@@ -1,6 +1,6 @@
 {
   "name": "@cleverc2200/dsh-agent-workbench",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "Shared Agent workbench layout for unmodified DeepSeek Harness",
@@ -16,7 +16,8 @@
     "./package.json": "./package.json",
     "./workbench": {
       "types": "./lib/types/workbench.d.ts"
-    }
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml"
   },
   "dsh": {
     "client": {
@@ -32,6 +33,9 @@
       "external": [
         "@deepseek-ai/dsh-client-store"
       ]
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
     }
   },
   "peerDependencies": {
@@ -40,7 +44,39 @@
   "files": [
     "lib/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "UPSTREAM.md",
+    "cordis.patch.yml"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit --emitDeclarationOnly false",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CleverC2200/dsh-agent-workbench.git"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-api-remotes": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-session-controller": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-api-workspace-controller": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-brand": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-connection": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-locale": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-store": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-layout": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-session": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-slots": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-client-ui-theme": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-session": "0.1.5-rc.2",
+    "react": "18.3.1",
+    "esbuild": "0.25.9",
+    "typescript": "5.9.3",
+    "@types/react": "18.3.31",
+    "@types/node": "24.3.1"
+  }
 }

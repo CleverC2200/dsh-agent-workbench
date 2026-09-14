@@ -26,4 +26,8 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 
 ## 维护
 
-布局适配代码来自原有布局实现，来源见 UPSTREAM.md。升级 DSH 需要验证原生插槽、服务和客户端加载协议。此包与 GEA 无业务依赖；示例包使用同一接口验证第二个 Agent。当前源码在同一 npm workspace 内维护，尚未发布独立 npm 包。
+布局适配代码来自原有布局实现，来源见 UPSTREAM.md。升级 DSH 需要验证原生插槽、服务和客户端加载协议。此包与 GEA 无业务依赖；示例包使用同一接口验证第二个 Agent。本包在独立 Git 仓库维护，构建产物随 Git 提交，可按固定提交安装；尚未发布 npm registry 版本。GEA 是本包的消费者，构建不需要 GEA checkout。
+
+## 独立开发与安装
+
+运行 `npm ci`、`npm test`、`npm run build`。通过 `dsh plugin --profile <profile> add git+https://github.com/CleverC2200/dsh-agent-workbench.git#<commit>` 安装固定提交；私有仓库需要 GitHub 读取权限。bundle 禁用默认 ui-layout 并挂载本包，默认工作区为启动目录，可在 profile 补丁的 agent-workbench 配置中指定绝对路径 cwd。

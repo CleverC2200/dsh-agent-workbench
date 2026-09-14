@@ -1,0 +1,7 @@
+- id: ui-layout
+  disabled: true
+- insert:
+    - id: agent-workbench
+      name: "@cleverc2200/dsh-agent-workbench"
+      config:
+        cwd: !!js process.cwd()
