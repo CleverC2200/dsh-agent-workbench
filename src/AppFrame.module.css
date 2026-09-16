@@ -1,5 +1,10 @@
+/*
+ * 中文：本文件定义 Agent 工作台三列框架的布局和交互外观，包括列轨道、拖拽把手、
+ * 全屏/堆叠模式和覆盖层。具体列宽由 AppFrame.tsx 计算后通过内联网格样式传入，
+ * 此处只负责视觉呈现、动画和命中区域。
+ */
 .frame {
-  position: relative; /* anchors the drag handles, which straddle column borders */
+  position: relative; /* anchors the drag handles, which straddle column borders; 中文：为跨列边界的拖拽把手提供定位基准 */
   display: grid;
   grid-template-rows: 100%;
   height: 100%;
@@ -7,12 +12,14 @@
   background: var(--dsw-alias-bg-base);
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
+  /* 中文：折叠/展开沿 deepsuite 侧栏曲线为网格轨道做动画，变量定义见 ui-theme base.css。 */
   transition: grid-template-columns var(--ds-transition-duration-slow)
     var(--ds-ease-in-out);
 }
 
 /* Dragging writes widths at pointer cadence; easing them would detach the
-   column from the handle. */
+   column from the handle.
+   中文：拖拽按指针频率写入宽度；若继续缓动，列边界会脱离把手和指针。 */
 .frame[data-dragging] {
   transition: none;
 }
@@ -54,6 +61,7 @@
   touch-action: none;
   /* Rides the same curve as the tracks so the pill stays on the moving
      border during collapse/expand; paused while dragging (frame rule). */
+  /* 中文：把手沿与轨道相同的曲线移动，折叠/展开时保持在边界；拖拽期间由 frame 规则暂停。 */
   transition: left var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
@@ -61,7 +69,8 @@
   transition: none;
 }
 
-/* Stacking moves both bodies into the center track before old columns can shrink. */
+/* Stacking moves both bodies into the center track before old columns can shrink.
+   中文：堆叠布局先把两个内容区移入主列轨道，再让原列收缩，避免过渡中内容突然消失。 */
 .frame[data-rightbar-fullscreen],
 .frame[data-rightbar-fullscreen] .handle,
 .frame[data-rightbar-instant],
@@ -83,6 +92,7 @@
  * decide whether the centre makes room. With no track the panel hangs over the
  * centre from a zero-width column, and while the track animates the panel stays
  * where it is. The occupant draws its own left border.
+ * 中文：右列不裁剪内容；面板固定锚定框架右边缘，轨道只决定主列是否让位，面板自身绘制左边框。
  */
 .rightbarCol {
   position: relative;
