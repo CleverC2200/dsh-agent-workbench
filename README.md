@@ -30,4 +30,4 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 
 ## 独立开发与安装
 
-运行 `npm ci`、`npm test`、`npm run build`。通过 `dsh plugin --profile <profile> add git+https://github.com/CleverC2200/dsh-agent-workbench.git#<commit>` 安装固定提交；私有仓库需要 GitHub 读取权限。bundle 禁用默认 ui-layout 并挂载本包，默认工作区为启动目录，可在 profile 补丁的 agent-workbench 配置中指定绝对路径 cwd。
+运行 `npm ci`、`npm test`、`npm run build`。通过 `dsh plugin --profile <profile> add git+http://100.100.6.191:20656/chenyonghao/dsh-agent-workbench.git#<commit>` 安装固定提交；私有仓库需要 GitLab 读取权限。bundle 禁用默认 ui-layout 并挂载本包，默认工作区为启动目录，可在 profile 补丁的 agent-workbench 配置中指定绝对路径 cwd。
