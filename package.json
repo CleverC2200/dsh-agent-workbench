@@ -56,7 +56,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/CleverC2200/dsh-agent-workbench.git"
+    "url": "http://100.100.6.191:20656/chenyonghao/dsh-agent-workbench.git"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
