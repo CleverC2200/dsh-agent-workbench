@@ -71,6 +71,10 @@ export function updateContext(key: string, value: unknown) {
       ? { truncated: true, preview: serialized.slice(0, 18000) }
       : limited,
   );
+  refreshContext();
+}
+/** Re-read current context after UI work without accepting another response as business facts. */
+export function refreshContext() {
   clearTimeout(timer);
   timer = setTimeout(() => void publish(pageContext()).catch(() => {}), 350);
 }

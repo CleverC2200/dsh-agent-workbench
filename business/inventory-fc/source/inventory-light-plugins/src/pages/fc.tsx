@@ -608,6 +608,18 @@ export function BranchInventoryAgent() {
     if (!livePage || !sessionReady || snapshotLoading || snapshotEmpty || snapshotError ||
         snapshot !== livePage.snapshot || livePage.requestBody !== pageRequestBody ||
         livePage.revision !== pageRevision) return;
+    updateContext("data", {
+      plugin: "fc",
+      path: "/api/warehouse-page",
+      parameters: JSON.parse(livePage.requestBody),
+      loadedAt: new Date().toISOString(),
+      summary: snapshot.metrics,
+      computedOverview: snapshot.page?.overview,
+      sourceTrace: snapshot.ruleTrace,
+      localPreview: (snapshot as any).localPreview,
+      sourceTime: snapshot.snapshotTime,
+      dataQuality: snapshot.dataQuality,
+    });
     updateContext("inventoryInsight", { summary: buildWorkbenchAnalysis(snapshot).summary, currentOrders: currentOrderMetrics(snapshot), coverage: "当前页面全仓KPI；缺失值不按零处理" });
     updateContext("branchDraft", {
       warehouseId,

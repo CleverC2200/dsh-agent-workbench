@@ -1,7 +1,7 @@
 import { clearReadCache } from "../data";
 import * as engines from "../engine";
 import { call, ready, publish } from "../channel.js";
-import { updateContext } from "./context";
+import { updateContext, refreshContext } from "./context";
 declare const PLUGIN_ID: string;
 const engine = engines as any;
 const snapshots = new Map<string, any>();
@@ -202,6 +202,11 @@ export async function mountBusinessFetch() {
     try {
       const result = await dispatch(url, method, body, init.signal);
       init.signal?.throwIfAborted();
+      if (PLUGIN_ID === "fc") {
+        // The current ready page owns FC facts; exports and detail reads may finish after it changes.
+        refreshContext();
+        return Response.json(result);
+      }
       if (PLUGIN_ID === 'qll' && ['/api/workspace/details','/api/workspace/trend'].includes(url.pathname)) {
         updateContext('detail', {plugin:PLUGIN_ID,path:url.pathname,parameters:body,loadedAt:new Date().toISOString(),...result});
         return Response.json(result);

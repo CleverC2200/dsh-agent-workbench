@@ -61,3 +61,5 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 分仓页面的库存解读与草稿上下文只使用当前查询条件和刷新批次对应的就绪快照；加载、空结果和错误只发布状态与可用筛选，不把占位快照或上一仓结果当成业务事实。页面直接用现有 `BrowserRepository(memoryStorage)` 保存本页状态，构建不再按源码文本替换 localStorage；关闭页面或身份变化仍清除内存状态。
 
 `visibleText` 也遵守当前查询状态：只有 ready 才提取页面文字；非就绪时使用该状态的具体说明，避免页面暂留的旧 KPI 再次进入 Agent 上下文。页面展示及筛选控件保留。
+
+FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch 完成只触发当前上下文重读，不再把导出或明细响应直接写入事实；旧 CSV 可以正常完成下载，但不能覆盖切页后的查询状态或新查询事实。
