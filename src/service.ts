@@ -9,7 +9,7 @@
  * store's declared action set, shared with the root registration.
  * 中文说明：本文件是跨插件的布局动作门面，不持有会话业务状态。调用链为“插件调用 ctx.layout → 本控制器校验并取消旧导航 → root store 更新 → AppFrame/占位面板重渲染”；会话选择仍由运行时 sessions 服务负责。
  */
-import type { BoundActions } from "@deepseek-ai/dsh-client-ui-slots";
+import type { BoundActions, HostObservable } from "@deepseek-ai/dsh-client-ui-slots";
 import type { Branded } from "@deepseek-ai/dsh-brand";
 import type { createLayoutStore } from "./stores.ts";
 
@@ -32,6 +32,7 @@ export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>;
 /** Panel navigation and geometry actions exposed through ctx.layout. */
 /** 通过 ctx.layout 对外提供的面板导航与几何呈现动作接口。 */
 export interface ILayout {
+  readonly panelInfo: HostObservable<PanelInfo>;
   /**
    * Select a global central panel without changing the current Session.
    * @param panelId - registered main key, or null to show the Conversation.
@@ -86,6 +87,7 @@ export class LayoutController implements ILayout {
   constructor(
     private readonly panels: PanelActions,
     private readonly hasMainPanel: (id: MainPanelId) => boolean,
+    readonly panelInfo: HostObservable<PanelInfo>,
   ) {}
 
   /** Select a global panel or return to the Conversation. */

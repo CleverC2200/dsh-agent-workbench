@@ -30,4 +30,4 @@ await writeFile(
   `window.__ModuleLoader__.load({id:"@cleverc2200/dsh-agent-workbench",factory:(require)=>{var module={exports:{}};var exports=module.exports;const style=document.createElement("style");style.textContent=${JSON.stringify(workbenchCss)};document.head.append(style);\n${workbenchCode}\nreturn module.exports;}});\n`,
 );
 
-execFileSync(process.execPath,["node_modules/typescript/bin/tsc","-p","tsconfig.json"],{stdio:"inherit"});
+execFileSync(process.execPath,["node_modules/typescript/bin/tsc","-p",process.env.DSH_TYPECHECK_PROJECT ?? "tsconfig.json","--noEmit","false","--emitDeclarationOnly","true"],{stdio:"inherit"});

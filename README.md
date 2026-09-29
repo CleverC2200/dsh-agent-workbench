@@ -1,6 +1,6 @@
 # Agent 工作台
 
-替换 DSH 的布局插件，为多个业务 Agent 提供独立页面和原生会话并排显示。运行基线是未修改的 npm `@deepseek-ai/dsh@0.1.5-rc.2`；不要求 DSH checkout，不复制聊天或输入框。
+替换 DSH 的布局插件，为多个业务 Agent 提供独立页面和原生会话并排显示。本隔离分支以同级 DSH `0.2.0-rc.1` 源码及本项目会话导航扩展为基线；不复制聊天或输入框。原 `0.1.5-rc.2` 锁保留作历史开发环境记录，新组合通过下方的源码构建入口验证。
 
 ## 组合
 
@@ -31,3 +31,7 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 ## 独立开发与安装
 
 运行 `npm ci`、`npm test`、`npm run build`。通过 `dsh plugin --profile <profile> add git+http://100.100.6.191:20656/chenyonghao/dsh-agent-workbench.git#<commit>` 安装固定提交；私有仓库需要 GitLab 读取权限。bundle 禁用默认 ui-layout 并挂载本包，默认工作区为启动目录，可在 profile 补丁的 agent-workbench 配置中指定绝对路径 cwd。
+
+## 插件拆分源码基线
+
+隔离开发使用同级 DSH 0.2.0-rc.1 源码及其 `uiWorkspace.selectSession` 扩展，业务页切换会话时保留面板；主会话按 `mainView` 引用识别，布局服务公开同一份 `panelInfo`。在本隔离项目从 GEA 仓执行 `corepack pnpm run source:build`，按各仓现有工具链构建并对同一份已构建核心声明做类型检查。旧 0.1.x 锁文件下的普通类型检查不代表这套源码组合。

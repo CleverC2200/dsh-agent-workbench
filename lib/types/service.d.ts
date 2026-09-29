@@ -9,7 +9,7 @@
  * store's declared action set, shared with the root registration.
  * 中文说明：本文件是跨插件的布局动作门面，不持有会话业务状态。调用链为“插件调用 ctx.layout → 本控制器校验并取消旧导航 → root store 更新 → AppFrame/占位面板重渲染”；会话选择仍由运行时 sessions 服务负责。
  */
-import type { BoundActions } from "@deepseek-ai/dsh-client-ui-slots";
+import type { BoundActions, HostObservable } from "@deepseek-ai/dsh-client-ui-slots";
 import type { Branded } from "@deepseek-ai/dsh-brand";
 import type { createLayoutStore } from "./stores.ts";
 /** Identity shared by a sidebar panel entry and its main-slot occupant. */
@@ -28,6 +28,7 @@ export type PanelActions = BoundActions<ReturnType<typeof createLayoutStore>>;
 /** Panel navigation and geometry actions exposed through ctx.layout. */
 /** 通过 ctx.layout 对外提供的面板导航与几何呈现动作接口。 */
 export interface ILayout {
+    readonly panelInfo: HostObservable<PanelInfo>;
     /**
      * Select a global central panel without changing the current Session.
      * @param panelId - registered main key, or null to show the Conversation.
@@ -69,6 +70,7 @@ export interface ILayout {
 export declare class LayoutController implements ILayout {
     private readonly panels;
     private readonly hasMainPanel;
+    readonly panelInfo: HostObservable<PanelInfo>;
     private navigation;
     /** 面板选择成功校验后的通知回调；客户端用它同步对应的工作台 Session。 */
     onSelect?: (id: MainPanelId | null) => void;
@@ -78,7 +80,7 @@ export declare class LayoutController implements ILayout {
      * @param hasMainPanel - checks the live main-slot registry for a panel id.
      * 中文：接收 root 入口共享的 store 动作，以及用于校验面板是否仍在实时 main 插槽中的检查器。
      */
-    constructor(panels: PanelActions, hasMainPanel: (id: MainPanelId) => boolean);
+    constructor(panels: PanelActions, hasMainPanel: (id: MainPanelId) => boolean, panelInfo: HostObservable<PanelInfo>);
     /** Select a global panel or return to the Conversation. */
     /** 选择已注册全局面板，或传 null 返回 Conversation；未注册 ID 会抛错且不改选择。 */
     selectPanel(panelId: MainPanelId | null): void;

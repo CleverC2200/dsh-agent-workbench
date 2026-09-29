@@ -5,6 +5,7 @@ import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
 import type {} from "@deepseek-ai/dsh-client-locale/client";
 import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-session/client";
+import type {} from "@deepseek-ai/dsh-client-ui-workspace/client";
 import type {} from "@deepseek-ai/dsh-client-ui-theme/client";
 import type { HostObservable } from "@deepseek-ai/dsh-client-ui-slots";
 import type { PanelInfo } from "./service.ts";
@@ -42,9 +43,6 @@ export function apply(ctx: ClientContext): void {
     const handle = createLayoutStore();
     const instance = handle.create();
     const store: typeof handle = { ...handle, create: () => instance };
-    const layout = new LayoutController(instance.actions, (id) =>
-      ctx.slots.entries("main").some((entry) => entry.options.key === id),
-    );
     // 主面板注册变化时同步保留有效选择；已卸载的面板会回退到原生 Conversation。
     const retainMainPanels = (): void => {
       instance.actions.retainMainPanels(
@@ -60,6 +58,10 @@ export function apply(ctx: ClientContext): void {
       getSnapshot: () => instance.getSnapshot().panelInfo,
       subscribe: (listener) => instance.subscribe(listener),
     };
+    const layout = new LayoutController(instance.actions, (id) =>
+      ctx.slots.entries("main").some((entry) => entry.options.key === id),
+      panelInfo,
+    );
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo } });
     const workspaces = ctx.get("workspaces") as unknown as IWorkspaces;
     const sessions = ctx.get("sessions") as unknown as ISessions;
@@ -107,8 +109,9 @@ export function apply(ctx: ClientContext): void {
       available: (id) => sessions.list.getSnapshot().byId[id] !== undefined,
       // 将工作台选择映射到原生会话选择；undefined 表示清空当前会话。
       select: (id) => {
-        if (id === undefined) sessions.clear();
-        else sessions.open(id);
+        const navigation = ctx.get("uiWorkspace");
+        if (!navigation) throw new Error("Workbench session navigation unavailable");
+        navigation.selectSession(id);
       },
       // 面板动作统一经过 LayoutController，集中执行注册校验和导航取消规则。
       panel: (id) => layout.selectPanel(id),
