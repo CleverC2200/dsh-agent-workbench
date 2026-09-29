@@ -2,6 +2,8 @@ import { publish } from "../channel.js";
 declare const PLUGIN_ID: string;
 const parts = new Map<string, unknown>();
 let timer: ReturnType<typeof setTimeout> | undefined;
+if (typeof window !== "undefined")
+  window.addEventListener("gea-session-changed", () => refreshContext());
 function bounded(value: any, depth = 0): any {
   if (depth > 7) return "[已省略深层字段]";
   if (typeof value === "string") return value.slice(0, 3000);

@@ -107,6 +107,10 @@ export function apply(ctx: ClientContext): void {
       },
       // 只允许选择当前会话服务已知的 Session，避免恢复过期关联。
       available: (id) => sessions.list.getSnapshot().byId[id] !== undefined,
+      presetOf: (id) => {
+        const value = sessions.list.getSnapshot().byId[id]?.projectionValues?.agentPreset;
+        return typeof value === "string" ? value : undefined;
+      },
       // 将工作台选择映射到原生会话选择；undefined 表示清空当前会话。
       select: (id) => {
         const navigation = ctx.get("uiWorkspace");

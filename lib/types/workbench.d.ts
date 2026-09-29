@@ -13,6 +13,8 @@ export interface WorkbenchPage {
     readonly id: MainPanelId;
     /** 中文：首次为业务实例创建 Session 时传给宿主的 Agent 预设名。 */
     readonly preset: string;
+    /** Other installed presets explicitly allowed to interpret this page. */
+    readonly allowedPresets?: readonly string[];
 }
 /** Dependencies supplied by the DSH layout adapter. 中文：工作台访问 DSH 宿主能力的端口，便于让业务控制器与具体 UI/框架解耦。 */
 export interface WorkbenchPorts {
@@ -24,6 +26,8 @@ export interface WorkbenchPorts {
     prepare(id: SessionId): Promise<void>;
     /** 中文：判断本地 Session 列表中是否仍存在该 Session。 */
     available(id: SessionId): boolean;
+    /** Current durable preset, including a blank Session's later preset selection. */
+    presetOf?(id: SessionId): string | undefined;
     /** 中文：切换原生会话选择；undefined 表示当前没有可复用会话。 */
     select(id: SessionId | undefined): void;
     /** 中文：切换全局主面板；null 表示回到原生 Conversation。 */
@@ -38,7 +42,7 @@ export interface AgentWorkbench {
     /** 中文：登记页面并返回反注册函数。 */
     register(page: WorkbenchPage): () => void;
     /** 中文：打开页面的某个业务实例，可选择显式绑定宿主已创建的 Session。 */
-    open(id: MainPanelId, instance?: string, sessionId?: SessionId): Promise<void>;
+    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<void>;
     /** 中文：把原生 Conversation 列加入指定页面，返回清理函数。 */
     showConversation(id: MainPanelId): () => void;
     /** 中文：忘记页面的本地实例关联，但不删除真实 Session。 */
@@ -74,7 +78,7 @@ export declare class WorkbenchController implements AgentWorkbench {
      * 同一实例的并发创建会共用一个任务。只有页面仍存活、关联表未被替换且本次导航未过期时，
      * 才会准备 Session、保存关联并切到目标面板，避免慢请求把用户带回旧页面。
      */
-    open(id: MainPanelId, instance?: string, sessionId?: SessionId): Promise<void>;
+    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<void>;
     /** Opt a mounted page into the native conversation column. 中文：让已登记页面选择展示原生 Conversation 列，并把宿主清理函数原样返回。 */
     showConversation(id: MainPanelId): () => void;
     /** Drop local associations, without deleting or stopping durable Sessions. 中文：只删除页面的本地映射、当前实例和待建任务，不删除也不停止宿主持久 Session。 */

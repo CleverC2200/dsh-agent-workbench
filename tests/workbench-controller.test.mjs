@@ -77,6 +77,31 @@ test("pages and business instances retain separate sessions without changing the
   assert.equal(f.selected, a);
   assert.equal(f.created, 3);
 });
+test("one page keeps distinct allowed Agent sessions and refuses a mismatched preset", async () => {
+  let sequence = 0;
+  const presets = new Map();
+  const f = fixture({
+    create: async (preset) => {
+      const id = `session-${++sequence}`;
+      presets.set(id, preset);
+      return id;
+    },
+    presetOf: (id) => presets.get(id),
+  });
+  f.controller.register({ id: "inventory-fc", preset: "fc", allowedPresets: ["qll"] });
+  await f.controller.open("inventory-fc", "fc", undefined, "fc");
+  const fc = f.selected;
+  await f.controller.open("inventory-fc", "qll", undefined, "qll");
+  const qll = f.selected;
+  assert.notEqual(fc, qll);
+  assert.deepEqual([...presets.values()], ["fc", "qll"]);
+  await f.controller.open("inventory-fc", "fc", undefined, "fc");
+  assert.equal(f.selected, fc);
+  assert.equal(sequence, 2);
+  await assert.rejects(f.controller.open("inventory-fc", "other", undefined, "other"), /Preset not allowed/);
+  await assert.rejects(f.controller.open("inventory-fc", "qll", fc, "qll"), /Session preset differs/);
+  assert.equal(f.selected, fc);
+});
 test("coalesces duplicate instance creation and latest navigation wins", async () => {
   const d = deferred();
   let calls = 0;

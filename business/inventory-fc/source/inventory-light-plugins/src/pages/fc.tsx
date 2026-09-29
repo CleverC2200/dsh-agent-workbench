@@ -238,6 +238,7 @@ export function BranchInventoryAgent() {
     snapshot: WarehouseSnapshot;
     requestBody: string;
     revision: number;
+    referenceId: string;
   } | null>(null);
   const liveSnapshot = livePage?.snapshot ?? null;
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -471,7 +472,7 @@ export function BranchInventoryAgent() {
         );
         if (!controller.signal.aborted) {
           appliedPageRevision.current = pageRevision;
-          setLivePage({ snapshot: currentSnapshot, requestBody: pageRequestBody, revision: pageRevision });
+          setLivePage({ snapshot: currentSnapshot, requestBody: pageRequestBody, revision: pageRevision, referenceId: createConversationId() });
           updateContext("queryState", {state: "ready", warehouseId});
         }
       } catch (error) {
@@ -604,36 +605,17 @@ export function BranchInventoryAgent() {
     importRows,
     readOnlyHistory,
   ]);
-  useEffect(() => {
-    if (!livePage || !sessionReady || snapshotLoading || snapshotEmpty || snapshotError ||
-        snapshot !== livePage.snapshot || livePage.requestBody !== pageRequestBody ||
-        livePage.revision !== pageRevision) return;
-    updateContext("data", {
-      plugin: "fc",
-      path: "/api/warehouse-page",
-      parameters: JSON.parse(livePage.requestBody),
-      loadedAt: new Date().toISOString(),
-      summary: snapshot.metrics,
-      computedOverview: snapshot.page?.overview,
-      sourceTrace: snapshot.ruleTrace,
-      localPreview: (snapshot as any).localPreview,
-      sourceTime: snapshot.snapshotTime,
-      dataQuality: snapshot.dataQuality,
-    });
-    updateContext("inventoryInsight", { summary: buildWorkbenchAnalysis(snapshot).summary, currentOrders: currentOrderMetrics(snapshot), coverage: "当前页面全仓KPI；缺失值不按零处理" });
-    updateContext("branchDraft", {
-      warehouseId,
-      warehouseName: snapshot.warehouseName,
-      tab: activeTab,
-      status: "local-only",
-      sourceTime: snapshot.snapshotTime,
-      quantities: draft.quantities,
-      reasons: draft.reasons,
-      localPreview: (snapshot as any).localPreview,
-      visibleReplenishments: editedSnapshot.replenishments,
-    });
-  }, [warehouseId, snapshot, activeTab, draft, editedSnapshot, sessionReady,
-    snapshotLoading, snapshotEmpty, snapshotError, livePage, pageRequestBody, pageRevision]);
+  const referenceReady = Boolean(livePage && sessionReady && !readOnlyHistory &&
+    !snapshotLoading && !snapshotEmpty && !snapshotError &&
+    snapshot === livePage.snapshot && livePage.requestBody === pageRequestBody &&
+    livePage.revision === pageRevision);
+  const referenceScope = JSON.stringify({
+    warehouseId, tab: activeTab, search: activeTab === "base" ? baseSku : search,
+    baseName, businessOnly, urgentOnly, riskOnly, ageFilters, orderStatus,
+    pageNumber: replenishmentPage, pageSize: replenishmentPageSize, sort,
+    revision: pageRevision, snapshotVersion: snapshot.version,
+    referenceId: livePage?.referenceId,
+  });
   const replenishmentTableRef = useRef<HTMLTableElement>(null);
   const visibleColumns = pinReplenishmentColumns(visibleReplenishmentColumns(columnOrder, snapshot), frozenColumns);
   useEffect(()=>{
@@ -745,6 +727,41 @@ export function BranchInventoryAgent() {
     replenishments,
     snapshot.page,
   ]);
+  useEffect(() => {
+    if (!referenceReady || !livePage) return;
+    const parameters = JSON.parse(livePage.requestBody);
+    delete parameters.draft;
+    const visibleRows = activeTab === "replenishment" ? paginatedReplenishments.map((row) =>
+      Object.fromEntries(visibleColumns.map((column) => [column,
+        column === "actualQty" ? row.actualQty : column === "reason" ? row.reason : formatReplenishmentCell(row, column),
+      ]))) : [];
+    updateContext("pageReference", { scope: referenceScope, coverage: "仅当前筛选与分页已显示内容" });
+    updateContext("data", {
+      plugin: "fc",
+      path: "/api/warehouse-page",
+      parameters,
+      loadedAt: new Date().toISOString(),
+      summary: snapshot.metrics,
+      computedOverview: snapshot.page?.overview,
+      sourceTrace: snapshot.ruleTrace,
+      localPreview: (snapshot as any).localPreview,
+      sourceTime: snapshot.snapshotTime,
+      dataQuality: snapshot.dataQuality,
+    });
+    updateContext("inventoryInsight", { summary: buildWorkbenchAnalysis(snapshot).summary, currentOrders: currentOrderMetrics(snapshot), coverage: "当前页面全仓KPI；缺失值不按零处理" });
+    updateContext("branchDraft", {
+      warehouseId,
+      warehouseName: snapshot.warehouseName,
+      tab: activeTab,
+      status: "local-only",
+      sourceTime: snapshot.snapshotTime,
+      localPreview: (snapshot as any).localPreview,
+      visibleReplenishments: visibleRows.slice(0, 30),
+      visibleRowCount: visibleRows.length,
+      truncated: visibleRows.length > 30,
+    });
+  }, [warehouseId, snapshot, activeTab, editedSnapshot, livePage,
+    referenceReady, referenceScope, paginatedReplenishments, visibleColumns.join(",")]);
   const submissionSummary = useMemo(
     () =>
       summarizeSnapshot(
@@ -1306,7 +1323,8 @@ export function BranchInventoryAgent() {
     );
   }
   return (
-    <main className="agent-root">
+    <main className="agent-root" data-page-reference-ready={referenceReady}
+      data-page-reference-scope={referenceScope}>
       <div className="agent-shell">
         <header className="agent-topbar compact-topbar">
           <div className="agent-topbar-context">

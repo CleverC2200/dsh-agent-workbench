@@ -27,6 +27,7 @@ window.addEventListener("message", (event) => {
     if (message.type === "context") {
       context = message.context;
       if (context?.session) channel.postMessage({type: "theme:subscribe", session: context.session});
+      if (context?.session) window.dispatchEvent(new Event("gea-session-changed"));
     }
     if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
       if (message.version !== "1.0.0" || !["light", "dark"].includes(message.colorScheme) ||

@@ -14,6 +14,8 @@ export interface WorkbenchPage {
   readonly id: MainPanelId;
   /** 中文：首次为业务实例创建 Session 时传给宿主的 Agent 预设名。 */
   readonly preset: string;
+  /** Other installed presets explicitly allowed to interpret this page. */
+  readonly allowedPresets?: readonly string[];
 }
 /** Dependencies supplied by the DSH layout adapter. 中文：工作台访问 DSH 宿主能力的端口，便于让业务控制器与具体 UI/框架解耦。 */
 export interface WorkbenchPorts {
@@ -25,6 +27,8 @@ export interface WorkbenchPorts {
   prepare(id: SessionId): Promise<void>;
   /** 中文：判断本地 Session 列表中是否仍存在该 Session。 */
   available(id: SessionId): boolean;
+  /** Current durable preset, including a blank Session's later preset selection. */
+  presetOf?(id: SessionId): string | undefined;
   /** 中文：切换原生会话选择；undefined 表示当前没有可复用会话。 */
   select(id: SessionId | undefined): void;
   /** 中文：切换全局主面板；null 表示回到原生 Conversation。 */
@@ -43,6 +47,7 @@ export interface AgentWorkbench {
     id: MainPanelId,
     instance?: string,
     sessionId?: SessionId,
+    preset?: string,
   ): Promise<void>;
   /** 中文：把原生 Conversation 列加入指定页面，返回清理函数。 */
   showConversation(id: MainPanelId): () => void;
@@ -127,7 +132,7 @@ export class WorkbenchController implements AgentWorkbench {
     if (this.disposed) throw new Error("Workbench disposed");
     if (this.pages.has(page.id))
       throw new Error(`Duplicate workbench page: ${page.id}`);
-    const owned = { ...page };
+    const owned = { ...page, allowedPresets: page.allowedPresets ? [...page.allowedPresets] : undefined };
     this.pages.set(page.id, owned);
     return () => {
       if (this.pages.get(page.id) !== owned) return;
@@ -160,10 +165,14 @@ export class WorkbenchController implements AgentWorkbench {
     id: MainPanelId,
     instance?: string,
     sessionId?: SessionId,
+    preset?: string,
   ): Promise<void> {
     const page = this.pages.get(id);
     if (!page || this.disposed)
       throw new Error(`Unknown workbench page: ${id}`);
+    const selectedPreset = preset ?? page.preset;
+    if (selectedPreset !== page.preset && !page.allowedPresets?.includes(selectedPreset))
+      throw new Error(`Preset not allowed for workbench page: ${selectedPreset}`);
     instance ??= this.instances.get(id) ?? "default";
     const navigation = this.ports.beginNavigation();
     /** 中文：检查异步流程返回时，控制器和本次页面登记是否仍然有效。 */
@@ -179,7 +188,7 @@ export class WorkbenchController implements AgentWorkbench {
       let flight = flights.get(instance);
       if (!flight) {
         flight = this.ports
-          .create(page.preset)
+          .create(selectedPreset)
           .then((created) => {
             if (
               alive() &&
@@ -203,6 +212,8 @@ export class WorkbenchController implements AgentWorkbench {
     )
       return;
     await this.ports.prepare(selected);
+    if (preset !== undefined && this.ports.presetOf?.(selected) !== selectedPreset)
+      throw new Error(`Session preset differs from requested page ability: ${selectedPreset}`);
     if (
       !alive() ||
       this.sessions.get(id) !== ownedBindings ||

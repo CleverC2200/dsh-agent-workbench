@@ -16,9 +16,12 @@ const hideConversation = ctx.agentWorkbench.showConversation(panelId)
 await ctx.agentWorkbench.open(panelId, businessInstanceId)
 // 已由业务 Host 创建会话时，可明确关联；不会修改该会话的预设：
 await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
+// 同一页面允许多个已登记预设时，为每个预设保留不同实例：
+await ctx.agentWorkbench.open(panelId, 'my-other-agent', undefined, 'my-other-agent')
 ```
 
 首次 `open` 按页面预设创建原生 Session；同一页面、同一业务实例复用 Session。`instance` 省略时恢复该页面上次实例，初始值为 `default`。创建并发合并，后发导航获胜；离开页面、注销或卸载不会停止后台 Agent。调用方处理 Promise 错误，不能把失败当成已切换。
+页面可在 `register` 中声明 `allowedPresets`。第四个 `open` 参数只能选默认或已声明的预设；刷新会话目录后还会核对持久 Session 的实际预设，不会因切换页面修改旧会话。
 
 会话关联保存在当前浏览器标签页的 `sessionStorage`，刷新可恢复，不支持跨设备恢复。只保存页面、业务实例与 Session 标识，不保存业务数据。登录身份失效时业务插件调用 `forget(panelId)` 并清除当前 Session。恢复前通过 DSH 刷新会话列表，缺失会话报错，不自动换成其他会话。`forget` 不删除 DSH 会话；后续 `open` 可创建新会话。
 
@@ -63,3 +66,4 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 `visibleText` 也遵守当前查询状态：只有 ready 才提取页面文字；非就绪时使用该状态的具体说明，避免页面暂留的旧 KPI 再次进入 Agent 上下文。页面展示及筛选控件保留。
 
 FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch 完成只触发当前上下文重读，不再把导出或明细响应直接写入事实；旧 CSV 可以正常完成下载，但不能覆盖切页后的查询状态或新查询事实。
+行引用带当前仓、页签、筛选、分页和快照标识，不带未显示行的草稿。给 Agent 的补货行只包含当前页可见列，最多 30 行并标明截断。页面加载、空结果、错误或范围变化时引用入口拒绝旧行；换会话后页面用现有消息桥重发当前上下文。
