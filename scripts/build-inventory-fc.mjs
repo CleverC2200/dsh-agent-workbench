@@ -73,17 +73,6 @@ const result = await build({
             kind: a.kind,
           }),
         );
-        api.onLoad({ filter: /browser-repository\.ts$/ }, async (a) => ({
-          contents:
-            "import {memoryStorage} from " +
-            JSON.stringify(resolve(ui, "src/native/memory-storage.ts")) +
-            ";\n" +
-            (await readFile(a.path, "utf8")).replace(
-              "return new BrowserRepository(window.localStorage);",
-              "return new BrowserRepository(memoryStorage);",
-            ),
-          loader: "ts",
-        }));
       },
     },
   ],

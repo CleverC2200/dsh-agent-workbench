@@ -115,7 +115,7 @@ import {
 import { appPath } from "../../../fc/src/lib/app-path.ts";
 
 import {
-  createBrowserRepository,
+  BrowserRepository,
   type OrderDraft,
 } from "../../../fc/src/lib/browser-repository.ts";
 
@@ -234,9 +234,12 @@ export function BranchInventoryAgent() {
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionMode, setSessionMode] = useState<"local" | "gea">("gea");
   const [sessionError, setSessionError] = useState("");
-  const [liveSnapshot, setLiveSnapshot] = useState<WarehouseSnapshot | null>(
-    null,
-  );
+  const [livePage, setLivePage] = useState<{
+    snapshot: WarehouseSnapshot;
+    requestBody: string;
+    revision: number;
+  } | null>(null);
+  const liveSnapshot = livePage?.snapshot ?? null;
   const [snapshotLoading, setSnapshotLoading] = useState(true);
   const [pageRevision, setPageRevision] = useState(0);
   const appliedPageRevision = useRef(0);
@@ -328,7 +331,7 @@ export function BranchInventoryAgent() {
       (rule) => rule.level === "warehouse",
     ),
   });
-  const repository = useMemo(() => createBrowserRepository(), []);
+  const repository = useMemo(() => new BrowserRepository(memoryStorage), []);
   const scope = useMemo(
     () => ({ userId, conversationId, warehouseId }),
     [userId, conversationId, warehouseId],
@@ -431,6 +434,8 @@ export function BranchInventoryAgent() {
     setSnapshotLoading(true);
     setSnapshotError("");
     setSnapshotEmpty(false);
+    clearContext({ keepPageFilters: true });
+    updateContext("queryState", { state: "loading", warehouseId, message: "正在查询当前分仓，暂不提供库存事实" });
     const timer = window.setTimeout(async () => {
       try {
         const response = await fetch(appPath("/api/warehouse-page"), {
@@ -454,7 +459,7 @@ export function BranchInventoryAgent() {
         if (payload.snapshot.dataState === "empty" && payload.snapshot.warehouseId === warehouseId) {
           if (!controller.signal.aborted) {
             setSnapshotEmpty(true);
-            setLiveSnapshot(null);
+            setLivePage(null);
             clearContext({ keepPageFilters: true });
             updateContext("queryState", {state: "empty", warehouseId, message: "授权范围内暂无库存与计划数据；不代表库存数量为零"});
           }
@@ -466,14 +471,16 @@ export function BranchInventoryAgent() {
         );
         if (!controller.signal.aborted) {
           appliedPageRevision.current = pageRevision;
-          setLiveSnapshot(currentSnapshot);
+          setLivePage({ snapshot: currentSnapshot, requestBody: pageRequestBody, revision: pageRevision });
           updateContext("queryState", {state: "ready", warehouseId});
         }
       } catch (error) {
-        if (!controller.signal.aborted)
-          setSnapshotError(
-            error instanceof Error ? error.message : "分仓业务数据暂不可用",
-          );
+        if (!controller.signal.aborted) {
+          const message = error instanceof Error ? error.message : "分仓业务数据暂不可用";
+          setSnapshotError(message);
+          clearContext({ keepPageFilters: true });
+          updateContext("queryState", { state: "error", warehouseId, message });
+        }
       } finally {
         if (!controller.signal.aborted) setSnapshotLoading(false);
       }
@@ -598,6 +605,9 @@ export function BranchInventoryAgent() {
     readOnlyHistory,
   ]);
   useEffect(() => {
+    if (!livePage || !sessionReady || snapshotLoading || snapshotEmpty || snapshotError ||
+        snapshot !== livePage.snapshot || livePage.requestBody !== pageRequestBody ||
+        livePage.revision !== pageRevision) return;
     updateContext("inventoryInsight", { summary: buildWorkbenchAnalysis(snapshot).summary, currentOrders: currentOrderMetrics(snapshot), coverage: "当前页面全仓KPI；缺失值不按零处理" });
     updateContext("branchDraft", {
       warehouseId,
@@ -610,7 +620,8 @@ export function BranchInventoryAgent() {
       localPreview: (snapshot as any).localPreview,
       visibleReplenishments: editedSnapshot.replenishments,
     });
-  }, [warehouseId, snapshot, activeTab, draft, editedSnapshot]);
+  }, [warehouseId, snapshot, activeTab, draft, editedSnapshot, sessionReady,
+    snapshotLoading, snapshotEmpty, snapshotError, livePage, pageRequestBody, pageRevision]);
   const replenishmentTableRef = useRef<HTMLTableElement>(null);
   const visibleColumns = pinReplenishmentColumns(visibleReplenishmentColumns(columnOrder, snapshot), frozenColumns);
   useEffect(()=>{
