@@ -18,6 +18,7 @@ fieldset { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding:
 label { display: grid; gap: 4px; font-size: .9em; }
 input, select, button { min-height: 36px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--workbench-control-border); border-radius: 8px; font: inherit; color: var(--workbench-body); background: var(--workbench-surface); }
 input { width: 240px; caret-color: var(--workbench-brand); }
+input::placeholder { color: var(--workbench-muted); opacity: 1; }
 button { cursor: pointer; }
 button:hover:not(:disabled) { background: var(--workbench-hover); border-color: var(--workbench-brand); color: var(--workbench-selected-text); }
 .primary { background: var(--workbench-brand); border-color: var(--workbench-brand); color: var(--workbench-surface); }
