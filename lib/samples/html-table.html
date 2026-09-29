@@ -73,7 +73,7 @@ h1 { margin: 0 0 8px; font-size: 1.35em; line-height: 1.35; }
 p { margin: 0; }
 .description, .summary, label { color: var(--workbench-muted); }
 .description { max-width: 70ch; }
-form { margin: 24px 0 16px; }
+#filters { margin: 24px 0 16px; }
 fieldset { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 0; margin: 0; border: 0; min-width: 0; }
 label { display: grid; gap: 4px; font-size: .9em; }
 input, select, button { min-height: 36px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--workbench-control-border); border-radius: 8px; font: inherit; color: var(--workbench-body); background: var(--workbench-surface); }
@@ -112,14 +112,14 @@ summary { cursor: pointer; width: fit-content; }
   <h1>项目交付清单</h1>
   <p class="description">HTML 表格样板 · 以下均为本地演示数据，可按名称和进度筛选。</p>
   <p class="diagnostic" role="alert" id="diagnostic">正在连接工作台主题…</p>
-  <form id="filters">
+  <section id="filters" role="search" aria-label="筛选项目">
     <fieldset disabled id="controls">
       <label>项目名称<input id="query" type="search" placeholder="输入名称或编号" autocomplete="off"></label>
       <label>交付进度<select id="stage"><option value="">全部进度</option><option>进行中</option><option>已完成</option><option>待开始</option></select></label>
-      <button class="primary" type="submit">查询</button>
+      <button class="primary" type="button" id="search">查询</button>
       <button type="button" id="reset">重置</button>
     </fieldset>
-  </form>
+  </section>
   <p class="summary" id="summary" role="status" aria-live="polite"></p>
   <section id="results" aria-busy="false" aria-label="查询结果">
     <div class="table-scroll" id="table-region" role="region" aria-label="可横向滚动的交付清单" tabindex="0" hidden>
@@ -194,8 +194,9 @@ summary { cursor: pointer; width: fit-content; }
       if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
     }, 350);
   };
-  $('filters').addEventListener('submit', event => { event.preventDefault(); query(); });
-  $('reset').onclick = () => { $('filters').reset(); query(); };
+  $('search').onclick = () => query();
+  $('query').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); query(); } });
+  $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; query(); };
   $('retry').onclick = () => query();
   document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
   const receive = event => {
