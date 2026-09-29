@@ -614,15 +614,17 @@ export function BranchInventoryAgent() {
     !snapshotLoading && !snapshotEmpty && !snapshotError &&
     snapshot === livePage.snapshot && livePage.requestBody === pageRequestBody &&
     livePage.revision === pageRevision);
+  const visibleColumns = pinReplenishmentColumns(visibleReplenishmentColumns(columnOrder, snapshot), frozenColumns);
   const referenceScope = JSON.stringify({
     warehouseId, tab: activeTab, search: activeTab === "base" ? baseSku : search,
     baseName, businessOnly, urgentOnly, riskOnly, ageFilters, orderStatus,
     pageNumber: replenishmentPage, pageSize: replenishmentPageSize, sort,
     revision: pageRevision, snapshotVersion: snapshot.version,
     referenceId: livePage?.referenceId,
+    // Catalog indices retain visible order without exceeding the existing bounded scope field.
+    columns: visibleColumns.map(column => DEFAULT_COLUMNS.indexOf(column)),
   });
   const replenishmentTableRef = useRef<HTMLTableElement>(null);
-  const visibleColumns = pinReplenishmentColumns(visibleReplenishmentColumns(columnOrder, snapshot), frozenColumns);
   useEffect(()=>{
     const table=replenishmentTableRef.current;if(!table)return;
     const headers=Array.from(table.querySelectorAll<HTMLTableCellElement>("thead > tr > th"));
