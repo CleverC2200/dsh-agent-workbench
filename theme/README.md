@@ -9,7 +9,7 @@ node scripts/sync-theme.mjs --core ../deepseek-harness
 node scripts/sync-theme.mjs --core ../deepseek-harness --check
 ```
 
-宿主提交生成的 `workbench-theme.css` 和含版本、SHA-256 的 `workbench-theme.json`。运行时由 ui-theme 打包并管理样式生命周期；没有工作台插件也会加载。集成前执行 `--check`，禁止单改生成副本。同步脚本要求显式指定目标，没有默认写入位置。
+宿主提交生成的 `workbench-theme.css` 和含版本、SHA-256 的 `workbench-theme.json`。运行时由 ui-theme 打包并管理样式生命周期；没有工作台插件也会加载。集成前执行 `--check`，禁止单改生成副本。同步同时更新宿主启动画布色，`--check` 也会拒绝启动色漂移。同步脚本要求显式指定目标，没有默认写入位置。
 
 主题状态与字号仍属于 DSH ui-theme。它的 presenter 设置 body 暗色标记、字号轴和系统窗口主题标记；所有布局只消费变量。资源用明确的 html/body 优先级抵抗上游样式加载顺序变化，仍允许主题 API 的内联 token 覆盖。宿主状态、代码配色和品牌字体保留上游规则。
 
