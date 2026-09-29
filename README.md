@@ -51,3 +51,9 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 在隔离源码组合运行 GEA 的 `tests/html-shared-theme-web.test.mjs`，测试临时生成 loader 所需的 mock 描述文件，以现有 HTML 承载器打开样板。临时描述不随插件发布，退出时先停止 profile 再删除。样板覆盖筛选、表格、加载、空结果、错误重试、明暗、字号、键盘焦点和窄屏表格滚动；不查询库存或其他业务数据。
 
 主题通过现有 `gea-html-v1` MessageChannel 同步，iframe 不读取父页 DOM。连接校验父窗口和来源，主题消息校验页面及当前会话；切换会话暂停操作，卸载释放计时器和端口。父页主题状态、持久化与 DOM 投影仍由 ui-theme 管理，样板只消费投影后的变量。sandbox 与 CSP 沿用承载器，外部请求仍被禁止。资源不兼容或连接失败时显示诊断并禁用查询。
+
+## 分仓库存试点
+
+`business/inventory-fc` 保存从 `dsh-agent-fc-plugin@906b3b0` 迁入的页面与计算源码。`scripts/build-inventory-fc.mjs` 生成 `lib/business/inventory-fc`，通过原有 `plugin.json` 与 `declarations.page/capability` 关联 Agent Manage 的 Skill/提示词/能力资源；没有新增注册表。GEA 负责登录、Consumer 和只读校验。旧资源入口保留。
+
+构建前在 `business/inventory-fc/source/inventory-light-plugins` 按其 pnpm 固定锁安装独立依赖；再运行工作台构建。Agent Manage 同级资源必须存在，缺失会失败。使用现有 `GEA_HTML_PLUGIN_ROOTS` 指向构建目录即可装载。原共享主题 1.0.0 经既有 MessagePort 投影，不增加 iframe 权限或网络连接。数量口径、页面预览及导出行为沿用原模块；缺少 SKU/库存数量时明确报错，不能解释为零。

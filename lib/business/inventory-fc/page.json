@@ -1,0 +1,7 @@
+{
+  "surface": "gea-html-inventory-fc",
+  "protocol": "dom-scan",
+  "pageIds": ["inventory-fc"],
+  "consumerCode": "branch-inventory",
+  "maxEffect": "view"
+}
