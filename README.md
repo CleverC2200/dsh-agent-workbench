@@ -35,3 +35,7 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 ## 插件拆分源码基线
 
 隔离开发使用同级 DSH 0.2.0-rc.1 源码及其 `uiWorkspace.selectSession` 扩展，业务页切换会话时保留面板；主会话按 `mainView` 引用识别，布局服务公开同一份 `panelInfo`。在本隔离项目从 GEA 仓执行 `corepack pnpm run source:build`，按各仓现有工具链构建并对同一份已构建核心声明做类型检查。旧 0.1.x 锁文件下的普通类型检查不代表这套源码组合。
+
+## 共享主题
+
+[共享主题资源](theme/README.md) 在本仓库维护，在开发期同步并编入受控 DSH 的 ui-theme。工作台不再创建主题 presenter；宿主主题适配必须与本插件一起整合。只升级此工作台插件到旧宿主不受支持。主题资源候选版本为 1.0.0，插件包版本保持 0.1.1，未发布。

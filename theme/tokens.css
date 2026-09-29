@@ -1,0 +1,60 @@
+/* Shared workbench resource 1.0.0. State belongs to DSH ui-theme.
+ * html + body specificity keeps the adapter stable when base sheets reload.
+ * Inline user token overrides retain priority. Status palettes stay upstream. */
+html body {
+  --workbench-theme-version: "1.0.0";
+  --workbench-font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --workbench-font-size: var(--dsh-content-font-size, 14px);
+  --workbench-page: #f7f8fa;
+  --workbench-surface: #ffffff;
+  --workbench-subtle: #fafafa;
+  --workbench-muted-surface: #f5f6f8;
+  --workbench-text: #20232a;
+  --workbench-body: #555d68;
+  --workbench-muted: #626b78;
+  --workbench-border: #e3e6ea;
+  --workbench-control-border: #d9dde3;
+  --workbench-brand: #df1732;
+  --workbench-selected-text: #d0132c;
+  --workbench-brand-hover: #c91029;
+  --workbench-brand-soft: #fff0f2;
+  --workbench-hover: #fffafb;
+}
+
+html body[data-ds-dark-theme] {
+  --workbench-page: #1b1d21;
+  --workbench-surface: #24262b;
+  --workbench-subtle: #282b31;
+  --workbench-muted-surface: #30343b;
+  --workbench-text: #edf0f5;
+  --workbench-body: #c7cdd6;
+  --workbench-muted: #aab3bf;
+  --workbench-border: #414751;
+  --workbench-control-border: #59616e;
+  --workbench-brand: #ff8092;
+  --workbench-selected-text: #ff9aa8;
+  --workbench-brand-hover: #ff9aa8;
+  --workbench-brand-soft: #442630;
+  --workbench-hover: #35272e;
+}
+
+html body,
+html body[data-ds-dark-theme] {
+  --dsw-font-family: var(--workbench-font-family);
+  --dsw-alias-bg-base: var(--workbench-page);
+  --dsw-alias-bg-layer-1: var(--workbench-surface);
+  --dsw-alias-bg-layer-2: var(--workbench-subtle);
+  --dsw-alias-label-primary: var(--workbench-text);
+  --dsw-alias-label-secondary: var(--workbench-body);
+  --dsw-alias-label-tertiary: var(--workbench-muted);
+  --dsw-alias-border-l3: var(--workbench-border);
+  --dsw-alias-border-l4: var(--workbench-control-border);
+  --dsw-alias-state-business-primary: var(--workbench-brand);
+  --dsw-specific-sidebar-fill: var(--workbench-surface);
+  --dsw-specific-sidebar-nav-item-hover: var(--workbench-hover);
+  --dsw-specific-sidebar-nav-item-active: var(--workbench-brand-soft);
+  --dsw-specific-input-major: var(--workbench-surface);
+  background-color: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+}

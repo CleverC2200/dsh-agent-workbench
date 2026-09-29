@@ -1,5 +1,5 @@
 /** Layout replacement for unmodified DSH, with native conversation composition. */
-/** 未改动 DSH 业务的布局替换层：把工作台页面与原生 Conversation 组合到同一框架中。端到端链路为：Host 通过认证连接提供配置，客户端创建工作区和 Session，注册布局/工作台服务，最后由 root 插槽和主题 presenter 驱动界面。 */
+/** 未改动 DSH 业务的布局替换层：把工作台页面与原生 Conversation 组合到同一框架中。端到端链路为：Host 通过认证连接提供配置，客户端创建工作区和 Session，注册布局/工作台服务，最后由 root 插槽驱动界面，主题由宿主 ui-theme 统一投影。 */
 import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import { type AgentWorkbench } from "./workbench.ts";
 /** Required services (cordis fiber inject — the loader passes all module exports as an object plugin). */

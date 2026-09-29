@@ -10,6 +10,9 @@
   height: 100%;
   overflow: hidden;
   background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--workbench-font-family, var(--dsw-font-family));
+  font-size: var(--workbench-font-size, var(--dsh-content-font-size, 14px));
   /* Collapse/expand animates the tracks on the deepsuite sider curve
      (--ds-ease-in-out / --ds-transition-duration-slow, ui-theme base.css). */
   /* 中文：折叠/展开沿 deepsuite 侧栏曲线为网格轨道做动画，变量定义见 ui-theme base.css。 */
