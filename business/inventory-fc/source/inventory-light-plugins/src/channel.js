@@ -25,9 +25,20 @@ window.addEventListener("message", (event) => {
   channel.onmessage = (event) => {
     const message = event.data;
     if (message.type === "context") {
+      const previousSession = context?.session;
+      if (previousSession && previousSession !== message.context?.session) {
+        for (const [id, item] of pending) {
+          clearTimeout(item.timer);
+          item.cleanup?.();
+          item.reject(Error("页面会话已切换，请重新操作"));
+          channel.postMessage({ type: "cancel", id });
+        }
+        pending.clear();
+      }
       context = message.context;
       if (context?.session) channel.postMessage({type: "theme:subscribe", session: context.session});
-      if (context?.session) window.dispatchEvent(new Event("gea-session-changed"));
+      if (context?.session && previousSession !== context.session)
+        window.dispatchEvent(new Event("gea-session-changed"));
     }
     if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
       if (message.version !== "1.0.0" || !["light", "dark"].includes(message.colorScheme) ||
@@ -59,6 +70,7 @@ window.addEventListener("message", (event) => {
     }
     if (message.type === "invoke") {
       const handler = handlers.get(message.name);
+      const session = context?.session;
       Promise.resolve()
         .then(() => {
           if (!handler) throw Error("页面未注册该操作");
@@ -66,11 +78,12 @@ window.addEventListener("message", (event) => {
         })
         .then(
           (result) =>
-            channel.postMessage({ type: "invoked", id: message.id, result }),
+            channel.postMessage({ type: "invoked", id: message.id, session, result }),
           (error) =>
             channel.postMessage({
               type: "invoked",
               id: message.id,
+              session,
               error: error.message,
             }),
         );
@@ -112,13 +125,13 @@ export async function call(method, parameters = {}, options = {}) {
     }, 120000);
     pending.set(id, { resolve, reject, timer, method, cleanup });
     options.signal?.addEventListener("abort", abort, {once: true});
-    channel.postMessage({ type: "request", id, method, parameters });
+    channel.postMessage({ type: "request", id, method, parameters, session: context?.session });
   });
 }
 export function action(name, description, handler) {
   handlers.set(name, handler);
   void ready.then(() =>
-    channel.postMessage({ type: "register", name, description }),
+    channel.postMessage({ type: "register", name, description, session: context?.session }),
   );
 }
 export function ask(text, context) {

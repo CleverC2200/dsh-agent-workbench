@@ -100,6 +100,8 @@ test("one page keeps distinct allowed Agent sessions and refuses a mismatched pr
   assert.equal(sequence, 2);
   await assert.rejects(f.controller.open("inventory-fc", "other", undefined, "other"), /Preset not allowed/);
   await assert.rejects(f.controller.open("inventory-fc", "qll", fc, "qll"), /Session preset differs/);
+  presets.set("foreign-session", "other");
+  await assert.rejects(f.controller.open("inventory-fc", "forged", "foreign-session"), /not allowed/);
   assert.equal(f.selected, fc);
 });
 test("coalesces duplicate instance creation and latest navigation wins", async () => {

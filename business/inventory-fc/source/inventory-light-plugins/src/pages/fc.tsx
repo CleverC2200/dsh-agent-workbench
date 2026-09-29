@@ -243,6 +243,11 @@ export function BranchInventoryAgent() {
   const liveSnapshot = livePage?.snapshot ?? null;
   const [snapshotLoading, setSnapshotLoading] = useState(true);
   const [pageRevision, setPageRevision] = useState(0);
+  useEffect(() => {
+    const rebind = () => setPageRevision((revision) => revision + 1);
+    window.addEventListener("gea-session-changed", rebind);
+    return () => window.removeEventListener("gea-session-changed", rebind);
+  }, []);
   const appliedPageRevision = useRef(0);
   const [detailSnapshot, setDetailSnapshot] =
     useState<WarehouseSnapshot | null>(null);

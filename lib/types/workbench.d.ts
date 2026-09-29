@@ -70,6 +70,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private save;
     /** Register after the page's main slot; the disposer forgets its associations. 中文：应在页面主槽位就绪后登记；返回的清理函数会取消待处理创建并清除该页本地关联。 */
     register(page: WorkbenchPage): () => void;
+    private permitsPreset;
     /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
     selectPanel(id: MainPanelId | null): void;
     /**

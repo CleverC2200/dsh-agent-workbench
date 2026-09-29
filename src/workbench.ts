@@ -142,14 +142,23 @@ export class WorkbenchController implements AgentWorkbench {
     };
   }
 
+  private permitsPreset(page: WorkbenchPage, session: SessionId): boolean {
+    const actual = this.ports.presetOf?.(session);
+    return actual !== undefined &&
+      (actual === page.preset || page.allowedPresets?.includes(actual) === true);
+  }
+
   /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
   selectPanel(id: MainPanelId | null): void {
-    if (id === null || !this.pages.has(id)) return;
+    if (id === null) return;
+    const page = this.pages.get(id);
+    if (!page) return;
     const session = this.sessions
       .get(id)
       ?.get(this.instances.get(id) ?? "default");
     this.ports.select(
-      session !== undefined && this.ports.available(session)
+      session !== undefined && this.ports.available(session) &&
+        (page.allowedPresets === undefined || this.permitsPreset(page, session))
         ? session
         : undefined,
     );
@@ -212,6 +221,8 @@ export class WorkbenchController implements AgentWorkbench {
     )
       return;
     await this.ports.prepare(selected);
+    if (page.allowedPresets !== undefined && !this.permitsPreset(page, selected))
+      throw new Error("Session preset is not allowed for this workbench page");
     if (preset !== undefined && this.ports.presetOf?.(selected) !== selectedPreset)
       throw new Error(`Session preset differs from requested page ability: ${selectedPreset}`);
     if (
