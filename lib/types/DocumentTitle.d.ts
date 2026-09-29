@@ -1,6 +1,13 @@
-import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
+import type { InjectFace, PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+/** Read-only main Session hook bound by the workbench registration. */
+export type MainSessionProps = InjectFace<{
+    hooks: {
+        mainSessionId: UiSession["mainSessionId"];
+    };
+}>;
 /** Props for the browser title projection. 中文：标题投影组件所需的最小运行时订阅能力和产品名。 */
-export type DocumentTitleProps = Pick<PropsRuntime<"root">, "useSessions" | "usePanelInfo"> & {
+export type DocumentTitleProps = Pick<PropsRuntime<"root">, "useSessions" | "usePanelInfo"> & MainSessionProps & {
     /** Build-configured or localized product title. 中文：构建配置或本地化提供的产品标题，也是无会话时的兜底标题。 */
     productTitle: string;
 };
@@ -13,4 +20,4 @@ export type DocumentTitleProps = Pick<PropsRuntime<"root">, "useSessions" | "use
  * 显示全局业务面板或没有当前 Session 时只显示产品名，组件卸载时也恢复产品名。
  * 该组件只产生副作用，不渲染任何 DOM。
  */
-export declare function DocumentTitle({ useSessions, usePanelInfo, productTitle, }: DocumentTitleProps): null;
+export declare function DocumentTitle({ useSessions, useMainSessionId, usePanelInfo, productTitle, }: DocumentTitleProps): null;

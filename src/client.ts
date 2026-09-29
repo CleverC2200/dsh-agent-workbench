@@ -20,6 +20,7 @@ import { LayoutController } from "./service.ts";
 /** 必需服务（Cordis fiber 注入；加载器会把模块导出整体作为对象插件传入）。 */
 export const inject = [
   "slots",
+  "uiSession",
   "theme",
   "locale",
   "sessions",
@@ -123,6 +124,7 @@ export function apply(ctx: ClientContext): void {
     const disposeRegistration = ctx.slots.register(
       {
         name: "root",
+        inject: () => ({ hooks: { mainSessionId: ctx.uiSession.mainSessionId } }),
         locale: "common",
         children: {
           sidebar: { kind: "single", scope: "root" },

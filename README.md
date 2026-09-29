@@ -39,3 +39,7 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 ## 共享主题
 
 [共享主题资源](theme/README.md) 在本仓库维护，在开发期同步并编入受控 DSH 的 ui-theme。工作台不再创建主题 presenter；宿主主题适配必须与本插件一起整合。只升级此工作台插件到旧宿主不受支持。主题资源候选版本为 1.0.0，插件包版本保持 0.1.1，未发布。
+
+浏览器标题通过核心 `uiSession.mainSessionId` 的只读观察源选择会话，再从会话列表读取标题；观察不会增加引用，组件卸载时释放订阅。源码适配需要配套核心与 GEA。
+
+主题同步按 `html body` 和 `html body[data-ds-dark-theme]` 选择器读取各自唯一的六位十六进制 `--workbench-page`，规则顺序不影响启动色；重复、缺失、嵌套规则或不兼容值会在写入前报错。资源版本、摘要和漂移检查仍由 `scripts/sync-theme.mjs` 维护。

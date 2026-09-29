@@ -40,14 +40,14 @@ import {
   SIDEBAR_AUTO_COLLAPSE,
   SIDEBAR_DEFAULT,
 } from "./columns.ts";
-import { DocumentTitle } from "./DocumentTitle.tsx";
+import { DocumentTitle, type MainSessionProps } from "./DocumentTitle.tsx";
 import type { createLayoutStore } from "./stores.ts";
 import css from "./AppFrame.module.css";
 
 /** Full composed props: runtime share + child-slot render share + store share.
  * 中文：完整根框架属性，合并运行时能力、子槽位渲染能力、布局 store 与本地化能力。
  */
-export type AppFrameProps = PropsRuntime<"root"> &
+export type AppFrameProps = PropsRuntime<"root"> & MainSessionProps &
   PropsRenderSlots<"sidebar" | "main" | "rightbar" | "shell.overlay"> &
   PropsStore<ReturnType<typeof createLayoutStore>> &
   PropsLocale<"common">;
@@ -191,6 +191,7 @@ function DragHandle(props: {
 export function AppFrame({
   useStore,
   useSessions,
+  useMainSessionId,
   usePanelInfo,
   actions,
   renderSlot,
@@ -349,6 +350,7 @@ export function AppFrame({
       <DocumentTitle
         productTitle={productTitle}
         useSessions={useSessions}
+        useMainSessionId={useMainSessionId}
         usePanelInfo={usePanelInfo}
       />
       <div className={css.sidebarCol}>{sidebar}</div>

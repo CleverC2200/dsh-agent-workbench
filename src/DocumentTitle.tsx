@@ -4,13 +4,17 @@
  * 当前 Session 标题，避免整个三栏框架因标题变化而重新订阅、重新渲染。
  */
 import { useEffect } from "react";
-import type { PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+import type { UiSession } from "@deepseek-ai/dsh-client-ui-session/client";
+import type { InjectFace, PropsRuntime } from "@deepseek-ai/dsh-client-ui-slots";
+
+/** Read-only main Session hook bound by the workbench registration. */
+export type MainSessionProps = InjectFace<{ hooks: { mainSessionId: UiSession["mainSessionId"] } }>;
 
 /** Props for the browser title projection. 中文：标题投影组件所需的最小运行时订阅能力和产品名。 */
 export type DocumentTitleProps = Pick<
   PropsRuntime<"root">,
   "useSessions" | "usePanelInfo"
-> & {
+> & MainSessionProps & {
   /** Build-configured or localized product title. 中文：构建配置或本地化提供的产品标题，也是无会话时的兜底标题。 */
   productTitle: string;
 };
@@ -26,14 +30,13 @@ export type DocumentTitleProps = Pick<
  */
 export function DocumentTitle({
   useSessions,
+  useMainSessionId,
   usePanelInfo,
   productTitle,
 }: DocumentTitleProps): null {
   const showSessionTitle = usePanelInfo((info) => info.activePanelId === null);
+  const current = useMainSessionId(id => id);
   const title = useSessions((state) => {
-    const current = Object.values(state.byId).find(
-      (session) => (session.retainedBy.mainView ?? 0) > 0,
-    )?.id;
     return !showSessionTitle || current === undefined
       ? undefined
       : state.byId[current]?.title;

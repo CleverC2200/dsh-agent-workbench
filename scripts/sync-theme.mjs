@@ -10,16 +10,35 @@ const core = resolve(values.core);
 const manifest = JSON.parse(await readFile(resolve(core, "packages/client/ui-theme/package.json"), "utf8"));
 if (manifest.name !== "@deepseek-ai/dsh-client-ui-theme") throw Error("Not a DSH ui-theme source checkout");
 const css = await readFile(new URL("../theme/tokens.css", import.meta.url), "utf8");
-const pageColors = [...css.matchAll(/--workbench-page:\s*(#[\da-f]{6});/gi)].map(match => match[1]);
-if (pageColors.length !== 2) throw Error("Expected one light and one dark page color");
+// This resource owns flat rules and one six-digit page color per theme selector.
+const selectors = { "html body": "LIGHT", "html body[data-ds-dark-theme]": "DARK" };
+const pageColors = {};
+const stripped = css.replace(/\/\*[\s\S]*?\*\//g, "");
+const rules = [...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)];
+if (stripped.replace(/([^{}]+)\{([^{}]*)\}/g, "").trim())
+  throw Error("theme/tokens.css: expected flat theme rules");
+for (const [, selector, declarations] of rules) {
+  const entries = declarations.split(";").map(value => value.trim())
+    .filter(value => /^--workbench-page\s*:/.test(value));
+  if (!entries.length) continue;
+  const key = selector.trim().replace(/\s+/g, " ");
+  const mode = Object.hasOwn(selectors, key) ? selectors[key] : undefined;
+  if (!mode || entries.length !== 1 || pageColors[mode])
+    throw Error(`theme/tokens.css: expected one page color for each theme, got ${key}`);
+  const color = entries[0].match(/^--workbench-page\s*:\s*(#[\da-f]{6})$/i)?.[1];
+  if (!color) throw Error(`theme/tokens.css: invalid page color for ${key}`);
+  pageColors[mode] = color;
+}
+if (!pageColors.LIGHT || !pageColors.DARK)
+  throw Error("theme/tokens.css: missing light or dark page color");
 const bootPath = resolve(core, "packages/client/ui-theme/src/boot-theme.ts");
 const boot = await readFile(bootPath, "utf8");
-let bootMatches = 0;
+const bootMatches = { LIGHT: 0, DARK: 0 };
 const syncedBoot = boot.replace(/const (LIGHT|DARK)_BACKGROUND = '[^']+'/g, (_, mode) => {
-  bootMatches++;
-  return `const ${mode}_BACKGROUND = '${pageColors[mode === "LIGHT" ? 0 : 1]}'`;
+  bootMatches[mode]++;
+  return `const ${mode}_BACKGROUND = '${pageColors[mode]}'`;
 });
-if (bootMatches !== 2) throw Error("DSH boot palette declarations changed; review the adapter before syncing");
+if (bootMatches.LIGHT !== 1 || bootMatches.DARK !== 1) throw Error("DSH boot palette declarations changed; review the adapter before syncing");
 if (values.check) {
   if (boot !== syncedBoot) throw Error("Shared theme boot palette drift; run sync-theme without --check");
 } else if (boot !== syncedBoot) await writeFile(bootPath, syncedBoot);
