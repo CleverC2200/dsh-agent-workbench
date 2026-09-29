@@ -16,6 +16,8 @@ export interface WorkbenchPage {
   readonly preset: string;
   /** Other installed presets explicitly allowed to interpret this page. */
   readonly allowedPresets?: readonly string[];
+  /** Current authority for a business page; a different login must not reuse its Session. */
+  readonly scope?: () => Promise<string>;
 }
 /** Dependencies supplied by the DSH layout adapter. 中文：工作台访问 DSH 宿主能力的端口，便于让业务控制器与具体 UI/框架解耦。 */
 export interface WorkbenchPorts {
@@ -48,11 +50,13 @@ export interface AgentWorkbench {
     instance?: string,
     sessionId?: SessionId,
     preset?: string,
-  ): Promise<void>;
+  ): Promise<boolean>;
   /** 中文：把原生 Conversation 列加入指定页面，返回清理函数。 */
   showConversation(id: MainPanelId): () => void;
   /** 中文：忘记页面的本地实例关联，但不删除真实 Session。 */
   forget(id: MainPanelId): void;
+  /** Select the host's startup panel while a saved business page is waiting to register. */
+  selectDefault(id: MainPanelId): void;
 }
 
 /** Owns one selected instance per page and coalesces creation per instance. 中文：控制每个页面当前选中的业务实例，并将同一实例的并发创建请求合并为一个 Promise。 */
@@ -63,6 +67,12 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly sessions = new Map<MainPanelId, Map<string, SessionId>>();
   /** 中文：记录每个页面最后一次选中的实例，用于再次进入页面时恢复。 */
   private readonly instances = new Map<MainPanelId, string>();
+  private readonly scopes = new Map<MainPanelId, string>();
+  private readonly verifiedScopes = new Set<MainPanelId>();
+  private restorePanel?: MainPanelId;
+  private bootPanel?: MainPanelId;
+  private restoringPanel = false;
+  private restoredPanel = false;
   /** 中文：尚未完成的 Session 创建任务，用于合并同页面同实例的重复打开。 */
   private readonly pending = new Map<
     WorkbenchPage,
@@ -77,6 +87,8 @@ export class WorkbenchController implements AgentWorkbench {
    */
   constructor(private readonly ports: WorkbenchPorts) {
     try {
+      const active = ports.storage?.getItem("agent-workbench:active-panel");
+      if (active && active.length <= 120) this.restorePanel = active as MainPanelId;
       const raw = ports.storage?.getItem("agent-workbench:v1");
       if (!raw) return;
       const stored: unknown = JSON.parse(raw);
@@ -84,7 +96,7 @@ export class WorkbenchController implements AgentWorkbench {
       for (const row of stored) {
         if (
           !Array.isArray(row) ||
-          row.length !== 3 ||
+          (row.length !== 3 && row.length !== 4) ||
           typeof row[0] !== "string" ||
           typeof row[1] !== "string" ||
           !Array.isArray(row[2])
@@ -103,6 +115,7 @@ export class WorkbenchController implements AgentWorkbench {
         }
         this.sessions.set(row[0] as MainPanelId, bindings);
         this.instances.set(row[0] as MainPanelId, row[1]);
+        if (typeof row[3] === "string") this.scopes.set(row[0] as MainPanelId, row[3]);
       }
     } catch {
       /* Malformed browser storage is discarded; durable Sessions are untouched. 中文：损坏的浏览器缓存直接丢弃，不会删除或修改宿主中的持久 Session。 */
@@ -119,6 +132,7 @@ export class WorkbenchController implements AgentWorkbench {
             id,
             this.instances.get(id) ?? "default",
             [...bindings],
+            this.scopes.get(id) ?? null,
           ]),
         ),
       );
@@ -127,7 +141,7 @@ export class WorkbenchController implements AgentWorkbench {
     }
   }
 
-  /** Register after the page's main slot; the disposer forgets its associations. 中文：应在页面主槽位就绪后登记；返回的清理函数会取消待处理创建并清除该页本地关联。 */
+  /** Register after the page's main slot; unmount keeps durable associations for reload. */
   register(page: WorkbenchPage): () => void {
     if (this.disposed) throw new Error("Workbench disposed");
     if (this.pages.has(page.id))
@@ -138,7 +152,7 @@ export class WorkbenchController implements AgentWorkbench {
       if (this.pages.get(page.id) !== owned) return;
       this.pending.delete(owned);
       this.pages.delete(page.id);
-      this.forget(page.id);
+      this.verifiedScopes.delete(page.id);
     };
   }
 
@@ -150,18 +164,41 @@ export class WorkbenchController implements AgentWorkbench {
 
   /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
   selectPanel(id: MainPanelId | null): void {
+    if (this.restorePanel && id !== this.bootPanel) this.restorePanel = undefined;
+    if (!this.restorePanel) {
+      try { this.ports.storage?.setItem("agent-workbench:active-panel", id ?? ""); } catch { /* Memory-only navigation. */ }
+    }
     if (id === null) return;
     const page = this.pages.get(id);
     if (!page) return;
+    // Restoring the panel can precede the host Session navigation service.
+    // Its mounted page calls open(), which prepares and selects the exact Session.
+    if (this.restoringPanel) return;
     const session = this.sessions
       .get(id)
       ?.get(this.instances.get(id) ?? "default");
     this.ports.select(
-      session !== undefined && this.ports.available(session) &&
+      (page.scope === undefined || this.verifiedScopes.has(id)) &&
+        session !== undefined && this.ports.available(session) &&
         (page.allowedPresets === undefined || this.permitsPreset(page, session))
         ? session
         : undefined,
     );
+  }
+
+  /** Startup defaults may render immediately; a saved page wins once its slot is registered. */
+  selectDefault(id: MainPanelId): void {
+    this.bootPanel = id;
+    if (!this.restoredPanel) this.ports.panel(id);
+  }
+
+  restoreRegistered(ids: readonly string[]): void {
+    const id = this.restorePanel;
+    if (!id || !this.pages.has(id) || !ids.includes(id)) return;
+    this.restorePanel = undefined;
+    this.restoredPanel = true;
+    this.restoringPanel = true;
+    try { this.ports.panel(id); } finally { this.restoringPanel = false; }
   }
 
   /**
@@ -169,23 +206,38 @@ export class WorkbenchController implements AgentWorkbench {
    * 中文：打开一个“页面 + 实例”。优先采用显式 sessionId，其次复用已绑定 Session，最后按页面预设新建；
    * 同一实例的并发创建会共用一个任务。只有页面仍存活、关联表未被替换且本次导航未过期时，
    * 才会准备 Session、保存关联并切到目标面板，避免慢请求把用户带回旧页面。
+   * 返回 false 表示导航已被后续动作取消，调用方不得把它当作页面已打开。
    */
   async open(
     id: MainPanelId,
     instance?: string,
     sessionId?: SessionId,
     preset?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const page = this.pages.get(id);
     if (!page || this.disposed)
       throw new Error(`Unknown workbench page: ${id}`);
     const selectedPreset = preset ?? page.preset;
     if (selectedPreset !== page.preset && !page.allowedPresets?.includes(selectedPreset))
       throw new Error(`Preset not allowed for workbench page: ${selectedPreset}`);
-    instance ??= this.instances.get(id) ?? "default";
     const navigation = this.ports.beginNavigation();
     /** 中文：检查异步流程返回时，控制器和本次页面登记是否仍然有效。 */
     const alive = () => !this.disposed && this.pages.get(id) === page;
+    let scope: string | undefined;
+    if (page.scope) {
+      scope = await page.scope();
+      if (!alive() || navigation.aborted) return false;
+      if (!scope) throw new Error("Workbench identity unavailable");
+      if (this.scopes.get(id) !== scope) {
+        this.sessions.delete(id);
+        this.instances.delete(id);
+        this.pending.delete(page);
+        this.scopes.set(id, scope);
+        this.save();
+      }
+      this.verifiedScopes.add(id);
+    }
+    instance ??= this.instances.get(id) ?? "default";
     let bindings = this.sessions.get(id);
     if (!bindings) this.sessions.set(id, (bindings = new Map()));
     const ownedBindings = bindings;
@@ -198,15 +250,6 @@ export class WorkbenchController implements AgentWorkbench {
       if (!flight) {
         flight = this.ports
           .create(selectedPreset)
-          .then((created) => {
-            if (
-              alive() &&
-              this.sessions.get(id) === ownedBindings &&
-              flights.get(instance) === flight
-            )
-              ownedBindings.set(instance, created);
-            return created;
-          })
           .finally(() => {
             if (flights.get(instance) === flight) flights.delete(instance);
           });
@@ -219,22 +262,28 @@ export class WorkbenchController implements AgentWorkbench {
       this.sessions.get(id) !== ownedBindings ||
       navigation.aborted
     )
-      return;
+      return false;
     await this.ports.prepare(selected);
+    if (!alive() || this.sessions.get(id) !== ownedBindings || navigation.aborted) return false;
     if (page.allowedPresets !== undefined && !this.permitsPreset(page, selected))
       throw new Error("Session preset is not allowed for this workbench page");
     if (preset !== undefined && this.ports.presetOf?.(selected) !== selectedPreset)
       throw new Error(`Session preset differs from requested page ability: ${selectedPreset}`);
+    if (page.scope && (await page.scope()) !== scope) {
+      if (this.scopes.get(id) === scope) this.forget(id);
+      throw new Error("Workbench identity changed while opening page");
+    }
     if (
       !alive() ||
       this.sessions.get(id) !== ownedBindings ||
       navigation.aborted
     )
-      return;
+      return false;
     bindings.set(instance, selected);
     this.instances.set(id, instance);
     this.save();
     this.ports.panel(id);
+    return true;
   }
 
   /** Opt a mounted page into the native conversation column. 中文：让已登记页面选择展示原生 Conversation 列，并把宿主清理函数原样返回。 */
@@ -247,6 +296,8 @@ export class WorkbenchController implements AgentWorkbench {
   forget(id: MainPanelId): void {
     this.sessions.delete(id);
     this.instances.delete(id);
+    this.scopes.delete(id);
+    this.verifiedScopes.delete(id);
     const page = this.pages.get(id);
     if (page) this.pending.delete(page);
     this.save();
@@ -258,6 +309,8 @@ export class WorkbenchController implements AgentWorkbench {
     this.pages.clear();
     this.sessions.clear();
     this.instances.clear();
+    this.scopes.clear();
+    this.verifiedScopes.clear();
     this.pending.clear();
   }
 }

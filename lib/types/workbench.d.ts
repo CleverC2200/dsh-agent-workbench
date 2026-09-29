@@ -15,6 +15,8 @@ export interface WorkbenchPage {
     readonly preset: string;
     /** Other installed presets explicitly allowed to interpret this page. */
     readonly allowedPresets?: readonly string[];
+    /** Current authority for a business page; a different login must not reuse its Session. */
+    readonly scope?: () => Promise<string>;
 }
 /** Dependencies supplied by the DSH layout adapter. 中文：工作台访问 DSH 宿主能力的端口，便于让业务控制器与具体 UI/框架解耦。 */
 export interface WorkbenchPorts {
@@ -42,11 +44,13 @@ export interface AgentWorkbench {
     /** 中文：登记页面并返回反注册函数。 */
     register(page: WorkbenchPage): () => void;
     /** 中文：打开页面的某个业务实例，可选择显式绑定宿主已创建的 Session。 */
-    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<void>;
+    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<boolean>;
     /** 中文：把原生 Conversation 列加入指定页面，返回清理函数。 */
     showConversation(id: MainPanelId): () => void;
     /** 中文：忘记页面的本地实例关联，但不删除真实 Session。 */
     forget(id: MainPanelId): void;
+    /** Select the host's startup panel while a saved business page is waiting to register. */
+    selectDefault(id: MainPanelId): void;
 }
 /** Owns one selected instance per page and coalesces creation per instance. 中文：控制每个页面当前选中的业务实例，并将同一实例的并发创建请求合并为一个 Promise。 */
 export declare class WorkbenchController implements AgentWorkbench {
@@ -57,6 +61,12 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly sessions;
     /** 中文：记录每个页面最后一次选中的实例，用于再次进入页面时恢复。 */
     private readonly instances;
+    private readonly scopes;
+    private readonly verifiedScopes;
+    private restorePanel?;
+    private bootPanel?;
+    private restoringPanel;
+    private restoredPanel;
     /** 中文：尚未完成的 Session 创建任务，用于合并同页面同实例的重复打开。 */
     private readonly pending;
     /** 中文：控制器是否已销毁；销毁后不再接受页面或导航结果。 */
@@ -68,18 +78,22 @@ export declare class WorkbenchController implements AgentWorkbench {
     constructor(ports: WorkbenchPorts);
     /** 中文：把当前关联表和每页选中实例写入浏览器存储；存储失败不影响本次内存态业务。 */
     private save;
-    /** Register after the page's main slot; the disposer forgets its associations. 中文：应在页面主槽位就绪后登记；返回的清理函数会取消待处理创建并清除该页本地关联。 */
+    /** Register after the page's main slot; unmount keeps durable associations for reload. */
     register(page: WorkbenchPage): () => void;
     private permitsPreset;
     /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
     selectPanel(id: MainPanelId | null): void;
+    /** Startup defaults may render immediately; a saved page wins once its slot is registered. */
+    selectDefault(id: MainPanelId): void;
+    restoreRegistered(ids: readonly string[]): void;
     /**
      * Create/reuse an instance Session, or explicitly associate a host-created Session.
      * 中文：打开一个“页面 + 实例”。优先采用显式 sessionId，其次复用已绑定 Session，最后按页面预设新建；
      * 同一实例的并发创建会共用一个任务。只有页面仍存活、关联表未被替换且本次导航未过期时，
      * 才会准备 Session、保存关联并切到目标面板，避免慢请求把用户带回旧页面。
+     * 返回 false 表示导航已被后续动作取消，调用方不得把它当作页面已打开。
      */
-    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<void>;
+    open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<boolean>;
     /** Opt a mounted page into the native conversation column. 中文：让已登记页面选择展示原生 Conversation 列，并把宿主清理函数原样返回。 */
     showConversation(id: MainPanelId): () => void;
     /** Drop local associations, without deleting or stopping durable Sessions. 中文：只删除页面的本地映射、当前实例和待建任务，不删除也不停止宿主持久 Session。 */

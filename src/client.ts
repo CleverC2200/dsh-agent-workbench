@@ -45,13 +45,13 @@ export function apply(ctx: ClientContext): void {
     const store: typeof handle = { ...handle, create: () => instance };
     // 主面板注册变化时同步保留有效选择；已卸载的面板会回退到原生 Conversation。
     const retainMainPanels = (): void => {
-      instance.actions.retainMainPanels(
-        ctx.slots
+      const registered = ctx.slots
           .entries("main")
           .flatMap((entry) =>
             entry.options.key === undefined ? [] : [entry.options.key],
-          ),
-      );
+          );
+      instance.actions.retainMainPanels(registered);
+      workbench.restoreRegistered(registered);
     };
     // 将 store 的面板快照包装成 root slot 可订阅的数据源，供宿主组件响应选择变化。
     const panelInfo: HostObservable<PanelInfo> = {

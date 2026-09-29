@@ -117,7 +117,7 @@ test("coalesces duplicate instance creation and latest navigation wins", async (
   const a = f.controller.open("gea"),
     b = f.controller.open("gea");
   d.resolve("session-one");
-  await Promise.all([a, b]);
+  assert.deepEqual(await Promise.all([a, b]), [false, true]);
   assert.equal(calls, 1);
   assert.equal(f.selected, "session-one");
 });
@@ -131,7 +131,7 @@ test("a slow request cannot steal selection from another page", async () => {
   const a = f.controller.open("a");
   await f.controller.open("b");
   d.resolve("slow-session");
-  await a;
+  assert.equal(await a, false);
   assert.equal(f.panel, "b");
   assert.equal(f.selected, "fast-session");
 });
@@ -145,7 +145,7 @@ test("unregistration and logout invalidate pending association without stopping 
     else if (action === "forget") f.controller.forget("a");
     else f.controller.dispose();
     d.resolve("late-session");
-    await a;
+    assert.equal(await a, false);
     assert.equal(f.panel, undefined);
     assert.equal(f.selected, undefined);
   }
@@ -163,10 +163,12 @@ test("an explicitly associated session wins over earlier creation for the same i
 });
 test("storage restores associations and malformed entries cannot become session identities", async () => {
   let stored;
+  let active;
   const storage = {
-    getItem: () => stored,
-    setItem: (_k, v) => {
-      stored = v;
+    getItem: (key) => key === "agent-workbench:active-panel" ? active : stored,
+    setItem: (key, v) => {
+      if (key === "agent-workbench:active-panel") active = v;
+      else stored = v;
     },
   };
   const a = fixture({ storage });
@@ -211,4 +213,104 @@ test("a restored association waits for the session list instead of crashing init
   f.controller.register({ id: "gea", preset: "gea" });
   f.controller.selectPanel("gea");
   assert.equal(f.selected, undefined);
+});
+
+test("unmount and reload retain the exact page instance and durable Session", async () => {
+  let stored;
+  let active;
+  const storage = {
+    getItem: (key) => key === "agent-workbench:active-panel" ? active : stored,
+    setItem: (key, value) => { if (key === "agent-workbench:active-panel") active = value; else stored = value; },
+  };
+  const first = fixture({ storage });
+  const unmount = first.controller.register({ id: "inventory-fc", preset: "fc" });
+  await first.controller.open("inventory-fc", "changsha");
+  const session = first.selected;
+  unmount();
+  first.controller.dispose();
+  const reloaded = fixture({ storage });
+  reloaded.controller.register({ id: "inventory-fc", preset: "fc" });
+  await reloaded.controller.open("inventory-fc");
+  assert.equal(reloaded.selected, session);
+  assert.equal(reloaded.created, 0);
+});
+
+test("reload returns to the saved business panel after its slot is registered", async () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+  };
+  const first = fixture({ storage });
+  first.controller.register({ id: "gea", preset: "gea" });
+  first.controller.register({ id: "inventory-fc", preset: "fc" });
+  first.controller.selectDefault("gea");
+  await first.controller.open("inventory-fc", "changsha");
+  const session = first.selected;
+  first.controller.dispose();
+  const next = fixture({ storage });
+  next.controller.register({ id: "gea", preset: "gea" });
+  next.controller.selectDefault("gea");
+  assert.equal(next.panel, "gea");
+  next.controller.register({ id: "inventory-fc", preset: "fc" });
+  next.controller.restoreRegistered(["gea", "inventory-fc"]);
+  assert.equal(next.panel, "inventory-fc");
+  assert.equal(next.selected, undefined, "panel restoration waits for the page to prepare its Session");
+  await next.controller.open("inventory-fc");
+  assert.equal(next.selected, session);
+  assert.equal(next.created, 0);
+  const early = fixture({ storage });
+  early.controller.register({ id: "inventory-fc", preset: "fc" });
+  early.controller.restoreRegistered(["inventory-fc"]);
+  early.controller.register({ id: "gea", preset: "gea" });
+  early.controller.selectDefault("gea");
+  assert.equal(early.panel, "inventory-fc", "a late startup default cannot displace the restored page");
+});
+
+test("a missing restored Session fails explicitly without creating or selecting another", async () => {
+  let stored;
+  let active;
+  const storage = {
+    getItem: (key) => key === "agent-workbench:active-panel" ? active : stored,
+    setItem: (key, value) => { if (key === "agent-workbench:active-panel") active = value; else stored = value; },
+  };
+  const first = fixture({ storage });
+  first.controller.register({ id: "inventory-fc", preset: "fc" });
+  await first.controller.open("inventory-fc", "changsha");
+  const reloaded = fixture({ storage, prepare: async () => { throw Error("Session unavailable"); } });
+  reloaded.controller.register({ id: "inventory-fc", preset: "fc" });
+  await assert.rejects(reloaded.controller.open("inventory-fc"), /Session unavailable/);
+  assert.equal(reloaded.selected, undefined);
+  assert.equal(reloaded.created, 0);
+});
+
+test("an identity change invalidates restored associations and late creation", async () => {
+  let stored;
+  let active;
+  let scope = "first-login";
+  const storage = {
+    getItem: (key) => key === "agent-workbench:active-panel" ? active : stored,
+    setItem: (key, value) => { if (key === "agent-workbench:active-panel") active = value; else stored = value; },
+  };
+  const page = { id: "inventory-fc", preset: "fc", scope: async () => scope };
+  const first = fixture({ storage });
+  first.controller.register(page);
+  await first.controller.open(page.id, "changsha");
+  scope = "second-login";
+  const reloaded = fixture({ storage });
+  reloaded.controller.register(page);
+  await reloaded.controller.open(page.id);
+  assert.equal(reloaded.created, 1);
+  assert.equal(JSON.parse(stored)[0][3], "second-login");
+  const slow = deferred();
+  const entered = deferred();
+  const pending = fixture({ storage, create: () => { entered.resolve(); return slow.promise; } });
+  pending.controller.register(page);
+  const opening = pending.controller.open(page.id, "new-instance");
+  await entered.promise;
+  scope = "third-login";
+  slow.resolve("late-session");
+  await assert.rejects(opening, /identity changed/);
+  assert.equal(pending.selected, undefined);
+  assert.equal(pending.panel, undefined);
 });

@@ -20,10 +20,10 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 await ctx.agentWorkbench.open(panelId, 'my-other-agent', undefined, 'my-other-agent')
 ```
 
-首次 `open` 按页面预设创建原生 Session；同一页面、同一业务实例复用 Session。`instance` 省略时恢复该页面上次实例，初始值为 `default`。创建并发合并，后发导航获胜；离开页面、注销或卸载不会停止后台 Agent。调用方处理 Promise 错误，不能把失败当成已切换。
+首次 `open` 按页面预设创建原生 Session；同一页面、同一业务实例复用 Session。`instance` 省略时恢复该页面上次实例，初始值为 `default`。创建并发合并，后发导航获胜；`open` 只有真正选中页面才返回 `true`，被较新导航取消时返回 `false`。离开页面、注销或卸载不会停止后台 Agent。调用方处理 Promise 错误，也不能把 `false` 当成已切换。
 页面可在 `register` 中声明 `allowedPresets`。第四个 `open` 参数只能选默认或已声明的预设；即使调用方显式传入 Session 而省略第四参数，刷新会话目录后仍会核对该 Session 的实际预设。恢复页面关联时也拒绝不允许的预设，不会因切换页面修改旧会话。
 
-会话关联保存在当前浏览器标签页的 `sessionStorage`，刷新可恢复，不支持跨设备恢复。只保存页面、业务实例与 Session 标识，不保存业务数据。登录身份失效时业务插件调用 `forget(panelId)` 并清除当前 Session。恢复前通过 DSH 刷新会话列表，缺失会话报错，不自动换成其他会话。`forget` 不删除 DSH 会话；后续 `open` 可创建新会话。
+会话关联和当前业务面板保存在当前浏览器标签页的 `sessionStorage`，刷新后回到同一面板和业务实例，不支持跨设备恢复。只保存页面、业务实例、Session 标识和不含凭证的身份代次，不保存业务数据。页面反注册或布局卸载保留关联，后台持久 Session 不会被删除或停止。身份失效时业务插件调用 `forget(panelId)` 并清除当前选择；`forget` 只删本地关联。需要身份隔离的页面在 `register` 中提供异步 `scope`，重新打开前及准备 Session 后都核对当前代次；旧登录或旧 Host 的关联不能复用。恢复前通过 DSH 刷新会话列表，缺失会话明确报错，不自动换成其他会话。
 
 业务插件仍负责自身权限、页面内业务状态和需要发送给模型的上下文。界面展示本身不会向模型发送数据。原生输入框、草稿和消息全部由 DSH 管理。
 
