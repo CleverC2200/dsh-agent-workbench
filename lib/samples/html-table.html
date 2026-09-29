@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目交付清单 · 样板</title>
+<style data-workbench-resource="1.0.0">/* Shared workbench resource 1.0.0. State belongs to DSH ui-theme.
+ * html + body specificity keeps the adapter stable when base sheets reload.
+ * Inline user token overrides retain priority. Status palettes stay upstream. */
+html body {
+  --workbench-theme-version: "1.0.0";
+  --workbench-font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --workbench-font-size: var(--dsh-content-font-size, 14px);
+  --workbench-page: #f7f8fa;
+  --workbench-surface: #ffffff;
+  --workbench-subtle: #fafafa;
+  --workbench-muted-surface: #f5f6f8;
+  --workbench-text: #20232a;
+  --workbench-body: #555d68;
+  --workbench-muted: #626b78;
+  --workbench-border: #e3e6ea;
+  --workbench-control-border: #d9dde3;
+  --workbench-brand: #df1732;
+  --workbench-selected-text: #d0132c;
+  --workbench-brand-hover: #c91029;
+  --workbench-brand-soft: #fff0f2;
+  --workbench-hover: #fffafb;
+}
+
+html body[data-ds-dark-theme] {
+  --workbench-page: #1b1d21;
+  --workbench-surface: #24262b;
+  --workbench-subtle: #282b31;
+  --workbench-muted-surface: #30343b;
+  --workbench-text: #edf0f5;
+  --workbench-body: #c7cdd6;
+  --workbench-muted: #aab3bf;
+  --workbench-border: #414751;
+  --workbench-control-border: #59616e;
+  --workbench-brand: #ff8092;
+  --workbench-selected-text: #ff9aa8;
+  --workbench-brand-hover: #ff9aa8;
+  --workbench-brand-soft: #442630;
+  --workbench-hover: #35272e;
+}
+
+html body,
+html body[data-ds-dark-theme] {
+  --dsw-font-family: var(--workbench-font-family);
+  --dsw-alias-bg-base: var(--workbench-page);
+  --dsw-alias-bg-layer-1: var(--workbench-surface);
+  --dsw-alias-bg-layer-2: var(--workbench-subtle);
+  --dsw-alias-label-primary: var(--workbench-text);
+  --dsw-alias-label-secondary: var(--workbench-body);
+  --dsw-alias-label-tertiary: var(--workbench-muted);
+  --dsw-alias-border-l3: var(--workbench-border);
+  --dsw-alias-border-l4: var(--workbench-control-border);
+  --dsw-alias-state-business-primary: var(--workbench-brand);
+  --dsw-specific-sidebar-fill: var(--workbench-surface);
+  --dsw-specific-sidebar-nav-item-hover: var(--workbench-hover);
+  --dsw-specific-sidebar-nav-item-active: var(--workbench-brand-soft);
+  --dsw-specific-input-major: var(--workbench-surface);
+  background-color: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--dsw-font-family);
+}
+</style>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; font: var(--workbench-font-size, 14px)/1.7 var(--workbench-font-family, sans-serif); }
+main { padding: 24px; }
+h1 { margin: 0 0 8px; font-size: 1.35em; line-height: 1.35; }
+p { margin: 0; }
+.description, .summary, label { color: var(--workbench-muted); }
+.description { max-width: 70ch; }
+form { margin: 24px 0 16px; }
+fieldset { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; padding: 0; margin: 0; border: 0; min-width: 0; }
+label { display: grid; gap: 4px; font-size: .9em; }
+input, select, button { min-height: 36px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--workbench-control-border); border-radius: 8px; font: inherit; color: var(--workbench-body); background: var(--workbench-surface); }
+input { width: 240px; caret-color: var(--workbench-brand); }
+button { cursor: pointer; }
+button:hover:not(:disabled) { background: var(--workbench-hover); border-color: var(--workbench-brand); color: var(--workbench-selected-text); }
+.primary { background: var(--workbench-brand); border-color: var(--workbench-brand); color: var(--workbench-surface); }
+.primary:hover:not(:disabled) { background: var(--workbench-brand-hover); color: var(--workbench-surface); }
+:disabled { cursor: default; opacity: .6; }
+:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+::selection { color: var(--workbench-text); background: var(--workbench-brand-soft); }
+.summary { margin-bottom: 8px; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--workbench-border); border-radius: 10px; background: var(--workbench-surface); scrollbar-color: var(--workbench-control-border) var(--workbench-subtle); }
+table { width: 100%; min-width: 580px; border-collapse: collapse; white-space: nowrap; }
+caption { text-align: left; padding: 12px 16px; font-weight: 600; }
+th, td { text-align: left; padding: 10px 16px; border-bottom: 1px solid var(--workbench-border); }
+th { background: var(--workbench-muted-surface); color: var(--workbench-muted); font-size: .9em; }
+td { color: var(--workbench-body); height: 44px; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: var(--workbench-hover); }
+.number { text-align: right; font-variant-numeric: tabular-nums; }
+.state { padding: 24px 16px; background: var(--workbench-surface); border: 1px solid var(--workbench-border); border-radius: 10px; }
+.state strong { display: block; margin-bottom: 4px; }
+.state button { margin-top: 12px; }
+.diagnostic { padding: 12px 16px; margin: 16px 0; border: 1px solid var(--workbench-control-border); }
+[hidden] { display: none !important; }
+details { margin-top: 24px; color: var(--workbench-muted); }
+summary { cursor: pointer; width: fit-content; }
+.simulations { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+@media (max-width: 520px) { main { padding: 16px; } label { width: 100%; } input, select { width: 100%; } }
+@media (prefers-reduced-motion: no-preference) { button { transition: background-color 160ms ease, border-color 160ms ease; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>项目交付清单</h1>
+  <p class="description">HTML 表格样板 · 以下均为本地演示数据，可按名称和进度筛选。</p>
+  <p class="diagnostic" role="alert" id="diagnostic">正在连接工作台主题…</p>
+  <form id="filters">
+    <fieldset disabled id="controls">
+      <label>项目名称<input id="query" type="search" placeholder="输入名称或编号" autocomplete="off"></label>
+      <label>交付进度<select id="stage"><option value="">全部进度</option><option>进行中</option><option>已完成</option><option>待开始</option></select></label>
+      <button class="primary" type="submit">查询</button>
+      <button type="button" id="reset">重置</button>
+    </fieldset>
+  </form>
+  <p class="summary" id="summary" role="status" aria-live="polite"></p>
+  <section id="results" aria-busy="false" aria-label="查询结果">
+    <div class="table-scroll" id="table-region" role="region" aria-label="可横向滚动的交付清单" tabindex="0" hidden>
+      <table><caption>项目明细</caption><thead><tr><th scope="col">项目编号</th><th scope="col">项目名称</th><th scope="col">负责人</th><th scope="col">交付进度</th><th scope="col" class="number">任务数</th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+    <div class="state" id="state" hidden><strong id="state-title"></strong><p id="state-description"></p><button type="button" id="retry" hidden>重新查询</button></div>
+  </section>
+  <details><summary>演示状态</summary><p>用于验收加载、空态与错误提示，不连接业务服务。</p><div class="simulations"><button type="button" data-state="empty" disabled>演示空结果</button><button type="button" data-state="error" disabled>演示查询失败</button></div></details>
+</main>
+<script>
+(() => {
+  const expectedVersion = '1.0.0';
+  const $ = id => document.getElementById(id);
+  const diagnostic = $('diagnostic');
+  const resource = document.querySelector('style[data-workbench-resource]');
+  const localVersion = getComputedStyle(document.body).getPropertyValue('--workbench-theme-version').trim();
+  const rows = [
+    ['DEMO-001', '工作台页面联调', '林晓', '进行中', 8],
+    ['DEMO-002', '月度资料归档', '陈宁', '已完成', 12],
+    ['DEMO-003', '帮助内容整理', '周晴', '待开始', 6],
+    ['DEMO-004', '交付清单核对', '林晓', '进行中', 5],
+  ];
+  let port, context, timer, themeReady = false, appliedTokens = [];
+  const controls = enabled => {
+    $('controls').disabled = !enabled;
+    document.querySelectorAll('[data-state], #retry').forEach(button => button.disabled = !enabled);
+  };
+  const stop = message => {
+    clearTimeout(timer);
+    $('results').setAttribute('aria-busy', 'false');
+    themeReady = false;
+    controls(false);
+    diagnostic.hidden = false;
+    diagnostic.textContent = message;
+  };
+  if (!resource || localVersion !== '"' + expectedVersion + '"') {
+    stop('共享样式资源缺失或版本不兼容，请重新构建并重新打开样板。');
+    return;
+  }
+  const showState = (title, description, retry = false) => {
+    $('table-region').hidden = true;
+    $('state').hidden = false;
+    $('state-title').textContent = title;
+    $('state-description').textContent = description;
+    $('retry').hidden = !retry;
+  };
+  const query = (simulation = '') => {
+    if (!themeReady || !context) return;
+    clearTimeout(timer);
+    $('results').setAttribute('aria-busy', 'true');
+    $('summary').textContent = '正在查询…';
+    showState('正在加载项目', '正在读取本地演示数据。');
+    timer = setTimeout(() => {
+      $('results').setAttribute('aria-busy', 'false');
+      if (simulation === 'error') {
+        $('summary').textContent = '查询未完成';
+        showState('暂时无法读取项目', '这是演示错误；点击“重新查询”恢复本地数据。', true);
+        return;
+      }
+      const keyword = $('query').value.trim().toLowerCase();
+      const stage = $('stage').value;
+      const result = simulation === 'empty' ? [] : rows.filter(row =>
+        (row[0] + row[1]).toLowerCase().includes(keyword) && (!stage || row[3] === stage));
+      $('summary').textContent = '共 ' + result.length + ' 个项目';
+      $('rows').replaceChildren(...result.map(row => {
+        const tr = document.createElement('tr');
+        row.forEach((value, index) => { const td = document.createElement('td'); td.textContent = value; if (index === 4) td.className = 'number'; tr.append(td); });
+        return tr;
+      }));
+      $('table-region').hidden = !result.length;
+      $('state').hidden = !!result.length;
+      if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
+    }, 350);
+  };
+  $('filters').addEventListener('submit', event => { event.preventDefault(); query(); });
+  $('reset').onclick = () => { $('filters').reset(); query(); };
+  $('retry').onclick = () => query();
+  document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
+  const receive = event => {
+    const message = event.data;
+    if (!message || typeof message !== 'object') return;
+    if (message.type === 'context') {
+      if (message.context === null) { context = null; stop('正在切换会话，请稍候…'); return; }
+      if (typeof message.context?.session !== 'string' || typeof message.context?.plugin !== 'string') return;
+      context = message.context;
+      port.postMessage({ type: 'theme:subscribe', session: context.session });
+      return;
+    }
+    if (message.type === 'identity-changed') { context = null; stop('页面连接已断开，请在工作台重新连接。'); return; }
+    if (message.type !== 'theme' || !context || message.context?.session !== context.session || message.context?.plugin !== context.plugin) return;
+    const tokens = message.tokens;
+    if (message.version !== expectedVersion || !tokens || typeof tokens !== 'object' ||
+        !['light', 'dark'].includes(message.colorScheme) ||
+        !['--workbench-page', '--workbench-text', '--workbench-font-size'].every(name => typeof tokens[name] === 'string' && tokens[name]) ||
+        Object.entries(tokens).some(([name, value]) => !/^--workbench-[a-z-]+$/.test(name) || typeof value !== 'string' || value.length > 500)) {
+      stop('工作台共享样式版本不兼容或资源缺失，请重新构建并重新打开样板。');
+      return;
+    }
+    appliedTokens.forEach(name => document.body.style.removeProperty(name));
+    appliedTokens = Object.keys(tokens);
+    Object.entries(tokens).forEach(([name, value]) => document.body.style.setProperty(name, value));
+    document.documentElement.style.colorScheme = message.colorScheme;
+    document.body.toggleAttribute('data-ds-dark-theme', message.colorScheme === 'dark');
+    const wasReady = themeReady;
+    themeReady = true;
+    diagnostic.hidden = true;
+    controls(true);
+    if (!wasReady) query();
+  };
+  const connect = event => {
+    if (event.source !== parent || event.origin !== new URL(document.referrer).origin ||
+        event.data?.protocol !== 'gea-html-v1' || event.data.type !== 'connect' || port ||
+        typeof event.data.context?.session !== 'string' || typeof event.data.context?.plugin !== 'string' || !event.ports[0]) return;
+    context = event.data.context;
+    port = event.ports[0];
+    port.onmessage = receive;
+    port.start();
+    port.postMessage({ type: 'theme:subscribe', session: context.session });
+  };
+  addEventListener('message', connect);
+  const timeout = setTimeout(() => { if (!themeReady) stop('未收到工作台主题，请重新连接后打开样板。'); }, 5000);
+  addEventListener('pagehide', () => { clearTimeout(timer); clearTimeout(timeout); removeEventListener('message', connect); port?.close(); }, { once: true });
+  parent.postMessage({ protocol: 'gea-html-v1', type: 'ready' }, '*');
+})();
+</script>
+</body>
+</html>

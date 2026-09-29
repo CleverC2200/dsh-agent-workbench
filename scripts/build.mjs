@@ -31,3 +31,5 @@ await writeFile(
 );
 
 execFileSync(process.execPath,["node_modules/typescript/bin/tsc","-p",process.env.DSH_TYPECHECK_PROJECT ?? "tsconfig.json","--noEmit","false","--emitDeclarationOnly","true"],{stdio:"inherit"});
+
+await import("./build-html-sample.mjs");

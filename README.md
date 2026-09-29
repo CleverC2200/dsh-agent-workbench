@@ -43,3 +43,11 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 浏览器标题通过核心 `uiSession.mainSessionId` 的只读观察源选择会话，再从会话列表读取标题；观察不会增加引用，组件卸载时释放订阅。源码适配需要配套核心与 GEA。
 
 主题同步按 `html body` 和 `html body[data-ds-dark-theme]` 选择器读取各自唯一的六位十六进制 `--workbench-page`，规则顺序不影响启动色；重复、缺失、嵌套规则或不兼容值会在写入前报错。资源版本、摘要和漂移检查仍由 `scripts/sync-theme.mjs` 维护。
+
+## HTML 表格样板（隔离验证）
+
+`samples/html-table.html` 是项目交付清单样板，只含本地演示数据。`npm run build` 将唯一的 `theme/tokens.css` 内嵌到 `lib/samples/html-table.html`，校验资源 1.0.0 的 SHA-256；不新增运行时插件，不加载网络 CSS。资源缺失或摘要变化会拒绝构建。源码模板直接打开会显示资源缺失提示。
+
+在隔离源码组合运行 GEA 的 `tests/html-shared-theme-web.test.mjs`，测试临时生成 loader 所需的 mock 描述文件，以现有 HTML 承载器打开样板。临时描述不随插件发布，退出时先停止 profile 再删除。样板覆盖筛选、表格、加载、空结果、错误重试、明暗、字号、键盘焦点和窄屏表格滚动；不查询库存或其他业务数据。
+
+主题通过现有 `gea-html-v1` MessageChannel 同步，iframe 不读取父页 DOM。连接校验父窗口和来源，主题消息校验页面及当前会话；切换会话暂停操作，卸载释放计时器和端口。父页主题状态、持久化与 DOM 投影仍由 ui-theme 管理，样板只消费投影后的变量。sandbox 与 CSP 沿用承载器，外部请求仍被禁止。资源不兼容或连接失败时显示诊断并禁用查询。
