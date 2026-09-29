@@ -43,6 +43,14 @@ test("an empty stock response clears stale facts while preserving the warehouse 
       "changsha",
       "zhengzhou",
     ]);
+    globalThis.document = { getElementById: () => ({ innerText: "当前库存130件" }) };
+    assert.equal(context.pageContext().visibleText, undefined);
+    for (const state of ["loading", "empty", "error"]) {
+      context.updateContext("queryState", { state, warehouseId: "changsha", message: state + "说明" });
+      assert.equal(context.pageContext().visibleText, state + "说明");
+    }
+    context.updateContext("queryState", { state: "ready", warehouseId: "changsha" });
+    assert.equal(context.pageContext().visibleText, "当前库存130件");
     context.clearContext();
     assert.deepEqual(context.pageContext().parts, {});
   } finally {

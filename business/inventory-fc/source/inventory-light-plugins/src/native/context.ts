@@ -22,6 +22,11 @@ function bounded(value: any, depth = 0): any {
   return value;
 }
 export function pageContext() {
+  const queryState = parts.get("queryState") as { state: string; message?: string } | undefined;
+  // A same-warehouse refresh may leave the previous KPI visible while its query is pending or failed.
+  const visibleText = PLUGIN_ID === "fc" && queryState?.state !== "ready"
+    ? queryState?.message
+    : document.getElementById("app")?.innerText.slice(0, 16000);
   return {
     source: "GEA",
     businessDefinitions:
@@ -53,7 +58,7 @@ export function pageContext() {
         : undefined,
     capturedAt: new Date().toISOString(),
     parts: Object.fromEntries(parts),
-    visibleText: document.getElementById("app")?.innerText.slice(0, 16000),
+    visibleText,
     coverage: "当前页面与已读取结果摘要；截断的行不能用于全量汇总",
   };
 }

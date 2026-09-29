@@ -18,7 +18,7 @@
     "source/inventory-light-plugins/src/pages/fc/components/base-resources-table.tsx": "0d33f8ac157066bb63869b872399bc2ad35c23cc42be1ac9489b1c9fcc8b64b4",
     "source/inventory-light-plugins/src/pages/fc/components/replenishment-detail.tsx": "3191a2e8bf9bfefb09f2c530ba2575cdb4e6b010d264b30376b921917bfb17f8",
     "source/inventory-light-plugins/src/channel.js": "973bbceb3a258dcabb433de12041adc1a480914da3190f540e4ec819fa565350",
-    "source/inventory-light-plugins/src/native/context.ts": "5b7b949f34942d382f4c301deb2c962334636b8ca700e96e03e4e52197f78265",
+    "source/inventory-light-plugins/src/native/context.ts": "dcc727730ff8ab3e7d771a142330fc06c24a551506dc13214468851c0ad2fc89",
     "source/inventory-light-plugins/src/native/memory-storage.ts": "2fbcab1040cbcb9c44c5527302c6083aac3b50f584a6451d55e93bba5cb734ec",
     "source/inventory-light-plugins/src/pages/fc.css": "2d4a756d5a65fc74eb61cf98117a51579996a553826a22743f344914e4dcca9c",
     "source/inventory-light-plugins/src/dsh-ui/workbook.ts": "cb63a34d1069fa637c9982947dcef9ea3f44e05e51b042c45d944c8fc54be217",

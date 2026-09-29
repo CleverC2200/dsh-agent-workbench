@@ -59,3 +59,5 @@ await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
 构建前在 `business/inventory-fc/source/inventory-light-plugins` 按其 pnpm 固定锁安装独立依赖；再运行工作台构建。Agent Manage 同级资源必须存在，缺失会失败。使用现有 `GEA_HTML_PLUGIN_ROOTS` 指向构建目录即可装载。原共享主题 1.0.0 经既有 MessagePort 投影，不增加 iframe 权限或网络连接。数量口径、页面预览及导出行为沿用原模块；缺少 SKU/库存数量时明确报错，不能解释为零。
 
 分仓页面的库存解读与草稿上下文只使用当前查询条件和刷新批次对应的就绪快照；加载、空结果和错误只发布状态与可用筛选，不把占位快照或上一仓结果当成业务事实。页面直接用现有 `BrowserRepository(memoryStorage)` 保存本页状态，构建不再按源码文本替换 localStorage；关闭页面或身份变化仍清除内存状态。
+
+`visibleText` 也遵守当前查询状态：只有 ready 才提取页面文字；非就绪时使用该状态的具体说明，避免页面暂留的旧 KPI 再次进入 Agent 上下文。页面展示及筛选控件保留。
