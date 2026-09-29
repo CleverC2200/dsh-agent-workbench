@@ -467,6 +467,7 @@ export function BranchInventoryAgent() {
         if (!controller.signal.aborted) {
           appliedPageRevision.current = pageRevision;
           setLiveSnapshot(currentSnapshot);
+          updateContext("queryState", {state: "ready", warehouseId});
         }
       } catch (error) {
         if (!controller.signal.aborted)
