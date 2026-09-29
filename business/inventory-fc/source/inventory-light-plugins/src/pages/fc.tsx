@@ -455,7 +455,7 @@ export function BranchInventoryAgent() {
           if (!controller.signal.aborted) {
             setSnapshotEmpty(true);
             setLiveSnapshot(null);
-            clearContext();
+            clearContext({ keepPageFilters: true });
             updateContext("queryState", {state: "empty", warehouseId, message: "授权范围内暂无库存与计划数据；不代表库存数量为零"});
           }
           return;
@@ -1243,8 +1243,17 @@ export function BranchInventoryAgent() {
       setReplenishmentPage(1);
     },
   );
+  const selectWarehouse = (nextWarehouse: WarehouseId) => {
+    setWarehouseId(nextWarehouse);
+    setRestoredSnapshot(null);
+    setReadOnlyHistory(false);
+    setConversationId(createConversationId());
+    setSubmissionStatus("idle");
+  };
   if (snapshotEmpty && !snapshotLoading) return (
     <main className="launch-screen"><section className="launch-card" role="status">
+      <WarehouseSelect value={warehouseId} options={warehouseOptions}
+        disabled={planningSaving} onChange={(value) => selectWarehouse(value as WarehouseId)} />
       <strong>当前授权范围暂无库存与计划数据</strong>
       <p>查询已完成，未返回业务行；不代表库存数量为零。</p>
       <button onClick={() => window.location.reload()}>重新查询</button>
@@ -1314,14 +1323,7 @@ export function BranchInventoryAgent() {
                 value={warehouseId}
                 options={warehouseOptions}
                 disabled={readOnlyHistory || planningSaving}
-                onChange={(value) => {
-                  const nextWarehouse = value as WarehouseId;
-                  setWarehouseId(nextWarehouse);
-                  setRestoredSnapshot(null);
-                  setReadOnlyHistory(false);
-                  setConversationId(createConversationId());
-                  setSubmissionStatus("idle");
-                }}
+                onChange={(value) => selectWarehouse(value as WarehouseId)}
               />
             </div>
             <button

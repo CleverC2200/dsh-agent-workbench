@@ -69,7 +69,9 @@ export function updateContext(key: string, value: unknown) {
   clearTimeout(timer);
   timer = setTimeout(() => void publish(pageContext()).catch(() => {}), 350);
 }
-export function clearContext() {
+export function clearContext(options: { keepPageFilters?: boolean } = {}) {
+  const filters = options.keepPageFilters ? parts.get("pageFilters") : undefined;
   parts.clear();
+  if (filters !== undefined) parts.set("pageFilters", filters);
   clearTimeout(timer);
 }
