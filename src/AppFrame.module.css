@@ -74,6 +74,7 @@
 
 /* Stacking moves both bodies into the center track before old columns can shrink.
    中文：堆叠布局先把两个内容区移入主列轨道，再让原列收缩，避免过渡中内容突然消失。 */
+.frame[data-main-fullscreen],
 .frame[data-rightbar-fullscreen],
 .frame[data-rightbar-fullscreen] .handle,
 .frame[data-rightbar-instant],
@@ -148,4 +149,5 @@
 .frame[data-conversation-view="chat"] > .rightbarCol {grid-column:2;grid-row:1}
 .centerCol > [data-slot="shell.conversation.toolbar"], .rightbarCol > [data-slot="shell.conversation.toolbar"] {flex-shrink:0}
 
-.frame[data-main-fullscreen] > .sidebarCol {display:none}
+.frame[data-main-fullscreen] > :is(.sidebarCol, .rightbarCol) {display:none}
+.frame[data-main-fullscreen] > .centerCol {grid-column:1 / -1;grid-row:1}

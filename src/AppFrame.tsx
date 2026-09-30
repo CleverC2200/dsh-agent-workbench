@@ -258,9 +258,9 @@ export function AppFrame({
     !layoutInfo.rightbarShown && narrow ? 0 : sidebarPreference,
     rightbarPreference,
   );
-  const cols = computeColumns(
+  const cols = mainFullscreen ? {sidebar: 0, center: viewport, rightbar: 0} : computeColumns(
     viewport,
-    mainFullscreen ? 0 : sidebarPreference,
+    sidebarPreference,
     conversationBesidePanel && presentation.conversationView === "split"
       ? (layoutInfo.conversationWidth ?? CONVERSATION_DEFAULT_WIDTH)
       : layoutInfo.rightbarTrack
