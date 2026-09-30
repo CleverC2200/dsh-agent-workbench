@@ -387,7 +387,7 @@ export function AppFrame({
           onEnd={onDragEnd}
         />
       )}
-      {rightbarShown && !rightbarFullscreen && resizeWidth > 0 && (
+      {rightbarShown && !mainFullscreen && !rightbarFullscreen && resizeWidth > 0 && (
         <DragHandle
           side="rightbar"
           left={viewport - resizeWidth}
