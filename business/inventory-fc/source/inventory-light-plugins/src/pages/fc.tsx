@@ -1246,6 +1246,13 @@ export function BranchInventoryAgent() {
       ),
     );
 
+  const rowElementIds = useRef(new Map<string, string>());
+  const rowElementId = (sku: string) => {
+    const key = `${warehouseId}:${sku}`;
+    let id = rowElementIds.current.get(key);
+    if (!id) {id = crypto.randomUUID(); rowElementIds.current.set(key, id);}
+    return id;
+  };
   useEffect(() => {
     if (!referenceReady || snapshotLoading || snapshotEmpty) return reportElements("readouts", [], undefined);
     const elements: any[] = [
@@ -1260,13 +1267,13 @@ export function BranchInventoryAgent() {
         for (const column of visibleColumns) {
           if (elements.length >= 290) break;
           const value = column === "actualQty" ? row.actualQty : column === "reason" ? row.reason : formatReplenishmentCell(row, column);
-          elements.push({id: `readout:${row.sku}:${column}`, role: "field", label: `${COLUMN_LABELS[column]} · ${row.sku}`.slice(0,200), ...(["actualQty", "reason"].includes(column) && !readOnlyHistory && row.recommendedQty !== null ? {editable: true} : {}), ...(String(value ?? "") ? {value: String(value).slice(0,200)} : {})});
+          elements.push({id: `readout:${rowElementId(row.sku)}:${column}`, role: "field", label: `${COLUMN_LABELS[column]} · ${row.sku}`.slice(0,200), ...(["actualQty", "reason"].includes(column) && !readOnlyHistory && row.recommendedQty !== null ? {editable: true} : {}), ...(String(value ?? "") ? {value: String(value).slice(0,200)} : {})});
         }
       }
     }
     return reportElements("readouts", elements, (args: any) => {
       if (args.kind !== "setValue" || readOnlyHistory || activeTab !== "replenishment") throw Error("ACTION_NOT_ALLOWED");
-      const row = paginatedReplenishments.find(row => args.target === `readout:${row.sku}:actualQty` || args.target === `readout:${row.sku}:reason`);
+      const row = paginatedReplenishments.find(row => args.target === `readout:${rowElementId(row.sku)}:actualQty` || args.target === `readout:${rowElementId(row.sku)}:reason`);
       if (!row || row.recommendedQty === null) throw Error("ELEMENT_GONE");
       if (args.target.endsWith(":reason")) {
         if (typeof args.value !== "string" || args.value.length > 1000) throw Error("调减原因无效");

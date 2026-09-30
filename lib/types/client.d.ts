@@ -20,3 +20,13 @@ declare module "@deepseek-ai/cordis" {
         agentWorkbench: AgentWorkbench;
     }
 }
+export type { ILayout } from "./service.ts";
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+    interface SlotMap {
+        /** Toolbar for the already-associated Conversation; the frame owns its placement. */
+        "shell.conversation.toolbar": {
+            kind: "single";
+            scope: "root";
+        };
+    }
+}

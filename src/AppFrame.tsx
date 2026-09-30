@@ -26,7 +26,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, CSSProperties } from "react";
 import type {
   PropsLocale,
   PropsRenderSlots,
@@ -48,7 +48,7 @@ import css from "./AppFrame.module.css";
  * 中文：完整根框架属性，合并运行时能力、子槽位渲染能力、布局 store 与本地化能力。
  */
 export type AppFrameProps = PropsRuntime<"root"> & MainSessionProps &
-  PropsRenderSlots<"sidebar" | "main" | "rightbar" | "shell.overlay"> &
+  PropsRenderSlots<"sidebar" | "main" | "rightbar" | "shell.overlay" | "shell.conversation.toolbar"> &
   PropsStore<ReturnType<typeof createLayoutStore>> &
   PropsLocale<"common">;
 
@@ -202,6 +202,8 @@ export function AppFrame({
       state.panelInfo.activePanelId !== null &&
       state.conversationPanelIds.includes(state.panelInfo.activePanelId),
   );
+  const mainFullscreen = useStore(state => state.panelInfo.activePanelId !== null && state.fullscreenPanelIds.includes(state.panelInfo.activePanelId));
+  const presentation = useStore(state => state.shellPresentation);
   const layoutInfo = useStore((state) => state.layoutInfo);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const viewport = layoutInfo.viewportWidth;
@@ -258,14 +260,14 @@ export function AppFrame({
   );
   const cols = computeColumns(
     viewport,
-    sidebarPreference,
-    conversationBesidePanel
+    mainFullscreen ? 0 : sidebarPreference,
+    conversationBesidePanel && presentation.conversationView === "split"
       ? (layoutInfo.conversationWidth ?? CONVERSATION_DEFAULT_WIDTH)
       : layoutInfo.rightbarTrack
         ? rightbarPreference
         : 0,
   );
-  const conversationStacked = conversationBesidePanel && cols.rightbar === 0;
+  const conversationStacked = conversationBesidePanel && presentation.conversationView === "split" && cols.rightbar === 0;
   const rightbarShown = conversationBesidePanel || layoutInfo.rightbarShown;
   const rightbarFullscreen =
     !conversationBesidePanel && layoutInfo.rightbarFullscreen;
@@ -336,29 +338,33 @@ export function AppFrame({
       className={css.frame}
       style={{
         gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.rightbar}px`,
-      }}
+        "--dsh-conversation-background": conversationBesidePanel ? "var(--workbench-surface)" : undefined,
+      } as CSSProperties}
+      data-main-fullscreen={mainFullscreen || undefined}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-rightbar-collapsed={cols.rightbar === 0 || undefined}
       data-rightbar-fullscreen={rightbarFullscreen || undefined}
       data-rightbar-instant={
         (!conversationBesidePanel && layoutInfo.rightbarInstant) || undefined
       }
+      data-conversation-view={conversationBesidePanel ? presentation.conversationView : undefined}
       data-conversation-beside-panel={conversationBesidePanel || undefined}
       data-conversation-stacked={conversationStacked || undefined}
       data-dragging={dragging || undefined}
     >
       <DocumentTitle
         productTitle={productTitle}
+        fixedTitle={presentation.documentTitle}
         useSessions={useSessions}
         useMainSessionId={useMainSessionId}
         usePanelInfo={usePanelInfo}
       />
       <div className={css.sidebarCol}>{sidebar}</div>
       <>
-        <CenterColumn>{main}</CenterColumn>
+        <CenterColumn>{conversationBesidePanel && presentation.conversationView === "center" && renderSlot("shell.conversation.toolbar", {})}{main}</CenterColumn>
         <RightbarColumn>
           {conversationBesidePanel
-            ? renderSlot("main", {}, { entryKey: "conversation" })
+            ? <>{presentation.conversationView !== "center" && renderSlot("shell.conversation.toolbar", {})}{renderSlot("main", {}, { entryKey: "conversation" })}</>
             : renderSlot("rightbar", {
                 width: normal.rightbar,
                 viewportWidth: viewport,
@@ -372,7 +378,7 @@ export function AppFrame({
       {/* The collapsed rail is fixed-width: no resize handle while closed.
           中文：折叠后的侧栏是固定宽度的图标轨道，关闭时不显示可调整宽度的把手。
        */}
-      {!sidebarCollapsed && (
+      {!sidebarCollapsed && !mainFullscreen && (
         <DragHandle
           side="sidebar"
           left={cols.sidebar}

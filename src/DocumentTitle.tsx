@@ -17,6 +17,7 @@ export type DocumentTitleProps = Pick<
 > & MainSessionProps & {
   /** Build-configured or localized product title. 中文：构建配置或本地化提供的产品标题，也是无会话时的兜底标题。 */
   productTitle: string;
+  fixedTitle?: string;
 };
 
 /**
@@ -33,6 +34,7 @@ export function DocumentTitle({
   useMainSessionId,
   usePanelInfo,
   productTitle,
+  fixedTitle,
 }: DocumentTitleProps): null {
   const showSessionTitle = usePanelInfo((info) => info.activePanelId === null);
   const current = useMainSessionId(id => id);
@@ -43,11 +45,10 @@ export function DocumentTitle({
   });
   /** 中文：同步浏览器标题，并在依赖变化或组件卸载时撤回当前会话标题。 */
   useEffect(() => {
-    document.title =
-      title === undefined ? productTitle : `${title} — ${productTitle}`;
+    document.title = fixedTitle ?? (title === undefined ? productTitle : `${title} — ${productTitle}`);
     return () => {
       document.title = productTitle;
     };
-  }, [productTitle, title]);
+  }, [productTitle, title, fixedTitle]);
   return null;
 }

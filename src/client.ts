@@ -61,6 +61,7 @@ export function apply(ctx: ClientContext): void {
     const layout = new LayoutController(instance.actions, (id) =>
       ctx.slots.entries("main").some((entry) => entry.options.key === id),
       panelInfo,
+      {getSnapshot: () => instance.getSnapshot().shellPresentation, subscribe: listener => instance.subscribe(listener)},
     );
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo } });
     const workspaces = ctx.get("workspaces") as unknown as IWorkspaces;
@@ -135,6 +136,7 @@ export function apply(ctx: ClientContext): void {
           sidebar: { kind: "single", scope: "root" },
           main: { kind: "keyed", scope: "root" },
           rightbar: { kind: "single", scope: "root" },
+          "shell.conversation.toolbar": {kind: "single", scope: "root"},
           "shell.overlay": { kind: "list", scope: "root" },
         },
         store,
@@ -162,5 +164,14 @@ declare module "@deepseek-ai/cordis" {
   /** 向 Cordis 上下文声明由本插件提供的工作台服务类型。 */
   interface Context {
     agentWorkbench: AgentWorkbench;
+  }
+}
+
+export type { ILayout } from "./service.ts";
+
+declare module "@deepseek-ai/dsh-client-ui-slots" {
+  interface SlotMap {
+    /** Toolbar for the already-associated Conversation; the frame owns its placement. */
+    "shell.conversation.toolbar": {kind: "single"; scope: "root"};
   }
 }

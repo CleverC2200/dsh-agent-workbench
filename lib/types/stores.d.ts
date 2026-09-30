@@ -16,12 +16,19 @@ import type { MainPanelId } from "./service.ts";
 type LayoutState = {
     /** 当前已注册、可在会话旁展示的主面板 ID 列表。 */
     conversationPanelIds: MainPanelId[];
+    fullscreenPanelIds: MainPanelId[];
     panelInfo: {
         /** Null selects the Conversation; global panels keep the current Session intact. */
         /** 为 null 时显示当前 Conversation；切换全局面板不改变当前 Session。 */
         activePanelId: MainPanelId | null;
     };
     layoutInfo: LayoutInfo;
+    shellPresentation: ShellPresentation;
+};
+/** Transient shell appearance; Session and panel identities remain with their owners. */
+export type ShellPresentation = {
+    conversationView: "center" | "split" | "chat";
+    documentTitle?: string;
 };
 /** 由 AppFrame 和右侧面板共同维护的尺寸偏好及响应式展示状态。 */
 type LayoutInfo = {
@@ -73,6 +80,9 @@ type LayoutInfo = {
  * 若 action 签名漂移，defineStore 调用处会因不可赋值而失败。
  */
 type LayoutActions = {
+    setFullscreenPanels: (draft: LayoutState, panels: readonly MainPanelId[]) => void;
+    setConversationView: (draft: LayoutState, view: ShellPresentation["conversationView"]) => void;
+    setDocumentTitle: (draft: LayoutState, title: string | undefined) => void;
     /** 同步会话旁可展示的主面板注册列表。 */
     setConversationPanels: (draft: LayoutState, panelIds: readonly MainPanelId[]) => void;
     /** 设置会话区域宽度，并按当前视口上限夹紧。 */
@@ -85,6 +95,7 @@ type LayoutActions = {
     setSidebar: (draft: LayoutState, px: number) => void;
     /** 按宽屏关闭/打开或窄屏覆盖状态切换侧栏。 */
     toggleSidebar: (draft: LayoutState) => void;
+    expandSidebar: (draft: LayoutState) => void;
     /** 上报新的框架宽度，并在跨响应式断点时重置窄屏覆盖。 */
     setViewportWidth: (draft: LayoutState, width: number) => void;
     /** 保存右侧面板拖拽宽度，并按当前视口上限夹紧。 */

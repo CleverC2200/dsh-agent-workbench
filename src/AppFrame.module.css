@@ -142,3 +142,10 @@
 .overlayLayer > * {
   pointer-events: auto;
 }
+
+.frame[data-conversation-view="center"] > .rightbarCol {display:none}
+.frame[data-conversation-view="chat"] > .centerCol {display:none}
+.frame[data-conversation-view="chat"] > .rightbarCol {grid-column:2;grid-row:1}
+.centerCol > [data-slot="shell.conversation.toolbar"], .rightbarCol > [data-slot="shell.conversation.toolbar"] {flex-shrink:0}
+
+.frame[data-main-fullscreen] > .sidebarCol {display:none}

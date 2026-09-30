@@ -66,7 +66,7 @@ await ctx.agentWorkbench.open(panelId, 'my-other-agent', undefined, 'my-other-ag
 `visibleText` 也遵守当前查询状态：只有 ready 才提取页面文字；非就绪时使用该状态的具体说明，避免页面暂留的旧 KPI 再次进入 Agent 上下文。页面展示及筛选控件保留。
 
 FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch 完成只触发当前上下文重读，不再把导出或明细响应直接写入事实；旧 CSV 可以正常完成下载，但不能覆盖切页后的查询状态或新查询事实。
-行引用带当前仓、页签、筛选、分页和快照标识，不带未显示行的草稿。给 Agent 的补货行只包含当前页可见列，最多 30 行并标明截断。页面加载、空结果、错误或范围变化时引用入口拒绝旧行；换会话时取消旧页面请求，用现有消息桥重新读取并发布当前筛选结果。
+行引用带当前仓、页签、筛选、分页和快照标识，不带未显示行的草稿。给 Agent 的补货行只包含当前页可见列，最多 30 行并标明截断。引用入口在点击时核对当前范围和就绪状态；成功捕获后固定为点击时已显示的内容，后续筛选、分页或列变化不会拒绝已捕获引用。登录身份、Host 或 Session 授权失效仍使引用失效；换会话取消旧页面请求并发布新会话的当前筛选结果。
 
 分仓引用范围包含当前渲染列的顺序。使用已有列目录的序号表示，避免完整列名使 scope 超过现有1000字符边界；引用正文仍使用当前可见的列名和值。
 
@@ -79,3 +79,7 @@ Runtime imports only four-field page/instance/Session/scope records. Older three
 HTML consumers receive the current ui-theme projection (colorScheme, fontSize, active alias-token overrides). They present the same shared stylesheet locally; no Host DOM computed-style sampling or mutation subscription is supported. The font size contract is the current core's 12–17 px range.
 
 HTML 页面直接接收当前 ui-theme 的色彩模式、字号和活动 alias token 覆盖，在页面内呈现同一共享样式资源；不再支持采样宿主 DOM 的计算样式或观察 DOM 主题变化。字号沿用当前核心的 12–17 px 契约。
+
+外壳呈现由工作台的单一布局 store 管理。当前 `ILayout.shellPresentation` 公开只读快照，`setConversationView` 只改显示方式；业务 iframe 与唯一 Conversation 在中间区、并排和会话区三种模式中保持挂载。`registerDocumentTitle` 和 `registerFullscreenPanel` 返回独立释放函数；注销恢复正常标题和布局。`shell.conversation.toolbar` 的位置由 AppFrame 决定；业务插件不定位或修改外壳节点。
+
+Shell presentation belongs to the workbench layout store. `shellPresentation` is read-only; `setConversationView` changes display without changing the page or Session. Title/fullscreen registrations release their own claims. AppFrame places `shell.conversation.toolbar`; plugins do not discover shell nodes.
