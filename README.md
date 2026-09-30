@@ -69,3 +69,9 @@ FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch
 行引用带当前仓、页签、筛选、分页和快照标识，不带未显示行的草稿。给 Agent 的补货行只包含当前页可见列，最多 30 行并标明截断。页面加载、空结果、错误或范围变化时引用入口拒绝旧行；换会话时取消旧页面请求，用现有消息桥重新读取并发布当前筛选结果。
 
 分仓引用范围包含当前渲染列的顺序。使用已有列目录的序号表示，避免完整列名使 scope 超过现有1000字符边界；引用正文仍使用当前可见的列名和值。
+
+## Current association format
+
+Runtime imports only four-field page/instance/Session/scope records. Older three-field exports require the explicit offline command `node scripts/upgrade-workbench-associations.mjs input.json new-output.json`; it never overwrites the original or accesses a Host profile. A missing historical identity remains null, not a trusted business scope. Durable Sessions and their content are not deleted.
+
+运行时仅导入四字段关联。旧三字段导出可独立执行上述升级脚本，原文件不会被覆盖，不接触正式 Host/profile，不删除持久 Session；缺失的历史身份以 null 保留，不能被提升为当前业务授权。

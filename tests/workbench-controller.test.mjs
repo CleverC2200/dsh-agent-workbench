@@ -221,11 +221,20 @@ test("a restored association waits for the session list instead of crashing init
           "gea",
           "default",
           [["default", "session-00000000-0000-0000-0000-000000000001"]],
+          null,
         ],
       ]),
     setItem: () => {},
   };
   const f = fixture({ storage, available: () => false });
+  f.controller.register({ id: "gea", preset: "gea" });
+  f.controller.selectPanel("gea");
+  assert.equal(f.selected, undefined);
+});
+
+test("runtime refuses three-field associations instead of silently decoding an old format", () => {
+  const session = "session-00000000-0000-0000-0000-000000000001";
+  const f = fixture({ storage: { getItem: key => key === "agent-workbench:v1" ? JSON.stringify([["gea", "default", [["default", session]]]]) : null, setItem: () => {} } });
   f.controller.register({ id: "gea", preset: "gea" });
   f.controller.selectPanel("gea");
   assert.equal(f.selected, undefined);

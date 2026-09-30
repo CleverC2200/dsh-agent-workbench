@@ -99,10 +99,11 @@ export class WorkbenchController implements AgentWorkbench {
       for (const row of stored) {
         if (
           !Array.isArray(row) ||
-          (row.length !== 3 && row.length !== 4) ||
+          row.length !== 4 ||
           typeof row[0] !== "string" ||
           typeof row[1] !== "string" ||
-          !Array.isArray(row[2])
+          !Array.isArray(row[2]) ||
+          (row[3] !== null && typeof row[3] !== "string")
         )
           continue;
         const bindings = new Map<string, SessionId>();
