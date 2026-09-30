@@ -17,7 +17,7 @@
     "source/fc/src/lib/workbench-request.ts": "b2b58be4800d1fddc492a06e6e84289700c09e6af003c91ef052c92687eabc0e",
     "source/inventory-light-plugins/src/pages/fc/components/base-resources-table.tsx": "0d33f8ac157066bb63869b872399bc2ad35c23cc42be1ac9489b1c9fcc8b64b4",
     "source/inventory-light-plugins/src/pages/fc/components/replenishment-detail.tsx": "3191a2e8bf9bfefb09f2c530ba2575cdb4e6b010d264b30376b921917bfb17f8",
-    "source/inventory-light-plugins/src/channel.js": "2f20f0beb8610cf9cdddc1a6a527b89db8d4fe61e576d05aa470d7ef1c599f2d",
+    "source/inventory-light-plugins/src/channel.js": "df7faf21abe6f162cb5e1962cef9f316bd67466c7e193dcac3212dd67b9776f5",
     "source/inventory-light-plugins/src/native/context.ts": "81dfa44570d39235308fa137e5673f8397bb1065723d5b366defabfbf8af65c8",
     "source/inventory-light-plugins/src/native/memory-storage.ts": "2fbcab1040cbcb9c44c5527302c6083aac3b50f584a6451d55e93bba5cb734ec",
     "source/inventory-light-plugins/src/pages/fc.css": "2d4a756d5a65fc74eb61cf98117a51579996a553826a22743f344914e4dcca9c",

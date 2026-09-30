@@ -75,3 +75,7 @@ FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch
 Runtime imports only four-field page/instance/Session/scope records. Older three-field exports require the explicit offline command `node scripts/upgrade-workbench-associations.mjs input.json new-output.json`; it never overwrites the original or accesses a Host profile. A missing historical identity remains null, not a trusted business scope. Durable Sessions and their content are not deleted.
 
 运行时仅导入四字段关联。旧三字段导出可独立执行上述升级脚本，原文件不会被覆盖，不接触正式 Host/profile，不删除持久 Session；缺失的历史身份以 null 保留，不能被提升为当前业务授权。
+
+HTML consumers receive the current ui-theme projection (colorScheme, fontSize, active alias-token overrides). They present the same shared stylesheet locally; no Host DOM computed-style sampling or mutation subscription is supported. The font size contract is the current core's 12–17 px range.
+
+HTML 页面直接接收当前 ui-theme 的色彩模式、字号和活动 alias token 覆盖，在页面内呈现同一共享样式资源；不再支持采样宿主 DOM 的计算样式或观察 DOM 主题变化。字号沿用当前核心的 12–17 px 契约。

@@ -76,7 +76,7 @@ summary { cursor: pointer; width: fit-content; }
   const $ = id => document.getElementById(id);
   const diagnostic = $('diagnostic');
   const resource = document.querySelector('style[data-workbench-resource]');
-  const localVersion = getComputedStyle(document.body).getPropertyValue('--workbench-theme-version').trim();
+  const localVersion = resource?.getAttribute('data-workbench-resource');
   const rows = [
     ['DEMO-001', '工作台页面联调', '林晓', '进行中', 8],
     ['DEMO-002', '月度资料归档', '陈宁', '已完成', 12],
@@ -96,7 +96,7 @@ summary { cursor: pointer; width: fit-content; }
     diagnostic.hidden = false;
     diagnostic.textContent = message;
   };
-  if (!resource || localVersion !== '"' + expectedVersion + '"') {
+  if (!resource || localVersion !== expectedVersion) {
     stop('共享样式资源缺失或版本不兼容，请重新构建并重新打开样板。');
     return;
   }
@@ -155,14 +155,16 @@ summary { cursor: pointer; width: fit-content; }
     const tokens = message.tokens;
     if (message.version !== expectedVersion || !tokens || typeof tokens !== 'object' ||
         !['light', 'dark'].includes(message.colorScheme) ||
-        !['--workbench-page', '--workbench-text', '--workbench-font-size'].every(name => typeof tokens[name] === 'string' && tokens[name]) ||
-        Object.entries(tokens).some(([name, value]) => !/^--workbench-[a-z-]+$/.test(name) || typeof value !== 'string' || value.length > 500)) {
+        !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 ||
+        Object.entries(tokens).some(([name, value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== 'string' || value.length > 500)) {
       stop('工作台共享样式版本不兼容或资源缺失，请重新构建并重新打开样板。');
       return;
     }
     appliedTokens.forEach(name => document.body.style.removeProperty(name));
     appliedTokens = Object.keys(tokens);
     Object.entries(tokens).forEach(([name, value]) => document.body.style.setProperty(name, value));
+    document.body.style.setProperty('--workbench-font-size', `${message.fontSize}px`);
+    document.body.style.setProperty('--dsh-content-font-size', `${message.fontSize}px`);
     document.documentElement.style.colorScheme = message.colorScheme;
     document.body.toggleAttribute('data-ds-dark-theme', message.colorScheme === 'dark');
     const wasReady = themeReady;

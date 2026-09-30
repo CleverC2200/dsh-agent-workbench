@@ -4,6 +4,7 @@ let channel,
   sequence = 0;
 const pending = new Map(),
   handlers = new Map();
+let appliedThemeTokens = [];
 let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
@@ -42,12 +43,16 @@ window.addEventListener("message", (event) => {
     }
     if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
       if (message.version !== "1.0.0" || !["light", "dark"].includes(message.colorScheme) ||
-          !message.tokens || !["--workbench-page", "--workbench-text", "--workbench-font-size"].every(name => typeof message.tokens[name] === "string") ||
-          Object.entries(message.tokens).some(([name,value]) => !/^--workbench-[a-z-]+$/.test(name) || typeof value !== "string" || value.length > 500)) {
+          !message.tokens || !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 ||
+          Object.entries(message.tokens).some(([name,value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== "string" || value.length > 500)) {
         document.getElementById("app").textContent = "共享样式版本不兼容，请重新打开页面";
         return;
       }
+      for (const name of appliedThemeTokens) document.body.style.removeProperty(name);
+      appliedThemeTokens = Object.keys(message.tokens);
       for (const [name,value] of Object.entries(message.tokens)) document.body.style.setProperty(name,value);
+      document.body.style.setProperty("--workbench-font-size", `${message.fontSize}px`);
+      document.body.style.setProperty("--dsh-content-font-size", `${message.fontSize}px`);
       document.documentElement.style.colorScheme = message.colorScheme;
       document.body.toggleAttribute("data-ds-dark-theme", message.colorScheme === "dark");
     }
