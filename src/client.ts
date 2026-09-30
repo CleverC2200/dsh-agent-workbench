@@ -120,6 +120,7 @@ export function apply(ctx: ClientContext): void {
       // 面板动作统一经过 LayoutController，集中执行注册校验和导航取消规则。
       panel: (id) => layout.selectPanel(id),
       beginNavigation: () => layout.beginNavigation(),
+      currentPanel: () => panelInfo.getSnapshot().activePanelId,
       showConversation: (id) => layout.registerConversationPanel(id),
     });
     layout.onSelect = (id) => workbench.selectPanel(id);

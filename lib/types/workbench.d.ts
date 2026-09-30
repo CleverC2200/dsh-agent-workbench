@@ -36,6 +36,8 @@ export interface WorkbenchPorts {
     panel(id: MainPanelId | null): void;
     /** 中文：开始一次新导航并使更早导航失效，返回本次导航的取消信号。 */
     beginNavigation(): AbortSignal;
+    /** Current selected panel, used only to recover a superseded startup open. */
+    currentPanel?(): MainPanelId | null;
     /** 中文：让指定页面挂载原生 Conversation 列，返回撤销该挂载的函数。 */
     showConversation(id: MainPanelId): () => void;
 }
@@ -71,6 +73,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly pending;
     /** 中文：控制器是否已销毁；销毁后不再接受页面或导航结果。 */
     private disposed;
+    private openIntent;
     /**
      * 中文：创建控制器并从浏览器存储恢复“页面—实例—Session”关联。
      * 恢复时只接受结构和 SessionId 格式都合法的数据，避免损坏的本地缓存影响真实 Session。
@@ -94,6 +97,7 @@ export declare class WorkbenchController implements AgentWorkbench {
      * 返回 false 表示导航已被后续动作取消，调用方不得把它当作页面已打开。
      */
     open(id: MainPanelId, instance?: string, sessionId?: SessionId, preset?: string): Promise<boolean>;
+    private openOnce;
     /** Opt a mounted page into the native conversation column. 中文：让已登记页面选择展示原生 Conversation 列，并把宿主清理函数原样返回。 */
     showConversation(id: MainPanelId): () => void;
     /** Drop local associations, without deleting or stopping durable Sessions. 中文：只删除页面的本地映射、当前实例和待建任务，不删除也不停止宿主持久 Session。 */

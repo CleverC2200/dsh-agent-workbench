@@ -37,6 +37,8 @@ export interface WorkbenchPorts {
   panel(id: MainPanelId | null): void;
   /** 中文：开始一次新导航并使更早导航失效，返回本次导航的取消信号。 */
   beginNavigation(): AbortSignal;
+  /** Current selected panel, used only to recover a superseded startup open. */
+  currentPanel?(): MainPanelId | null;
   /** 中文：让指定页面挂载原生 Conversation 列，返回撤销该挂载的函数。 */
   showConversation(id: MainPanelId): () => void;
 }
@@ -80,6 +82,7 @@ export class WorkbenchController implements AgentWorkbench {
   >();
   /** 中文：控制器是否已销毁；销毁后不再接受页面或导航结果。 */
   private disposed = false;
+  private openIntent = 0;
 
   /**
    * 中文：创建控制器并从浏览器存储恢复“页面—实例—Session”关联。
@@ -164,6 +167,7 @@ export class WorkbenchController implements AgentWorkbench {
 
   /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
   selectPanel(id: MainPanelId | null): void {
+    this.openIntent++;
     if (this.restorePanel && id !== this.bootPanel) this.restorePanel = undefined;
     if (!this.restorePanel) {
       try { this.ports.storage?.setItem("agent-workbench:active-panel", id ?? ""); } catch { /* Memory-only navigation. */ }
@@ -209,6 +213,19 @@ export class WorkbenchController implements AgentWorkbench {
    * 返回 false 表示导航已被后续动作取消，调用方不得把它当作页面已打开。
    */
   async open(
+    id: MainPanelId,
+    instance?: string,
+    sessionId?: SessionId,
+    preset?: string,
+  ): Promise<boolean> {
+    const intent = ++this.openIntent;
+    const opened = await this.openOnce(id, instance, sessionId, preset);
+    if (opened || this.openIntent !== intent || this.ports.currentPanel?.() !== id || !this.pages.has(id) || this.disposed)
+      return opened;
+    return this.openOnce(id, instance, sessionId, preset);
+  }
+
+  private async openOnce(
     id: MainPanelId,
     instance?: string,
     sessionId?: SessionId,

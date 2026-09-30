@@ -108,6 +108,7 @@ test("coalesces duplicate instance creation and latest navigation wins", async (
   const d = deferred();
   let calls = 0;
   const f = fixture({
+    currentPanel: () => "gea",
     create: () => {
       calls++;
       return d.promise;
@@ -120,6 +121,21 @@ test("coalesces duplicate instance creation and latest navigation wins", async (
   assert.deepEqual(await Promise.all([a, b]), [false, true]);
   assert.equal(calls, 1);
   assert.equal(f.selected, "session-one");
+});
+test("only the selected startup page gets one central retry after a cancelled open", async () => {
+  let attempts = 0;
+  const f = fixture({
+    currentPanel: () => "gea",
+    beginNavigation: () => {
+      const controller = new AbortController();
+      if (++attempts === 1) controller.abort();
+      return controller.signal;
+    },
+  });
+  f.controller.register({ id: "gea", preset: "gea" });
+  assert.equal(await f.controller.open("gea"), true);
+  assert.equal(attempts, 2);
+  assert.equal(f.panel, "gea");
 });
 test("a slow request cannot steal selection from another page", async () => {
   const d = deferred();
