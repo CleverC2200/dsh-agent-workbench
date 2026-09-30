@@ -137,6 +137,31 @@ test("only the selected startup page gets one central retry after a cancelled op
   assert.equal(attempts, 2);
   assert.equal(f.panel, "gea");
 });
+test("reselecting the same mounted page allows its cancelled restore to finish", async () => {
+  const scope = deferred();
+  let authorityReads = 0;
+  const f = fixture({ currentPanel: () => "gea" });
+  f.controller.register({ id: "gea", preset: "gea", scope: () => ++authorityReads === 1 ? scope.promise : Promise.resolve("identity") });
+  const opening = f.controller.open("gea");
+  f.ports.panel("gea");
+  scope.resolve("identity");
+  assert.equal(await opening, true);
+  assert.equal(f.created, 1);
+  assert.equal(f.panel, "gea");
+  assert.match(f.selected, /^session-/);
+});
+test("reselecting the current page still cancels an opening for another page", async () => {
+  const scope = deferred();
+  const f = fixture({ currentPanel: () => "gea" });
+  f.controller.register({ id: "gea", preset: "gea" });
+  f.controller.register({ id: "other", preset: "other", scope: () => scope.promise });
+  const opening = f.controller.open("other");
+  f.ports.panel("gea");
+  scope.resolve("identity");
+  assert.equal(await opening, false);
+  assert.equal(f.created, 0);
+  assert.equal(f.panel, "gea");
+});
 test("a slow request cannot steal selection from another page", async () => {
   const d = deferred();
   const f = fixture({

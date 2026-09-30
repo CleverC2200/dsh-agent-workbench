@@ -168,7 +168,8 @@ export class WorkbenchController implements AgentWorkbench {
 
   /** Called by the layout on every panel selection, including native navigation. 中文：布局每次切换主面板时调用；若目标是已登记工作台页面，则恢复该页当前实例对应且仍存在的 Session。 */
   selectPanel(id: MainPanelId | null): void {
-    this.openIntent++;
+    // Reselecting the current page keeps its existing single restore retry eligible.
+    if (this.ports.currentPanel?.() !== id) this.openIntent++;
     if (this.restorePanel && id !== this.bootPanel) this.restorePanel = undefined;
     if (!this.restorePanel) {
       try { this.ports.storage?.setItem("agent-workbench:active-panel", id ?? ""); } catch { /* Memory-only navigation. */ }
