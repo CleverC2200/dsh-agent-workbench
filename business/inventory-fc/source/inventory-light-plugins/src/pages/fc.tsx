@@ -1,3 +1,4 @@
+import { reportElements } from "../channel.js";
 import { InventoryBatchTable } from "./fc/components/inventory-batch-table";
 import { parseActualQuantity, dmsWorkbookRows } from "../fc-feedback";
 import {queryErrorText} from '../query-error.js';
@@ -1245,9 +1246,45 @@ export function BranchInventoryAgent() {
       ),
     );
 
+  useEffect(() => {
+    if (!referenceReady || snapshotLoading || snapshotEmpty) return reportElements("readouts", [], undefined);
+    const elements: any[] = [
+      {id: "readout:inventory", role: "field", label: "当前库存（件）", value: kpiQuantity(snapshot.metrics.inventoryQty)},
+      {id: "readout:age", role: "field", label: "当前货龄（天）", value: kpiDecimal(snapshot.metrics.averageAgeDays)},
+      {id: "readout:fulfillment", role: "field", label: "订单满足率", value: kpiFulfillment(snapshot.metrics.fulfillmentRate)},
+      {id: "readout:replenishment", role: "field", label: "待补货量（件）", value: kpiQuantity(calculatedSummary.quantity)},
+      {id: "readout:orders", role: "field", label: "当前订单（件）", value: kpiQuantity(currentOrderMetrics(snapshot).quantity)},
+    ];
+    if (activeTab === "replenishment") {
+      for (const row of paginatedReplenishments) {
+        for (const column of visibleColumns) {
+          if (elements.length >= 290) break;
+          const value = column === "actualQty" ? row.actualQty : column === "reason" ? row.reason : formatReplenishmentCell(row, column);
+          elements.push({id: `readout:${row.sku}:${column}`, role: "field", label: `${COLUMN_LABELS[column]} · ${row.sku}`.slice(0,200), ...(["actualQty", "reason"].includes(column) && !readOnlyHistory && row.recommendedQty !== null ? {editable: true} : {}), ...(String(value ?? "") ? {value: String(value).slice(0,200)} : {})});
+        }
+      }
+    }
+    return reportElements("readouts", elements, (args: any) => {
+      if (args.kind !== "setValue" || readOnlyHistory || activeTab !== "replenishment") throw Error("ACTION_NOT_ALLOWED");
+      const row = paginatedReplenishments.find(row => args.target === `readout:${row.sku}:actualQty` || args.target === `readout:${row.sku}:reason`);
+      if (!row || row.recommendedQty === null) throw Error("ELEMENT_GONE");
+      if (args.target.endsWith(":reason")) {
+        if (typeof args.value !== "string" || args.value.length > 1000) throw Error("调减原因无效");
+        updateReason(row, args.value);
+      } else {
+        const quantity = Number(args.value);
+        if (!Number.isSafeInteger(quantity) || quantity < 0) throw Error("计划量必须为非负整数");
+        updateQuantity(row, quantity);
+      }
+    });
+  }, [referenceReady, snapshotLoading, snapshotEmpty, snapshot, activeTab, paginatedReplenishments, visibleColumns.join(","), calculatedSummary.quantity, readOnlyHistory, draft]);
+
   const layoutMode = "workspace";
   usePageFilter(
     {
+      visibleFields: snapshotEmpty || (snapshotLoading && !referenceReady) ? ["warehouseId"] :
+        ["warehouseId", "tab", "search", ...(activeTab === "replenishment" ? ["urgentOnly", "riskOnly", "businessOnly"] : [])],
+      disabledFields: readOnlyHistory || planningSaving ? ["warehouseId"] : [],
       allowedFields: [
         "warehouseId",
         "tab",
@@ -1367,6 +1404,7 @@ export function BranchInventoryAgent() {
             {!hasLiveWarehouseSource(snapshot) && (
               <span className="readonly-badge">演示数据（非真实业务）</span>
             )}
+            <button type="button" className="secondary-button" onClick={() => window.dispatchEvent(new Event("gea-page-refresh"))}>刷新</button>
             <div className="warehouse-switch">
               <WarehouseSelect
                 value={warehouseId}

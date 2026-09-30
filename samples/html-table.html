@@ -133,6 +133,7 @@ summary { cursor: pointer; width: fit-content; }
       $('table-region').hidden = !result.length;
       $('state').hidden = !!result.length;
       if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
+      catalog();
     }, 350);
   };
   $('search').onclick = () => query();
@@ -140,6 +141,18 @@ summary { cursor: pointer; width: fit-content; }
   $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; query(); };
   $('retry').onclick = () => query();
   document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
+  const catalog = () => {
+    if (!context || !port) return;
+    port.postMessage({type: 'catalog', session: context.session, elements: themeReady ? [
+      {id: 'filter:query', role: 'field', label: '项目名称', editable: true, ...($('query').value ? {value: $('query').value} : {})},
+      {id: 'filter:stage', role: 'control', label: '交付进度', editable: true, options: ['全部进度', '进行中', '已完成', '待开始'], ...($('stage').value ? {value: $('stage').value} : {})},
+      {id: 'control:search', role: 'control', label: '查询', actions: ['invoke']},
+      {id: 'control:reset', role: 'control', label: '重置', actions: ['invoke']},
+      ...[...$('rows').children].flatMap((row, index) => [...row.children].map((cell, column) => ({id: `readout:row${index}:c${column}`, role: 'field', label: ['项目编号','项目名称','负责人','交付进度','任务数'][column], value: cell.textContent})))
+    ] : []});
+  };
+  $('query').addEventListener('input', catalog);
+  $('stage').addEventListener('change', catalog);
   const receive = event => {
     const message = event.data;
     if (!message || typeof message !== 'object') return;
@@ -148,6 +161,22 @@ summary { cursor: pointer; width: fit-content; }
       if (typeof message.context?.session !== 'string' || typeof message.context?.plugin !== 'string') return;
       context = message.context;
       port.postMessage({ type: 'theme:subscribe', session: context.session });
+      return;
+    }
+    if (message.type === 'apply' && message.session === context?.session) {
+      const args = message.args;
+      try {
+        if (!themeReady) throw Error('PAGE_NOT_READY');
+        if (args.kind === 'setValue' && args.target === 'filter:query' && typeof args.value === 'string' && args.value.length <= 100) $('query').value = args.value;
+        else if (args.kind === 'setValue' && args.target === 'filter:stage' && ['全部进度','进行中','已完成','待开始'].includes(args.value)) $('stage').value = args.value === '全部进度' ? '' : args.value;
+        else if (args.kind === 'invoke' && args.target === 'control:search') query();
+        else if (args.kind === 'invoke' && args.target === 'control:reset') { $('query').value = ''; $('stage').value = ''; query(); }
+        else throw Error('ACTION_NOT_ALLOWED');
+        port.postMessage({type: 'applied', toolCallId: message.toolCallId, session: context.session, applied: true});
+        catalog();
+      } catch (error) {
+        port.postMessage({type: 'applied', toolCallId: message.toolCallId, session: context.session, applied: false, error: error.message});
+      }
       return;
     }
     if (message.type === 'identity-changed') { context = null; stop('页面连接已断开，请在工作台重新连接。'); return; }
@@ -169,13 +198,14 @@ summary { cursor: pointer; width: fit-content; }
     document.body.toggleAttribute('data-ds-dark-theme', message.colorScheme === 'dark');
     const wasReady = themeReady;
     themeReady = true;
+    catalog();
     diagnostic.hidden = true;
     controls(true);
     if (!wasReady) query();
   };
   const connect = event => {
     if (event.source !== parent || event.origin !== new URL(document.referrer).origin ||
-        event.data?.protocol !== 'gea-html-v1' || event.data.type !== 'connect' || port ||
+        event.data?.protocol !== 'gea-html-v2' || event.data.type !== 'connect' || port ||
         typeof event.data.context?.session !== 'string' || typeof event.data.context?.plugin !== 'string' || !event.ports[0]) return;
     context = event.data.context;
     port = event.ports[0];
@@ -186,7 +216,7 @@ summary { cursor: pointer; width: fit-content; }
   addEventListener('message', connect);
   const timeout = setTimeout(() => { if (!themeReady) stop('未收到工作台主题，请重新连接后打开样板。'); }, 5000);
   addEventListener('pagehide', () => { clearTimeout(timer); clearTimeout(timeout); removeEventListener('message', connect); port?.close(); }, { once: true });
-  parent.postMessage({ protocol: 'gea-html-v1', type: 'ready' }, '*');
+  parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
 })();
 </script>
 </body>

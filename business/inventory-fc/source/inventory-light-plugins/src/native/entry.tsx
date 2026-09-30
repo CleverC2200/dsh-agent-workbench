@@ -63,6 +63,7 @@ async function mount() {
   await mountBusinessFetch();
   const root = createRoot(document.getElementById("app")!);
   root.render(<App />);
+  window.addEventListener("gea-page-refresh", () => refreshPage());
   action("refresh", "清除本页快照并重新查询 GEA", () => {
     refreshPage();
     return { refreshing: true };

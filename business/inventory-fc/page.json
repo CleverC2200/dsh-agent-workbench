@@ -1,6 +1,6 @@
 {
   "surface": "gea-html-inventory-fc",
-  "protocol": "dom-scan",
+  "protocol": "self-report",
   "pageIds": ["inventory-fc"],
   "consumerCode": "branch-inventory",
   "maxEffect": "view"

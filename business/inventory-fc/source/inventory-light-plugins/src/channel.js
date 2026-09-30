@@ -5,6 +5,24 @@ let channel,
 const pending = new Map(),
   handlers = new Map();
 let appliedThemeTokens = [];
+const pageGroups = new Map();
+const applying = new Map();
+function reportCatalog() {
+  if (!channel || !context?.session) return;
+  channel.postMessage({type: "catalog", session: context.session,
+    elements: [...pageGroups.values()].flatMap(group => group.elements)});
+}
+/** Page components supply visible elements and state callbacks; no DOM discovery. */
+export function reportElements(key, elements, apply) {
+  const group = {elements, apply};
+  pageGroups.set(key, group);
+  reportCatalog();
+  return () => {
+    if (pageGroups.get(key) !== group) return;
+    pageGroups.delete(key);
+    reportCatalog();
+  };
+}
 let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
@@ -15,7 +33,7 @@ window.addEventListener("message", (event) => {
     event.origin !== new URL(document.referrer).origin ||
     typeof event.data?.context?.session !== "string" ||
     typeof event.data?.context?.plugin !== "string" ||
-    event.data?.protocol !== "gea-html-v1" ||
+    event.data?.protocol !== "gea-html-v2" ||
     event.data?.type !== "connect" ||
     !event.ports[0] ||
     channel
@@ -36,7 +54,9 @@ window.addEventListener("message", (event) => {
         }
         pending.clear();
       }
+      for (const task of applying.values()) task.abort();
       context = message.context;
+      reportCatalog();
       if (context?.session) channel.postMessage({type: "theme:subscribe", session: context.session});
       if (context?.session && previousSession !== context.session)
         window.dispatchEvent(new Event("gea-session-changed"));
@@ -73,6 +93,37 @@ window.addEventListener("message", (event) => {
         item.reject(error);
       } else item.resolve(message.result);
     }
+    if (message.type === "cancel" && message.session === context?.session) {
+      applying.get(message.toolCallId)?.abort();
+    }
+    if (message.type === "apply" && message.session === context?.session) {
+      const session = context.session;
+      const task = new AbortController();
+      applying.set(message.toolCallId, task);
+      Promise.resolve().then(async () => {
+        const args = message.args;
+        const targets = args?.targets ?? [args?.target];
+        if (!Array.isArray(targets) || !targets.length) throw Error("MISSING_TARGET");
+        for (const target of targets) {
+          task.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          const group = [...pageGroups.values()].find(group => group.elements.some(element => element.id === target));
+          const element = group?.elements.find(element => element.id === target);
+          if (!element || !group.apply) throw Error("ELEMENT_GONE");
+          if (args.kind === "setValue" && !element.editable) throw Error("ELEMENT_READ_ONLY");
+          if (args.kind === "invoke" && !element.actions?.includes(args.action ?? "invoke")) throw Error("ACTION_NOT_ALLOWED");
+          if (!["setValue", "invoke", "select", "clear"].includes(args.kind)) throw Error("INVALID_PAGE_ACTION");
+          await group.apply({...args, target}, task.signal);
+        }
+        task.signal.throwIfAborted();
+        if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+        return {applied: true};
+      }).catch(error => ({applied: false, error: error.message})).then(result => {
+        applying.delete(message.toolCallId);
+        channel.postMessage({type: "applied", toolCallId: message.toolCallId, session, ...result});
+        reportCatalog();
+      });
+    }
     if (message.type === "invoke") {
       const handler = handlers.get(message.name);
       const session = context?.session;
@@ -94,6 +145,8 @@ window.addEventListener("message", (event) => {
         );
     }
     if (message.type === "identity-changed") {
+      for (const task of applying.values()) task.abort();
+      context = null;
       for (const item of pending.values()) {
         clearTimeout(item.timer);
         item.cleanup?.();
@@ -104,10 +157,11 @@ window.addEventListener("message", (event) => {
     }
   };
   channel.start();
+  reportCatalog();
   channel.postMessage({type: "theme:subscribe", session: context.session});
   readyResolve(event.data.context);
 });
-window.parent.postMessage({ protocol: "gea-html-v1", type: "ready" }, "*");
+window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
 export async function call(method, parameters = {}, options = {}) {
   await ready;
   options.signal?.throwIfAborted();
@@ -135,6 +189,10 @@ export async function call(method, parameters = {}, options = {}) {
 }
 export function action(name, description, handler) {
   handlers.set(name, handler);
+  if (name === "refresh") reportElements("refresh", [{id: "control:refresh", role: "control", label: description, actions: ["invoke"]}], args => {
+    if (args.kind !== "invoke") throw Error("ACTION_NOT_ALLOWED");
+    return handler({});
+  });
   void ready.then(() =>
     channel.postMessage({ type: "register", name, description, session: context?.session }),
   );

@@ -1,17 +1,10 @@
 import { useEffect, useRef } from "react";
-import { action, ask } from "../channel.js";
+import { action, ask, reportElements } from "../channel.js";
 import { pageContext, updateContext } from "./context";
 export function usePageFilter(current: any, apply: (args: any) => void) {
   const ref = useRef({ current, apply });
   ref.current = { current, apply };
-  useEffect(() => {
-    updateContext("pageFilters", current);
-  }, [JSON.stringify(current)]);
-  useEffect(() => {
-    action(
-      "filter",
-      "筛选本页；先读 context.parts.pageFilters 的 allowedFields、可选范围和当前值，仅传需要改变的字段。不会修改业务数据。",
-      (input: any) => {
+  const filter = (input: any) => {
         if (!input || typeof input !== "object" || Array.isArray(input))
           throw Error("筛选参数必须为对象");
         const { current: c, apply } = ref.current;
@@ -57,8 +50,29 @@ export function usePageFilter(current: any, apply: (args: any) => void) {
           requested: input,
           notice: "等待页面查询完成后再读取上下文",
         };
-      },
-    );
+  };
+  useEffect(() => {
+    updateContext("pageFilters", current);
+    const labels: Record<string, string> = {warehouseId: "分仓", tab: "库存业务页签", search: "搜索SKU", urgentOnly: "紧急补货", riskOnly: "低于建议", businessOnly: "只看业务商品"};
+    const elements = (current.visibleFields ?? []).map((field: string) => ({
+      id: `filter:${field}`, role: field === "search" ? "field" : "control", label: labels[field] ?? field,
+      ...(String(current[field] ?? "") ? {value: String(current[field])} : {}),
+      editable: !current.disabledFields?.includes(field),
+      ...(field === "warehouseId" ? {options: current.warehouses.slice(0,24)} : field === "tab" ? {options: current.tabs} : typeof current[field] === "boolean" ? {options: ["true", "false"]} : {}),
+    }));
+    return reportElements("filters", elements, (args: any) => {
+      const field = args.target.slice("filter:".length);
+      if (args.kind !== "setValue") throw Error("ACTION_NOT_ALLOWED");
+      let value = args.value;
+      if (typeof ref.current.current[field] === "boolean") {
+        if (!["true", "false"].includes(value)) throw Error("筛选开关无效");
+        value = value === "true";
+      }
+      return filter({[field]: value});
+    });
+  }, [JSON.stringify(current)]);
+  useEffect(() => {
+    action("filter", "按当前页允许的字段调整筛选；不修改业务数据", filter);
   }, []);
 }
 export function exportLocalJson(value: unknown, name: string) {

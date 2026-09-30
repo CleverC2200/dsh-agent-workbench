@@ -9,7 +9,7 @@
   "gea": {
     "consumerCode": "branch-inventory",
     "readonly": true,
-    "contract": "gea-html-v1"
+    "contract": "gea-html-v2"
   },
   "status": "integration-preview",
   "declarations": {
