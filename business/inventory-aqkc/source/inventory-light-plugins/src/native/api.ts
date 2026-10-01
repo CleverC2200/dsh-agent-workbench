@@ -92,14 +92,6 @@ export async function mountBusinessFetch() {
     try {
       const result = await dispatch(url, method, body, signal);
       signal.throwIfAborted();
-      updateContext("data", {
-        plugin: PLUGIN_ID,
-        path: url.pathname,
-        parameters: { ...Object.fromEntries(url.searchParams), ...body },
-        loadedAt: new Date().toISOString(),
-        summary: result.workspace?.kpis,
-        detail: result.page ?? result.tabs,
-      });
       return Response.json(result);
     } catch (e) {
       if (signal.aborted) throw e;

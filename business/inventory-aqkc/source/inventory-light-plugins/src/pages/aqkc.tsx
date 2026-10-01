@@ -217,6 +217,36 @@ export function InventoryOperationsWorkbench() {
     () => selectedWorkbenchPaths(basePaths, pathSelection),
     [basePaths, pathSelection],
   );
+  const closeDetails = () => {
+    baseDetailRequestRef.current += 1;
+    categoryDetailRequestRef.current += 1;
+    hierarchySkuRequestRef.current += 1;
+    setExpandedBaseDetail(null);
+    setExpandedCategoryDetail(null);
+    setExpandedSkuDetail(null);
+    removeContextPart("stockDetail");
+  };
+  const selectPaths = (selection: string[]) => {
+    closeDetails();
+    for (const requestKey of dashboardTabLoadedGroupsRef.current) {
+      if (requestKey.startsWith("safety-stock:"))
+        dashboardTabLoadedGroupsRef.current.delete(requestKey);
+    }
+    for (const [requestKey, controller] of dashboardTabControllersRef.current) {
+      if (!requestKey.startsWith("safety-stock:")) continue;
+      controller.abort();
+      dashboardTabControllersRef.current.delete(requestKey);
+      dashboardTabRequestsRef.current.delete(requestKey);
+      dashboardTabInteractiveGroupsRef.current.delete(requestKey);
+    }
+    setDashboardTabs((current) => {
+      if (!current) return current;
+      const { 品类结构: _removedCategory, ...remaining } = current;
+      return remaining;
+    });
+    setScopedOverview(null);
+    setPathSelection(selection);
+  };
   usePageFilter(
     {
       allowedFields: ["bases", "tab"],
@@ -227,17 +257,9 @@ export function InventoryOperationsWorkbench() {
       tab: activeBoardTab,
     },
     (args) => {
-      if (args.bases !== undefined) {
-        setScopedOverview(null);
-        setPathSelection(args.bases);
-      }
+      if (args.bases !== undefined) selectPaths(args.bases);
+      else closeDetails();
       if (args.tab !== undefined) setActiveBoardTab(args.tab);
-      baseDetailRequestRef.current++;
-      categoryDetailRequestRef.current++;
-      hierarchySkuRequestRef.current++;
-      setExpandedBaseDetail(null);
-      setExpandedCategoryDetail(null);
-      setExpandedSkuDetail(null);
     },
   );
   const realBoardTable = dashboardWorkspace
@@ -340,6 +362,7 @@ export function InventoryOperationsWorkbench() {
             tabs?: Partial<DashboardTabs>;
             error?: unknown;
           } | null;
+          controller.signal.throwIfAborted();
           const nextTabs: Partial<DashboardTabs> = {};
           for (const tabName of dashboardTabResultNames(requestedTab)) {
             const table = payload?.tabs?.[tabName];
@@ -359,8 +382,7 @@ export function InventoryOperationsWorkbench() {
           setDashboardTabsError(null);
         })
         .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError")
-            return;
+          if (controller.signal.aborted) return;
           if (dashboardTabInteractiveGroupsRef.current.has(requestKey)) {
             setDashboardTabsError(
               sanitizeUserVisibleCopy(
@@ -372,6 +394,8 @@ export function InventoryOperationsWorkbench() {
           }
         })
         .finally(() => {
+          if (dashboardTabControllersRef.current.get(requestKey) !== controller)
+            return;
           dashboardTabRequestsRef.current.delete(requestKey);
           dashboardTabControllersRef.current.delete(requestKey);
           dashboardTabInteractiveGroupsRef.current.delete(requestKey);
@@ -618,31 +642,8 @@ export function InventoryOperationsWorkbench() {
     ],
   );
   const togglePath = (path: string) => {
-    baseDetailRequestRef.current += 1;
-    categoryDetailRequestRef.current += 1;
-    hierarchySkuRequestRef.current += 1;
-    for (const requestKey of dashboardTabLoadedGroupsRef.current) {
-      if (requestKey.startsWith("safety-stock:"))
-        dashboardTabLoadedGroupsRef.current.delete(requestKey);
-    }
-    for (const [requestKey, controller] of dashboardTabControllersRef.current) {
-      if (!requestKey.startsWith("safety-stock:")) continue;
-      controller.abort();
-      dashboardTabControllersRef.current.delete(requestKey);
-      dashboardTabRequestsRef.current.delete(requestKey);
-      dashboardTabInteractiveGroupsRef.current.delete(requestKey);
-    }
-    setDashboardTabs((current) => {
-      if (!current) return current;
-      const { 品类结构: _removedCategory, ...remaining } = current;
-      return remaining;
-    });
-    setScopedOverview(null);
-    setPathSelection(toggleWorkbenchPath(basePaths, paths, path));
+    selectPaths(toggleWorkbenchPath(basePaths, paths, path));
     setActiveBoardTab("基地结构");
-    setExpandedBaseDetail(null);
-    setExpandedCategoryDetail(null);
-    setExpandedSkuDetail(null);
   };
   const allBasesSelected =
     basePaths.length > 0 && paths.length === basePaths.length;
@@ -744,8 +745,8 @@ export function InventoryOperationsWorkbench() {
               bases={basePaths.map((base) => base.replace(/基地$/u, ""))}
               initialBase={paths[0]?.replace(/基地$/u, "")}
               onBoard={(risk, base) => {
-                if (base && basePaths.includes(`${base}基地`)) setPathSelection([`${base}基地`]);
-                setExpandedBaseDetail(null); setExpandedCategoryDetail(null); setExpandedSkuDetail(null);
+                if (base && basePaths.includes(`${base}基地`)) selectPaths([`${base}基地`]);
+                else closeDetails();
                 setActiveBoardTab(risk?.module === "age" ? "货龄结构" : "基地结构");
                 if (!risk) return;
                 const tab = risk.module === "age" ? "货龄结构" : "品类结构";

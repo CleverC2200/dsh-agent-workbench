@@ -69,7 +69,7 @@ test("base query errors remain explicit and refresh discards a late old response
     const recovered = await window.fetch("/api/inventory/dashboard");
     assert.equal(recovered.status, 200);
     assert.equal((await recovered.json()).workspace.kpis[0].value, "fresh");
-    assert.equal(fixture.updates.at(-1).value.summary[0].value, "fresh");
+    assert.equal(fixture.updates.length, 0, "query results are published only by the current page owner");
     await assert.rejects(
       window.fetch("https://external.invalid/api/inventory/dashboard"),
       /数据访问/,
