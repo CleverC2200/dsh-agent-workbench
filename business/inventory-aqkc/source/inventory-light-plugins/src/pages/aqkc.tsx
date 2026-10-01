@@ -1,3 +1,4 @@
+import { currentOrderMetricScopes } from "../../../aqkc/web/src/lib/workbench-current-order.ts";
 import { DashboardOverviewSkeleton, DashboardTableSkeleton } from "../dsh-ui/workbench-loading";
 import {DATA_PERMISSION_MESSAGE, queryErrorText} from '../query-error.js';
 import { usePageFilter } from "../native/page-filter.tsx";
@@ -682,6 +683,7 @@ export function InventoryOperationsWorkbench() {
       rows: state === "ready" ? overviewWorkspace?.table.rows : undefined,
       cards: state === "ready" ? overviewWorkspace?.workbench?.cards : undefined,
       currentOrders: state === "ready" ? overviewWorkspace?.workbench?.currentOrders : undefined,
+      orderMetricScopes: state === "ready" ? currentOrderMetricScopes : undefined,
       version: state === "ready" ? overviewWorkspace?.versionSummary : undefined,
     });
     updateContext("inventoryInsight", {
@@ -1084,7 +1086,7 @@ function Kpi({
       <strong
         title={
           title === "当前订单"
-            ? "备单中订单量＋已备单未发货占用量（最新已同步快照）"
+            ? currentOrderMetricScopes.orderQuantity
             : title === "订单满足率"
               ? "当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行"
               : undefined
@@ -1104,7 +1106,7 @@ function Kpi({
               title={
                 title === "当前订单"
                   ? item.label === "备单量"
-                    ? "仅备单中订单量，不含已备单未发货"
+                    ? currentOrderMetricScopes.preparingQuantity
                     : "按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总"
                   : title === "订单满足率"
                     ? "当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量"

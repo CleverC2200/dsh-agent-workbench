@@ -1,3 +1,10 @@
+/** Field scope follows currentOrderCtes; interpretation must not narrow an allocation to one stage. */
+export const currentOrderMetricScopes = {
+  orderQuantity: "备单中订单量＋已备单未发货占用量（最新已同步快照）",
+  preparingQuantity: "仅备单中订单量，不含已备单未发货",
+  allocatedQuantity: "当前待发订单的全部占用量，含备单中占用与已备单未发货占用；不等于仅已备单未发货量",
+} as const;
+
 export interface CurrentOrderBase {
   base: string;
   orderQuantity: number | null;
