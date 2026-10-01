@@ -226,7 +226,10 @@ export function InventoryOperationsWorkbench() {
       tab: activeBoardTab,
     },
     (args) => {
-      if (args.bases !== undefined) setPathSelection(args.bases);
+      if (args.bases !== undefined) {
+        setScopedOverview(null);
+        setPathSelection(args.bases);
+      }
       if (args.tab !== undefined) setActiveBoardTab(args.tab);
       baseDetailRequestRef.current++;
       categoryDetailRequestRef.current++;
@@ -633,6 +636,7 @@ export function InventoryOperationsWorkbench() {
       const { 品类结构: _removedCategory, ...remaining } = current;
       return remaining;
     });
+    setScopedOverview(null);
     setPathSelection(toggleWorkbenchPath(basePaths, paths, path));
     setActiveBoardTab("基地结构");
     setExpandedBaseDetail(null);
