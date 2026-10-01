@@ -76,5 +76,12 @@ export function buildInventoryInsight(input: {
   if (input.stale) missing.push('快照过期');
   // Aggregate category overlap is never evidence of a specific SKU cause.
   lines.push(`数据边界：${missing.length?missing.join('、')+'；':''}当前只能判断到基地/品类层，不能确认具体SKU原因。`);
-  return {text:lines.join('\n'),ranking,top,groups:records,completeRanking};
+  return {text:lines.join('\n'),ranking,top,groups:records,completeRanking,
+    metrics:{current,target,gap,shortage,age60:ageTotal,future7,future14,fulfillment:input.fulfillment,dailyDemand:daily,last30d:sales},
+    completeAge,missing};
 }
+
+/** Exact engine evidence published to the page interpreter; no model-side recomputation. */
+export type InventoryRiskEvidence = Pick<ReturnType<typeof buildInventoryInsight>, "text" | "ranking" | "top" | "completeRanking" | "metrics" | "completeAge" | "missing"> & {
+  sources: {consumerCode: "base-safety-stock"; bases: string[]; targetMonth: string; targetVersions: string[]; targetSnapshots: string[]; inventorySnapshots: string[]; orderSnapshots: string[]};
+};

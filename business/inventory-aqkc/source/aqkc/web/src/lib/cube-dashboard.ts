@@ -1213,6 +1213,18 @@ export async function loadInitialDashboard(
       status: "ready",
       statusDescription: `工作台默认展示最新已发布数据：${scope.targetMonthLabel}，优先使用${scope.versionLabel}${correctionFallback.fallbackFieldCount > 0 ? "；纠偏版缺失字段已按同月月初版补齐" : ""}。${missingTargetBases.length ? `${missingTargetBases.join("、")}目标库存明细未返回，需核对 GEA 查询返回范围。` : ""}`,
       overallAnalysis,
+      inventoryInsight: {
+        text: insight.text, ranking: insight.ranking, top: insight.top,
+        completeRanking: insight.completeRanking, completeAge: insight.completeAge,
+        metrics: insight.metrics, missing: insight.missing,
+        sources: {
+          consumerCode: "base-safety-stock", bases: visibleBases,
+          targetMonth: scope.targetMonth, targetVersions: scope.versions,
+          targetSnapshots: [...new Set(sourceSkuRows.map(row => String(row["safety_stock.snapshot_time"] ?? "")).filter(Boolean))],
+          inventorySnapshots: [...new Set(currentOrders.map(row => row.inventorySnapshot).filter(Boolean))],
+          orderSnapshots: [...new Set(currentOrders.map(row => row.orderSnapshot).filter(Boolean))],
+        },
+      },
       currentOrders,
       cards: [
         { title: "当前库存", value: displayNumber(current), helpers: [{ label: "目标库存", value: targetDisplay }, { label: "库存差额", value: gap === null ? "-" : partialTargetDisplay(displayNumber(gap), targetMissing) }], tone: "neutral" },

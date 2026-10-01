@@ -672,16 +672,21 @@ export function InventoryOperationsWorkbench() {
     const tabPending = paths.length > 0 && activeBoardTab !== "基地结构" && (!activeTabTable || activeTabLoading) && !tabError;
     const state = dashboardLoading || overviewLoading || tabPending ? "loading" : dashboardError || overviewError || tabError ? "error" : overviewWorkspace ? "ready" : "empty";
     updateContext("queryState", {state, scope:overviewKey, message:dashboardError ?? overviewError ?? tabError ?? (state === "loading" ? "正在查询基地库存" : state === "empty" ? "当前范围没有可显示数据" : undefined)});
-    updateContext("stockOverview", {scope:overviewKey, state, kpis:state === "ready" ? overviewWorkspace?.kpis : undefined, rows:state === "ready" ? overviewWorkspace?.table.rows : undefined});
+    updateContext("stockOverview", {
+      scope: overviewKey, state,
+      kpis: state === "ready" ? overviewWorkspace?.kpis : undefined,
+      rows: state === "ready" ? overviewWorkspace?.table.rows : undefined,
+      cards: state === "ready" ? overviewWorkspace?.workbench?.cards : undefined,
+      currentOrders: state === "ready" ? overviewWorkspace?.workbench?.currentOrders : undefined,
+      version: state === "ready" ? overviewWorkspace?.versionSummary : undefined,
+    });
+    updateContext("inventoryInsight", {
+      scope: overviewKey, status: state,
+      analysis: state === "ready" ? overviewWorkspace?.workbench?.overallAnalysis : undefined,
+      evidence: state === "ready" ? overviewWorkspace?.workbench?.inventoryInsight : undefined,
+    });
     return reportElements("stock", state === "ready" && activeBoardTab === "基地结构" ? (overviewWorkspace?.table.rows ?? []).map((row, index) => ({id:`stock:${row.level ?? row.base ?? index}`, role:"row", label:String(row.level ?? row.base ?? index), value:`当前库存：${row.current ?? "-"}；目标库存：${row.target ?? "-"}`})) : [], undefined);
   }, [dashboardLoading, dashboardError, overviewKey, overviewWorkspace, overviewLoading, overviewError, activeBoardTab, activeTabTable, activeTabLoading, dashboardTabsError]);
-  useEffect(() => {
-    updateContext("inventoryInsight", {
-      scope: overviewKey, status: overviewLoading ? "loading" : overviewError ? "error" : overviewWorkspace ? "ready" : "empty",
-      analysis: overviewWorkspace?.workbench?.overallAnalysis ?? null,
-      rule: "基地×品类：有当前订单缺口按缺口排序，否则按目标偏差或货龄排序；缺失不按零处理，不能确认具体SKU原因。",
-    });
-  }, [overviewKey, overviewWorkspace, overviewLoading, overviewError]);
   useEffect(() => {
     if (!dashboardWorkspace || allBasesSelected || !paths.length) return;
     const controller = new AbortController();
@@ -726,7 +731,7 @@ export function InventoryOperationsWorkbench() {
             </h2>
           </div>
           <div className={styles.boardHeaderActions}>
-            <Button size="small" onClick={() => window.location.reload()} aria-label="刷新库存数据">
+            <Button size="small" onClick={() => window.dispatchEvent(new Event("gea-page-refresh"))} aria-label="刷新库存数据">
               刷新数据
             </Button>
             <DailyReportButton

@@ -1,3 +1,4 @@
+import { numeric, type InventoryRiskEvidence } from "../../../../../../aqkc/web/src/lib/inventory-insight.ts";
 import {
   normalizeCurrentOrderBases,
   type CurrentOrderBase,
@@ -114,6 +115,7 @@ export interface FixedSafetyStockWorkbench {
   };
   cards?: FixedWorkbenchCard[];
   currentOrders?: CurrentOrderBase[];
+  inventoryInsight?: InventoryRiskEvidence;
 }
 
 export interface FixedWorkbenchCard {
@@ -534,6 +536,37 @@ function normalizePresentation(value: unknown): WorkspacePresentation {
   return "chart";
 }
 
+function normalizeInventoryRiskEvidence(value: unknown): InventoryRiskEvidence | undefined {
+  if (!isRecord(value) || !isRecord(value.metrics) || !isRecord(value.sources)
+      || value.sources.consumerCode !== "base-safety-stock") return undefined;
+  const metrics = value.metrics, sources = value.sources;
+  const strings = (items: unknown) => Array.isArray(items) ? items.filter((item): item is string => typeof item === "string") : [];
+  const top = Array.isArray(value.top) ? value.top.filter(isRecord).map(row => ({
+    base: asString(row.base), category: asString(row.category),
+    current: numeric(row.current), target: numeric(row.target), gap: numeric(row.gap),
+    shortage: numeric(row.shortage), age60: numeric(row.age60),
+    future7: numeric(row.future7), future14: numeric(row.future14),
+    dailyDemand: numeric(row.dailyDemand), last30d: numeric(row.last30d),
+  })) : [];
+  return {
+    text: asString(value.text), ranking: asString(value.ranking), top,
+    completeRanking: value.completeRanking === true, completeAge: value.completeAge === true,
+    missing: strings(value.missing),
+    metrics: {
+      current: numeric(metrics.current), target: numeric(metrics.target), gap: numeric(metrics.gap),
+      shortage: numeric(metrics.shortage), age60: numeric(metrics.age60),
+      future7: numeric(metrics.future7), future14: numeric(metrics.future14),
+      fulfillment: numeric(metrics.fulfillment), dailyDemand: numeric(metrics.dailyDemand), last30d: numeric(metrics.last30d),
+    },
+    sources: {
+      consumerCode: "base-safety-stock", bases: strings(sources.bases),
+      targetMonth: asString(sources.targetMonth), targetVersions: strings(sources.targetVersions),
+      targetSnapshots: strings(sources.targetSnapshots), inventorySnapshots: strings(sources.inventorySnapshots),
+      orderSnapshots: strings(sources.orderSnapshots),
+    },
+  };
+}
+
 function normalizeFixedWorkbench(
   value: unknown,
 ): FixedSafetyStockWorkbench | null {
@@ -565,6 +598,7 @@ function normalizeFixedWorkbench(
     status: value.status === "no_data" ? "no_data" : "ready",
     statusDescription: asString(value.statusDescription),
     overallAnalysis: asString(value.overallAnalysis),
+    inventoryInsight: normalizeInventoryRiskEvidence(value.inventoryInsight),
     ...(noData ? { noData } : {}),
     ...(cards ? { cards } : {}),
     ...(Array.isArray(value.currentOrders)
