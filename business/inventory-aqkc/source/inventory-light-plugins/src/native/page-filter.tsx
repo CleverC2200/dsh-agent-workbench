@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { action, reportElements } from "../channel.js";
-import { updateContext } from "./context";
+import { action, reportElements, publish } from "../channel.js";
+import { updateContext, clearContext, pageContext } from "./context";
 export function usePageFilter(current: any, apply: (input: any) => void) {
   const ref = useRef({ current, apply });
   ref.current = { current, apply };
-  const filter = (input: any) => {
+  const filter = async (input: any) => {
     const { current: scope, apply } = ref.current;
     if (!input || typeof input !== "object" || Array.isArray(input))
       throw Error("筛选参数必须为对象");
@@ -18,7 +18,28 @@ export function usePageFilter(current: any, apply: (input: any) => void) {
       throw Error("基地不在当前可见范围");
     if (input.tab !== undefined && !scope.tabs.includes(input.tab))
       throw Error("页签无效");
+    const bases = input.bases ?? scope.selectedBases;
+    const tab = input.tab ?? scope.tab;
+    if (
+      JSON.stringify(bases) === JSON.stringify(scope.selectedBases) &&
+      tab === scope.tab
+    )
+      return { unchanged: true, notice: "筛选条件未变化，请读取当前查询状态" };
+    clearContext();
+    updateContext("pageFilters", {
+      ...scope,
+      selectedBases: bases,
+      tab,
+      loading: true,
+    });
+    updateContext("queryState", {
+      state: "loading",
+      scope: bases.join(","),
+      message: "正在查询所选基地范围，请等待完成",
+    });
+    const pending = pageContext();
     apply(input);
+    await publish(pending);
     return {
       querying: true,
       requested: input,

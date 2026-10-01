@@ -8,7 +8,7 @@
     "../shared/channel.js": "47759f47087950d18a8c7e5f53bf1411412b5ede6b7e8053407989cc4edad429",
     "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "source/inventory-light-plugins/src/native/context.ts": "8aeb874f3bd4f81b81d214d7fb795325607ff406ad88d8db35b7b4bed56e7001",
-    "source/inventory-light-plugins/src/native/page-filter.tsx": "ae948959bd05e6dd914e291f7f53855729447c4e4c1b205f65f2b57c089c9bb2",
+    "source/inventory-light-plugins/src/native/page-filter.tsx": "75997acd3592536461115231da838c1f8bcfccfcf1e4596296b88d96eb3a60df",
     "source/inventory-light-plugins/src/dsh-ui/Button.module.css": "0b6fc685b366edacbb549dbac46601534c4b86902377ccb56d7fda43737272c9",
     "source/inventory-light-plugins/src/dsh-ui/DshButton.tsx": "fb45bad260a59a51359a80262abd619d44d439f0825230f157303eb1cf391a18",
     "source/inventory-light-plugins/src/dsh-ui/controls.module.css": "d41567d543907b929f6f4e108ec36a6991d73a764458988a34a8156d2e460864",
