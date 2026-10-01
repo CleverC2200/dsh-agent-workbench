@@ -95,6 +95,11 @@ test("one page keeps distinct allowed Agent sessions and refuses a mismatched pr
   const qll = f.selected;
   assert.notEqual(fc, qll);
   assert.deepEqual([...presets.values()], ["fc", "qll"]);
+  await f.controller.open("inventory-fc", "gea-history", qll);
+  await assert.rejects(f.controller.open("inventory-fc", undefined, undefined, "fc"), /Session preset differs/);
+  await f.controller.open("inventory-fc");
+  assert.equal(f.selected, qll, "page bootstrap keeps the history instance and its allowed Agent");
+  assert.equal(sequence, 2, "restoration does not create another Session");
   await f.controller.open("inventory-fc", "fc", undefined, "fc");
   assert.equal(f.selected, fc);
   assert.equal(sequence, 2);
