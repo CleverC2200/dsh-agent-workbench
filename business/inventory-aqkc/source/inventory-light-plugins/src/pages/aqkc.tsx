@@ -668,11 +668,12 @@ export function InventoryOperationsWorkbench() {
   const overviewLoading =
     paths.length > 0 && !overviewWorkspace && !overviewError;
   useEffect(() => {
-    const state = dashboardLoading || overviewLoading ? "loading" : dashboardError || overviewError ? "error" : overviewWorkspace ? "ready" : "empty";
-    updateContext("queryState", {state, scope:overviewKey, message:dashboardError ?? overviewError ?? (state === "loading" ? "正在查询基地库存" : state === "empty" ? "当前范围没有可显示数据" : undefined)});
+    const tabPending = paths.length > 0 && activeBoardTab !== "基地结构" && (!activeTabTable || activeTabLoading) && !dashboardTabsError;
+    const state = dashboardLoading || overviewLoading || tabPending ? "loading" : dashboardError || overviewError || dashboardTabsError ? "error" : overviewWorkspace ? "ready" : "empty";
+    updateContext("queryState", {state, scope:overviewKey, message:dashboardError ?? overviewError ?? dashboardTabsError ?? (state === "loading" ? "正在查询基地库存" : state === "empty" ? "当前范围没有可显示数据" : undefined)});
     updateContext("stockOverview", {scope:overviewKey, state, kpis:state === "ready" ? overviewWorkspace?.kpis : undefined, rows:state === "ready" ? overviewWorkspace?.table.rows : undefined});
-    return reportElements("stock", state === "ready" ? (overviewWorkspace?.table.rows ?? []).map((row, index) => ({id:`stock:${row.level ?? row.base ?? index}`, role:"row", label:String(row.level ?? row.base ?? index), value:`当前库存：${row.current ?? "-"}；目标库存：${row.target ?? "-"}`})) : [], undefined);
-  }, [dashboardLoading, dashboardError, overviewKey, overviewWorkspace, overviewLoading, overviewError]);
+    return reportElements("stock", state === "ready" && activeBoardTab === "基地结构" ? (overviewWorkspace?.table.rows ?? []).map((row, index) => ({id:`stock:${row.level ?? row.base ?? index}`, role:"row", label:String(row.level ?? row.base ?? index), value:`当前库存：${row.current ?? "-"}；目标库存：${row.target ?? "-"}`})) : [], undefined);
+  }, [dashboardLoading, dashboardError, overviewKey, overviewWorkspace, overviewLoading, overviewError, activeBoardTab, activeTabTable, activeTabLoading, dashboardTabsError]);
   useEffect(() => {
     updateContext("inventoryInsight", {
       scope: overviewKey, status: overviewLoading ? "loading" : overviewError ? "error" : overviewWorkspace ? "ready" : "empty",
