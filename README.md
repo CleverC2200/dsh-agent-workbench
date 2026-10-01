@@ -85,3 +85,5 @@ HTML 页面直接接收当前 ui-theme 的色彩模式、字号和活动 alias t
 外壳呈现由工作台的单一布局 store 管理。当前 `ILayout.shellPresentation` 公开只读快照，`setConversationView` 只改显示方式；业务 iframe 与唯一 Conversation 在中间区、并排和会话区三种模式中保持挂载。`registerDocumentTitle` 和 `registerFullscreenPanel` 返回独立释放函数；注销恢复正常标题和布局。`shell.conversation.toolbar` 的位置由 AppFrame 决定；业务插件不定位或修改外壳节点。
 
 Shell presentation belongs to the workbench layout store. `shellPresentation` is read-only; `setConversationView` changes display without changing the page or Session. Title/fullscreen registrations release their own claims. AppFrame places `shell.conversation.toolbar`; plugins do not discover shell nodes.
+
+并排与窄屏堆叠的 Conversation 使用独立剩余高度容器，工具栏不占用会话滚动区域。公共容器 `workbench-conversation` 提供尺寸查询，槽位内容可按面板高度适配；工作台不查询或修改原生会话内部DOM。

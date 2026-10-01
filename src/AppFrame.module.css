@@ -151,3 +151,13 @@
 
 .frame[data-main-fullscreen] > :is(.sidebarCol, .rightbarCol) {display:none}
 .frame[data-main-fullscreen] > .centerCol {grid-column:1 / -1;grid-row:1}
+
+/* The public Conversation slot fills only the space left by its toolbar. */
+.conversationBody {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  container-name: workbench-conversation;
+  container-type: size;
+}
