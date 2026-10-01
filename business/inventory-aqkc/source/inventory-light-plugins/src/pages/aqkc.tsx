@@ -6,7 +6,7 @@ import { DailyReportButton } from "./aqkc/components/analytics/daily-report-dial
 
 import { ask as askDsh, reportElements } from "../channel.js";
 
-import { updateContext, pageContext as reportContext } from "../native/context.ts";
+import { updateContext, removeContextPart, pageContext as reportContext } from "../native/context.ts";
 
 import {
   defaultSkuRisks,
@@ -1206,13 +1206,14 @@ function InlineSkuDetail({
     const group = "sku-detail";
     const ready = !detail.loading && !detail.error;
     updateContext("stockDetail", {base:detail.base, category:detail.category, tab:detail.tab, state:detail.loading ? "loading" : detail.error ? "error" : "ready", error:detail.error, query, risks, page, pageSize, sort, result:ready ? result : undefined});
-    return reportElements(group, ready ? [
+    const unregister = reportElements(group, ready ? [
       {id:`${group}:search`, role:"field", label:"物料搜索", value:query, editable:true},
-      ...result.rows.map((row, index) => ({id:`${group}:row:${index}`, role:"row", label:String(row.materialCode ?? row.sku ?? index), value:`当前库存：${row.current ?? "-"}；目标库存：${row.target ?? "-"}`})),
+      ...result.rows.map((row, index) => ({id:`${group}:${detail.base}:${String(row.level ?? row.materialCode ?? row.sku ?? index).split(/\s/)[0]}`, role:"row", label:String(row.level ?? row.materialCode ?? row.sku ?? index).slice(0,200), value:`当前库存：${row.current ?? "-"}；目标库存：${row.target ?? "-"}`})),
     ] : [], (args: any) => {
       if (args.target !== `${group}:search` || args.kind !== "setValue" || typeof args.value !== "string" || args.value.length > 100) throw Error("不支持的明细操作");
       setQuery(args.value); setPage(1);
     });
+    return () => {unregister(); removeContextPart("stockDetail");};
   }, [detail, query, risks, page, pageSize, sort]);
   if (detail.loading) {
     return (

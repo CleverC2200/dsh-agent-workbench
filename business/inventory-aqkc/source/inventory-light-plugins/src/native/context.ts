@@ -46,5 +46,9 @@ export function clearContext() {
   parts.clear();
   clearTimeout(timer);
 }
+export function removeContextPart(key: string) {
+  parts.delete(key);
+  refreshContext();
+}
 if (typeof window !== "undefined")
   window.addEventListener("gea-session-changed", refreshContext);
