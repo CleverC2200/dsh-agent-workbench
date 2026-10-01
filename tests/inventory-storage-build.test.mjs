@@ -11,6 +11,8 @@ test("the opaque inventory build keeps memory storage after repository formattin
   const workbench = join(fixture, "dsh-agent-workbench");
   await mkdir(join(workbench, "scripts"), { recursive: true });
   await cp("scripts/build-inventory-fc.mjs", join(workbench, "scripts/build-inventory-fc.mjs"));
+  await cp("scripts/build-inventory.mjs", join(workbench, "scripts/build-inventory.mjs"));
+  await cp("business/shared", join(workbench, "business/shared"), { recursive: true });
   await cp("theme", join(workbench, "theme"), { recursive: true });
   await cp("business/inventory-fc", join(workbench, "business/inventory-fc"), {
     recursive: true, filter: path => !path.split(/[\\/]/).includes("node_modules"),

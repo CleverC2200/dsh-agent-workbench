@@ -87,3 +87,5 @@ HTML 页面直接接收当前 ui-theme 的色彩模式、字号和活动 alias t
 Shell presentation belongs to the workbench layout store. `shellPresentation` is read-only; `setConversationView` changes display without changing the page or Session. Title/fullscreen registrations release their own claims. AppFrame places `shell.conversation.toolbar`; plugins do not discover shell nodes.
 
 并排与窄屏堆叠的 Conversation 使用独立剩余高度容器，工具栏不占用会话滚动区域。公共容器 `workbench-conversation` 提供尺寸查询，槽位内容可按面板高度适配；工作台不查询或修改原生会话内部DOM。
+
+Base inventory page source is owned by `business/inventory-aqkc`; Agent resources are assembled from sibling Manage. Both stock pages share `business/shared/channel.js` and the same HTML v2 contract. The original AQKC runtime entry is retired. Build with the existing npm lockfile and `npm run build`; this does not authorize release or remote writes.

@@ -34,3 +34,5 @@ execFileSync(process.execPath,["node_modules/typescript/bin/tsc","-p",process.en
 
 await import("./build-html-sample.mjs");
 await import("./build-inventory-fc.mjs");
+
+await import("./build-inventory-aqkc.mjs");

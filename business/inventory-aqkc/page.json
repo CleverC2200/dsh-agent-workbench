@@ -1,0 +1,9 @@
+{
+  "surface": "gea-html-inventory-aqkc",
+  "protocol": "self-report",
+  "pageIds": [
+    "inventory-aqkc"
+  ],
+  "consumerCode": "base-safety-stock",
+  "maxEffect": "view"
+}
