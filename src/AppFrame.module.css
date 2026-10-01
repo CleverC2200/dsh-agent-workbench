@@ -158,6 +158,5 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  container-name: workbench-conversation;
   container-type: size;
 }

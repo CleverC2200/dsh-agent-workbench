@@ -364,7 +364,7 @@ export function AppFrame({
         <CenterColumn>{conversationBesidePanel && presentation.conversationView === "center" && renderSlot("shell.conversation.toolbar", {})}{main}</CenterColumn>
         <RightbarColumn>
           {conversationBesidePanel
-            ? <>{presentation.conversationView !== "center" && renderSlot("shell.conversation.toolbar", {})}<div className={css.conversationBody}>{renderSlot("main", {}, { entryKey: "conversation" })}</div></>
+            ? <>{presentation.conversationView !== "center" && renderSlot("shell.conversation.toolbar", {})}<div className={css.conversationBody} style={{ containerName: "workbench-conversation" }}>{renderSlot("main", {}, { entryKey: "conversation" })}</div></>
             : renderSlot("rightbar", {
                 width: normal.rightbar,
                 viewportWidth: viewport,
