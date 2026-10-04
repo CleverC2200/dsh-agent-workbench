@@ -12,7 +12,7 @@ const module={exports:{}};new Function('module','exports','require',bundle.outpu
 const {mountCompanyUI}=module.exports;
 function fixture(account){
  const entries=[];const effects=[];const calls=[];
- const ctx={layout:{selectPanel:id=>calls.push(['panel',id]),toggleSidebar:()=>calls.push(['toggle'])},uiWorkspace:{startSession:()=>calls.push(['new'])},locale:{getSnapshot:()=>({active:'zh'}),subscribe:()=>()=>{}},slots:{entries:()=>[{options:{key:'gea-proof'}},{options:{key:'inventory-fc'}}],subscribe:()=>()=>{},inject:(_name,fn)=>fn(),register:(options,component)=>{entries.push({options,component});return()=>{};}},inject:(_names,fn)=>{if(account)fn({...ctx,businessAccount:account});},effect:fn=>{effects.push(fn);}};
+ const ctx={layout:{selectPanel:id=>calls.push(['panel',id]),toggleSidebar:()=>calls.push(['toggle'])},uiWorkspace:{startSession:()=>calls.push(['new'])},locale:{getSnapshot:()=>({active:'zh'}),subscribe:()=>()=>{}},slots:{entries:name=>name==='sidebar.panellist'?[{options:{id:'public-tool',label:()=> '插件管理'}}]:[{options:{key:'gea-proof'}},{options:{key:'inventory-fc'}},{options:{key:'public-tool'}}],subscribe:()=>()=>{},inject:(_name,fn)=>fn(),register:(options,component)=>{entries.push({options,component});return()=>{};}},inject:(_names,fn)=>{if(account)fn({...ctx,businessAccount:account});},effect:fn=>{effects.push(fn);}};
  const workbench={label:id=>id,subscribe:()=>()=>{},subscribeHistory:()=>()=>{},takeHistoryPage:()=>undefined,open:async id=>calls.push(['page',id])};
  mountCompanyUI(ctx,workbench,()=>React.createElement('div',null,'resources'));
  return{entries,calls};
@@ -29,6 +29,11 @@ test('the account contribution retains settings and renders the GEA read-only si
  const {entries}=fixture();const entry=entries.find(e=>e.options.name==='settings.launcher');assert.ok(entry);
  const markup=renderToStaticMarkup(React.createElement(entry.component,{wide:true,settingsOpen:false,openSettings:()=>{}}));
  assert.ok(markup.includes('账户菜单'));assert.ok(markup.includes('未登录'));
+});
+test('public tools retain their matching sidebar metadata label rather than exposing the internal main key',()=>{
+ const {entries}=fixture();const entry=entries.find(row=>row.options.name==='sidebar');
+ const markup=renderToStaticMarkup(React.createElement(entry.component,{collapsed:false,width:280,usePanelInfo:fn=>fn({activePanelId:null}),renderSlot:()=>null}));
+ assert.ok(markup.includes('插件管理'));assert.ok(!markup.includes('>public-tool</button>'));
 });
 test('company Conversation composes its welcome and the native content with original workspace selection seats',()=>{
  const {entries}=fixture();const entry=entries.find(e=>e.options.name==='main.conversation');assert.ok(entry);

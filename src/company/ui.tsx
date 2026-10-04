@@ -84,18 +84,23 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
  function Sidebar({collapsed,usePanelInfo,renderSlot}:PropsRuntime<'sidebar'>&PropsRenderSlots<'sidebar.brand.mark'|'sidebar.brand.name'|'sidebar.panellist'|'sidebar.workspaces'|'sidebar.settings'|'sidebar.footer.action'>){
   const active=usePanelInfo(value=>value.activePanelId);
   const [history,setHistory]=useState(false);const [entries,setEntries]=useState(()=>ctx.slots.entries('main'));
-  useEffect(()=>{const refresh=()=>setEntries([...ctx.slots.entries('main')]);const off=ctx.slots.subscribe('main',refresh);const offPages=workbench.subscribe(refresh);return()=>{off();offPages();};},[]);
+  useEffect(()=>{const refresh=()=>setEntries([...ctx.slots.entries('main')]);const off=ctx.slots.subscribe('main',refresh);const offPanels=ctx.slots.subscribe('sidebar.panellist',refresh);const offLocale=ctx.locale.subscribe(refresh);const offPages=workbench.subscribe(refresh);return()=>{off();offPanels();offLocale();offPages();};},[]);
   const available=new Set(entries.map(entry=>entry.options.key));
   const expandHistory=()=>{setHistory(true);if(collapsed)ctx.layout.toggleSidebar();};
   useEffect(()=>workbench.subscribeHistory(expandHistory),[collapsed]);
   const start=()=>{setHistory(true);ctx.uiWorkspace.startSession();};
   const known=new Set<string>(groups.flatMap(group=>group.items.map(([id])=>id)));
-  const additional=entries.filter(entry=>entry.options.key&&entry.options.key!=='conversation'&&!known.has(entry.options.key)&&entry.options.key!=='gea-inbox');
+  const panels=ctx.slots.entries('sidebar.panellist');
+  const additional=entries.filter(entry=>entry.options.key&&entry.options.key!=='conversation'&&!known.has(entry.options.key)&&entry.options.key!=='gea-inbox').map(entry=>{
+   const id=entry.options.key! as MainPanelId;
+   const label=panels.find(panel=>panel.options.id===id)?.options.label;
+   return {id,label:typeof label==='function'?label():label??workbench.label(id)};
+  });
   return <aside className={'agent-workbench-ui workbench-sidebar'+(collapsed?' is-collapsed':'')} aria-label="思念 GEA 导航">
    <div className="workbench-sidebar-brand"><button type="button" aria-label={collapsed?'展开业务菜单':'收起侧边栏'} onClick={()=>ctx.layout.toggleSidebar()}><img src={logo} alt="" width={36} height={36}/></button>{!collapsed&&<div><strong>Synear GEA</strong><span>智能体工作台</span></div>}</div>
    <div className="workbench-sidebar-actions"><button type="button" aria-label="新建会话" onClick={start}>{collapsed?'+':'AI工作台'}</button><button type="button" aria-label="消息待办" disabled={!available.has('gea-inbox' as MainPanelId)} onClick={()=>void workbench.open('gea-inbox' as MainPanelId)}>{collapsed?'◇':'消息待办'}</button></div>
    <div className="workbench-nav-tabs"><button type="button" aria-pressed={!history} onClick={()=>{setHistory(false);if(collapsed)ctx.layout.toggleSidebar();}}>{collapsed?'▦':'业务工作台'}</button><button type="button" aria-pressed={history} onClick={expandHistory}>{collapsed?'◷':'历史会话'}</button></div>
-   {!collapsed&&<div className="workbench-sidebar-browser"><nav hidden={history} aria-label="业务导航">{groups.map(group=><details key={group.title} open><summary>{group.title}</summary>{group.items.map(([id,title])=><button key={id} type="button" disabled={!available.has(id as MainPanelId)} aria-current={active===id?'page':undefined} onClick={()=>void workbench.open(id as MainPanelId)}>{title}</button>)}</details>)}{additional.length>0&&<details open><summary>公共工具与原型</summary>{additional.map(entry=><button key={entry.options.key} type="button" aria-current={active===entry.options.key?'page':undefined} onClick={()=>void workbench.open(entry.options.key! as MainPanelId)}>{workbench.label(entry.options.key! as MainPanelId)}</button>)}</details>}</nav><div hidden={!history}>{renderSlot('sidebar.workspaces',{wide:true,expandSidebar:()=>ctx.layout.toggleSidebar()})}</div></div>}
+   {!collapsed&&<div className="workbench-sidebar-browser"><nav hidden={history} aria-label="业务导航">{groups.map(group=><details key={group.title} open><summary>{group.title}</summary>{group.items.map(([id,title])=><button key={id} type="button" disabled={!available.has(id as MainPanelId)} aria-current={active===id?'page':undefined} onClick={()=>void workbench.open(id as MainPanelId)}>{title}</button>)}</details>)}{additional.length>0&&<details open><summary>公共工具与原型</summary>{additional.map(entry=><button key={entry.id} type="button" aria-current={active===entry.id?'page':undefined} onClick={()=>void workbench.open(entry.id)}>{entry.label}</button>)}</details>}</nav><div hidden={!history}>{renderSlot('sidebar.workspaces',{wide:true,expandSidebar:()=>ctx.layout.toggleSidebar()})}</div></div>}
    <footer>{renderSlot('sidebar.settings',{wide:!collapsed})}{renderSlot('sidebar.footer.action',{wide:!collapsed})}</footer>
   </aside>;
  }
