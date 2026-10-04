@@ -34,7 +34,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const frame=useRef<HTMLIFrameElement>(null);
     const [loaded,setLoaded]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState("");
     const [selection,setSelection]=useState<{reference:SessionReference;preset:string;ownerScope:string|null}>();
-    const pending=useRef<AbortController>();
+    const pending=useRef<{controller:AbortController;scope:string|null}>();
     const connectionTransition=useRef<Promise<void>>(Promise.resolve());
     const title=typeof page.label==="function"?page.label():page.label??page.id;
     const src=typeof page.src==="function"?page.src():page.src;
@@ -44,11 +44,15 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       const ready=(event:MessageEvent)=>{if(event.source===frame.current?.contentWindow&&event.data?.protocol==="agent-workbench-theme")sendTheme();};
       window.addEventListener("message",ready);return()=>window.removeEventListener("message",ready);
     },[]);
-    useEffect(()=>()=>{pending.current?.abort();},[]);
+    useEffect(()=>()=>{pending.current?.controller.abort();pending.current=undefined;},[]);
     useEffect(()=>{
-      if(!selection)return;
-      if(identity.scope!==selection.ownerScope||!identity.status?.authenticated){
-        pending.current?.abort();setSelection(undefined);setError(t("pageChanged"));
+      const flight=pending.current;
+      if(flight&&(flight.scope!==identity.scope||!identity.status?.authenticated)){
+        flight.controller.abort();
+        if(pending.current===flight){pending.current=undefined;setBusy(false);}
+      }
+      if(selection&&(identity.scope!==selection.ownerScope||!identity.status?.authenticated)){
+        setSelection(undefined);setError(t("pageChanged"));
       }
     },[identity.scope,identity.status?.authenticated,selection]);
     useEffect(()=>{
@@ -90,14 +94,14 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const connect=async()=>{
       const host=resources();if(!host||!currentExecution||!page.resourceId){setError(t("pageWait"));return;}
       if(!identity.status?.authenticated){setError(t("pageLogin"));return;}
-      pending.current?.abort();const controller=new AbortController();pending.current=controller;setBusy(true);setError("");
+      pending.current?.controller.abort();const controller=new AbortController();const flight={controller,scope:identity.scope};pending.current=flight;setBusy(true);setError("");
       try{
         const selected=await selectResource(host,page.resourceId,controller.signal,true);
         if(!selected.reference)throw Error(t("pageSessionUnavailable"));
         if(controller.signal.aborted||identity.scope!==currentExecution.identity.getSnapshot().scope){selected.reference.release();return;}
         setSelection({reference:selected.reference,preset:selected.preset,ownerScope:identity.scope});
       }catch(failure){if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));}
-      finally{if(!controller.signal.aborted)setBusy(false);}
+      finally{if(pending.current===flight){pending.current=undefined;setBusy(false);}}
     };
     return <section className="agent-workbench-ui agent-workbench-document">
       {page.resourceId&&<header className="agent-workbench-page-toolbar"><span>{title}</span><button type="button" disabled={busy} onClick={()=>void connect()}>{busy?t("pageWorking"):selection?t("pageNewChat"):t("pageConnect")}</button>{!selection&&<span>{t("pageHint")}</span>}</header>}

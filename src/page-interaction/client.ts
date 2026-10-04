@@ -190,7 +190,9 @@ export function installPageInteraction(ctx: Context): PageInteraction {
         return ready.conversation.input.for(reference.binding.ctx);
       };
       const channel = crypto.randomUUID();
-      const expectedOrigin = frame.src && !frame.srcdoc
+      const sandbox = frame.getAttribute("sandbox");
+      const opaqueOrigin = sandbox !== null && !sandbox.split(/\s+/).includes("allow-same-origin");
+      const expectedOrigin = opaqueOrigin ? "null" : frame.src && !frame.srcdoc
         ? new URL(frame.src, window.location.href).origin : undefined;
       let active = true;
       let generation: string | undefined;

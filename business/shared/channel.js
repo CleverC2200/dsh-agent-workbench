@@ -57,7 +57,7 @@ window.addEventListener("message", (event) => {
           clearTimeout(item.timer);
           item.cleanup?.();
           item.reject(Error("页面会话已切换，请重新操作"));
-          channel.postMessage({ type: "cancel", id });
+          channel.postMessage({ type: "cancel", id, session: previousSession });
         }
         pending.clear();
       }
@@ -233,6 +233,7 @@ window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
 export async function call(method, parameters = {}, options = {}) {
   options.signal?.throwIfAborted();
   if (!channel || !context?.session) throw Error("页面已显示，请先登录并连接页面能力。");
+  const session = context.session;
   const id = String(++sequence);
   return new Promise((resolve, reject) => {
     const cleanup = () => options.signal?.removeEventListener("abort", abort);
@@ -240,13 +241,13 @@ export async function call(method, parameters = {}, options = {}) {
       if (!pending.delete(id)) return;
       clearTimeout(timer);
       cleanup();
-      channel.postMessage({ type: "cancel", id });
+      channel.postMessage({ type: "cancel", id, session });
       reject(options.signal.reason ?? Error("请求已取消"));
     };
     const timer = setTimeout(() => {
       pending.delete(id);
       cleanup();
-      channel.postMessage({ type: "cancel", id });
+      channel.postMessage({ type: "cancel", id, session });
       const error = Error("业务请求超时");
       reject(method === "sql" ? sqlQueryError(error) : error);
     }, 120000);
@@ -257,7 +258,7 @@ export async function call(method, parameters = {}, options = {}) {
       id,
       method,
       parameters,
-      session: context?.session,
+      session,
     });
   });
 }

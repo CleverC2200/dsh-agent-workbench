@@ -50,3 +50,5 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 GEA 的窄 geaPageExecution 只提供唯一身份投影与既有受控 open/call/close/prompt；Workbench 持有 HTML MessageChannel、owned lease 的使用/关闭、self-report/catalog/apply/cancel、主题及页面引用。端口、引用代际和请求都在页面释放/身份变化时撤旧，旧结果不恢复。Native 审批文档保留原呈现与规则，不强制使用 HTML lease。
 
 公共页面选择/引用实现从 GEA 退出，source 在 src/page-interaction，公开 client/picker/bridge/reference/protocol/payload-budget。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。
+
+页面请求取消消息携带该请求原先绑定的Session，abort和timeout都撤销对应Host请求。URL HTML frame保持不允许same-origin的sandbox；内容引用按该frame的opaque origin判定，同时保留window/channel、Host generation、owned lease和输入revision校验。连接按钮的busy属于当前请求controller；身份变化立即释放它，旧请求完成不能清除新请求的busy。

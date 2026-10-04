@@ -2,7 +2,7 @@
   "sourceCommit": "906b3b08947b71cecf627073c0b0e9a389b692bf",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
-    "../shared/channel.js": "31f2d8665b7e9d252cbb8491e7c70d62b142dceccbdbb1a13b362fa710a2cdf5",
+    "../shared/channel.js": "9bf9c59d48451270449021b7d818bb0de867e98bd859a784118452ef125caf1c",
     "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "source/inventory-light-plugins/src/pages/fc/components/inventory-batch-table.tsx": "df340ea99ebab5eea3bd10accbc91bad01c2ada0818eccf45b8109dcefef8d81",
     "source/inventory-light-plugins/src/fc-feedback.ts": "754dcbbb0d64a9ed2fb006ce096b00d05b96605cb0c425285aecb8013d0b685f",
