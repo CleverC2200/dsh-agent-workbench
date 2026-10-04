@@ -4,6 +4,7 @@ import { isAbsolute } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-client-connection";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { HtmlPages, type WorkbenchPages } from "./html-pages.ts";
 export const inject = ["connection"];
 /** The workspace directory used for new business Sessions. */
@@ -18,7 +19,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (!config || typeof config.cwd !== "string" || !isAbsolute(config.cwd))
     throw new Error("agent-workbench: cwd must be absolute");
   const pages = new HtmlPages(await readFile(new URL("./theme/tokens.css", import.meta.url), "utf8"));
-  await pages.registerHtml([new URL("./samples/", import.meta.url).pathname]);
+  await pages.registerHtml([fileURLToPath(new URL("./samples/", import.meta.url))]);
   ctx.provide("workbenchPages", pages);
   ctx.effect(() => ctx.connection.fetch.register({
     path: "/api/agent-workbench/theme.css", methods: ["GET"], requestBody: "buffered",

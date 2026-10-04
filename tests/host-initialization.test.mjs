@@ -1,0 +1,33 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+
+test('Host initializes package resources in a Chinese path and serves the registered HTML', async t => {
+  const root = await mkdtemp(join(tmpdir(), '工作台初始化-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, 'samples'));
+  await mkdir(join(root, 'theme'));
+  await writeFile(join(root, 'theme/tokens.css'), 'body { --workbench-text: #20232a; }');
+  await writeFile(join(root, 'samples/plugin.json'), JSON.stringify({schemaVersion: 1, id: 'workbench-html-table', name: '表格样板', html: 'index.html'}));
+  await writeFile(join(root, 'samples/index.html'), '<html><head></head><body>中文资源已加载</body></html>');
+  const entry = join(root, 'host.mjs');
+  await build({entryPoints: ['src/host.ts'], bundle: true, platform: 'node', format: 'esm', outfile: entry});
+  const { apply } = await import(pathToFileURL(entry).href);
+  const routes = new Map();
+  const context = {
+    connection: {fetch: {register: route => {routes.set(route.path, route); return () => routes.delete(route.path);}}},
+    effect: operation => operation(),
+    provide: (name, value) => {context[name] = value;},
+  };
+  await apply(context, {cwd: root});
+  const metadata = await routes.get('/api/agent-workbench/pages').fetch(new Request('https://localhost/api/agent-workbench/pages'));
+  const pages = await metadata.json();
+  assert.equal(pages[0].name, '表格样板');
+  const response = await routes.get('/api/agent-workbench/html').fetch(new Request('https://localhost' + pages[0].url));
+  assert.equal(response.status, 200);
+  assert.match(await response.text(), /中文资源已加载/);
+});
