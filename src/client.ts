@@ -11,12 +11,13 @@ import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
 import { WorkbenchController, type AgentWorkbench } from "./workbench.ts";
 import type { HtmlPage } from "./html-pages.ts";
 import css from "../theme/tokens.css";
-import { presentHtml } from "./html-document.ts";
+import { mountFramePresentation } from "./frame-presenter.tsx";
+import type { PropsRuntime, PropsRenderFactories } from "@deepseek-ai/dsh-client-ui-slots";
 
 export const inject = ["slots", "layout", "locale", "theme"];
 const DIRECTORY = "agent-workbench" as MainPanelId;
-const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"当前不可用 Skill", resourcesFailed:"资源清单读取失败，请刷新。", selectionFailed:"资源选用失败，请重试。", resourceWorking:"正在装载", resourcesRefresh:"刷新资源" };
-const en = { title: "Workbench", pages: "Available pages", conversation: "Conversation", failed: "Page directory unavailable", retry: "Retry", empty: "No pages available", resources:"Prompts and Skills", start:"Start a new chat", useSkill:"Use in a new chat", unavailable:"Unavailable", missing:"Unavailable Skills", resourcesFailed:"Resource list unavailable. Please refresh.", selectionFailed:"Unable to select this resource. Please retry.", resourceWorking:"Loading", resourcesRefresh:"Refresh resources" };
+const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"当前不可用 Skill", resourcesFailed:"资源清单读取失败，请刷新。", selectionFailed:"资源选用失败，请重试。", resourceWorking:"正在装载", resourcesRefresh:"刷新资源",pageConnect:"连接页面与原生对话",pageNewChat:"开始新的页面对话",pageWorking:"正在连接…",pageChanged:"登录身份已变化，请重新选用页面能力。",pageHint:"业务读取需登录并选用页面能力。",pageWait:"页面能力尚未就绪，请稍后重试。",pageLogin:"请先登录 GEA，再连接页面能力。",pageSessionUnavailable:"页面原生会话未就绪。" };
+const en = { title: "Workbench", pages: "Available pages", conversation: "Conversation", failed: "Page directory unavailable", retry: "Retry", empty: "No pages available", resources:"Prompts and Skills", start:"Start a new chat", useSkill:"Use in a new chat", unavailable:"Unavailable", missing:"Unavailable Skills", resourcesFailed:"Resource list unavailable. Please refresh.", selectionFailed:"Unable to select this resource. Please retry.", resourceWorking:"Loading", resourcesRefresh:"Refresh resources",pageConnect:"Connect page and Conversation",pageNewChat:"Start a new page chat",pageWorking:"Connecting…",pageChanged:"Your identity changed. Select this page resource again.",pageHint:"Business reads require login and a selected page resource.",pageWait:"Page capability is not ready. Please retry shortly.",pageLogin:"Sign in to GEA before connecting this page.",pageSessionUnavailable:"The page Conversation is unavailable." };
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface LocaleNamespaceMap { agentWorkbench: keyof typeof zh; }
@@ -36,13 +37,14 @@ export function apply(ctx: Context): void {
   const workbench = new WorkbenchController({
     panel: id => ctx.layout.selectPanel(id),
     hasPanel: id => ctx.slots.entries("main").some(entry => entry.options.key === id),
-    html: page => ctx.slots.register({ name: "main", key: page.id }, () => React.createElement(HtmlFrame, { page: { id: page.id, name: typeof page.label === "function" ? page.label() : page.label ?? page.id, pluginId: page.id, order: 20, view: "", url: "" }, html: presentHtml(page.html, css) })),
+    frame: page => ctx.slots.register({name:"main",key:page.id},({renderFactorySlot}:PropsRuntime<"main">&PropsRenderFactories)=>renderFactorySlot("agent-workbench.document",{page})),
   });
   ctx.provide("agentWorkbench", workbench);
   ctx.effect(() => () => workbench.dispose());
 
   let nativeResources: NativeResourceSelection | undefined;
   mountNativeResourceSelection(ctx, host => {nativeResources=host;});
+  mountFramePresentation(ctx,()=>nativeResources,key=>t(key));
 
   function Resources() {
     const [rows,setRows]=useState<ResourceSummary[]>([]);
@@ -105,25 +107,6 @@ export function apply(ctx: Context): void {
     React.useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, () => discoveryRevision);
     return discoveryError ? React.createElement("p", { role: "alert" }, t("failed") + ": " + discoveryError, " ", React.createElement("button", { onClick: () => retry() }, t("retry"))) : null;
   }
-  function HtmlFrame({ page, html }: { page: HtmlPage; html?: string }) {
-    const frame = useRef<HTMLIFrameElement>(null);
-    useEffect(() => {
-      const theme = () => {
-        const snapshot = ctx.theme.getTheme();
-        frame.current?.contentWindow?.postMessage({ protocol: "agent-workbench-theme", dark: snapshot.active.colorScheme === "dark", fontSize: snapshot.fontSize }, "*");
-      };
-      const ready = (event: MessageEvent) => {
-        if (event.source === frame.current?.contentWindow && event.data?.protocol === "agent-workbench-theme") theme();
-      };
-      window.addEventListener("message", ready);
-      const stop = ctx.on("theme/change", theme);
-      return () => { window.removeEventListener("message", ready); stop(); };
-    }, [page.id]);
-    return React.createElement("iframe", { ref: frame, title: page.name, ...(html === undefined ? { src: page.url } : { srcDoc: html }), sandbox: "allow-scripts allow-downloads", className: "agent-workbench-html", onLoad: () => {
-      const snapshot = ctx.theme.getTheme();
-      frame.current?.contentWindow?.postMessage({ protocol: "agent-workbench-theme", dark: snapshot.active.colorScheme === "dark", fontSize: snapshot.fontSize }, "*");
-    } });
-  }
   ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: DIRECTORY }, Directory));
   ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: DIRECTORY, order: 5, label: () => t("title") }, ({ size }) => React.createElement("span", { style: { fontSize: size }, "aria-hidden": true }, "▦")));
   ctx.effect(() => {
@@ -145,7 +128,7 @@ export function apply(ctx: Context): void {
           ctx.slots.inject("main", () => {
             if (controller.signal.aborted) return () => {};
             const unregister = workbench.register({ id: page.id as MainPanelId, label: page.name });
-            const disposeSlot = ctx.slots.register({ name: "main", key: page.id as MainPanelId }, () => React.createElement(HtmlFrame, { page }));
+            const disposeSlot = ctx.slots.register({name:"main",key:page.id as MainPanelId},({renderFactorySlot}:PropsRuntime<"main">&PropsRenderFactories)=>renderFactorySlot("agent-workbench.document",{page:{id:page.id as MainPanelId,label:page.name,src:page.url,kind:"html",pluginId:page.pluginId,resourceId:page.resourceId}}));
             const dispose = () => { disposeSlot(); unregister(); };
             cleanup.push(dispose);
             return dispose;
@@ -170,3 +153,5 @@ export type { AgentWorkbench, WorkbenchPage } from "./workbench.ts";
 declare module "@deepseek-ai/dsh-api-session-controller/client" {
   interface SessionReferenceSourceMap { agentResourceSelection: unknown; }
 }
+
+export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";

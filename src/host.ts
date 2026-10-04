@@ -11,6 +11,7 @@ export const inject = ["connection"];
 /** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
 export interface Config {
   cwd: string;
+  htmlRoots?: readonly string[];
 }
 /** Publish configuration through the normal authenticated DSH connection. */
 /** 通过 DSH 的标准认证连接发布配置；请求只返回配置，不写入业务数据，响应禁止缓存以避免跨用户复用。 */
@@ -18,8 +19,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // Fail before publishing configuration if the explicit workspace path is invalid.
   if (!config || typeof config.cwd !== "string" || !isAbsolute(config.cwd))
     throw new Error("agent-workbench: cwd must be absolute");
-  const pages = new HtmlPages(await readFile(new URL("./theme/tokens.css", import.meta.url), "utf8"));
-  await pages.registerHtml([fileURLToPath(new URL("./samples/", import.meta.url))]);
+  const pages = new HtmlPages(await readFile(new URL("./theme/tokens.css", import.meta.url), "utf8"),()=>readFile(new URL("./page-picker.js",import.meta.url),"utf8"));
+  if (config.htmlRoots?.some(root => typeof root !== "string" || !isAbsolute(root))) throw Error("INVALID_WORKBENCH_HTML_ROOTS");
+  await pages.registerHtml([
+    fileURLToPath(new URL("./samples/", import.meta.url)),
+    ...["regional", "category", "mps"].map(id => fileURLToPath(new URL(`./static/${id}/`, import.meta.url))),
+    ...(config.htmlRoots ?? ["fc", "aqkc"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url)))),
+  ]);
   ctx.provide("workbenchPages", pages);
   ctx.effect(() => ctx.connection.fetch.register({
     path: "/api/agent-workbench/theme.css", methods: ["GET"], requestBody: "buffered",

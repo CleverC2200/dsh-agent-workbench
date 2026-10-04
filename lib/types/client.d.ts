@@ -17,6 +17,14 @@ declare const zh: {
     selectionFailed: string;
     resourceWorking: string;
     resourcesRefresh: string;
+    pageConnect: string;
+    pageNewChat: string;
+    pageWorking: string;
+    pageChanged: string;
+    pageHint: string;
+    pageWait: string;
+    pageLogin: string;
+    pageSessionUnavailable: string;
 };
 declare module "@deepseek-ai/dsh-client-ui-slots" {
     interface LocaleNamespaceMap {
@@ -36,3 +44,4 @@ declare module "@deepseek-ai/dsh-api-session-controller/client" {
         agentResourceSelection: unknown;
     }
 }
+export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";

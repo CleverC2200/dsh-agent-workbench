@@ -11,9 +11,19 @@ test('Host initializes package resources in a Chinese path and serves the regist
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'samples'));
   await mkdir(join(root, 'theme'));
+  for (const id of ['regional','category','mps']) {
+    const directory=join(root,'static',id);await mkdir(directory,{recursive:true});
+    await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'plan-'+id,name:id,html:'index.html'}));
+    await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
+  }
   await writeFile(join(root, 'theme/tokens.css'), 'body { --workbench-text: #20232a; }');
   await writeFile(join(root, 'samples/plugin.json'), JSON.stringify({schemaVersion: 1, id: 'workbench-html-table', name: '表格样板', html: 'index.html'}));
   await writeFile(join(root, 'samples/index.html'), '<html><head></head><body>中文资源已加载</body></html>');
+  for (const id of ['fc','aqkc']) {
+    const directory=join(root,'business','inventory-'+id);await mkdir(directory,{recursive:true});
+    await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'inventory-'+id,name:id,html:'index.html'}));
+    await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
+  }
   const entry = join(root, 'host.mjs');
   await build({entryPoints: ['src/host.ts'], bundle: true, platform: 'node', format: 'esm', outfile: entry});
   const { apply } = await import(pathToFileURL(entry).href);

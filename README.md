@@ -13,7 +13,7 @@ await ctx.agentWorkbench.open(panelId)
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-现有 HTML 文档通过 `ctx.agentWorkbench.registerHtml({id, label, html})` 贡献。Workbench 负责 iframe、sandbox、主题投影与释放，不改变原 HTML 的交互和业务内容。包内 HTML 则由 Host `ctx.workbenchPages.registerHtml(roots)` 登记显式安装目录。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。返回原声明供能力拥有者检查 Consumer 等业务约定。
+原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有 frame、显式会话引用与呈现生命周期。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记；同组 profile 使用本候选快照中的 FC/AQKC 根，不指向旧用户目录。三个静态计划原型独立放在 `lib/static`，启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
 
 Host 公开认证 Fetch：
 
@@ -42,3 +42,11 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 [theme/tokens.css](theme/tokens.css) 只由 Workbench 插件安装和释放。Manage、GEA 与 HTML 消费 `--workbench-*`，主题状态及字号来自官方 DSH；没有写 Core 源码、启动色或官方 token 的同步脚本。HTML 表格样板保留本地筛选、加载、空态、错误与恢复交互，独立显示不需要 GEA Session。
 
 `business/inventory-fc` 与 `business/inventory-aqkc` 保留当前已迁移页面源码和包内资源。提示词／Skill 正文归 Manage，授权执行归 GEA，后续消费者迁移需接续原必要业务桥。静态页面通过不等于这些业务能力已验收。
+
+## 显式页面能力与受控桥
+
+页面的“连接页面与原生对话”动作按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。Workbench 经公开 SessionProvider 与 conversation.content factory呈现原生对话，不保存第二套全局当前会话、认证或 preset。静态原型无这项前置。
+
+GEA 的窄 geaPageExecution 只提供唯一身份投影与既有受控 open/call/close/prompt；Workbench 持有 HTML MessageChannel、owned lease 的使用/关闭、self-report/catalog/apply/cancel、主题及页面引用。端口、引用代际和请求都在页面释放/身份变化时撤旧，旧结果不恢复。Native 审批文档保留原呈现与规则，不强制使用 HTML lease。
+
+公共页面选择/引用实现从 GEA 退出，source 在 src/page-interaction，公开 client/picker/bridge/reference/protocol/payload-budget。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。

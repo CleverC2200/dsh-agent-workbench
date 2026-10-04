@@ -58,6 +58,15 @@ html body[data-ds-dark-theme] {
 
 .agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
 .agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }
+
+.agent-workbench-document { height: 100%; min-height: 0; display:flex; flex-direction:column; }
+.agent-workbench-page-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:8px 16px; border-bottom:1px solid var(--workbench-border); flex:none; }
+.agent-workbench-page-toolbar>span:last-child { color:var(--workbench-muted); }
+.agent-workbench-page-error { padding:8px 16px; margin:0; flex:none; color:var(--workbench-text); }
+.agent-workbench-document-body { min-height:0; flex:1; display:grid; grid-template-columns:minmax(0,1fr); }
+.agent-workbench-document-body.with-conversation { grid-template-columns:minmax(0,1fr) minmax(340px,36%); }
+.agent-workbench-native-conversation { min-height:0; border-left:1px solid var(--workbench-border); overflow:auto; }
+@media(max-width:900px) { .agent-workbench-document-body.with-conversation { grid-template-columns:minmax(0,1fr); grid-template-rows:minmax(320px,1fr) minmax(320px,1fr); overflow:auto; } .agent-workbench-native-conversation {border-left:0;border-top:1px solid var(--workbench-border);} }
 </style>
 <style>
 * { box-sizing: border-box; }

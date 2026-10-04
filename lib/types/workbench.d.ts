@@ -1,4 +1,5 @@
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
+import type { WorkbenchFramePage } from "./frame.ts";
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
     readonly id: MainPanelId;
@@ -8,17 +9,13 @@ export interface AgentWorkbench {
     register(page: WorkbenchPage): () => void;
     /** Open a registered page without creating or changing a host Conversation. */
     open(id: MainPanelId): Promise<boolean>;
-    /** Contribute an existing HTML document; Workbench owns its frame and theme lifetime. */
-    registerHtml(page: WorkbenchPage & {
-        html: string;
-    }): () => void;
+    /** Contribute a document location; its body loads when the page is selected. */
+    registerFrame(page: WorkbenchFramePage): () => void;
 }
 export interface WorkbenchPorts {
     panel(id: MainPanelId): void;
     hasPanel?(id: MainPanelId): boolean;
-    html?(page: WorkbenchPage & {
-        html: string;
-    }): () => void;
+    frame?(page: WorkbenchFramePage): () => void;
 }
 /** Page navigation has no identity, preset or persistent Session state. */
 export declare class WorkbenchController implements AgentWorkbench {
@@ -29,9 +26,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     constructor(ports: WorkbenchPorts);
     register(page: WorkbenchPage): () => void;
     open(id: MainPanelId): Promise<boolean>;
-    registerHtml(page: WorkbenchPage & {
-        html: string;
-    }): () => void;
+    registerFrame(page: WorkbenchFramePage): () => void;
     label(id: MainPanelId): string;
     subscribe(listener: () => void): () => void;
     private changed;

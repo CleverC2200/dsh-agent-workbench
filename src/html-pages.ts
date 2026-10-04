@@ -1,5 +1,6 @@
 import { readFile, realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
+import { injectPicker } from "./page-interaction/inject.ts";
 import { presentHtml } from "./html-document.ts";
 
 export interface HtmlPage {
@@ -9,6 +10,7 @@ export interface HtmlPage {
   pluginId: string;
   order: number;
   url: string;
+  resourceId?: string;
 }
 /** Private package location plus the original declaration, for capability owners. */
 export interface HtmlPackage {
@@ -19,6 +21,7 @@ export interface HtmlPackage {
 export interface WorkbenchPages {
   /** Register explicit installed package roots. No capability body or business credentials are read. */
   registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
+  packages(): readonly HtmlPackage[];
 }
 
 const idPattern = /^[a-z][a-z0-9-]{0,119}$/;
@@ -26,8 +29,8 @@ const legacyApsIds = new Set(["inventory-apsboard", "inventory-apsdemand", "inve
 
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
 export class HtmlPages implements WorkbenchPages {
-  private readonly packages = new Map<string, HtmlPackage>();
-  constructor(private readonly css: string) {}
+  private readonly packageDeclarations = new Map<string, HtmlPackage>();
+  constructor(private readonly css: string, private readonly picker?: () => Promise<string>) {}
   async registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]> {
     const candidates = await Promise.all(roots.map(async root => {
       const directory = await realpath(root);
@@ -48,31 +51,38 @@ export class HtmlPages implements WorkbenchPages {
     const selected = candidates.filter(item => !replaced.has(item.manifest.id));
     const ids = new Set(this.list().map(page => page.id));
     for (const item of selected) {
-      const previous = this.packages.get(item.manifest.id);
+      const previous = this.packageDeclarations.get(item.manifest.id);
       if (previous?.directory === item.directory) continue;
       if (previous || item.manifest.pages.some((page: HtmlPage) => ids.has(page.id))) throw Error(`DUPLICATE_HTML_PLUGIN: ${item.manifest.id}`);
       for (const page of item.manifest.pages) ids.add(page.id);
     }
-    for (const item of selected) this.packages.set(item.manifest.id, item);
+    for (const item of selected) this.packageDeclarations.set(item.manifest.id, item);
     return selected;
   }
   list(): HtmlPage[] {
-    return [...this.packages.values()].flatMap(item => item.manifest.pages.map((page: HtmlPage) => ({
+    return [...this.packageDeclarations.values()].flatMap(item => item.manifest.pages.map((page: HtmlPage) => ({
       id: page.id, name: page.name, view: page.view, pluginId: item.manifest.id,
       order: typeof page.order === "number" ? page.order : 20,
       url: `/api/agent-workbench/html?id=${encodeURIComponent(page.id)}&page=${encodeURIComponent(page.view)}`,
+      ...(item.manifest.gea?.contract === "gea-html-v2" ? {resourceId:`gea-html-${item.manifest.id}`} : {}),
     })));
   }
+  packages(): readonly HtmlPackage[] { return [...this.packageDeclarations.values()]; }
   async fetch(request: Request): Promise<Response> {
     const id = new URL(request.url).searchParams.get("id");
-    const item = [...this.packages.values()].find(item => item.manifest.pages.some((page: HtmlPage) => page.id === id));
+    const item = [...this.packageDeclarations.values()].find(item => item.manifest.pages.some((page: HtmlPage) => page.id === id));
     if (!item) return new Response("Page unavailable", { status: 404 });
     const path = await realpath(item.htmlPath);
     if (!path.startsWith(item.directory + sep)) throw Error("INVALID_HTML_PATH");
     const html = await readFile(path, "utf8");
     if (Buffer.byteLength(html) > 5_000_000) throw Error("HTML_TOO_LARGE");
     const page = item.manifest.pages.find((page: HtmlPage) => page.id === id);
-    return new Response(presentHtml(html, this.css), { headers: {
+    let document=html;
+    if(item.manifest.gea?.contract === "gea-html-v2") {
+      if(!this.picker)throw Error("WORKBENCH_PICKER_UNAVAILABLE");
+      document=injectPicker(document,await this.picker());
+    }
+    return new Response(presentHtml(document, this.css), { headers: {
       "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
       "X-Workbench-Page-View": page.view,

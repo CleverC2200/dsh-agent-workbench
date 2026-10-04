@@ -31,6 +31,9 @@ export const ready = new Promise((resolve) => {
   readyResolve = resolve;
 });
 window.addEventListener("message", (event) => {
+  if (event.source === window.parent && event.data?.protocol === "gea-html-v2" && event.data.type === "request-ready") {
+    window.parent.postMessage({protocol:"gea-html-v2",type:"ready"},"*");return;
+  }
   if (
     event.source !== window.parent ||
     event.origin !== new URL(document.referrer).origin ||
@@ -39,9 +42,10 @@ window.addEventListener("message", (event) => {
     event.data?.protocol !== "gea-html-v2" ||
     event.data?.type !== "connect" ||
     !event.ports[0] ||
-    channel
+    (channel && context?.session === event.data.context.session)
   )
     return;
+  if (channel) { channel.close(); for (const task of applying.values()) task.abort(); for (const item of pending.values()) {clearTimeout(item.timer);item.cleanup?.();item.reject(Error("页面会话已切换，请重新操作"));}pending.clear(); }
   context = event.data.context;
   channel = event.ports[0];
   channel.onmessage = (event) => {
@@ -223,11 +227,12 @@ window.addEventListener("message", (event) => {
   reportCatalog();
   channel.postMessage({ type: "theme:subscribe", session: context.session });
   readyResolve(event.data.context);
+  window.dispatchEvent(new Event("gea-session-changed"));
 });
 window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
 export async function call(method, parameters = {}, options = {}) {
-  await ready;
   options.signal?.throwIfAborted();
+  if (!channel || !context?.session) throw Error("页面已显示，请先登录并连接页面能力。");
   const id = String(++sequence);
   return new Promise((resolve, reject) => {
     const cleanup = () => options.signal?.removeEventListener("abort", abort);

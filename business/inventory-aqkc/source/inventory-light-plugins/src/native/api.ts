@@ -67,7 +67,6 @@ async function dispatch(
   throw Error("暂不支持此操作，业务数据未保存或提交。");
 }
 export async function mountBusinessFetch() {
-  await ready;
   let lifetime = new AbortController();
   window.addEventListener("light-refresh", () => {
     lifetime.abort();

@@ -15,3 +15,9 @@ test('a user edit made while the new Session is preparing remains intact and pre
  const host={fetch:async path=>Response.json(path.endsWith('/config')?{cwd:'/isolated/workspace'}:{preset:'original',skill:'existing'}),workspace:async()=> 'workspace-owned',create:async()=> 'new',select:async()=>{},open:async()=>{throw Error('RESOURCE_DRAFT_CHANGED')}};
  await assert.rejects(selectResource(host,'skill:existing',new AbortController().signal),/RESOURCE_DRAFT_CHANGED/);
 });
+test('a page resource action returns its own real host reference for embedded Conversation without native main navigation',async()=>{
+ const reference={sessionId:'page-session',release(){},ready:Promise.resolve({})};let embedded;
+ const host={fetch:async path=>Response.json(path.endsWith('/config')?{cwd:'/isolated/workspace'}:{preset:'gea-readonly'}),workspace:async()=> 'workspace-owned',create:async()=> 'page-session',select:async()=>{},open:async(_id,_skill,_signal,insidePage)=>{embedded=insidePage;return reference;}};
+ const selected=await selectResource(host,'gea-readonly',new AbortController().signal,true);
+ assert.equal(embedded,true);assert.equal(selected.sessionId,'page-session');assert.equal(selected.reference,reference);assert.equal(selected.preset,'gea-readonly');
+});

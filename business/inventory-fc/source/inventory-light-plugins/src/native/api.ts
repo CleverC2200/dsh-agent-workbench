@@ -186,7 +186,6 @@ async function dispatch(url: URL, method: string, body: any, signal?: AbortSigna
   );
 }
 export async function mountBusinessFetch() {
-  await ready;
   window.fetch = async (input: any, init: any = {}) => {
     const url = new URL(
       input instanceof Request ? input.url : String(input),

@@ -1,6 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { WorkspaceId } from "@deepseek-ai/dsh-api-workspace-controller/client";
 import type { SessionId } from "@deepseek-ai/dsh-session/types";
+import type { SessionReference } from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-workspace/client";
@@ -12,10 +13,10 @@ export interface NativeResourceSelection {
  workspace(path:string):Promise<string>;
  create(options:{workspaceId:string}):Promise<string>;
  select(sessionId:string,preset:string):Promise<void>;
- open(sessionId:string,skill:string|undefined,signal:AbortSignal):Promise<void>;
+ open(sessionId:string,skill:string|undefined,signal:AbortSignal,embedded?:boolean):Promise<SessionReference|void>;
 }
 export interface ResourceSummary {id:string;label:string;kind:'prompt'|'skill';installed:boolean;enabled:boolean;provider:string;skills?:string[];missingSkills?:string[];error?:string}
-export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal):Promise<void> {
+export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal,embedded=false):Promise<{sessionId:string;preset:string;reference?:SessionReference}> {
  const configResponse=await host.fetch('/api/agent-workbench/config',{signal,cache:'no-store'});
  if(!configResponse.ok)throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
  const config=await configResponse.json() as {cwd?:unknown};
@@ -29,7 +30,8 @@ export async function selectResource(host:NativeResourceSelection,id:string,sign
  const sessionId=await host.create({workspaceId});
  signal.throwIfAborted();
  await host.select(sessionId,resource.preset);signal.throwIfAborted();
- await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal);
+ const reference=await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal,embedded);
+ return {sessionId,preset:resource.preset,...(reference?{reference}:{})};
 }
 
 /** Bind the actual native client services under their Cordis effect lifetime. */
@@ -41,15 +43,20 @@ export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResou
       workspace: async path => (await scope.workspaces.create({path})).workspaceId,
       create: options => scope.sessions.create({workspaceId:options.workspaceId as WorkspaceId}),
       select: async (id, preset) => {const result=await scope.remote.agentPresets.select(id as SessionId,preset);if(!result.ok)throw Error(result.error.message);},
-      open: async (id,skill,signal) => scope.sessions.using(id as SessionId,{source:"agentResourceSelection",signal},reference => {
-        signal.throwIfAborted();
+      open: async (id,skill,signal,embedded) => {
+        const reference=scope.sessions.retain(id as SessionId,{source:"agentResourceSelection",signal});
+        try {
+        await reference.ready;signal.throwIfAborted();
         if(skill){
           const input=scope.conversation.input.for(reference.binding.ctx);
           const state=input.state.getSnapshot();
           if(state.draft || reference.binding.ctx.bail("slash/input-insert-text",{text:`/${skill} `,span:{start:0,end:0,draftRev:state.draftRev}})!==true)throw Error("RESOURCE_DRAFT_CHANGED");
         }
+        if(embedded)return reference;
         scope.uiWorkspace.openSession(id as SessionId);
-      }),
+        }catch(error){reference.release();throw error;}
+        reference.release();
+      },
     };
     active=host;ready(host);
     scope.effect(() => () => {if(active===host){active=undefined;ready(undefined);}});

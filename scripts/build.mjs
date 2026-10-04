@@ -1,5 +1,5 @@
 import { build } from "esbuild";
-import { mkdir, writeFile, copyFile } from "node:fs/promises";
+import { mkdir, writeFile, copyFile, cp } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
 const { values } = parseArgs({options:{target:{type:"string"}}});
@@ -8,6 +8,7 @@ if (process.env.DSH_TYPECHECK_PROJECT === "tsconfig.official.json") await import
 await mkdir("lib", { recursive: true });
 await mkdir("lib/theme", { recursive: true });
 await copyFile("theme/tokens.css", "lib/theme/tokens.css");
+await cp("static", "lib/static", {recursive:true});
 await build({
   entryPoints: ["src/host.ts"],
   bundle: true,
@@ -15,6 +16,8 @@ await build({
   platform: "node",
   outfile: "lib/host.js",
 });
+await build({entryPoints:["src/page-interaction/client.ts","src/page-interaction/picker.ts","src/page-interaction/reference.ts","src/page-interaction/inject.ts","src/page-interaction/shared/payload-budget.ts","src/page-interaction/page-bridge/client.ts","src/page-interaction/page-bridge/protocol.ts"],bundle:true,format:"esm",platform:"browser",outdir:"lib/page-interaction",outbase:"src/page-interaction",external:["react","@deepseek-ai/dsh-client-store"]});
+await build({entryPoints:["src/page-interaction/page.ts"],bundle:true,format:"iife",platform:"browser",outfile:"lib/page-picker.js"});
 const workbench = await build({
   entryPoints: ["src/client.ts"],
   bundle: true,

@@ -64,6 +64,7 @@ async function mount() {
   const root = createRoot(document.getElementById("app")!);
   root.render(<App />);
   window.addEventListener("gea-page-refresh", () => refreshPage());
+  window.addEventListener("gea-session-changed", () => refreshPage());
   action("refresh", "清除本页快照并重新查询 GEA", () => {
     refreshPage();
     return { refreshing: true };
@@ -71,11 +72,9 @@ async function mount() {
   window.addEventListener("gea-identity-changed", () => {
     clearBusinessCache(true);
     clearContext();
-    root.unmount();
-    document.getElementById("app")!.textContent =
-      "登录身份已变化，请重新打开业务页";
+    refreshPage();
   });
 }
-void ready.then(mount).catch((e) => {
+void mount().catch((e) => {
   document.getElementById("app")!.textContent = e.message;
 });

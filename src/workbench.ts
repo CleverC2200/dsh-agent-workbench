@@ -1,4 +1,5 @@
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
+import type { WorkbenchFramePage } from "./frame.ts";
 
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
@@ -9,13 +10,13 @@ export interface AgentWorkbench {
   register(page: WorkbenchPage): () => void;
   /** Open a registered page without creating or changing a host Conversation. */
   open(id: MainPanelId): Promise<boolean>;
-  /** Contribute an existing HTML document; Workbench owns its frame and theme lifetime. */
-  registerHtml(page: WorkbenchPage & { html: string }): () => void;
+  /** Contribute a document location; its body loads when the page is selected. */
+  registerFrame(page: WorkbenchFramePage): () => void;
 }
 export interface WorkbenchPorts {
   panel(id: MainPanelId): void;
   hasPanel?(id: MainPanelId): boolean;
-  html?(page: WorkbenchPage & { html: string }): () => void;
+  frame?(page: WorkbenchFramePage): () => void;
 }
 /** Page navigation has no identity, preset or persistent Session state. */
 export class WorkbenchController implements AgentWorkbench {
@@ -36,11 +37,11 @@ export class WorkbenchController implements AgentWorkbench {
     this.ports.panel(id);
     return true;
   }
-  registerHtml(page: WorkbenchPage & { html: string }): () => void {
-    if (!this.ports.html) throw Error("WORKBENCH_HTML_UNAVAILABLE");
+  registerFrame(page: WorkbenchFramePage): () => void {
+    if (!this.ports.frame) throw Error("WORKBENCH_FRAME_UNAVAILABLE");
     const unregister = this.register(page);
     let dispose: () => void;
-    try { dispose = this.ports.html(page); } catch (error) { unregister(); throw error; }
+    try { dispose = this.ports.frame(page); } catch (error) { unregister(); throw error; }
     return () => { dispose(); unregister(); };
   }
   label(id: MainPanelId): string {

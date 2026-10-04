@@ -5,6 +5,7 @@ export interface HtmlPage {
     pluginId: string;
     order: number;
     url: string;
+    resourceId?: string;
 }
 /** Private package location plus the original declaration, for capability owners. */
 export interface HtmlPackage {
@@ -15,13 +16,16 @@ export interface HtmlPackage {
 export interface WorkbenchPages {
     /** Register explicit installed package roots. No capability body or business credentials are read. */
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
+    packages(): readonly HtmlPackage[];
 }
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
 export declare class HtmlPages implements WorkbenchPages {
     private readonly css;
-    private readonly packages;
-    constructor(css: string);
+    private readonly picker?;
+    private readonly packageDeclarations;
+    constructor(css: string, picker?: (() => Promise<string>) | undefined);
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
     list(): HtmlPage[];
+    packages(): readonly HtmlPackage[];
     fetch(request: Request): Promise<Response>;
 }
