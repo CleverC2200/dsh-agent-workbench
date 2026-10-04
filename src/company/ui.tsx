@@ -16,6 +16,8 @@ import * as prompts from './conversation-prompts.ts';
 import brandLogo from './brand-logo.png';
 import css from './shell.css';
 import layoutCss from './layout.css';
+import staticControlsCss from './formal-static-controls.css';
+import {IconNewChatOutline16,IconPanelLeftOutline16,IconFolderClose16,IconFolderOpen16,IconChevronDownOutline14} from './formal-static-icons.tsx';
 
 const DIRECTORY='agent-workbench' as MainPanelId;
 const INBOX='gea-inbox' as MainPanelId;
@@ -48,7 +50,7 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
  ctx.effect(()=>ctx.locale.register('companyWorkbench',{zh,en}));
  const t=ctx.locale.bind('companyWorkbench');
  const SidebarGeometry=React.createContext({collapsed:false,expand:()=>{}});
- ctx.effect(()=>{const style=document.createElement('style');style.dataset.companyWorkbench='formal-508feea';style.textContent=css+'\n'+layoutCss;document.head.append(style);return()=>style.remove();});
+ ctx.effect(()=>{const style=document.createElement('style');style.dataset.companyWorkbench='formal-508feea';style.textContent=staticControlsCss+'\n'+css+'\n'+layoutCss;document.head.append(style);return()=>style.remove();});
  let account:BusinessAccount|undefined;
  const accountListeners=new Set<()=>void>();
  ctx.inject(['businessAccount'],scope=>{account=scope.businessAccount;for(const listener of accountListeners)listener();scope.effect(()=>()=>{if(account===scope.businessAccount){account=undefined;for(const listener of accountListeners)listener();}});});
@@ -114,9 +116,9 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const modules=[{id:DIRECTORY,label:'工作台'},{id:PLUGINS,label:(()=>{const label=ctx.slots.entries('sidebar.panellist').find(entry=>entry.options.id===PLUGINS)?.options.label;return typeof label==='function'?label():label??PLUGINS;})()}];
   return <aside className="gea-sidebar-owned" data-gea-narrow={collapsed||width<=100?'':undefined} data-sidebar-collapsed={collapsed?'':undefined} aria-label={t('businessNavigation')}>
    <SidebarGeometry.Provider value={{collapsed,expand:expandSidebar}}><div className="gea-sidebar-brand-row"><div className="gea-sidebar-brand">{renderSlot('sidebar.brand.mark',{size:38})}{!collapsed&&renderSlot('sidebar.brand.name',{})}</div>
-    {!collapsed&&<><button type="button" className="gea-inbox-quick-action" aria-label={t('messageInbox')} title="业务代办" disabled={!available.has(INBOX)} onClick={()=>void workbench.open(INBOX)}><NavIcon kind="bell"/></button><button type="button" className="gea-inbox-quick-action gea-owned-sidebar-toggle" aria-label="收起侧边栏" onClick={()=>ctx.layout.toggleSidebar()}><MenuIcon/></button></>}
+    {!collapsed&&<><button type="button" className="gea-inbox-quick-action" aria-label={t('messageInbox')} title="业务代办" disabled={!available.has(INBOX)} onClick={()=>void workbench.open(INBOX)}><NavIcon kind="bell"/></button><button type="button" className="gea-inbox-quick-action gea-owned-sidebar-toggle" aria-label="收起侧边栏" onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutline16 size={16}/></button></>}
    </div></SidebarGeometry.Provider>
-   {!collapsed&&<button type="button" className="gea-sidebar-tab gea-new-session" aria-label={t('newConversation')} onClick={newConversation}><NavIcon kind="newChat"/><span>AI工作台</span></button>}
+   {!collapsed&&<button type="button" className="gea-formal-new-session gea-new-session" aria-label={t('newConversation')} onClick={newConversation}><IconNewChatOutline16 size={14}/><span className="gea-formal-new-session-label">AI工作台</span></button>}
    <div className="gea-sidebar-region" data-gea-drawer={drawer}>
     <div className="gea-sidebar-rail" data-gea-sidebar-rail>{([['newChat',t('newConversation'),newConversation,false],['apps',t('functionArea'),()=>{setDrawer('function');expandSidebar();},drawer==='function'],['folder',t('workspaceArea'),()=>{setDrawer('workspace');expandSidebar();},drawer==='workspace']] as const).map(([kind,label,action,selected])=><button key={kind} type="button" className={'gea-sidebar-rail-item'+(selected?' is-active':'')} title={label} aria-label={label} aria-current={selected?'page':undefined} onClick={action}><NavIcon kind={kind}/></button>)}</div>
     <div className="gea-sidebar-drawer gea-drawer-function"><button type="button" className="gea-sidebar-tab" aria-expanded={drawer==='function'} aria-controls="gea-panel-function" onClick={()=>toggleDrawer('function')}><span className="gea-drawer-title">{t('functionArea')}</span><Chevron open={drawer==='function'}/></button></div>
@@ -139,7 +141,20 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const loading=session?.openState==='loading'&&!blank;
   const positions=useMemo(()=>{
    function Home(){return <GeaHomeHero copy={{label:t('geaBusiness'),eyebrow:t('homeEyebrow'),title:t('homeTitle'),description:t('homeDescription')}}/>;}
-   function Choices({useWorkspaces,renderSlot,selectWorkspace}:Pick<FactoryLocalComponentPropsOf<'conversation.content','widthControls'>,'useWorkspaces'|'renderSlot'|'selectWorkspace'>){const workspaces=useWorkspaces(value=>value.items),current=workspaces.find(workspace=>workspace.sessionIds.includes(sessionId!));const [open,setOpen]=useState(false);return <div className="gea-native-selectors"><button type="button" onClick={()=>setOpen(value=>!value)} aria-expanded={open}>{current?.title||'选择工作区'}</button>{renderSlot('conversation.hero.workspace',{open,selectedId:current?.workspaceId,onPick:id=>{setOpen(false);void selectWorkspace(id);},onClose:()=>setOpen(false)})}{renderSlot('conversation.hero.agentPreset',{})}</div>;}
+   function Choices({useWorkspaces,renderSlot,selectWorkspace,t}:Pick<FactoryLocalComponentPropsOf<'conversation.content','widthControls'>,'useWorkspaces'|'renderSlot'|'selectWorkspace'|'t'>){
+    const workspaces=useWorkspaces(value=>value.items),current=workspaces.find(workspace=>workspace.sessionIds.includes(sessionId!));
+    const [open,setOpen]=useState(false);
+    const anchorRef=useRef<HTMLButtonElement>(null);
+    return <div className="gea-native-selectors">
+     <button ref={anchorRef} type="button" className="gea-formal-workspace" aria-label={t('hero.chooseWorkspace')} aria-haspopup="menu" onClick={()=>setOpen(value=>!value)} aria-expanded={open}>
+      {current?.title===undefined?<IconFolderClose16 className="gea-formal-folder" size={16}/>:<IconFolderOpen16 className="gea-formal-folder" size={16}/>}
+      <span className="gea-formal-workspace-label">{current?.title??t('hero.chooseWorkspace')}</span>
+      <IconChevronDownOutline14 className="gea-formal-workspace-chevron" size={12}/>
+     </button>
+     {renderSlot('conversation.hero.workspace',{open,anchorRef,selectedId:current?.workspaceId,onPick:id=>{setOpen(false);void selectWorkspace(id);},onClose:()=>setOpen(false)})}
+     {renderSlot('conversation.hero.agentPreset',{})}
+    </div>;
+   }
    return {
     views:function MainViews(props:FactoryLocalComponentPropsOf<'conversation.content','views'>){return <div className="gea-main-views">{blank&&<div className="gea-home-position"><Home/></div>}<div className="gea-native-history" hidden={blank}>{props.renderSlot('conversation.session',{})}</div>{blank&&<Choices {...props}/>}</div>;},
     widthControls:function ColdStart(props:FactoryLocalComponentPropsOf<'conversation.content','widthControls'>){return sessionId===undefined?<div className="gea-cold-start"><div className="gea-home-position"><Home/></div><Choices {...props}/></div>:null;},

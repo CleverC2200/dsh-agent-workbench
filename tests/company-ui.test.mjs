@@ -29,6 +29,13 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
  assert.ok(!markup.includes('<details'));assert.ok(!markup.includes('<summary'));assert.ok(!markup.includes('workbench-sidebar'));
  assert.ok(markup.includes('disabled=""'),'unavailable registered-page entries remain disabled');
 });
+test('formal static controls restore original card and SVG structure without old host selectors',()=>{
+ const {entries,renderSlot}=fixture();const sidebar=entries.find(row=>row.options.name==='sidebar');
+ const markup=renderToStaticMarkup(React.createElement(sidebar.component,{collapsed:false,width:280,usePanelInfo:selector=>selector({activePanelId:null}),renderSlot}));
+ const dom=new JSDOM(markup);const button=dom.window.document.querySelector('.gea-formal-new-session');
+ assert.ok(button,'AI workbench uses the original card class rather than drawer-tab styling');assert.equal(button.querySelector('svg').getAttribute('viewBox'),'0 0 16 16');
+ assert.ok(button.querySelector('.gea-formal-new-session-label'));assert.equal(dom.window.document.querySelector('.gea-owned-sidebar-toggle svg').getAttribute('viewBox'),'0 0 16 16');dom.window.close();
+});
 test('formal account contribution renders the GEA read-only avatar and signed-out label',()=>{
  const {entries}=fixture();const entry=entries.find(e=>e.options.name==='settings.launcher');
  const markup=renderToStaticMarkup(React.createElement(entry.component,{wide:true,settingsOpen:false,openSettings:()=>{}}));
@@ -50,7 +57,7 @@ test('only the two authorized extra modules enter formal navigation and Plugins 
  assert.ok(!markup.includes('公共工具与原型'));
 });
 function nativeFactory(_name,options,extension,sessionId){
- const shares={sessionId,useWorkspaces:selector=>selector({items:[]}),selectWorkspace:()=>{},renderSlot:name=>React.createElement('article',{'data-native-seat':name})};
+ const shares={t:key=>key==='hero.chooseWorkspace'?'选择工作区':key,sessionId,useWorkspaces:selector=>selector({items:[]}),selectWorkspace:()=>{},renderSlot:name=>React.createElement('article',{'data-native-seat':name})};
  const Views=extension.slots.views;
  return React.createElement('div',{'data-native-content':options.variant},React.createElement('div',{'data-native-flow':true},sessionId&&Views?React.createElement(Views,shares):null),React.createElement('div',{'data-root-controls':true},React.createElement(extension.slots.widthControls,shares)));
 }
@@ -70,6 +77,17 @@ test('selected native Session keeps formal welcome inside native views while pre
  assert.equal(document.querySelector('[data-root-controls] .gea-native-selectors'),null,'selected-session controls do not sit after the composer in root width controls');
  assert.ok(document.querySelector('.gea-native-history[hidden]'),'only the proven blank transcript is hidden; its actual Session seat remains mounted');
  assert.ok(document.querySelector('[data-native-flow] [data-native-seat="conversation.session"]'));
+});
+test('blank-session controls inherit the official composer width and pass their actual picker anchor',t=>{
+ const {entries}=fixture();const entry=entries.find(row=>row.options.name==='main.conversation');let pickerProps;
+ const shares={t:key=>key,sessionId:'blank',useWorkspaces:selector=>selector({items:[]}),selectWorkspace:()=>{},renderSlot:(name,props)=>{if(name==='conversation.hero.workspace')pickerProps=props;return React.createElement('article',{'data-native-seat':name});}};
+ const markup=renderToStaticMarkup(React.createElement(entry.component,{sessionId:'blank',useSession:selector=>selector({blank:true}),useConversation:selector=>selector({activeTargets:new Set()}),renderFactorySlot:(_name,_options,extension)=>React.createElement(extension.slots.views,shares)}));
+ const dom=new JSDOM('<style>'+readFileSync('src/company/layout.css','utf8')+'</style>'+markup);t.after(()=>dom.window.close());
+ const style=dom.window.getComputedStyle(dom.window.document.querySelector('.gea-native-selectors'));
+ assert.ok(style.width.includes('--dsh-composer-side-clearance'),'same inherited side clearance as the resident native card');
+ assert.ok(style.maxWidth.includes('--dsh-composer-card-max-width'),'same inherited width cap as the resident native card');
+ assert.equal(style.marginLeft,'auto');assert.equal(style.marginRight,'auto');
+ assert.ok(pickerProps.anchorRef,'the public picker receives the actual owned trigger ref');
 });
 test('retained Workbench directory reads current official workspace facts and provides native Conversation plus resource selection',()=>{
  const {entries}=fixture();const entry=entries.find(row=>row.options.name==='agent-workbench.directory');
@@ -99,4 +117,15 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
  await act(async()=>document.activeElement.click());await act(async()=>document.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
  assert.equal(document.activeElement,trigger);assert.equal(trigger.getAttribute('aria-expanded'),'false');assert.equal(logoutSignal.aborted,true);
  await act(async()=>trigger.click());await act(async()=>delayed.resolve());assert.equal(trigger.getAttribute('aria-expanded'),'true','late completion cannot close a newer menu owner');
+});
+test('formal Workspace trigger anchors the public menu and delegates selection through the official action',async t=>{
+ const dom=new JSDOM('<main id="root"></main>',{pretendToBeVisual:true});
+ const saved=['window','document','Node','navigator','IS_REACT_ACT_ENVIRONMENT'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
+ for(const [key,value]of [['window',dom.window],['document',dom.window.document],['Node',dom.window.Node],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
+ const {createRoot}=await import('react-dom/client');const {act}=React;const {entries}=fixture();const entry=entries.find(row=>row.options.name==='main.conversation');const root=createRoot(document.getElementById('root'));let menu;const picks=[];
+ t.after(async()=>{await act(async()=>root.unmount());dom.window.close();for(const [key,value]of saved){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}});
+ const shares={t:key=>key==='hero.chooseWorkspace'?'选择工作区':key,sessionId:'blank',useWorkspaces:selector=>selector({items:[]}),selectWorkspace:id=>{picks.push(id);return Promise.resolve();},renderSlot:(name,props)=>{if(name==='conversation.hero.workspace')menu=props;return React.createElement('article',{'data-native-seat':name});}};
+ await act(async()=>root.render(React.createElement(entry.component,{sessionId:'blank',useSession:selector=>selector({blank:true}),useConversation:selector=>selector({activeTargets:new Set()}),renderFactorySlot:(_name,_options,extension)=>React.createElement(extension.slots.views,shares)})));
+ const trigger=document.querySelector('.gea-formal-workspace');assert.equal(menu.anchorRef.current,trigger);assert.equal(trigger.querySelector('svg').getAttribute('viewBox'),'0 0 16 16');assert.equal(trigger.getAttribute('aria-expanded'),'false');
+ await act(async()=>trigger.click());assert.equal(menu.open,true);assert.equal(trigger.getAttribute('aria-expanded'),'true');await act(async()=>menu.onPick('actual-workspace'));assert.deepEqual(picks,['actual-workspace']);assert.equal(menu.open,false);
 });
