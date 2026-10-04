@@ -65,11 +65,11 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
    return()=>{document.removeEventListener('pointerdown',close);document.removeEventListener('keydown',escape);window.removeEventListener('blur',dismiss);window.removeEventListener('resize',dismiss);};
   },[open]);
   useEffect(()=>{if(!qr||!authority)return;const controller=new AbortController();let timer:ReturnType<typeof setTimeout>;
-   const poll=async()=>{try{if(await authority.pollLogin(qr.loginId,controller.signal)){setQr(undefined);setOpen(false);return;}if(!controller.signal.aborted)timer=setTimeout(poll,1500);}catch(failure){if(!controller.signal.aborted){setError(failure instanceof Error?failure.message:String(failure));setQr(undefined);}}};
+   const poll=async()=>{try{const authenticated=await authority.pollLogin(qr.loginId,controller.signal);controller.signal.throwIfAborted();if(authenticated){setQr(undefined);setOpen(false);return;}timer=setTimeout(poll,1500);}catch(failure){if(!controller.signal.aborted){setError(failure instanceof Error?failure.message:String(failure));setQr(undefined);}}};
    timer=setTimeout(poll,1500);return()=>{controller.abort();clearTimeout(timer);};
   },[qr,authority]);
   const action=async(kind:'login'|'logout')=>{if(!authority||busy)return;pending.current?.abort();const controller=new AbortController();pending.current=controller;setBusy(true);setError('');
-   try{if(kind==='login')setQr(await authority.startLogin(controller.signal));else{await authority.logout(controller.signal);setOpen(false);}}
+   try{if(kind==='login'){const qr=await authority.startLogin(controller.signal);controller.signal.throwIfAborted();setQr(qr);}else{await authority.logout(controller.signal);controller.signal.throwIfAborted();setOpen(false);}}
    catch(failure){if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));}
    finally{if(!controller.signal.aborted)setBusy(false);}
   };
