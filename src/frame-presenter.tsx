@@ -78,7 +78,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
         if(page.kind==="html"){
           const bridge=connectHtmlFrame(target,connection,currentExecution,()=>ctx.theme.getTheme(),controller.signal,failure=>{if(alive()){setError(failure instanceof Error?failure.message:String(failure));if(connection)void currentExecution.close(connection).catch(()=>{});}});
           disposeBridge=bridge;const off=ctx.on("theme/change",()=>bridge.sendTheme());disposeTheme=()=>{off();};
-        }else target.contentWindow?.postMessage({type:"gea:session",sessionId:selection.reference.sessionId},window.location.origin);
+        }else target.contentWindow?.postMessage({type:"gea:session",sessionId:selection.reference.sessionId,lease:connection.lease},window.location.origin);
         disposeReference=interaction.bindFrame({frame:target,reference:selection.reference,page:title,surface:page.kind==="html"?`gea-html-${page.pluginId}`:"gea-workbench",tool:page.kind==="native"?"gea_workbench_apply":undefined,referenceLease:()=>connection?.lease});
         setError("");
       });
