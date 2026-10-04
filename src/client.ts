@@ -44,9 +44,10 @@ export function apply(ctx: Context): void {
     useEffect(() => {
       const refresh = () => setEntries([...ctx.slots.entries("main")]);
       const offSlots = ctx.slots.subscribe("main", refresh);
+      const offSidebar = ctx.slots.subscribe("sidebar.panellist", refresh);
       const offPages = workbench.subscribe(refresh);
       const offLocale = ctx.locale.subscribe(refresh);
-      return () => { offSlots(); offPages(); offLocale(); };
+      return () => { offSlots(); offSidebar(); offPages(); offLocale(); };
     }, []);
     const pages = entries.filter(entry => entry.options.key && entry.options.key !== DIRECTORY && entry.options.key !== "conversation");
     return React.createElement("section", { className: "agent-workbench-ui agent-workbench-directory" },
@@ -55,7 +56,9 @@ export function apply(ctx: Context): void {
       React.createElement("h2", null, t("pages")),
       pages.length ? React.createElement("div", { className: "agent-workbench-pages" }, ...pages.map(entry => {
         const id = entry.options.key as MainPanelId;
-        const label = workbench.label(id);
+        const sidebarLabel = ctx.slots.entries("sidebar.panellist")
+          .find(sidebar => sidebar.options.id === id)?.options.label;
+        const label = typeof sidebarLabel === "function" ? sidebarLabel() : sidebarLabel ?? workbench.label(id);
         return React.createElement("button", { key: id, type: "button", onClick: () => void workbench.open(id) }, label);
       })) : React.createElement("p", null, t("empty")),
       React.createElement(DiscoveryNotice),
