@@ -65,11 +65,11 @@ export function apply(ctx: Context): void {
       catch(failure){if(!controller.signal.aborted){console.error("[agent-workbench] resource selection failed",{id,error:failure instanceof Error?failure.message:String(failure)});setSelectionError(true);setError(String(failure));}}
       finally{if(!controller.signal.aborted)setBusy("");}
     };
-    return React.createElement("details",{className:'workbench-resources'},React.createElement("summary",null,t("resources")),
-      React.createElement("button",{type:"button",disabled:Boolean(busy),onClick:()=>refreshResources(value=>value+1)},t("resourcesRefresh")),
+    return React.createElement("section",{className:'gea-home-panel'},React.createElement("div",{className:'gea-home-panel-head'},React.createElement("strong",null,t("resources"))),
+      React.createElement("button",{className:'gea-home-panel-more',type:"button",disabled:Boolean(busy),onClick:()=>refreshResources(value=>value+1)},t("resourcesRefresh")),
       error?React.createElement("p",{role:"alert"},selectionError?t("selectionFailed"):t("resourcesFailed")):null,
       ...rows.map(row=>React.createElement("div",{key:row.id},
-        React.createElement("button",{type:"button",disabled:!row.enabled||Boolean(busy),onClick:()=>void choose(row.id)},row.label+" · "+(busy===row.id?t("resourceWorking"):!row.enabled?t("unavailable"):row.kind==="skill"?t("useSkill"):t("start"))),
+        React.createElement("button",{className:'gea-home-panel-item',type:"button",disabled:!row.enabled||Boolean(busy),onClick:()=>void choose(row.id)},row.label+" · "+(busy===row.id?t("resourceWorking"):!row.enabled?t("unavailable"):row.kind==="skill"?t("useSkill"):t("start"))),
         row.missingSkills?.length?React.createElement("p",null,t("missing")+": "+row.missingSkills.join(", ")):null,
         row.error?React.createElement("p",{role:"alert"},row.error):null)));
   }

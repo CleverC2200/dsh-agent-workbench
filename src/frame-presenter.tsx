@@ -5,11 +5,12 @@ import type {SessionId} from '@deepseek-ai/dsh-session/types';
 import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {FactoryComponentPropsOf, PropsRenderFactories, PropsRenderSlots, PropsRuntime} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
-import {selectResource,type NativeResourceSelection} from "./resource-selection.ts";
+import {selectResource,resourceWorkspace,type ResourceSummary,type NativeResourceSelection} from "./resource-selection.ts";
 import type {PageExecutionConnection,PageIdentitySnapshot,WorkbenchFramePage,WorkbenchPageExecution} from "./frame.ts";
 import {connectHtmlFrame} from "./html-bridge.ts";
 import {installPageInteraction} from "./page-interaction/client.ts";
 import {CompanyWelcome} from './company/ui.tsx';
+import {ConversationToolbar} from './company/formal-components.tsx';
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotFactoryMap {
@@ -45,6 +46,8 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       return reference?{reference,preset:page.resourceId!,ownerScope:execution?.identity.getSnapshot().scope??null}:undefined;
     });
     const pending=useRef<{controller:AbortController;scope:string|null}>();
+    const preparationOwner=useRef<string>();
+    const preparation=useRef<AbortController>();
     const connectionTransition=useRef<Promise<void>>(Promise.resolve());
     const title=typeof page.label==="function"?page.label():page.label??page.id;
     const src=typeof page.src==="function"?page.src():page.src;
@@ -101,23 +104,40 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
         }).catch(()=>{});
       };
     },[selection,loaded,currentExecution,page,title]);
-    const connect=async()=>{
+    const connect=async(cwd?:string,ownerSignal?:AbortSignal)=>{
+      if(!ownerSignal)preparation.current?.abort();
       const host=resources();if(!host||!currentExecution||!page.resourceId){setError(t("pageWait"));return;}
       if(!identity.status?.authenticated){setError(t("pageLogin"));return;}
       pending.current?.controller.abort();const controller=new AbortController();const flight={controller,scope:identity.scope};pending.current=flight;setBusy(true);setError("");
+      const signal=ownerSignal?AbortSignal.any([controller.signal,ownerSignal]):controller.signal;
       try{
-        const selected=await selectResource(host,page.resourceId,controller.signal,true);
+        const selected=await selectResource(host,page.resourceId,signal,true,cwd);
         if(!selected.reference)throw Error(t("pageSessionUnavailable"));
-        if(controller.signal.aborted||identity.scope!==currentExecution.identity.getSnapshot().scope){selected.reference.release();return;}
+        if(signal.aborted||identity.scope!==currentExecution.identity.getSnapshot().scope){selected.reference.release();return;}
         setSelection({reference:selected.reference,preset:selected.preset,ownerScope:identity.scope});
-      }catch(failure){if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));}
+      }catch(failure){if(!signal.aborted)setError(failure instanceof Error?failure.message:String(failure));}
       finally{if(pending.current===flight){pending.current=undefined;setBusy(false);}}
     };
+    useEffect(()=>{
+      const host=resources();
+      if(!host||!currentExecution||!page.resourceId||!identity.scope||!identity.status?.authenticated||selection)return;
+      const owner=identity.scope+'\0'+page.resourceId;
+      if(preparationOwner.current===owner)return;
+      preparationOwner.current=owner;
+      const controller=new AbortController();
+      preparation.current=controller;
+      void (async()=>{
+        const cwd=await resourceWorkspace(host.fetch,controller.signal);
+        const response=await host.fetch('/api/agent-manage/resources?'+new URLSearchParams({cwd}),{signal:controller.signal,cache:'no-store'});
+        if(!response.ok)throw Error('RESOURCE_LIST_UNAVAILABLE');
+        const rows=await response.json() as ResourceSummary[];controller.signal.throwIfAborted();
+        if(!rows.some(row=>row.id===page.resourceId&&row.installed&&row.enabled))return;
+        await connect(cwd,controller.signal);
+      })().catch(failure=>{if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));});
+      return()=>{controller.abort();if(preparation.current===controller)preparation.current=undefined;};
+    },[identity.scope,identity.status?.authenticated,currentExecution,page.resourceId]);
     return <section className="agent-workbench-ui agent-workbench-document">
-      <header className="agent-workbench-page-toolbar"><span>{title}</span>{page.resourceId&&<button type="button" disabled={busy} onClick={()=>void connect()}>{busy?t("pageWorking"):selection?t("pageNewChat"):t("pageConnect")}</button>}
-       <div className="workbench-conversation-toolbar" role="toolbar" aria-label="对话区视图与会话操作"><div role="group" aria-label="区域显示方式">{([['center','中间区域最大，隐藏会话区','▦'],['split','同时显示中间区域和会话区','◫'],['chat','会话区最大，隐藏中间区域','▤']] as const).map(([id,label,icon])=><button key={id} type="button" aria-label={label} title={label} aria-pressed={view===id} onClick={()=>setView(id)}>{icon}</button>)}</div><button type="button" aria-label="历史对话" onClick={()=>showHistory(page.resourceId?page.id:undefined)}>◷</button>{page.resourceId&&<button type="button" disabled={busy} aria-label="新建对话" onClick={()=>void connect()}>＋</button>}</div>
-      </header>
-      {error&&<p role="alert" className="agent-workbench-page-error">{error}</p>}
+      <div className={'gea-page-toolbar-anchor'+(selection&&view==='split'?' for-conversation':'')}><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>
       <div className={"agent-workbench-document-body"+(selection?" with-conversation":"")+' view-'+view}>
         <iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>
         {selection&&<aside className="agent-workbench-native-conversation"><SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider></aside>}
@@ -127,7 +147,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
   ctx.effect(()=>ctx.slots.registerFactory({name:"agent-workbench.document",scope:"root",children:{"agent-workbench.conversation":{kind:"single",scope:"session"}}},Document));
   ctx.slots.inject("agent-workbench.conversation",()=>ctx.slots.register({name:"agent-workbench.conversation"},({page,useSession,inputActions,renderFactorySlot}:PropsRuntime<"agent-workbench.conversation">&PropsRenderFactories)=>{
     const blank=useSession(session=>session.blank&&!session.running&&!session.promptAttempted);
-    return <div className="workbench-page-conversation">{blank&&<CompanyWelcome page={page} onFill={text=>inputActions.setDraft(text)}/>} {renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false})}</div>;
+    return <div className="workbench-page-conversation">{blank&&<CompanyWelcome page={page} language={ctx.locale.getSnapshot().active} onFill={text=>inputActions.setDraft(text)}/>} {renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false})}</div>;
   }));
   return async(page,id,signal)=>{
     const reference=ctx.sessions.retain(id,{source:'agentResourceSelection',signal});

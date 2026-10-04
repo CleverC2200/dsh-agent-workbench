@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 
 const resource = await readFile(new URL('../theme/tokens.css', import.meta.url), 'utf8');
 const sha256 = createHash('sha256').update(resource).digest('hex');
-if (sha256 !== 'd15b4faa3fb080fbb6786042848b8b3c1263be44569154bdf56913c2a2a934e3') {
+if (sha256 !== '7be2c4591078ca4ed2cc79173a26b6db41035071980205785413757765f78a9e') {
   throw new Error('HTML_SAMPLE_THEME_RESOURCE_MISMATCH: expected shared theme 1.1.0');
 }
 const source = await readFile(new URL('../samples/html-table.html', import.meta.url), 'utf8');
