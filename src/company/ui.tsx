@@ -104,6 +104,8 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const activePanel=usePanelInfo(value=>value.activePanelId);
   const business=Boolean(activePanel&&![DIRECTORY,PLUGINS,'gea-api-log'].includes(activePanel));
   const [drawer,setDrawer]=useState<'function'|'workspace'|'none'>(()=>business?'function':'workspace');
+  const previousBusiness=useRef(business);
+  useEffect(()=>{if(business&&!previousBusiness.current)setDrawer('function');previousBusiness.current=business;},[business]);
   const [sections,setSections]=useState({supply:true,plan:true,inventory:true,orders:true});
   const [entries,setEntries]=useState(()=>ctx.slots.entries('main'));
   useEffect(()=>{const refresh=()=>setEntries([...ctx.slots.entries('main')]);const offs=[ctx.slots.subscribe('main',refresh),ctx.slots.subscribe('sidebar.panellist',refresh),workbench.subscribe(refresh)];return()=>offs.forEach(off=>off());},[]);

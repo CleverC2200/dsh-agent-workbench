@@ -129,3 +129,17 @@ test('formal Workspace trigger anchors the public menu and delegates selection t
  const trigger=document.querySelector('.gea-formal-workspace');assert.equal(menu.anchorRef.current,trigger);assert.equal(trigger.querySelector('svg').getAttribute('viewBox'),'0 0 16 16');assert.equal(trigger.getAttribute('aria-expanded'),'false');
  await act(async()=>trigger.click());assert.equal(menu.open,true);assert.equal(trigger.getAttribute('aria-expanded'),'true');await act(async()=>menu.onPick('actual-workspace'));assert.deepEqual(picks,['actual-workspace']);assert.equal(menu.open,false);
 });
+test('entering a business page opens its functional drawer once and preserves manual History selection within business',async t=>{
+ const dom=new JSDOM('<main id="root"></main>',{pretendToBeVisual:true});
+ const saved=['window','document','Node','navigator','IS_REACT_ACT_ENVIRONMENT'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
+ for(const [key,value]of [['window',dom.window],['document',dom.window.document],['Node',dom.window.Node],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
+ const {createRoot}=await import('react-dom/client');const {act}=React;const {entries,renderSlot}=fixture();const entry=entries.find(row=>row.options.name==='sidebar');const root=createRoot(document.getElementById('root'));
+ t.after(async()=>{await act(async()=>root.unmount());dom.window.close();for(const [key,value]of saved){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}});
+ const render=async activePanelId=>act(async()=>root.render(React.createElement(entry.component,{collapsed:false,width:280,usePanelInfo:selector=>selector({activePanelId}),renderSlot})));
+ const drawer=()=>document.querySelector('.gea-sidebar-region').dataset.geaDrawer;
+ await render('agent-workbench');assert.equal(drawer(),'workspace');
+ await render('gea-inbox');assert.equal(drawer(),'function','a directory/notification arrival opens the business navigation');
+ await act(async()=>document.querySelector('[aria-controls="gea-panel-workspace"]').click());assert.equal(drawer(),'workspace');
+ await render('inventory-fc');assert.equal(drawer(),'workspace','business-to-business rerenders do not seize the user drawer');
+ await render(null);assert.equal(drawer(),'workspace');await render('gea-proof');assert.equal(drawer(),'function','a later new business entry restores the original transition');
+});

@@ -51,6 +51,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const connectionTransition=useRef<Promise<void>>(Promise.resolve());
     const title=typeof page.label==="function"?page.label():page.label??page.id;
     const src=typeof page.src==="function"?page.src():page.src;
+    const Body=page.kind==="local"?page.body:undefined;
     const sendTheme=()=>{const theme=ctx.theme.getTheme();frame.current?.contentWindow?.postMessage({protocol:"agent-workbench-theme",dark:theme.active.colorScheme==="dark",fontSize:theme.fontSize},"*");};
     useEffect(()=>{const off=ctx.on("theme/change",sendTheme);return()=>{off();};},[]);
     useEffect(()=>{
@@ -139,7 +140,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     return <section className="agent-workbench-ui agent-workbench-document">
       <div className={'gea-page-toolbar-anchor'+(selection&&view==='split'?' for-conversation':'')}><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>
       <div className={"agent-workbench-document-body"+(selection?" with-conversation":"")+' view-'+view}>
-        <iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>
+        {Body?<div className="agent-workbench-html"><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
         {selection&&<aside className="agent-workbench-native-conversation"><SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider></aside>}
       </div>
     </section>;

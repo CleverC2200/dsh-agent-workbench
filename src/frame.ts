@@ -1,12 +1,13 @@
 import type { WorkbenchPage } from "./workbench.ts";
 /** A real document contribution; Workbench owns the frame and its attached Conversation. */
-export interface WorkbenchFramePage extends WorkbenchPage {
-  readonly src: string | (() => string);
-  readonly kind: "native" | "html";
+export type WorkbenchFramePage = WorkbenchPage & {
   readonly pluginId?: string;
   readonly resourceId?: string;
   readonly onVisible?: () => void;
-}
+} & (
+  {readonly kind:"native"|"html";readonly src:string|(()=>string);readonly body?:never}
+  | {readonly kind:"local";readonly body:import("react").ComponentType;readonly src?:never}
+);
 export interface PageIdentitySnapshot {
   readonly state: string;
   readonly scope: string | null;

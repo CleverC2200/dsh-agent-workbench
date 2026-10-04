@@ -30,12 +30,13 @@ export function mountBusinessViews(ctx:Context){
     return <section className="agent-workbench-ui gea-native-page" style={{ height: "100%" }}><style>{nativeCss}</style><ApiLogCenter environment={environment} request={request} onClose={() => ctx.layout.selectPanel(PANEL)} /></section>;
   }
   for (const [id, label, component] of [
-    [INBOX, "businessInbox", InboxPage], [API_LOG_PANEL, "apiLog", LogPage],
+    [API_LOG_PANEL, "apiLog", LogPage],
   ] as const) ctx.slots.inject("main", () => {
     const unregister = ctx.agentWorkbench.register({id, label: () => t(label)});
     const dispose = ctx.slots.register({ name: "main", key: id }, component);
     return () => { dispose(); unregister(); };
   });
+  ctx.slots.inject("main",()=>ctx.agentWorkbench.registerFrame({id:INBOX,label:()=>t("businessInbox"),kind:"local",body:InboxPage,resourceId:"gea-readonly"}));
   ctx.slots.inject("main",()=>ctx.agentWorkbench.registerFrame({id:PANEL,label:()=>t("salesPlan"),kind:"native",resourceId:"gea-readonly",src:()=>`/api/agent-workbench/native?locale=${encodeURIComponent(ctx.locale.getSnapshot().active)}`,onVisible:()=>{const navigation=incoming.getSnapshot();if(identity.getSnapshot().status?.authenticated&&navigation?.panel===PANEL)navigation.visible();}}));
   const openNavigation = async (target: ReadyNavigation, signal: AbortSignal) => {
     if (![PANEL, INBOX].includes(target.panel as MainPanelId)) throw Error("NAVIGATION_TARGET_UNSUPPORTED");
