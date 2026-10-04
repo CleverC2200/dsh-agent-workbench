@@ -32,7 +32,7 @@ export function connectHtmlFrame(
   };
   window.addEventListener("message",ready);
   const pageBridge = startPageBridgeClient({
-    endpoint:"page-bridge",request:(_endpoint,payload)=>call("page-bridge",payload),sessionId:connection.sessionId,pageSource:"self-report",
+    endpoint:"page-bridge",request:(_endpoint,payload)=>call("page-bridge",payload),sessionId:connection.sessionId,
     catalog:()=>elements===null?null:{elements},
     apply:(args,meta,applySignal)=>new Promise(resolve=>{
       const settle=(result:{applied:boolean;error?:string})=>{applies.delete(meta.toolCallId);applySignal.removeEventListener("abort",cancel);resolve(result);};

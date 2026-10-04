@@ -44,5 +44,6 @@ declare module "@deepseek-ai/dsh-api-session-controller/client" {
         agentResourceSelection: unknown;
     }
 }
-export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";
+export type { WorkbenchFramePage } from "./frame.ts";
 export type { BusinessAccount } from './company/account.ts';
+export type { NavigationView } from "./client/desktop-navigation.tsx";

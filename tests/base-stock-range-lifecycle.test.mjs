@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 test("base changes and closed details cannot retain or publish obsolete query results", async t => {
-  const require = createRequire(resolve("../deepseek-harness/packages/client/ui-primitives/package.json"));
+  const require = createRequire(import.meta.url);
   const React = require("react");
   const { createRoot } = require("react-dom/client");
   const { JSDOM } = require("jsdom");
@@ -50,7 +50,7 @@ test("base changes and closed details cannot retain or publish obsolete query re
       api.onResolve({ filter: /channel\.js$|aqkc-engine$|\/data$|workspace-normalizer\.ts$|dsh-ui\/(controls|icons|workbench-loading)$|daily-report-dialog\.tsx$|floating-table-scrollbar\.tsx$/ }, args => ({ path: args.path, namespace: "fixture" }));
       api.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({
         contents: args.path.includes("aqkc-engine") ? "export const load=(...a)=>stockRangeTest.load(...a);export const loadInventoryDashboardTabs=(...a)=>stockRangeTest.tabs(...a);"
-          : args.path.endsWith("channel.js") ? "export const ready=Promise.resolve();export const action=(key,info,handler)=>{stockRangeTest.handlers[key]=handler};export const reportElements=()=>()=>{};export const publish=async value=>stockRangeTest.published.push(structuredClone(value));export const ask=async()=>{};"
+          : args.path.endsWith("channel.js") ? "export const call=async()=>({principalId:'fixture',trusted:false});export const ready=Promise.resolve();export const action=(key,info,handler)=>{stockRangeTest.handlers[key]=handler};export const reportElements=()=>()=>{};export const publish=async value=>stockRangeTest.published.push(structuredClone(value));export const ask=async()=>{};"
           : args.path.endsWith("/data") ? "export const clearReadCache=()=>{};"
           : args.path.includes("workspace-normalizer") ? "export const normalizeWorkspaceState=value=>value;"
           : `import React from "react";const Pass=p=>React.createElement('div',null,p.children);export const Button=p=>React.createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children);export const Dropdown=Pass;export const Menu=Pass;Menu.Item=Pass;export const DataPagination=()=>null;export const IconDown=()=>null;export const DashboardOverviewSkeleton=()=>null;export const DashboardTableSkeleton=()=>null;export const DailyReportButton=()=>null;export const FloatingTableScrollbar=()=>null;`,

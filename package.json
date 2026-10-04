@@ -45,6 +45,17 @@
     "./page-interaction/payload-budget": {
       "types": "./lib/types/page-interaction/shared/payload-budget.d.ts",
       "default": "./lib/page-interaction/shared/payload-budget.js"
+    },
+    "./notifications": {
+      "types": "./lib/types/shared/notifications.d.ts",
+      "default": "./lib/shared/notifications.js"
+    },
+    "./sales-plan": {
+      "types": "./lib/types/sales-plan.d.ts",
+      "default": "./lib/sales-plan.js"
+    },
+    "./api-log": {
+      "types": "./lib/types/workbench/api-log-contract.d.ts"
     }
   },
   "dsh": {
@@ -69,7 +80,8 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.2"
+    "@deepseek-ai/cordis": "4.0.2",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.1"
   },
   "files": [
     "lib/",
@@ -85,7 +97,8 @@
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "test": "node --test tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",
     "build:core": "node scripts/build.mjs --target core",
-    "typecheck:official": "node scripts/verify-official-input.mjs && tsc -p tsconfig.official.json --noEmit --emitDeclarationOnly false"
+    "typecheck:official": "node scripts/verify-official-input.mjs && tsc -p tsconfig.official.json --noEmit --emitDeclarationOnly false",
+    "test:browser": "node --test tests/*.browser.mjs"
   },
   "repository": {
     "type": "git",
@@ -114,7 +127,15 @@
     "react": "18.3.1",
     "react-dom": "^18.3.1",
     "react-grab": "0.2.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "@arco-design/web-react": "2.66.1",
+    "@icon-park/react": "1.4.2",
+    "i18next": "23.7.16",
+    "xlsx-republish": "0.20.3",
+    "decimal.js": "10.6.0",
+    "@deepseek-ai/dsh-tools": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-agent": "0.1.5-rc.2",
+    "@playwright/test": "1.58.2"
   },
   "packageManager": "npm@11.11.0"
 }

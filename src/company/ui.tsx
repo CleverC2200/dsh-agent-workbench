@@ -27,7 +27,7 @@ const agents:Record<string,prompts.ConversationPromptConfig>={
  'inventory-apsplan':prompts.supplyCoordinationConversation,'inventory-customer':prompts.customerStockConversation,
  'inventory-orderworkbench':prompts.orderManagementConversation,'inventory-orderfulfillment':prompts.orderFulfillmentConversation,
 };
-const unavailableAccount={state:'unknown',status:null};
+const unavailableAccount={state:'unknown',scope:null,status:null};
 const noSubscribe=()=>()=>{};
 export function CompanyWelcome({page,onFill}:{page?:string;onFill?:(text:string)=>void}) {
  const agent=page?agents[page]:undefined;

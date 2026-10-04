@@ -19,7 +19,7 @@ export type FrameBinding = {
   page: string;
   surface: string;
   tool?: string;
-  referenceLease?: () => string | undefined;
+  owner: string;
 };
 export type PageInteraction = {
   bindFrame(options: FrameBinding): () => void;
@@ -176,7 +176,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
         for (const binding of bindings) binding.configure();
       };
     },
-    bindFrame({ frame, reference, page, surface, tool, referenceLease }) {
+    bindFrame({ frame, reference, page, surface, tool, owner }) {
       if (disposed) throw new Error("页面交互已释放。");
       const { sessionId } = reference;
       const owned = reference.binding;
@@ -274,7 +274,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           const response = await fetch("/api/page-interaction/reference", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ...value, generation, lease: referenceLease?.() }),
+            body: JSON.stringify({ ...value, generation, owner }),
             signal: controller.signal,
           });
           const receipt = await response.json();

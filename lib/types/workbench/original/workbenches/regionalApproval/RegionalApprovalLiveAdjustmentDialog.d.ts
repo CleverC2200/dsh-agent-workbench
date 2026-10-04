@@ -1,0 +1,21 @@
+import type { TFunction } from 'i18next';
+import React from 'react';
+import type { SalesPlanDetailClient } from './hooks/useSalesPlanDetail.ts';
+import { type SalesPlanAdjustmentDraft } from './models/salesPlanAdjustmentModel.ts';
+import { type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
+import type { ApprovalDimension } from './regionalApprovalFixture.ts';
+declare const RegionalApprovalLiveAdjustmentDialog: React.FC<{
+    visible: boolean;
+    readOnly?: boolean;
+    rows: readonly RegionalApprovalLiveRow[];
+    row: RegionalApprovalLiveRow;
+    initialDimension: ApprovalDimension;
+    drafts: Readonly<Record<string, SalesPlanAdjustmentDraft>>;
+    t: TFunction;
+    client?: SalesPlanDetailClient;
+    onDraftsChange: (recordIds: string[], drafts: SalesPlanAdjustmentDraft[]) => void;
+    onEdit?: () => void;
+    editor?: React.ReactNode;
+    onClose: () => void;
+}>;
+export default RegionalApprovalLiveAdjustmentDialog;

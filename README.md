@@ -54,3 +54,11 @@ GEA 的窄 geaPageExecution 只提供唯一身份投影与既有受控 open/call
 公共页面选择/引用实现从 GEA 退出，source 在 src/page-interaction，公开 client/picker/bridge/reference/protocol/payload-budget。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。
 
 页面请求取消消息携带该请求原先绑定的Session，abort和timeout都撤销对应Host请求。URL HTML frame保持不允许same-origin的sandbox；内容引用按该frame的opaque origin判定，同时保留window/channel、Host generation、owned lease和输入revision校验。连接按钮的busy属于当前请求controller；身份变化立即释放它，旧请求完成不能清除新请求的busy。
+
+### 页面实现与执行归属（规格42）
+
+Workbench 持有现有 Native 审批文档、Inbox/ApiLog/桌面导航呈现、HTML 静态资源、页面目录、动作与引用的完整生命周期。Native 构建产物为 `lib/native.js` / `lib/native.css`，认证 Fetch 为 `/api/agent-workbench/native`。
+
+页面贡献者仍只调用 `registerFrame({id,label,kind,src,resourceId})`。Host 的已安装业务页通过 `workbenchPages.registerBusinessPage(page, authorize)` 接入真实业务 grant；凭据、Consumer、身份变化与业务权限留在实际 GEA adapter。Workbench 自己持有 opaque owner、两种页面动作通道、工具注册、官方 Session 引用与释放。Host 运行使用固定官方 Tools `0.2.0-rc.1`；开发依赖及类型映射按项目锁文件与 `typecheck:official` 核对。
+
+`npm test` 是源码与离线行为检查；`test:browser` 另由同组运行所有者执行。离线通过不表示业务登录、真实数据或正式 UI 等价已验收。

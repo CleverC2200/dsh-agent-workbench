@@ -2,17 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import {pathToFileURL} from 'node:url';
 import { build } from 'esbuild';
-const { outputFiles } = await build({ entryPoints: ['src/html-pages.ts'], bundle: true, write: false, format: 'esm', platform: 'node' });
-const { HtmlPages } = await import('data:text/javascript;base64,' + Buffer.from(outputFiles[0].text).toString('base64'));
+const { outputFiles } = await build({ entryPoints: ['src/html-pages.ts'], bundle: true, write: false, format: 'esm', platform: 'node', plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:pathToFileURL(resolve('../../official-core/packages/core/tools/lib/index.js')).href,external:true}));}}] });
+await writeFile('.scratch/html-pages-test.mjs',outputFiles[0].text);
+const {HtmlPages}=await import(pathToFileURL(resolve('.scratch/html-pages-test.mjs')).href);
 
+function context(t){const cleanups=[];t.after(()=>cleanups.forEach(stop=>stop?.()));return {effect(start){cleanups.push(start());},on(){return()=>{};},inject(){},connection:{fetch:{register(){return()=>{};}}}};}
 test('registered package HTML is discoverable and readable without business identity or a Session', async t => {
   const root = await mkdtemp(join(tmpdir(), 'workbench-pages-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'plugin.json'), JSON.stringify({ schemaVersion: 1, id: 'inventory-test', name: 'Existing page', html: 'index.html', pages: [{ id: 'inventory-test', name: 'Existing page', view: '' }] }));
   await writeFile(join(root, 'index.html'), '<html><head></head><body><button>Original interaction</button></body></html>');
-  const pages = new HtmlPages('/* plugin theme */');
+  const pages = new HtmlPages(context(t),'/* plugin theme */');
   await pages.registerHtml([root]);
   assert.deepEqual(pages.list().map(page => page.id), ['inventory-test']);
   const response = await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=inventory-test'));
@@ -26,5 +29,5 @@ test('package HTML symlinks escaping the registered root are rejected', async t 
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'plugin.json'), JSON.stringify({ schemaVersion: 1, id: 'inventory-test', name: 'Page', html: 'index.html' }));
   await symlink('/etc/hosts', join(root, 'index.html'));
-  await assert.rejects(new HtmlPages('').registerHtml([root]), /INVALID_HTML_PATH/);
+  await assert.rejects(new HtmlPages(context(t),'').registerHtml([root]), /INVALID_HTML_PATH/);
 });

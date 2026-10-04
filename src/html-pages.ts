@@ -1,6 +1,7 @@
 import { readFile, realpath } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { injectPicker } from "./page-interaction/inject.ts";
+import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from "./page-runtime.ts";
 import { presentHtml } from "./html-document.ts";
 
 export interface HtmlPage {
@@ -22,15 +23,16 @@ export interface WorkbenchPages {
   /** Register explicit installed package roots. No capability body or business credentials are read. */
   registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
   packages(): readonly HtmlPackage[];
+  registerBusinessPage(page:BusinessPage,authorize:AuthorizeBusinessPage):()=>void;
 }
 
 const idPattern = /^[a-z][a-z0-9-]{0,119}$/;
 const legacyApsIds = new Set(["inventory-apsboard", "inventory-apsdemand", "inventory-apsdelivery"]);
 
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
-export class HtmlPages implements WorkbenchPages {
+export class HtmlPages extends PageRuntime implements WorkbenchPages {
   private readonly packageDeclarations = new Map<string, HtmlPackage>();
-  constructor(private readonly css: string, private readonly picker?: () => Promise<string>) {}
+  constructor(ctx: import("@deepseek-ai/cordis").Context, private readonly css: string, private readonly picker?: () => Promise<string>) { super(ctx); }
   async registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]> {
     const candidates = await Promise.all(roots.map(async root => {
       const directory = await realpath(root);

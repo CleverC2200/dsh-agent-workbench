@@ -21,7 +21,7 @@ test('disposing the page cancels its active application and does not publish a l
   assert.equal(signal.aborted, true);
   resolveApply({ applied: true });
   await new Promise(resolve => setTimeout(resolve, 0));
-  assert.deepEqual(calls.at(-1), { sessionId: 'owned', toolMessages: [], catalog: null });
+  assert.deepEqual(calls.at(-1), { sessionId: 'owned', toolMessages: [], catalog: null, pageSource:'self-report' });
   assert.equal(calls.length, 2);
 });
 

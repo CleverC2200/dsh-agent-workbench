@@ -1,3 +1,4 @@
+import {mountBusinessViews} from "./business-views.tsx";
 import type { Context } from "@deepseek-ai/cordis";
 import React, { useEffect, useRef, useState } from "react";
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
@@ -73,6 +74,7 @@ export function apply(ctx: Context): void {
         row.error?React.createElement("p",{role:"alert"},row.error):null)));
   }
   mountCompanyUI(ctx,workbench,Resources,restorePageSession);
+  mountBusinessViews(ctx);
   let discoveryError = "";
   let discoveryRevision = 0;
   const listeners = new Set<() => void>();
@@ -126,5 +128,7 @@ declare module "@deepseek-ai/dsh-api-session-controller/client" {
   interface SessionReferenceSourceMap { agentResourceSelection: unknown; }
 }
 
-export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";
+export type { WorkbenchFramePage } from "./frame.ts";
 export type {BusinessAccount} from './company/account.ts';
+
+export type {NavigationView} from "./client/desktop-navigation.tsx";

@@ -22,7 +22,7 @@ export type PageBridgeApply = (
 ) => PageBridgeApplyResult | Promise<PageBridgeApplyResult>;
 
 export type PageBridgeClientOptions = {
-  /** 宿主侧路由，例如 "agui/workbench"。 */
+  /** Workbench 页面动作端点。 */
   endpoint: string;
   /** 页面自己的请求函数：与宿主通信的方式由业务决定。 */
   request: <T>(endpoint: string, payload: object) => Promise<T>;
@@ -46,7 +46,7 @@ export type PageBridgeClientOptions = {
   /**
    * 页面主动发布目录。
    */
-  pageSource?: "self-report" | (() => "self-report");
+
   /**
    * 页面自述的能力目录：这一屏此刻能做什么。
    * 桥据此为这个会话生成工具；不声明（返回 null）就等于没有可调用动作。
@@ -130,17 +130,13 @@ export function startPageBridgeClient(
   const poll = async (): Promise<void> => {
     const pending = outbox.splice(0, outbox.length);
     try {
-      const pageSource =
-        typeof options.pageSource === "function"
-          ? options.pageSource()
-          : options.pageSource;
       const result = await options.request<{ events: AgUiEvent[] }>(
         options.endpoint,
         {
           sessionId: options.sessionId,
           toolMessages: pending,
           ...(options.catalog ? { catalog: options.catalog() } : {}),
-          ...(pageSource === undefined ? {} : { pageSource }),
+          pageSource: "self-report",
         },
       );
       if (stopped) return;
@@ -201,6 +197,7 @@ export function startPageBridgeClient(
           sessionId: options.sessionId,
           toolMessages: [],
           catalog: null,
+          pageSource: "self-report",
         }),
       ).catch(() => {});
     } catch {

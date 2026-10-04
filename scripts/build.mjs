@@ -10,14 +10,16 @@ await mkdir("lib/theme", { recursive: true });
 await copyFile("theme/tokens.css", "lib/theme/tokens.css");
 await cp("static", "lib/static", {recursive:true});
 await build({
-  entryPoints: ["src/host.ts"],
+  entryPoints: ["src/host.ts", "src/shared/notifications.ts", "src/sales-plan.ts"],
   bundle: true,
   format: "esm",
   platform: "node",
-  outfile: "lib/host.js",
+  outdir: "lib",
+  packages: "external",
 });
 await build({entryPoints:["src/page-interaction/client.ts","src/page-interaction/picker.ts","src/page-interaction/reference.ts","src/page-interaction/inject.ts","src/page-interaction/shared/payload-budget.ts","src/page-interaction/page-bridge/client.ts","src/page-interaction/page-bridge/protocol.ts"],bundle:true,format:"esm",platform:"browser",outdir:"lib/page-interaction",outbase:"src/page-interaction",external:["react","@deepseek-ai/dsh-client-store"]});
 await build({entryPoints:["src/page-interaction/page.ts"],bundle:true,format:"iife",platform:"browser",outfile:"lib/page-picker.js"});
+await build({entryPoints:['src/workbench-entry.tsx'],bundle:true,format:'esm',platform:'browser',target:'es2022',outfile:'lib/native.js',loader:{'.css':'css','.module.css':'local-css','.png':'dataurl'}});
 const workbench = await build({
   entryPoints: ["src/client.ts"],
   bundle: true,

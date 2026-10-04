@@ -6,7 +6,7 @@ export type FrameBinding = {
     page: string;
     surface: string;
     tool?: string;
-    referenceLease?: () => string | undefined;
+    owner: string;
 };
 export type PageInteraction = {
     bindFrame(options: FrameBinding): () => void;

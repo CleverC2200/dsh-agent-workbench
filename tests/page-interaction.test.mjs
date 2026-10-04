@@ -25,7 +25,7 @@ function fixture(t, saving, options={}) {
   const api = installPageInteraction(ctx);
   const triggerAnchor = element();
   const offTrigger = api.mountTrigger(triggerAnchor, 'owned');
-  const dispose = api.bindFrame({ frame, reference, page: 'Original page', surface: 'gea-workbench',referenceLease:()=> 'owned-lease' });
+  const dispose = api.bindFrame({ frame, reference, page: 'Original page', surface: 'gea-workbench',owner:'owned-lease' });
   t.after(() => { dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); for (const [key, value] of globals) globalThis[key] = value });
   return { drafts, posted, saves, frame, reference, dispose, offTrigger, trigger: triggerAnchor.children[0], mountOtherTrigger: () => { const anchor = element(); const off = api.mountTrigger(anchor, 'other'); effects.push(off); return anchor.children[0] }, receive: async (type, details = {}, event = {}) => {
     const channel = posted.at(-1)?.channel;
@@ -73,7 +73,7 @@ test('a URL sandbox frame accepts its opaque-origin picker while preserving chan
   assert.equal(f.trigger.disabled,false);
   await f.receive('reference',{requestId:'chosen',reference:{label:'Chosen row',text:'120',targets:[]}});
   assert.equal(f.drafts.length,1);
-  assert.equal(f.saves[0].generation,'live');assert.equal(f.saves[0].lease,'owned-lease');
+  assert.equal(f.saves[0].generation,'live');assert.equal(f.saves[0].owner,'owned-lease');
   await f.receive('reference',{requestId:'wrong-channel',channel:'foreign',reference:{text:'secret',targets:[]}});
   await f.receive('reference',{requestId:'wrong-origin',reference:{text:'secret',targets:[]}},{origin:'https://host.example'});
   await f.receive('reference',{requestId:'wrong-window',reference:{text:'secret',targets:[]}},{source:{}});

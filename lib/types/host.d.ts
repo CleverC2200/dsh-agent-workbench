@@ -16,3 +16,4 @@ declare module "@deepseek-ai/cordis" {
     }
 }
 export type { HtmlPackage, WorkbenchPages } from "./html-pages.ts";
+export type { PageBusinessGrant, BusinessPage, AuthorizeBusinessPage } from "./page-runtime.ts";

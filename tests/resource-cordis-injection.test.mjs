@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import * as cordis from '../../deepseek-harness/vendor/cordis/lib/index.js';
-import * as store from '../../deepseek-harness/packages/client/store/lib/index.js';
+import * as cordis from '../../../official-core/vendor/cordis/lib/index.js';
+import * as store from '../../../official-core/packages/client/store/lib/index.js';
 import {readFile} from 'node:fs/promises';
 import {runInNewContext} from 'node:vm';
 const {Context}=cordis;
@@ -10,7 +10,7 @@ const {Context}=cordis;
 const modules=new Map([['@deepseek-ai/cordis',cordis],['@deepseek-ai/dsh-client-store',store]]);
 const loader={load:({id,factory})=>modules.set(id,factory(name=>{const found=modules.get(name.replace(/\/client$/,''));if(!found)throw Error(`Missing official client fixture dependency: ${name}`);return found;}))};
 for(const packageName of ['gateway','workspace-controller']){
- runInNewContext(await readFile(new URL(`../../deepseek-harness/packages/api/${packageName}/lib/client.js`,import.meta.url),'utf8'),{window:{__ModuleLoader__:loader},AbortController,AbortSignal,console,setTimeout,clearTimeout,queueMicrotask,URL,TextEncoder,TextDecoder});
+ runInNewContext(await readFile(new URL(`../../../official-core/packages/api/${packageName}/lib/client.js`,import.meta.url),'utf8'),{window:{__ModuleLoader__:loader},AbortController,AbortSignal,console,setTimeout,clearTimeout,queueMicrotask,URL,TextEncoder,TextDecoder});
 }
 const {ClientWorkspaceModel,WorkspaceController}=modules.get('@deepseek-ai/dsh-api-workspace-controller');
 const {outputFiles}=await build({entryPoints:['src/resource-selection.ts'],bundle:true,write:false,platform:'node',format:'esm'});

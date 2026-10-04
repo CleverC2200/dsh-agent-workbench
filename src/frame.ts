@@ -8,7 +8,7 @@ export interface WorkbenchFramePage extends WorkbenchPage {
   readonly onVisible?: () => void;
 }
 export interface PageIdentitySnapshot {
-  readonly state: "unknown" | "confirmed" | "error";
+  readonly state: string;
   readonly scope: string | null;
   readonly status: { readonly authenticated: boolean } | null;
 }
@@ -16,10 +16,10 @@ export interface PageExecutionConnection {
   readonly page: WorkbenchFramePage;
   readonly sessionId: string;
   readonly resourceId: string;
-  readonly scope: string;
-  readonly lease?: string;
+  readonly owner: string;
+  readonly binding:{surface:string;tool:string};
 }
-/** GEA owns identity and authorized routes; Workbench owns presentation/port lifetimes. */
+/** Private Workbench document implementation. Business grants stay on the Host. */
 export interface WorkbenchPageExecution {
   readonly identity: {
     getSnapshot(): PageIdentitySnapshot;
@@ -30,4 +30,3 @@ export interface WorkbenchPageExecution {
   close(connection: PageExecutionConnection): Promise<void>;
   prompt(connection: PageExecutionConnection, text: string, signal: AbortSignal): Promise<void>;
 }
-declare module "@deepseek-ai/cordis" { interface Context { geaPageExecution: WorkbenchPageExecution; } }

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 
@@ -25,12 +25,13 @@ test('Host initializes package resources in a Chinese path and serves the regist
     await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
   }
   const entry = join(root, 'host.mjs');
-  await build({entryPoints: ['src/host.ts'], bundle: true, platform: 'node', format: 'esm', outfile: entry});
+  await build({entryPoints: ['src/host.ts'], bundle: true, platform: 'node', format: 'esm', outfile: entry, plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:pathToFileURL(resolve('../../official-core/packages/core/tools/lib/index.js')).href,external:true}));}}]});
   const { apply } = await import(pathToFileURL(entry).href);
   const routes = new Map();
   const context = {
     connection: {fetch: {register: route => {routes.set(route.path, route); return () => routes.delete(route.path);}}},
     effect: operation => operation(),
+    on:()=>()=>{},inject:()=>{},
     provide: (name, value) => {context[name] = value;},
   };
   await apply(context, {cwd: root});

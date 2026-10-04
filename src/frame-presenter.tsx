@@ -25,9 +25,10 @@ export type FrameCopyKey="pageConnect"|"pageNewChat"|"pageWorking"|"pageChanged"
 export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceSelection|undefined,t:(key:FrameCopyKey)=>string,showHistory:(page?:MainPanelId)=>void=()=>{}):(page:MainPanelId,sessionId:SessionId,signal:AbortSignal)=>Promise<void> {
   let execution:WorkbenchPageExecution|undefined;
   const backendListeners=new Set<()=>void>();
-  ctx.inject(["geaPageExecution"],scope=>{
-    execution=scope.geaPageExecution;for(const changed of backendListeners)changed();
-    scope.effect(()=>()=>{if(execution===scope.geaPageExecution){execution=undefined;for(const changed of backendListeners)changed();}});
+  ctx.inject(["businessAccount", "remote.session"],scope=>{
+    const owned=createExecution(scope,scope.businessAccount);
+    execution=owned;for(const changed of backendListeners)changed();
+    scope.effect(()=>()=>{if(execution===owned){execution=undefined;for(const changed of backendListeners)changed();}});
   });
   const interaction=installPageInteraction(ctx);
   const restored=new Map<MainPanelId,SessionReference>();
@@ -87,14 +88,14 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
         if(page.kind==="html"){
           const bridge=connectHtmlFrame(target,connection,currentExecution,()=>ctx.theme.getTheme(),controller.signal,failure=>{if(alive()){setError(failure instanceof Error?failure.message:String(failure));if(connection)void currentExecution.close(connection).catch(()=>{});}});
           disposeBridge=bridge;const off=ctx.on("theme/change",()=>bridge.sendTheme());disposeTheme=()=>{off();};
-        }else target.contentWindow?.postMessage({type:"gea:session",sessionId:selection.reference.sessionId,lease:connection.lease},window.location.origin);
-        disposeReference=interaction.bindFrame({frame:target,reference:selection.reference,page:title,surface:page.kind==="html"?`gea-html-${page.pluginId}`:"gea-workbench",tool:page.kind==="native"?"gea_workbench_apply":undefined,referenceLease:()=>connection?.lease});
+        }else target.contentWindow?.postMessage({type:"workbench:session",sessionId:selection.reference.sessionId,owner:connection.owner},window.location.origin);
+        disposeReference=interaction.bindFrame({frame:target,reference:selection.reference,page:title,surface:connection.binding.surface,tool:connection.binding.tool,owner:connection.owner});
         setError("");
       });
       connectionTransition.current=setup.catch(failure=>{if(alive()){setError(failure instanceof Error?failure.message:String(failure));if(connection)void currentExecution.close(connection).catch(()=>{});}});
       return()=>{
         controller.abort();disposeTheme();disposeReference();disposeBridge();
-        if(page.kind==="native")target.contentWindow?.postMessage({type:"gea:session",sessionId:null},window.location.origin);
+        if(page.kind==="native")target.contentWindow?.postMessage({type:"workbench:session",sessionId:null},window.location.origin);
         connectionTransition.current=setup.catch(()=>{}).then(async()=>{
           if(connection){const owned=connection;connection=undefined;await currentExecution.close(owned);}
         }).catch(()=>{});
@@ -132,5 +133,19 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const reference=ctx.sessions.retain(id,{source:'agentResourceSelection',signal});
     try{await reference.ready;signal.throwIfAborted();restored.get(page)?.release();restored.set(page,reference);}
     catch(error){reference.release();throw error;}
+  };
+}
+
+function createExecution(ctx:Context,account:import('./company/account.ts').BusinessAccount):WorkbenchPageExecution {
+  const request=async(operation:string,input:object,signal:AbortSignal)=>{
+    const response=await fetch('/api/agent-workbench/page',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({operation,...input}),signal});
+    const value=await response.json();signal.throwIfAborted();if(!response.ok)throw Error(value.error??'PAGE_REQUEST_FAILED');return value;
+  };
+  return {
+    identity:account,
+    async open(page,sessionId,resourceId,signal){const result=await request('open',{pageId:page.id,sessionId,resourceId},signal);return {page,sessionId,resourceId,owner:result.owner,binding:result.binding};},
+    call:(connection,operation,parameters,signal)=>request(operation==='page-bridge'?'catalog':operation,{owner:connection.owner,parameters},signal),
+    close:async connection=>{await request('close',{owner:connection.owner},AbortSignal.timeout(5000));},
+    prompt:async(connection,text,signal)=>{signal.throwIfAborted();const result=await ctx.remote.session.prompt({sessionId:connection.sessionId as any,requestId:crypto.randomUUID() as any,mode:'queue',content:[{type:'text',text}]},signal);signal.throwIfAborted();if(!result.ok)throw Error(result.error.message);},
   };
 }

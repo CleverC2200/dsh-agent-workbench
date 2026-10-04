@@ -1,3 +1,4 @@
+import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from "./page-runtime.ts";
 export interface HtmlPage {
     id: string;
     name: string;
@@ -17,13 +18,14 @@ export interface WorkbenchPages {
     /** Register explicit installed package roots. No capability body or business credentials are read. */
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
     packages(): readonly HtmlPackage[];
+    registerBusinessPage(page: BusinessPage, authorize: AuthorizeBusinessPage): () => void;
 }
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
-export declare class HtmlPages implements WorkbenchPages {
+export declare class HtmlPages extends PageRuntime implements WorkbenchPages {
     private readonly css;
     private readonly picker?;
     private readonly packageDeclarations;
-    constructor(css: string, picker?: (() => Promise<string>) | undefined);
+    constructor(ctx: import("@deepseek-ai/cordis").Context, css: string, picker?: (() => Promise<string>) | undefined);
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
     list(): HtmlPage[];
     packages(): readonly HtmlPackage[];
