@@ -6,6 +6,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {JSDOM} from 'jsdom';
 import {zh} from '../src/company/locales.ts';
+import {readFileSync} from 'node:fs';
 import {SlotCore} from '../../../official-latest-standard/packages/client/ui-slots/lib/index.js';
 const require=createRequire(import.meta.url);
 const bundle=await build({stdin:{contents:"export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';",resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',external:['react','react/jsx-runtime','react-dom'],loader:{'.png':'dataurl','.css':'text'}});
@@ -33,6 +34,15 @@ test('formal account contribution renders the GEA read-only avatar and signed-ou
  const markup=renderToStaticMarkup(React.createElement(entry.component,{wide:true,settingsOpen:false,openSettings:()=>{}}));
  assert.ok(markup.includes('账户菜单'));assert.ok(markup.includes('未登录'));assert.ok(markup.includes('gea-user-avatar'));assert.ok(!markup.includes('workbench-avatar'));
 });
+test('actual owned anchors constrain the bell and put the browser after both drawer headers',t=>{
+ const {entries,renderSlot}=fixture();const entry=entries.find(row=>row.options.name==='sidebar');
+ const markup=renderToStaticMarkup(React.createElement(entry.component,{collapsed:false,width:280,usePanelInfo:selector=>selector({activePanelId:null}),renderSlot}));
+ const dom=new JSDOM('<style>'+readFileSync('src/company/layout.css','utf8')+'</style>'+markup);t.after(()=>dom.window.close());
+ const document=dom.window.document,row=document.querySelector('.gea-sidebar-brand-row'),bell=document.querySelector('[aria-label="消息待办"]'),browser=document.querySelector('.gea-workspace-owned');
+ assert.equal(bell.parentElement,row);assert.equal(dom.window.getComputedStyle(row).position,'relative','the original absolute bell anchors to the brand row');
+ assert.equal(dom.window.getComputedStyle(browser).order,'4','the owned wrapper receives the original browser order rather than the unmatched native-slot selector');
+ const siblings=[...browser.parentElement.children];assert.ok(siblings.indexOf(document.querySelector('.gea-drawer-function'))<siblings.indexOf(browser));assert.ok(siblings.indexOf(document.querySelector('.gea-drawer-workspace'))<siblings.indexOf(browser));
+});
 test('only the two authorized extra modules enter formal navigation and Plugins consumes its registered localized label',()=>{
  const {entries,renderSlot}=fixture();const entry=entries.find(row=>row.options.name==='sidebar');
  const markup=renderToStaticMarkup(React.createElement(entry.component,{collapsed:false,width:280,usePanelInfo:fn=>fn({activePanelId:'gea-proof'}),renderSlot}));
@@ -56,6 +66,9 @@ test('selected native Session keeps formal welcome inside native views while pre
  const dom=new JSDOM(markup);t.after(()=>dom.window.close());const document=dom.window.document;
  assert.ok(document.querySelector('[data-native-flow] .gea-home-hero'));
  assert.equal(document.querySelector('[data-root-controls] .gea-home-hero'),null);
+ assert.ok(document.querySelector('[data-native-flow] .gea-native-selectors'),'Workspace and Agent controls share the content position before the native composer');
+ assert.equal(document.querySelector('[data-root-controls] .gea-native-selectors'),null,'selected-session controls do not sit after the composer in root width controls');
+ assert.ok(document.querySelector('.gea-native-history[hidden]'),'only the proven blank transcript is hidden; its actual Session seat remains mounted');
  assert.ok(document.querySelector('[data-native-flow] [data-native-seat="conversation.session"]'));
 });
 test('retained Workbench directory reads current official workspace facts and provides native Conversation plus resource selection',()=>{

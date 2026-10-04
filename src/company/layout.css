@@ -1,19 +1,22 @@
 /* Owned containers replacing the old portal anchors. Visual rules stay in shell.css. */
 .gea-sidebar-owned {height:100%;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;padding:12px;}
 .gea-sidebar-brand-row,.gea-sidebar-brand {display:flex;align-items:center;min-width:0;}
+.gea-sidebar-brand-row {position:relative;}
 .gea-sidebar-brand {flex:1;}
 .gea-sidebar-region {flex:1;}
 .gea-sidebar-footer {display:flex;align-items:center;flex:none;}
 .gea-sidebar-footer>div:first-child {flex:1;min-width:0;}
-.gea-workspace-owned {flex:1;min-height:0;overflow:hidden;}
+.gea-workspace-owned {order:4;flex:1;min-height:0;overflow:hidden;}
 .gea-workspace-owned[hidden] {display:none;}
 .gea-account-launcher {--gea-sidebar-ink:rgb(31,31,31);}
 .gea-company-main {height:100%;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:white;}
 .gea-native-content {flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
-.gea-main-views {display:flex;flex-direction:column;flex:1 0 auto;}
-.gea-main-views>.gea-home-hero {margin-top:auto;}
-.gea-main-choices {flex:none;}
-.gea-main-choices[data-cold] {order:-1;flex:0 1 auto;min-height:0;overflow:auto;}
+.gea-main-views {display:flex;flex-direction:column;flex:1 0 auto;min-height:0;}
+.gea-home-position {flex:1;min-height:0;display:flex;align-items:center;justify-content:center;}
+.gea-native-history {flex:1;min-height:0;display:flex;flex-direction:column;}
+.gea-native-history[hidden] {display:none;}
+.gea-cold-start {order:-1;flex:0 1 auto;min-height:0;display:flex;flex-direction:column;overflow:auto;}
+.gea-owned-sidebar-toggle {position:static;transform:none;flex:none;}
 .gea-native-selectors {display:flex;align-items:center;gap:12px;padding:0 24px 8px;}
 .gea-directory-owned {height:100%;min-height:0;overflow:auto;padding:24px;box-sizing:border-box;}
 .gea-shell-leading {display:flex;align-items:center;gap:8px;}
