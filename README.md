@@ -1,6 +1,6 @@
 # Agent 工作台
 
-Workbench 在未修改的官方 DSH `4878cdabd87d4041bdaff61d04c966883b9fd07a` 上提供统一页面目录、原生页面入口、HTML 呈现与包内资源桥。官方 `ui-layout`、侧栏工作区、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开静态页面不会创建 Session、改写 preset 或发送模型请求。
+Workbench 在未修改的官方 DSH `4878cdabd87d4041bdaff61d04c966883b9fd07a` 上提供公司品牌、账户投影、业务分组导航、欢迎区与公共工具栏，并承载原生页面、HTML 与包内资源桥。官方 `ui-layout`、工作区浏览器、设置、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开静态页面不会创建 Session、改写 preset 或发送模型请求。
 
 ## 页面接入
 
@@ -26,7 +26,7 @@ Host 公开认证 Fetch：
 
 ## 官方输入与构建
 
-`cordis.patch.yml` 只插入本插件，保持官方 `ui-layout` 启用。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-core` 标准产物，包括官方 Cordis `4.0.4`。旧 npm 锁仅用于准备开发工具，不能作为官方适配或运行的证据；最终外部 SDK 与宿主必须来自同一个官方输入。
+`cordis.patch.yml` 插入本插件并公开禁用默认 `ui-sidebar`；Workbench 声明原公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务/Factory保持启用。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-core` 标准产物，包括官方 Cordis `4.0.4`。旧 npm 锁仅用于准备开发工具，不能作为官方适配或运行的证据；最终外部 SDK 与宿主必须来自同一个官方输入。
 
 ```sh
 npm ci --ignore-scripts --prefer-offline
@@ -44,6 +44,8 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 `business/inventory-fc` 与 `business/inventory-aqkc` 保留当前已迁移页面源码和包内资源。提示词／Skill 正文归 Manage，授权执行归 GEA，后续消费者迁移需接续原必要业务桥。静态页面通过不等于这些业务能力已验收。
 
 ## 显式页面能力与受控桥
+
+公司自有主壳通过公开 `conversation.content` 的 `embedded` 呈现消费原生会话。已有 Session 的欢迎、资源和工作区/Agent控件位于 Factory 的 `views` 内容流，同时保留官方 `conversation.session` 与 resident composer；长资源使用同一官方滚动区域，不能作为不可收缩的宽度控件挤走输入区。无 Session 时的冷启动控件保留在独立可收缩滚动容器，官方惯有输入仍呈现。工作区切换沿 Factory 的 `selectWorkspace`，保留官方草稿转移行为，不复制私有主壳样式或扫描宿主 DOM。
 
 页面的“连接页面与原生对话”动作按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。Workbench 经公开 SessionProvider 与 conversation.content factory呈现原生对话，不保存第二套全局当前会话、认证或 preset。静态原型无这项前置。
 

@@ -39,7 +39,20 @@ test('company Conversation composes its welcome and the native content with orig
  const {entries}=fixture();const entry=entries.find(e=>e.options.name==='main.conversation');assert.ok(entry);
  const markup=renderToStaticMarkup(React.createElement(entry.component,{useSession:()=>undefined,useConversation:()=>undefined,useSessions:fn=>fn({byId:{}}),renderFactorySlot:(_name,options,extension)=>React.createElement('div',{'data-native-content':options.variant},React.createElement(extension.slots.widthControls,{useWorkspaces:fn=>fn({items:[]}),renderSlot:name=>React.createElement('div',{'data-seat':name}),selectWorkspace:()=>{}}))}));
  assert.ok(markup.includes('思念企业 AI 协作伙伴'));assert.ok(markup.includes('让 AI 进入工作流程'));
- assert.ok(markup.includes('conversation.hero.workspace'));assert.ok(markup.includes('conversation.hero.agentPreset'));assert.ok(markup.includes('data-native-content="main"'));
+ assert.ok(markup.includes('conversation.hero.workspace'));assert.ok(markup.includes('conversation.hero.agentPreset'));assert.ok(markup.includes('data-native-content="embedded"'));
+});
+test('the public Session-bound Conversation keeps welcome and resources in the native content flow, not the root width controls',t=>{
+ const {entries}=fixture();const entry=entries.find(row=>row.options.name==='main.conversation');
+ const session={blank:true,running:false,promptAttempted:false,openState:'open'};
+ const markup=renderToStaticMarkup(React.createElement(entry.component,{sessionId:'selected-native-session',useSession:selector=>selector(session),useConversation:selector=>selector({activeTargets:new Set()}),useSessions:selector=>selector({byId:{'selected-native-session':{cwd:'/native/project'}}}),renderFactorySlot:(_name,options,extension)=>{
+  const shares={sessionId:'selected-native-session',useSession:selector=>selector(session),useWorkspaces:selector=>selector({items:[]}),selectWorkspace:()=>{},renderSlot:name=>React.createElement('article',{'data-native-seat':name})};
+  const Views=extension.slots.views;
+  return React.createElement('div',{'data-native-content':options.variant},React.createElement('div',{'data-native-flow':true},Views?React.createElement(Views,shares):shares.renderSlot('conversation.session')),React.createElement('div',{'data-root-controls':true},React.createElement(extension.slots.widthControls,shares)));
+ }}));
+ const dom=new JSDOM(markup);t.after(()=>dom.window.close());const document=dom.window.document;
+ assert.ok(document.querySelector('[data-native-flow] .workbench-main-welcome'),'company resources must share the native scrolling flow with the selected Session');
+ assert.equal(document.querySelector('[data-root-controls] .workbench-main-welcome'),null);
+ assert.ok(document.querySelector('[data-native-flow] [data-native-seat="conversation.session"]'),'native history still renders through its existing Session seat');
 });
 test('company registrations obey the fixed official public declaration ledger with the default Sidebar disabled',()=>{
  const core=new SlotCore();

@@ -114,15 +114,21 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   },[sessionId]);
   const blank=!session||!conversation||(conversation.activeTargets.size===0&&session.blank&&!session.running&&!session.promptAttempted);
   const loading=session?.openState==='loading'&&!blank;
-  const WelcomeControls=useMemo(()=>function CompanyMainWelcome({useWorkspaces,renderSlot,selectWorkspace}:FactoryLocalComponentPropsOf<'conversation.content','widthControls'>){
+  const positions=useMemo(()=>{
+   function Welcome({useWorkspaces,renderSlot,selectWorkspace}:Pick<FactoryLocalComponentPropsOf<'conversation.content','widthControls'>,'useWorkspaces'|'renderSlot'|'selectWorkspace'>){
     const workspaces=useWorkspaces(value=>value.items);const current=workspaces.find(workspace=>workspace.sessionIds.includes(sessionId!));
     const [pickerOpen,setPickerOpen]=useState(false);
-    return blank?<div className="workbench-main-welcome"><CompanyWelcome/><div className="workbench-native-selectors"><button type="button" onClick={()=>setPickerOpen(value=>!value)} aria-expanded={pickerOpen}>{current?.title||'选择工作区'}</button>{renderSlot('conversation.hero.workspace',{open:pickerOpen,selectedId:current?.workspaceId,onPick:id=>{setPickerOpen(false);void selectWorkspace(id);},onClose:()=>setPickerOpen(false)})}{renderSlot('conversation.hero.agentPreset',{})}</div><Resources cwd={cwd}/></div>:null;
+    return <div className="workbench-main-welcome"><CompanyWelcome/><div className="workbench-native-selectors"><button type="button" onClick={()=>setPickerOpen(value=>!value)} aria-expanded={pickerOpen}>{current?.title||'选择工作区'}</button>{renderSlot('conversation.hero.workspace',{open:pickerOpen,selectedId:current?.workspaceId,onPick:id=>{setPickerOpen(false);void selectWorkspace(id);},onClose:()=>setPickerOpen(false)})}{renderSlot('conversation.hero.agentPreset',{})}</div><Resources cwd={cwd}/></div>;
+   }
+   return {
+    views:function MainViews(props:FactoryLocalComponentPropsOf<'conversation.content','views'>){return <div className="workbench-main-views">{blank&&<Welcome {...props}/>} {props.renderSlot('conversation.session',{})}</div>;},
+    widthControls:function ColdWelcome(props:FactoryLocalComponentPropsOf<'conversation.content','widthControls'>){return sessionId===undefined&&blank?<div className="workbench-cold-welcome"><Welcome {...props}/></div>:null;},
+   };
   },[blank,cwd,sessionId]);
   const title=useSessions(value=>sessionId?value.byId[sessionId]?.title:undefined);
   return <section className="agent-workbench-ui workbench-main-conversation"><header className="workbench-main-toolbar"><strong>{title||'AI工作台'}</strong><button type="button" onClick={()=>workbench.showHistory()}>历史对话</button><button type="button" onClick={()=>ctx.uiWorkspace.startSession()}>新建会话</button></header>
    {historyError&&<p role="alert">{historyError}</p>}
-   {renderFactorySlot('conversation.content',{variant:'main',phase:loading?'settling':'active',hero:false},{slots:{widthControls:WelcomeControls}})}
+   <div className="workbench-native-content">{renderFactorySlot('conversation.content',{variant:'embedded',phase:loading?'settling':'active',hero:false},{slots:positions})}</div>
   </section>;
  }
  ctx.slots.inject('sidebar',()=>ctx.slots.register({name:'sidebar',priority:-20,children:{'sidebar.brand.mark':{kind:'single',scope:'root'},'sidebar.brand.name':{kind:'single',scope:'root'},'sidebar.panellist':{kind:'list',scope:'root'},'sidebar.workspaces':{kind:'single',scope:'root'},'sidebar.settings':{kind:'single',scope:'root'},'sidebar.footer.action':{kind:'list',scope:'root'}}},Sidebar));
