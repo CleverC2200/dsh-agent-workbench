@@ -4,7 +4,7 @@ import {build} from 'esbuild';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
-const core=resolve('../../official-core'), official=path=>pathToFileURL(resolve(core,path)).href;
+const core=resolve('../../official-latest-standard'), official=path=>pathToFileURL(resolve(core,path)).href;
 const {Context}=await import(official('vendor/cordis/lib/index.js'));
 const {default:Tools}=await import(official('packages/core/tools/lib/index.js'));
 const {default:SystemPrompt}=await import(official('packages/core/system-prompt/lib/index.js'));

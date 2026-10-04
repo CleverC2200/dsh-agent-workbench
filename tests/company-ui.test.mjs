@@ -6,7 +6,7 @@ import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {JSDOM} from 'jsdom';
 import {zh} from '../src/company/locales.ts';
-import {SlotCore} from '../../../official-core/packages/client/ui-slots/lib/index.js';
+import {SlotCore} from '../../../official-latest-standard/packages/client/ui-slots/lib/index.js';
 const require=createRequire(import.meta.url);
 const bundle=await build({stdin:{contents:"export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';",resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',external:['react','react/jsx-runtime','react-dom'],loader:{'.png':'dataurl','.css':'text'}});
 const module={exports:{}};new Function('module','exports','require',bundle.outputFiles[0].text)(module,module.exports,require);
