@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState, useSyncExternalStore} from "react";
+import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from "react";
 import type {Context} from "@deepseek-ai/cordis";
 import type {SessionReference} from "@deepseek-ai/dsh-api-session-controller/client";
 import type {SessionId} from '@deepseek-ai/dsh-session/types';
@@ -11,6 +11,7 @@ import {connectHtmlFrame} from "./html-bridge.ts";
 import {installPageInteraction} from "./page-interaction/client.ts";
 import {CompanyWelcome} from './company/ui.tsx';
 import {ConversationToolbar} from './company/formal-components.tsx';
+import layoutCss from './frame-presenter.css';
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotFactoryMap {
@@ -24,6 +25,9 @@ const noSubscribe=()=>()=>{};
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey="pageConnect"|"pageNewChat"|"pageWorking"|"pageChanged"|"pageHint"|"pageWait"|"pageLogin"|"pageSessionUnavailable";
 export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceSelection|undefined,t:(key:FrameCopyKey)=>string,showHistory:(page?:MainPanelId)=>void=()=>{}):(page:MainPanelId,sessionId:SessionId,signal:AbortSignal)=>Promise<void> {
+  ctx.effect(()=>{const style=document.createElement('style');style.dataset.workbenchDocument='layout';style.textContent=layoutCss;document.head.append(style);return()=>style.remove();});
+  // Formal Workbench remembered this value for the plugin instance, across pages and modes.
+  let rememberedConversationWidth:number|undefined;
   let execution:WorkbenchPageExecution|undefined;
   const backendListeners=new Set<()=>void>();
   ctx.inject(["businessAccount", "remote.session"],scope=>{
@@ -39,6 +43,24 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const currentExecution=useSyncExternalStore(listener=>{backendListeners.add(listener);return()=>{backendListeners.delete(listener);};},()=>execution);
     const identity=useSyncExternalStore(currentExecution?.identity.subscribe??noSubscribe,currentExecution?.identity.getSnapshot??(()=>unknownIdentity));
     const frame=useRef<HTMLIFrameElement>(null);
+    const documentElement=useRef<HTMLElement>(null);
+    const [preferredWidth,setPreferredWidth]=useState(()=>rememberedConversationWidth??440);
+    const [space,setSpace]=useState({viewport:window.innerWidth,document:0});
+    const maximumWidth=Math.max(300,Math.min(space.viewport*.7,space.document?space.document-400:Infinity));
+    const conversationWidth=Math.min(maximumWidth,Math.max(300,Math.round(preferredWidth)));
+    const drag=useRef<{pointer:number;x:number;width:number}>();
+    useLayoutEffect(()=>{
+      const target=documentElement.current!;
+      const measure=()=>{const width=target.getBoundingClientRect().width;setSpace({viewport:window.innerWidth,document:width});};
+      measure();window.addEventListener('resize',measure);
+      const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(measure);observer?.observe(target);
+      return()=>{window.removeEventListener('resize',measure);observer?.disconnect();};
+    },[]);
+    const resizeConversation=(x:number)=>{
+      const current=drag.current;if(!current)return;
+      const width=Math.min(maximumWidth,Math.max(300,Math.round(current.width+current.x-x)));
+      rememberedConversationWidth=width;setPreferredWidth(width);
+    };
     const [loaded,setLoaded]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState("");
     const [view,setView]=useState<'center'|'split'|'chat'>('split');
     const [selection,setSelection]=useState<{reference:SessionReference;preset:string;ownerScope:string|null}|undefined>(()=>{
@@ -137,11 +159,16 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       })().catch(failure=>{if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));});
       return()=>{controller.abort();if(preparation.current===controller)preparation.current=undefined;};
     },[identity.scope,identity.status?.authenticated,currentExecution,page.resourceId]);
-    return <section className="agent-workbench-ui agent-workbench-document">
-      <div className={'gea-page-toolbar-anchor'+(selection&&view==='split'?' for-conversation':'')}><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>
-      <div className={"agent-workbench-document-body"+(selection?" with-conversation":"")+' view-'+view}>
-        {Body?<div className="agent-workbench-html"><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
-        {selection&&<aside className="agent-workbench-native-conversation"><SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider></aside>}
+    return <section ref={documentElement} className="agent-workbench-ui agent-workbench-document" style={{'--workbench-ai-preferred-width':conversationWidth+'px'} as React.CSSProperties}>
+      <div className={'gea-page-toolbar-anchor'+(view==='split'?' for-conversation':'')}><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>
+      <div className={"agent-workbench-document-body view-"+view}>
+        {Body?<div className="agent-workbench-html" hidden={view==='chat'}><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" hidden={view==='chat'} onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
+        <div role="separator" aria-label="调整业务与AI栏宽" aria-orientation="vertical" className="agent-workbench-column-handle" hidden={view!=='split'}
+          onPointerDown={event=>{if(event.button!==0||space.viewport<=1200||drag.current)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);drag.current={pointer:event.pointerId,x:event.clientX,width:conversationWidth};}}
+          onPointerMove={event=>{if(drag.current?.pointer===event.pointerId)resizeConversation(event.clientX);}}
+          onPointerUp={event=>{if(drag.current?.pointer!==event.pointerId)return;resizeConversation(event.clientX);drag.current=undefined;event.currentTarget.releasePointerCapture(event.pointerId);}}
+          onPointerCancel={()=>{drag.current=undefined;}} onLostPointerCapture={()=>{drag.current=undefined;}}/>
+        <aside className="agent-workbench-native-conversation" aria-label="AI对话" hidden={view==='center'}>{selection?<SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider>:<p className="agent-workbench-page-status" role={error?"alert":"status"}>{error||t(!currentExecution||identity.state==="unknown"?"pageWait":!identity.status?.authenticated?"pageLogin":!resources()||!page.resourceId?"pageWait":busy?"pageWorking":"pageHint")}</p>}</aside>
       </div>
     </section>;
   }

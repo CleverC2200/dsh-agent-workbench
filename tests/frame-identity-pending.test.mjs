@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);const {JSDOM}=require('jsdom');
 const {outputFiles}=await build({stdin:{contents:`export {mountFramePresentation} from './src/frame-presenter.tsx';export {createElement,act} from 'react';export {createRoot} from ${JSON.stringify(require.resolve('react-dom/client'))};`,resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',alias:{react:resolve('node_modules/react')},loader:{'.png':'dataurl','.css':'text'}});
 const module={exports:{}};new Function('module','exports','require',outputFiles[0].text)(module,module.exports,require);
 const {mountFramePresentation,createElement,createRoot,act}=module.exports;
-async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=false,delayList=false,selectionFails=false,localBody=false}={}){
+async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=false,delayList=false,selectionFails=false,localBody=false,available=true}={}){
  const dom=new JSDOM('<main id="root"></main>',{url:'https://host.example/workbench',pretendToBeVisual:true});
  const keys=['window','document','navigator','IS_REACT_ACT_ENVIRONMENT','MessageChannel'];const saved=keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
  for(const [key,value]of [['window',dom.window],['document',dom.window.document],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true],['MessageChannel',class{constructor(){this.port1={onmessage:null,close(){}};this.port2={postMessage:value=>setImmediate(()=>this.port1.onmessage?.({data:value})),close(){}};}}]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
@@ -23,9 +23,9 @@ async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=fa
   if(selectionFails)return Response.json({error:'ORIGINAL_RESOURCE_FAILURE'},{status:400});
   return enabled?Response.json({preset:'original'}):Response.json({error:'AGENT_RESOURCE_DISABLED_OR_MISSING'},{status:400});
  },workspace:async path=>{calls.push(['workspace',path]);return 'workspace';},create:async()=> 'session-'+(++sessions),select:async()=>{},open:async id=>({sessionId:id,binding:{ctx:{}},ready:Promise.resolve({}),release(){calls.push(['release',id]);}})};
- mountFramePresentation(ctx,()=>host,key=>key,page=>calls.push(['history',page]));const root=createRoot(dom.window.document.getElementById('root'));
+ mountFramePresentation(ctx,()=>available?host:undefined,key=>key,page=>calls.push(['history',page]));const root=createRoot(dom.window.document.getElementById('root'));
  const page=localBody?{id:'gea-inbox',label:'Original inbox',kind:'local',body:()=>createElement('article',{'data-original-inbox':true},'original body'),resourceId:'original'}:{id:'native',label:'Original page',src:'https://host.example/document',kind:'native',resourceId:'original'};
- const render=()=>root.render(createElement(Document,{page,SessionProvider:({session,children})=>createElement('div',{'data-retained-session':session.sessionId},children),renderSlot:()=>createElement(Conversation,{page:page.id,useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderFactorySlot:name=>createElement('div',{'data-official-factory':name})})}));
+ const render=()=>root.render(createElement(Document,{page,SessionProvider:({session,children})=>createElement('div',{'data-retained-session':session.sessionId},children),renderSlot:()=>createElement(Conversation,{page:page.id,useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderFactorySlot:name=>createElement('div',{'data-official-factory':name},createElement('textarea',{'aria-label':'SDK draft fixture',defaultValue:''}))})}));
  t.after(async()=>{await act(async()=>root.unmount());effects.reverse().forEach(off=>off());dom.window.close();for(const [key,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}});
  await act(async()=>render());
  return {dom,calls,waiting,render,dispose:async()=>act(async()=>root.unmount()),counts:()=>({sessions,listRequests,selectionRequests}),changeIdentity:async()=>act(async()=>{snapshot={...snapshot,scope:'principal-b'};for(const listener of listeners)listener();}),newConversation:async()=>act(async()=>dom.window.document.querySelector('[aria-label="新建对话"]').click()),resolve:async(item,value)=>act(async()=>item.resolve(Response.json(value)))};
@@ -71,4 +71,43 @@ test('local original Inbox body shares actual resource selection, toolbar and Se
 
 for(const options of [{authenticated:false},{enabled:false}])test(`local Inbox preserves the original body without invented Session for ${options.authenticated===false?'Guest':'disabled resource'}`,async t=>{
  const f=await fixture(t,{localBody:true,...options});assert.ok(f.dom.window.document.querySelector('[data-original-inbox]'));assert.equal(f.dom.window.document.querySelector('iframe'),null);assert.equal(f.dom.window.document.querySelector('[data-retained-session]'),null);assert.equal(f.counts().sessions,0);assert.equal(f.counts().selectionRequests,0);
+});
+
+for(const options of [{authenticated:false},{enabled:false},{selectionFails:true}])test(`unbound business Document preserves its AI region and reports ${options.authenticated===false?'login':options.enabled===false?'resource selection':'preparation failure'} without a Session or composer`,async t=>{
+ const f=await fixture(t,options);
+ const ai=f.dom.window.document.querySelector('[aria-label="AI对话"]');
+ assert.ok(ai,'the split view retains a visible AI region before a Session is bound');
+ assert.equal(ai.hidden,false);
+ assert.match(ai.textContent,new RegExp(options.authenticated===false?'pageLogin':options.selectionFails?'ORIGINAL_RESOURCE_FAILURE':'pageHint'));
+ assert.equal(ai.querySelector('[data-retained-session]'),null);
+ assert.equal(ai.querySelector('textarea,input,[contenteditable="true"]'),null);
+ const business=f.dom.window.document.querySelector('iframe');
+ await act(async()=>f.dom.window.document.querySelector('[aria-label="会话区最大，隐藏中间区域"]').click());
+ assert.equal(business.hidden,true);assert.equal(ai.hidden,false);
+ await act(async()=>f.dom.window.document.querySelector('[aria-label="中间区域最大，隐藏会话区"]').click());
+ assert.equal(business.hidden,false);assert.equal(ai.hidden,true);
+ await act(async()=>f.dom.window.document.querySelector('[aria-label="同时显示中间区域和会话区"]').click());
+ assert.equal(business.hidden,false);assert.equal(ai.hidden,false);
+ assert.equal(f.dom.window.document.querySelector('iframe'),business,'switching modes keeps the business frame');
+ assert.equal(f.counts().sessions,0);
+});
+
+test('mode changes retain the borrowed Session, public Conversation draft and business frame without resource preparation',async t=>{
+ const f=await fixture(t);const document=f.dom.window.document;
+ const session=document.querySelector('[data-retained-session]'),draft=document.querySelector('[aria-label="SDK draft fixture"]'),business=document.querySelector('iframe');
+ draft.value='尚未发送的分析问题';
+ for(const label of ['中间区域最大，隐藏会话区','会话区最大，隐藏中间区域','同时显示中间区域和会话区']){
+  await act(async()=>document.querySelector('[aria-label="'+label+'"]').click());
+  assert.equal(document.querySelector('[data-retained-session]'),session,'the same borrowed Session provider remains mounted');
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]'),draft);assert.equal(draft.value,'尚未发送的分析问题');
+  assert.equal(document.querySelector('iframe'),business);
+ }
+ assert.deepEqual(f.counts(),{sessions:1,listRequests:1,selectionRequests:1});
+ assert.equal(f.calls.some(row=>row[0]==='release'),false,'mode changes do not release or rebind the current reference');
+});
+
+test('unavailable resource backend keeps the AI region and reports readiness without a fabricated Conversation',async t=>{
+ const f=await fixture(t,{available:false});const ai=f.dom.window.document.querySelector('[aria-label="AI对话"]');
+ assert.ok(ai);assert.equal(ai.hidden,false);assert.match(ai.textContent,/pageWait/);
+ assert.equal(ai.querySelector('[data-official-factory]'),null);assert.equal(f.counts().sessions,0);
 });

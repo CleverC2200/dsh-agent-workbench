@@ -20,8 +20,3 @@
 .gea-native-selectors {box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance));max-width:var(--dsh-composer-card-max-width);margin-left:auto;margin-right:auto;margin-bottom:8px;}
 .gea-directory-owned {height:100%;min-height:0;overflow:auto;padding:24px;box-sizing:border-box;}
 .gea-shell-leading {display:flex;align-items:center;gap:8px;}
-.agent-workbench-document {position:relative;}
-.gea-page-toolbar-anchor {position:absolute;z-index:16;top:0;right:0;left:0;height:58px;}
-.gea-page-toolbar-anchor.for-conversation {left:auto;width:36%;min-width:340px;}
-.agent-workbench-document-body.with-conversation>.agent-workbench-native-conversation {padding-top:58px;box-sizing:border-box;}
-.agent-workbench-document-body.view-center>.agent-workbench-html {padding-top:58px;box-sizing:border-box;}
