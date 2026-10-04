@@ -23,12 +23,17 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly pages;
     private disposed;
     private readonly listeners;
+    private readonly historyListeners;
+    private historyPage;
     constructor(ports: WorkbenchPorts);
     register(page: WorkbenchPage): () => void;
     open(id: MainPanelId): Promise<boolean>;
     registerFrame(page: WorkbenchFramePage): () => void;
     label(id: MainPanelId): string;
     subscribe(listener: () => void): () => void;
+    showHistory(page?: MainPanelId): void;
+    takeHistoryPage(): MainPanelId | undefined;
+    subscribeHistory(listener: () => void): () => void;
     private changed;
     dispose(): void;
 }

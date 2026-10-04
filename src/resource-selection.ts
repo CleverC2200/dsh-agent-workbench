@@ -16,16 +16,21 @@ export interface NativeResourceSelection {
  open(sessionId:string,skill:string|undefined,signal:AbortSignal,embedded?:boolean):Promise<SessionReference|void>;
 }
 export interface ResourceSummary {id:string;label:string;kind:'prompt'|'skill';installed:boolean;enabled:boolean;provider:string;skills?:string[];missingSkills?:string[];error?:string}
-export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal,embedded=false):Promise<{sessionId:string;preset:string;reference?:SessionReference}> {
- const configResponse=await host.fetch('/api/agent-workbench/config',{signal,cache:'no-store'});
+export async function resourceWorkspace(request:typeof fetch,signal:AbortSignal,cwd?:string):Promise<string> {
+ if(cwd?.trim())return cwd;
+ const configResponse=await request('/api/agent-workbench/config',{signal,cache:'no-store'});
  if(!configResponse.ok)throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
  const config=await configResponse.json() as {cwd?:unknown};
  if(typeof config.cwd!=='string'||!config.cwd.trim())throw Error('WORKBENCH_WORKSPACE_REQUIRED');
- const response=await host.fetch('/api/agent-manage/resources/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id}),signal});
+ return config.cwd;
+}
+export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal,embedded=false,currentCwd?:string):Promise<{sessionId:string;preset:string;reference?:SessionReference}> {
+ const cwd=await resourceWorkspace(host.fetch,signal,currentCwd);
+ const response=await host.fetch('/api/agent-manage/resources/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,cwd}),signal});
  const resource=await response.json() as {preset?:unknown;skill?:unknown;error?:string};
  if(!response.ok||typeof resource.preset!=='string')throw Error(resource.error??'RESOURCE_SELECTION_FAILED');
  signal.throwIfAborted();
- const workspaceId=await host.workspace(config.cwd);
+ const workspaceId=await host.workspace(cwd);
  signal.throwIfAborted();
  const sessionId=await host.create({workspaceId});
  signal.throwIfAborted();

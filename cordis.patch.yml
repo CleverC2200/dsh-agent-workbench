@@ -1,3 +1,5 @@
+- id: ui-sidebar
+  disabled: true
 - insert:
     - id: agent-workbench
       name: "@cleverc2200/dsh-agent-workbench"

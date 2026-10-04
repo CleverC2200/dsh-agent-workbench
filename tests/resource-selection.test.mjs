@@ -21,3 +21,10 @@ test('a page resource action returns its own real host reference for embedded Co
  const selected=await selectResource(host,'gea-readonly',new AbortController().signal,true);
  assert.equal(embedded,true);assert.equal(selected.sessionId,'page-session');assert.equal(selected.reference,reference);assert.equal(selected.preset,'gea-readonly');
 });
+test('resource selection sends the same explicit workspace to Manage and the official Session owner',async()=>{
+ const calls=[];
+ const host={fetch:async(path,options)=>{calls.push([path,options]);return Response.json(path.endsWith('/config')?{cwd:'/isolated/project'}:{preset:'project-skill'});},workspace:async cwd=>{calls.push(['workspace',cwd]);return 'project';},create:async()=> 'session',select:async()=>{},open:async()=>{}};
+ await selectResource(host,'skill:project',new AbortController().signal);
+ assert.deepEqual(JSON.parse(calls[1][1].body),{id:'skill:project',cwd:'/isolated/project'});
+ assert.deepEqual(calls[2],['workspace','/isolated/project']);
+});

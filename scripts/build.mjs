@@ -27,7 +27,7 @@ const workbench = await build({
   platform: "browser",
   target: "es2022",
   external: ["react", "@deepseek-ai/dsh-client-store"],
-  loader: { ".module.css": "local-css", ".css": "text" },
+  loader: { ".module.css": "local-css", ".css": "text", ".png":"dataurl" },
 });
 const workbenchCode = workbench.outputFiles.find((file) =>
   file.path.endsWith(".js"),

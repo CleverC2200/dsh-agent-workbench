@@ -45,3 +45,4 @@ declare module "@deepseek-ai/dsh-api-session-controller/client" {
     }
 }
 export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";
+export type { BusinessAccount } from './company/account.ts';

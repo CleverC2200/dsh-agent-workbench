@@ -5,7 +5,8 @@ import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-sidebar/client";
 import type {} from "@deepseek-ai/dsh-client-ui-theme/client";
 import type {} from "@deepseek-ai/dsh-client-locale/client";
-import { selectResource, mountNativeResourceSelection, type ResourceSummary, type NativeResourceSelection } from "./resource-selection.ts";
+import { selectResource, resourceWorkspace, mountNativeResourceSelection, type ResourceSummary, type NativeResourceSelection } from "./resource-selection.ts";
+import {mountCompanyUI} from './company/ui.tsx';
 import type {} from "@deepseek-ai/dsh-api-session-controller/client";
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
 import { WorkbenchController, type AgentWorkbench } from "./workbench.ts";
@@ -14,8 +15,7 @@ import css from "../theme/tokens.css";
 import { mountFramePresentation } from "./frame-presenter.tsx";
 import type { PropsRuntime, PropsRenderFactories } from "@deepseek-ai/dsh-client-ui-slots";
 
-export const inject = ["slots", "layout", "locale", "theme"];
-const DIRECTORY = "agent-workbench" as MainPanelId;
+export const inject = ["slots", "layout", "locale", "theme", "uiWorkspace"];
 const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"当前不可用 Skill", resourcesFailed:"资源清单读取失败，请刷新。", selectionFailed:"资源选用失败，请重试。", resourceWorking:"正在装载", resourcesRefresh:"刷新资源",pageConnect:"连接页面与原生对话",pageNewChat:"开始新的页面对话",pageWorking:"正在连接…",pageChanged:"登录身份已变化，请重新选用页面能力。",pageHint:"业务读取需登录并选用页面能力。",pageWait:"页面能力尚未就绪，请稍后重试。",pageLogin:"请先登录 GEA，再连接页面能力。",pageSessionUnavailable:"页面原生会话未就绪。" };
 const en = { title: "Workbench", pages: "Available pages", conversation: "Conversation", failed: "Page directory unavailable", retry: "Retry", empty: "No pages available", resources:"Prompts and Skills", start:"Start a new chat", useSkill:"Use in a new chat", unavailable:"Unavailable", missing:"Unavailable Skills", resourcesFailed:"Resource list unavailable. Please refresh.", selectionFailed:"Unable to select this resource. Please retry.", resourceWorking:"Loading", resourcesRefresh:"Refresh resources",pageConnect:"Connect page and Conversation",pageNewChat:"Start a new page chat",pageWorking:"Connecting…",pageChanged:"Your identity changed. Select this page resource again.",pageHint:"Business reads require login and a selected page resource.",pageWait:"Page capability is not ready. Please retry shortly.",pageLogin:"Sign in to GEA before connecting this page.",pageSessionUnavailable:"The page Conversation is unavailable." };
 
@@ -29,7 +29,7 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind("agentWorkbench");
   ctx.effect(() => {
     const style = document.createElement("style");
-    style.dataset.agentWorkbenchTheme = "1.0.0";
+    style.dataset.agentWorkbenchTheme = "1.1.0";
     style.textContent = css;
     document.head.append(style);
     return () => style.remove();
@@ -44,27 +44,27 @@ export function apply(ctx: Context): void {
 
   let nativeResources: NativeResourceSelection | undefined;
   mountNativeResourceSelection(ctx, host => {nativeResources=host;});
-  mountFramePresentation(ctx,()=>nativeResources,key=>t(key));
+  const restorePageSession=mountFramePresentation(ctx,()=>nativeResources,key=>t(key),page=>workbench.showHistory(page));
 
-  function Resources() {
+  function Resources({cwd}:{cwd?:string}) {
     const [rows,setRows]=useState<ResourceSummary[]>([]);
     const [resourceRevision,refreshResources]=useState(0);
     const [error,setError]=useState(""); const [selectionError,setSelectionError]=useState(false); const [busy,setBusy]=useState("");
     const pending=useRef<AbortController>();
     useEffect(() => {
       const lifetime=new AbortController();
-      void fetch("/api/agent-manage/resources",{signal:lifetime.signal,cache:"no-store"}).then(async response=>{
+      void resourceWorkspace(fetch,lifetime.signal,cwd).then(path=>fetch("/api/agent-manage/resources?"+new URLSearchParams({cwd:path}),{signal:lifetime.signal,cache:"no-store"})).then(async response=>{
         if(!response.ok)throw Error(`HTTP ${response.status}`);const value=await response.json();lifetime.signal.throwIfAborted();setRows(value);setError("");
       }).catch(failure=>{if(!lifetime.signal.aborted){console.error("[agent-workbench] resource list failed",failure);setSelectionError(false);setError(String(failure));}});
       return () => {lifetime.abort();pending.current?.abort();};
-    },[resourceRevision]);
+    },[resourceRevision,cwd]);
     const choose=async (id:string) => {
       pending.current?.abort();const controller=new AbortController();pending.current=controller;setBusy(id);setError("");
-      try {if(!nativeResources)throw Error(t("unavailable"));await selectResource(nativeResources,id,controller.signal);}
+      try {if(!nativeResources)throw Error(t("unavailable"));await selectResource(nativeResources,id,controller.signal,false,cwd);}
       catch(failure){if(!controller.signal.aborted){console.error("[agent-workbench] resource selection failed",{id,error:failure instanceof Error?failure.message:String(failure)});setSelectionError(true);setError(String(failure));}}
       finally{if(!controller.signal.aborted)setBusy("");}
     };
-    return React.createElement("section",null,React.createElement("h2",null,t("resources")),
+    return React.createElement("details",{className:'workbench-resources'},React.createElement("summary",null,t("resources")),
       React.createElement("button",{type:"button",disabled:Boolean(busy),onClick:()=>refreshResources(value=>value+1)},t("resourcesRefresh")),
       error?React.createElement("p",{role:"alert"},selectionError?t("selectionFailed"):t("resourcesFailed")):null,
       ...rows.map(row=>React.createElement("div",{key:row.id},
@@ -72,32 +72,7 @@ export function apply(ctx: Context): void {
         row.missingSkills?.length?React.createElement("p",null,t("missing")+": "+row.missingSkills.join(", ")):null,
         row.error?React.createElement("p",{role:"alert"},row.error):null)));
   }
-  function Directory() {
-    const [entries, setEntries] = useState(() => ctx.slots.entries("main"));
-    useEffect(() => {
-      const refresh = () => setEntries([...ctx.slots.entries("main")]);
-      const offSlots = ctx.slots.subscribe("main", refresh);
-      const offSidebar = ctx.slots.subscribe("sidebar.panellist", refresh);
-      const offPages = workbench.subscribe(refresh);
-      const offLocale = ctx.locale.subscribe(refresh);
-      return () => { offSlots(); offSidebar(); offPages(); offLocale(); };
-    }, []);
-    const pages = entries.filter(entry => entry.options.key && entry.options.key !== DIRECTORY && entry.options.key !== "conversation");
-    return React.createElement("section", { className: "agent-workbench-ui agent-workbench-directory" },
-      React.createElement("h1", null, t("title")),
-      React.createElement("button", { type: "button", onClick: () => ctx.layout.selectPanel(null) }, t("conversation")),
-      React.createElement("h2", null, t("pages")),
-      pages.length ? React.createElement("div", { className: "agent-workbench-pages" }, ...pages.map(entry => {
-        const id = entry.options.key as MainPanelId;
-        const sidebarLabel = ctx.slots.entries("sidebar.panellist")
-          .find(sidebar => sidebar.options.id === id)?.options.label;
-        const label = typeof sidebarLabel === "function" ? sidebarLabel() : sidebarLabel ?? workbench.label(id);
-        return React.createElement("button", { key: id, type: "button", onClick: () => void workbench.open(id) }, label);
-      })) : React.createElement("p", null, t("empty")),
-      React.createElement(DiscoveryNotice),
-      React.createElement(Resources),
-    );
-  }
+  mountCompanyUI(ctx,workbench,Resources,restorePageSession);
   let discoveryError = "";
   let discoveryRevision = 0;
   const listeners = new Set<() => void>();
@@ -107,8 +82,7 @@ export function apply(ctx: Context): void {
     React.useSyncExternalStore(listener => { listeners.add(listener); return () => listeners.delete(listener); }, () => discoveryRevision);
     return discoveryError ? React.createElement("p", { role: "alert" }, t("failed") + ": " + discoveryError, " ", React.createElement("button", { onClick: () => retry() }, t("retry"))) : null;
   }
-  ctx.slots.inject("main", () => ctx.slots.register({ name: "main", key: DIRECTORY }, Directory));
-  ctx.slots.inject("sidebar.panellist", () => ctx.slots.register({ name: "sidebar.panellist", id: DIRECTORY, order: 5, label: () => t("title") }, ({ size }) => React.createElement("span", { style: { fontSize: size }, "aria-hidden": true }, "▦")));
+  ctx.slots.inject('shell.overlay',()=>ctx.slots.register({name:'shell.overlay',id:'workbench-page-discovery'},DiscoveryNotice));
   ctx.effect(() => {
     const controller = new AbortController();
     const registered = new Set<string>();
@@ -127,9 +101,7 @@ export function apply(ctx: Context): void {
           registered.add(page.id);
           ctx.slots.inject("main", () => {
             if (controller.signal.aborted) return () => {};
-            const unregister = workbench.register({ id: page.id as MainPanelId, label: page.name });
-            const disposeSlot = ctx.slots.register({name:"main",key:page.id as MainPanelId},({renderFactorySlot}:PropsRuntime<"main">&PropsRenderFactories)=>renderFactorySlot("agent-workbench.document",{page:{id:page.id as MainPanelId,label:page.name,src:page.url,kind:"html",pluginId:page.pluginId,resourceId:page.resourceId}}));
-            const dispose = () => { disposeSlot(); unregister(); };
+            const dispose = workbench.registerFrame({id:page.id as MainPanelId,label:page.name,src:page.url,kind:'html',pluginId:page.pluginId,resourceId:page.resourceId});
             cleanup.push(dispose);
             return dispose;
           });
@@ -155,3 +127,4 @@ declare module "@deepseek-ai/dsh-api-session-controller/client" {
 }
 
 export type { WorkbenchFramePage, WorkbenchPageExecution, PageExecutionConnection } from "./frame.ts";
+export type {BusinessAccount} from './company/account.ts';

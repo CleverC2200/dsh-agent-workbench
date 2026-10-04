@@ -23,6 +23,8 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly pages = new Map<MainPanelId, WorkbenchPage>();
   private disposed = false;
   private readonly listeners = new Set<() => void>();
+  private readonly historyListeners = new Set<() => void>();
+  private historyPage:MainPanelId|undefined;
   constructor(private readonly ports: WorkbenchPorts) {}
   register(page: WorkbenchPage): () => void {
     if (this.disposed) throw Error("WORKBENCH_DISPOSED");
@@ -49,6 +51,9 @@ export class WorkbenchController implements AgentWorkbench {
     return typeof label === "function" ? label() : label ?? id;
   }
   subscribe(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  showHistory(page?:MainPanelId):void {this.historyPage=page;for(const listener of this.historyListeners)listener();}
+  takeHistoryPage():MainPanelId|undefined {const page=this.historyPage;this.historyPage=undefined;return page;}
+  subscribeHistory(listener:()=>void):()=>void {this.historyListeners.add(listener);return()=>{this.historyListeners.delete(listener);};}
   private changed(): void { for (const listener of this.listeners) listener(); }
   dispose(): void { this.disposed = true; this.pages.clear(); }
 }

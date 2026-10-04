@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {build} from 'esbuild';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
-const requireManage=createRequire(new URL('../../dsh-agent-manage/package.json',import.meta.url));
+const requireManage=createRequire(import.meta.url);
 const {JSDOM}=requireManage('jsdom');
 
 test('identity changes release the current connection button and an older selection cannot clear a newer busy owner',async t=>{
@@ -11,7 +11,7 @@ test('identity changes release the current connection button and an older select
   const keys=['window','document','navigator','IS_REACT_ACT_ENVIRONMENT','MessageChannel'];
   const saved=keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
   for(const [key,value] of [['window',dom.window],['document',dom.window.document],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true],['MessageChannel',class {constructor(){this.port1={onmessage:null,close(){}};this.port2={postMessage:value=>setImmediate(()=>this.port1.onmessage?.({data:value})),close(){}};}}]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
-  const {outputFiles}=await build({stdin:{contents:`export {mountFramePresentation} from './src/frame-presenter.tsx';export {createElement,act} from 'react';export {createRoot} from ${JSON.stringify(requireManage.resolve('react-dom/client'))};`,resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',alias:{react:resolve('node_modules/react')}});
+  const {outputFiles}=await build({stdin:{contents:`export {mountFramePresentation} from './src/frame-presenter.tsx';export {createElement,act} from 'react';export {createRoot} from ${JSON.stringify(requireManage.resolve('react-dom/client'))};`,resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',alias:{react:resolve('node_modules/react')},loader:{'.png':'dataurl'}});
   const module={exports:{}};new Function('module','exports','require',outputFiles[0].text)(module,module.exports,createRequire(import.meta.url));
   const {mountFramePresentation,createElement,createRoot,act}=module.exports;
   let Document;const effects=[],listeners=new Set();

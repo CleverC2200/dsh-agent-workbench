@@ -21,7 +21,8 @@ export interface ResourceSummary {
     missingSkills?: string[];
     error?: string;
 }
-export declare function selectResource(host: NativeResourceSelection, id: string, signal: AbortSignal, embedded?: boolean): Promise<{
+export declare function resourceWorkspace(request: typeof fetch, signal: AbortSignal, cwd?: string): Promise<string>;
+export declare function selectResource(host: NativeResourceSelection, id: string, signal: AbortSignal, embedded?: boolean, currentCwd?: string): Promise<{
     sessionId: string;
     preset: string;
     reference?: SessionReference;

@@ -23,7 +23,7 @@ export function connectHtmlFrame(
   const sendTheme = () => {
     if (!alive() || !connected || !themeRequested) return;
     const snapshot=theme();
-    channel.port1.postMessage({type:"theme",context,version:"1.0.0",colorScheme:snapshot.active.colorScheme,fontSize:snapshot.fontSize,tokens:snapshot.active.tokens});
+    channel.port1.postMessage({type:"theme",context,version:"1.1.0",colorScheme:snapshot.active.colorScheme,fontSize:snapshot.fontSize,tokens:snapshot.active.tokens});
   };
   const ready = (event:MessageEvent) => {
     if (!alive() || event.source !== frame.contentWindow || event.data?.protocol !== "gea-html-v2" || event.data.type !== "ready" || connected) return;

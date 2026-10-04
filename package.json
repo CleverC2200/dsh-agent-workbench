@@ -54,10 +54,11 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-layout",
-        "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-ui-theme",
         "@deepseek-ai/dsh-client-ui-conversation",
-        "@deepseek-ai/dsh-client-ui-input-trigger"
+        "@deepseek-ai/dsh-client-ui-input-trigger",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-settings"
       ],
       "external": [
         "@deepseek-ai/dsh-client-store"
@@ -107,8 +108,11 @@
     "@deepseek-ai/dsh-session": "0.1.5-rc.2",
     "@types/node": "24.3.1",
     "@types/react": "18.3.31",
+    "@types/react-dom": "^18.3.7",
     "esbuild": "0.25.9",
+    "jsdom": "^26.1.0",
     "react": "18.3.1",
+    "react-dom": "^18.3.1",
     "react-grab": "0.2.0",
     "typescript": "5.9.3"
   },

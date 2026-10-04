@@ -1,25 +1,28 @@
 import React, {useEffect, useRef, useState, useSyncExternalStore} from "react";
 import type {Context} from "@deepseek-ai/cordis";
 import type {SessionReference} from "@deepseek-ai/dsh-api-session-controller/client";
+import type {SessionId} from '@deepseek-ai/dsh-session/types';
+import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {FactoryComponentPropsOf, PropsRenderFactories, PropsRenderSlots, PropsRuntime} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import {selectResource,type NativeResourceSelection} from "./resource-selection.ts";
 import type {PageExecutionConnection,PageIdentitySnapshot,WorkbenchFramePage,WorkbenchPageExecution} from "./frame.ts";
 import {connectHtmlFrame} from "./html-bridge.ts";
 import {installPageInteraction} from "./page-interaction/client.ts";
+import {CompanyWelcome} from './company/ui.tsx';
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotFactoryMap {
     "agent-workbench.document": {scope:"root";props:{page:WorkbenchFramePage};children:{"agent-workbench.conversation":{kind:"single";scope:"session"}}};
   }
-  interface SlotMap { "agent-workbench.conversation":{kind:"single";scope:"session"}; }
+  interface SlotMap { "agent-workbench.conversation":{kind:"single";scope:"session";owner:{page:string}}; }
 }
 const unknownIdentity:PageIdentitySnapshot={state:"unknown",scope:null,status:null};
 const noSubscribe=()=>()=>{};
 
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey="pageConnect"|"pageNewChat"|"pageWorking"|"pageChanged"|"pageHint"|"pageWait"|"pageLogin"|"pageSessionUnavailable";
-export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceSelection|undefined,t:(key:FrameCopyKey)=>string):void {
+export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceSelection|undefined,t:(key:FrameCopyKey)=>string,showHistory:(page?:MainPanelId)=>void=()=>{}):(page:MainPanelId,sessionId:SessionId,signal:AbortSignal)=>Promise<void> {
   let execution:WorkbenchPageExecution|undefined;
   const backendListeners=new Set<()=>void>();
   ctx.inject(["geaPageExecution"],scope=>{
@@ -27,13 +30,19 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     scope.effect(()=>()=>{if(execution===scope.geaPageExecution){execution=undefined;for(const changed of backendListeners)changed();}});
   });
   const interaction=installPageInteraction(ctx);
+  const restored=new Map<MainPanelId,SessionReference>();
+  ctx.effect(()=>()=>{for(const reference of restored.values())reference.release();restored.clear();});
   function Document({page,SessionProvider,renderSlot}:FactoryComponentPropsOf<"agent-workbench.document">&PropsRenderSlots<"agent-workbench.conversation">) {
     useSyncExternalStore(listener=>ctx.locale.subscribe(listener),()=>ctx.locale.getSnapshot());
     const currentExecution=useSyncExternalStore(listener=>{backendListeners.add(listener);return()=>{backendListeners.delete(listener);};},()=>execution);
     const identity=useSyncExternalStore(currentExecution?.identity.subscribe??noSubscribe,currentExecution?.identity.getSnapshot??(()=>unknownIdentity));
     const frame=useRef<HTMLIFrameElement>(null);
     const [loaded,setLoaded]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState("");
-    const [selection,setSelection]=useState<{reference:SessionReference;preset:string;ownerScope:string|null}>();
+    const [view,setView]=useState<'center'|'split'|'chat'>('split');
+    const [selection,setSelection]=useState<{reference:SessionReference;preset:string;ownerScope:string|null}|undefined>(()=>{
+      const reference=restored.get(page.id);restored.delete(page.id);
+      return reference?{reference,preset:page.resourceId!,ownerScope:execution?.identity.getSnapshot().scope??null}:undefined;
+    });
     const pending=useRef<{controller:AbortController;scope:string|null}>();
     const connectionTransition=useRef<Promise<void>>(Promise.resolve());
     const title=typeof page.label==="function"?page.label():page.label??page.id;
@@ -104,14 +113,24 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       finally{if(pending.current===flight){pending.current=undefined;setBusy(false);}}
     };
     return <section className="agent-workbench-ui agent-workbench-document">
-      {page.resourceId&&<header className="agent-workbench-page-toolbar"><span>{title}</span><button type="button" disabled={busy} onClick={()=>void connect()}>{busy?t("pageWorking"):selection?t("pageNewChat"):t("pageConnect")}</button>{!selection&&<span>{t("pageHint")}</span>}</header>}
+      <header className="agent-workbench-page-toolbar"><span>{title}</span>{page.resourceId&&<button type="button" disabled={busy} onClick={()=>void connect()}>{busy?t("pageWorking"):selection?t("pageNewChat"):t("pageConnect")}</button>}
+       <div className="workbench-conversation-toolbar" role="toolbar" aria-label="对话区视图与会话操作"><div role="group" aria-label="区域显示方式">{([['center','中间区域最大，隐藏会话区','▦'],['split','同时显示中间区域和会话区','◫'],['chat','会话区最大，隐藏中间区域','▤']] as const).map(([id,label,icon])=><button key={id} type="button" aria-label={label} title={label} aria-pressed={view===id} onClick={()=>setView(id)}>{icon}</button>)}</div><button type="button" aria-label="历史对话" onClick={()=>showHistory(page.resourceId?page.id:undefined)}>◷</button>{page.resourceId&&<button type="button" disabled={busy} aria-label="新建对话" onClick={()=>void connect()}>＋</button>}</div>
+      </header>
       {error&&<p role="alert" className="agent-workbench-page-error">{error}</p>}
-      <div className={"agent-workbench-document-body"+(selection?" with-conversation":"")}>
+      <div className={"agent-workbench-document-body"+(selection?" with-conversation":"")+' view-'+view}>
         <iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>
-        {selection&&<aside className="agent-workbench-native-conversation"><SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{})}</SessionProvider></aside>}
+        {selection&&<aside className="agent-workbench-native-conversation"><SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider></aside>}
       </div>
     </section>;
   }
   ctx.effect(()=>ctx.slots.registerFactory({name:"agent-workbench.document",scope:"root",children:{"agent-workbench.conversation":{kind:"single",scope:"session"}}},Document));
-  ctx.slots.inject("agent-workbench.conversation",()=>ctx.slots.register({name:"agent-workbench.conversation"},({renderFactorySlot}:PropsRuntime<"agent-workbench.conversation">&PropsRenderFactories)=>renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false})));
+  ctx.slots.inject("agent-workbench.conversation",()=>ctx.slots.register({name:"agent-workbench.conversation"},({page,useSession,inputActions,renderFactorySlot}:PropsRuntime<"agent-workbench.conversation">&PropsRenderFactories)=>{
+    const blank=useSession(session=>session.blank&&!session.running&&!session.promptAttempted);
+    return <div className="workbench-page-conversation">{blank&&<CompanyWelcome page={page} onFill={text=>inputActions.setDraft(text)}/>} {renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false})}</div>;
+  }));
+  return async(page,id,signal)=>{
+    const reference=ctx.sessions.retain(id,{source:'agentResourceSelection',signal});
+    try{await reference.ready;signal.throwIfAborted();restored.get(page)?.release();restored.set(page,reference);}
+    catch(error){reference.release();throw error;}
+  };
 }
