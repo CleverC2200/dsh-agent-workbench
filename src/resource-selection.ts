@@ -1,4 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
+import type { WorkspaceId } from "@deepseek-ai/dsh-api-workspace-controller/client";
 import type { SessionId } from "@deepseek-ai/dsh-session/types";
 import type {} from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
@@ -8,7 +9,8 @@ import type {} from "@deepseek-ai/dsh-api-remotes/client";
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
  fetch: typeof fetch;
- create(options:{cwd:string}):Promise<string>;
+ workspace(path:string):Promise<string>;
+ create(options:{workspaceId:string}):Promise<string>;
  select(sessionId:string,preset:string):Promise<void>;
  open(sessionId:string,skill:string|undefined,signal:AbortSignal):Promise<void>;
 }
@@ -22,7 +24,9 @@ export async function selectResource(host:NativeResourceSelection,id:string,sign
  const resource=await response.json() as {preset?:unknown;skill?:unknown;error?:string};
  if(!response.ok||typeof resource.preset!=='string')throw Error(resource.error??'RESOURCE_SELECTION_FAILED');
  signal.throwIfAborted();
- const sessionId=await host.create({cwd:config.cwd});
+ const workspaceId=await host.workspace(config.cwd);
+ signal.throwIfAborted();
+ const sessionId=await host.create({workspaceId});
  signal.throwIfAborted();
  await host.select(sessionId,resource.preset);signal.throwIfAborted();
  await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal);
@@ -31,10 +35,11 @@ export async function selectResource(host:NativeResourceSelection,id:string,sign
 /** Bind the actual native client services under their Cordis effect lifetime. */
 export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResourceSelection|undefined)=>void):ReturnType<Context['inject']> {
   let active:NativeResourceSelection|undefined;
-  return ctx.inject(["sessions", "remote", "remote.agentPresets", "conversation", "uiWorkspace"], scope => {
+  return ctx.inject(["sessions", "workspaces", "remote", "remote.agentPresets", "conversation", "uiWorkspace"], scope => {
     const host: NativeResourceSelection = {
       fetch: (...args) => fetch(...args),
-      create: options => scope.sessions.create(options),
+      workspace: async path => (await scope.workspaces.create({path})).workspaceId,
+      create: options => scope.sessions.create({workspaceId:options.workspaceId as WorkspaceId}),
       select: async (id, preset) => {const result=await scope.remote.agentPresets.select(id as SessionId,preset);if(!result.ok)throw Error(result.error.message);},
       open: async (id,skill,signal) => scope.sessions.using(id as SessionId,{source:"agentResourceSelection",signal},reference => {
         signal.throwIfAborted();

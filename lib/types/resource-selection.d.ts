@@ -2,8 +2,9 @@ import type { Context } from "@deepseek-ai/cordis";
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
     fetch: typeof fetch;
+    workspace(path: string): Promise<string>;
     create(options: {
-        cwd: string;
+        workspaceId: string;
     }): Promise<string>;
     select(sessionId: string, preset: string): Promise<void>;
     open(sessionId: string, skill: string | undefined, signal: AbortSignal): Promise<void>;
