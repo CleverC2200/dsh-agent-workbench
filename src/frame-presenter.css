@@ -11,8 +11,6 @@
 .agent-workbench-column-handle {position:absolute;top:0;bottom:0;right:calc(var(--workbench-ai-width) - 4px);width:8px;z-index:11;cursor:col-resize;touch-action:none;}
 .agent-workbench-page-status {margin:24px 16px;color:var(--workbench-muted);}
 .workbench-page-conversation {flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
-.workbench-page-history {display:flex;flex-direction:column;flex:1 0 auto;min-height:0;}
-.workbench-page-history[hidden] {display:none;}
 @media(max-width:1200px) {.agent-workbench-document {--workbench-ai-width:360px;}.agent-workbench-column-handle {display:none;}}
 @media(max-width:1024px) {.agent-workbench-document {--workbench-ai-width:320px;}}
 @media(max-width:860px) {.agent-workbench-document {--workbench-ai-width:300px;}}

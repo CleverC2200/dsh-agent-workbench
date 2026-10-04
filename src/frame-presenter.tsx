@@ -181,7 +181,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const positions=useMemo(()=>({
       views: function BusinessViews({useSession,inputActions,renderSlot}:FactoryLocalComponentPropsOf<'conversation.content','views'>){
         const blank=useSession(session=>session.blank&&!session.running&&!session.promptAttempted);
-        return <>{blank&&<CompanyWelcome page={page} language={language} onFill={text=>inputActions.setDraft(text)}/>}<div className="workbench-page-history" hidden={blank}>{renderSlot('conversation.session',{})}</div></>;
+        return <>{blank&&<CompanyWelcome page={page} language={language} onFill={text=>inputActions.setDraft(text)}/>}{renderSlot('conversation.session',{})}</>;
       },
     }),[page,language]);
     return <div className="workbench-page-conversation">{renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false},{slots:positions})}</div>;
