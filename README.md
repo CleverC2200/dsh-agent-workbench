@@ -1,91 +1,44 @@
 # Agent 工作台
 
-替换 DSH 的布局插件，为多个业务 Agent 提供独立页面和原生会话并排显示。本隔离分支以同级 DSH `0.2.0-rc.1` 源码及本项目会话导航扩展为基线；不复制聊天或输入框。原 `0.1.5-rc.2` 锁保留作历史开发环境记录，新组合通过下方的源码构建入口验证。
+Workbench 在未修改的官方 DSH `4878cdabd87d4041bdaff61d04c966883b9fd07a` 上提供统一页面目录、原生页面入口、HTML 呈现与包内资源桥。官方 `ui-layout`、侧栏工作区、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开静态页面不会创建 Session、改写 preset 或发送模型请求。
 
-## 组合
+## 页面接入
 
-通过 profile 补丁禁用 `ui-layout`，插入本包 Host entry，并配置绝对路径 `cwd`。DSH 的 `name` 补丁字段是名称检查，不能用来替换插件：必须采用“禁用旧行＋插入新行”。本包提供原有 `layout` 服务及 `sidebar`、`main`、`rightbar`、`shell.overlay` 插槽，保留原生导航、主题、设置、对话和右侧工具栏。工作台页面与原生会话并排时，原生右侧工具栏暂停显示。
-
-## 业务插件接入
-
-客户端声明注入 `slots`、`agentWorkbench`；先注册标准 `main` 页面，再注册工作台身份。页面卸载撤销并排显示，插件卸载撤销注册。
+原生页面注册官方 `main` keyed slot，再登记标题元数据。`main` 的注册事实决定目录是否显示；`register` 只补充标题，不建立第二份安装或授权清单。
 
 ```ts
-const unregister = ctx.agentWorkbench.register({ id: panelId, preset: 'my-agent' })
-const hideConversation = ctx.agentWorkbench.showConversation(panelId)
-await ctx.agentWorkbench.open(panelId, businessInstanceId)
-// 已由业务 Host 创建会话时，可明确关联；不会修改该会话的预设：
-await ctx.agentWorkbench.open(panelId, businessInstanceId, sessionId)
-// 同一页面允许多个已登记预设时，为每个预设保留不同实例：
-await ctx.agentWorkbench.open(panelId, 'my-other-agent', undefined, 'my-other-agent')
+const disposePage = ctx.slots.register({ name: 'main', key: panelId }, Page)
+const disposeTitle = ctx.agentWorkbench.register({ id: panelId, label: () => title })
+await ctx.agentWorkbench.open(panelId)
+// 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-首次 `open` 按页面预设创建原生 Session；同一页面、同一业务实例复用 Session。`instance` 省略时恢复该页面上次实例，初始值为 `default`。创建并发合并，后发导航获胜；`open` 只有真正选中页面才返回 `true`，被较新导航取消时返回 `false`。离开页面、注销或卸载不会停止后台 Agent。调用方处理 Promise 错误，也不能把 `false` 当成已切换。
+现有 HTML 文档通过 `ctx.agentWorkbench.registerHtml({id, label, html})` 贡献。Workbench 负责 iframe、sandbox、主题投影与释放，不改变原 HTML 的交互和业务内容。包内 HTML 则由 Host `ctx.workbenchPages.registerHtml(roots)` 登记显式安装目录。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。返回原声明供能力拥有者检查 Consumer 等业务约定。
 
-重复选中当前页时，已取消的恢复仍可使用控制器原有的一次重试；选择别的页面仍取消旧打开请求，迟到结果不能抢回当前页。业务页需订阅公开 `panelInfo`，保留挂载的后台页再次激活时也要重新打开合法关联。
-页面可在 `register` 中声明 `allowedPresets`。第四个 `open` 参数只能选默认或已声明的预设；即使调用方显式传入 Session 而省略第四参数，刷新会话目录后仍会核对该 Session 的实际预设。恢复页面关联时也拒绝不允许的预设，不会因切换页面修改旧会话。
+Host 公开认证 Fetch：
 
-会话关联和当前业务面板保存在当前浏览器标签页的 `sessionStorage`，刷新后回到同一面板和业务实例，不支持跨设备恢复。只保存页面、业务实例、Session 标识和不含凭证的身份代次，不保存业务数据。页面反注册或布局卸载保留关联，后台持久 Session 不会被删除或停止。身份失效时业务插件调用 `forget(panelId)` 并清除当前选择；`forget` 只删本地关联。需要身份隔离的页面在 `register` 中提供异步 `scope`，重新打开前及准备 Session 后都核对当前代次；旧登录或旧 Host 的关联不能复用。恢复前通过 DSH 刷新会话列表，缺失会话明确报错，不自动换成其他会话。
+- `GET /api/agent-workbench/pages`：页面元数据，不返回正文或本地路径。
+- `GET /api/agent-workbench/html?id=<pageId>&page=<view>`：安全 HTML 呈现；响应禁止缓存和外部网络。
+- `GET /api/agent-workbench/theme.css`：插件共享视觉资源。
+- `GET /api/agent-workbench/config`：绝对工作区路径，供明确资源／会话动作使用。
 
-业务插件仍负责自身权限、页面内业务状态和需要发送给模型的上下文。界面展示本身不会向模型发送数据。原生输入框、草稿和消息全部由 DSH 管理。
+页面可见和资源存在均不授予 GEA Consumer 权限。受控业务桥及资源进入原生会话是独立动作，由 Manage/GEA 接线；静态呈现不等待它们。宿主持久会话和浏览器中的旧数据不清空、不迁移、不解析为新的运行时兼容层。
 
-## 维护
+## 官方输入与构建
 
-布局适配代码来自原有布局实现，来源见 UPSTREAM.md。升级 DSH 需要验证原生插槽、服务和客户端加载协议。此包与 GEA 无业务依赖；示例包使用同一接口验证第二个 Agent。本包在独立 Git 仓库维护，构建产物随 Git 提交，可按固定提交安装；尚未发布 npm registry 版本。GEA 是本包的消费者，构建不需要 GEA checkout。
+`cordis.patch.yml` 只插入本插件，保持官方 `ui-layout` 启用。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-core` 标准产物，包括官方 Cordis `4.0.4`。旧 npm 锁仅用于准备开发工具，不能作为官方适配或运行的证据；最终外部 SDK 与宿主必须来自同一个官方输入。
 
-## 独立开发与安装
+```sh
+npm ci --ignore-scripts --prefer-offline
+npm run typecheck:official
+DSH_TYPECHECK_PROJECT=tsconfig.official.json npm run build:core
+node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-sample-resource.test.mjs
+```
 
-运行 `npm ci`、`npm test`、`npm run build`。通过 `dsh plugin --profile <profile> add git+http://100.100.6.191:20656/chenyonghao/dsh-agent-workbench.git#<commit>` 安装固定提交；私有仓库需要 GitLab 读取权限。bundle 禁用默认 ui-layout 并挂载本包，默认工作区为启动目录，可在 profile 补丁的 agent-workbench 配置中指定绝对路径 cwd。
+`build:core` 构建 Host、Client、声明和现有 HTML 表格样板；默认 `build` 还构建仓库内库存资源，需要相应业务源码包的固定依赖。构建输出随本仓提交。测试和构建通过只是候选证明，同一官方 Web 上的实际显示与切换由集中联调记录。
 
-## 插件拆分源码基线
+## 视觉与已有资源
 
-隔离开发使用同级 DSH 0.2.0-rc.1 源码及其 `uiWorkspace.selectSession` 扩展，业务页切换会话时保留面板；主会话按 `mainView` 引用识别，布局服务公开同一份 `panelInfo`。在本隔离项目从 GEA 仓执行 `corepack pnpm run source:build`，按各仓现有工具链构建并对同一份已构建核心声明做类型检查。旧 0.1.x 锁文件下的普通类型检查不代表这套源码组合。
+[theme/tokens.css](theme/tokens.css) 只由 Workbench 插件安装和释放。Manage、GEA 与 HTML 消费 `--workbench-*`，主题状态及字号来自官方 DSH；没有写 Core 源码、启动色或官方 token 的同步脚本。HTML 表格样板保留本地筛选、加载、空态、错误与恢复交互，独立显示不需要 GEA Session。
 
-## 共享主题
-
-[共享主题资源](theme/README.md) 在本仓库维护，在开发期同步并编入受控 DSH 的 ui-theme。工作台不再创建主题 presenter；宿主主题适配必须与本插件一起整合。只升级此工作台插件到旧宿主不受支持。主题资源候选版本为 1.0.0，插件包版本保持 0.1.1，未发布。
-
-浏览器标题通过核心 `uiSession.mainSessionId` 的只读观察源选择会话，再从会话列表读取标题；观察不会增加引用，组件卸载时释放订阅。源码适配需要配套核心与 GEA。
-
-主题同步按 `html body` 和 `html body[data-ds-dark-theme]` 选择器读取各自唯一的六位十六进制 `--workbench-page`，规则顺序不影响启动色；重复、缺失、嵌套规则或不兼容值会在写入前报错。资源版本、摘要和漂移检查仍由 `scripts/sync-theme.mjs` 维护。
-
-## HTML 表格样板（隔离验证）
-
-`samples/html-table.html` 是项目交付清单样板，只含本地演示数据。`npm run build` 将唯一的 `theme/tokens.css` 内嵌到 `lib/samples/html-table.html`，校验资源 1.0.0 的 SHA-256；不新增运行时插件，不加载网络 CSS。资源缺失或摘要变化会拒绝构建。源码模板直接打开会显示资源缺失提示。
-
-在隔离源码组合运行 GEA 的 `tests/html-shared-theme-web.test.mjs`，测试临时生成 loader 所需的 mock 描述文件，以现有 HTML 承载器打开样板。临时描述不随插件发布，退出时先停止 profile 再删除。样板覆盖筛选、表格、加载、空结果、错误重试、明暗、字号、键盘焦点和窄屏表格滚动；不查询库存或其他业务数据。
-
-主题通过现有 `gea-html-v1` MessageChannel 同步，iframe 不读取父页 DOM。连接校验父窗口和来源，主题消息校验页面及当前会话；切换会话暂停操作，卸载释放计时器和端口。父页主题状态、持久化与 DOM 投影仍由 ui-theme 管理，样板只消费投影后的变量。sandbox 与 CSP 沿用承载器，外部请求仍被禁止。资源不兼容或连接失败时显示诊断并禁用查询。
-
-## 分仓库存试点
-
-`business/inventory-fc` 保存从 `dsh-agent-fc-plugin@906b3b0` 迁入的页面与计算源码。`scripts/build-inventory-fc.mjs` 生成 `lib/business/inventory-fc`，通过原有 `plugin.json` 与 `declarations.page/capability` 关联 Agent Manage 的 Skill/提示词/能力资源；没有新增注册表。GEA 负责登录、Consumer 和只读校验。旧资源入口保留。
-
-构建前在 `business/inventory-fc/source/inventory-light-plugins` 按其 pnpm 固定锁安装独立依赖；再运行工作台构建。Agent Manage 同级资源必须存在，缺失会失败。使用现有 `GEA_HTML_PLUGIN_ROOTS` 指向构建目录即可装载。原共享主题 1.0.0 经既有 MessagePort 投影，不增加 iframe 权限或网络连接。数量口径、页面预览及导出行为沿用原模块；缺少 SKU/库存数量时明确报错，不能解释为零。
-
-分仓页面的库存解读与草稿上下文只使用当前查询条件和刷新批次对应的就绪快照；加载、空结果和错误只发布状态与可用筛选，不把占位快照或上一仓结果当成业务事实。页面直接用现有 `BrowserRepository(memoryStorage)` 保存本页状态，构建不再按源码文本替换 localStorage；关闭页面或身份变化仍清除内存状态。
-
-`visibleText` 也遵守当前查询状态：只有 ready 才提取页面文字；非就绪时使用该状态的具体说明，避免页面暂留的旧 KPI 再次进入 Agent 上下文。页面展示及筛选控件保留。
-
-FC 的 `data` 与库存解读、草稿一起由当前 ready 页面发布。fetch 完成只触发当前上下文重读，不再把导出或明细响应直接写入事实；旧 CSV 可以正常完成下载，但不能覆盖切页后的查询状态或新查询事实。
-行引用带当前仓、页签、筛选、分页和快照标识，不带未显示行的草稿。给 Agent 的补货行只包含当前页可见列，最多 30 行并标明截断。引用入口在点击时核对当前范围和就绪状态；成功捕获后固定为点击时已显示的内容，后续筛选、分页或列变化不会拒绝已捕获引用。登录身份、Host 或 Session 授权失效仍使引用失效；换会话取消旧页面请求并发布新会话的当前筛选结果。
-
-分仓引用范围包含当前渲染列的顺序。使用已有列目录的序号表示，避免完整列名使 scope 超过现有1000字符边界；引用正文仍使用当前可见的列名和值。
-
-## Current association format
-
-Runtime imports only four-field page/instance/Session/scope records. Older three-field exports require the explicit offline command `node scripts/upgrade-workbench-associations.mjs input.json new-output.json`; it never overwrites the original or accesses a Host profile. A missing historical identity remains null, not a trusted business scope. Durable Sessions and their content are not deleted.
-
-运行时仅导入四字段关联。旧三字段导出可独立执行上述升级脚本，原文件不会被覆盖，不接触正式 Host/profile，不删除持久 Session；缺失的历史身份以 null 保留，不能被提升为当前业务授权。
-
-HTML consumers receive the current ui-theme projection (colorScheme, fontSize, active alias-token overrides). They present the same shared stylesheet locally; no Host DOM computed-style sampling or mutation subscription is supported. The font size contract is the current core's 12–17 px range.
-
-HTML 页面直接接收当前 ui-theme 的色彩模式、字号和活动 alias token 覆盖，在页面内呈现同一共享样式资源；不再支持采样宿主 DOM 的计算样式或观察 DOM 主题变化。字号沿用当前核心的 12–17 px 契约。
-
-外壳呈现由工作台的单一布局 store 管理。当前 `ILayout.shellPresentation` 公开只读快照，`setConversationView` 只改显示方式；业务 iframe 与唯一 Conversation 在中间区、并排和会话区三种模式中保持挂载。`registerDocumentTitle` 和 `registerFullscreenPanel` 返回独立释放函数；注销恢复正常标题和布局。`shell.conversation.toolbar` 的位置由 AppFrame 决定；业务插件不定位或修改外壳节点。
-
-Shell presentation belongs to the workbench layout store. `shellPresentation` is read-only; `setConversationView` changes display without changing the page or Session. Title/fullscreen registrations release their own claims. AppFrame places `shell.conversation.toolbar`; plugins do not discover shell nodes.
-
-并排与窄屏堆叠的 Conversation 使用独立剩余高度容器，工具栏不占用会话滚动区域。公共容器 `workbench-conversation` 提供尺寸查询，槽位内容可按面板高度适配；工作台不查询或修改原生会话内部DOM。
-
-Base inventory page source is owned by `business/inventory-aqkc`; Agent resources are assembled from sibling Manage. Both stock pages share `business/shared/channel.js` and the same HTML v2 contract. The original AQKC runtime entry is retired. Build with the existing npm lockfile and `npm run build`; this does not authorize release or remote writes.
+`business/inventory-fc` 与 `business/inventory-aqkc` 保留当前已迁移页面源码和包内资源。提示词／Skill 正文归 Manage，授权执行归 GEA，后续消费者迁移需接续原必要业务桥。静态页面通过不等于这些业务能力已验收。

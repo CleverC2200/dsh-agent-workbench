@@ -38,23 +38,17 @@ html body[data-ds-dark-theme] {
   --workbench-hover: #35272e;
 }
 
-html body,
-html body[data-ds-dark-theme] {
-  --dsw-font-family: var(--workbench-font-family);
-  --dsw-alias-bg-base: var(--workbench-page);
-  --dsw-alias-bg-layer-1: var(--workbench-surface);
-  --dsw-alias-bg-layer-2: var(--workbench-subtle);
-  --dsw-alias-label-primary: var(--workbench-text);
-  --dsw-alias-label-secondary: var(--workbench-body);
-  --dsw-alias-label-tertiary: var(--workbench-muted);
-  --dsw-alias-border-l3: var(--workbench-border);
-  --dsw-alias-border-l4: var(--workbench-control-border);
-  --dsw-alias-state-business-primary: var(--workbench-brand);
-  --dsw-specific-sidebar-fill: var(--workbench-surface);
-  --dsw-specific-sidebar-nav-item-hover: var(--workbench-hover);
-  --dsw-specific-sidebar-nav-item-active: var(--workbench-brand-soft);
-  --dsw-specific-input-major: var(--workbench-surface);
-  background-color: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
-  font-family: var(--dsw-font-family);
+.agent-workbench-ui {
+  background: var(--workbench-page);
+  color: var(--workbench-text);
+  font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
 }
+.agent-workbench-directory { height: 100%; overflow: auto; box-sizing: border-box; padding: 24px; }
+.agent-workbench-pages { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; }
+.agent-workbench-ui button { padding: 10px 14px; border: 1px solid var(--workbench-border); border-radius: 8px; background: var(--workbench-surface); color: var(--workbench-text); font: inherit; cursor: pointer; }
+.agent-workbench-ui button:not(:disabled):hover { background: var(--workbench-hover); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+.agent-workbench-html { height: 100%; width: 100%; border: 0; display: block; }
+
+.agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }

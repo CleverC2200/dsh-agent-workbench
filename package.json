@@ -25,10 +25,9 @@
       "inject": [
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-theme",
-        "@deepseek-ai/dsh-api-remotes",
-        "@deepseek-ai/dsh-api-session-controller"
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-theme"
       ],
       "external": [
         "@deepseek-ai/dsh-client-store"
@@ -46,13 +45,16 @@
     "README.md",
     "LICENSE",
     "UPSTREAM.md",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "theme/"
   ],
   "license": "MIT",
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
-    "test": "node --test tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",
+    "build:core": "node scripts/build.mjs --target core",
+    "typecheck:official": "node scripts/verify-official-input.mjs && tsc -p tsconfig.official.json --noEmit --emitDeclarationOnly false"
   },
   "repository": {
     "type": "git",

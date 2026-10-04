@@ -44,26 +44,20 @@ html body[data-ds-dark-theme] {
   --workbench-hover: #35272e;
 }
 
-html body,
-html body[data-ds-dark-theme] {
-  --dsw-font-family: var(--workbench-font-family);
-  --dsw-alias-bg-base: var(--workbench-page);
-  --dsw-alias-bg-layer-1: var(--workbench-surface);
-  --dsw-alias-bg-layer-2: var(--workbench-subtle);
-  --dsw-alias-label-primary: var(--workbench-text);
-  --dsw-alias-label-secondary: var(--workbench-body);
-  --dsw-alias-label-tertiary: var(--workbench-muted);
-  --dsw-alias-border-l3: var(--workbench-border);
-  --dsw-alias-border-l4: var(--workbench-control-border);
-  --dsw-alias-state-business-primary: var(--workbench-brand);
-  --dsw-specific-sidebar-fill: var(--workbench-surface);
-  --dsw-specific-sidebar-nav-item-hover: var(--workbench-hover);
-  --dsw-specific-sidebar-nav-item-active: var(--workbench-brand-soft);
-  --dsw-specific-input-major: var(--workbench-surface);
-  background-color: var(--dsw-alias-bg-base);
-  color: var(--dsw-alias-label-primary);
-  font-family: var(--dsw-font-family);
+.agent-workbench-ui {
+  background: var(--workbench-page);
+  color: var(--workbench-text);
+  font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
 }
+.agent-workbench-directory { height: 100%; overflow: auto; box-sizing: border-box; padding: 24px; }
+.agent-workbench-pages { display: grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap: 12px; }
+.agent-workbench-ui button { padding: 10px 14px; border: 1px solid var(--workbench-border); border-radius: 8px; background: var(--workbench-surface); color: var(--workbench-text); font: inherit; cursor: pointer; }
+.agent-workbench-ui button:not(:disabled):hover { background: var(--workbench-hover); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+.agent-workbench-html { height: 100%; width: 100%; border: 0; display: block; }
+
+.agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }
 </style>
 <style>
 * { box-sizing: border-box; }
@@ -143,7 +137,7 @@ summary { cursor: pointer; width: fit-content; }
     ['DEMO-003', '帮助内容整理', '周晴', '待开始', 6],
     ['DEMO-004', '交付清单核对', '林晓', '进行中', 5],
   ];
-  let port, context, timer, themeReady = false, appliedTokens = [];
+  let timer, themeReady = false;
   const controls = enabled => {
     $('controls').disabled = !enabled;
     document.querySelectorAll('[data-state], #retry').forEach(button => button.disabled = !enabled);
@@ -168,7 +162,7 @@ summary { cursor: pointer; width: fit-content; }
     $('retry').hidden = !retry;
   };
   const query = (simulation = '') => {
-    if (!themeReady || !context) return;
+    if (!themeReady) return;
     clearTimeout(timer);
     $('results').setAttribute('aria-busy', 'true');
     $('summary').textContent = '正在查询…';
@@ -193,7 +187,6 @@ summary { cursor: pointer; width: fit-content; }
       $('table-region').hidden = !result.length;
       $('state').hidden = !!result.length;
       if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
-      catalog();
     }, 350);
   };
   $('search').onclick = () => query();
@@ -201,82 +194,21 @@ summary { cursor: pointer; width: fit-content; }
   $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; query(); };
   $('retry').onclick = () => query();
   document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
-  const catalog = () => {
-    if (!context || !port) return;
-    port.postMessage({type: 'catalog', session: context.session, elements: themeReady ? [
-      {id: 'filter:query', role: 'field', label: '项目名称', editable: true, ...($('query').value ? {value: $('query').value} : {})},
-      {id: 'filter:stage', role: 'control', label: '交付进度', editable: true, options: ['全部进度', '进行中', '已完成', '待开始'], ...($('stage').value ? {value: $('stage').value} : {})},
-      {id: 'control:search', role: 'control', label: '查询', actions: ['invoke']},
-      {id: 'control:reset', role: 'control', label: '重置', actions: ['invoke']},
-      ...[...$('rows').children].flatMap((row, index) => [...row.children].map((cell, column) => ({id: `readout:row${index}:c${column}`, role: 'field', label: ['项目编号','项目名称','负责人','交付进度','任务数'][column], value: cell.textContent})))
-    ] : []});
+  const projectTheme = event => {
+    if (event.source !== parent || event.data?.protocol !== 'agent-workbench-theme') return;
+    const value = event.data;
+    if (!Number.isFinite(value.fontSize)) return;
+    document.body.style.setProperty('--dsh-content-font-size', `${value.fontSize}px`);
+    document.documentElement.style.colorScheme = value.dark ? 'dark' : 'light';
+    document.body.toggleAttribute('data-ds-dark-theme', value.dark === true);
   };
-  $('query').addEventListener('input', catalog);
-  $('stage').addEventListener('change', catalog);
-  const receive = event => {
-    const message = event.data;
-    if (!message || typeof message !== 'object') return;
-    if (message.type === 'context') {
-      if (message.context === null) { context = null; stop('正在切换会话，请稍候…'); return; }
-      if (typeof message.context?.session !== 'string' || typeof message.context?.plugin !== 'string') return;
-      context = message.context;
-      port.postMessage({ type: 'theme:subscribe', session: context.session });
-      return;
-    }
-    if (message.type === 'apply' && message.session === context?.session) {
-      const args = message.args;
-      try {
-        if (!themeReady) throw Error('PAGE_NOT_READY');
-        if (args.kind === 'setValue' && args.target === 'filter:query' && typeof args.value === 'string' && args.value.length <= 100) $('query').value = args.value;
-        else if (args.kind === 'setValue' && args.target === 'filter:stage' && ['全部进度','进行中','已完成','待开始'].includes(args.value)) $('stage').value = args.value === '全部进度' ? '' : args.value;
-        else if (args.kind === 'invoke' && args.target === 'control:search') query();
-        else if (args.kind === 'invoke' && args.target === 'control:reset') { $('query').value = ''; $('stage').value = ''; query(); }
-        else throw Error('ACTION_NOT_ALLOWED');
-        port.postMessage({type: 'applied', toolCallId: message.toolCallId, session: context.session, applied: true});
-        catalog();
-      } catch (error) {
-        port.postMessage({type: 'applied', toolCallId: message.toolCallId, session: context.session, applied: false, error: error.message});
-      }
-      return;
-    }
-    if (message.type === 'identity-changed') { context = null; stop('页面连接已断开，请在工作台重新连接。'); return; }
-    if (message.type !== 'theme' || !context || message.context?.session !== context.session || message.context?.plugin !== context.plugin) return;
-    const tokens = message.tokens;
-    if (message.version !== expectedVersion || !tokens || typeof tokens !== 'object' ||
-        !['light', 'dark'].includes(message.colorScheme) ||
-        !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 ||
-        Object.entries(tokens).some(([name, value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== 'string' || value.length > 500)) {
-      stop('工作台共享样式版本不兼容或资源缺失，请重新构建并重新打开样板。');
-      return;
-    }
-    appliedTokens.forEach(name => document.body.style.removeProperty(name));
-    appliedTokens = Object.keys(tokens);
-    Object.entries(tokens).forEach(([name, value]) => document.body.style.setProperty(name, value));
-    document.body.style.setProperty('--workbench-font-size', `${message.fontSize}px`);
-    document.body.style.setProperty('--dsh-content-font-size', `${message.fontSize}px`);
-    document.documentElement.style.colorScheme = message.colorScheme;
-    document.body.toggleAttribute('data-ds-dark-theme', message.colorScheme === 'dark');
-    const wasReady = themeReady;
-    themeReady = true;
-    catalog();
-    diagnostic.hidden = true;
-    controls(true);
-    if (!wasReady) query();
-  };
-  const connect = event => {
-    if (event.source !== parent || event.origin !== new URL(document.referrer).origin ||
-        event.data?.protocol !== 'gea-html-v2' || event.data.type !== 'connect' || port ||
-        typeof event.data.context?.session !== 'string' || typeof event.data.context?.plugin !== 'string' || !event.ports[0]) return;
-    context = event.data.context;
-    port = event.ports[0];
-    port.onmessage = receive;
-    port.start();
-    port.postMessage({ type: 'theme:subscribe', session: context.session });
-  };
-  addEventListener('message', connect);
-  const timeout = setTimeout(() => { if (!themeReady) stop('未收到工作台主题，请重新连接后打开样板。'); }, 5000);
-  addEventListener('pagehide', () => { clearTimeout(timer); clearTimeout(timeout); removeEventListener('message', connect); port?.close(); }, { once: true });
-  parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
+  addEventListener('message', projectTheme);
+  addEventListener('pagehide', () => { clearTimeout(timer); removeEventListener('message', projectTheme); }, { once: true });
+  themeReady = true;
+  diagnostic.hidden = true;
+  controls(true);
+  query();
+
 })();
 </script>
 </body>
