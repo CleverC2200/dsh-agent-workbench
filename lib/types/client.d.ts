@@ -8,6 +8,14 @@ declare const zh: {
     failed: string;
     retry: string;
     empty: string;
+    resources: string;
+    start: string;
+    useSkill: string;
+    unavailable: string;
+    missing: string;
+    resourcesFailed: string;
+    resourceWorking: string;
+    resourcesRefresh: string;
 };
 declare module "@deepseek-ai/dsh-client-ui-slots" {
     interface LocaleNamespaceMap {
@@ -22,3 +30,8 @@ declare module "@deepseek-ai/cordis" {
     }
 }
 export type { AgentWorkbench, WorkbenchPage } from "./workbench.ts";
+declare module "@deepseek-ai/dsh-api-session-controller/client" {
+    interface SessionReferenceSourceMap {
+        agentResourceSelection: unknown;
+    }
+}
