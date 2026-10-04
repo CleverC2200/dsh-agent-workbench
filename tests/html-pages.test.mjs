@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {pathToFileURL} from 'node:url';
 import { build } from 'esbuild';
-const { outputFiles } = await build({ entryPoints: ['src/html-pages.ts'], bundle: true, write: false, format: 'esm', platform: 'node', plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:pathToFileURL(resolve('../../official-core/packages/core/tools/lib/index.js')).href,external:true}));}}] });
+const { outputFiles } = await build({ entryPoints: ['src/html-pages.ts'], bundle: true, write: false, format: 'esm', platform: 'node', plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:pathToFileURL(resolve('../../official-latest-standard/packages/core/tools/lib/index.js')).href,external:true}));}}] });
 await writeFile('.scratch/html-pages-test.mjs',outputFiles[0].text);
 const {HtmlPages}=await import(pathToFileURL(resolve('.scratch/html-pages-test.mjs')).href);
 

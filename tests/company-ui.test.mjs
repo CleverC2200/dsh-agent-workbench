@@ -5,7 +5,7 @@ import {createRequire} from 'node:module';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {JSDOM} from 'jsdom';
-import {SlotCore} from '../../../official-core/packages/client/ui-slots/lib/index.js';
+import {SlotCore} from '../../../official-latest-standard/packages/client/ui-slots/lib/index.js';
 const require=createRequire(import.meta.url);
 const bundle=await build({entryPoints:['src/company/ui.tsx'],bundle:true,write:false,format:'cjs',platform:'node',external:['react','react/jsx-runtime'],loader:{'.png':'dataurl'}});
 const module={exports:{}};new Function('module','exports','require',bundle.outputFiles[0].text)(module,module.exports,require);

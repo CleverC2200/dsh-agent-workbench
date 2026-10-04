@@ -11,6 +11,8 @@ const { outputFiles } = await build({
     contents: "export * from './src/page-bridge/registry.ts';",
     resolveDir: process.cwd(),
   },
+  // Use the built current public SDK instead of bundling workspace SDK sources.
+  packages: "external",
   bundle: true,
   write: false,
   platform: "node",

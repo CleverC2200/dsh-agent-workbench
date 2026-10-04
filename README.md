@@ -1,6 +1,6 @@
 # Agent 工作台
 
-Workbench 在未修改的官方 DSH `4878cdabd87d4041bdaff61d04c966883b9fd07a` 上提供公司品牌、账户投影、业务分组导航、欢迎区与公共工具栏，并承载原生页面、HTML 与包内资源桥。官方 `ui-layout`、工作区浏览器、设置、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开静态页面不会创建 Session、改写 preset 或发送模型请求。
+Workbench 在未修改的官方 DSH `5badb15009ae1756c3afe0ae0cef1faafc290ccc` 上提供公司品牌、账户投影、业务分组导航、欢迎区与公共工具栏，并承载原生页面、HTML 与包内资源桥。官方 `ui-layout`、工作区浏览器、设置、原生 Conversation、主题和字号保留各自归属。Workbench 不替换 root 或 layout，不创建业务登录状态；打开静态页面不会创建 Session、改写 preset 或发送模型请求。
 
 ## 页面接入
 
@@ -26,7 +26,7 @@ Host 公开认证 Fetch：
 
 ## 官方输入与构建
 
-`cordis.patch.yml` 插入本插件并公开禁用默认 `ui-sidebar`；Workbench 声明原公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务/Factory保持启用。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-core` 标准产物，包括官方 Cordis `4.0.4`。旧 npm 锁仅用于准备开发工具，不能作为官方适配或运行的证据；最终外部 SDK 与宿主必须来自同一个官方输入。
+`cordis.patch.yml` 插入本插件并公开禁用默认 `ui-sidebar`；Workbench 声明原公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务/Factory保持启用。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-latest-standard` 标准产物，包括官方 Cordis `4.0.5-alpha.1`。npm锁登记本项目当前官方SDK的文件链接，实际SDK与宿主来自同一个已构建官方输入；类型/离线通过仍不代表实际客户端验收。
 
 ```sh
 npm ci --ignore-scripts --prefer-offline
@@ -59,6 +59,8 @@ GEA 的窄 geaPageExecution 只提供唯一身份投影与既有受控 open/call
 
 Workbench 持有现有 Native 审批文档、Inbox/ApiLog/桌面导航呈现、HTML 静态资源、页面目录、动作与引用的完整生命周期。Native 构建产物为 `lib/native.js` / `lib/native.css`，认证 Fetch 为 `/api/agent-workbench/native`。
 
-页面贡献者仍只调用 `registerFrame({id,label,kind,src,resourceId})`。Host 的已安装业务页通过 `workbenchPages.registerBusinessPage(page, authorize)` 接入真实业务 grant；凭据、Consumer、身份变化与业务权限留在实际 GEA adapter。Workbench 自己持有 opaque owner、两种页面动作通道、工具注册、官方 Session 引用与释放。Host 运行使用固定官方 Tools `0.2.0-rc.1`；开发依赖及类型映射按项目锁文件与 `typecheck:official` 核对。
+页面贡献者仍只调用 `registerFrame({id,label,kind,src,resourceId})`。Host 的已安装业务页通过 `workbenchPages.registerBusinessPage(page, authorize)` 接入真实业务 grant；凭据、Consumer、身份变化与业务权限留在实际 GEA adapter。Workbench 自己持有 opaque owner、两种页面动作通道、工具注册、官方 Session 引用与释放。Host 运行使用固定官方 Tools `0.2.1-alpha.1`；开发依赖及类型映射按项目锁文件与 `typecheck:official` 核对。
 
 `npm test` 是源码与离线行为检查；`test:browser` 另由同组运行所有者执行。离线通过不表示业务登录、真实数据或正式 UI 等价已验收。
+
+当前唯一官方输入为 `dsh-v0.2.1-alpha.1` / `5badb15009ae1756c3afe0ae0cef1faafc290ccc`；开发 SDK 通过本隔离项目已构建的 `official-latest-standard` package 文件链接提供，不复制 SDK。此本地开发配置不是发行依赖或发行授权；普通类型检查与官方类型检查均使用当前 SDK，旧4878输入不再是支持路径。

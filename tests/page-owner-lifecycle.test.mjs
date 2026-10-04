@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 
 // The same frozen official services used by the assembled candidate, not the
 // published development SDK or a substitute tools registration function.
-const core = resolve("../../official-core");
+const core = resolve("../../official-latest-standard");
 const official = (path) => pathToFileURL(resolve(core, path)).href;
 const { Context } = await import(official("vendor/cordis/lib/index.js"));
 const { default: Tools } = await import(
