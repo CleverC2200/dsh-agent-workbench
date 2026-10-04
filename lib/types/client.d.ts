@@ -14,6 +14,7 @@ declare const zh: {
     unavailable: string;
     missing: string;
     resourcesFailed: string;
+    selectionFailed: string;
     resourceWorking: string;
     resourcesRefresh: string;
 };

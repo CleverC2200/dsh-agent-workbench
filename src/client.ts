@@ -5,13 +5,8 @@ import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-sidebar/client";
 import type {} from "@deepseek-ai/dsh-client-ui-theme/client";
 import type {} from "@deepseek-ai/dsh-client-locale/client";
-import { selectResource, type ResourceSummary, type NativeResourceSelection } from "./resource-selection.ts";
-import type { SessionId } from "@deepseek-ai/dsh-session/types";
+import { selectResource, mountNativeResourceSelection, type ResourceSummary, type NativeResourceSelection } from "./resource-selection.ts";
 import type {} from "@deepseek-ai/dsh-api-session-controller/client";
-import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
-import type {} from "@deepseek-ai/dsh-client-ui-workspace/client";
-import type {} from "@deepseek-ai/dsh-agent-preset-registry/types";
-import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
 import { WorkbenchController, type AgentWorkbench } from "./workbench.ts";
 import type { HtmlPage } from "./html-pages.ts";
@@ -20,8 +15,8 @@ import { presentHtml } from "./html-document.ts";
 
 export const inject = ["slots", "layout", "locale", "theme"];
 const DIRECTORY = "agent-workbench" as MainPanelId;
-const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"未安装 Skill", resourcesFailed:"资源读取失败", resourceWorking:"正在装载", resourcesRefresh:"刷新资源" };
-const en = { title: "Workbench", pages: "Available pages", conversation: "Conversation", failed: "Page directory unavailable", retry: "Retry", empty: "No pages available", resources:"Prompts and Skills", start:"Start a new chat", useSkill:"Use in a new chat", unavailable:"Unavailable", missing:"Missing Skills", resourcesFailed:"Resources unavailable", resourceWorking:"Loading", resourcesRefresh:"Refresh resources" };
+const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"当前不可用 Skill", resourcesFailed:"资源清单读取失败，请刷新。", selectionFailed:"资源选用失败，请重试。", resourceWorking:"正在装载", resourcesRefresh:"刷新资源" };
+const en = { title: "Workbench", pages: "Available pages", conversation: "Conversation", failed: "Page directory unavailable", retry: "Retry", empty: "No pages available", resources:"Prompts and Skills", start:"Start a new chat", useSkill:"Use in a new chat", unavailable:"Unavailable", missing:"Unavailable Skills", resourcesFailed:"Resource list unavailable. Please refresh.", selectionFailed:"Unable to select this resource. Please retry.", resourceWorking:"Loading", resourcesRefresh:"Refresh resources" };
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface LocaleNamespaceMap { agentWorkbench: keyof typeof zh; }
@@ -47,45 +42,29 @@ export function apply(ctx: Context): void {
   ctx.effect(() => () => workbench.dispose());
 
   let nativeResources: NativeResourceSelection | undefined;
-  ctx.inject(["sessions", "remote.agentPresets", "conversation", "uiWorkspace"], scope => {
-    const host: NativeResourceSelection = {
-      fetch: (...args) => fetch(...args),
-      create: options => scope.sessions.create(options),
-      select: async (id, preset) => {const result=await scope.remote.agentPresets.select(id as SessionId,preset);if(!result.ok)throw Error(result.error.message);},
-      open: async (id,skill,signal) => scope.sessions.using(id as SessionId,{source:"agentResourceSelection",signal},reference => {
-        signal.throwIfAborted();
-        if(skill){
-          const input=scope.conversation.input.for(reference.binding.ctx);
-          const state=input.state.getSnapshot();
-          if(state.draft || reference.binding.ctx.bail("slash/input-insert-text",{text:`/${skill} `,span:{start:0,end:0,draftRev:state.draftRev}})!==true)throw Error("RESOURCE_DRAFT_CHANGED");
-        }
-        scope.uiWorkspace.openSession(id as SessionId);
-      }),
-    };
-    nativeResources=host;
-    scope.effect(() => () => {if(nativeResources===host)nativeResources=undefined;});
-  });
+  mountNativeResourceSelection(ctx, host => {nativeResources=host;});
+
   function Resources() {
     const [rows,setRows]=useState<ResourceSummary[]>([]);
     const [resourceRevision,refreshResources]=useState(0);
-    const [error,setError]=useState(""); const [busy,setBusy]=useState("");
+    const [error,setError]=useState(""); const [selectionError,setSelectionError]=useState(false); const [busy,setBusy]=useState("");
     const pending=useRef<AbortController>();
     useEffect(() => {
       const lifetime=new AbortController();
       void fetch("/api/agent-manage/resources",{signal:lifetime.signal,cache:"no-store"}).then(async response=>{
         if(!response.ok)throw Error(`HTTP ${response.status}`);const value=await response.json();lifetime.signal.throwIfAborted();setRows(value);setError("");
-      }).catch(failure=>{if(!lifetime.signal.aborted)setError(String(failure));});
+      }).catch(failure=>{if(!lifetime.signal.aborted){console.error("[agent-workbench] resource list failed",failure);setSelectionError(false);setError(String(failure));}});
       return () => {lifetime.abort();pending.current?.abort();};
     },[resourceRevision]);
     const choose=async (id:string) => {
       pending.current?.abort();const controller=new AbortController();pending.current=controller;setBusy(id);setError("");
       try {if(!nativeResources)throw Error(t("unavailable"));await selectResource(nativeResources,id,controller.signal);}
-      catch(failure){if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));}
+      catch(failure){if(!controller.signal.aborted){console.error("[agent-workbench] resource selection failed",{id,error:failure instanceof Error?failure.message:String(failure)});setSelectionError(true);setError(String(failure));}}
       finally{if(!controller.signal.aborted)setBusy("");}
     };
     return React.createElement("section",null,React.createElement("h2",null,t("resources")),
       React.createElement("button",{type:"button",disabled:Boolean(busy),onClick:()=>refreshResources(value=>value+1)},t("resourcesRefresh")),
-      error?React.createElement("p",{role:"alert"},t("resourcesFailed")+": "+error):null,
+      error?React.createElement("p",{role:"alert"},selectionError?t("selectionFailed"):t("resourcesFailed")):null,
       ...rows.map(row=>React.createElement("div",{key:row.id},
         React.createElement("button",{type:"button",disabled:!row.enabled||Boolean(busy),onClick:()=>void choose(row.id)},row.label+" · "+(busy===row.id?t("resourceWorking"):!row.enabled?t("unavailable"):row.kind==="skill"?t("useSkill"):t("start"))),
         row.missingSkills?.length?React.createElement("p",null,t("missing")+": "+row.missingSkills.join(", ")):null,

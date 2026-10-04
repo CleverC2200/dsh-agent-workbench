@@ -1,3 +1,10 @@
+import type { Context } from "@deepseek-ai/cordis";
+import type { SessionId } from "@deepseek-ai/dsh-session/types";
+import type {} from "@deepseek-ai/dsh-api-session-controller/client";
+import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
+import type {} from "@deepseek-ai/dsh-client-ui-workspace/client";
+import type {} from "@deepseek-ai/dsh-agent-preset-registry/types";
+import type {} from "@deepseek-ai/dsh-api-remotes/client";
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
  fetch: typeof fetch;
@@ -19,4 +26,27 @@ export async function selectResource(host:NativeResourceSelection,id:string,sign
  signal.throwIfAborted();
  await host.select(sessionId,resource.preset);signal.throwIfAborted();
  await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal);
+}
+
+/** Bind the actual native client services under their Cordis effect lifetime. */
+export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResourceSelection|undefined)=>void):ReturnType<Context['inject']> {
+  let active:NativeResourceSelection|undefined;
+  return ctx.inject(["sessions", "remote", "remote.agentPresets", "conversation", "uiWorkspace"], scope => {
+    const host: NativeResourceSelection = {
+      fetch: (...args) => fetch(...args),
+      create: options => scope.sessions.create(options),
+      select: async (id, preset) => {const result=await scope.remote.agentPresets.select(id as SessionId,preset);if(!result.ok)throw Error(result.error.message);},
+      open: async (id,skill,signal) => scope.sessions.using(id as SessionId,{source:"agentResourceSelection",signal},reference => {
+        signal.throwIfAborted();
+        if(skill){
+          const input=scope.conversation.input.for(reference.binding.ctx);
+          const state=input.state.getSnapshot();
+          if(state.draft || reference.binding.ctx.bail("slash/input-insert-text",{text:`/${skill} `,span:{start:0,end:0,draftRev:state.draftRev}})!==true)throw Error("RESOURCE_DRAFT_CHANGED");
+        }
+        scope.uiWorkspace.openSession(id as SessionId);
+      }),
+    };
+    active=host;ready(host);
+    scope.effect(() => () => {if(active===host){active=undefined;ready(undefined);}});
+  });
 }
