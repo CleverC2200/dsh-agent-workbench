@@ -25,7 +25,7 @@ async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=fa
  },workspace:async path=>{calls.push(['workspace',path]);return 'workspace';},create:async()=> 'session-'+(++sessions),select:async()=>{},open:async id=>({sessionId:id,binding:{ctx:{}},ready:Promise.resolve({}),release(){calls.push(['release',id]);}})};
  mountFramePresentation(ctx,()=>available?host:undefined,key=>key,page=>calls.push(['history',page]));const root=createRoot(dom.window.document.getElementById('root'));
  const page=localBody?{id:'gea-inbox',label:'Original inbox',kind:'local',body:()=>createElement('article',{'data-original-inbox':true},'original body'),resourceId:'original'}:{id:'native',label:'Original page',src:'https://host.example/document',kind:'native',resourceId:'original'};
- const render=()=>root.render(createElement(Document,{page,SessionProvider:({session,children})=>createElement('div',{'data-retained-session':session.sessionId},children),renderSlot:()=>createElement(Conversation,{page:page.id,useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderFactorySlot:name=>createElement('div',{'data-official-factory':name},createElement('textarea',{'aria-label':'SDK draft fixture',defaultValue:''}))})}));
+ const render=()=>root.render(createElement(Document,{page,SessionProvider:({session,children})=>createElement('div',{'data-retained-session':session.sessionId},children),renderSlot:()=>createElement(Conversation,{page:page.id,useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderFactorySlot:(name,_options,extension)=>createElement('div',{'data-official-factory':name},extension?.slots.views&&createElement(extension.slots.views,{useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderSlot:name=>createElement('article',{'data-native-seat':name})}),createElement('textarea',{'aria-label':'SDK draft fixture',defaultValue:''}))})}));
  t.after(async()=>{await act(async()=>root.unmount());effects.reverse().forEach(off=>off());dom.window.close();for(const [key,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}});
  await act(async()=>render());
  return {dom,calls,waiting,render,dispose:async()=>act(async()=>root.unmount()),counts:()=>({sessions,listRequests,selectionRequests}),changeIdentity:async()=>act(async()=>{snapshot={...snapshot,scope:'principal-b'};for(const listener of listeners)listener();}),newConversation:async()=>act(async()=>dom.window.document.querySelector('[aria-label="新建对话"]').click()),resolve:async(item,value)=>act(async()=>item.resolve(Response.json(value)))};
@@ -83,11 +83,11 @@ for(const options of [{authenticated:false},{enabled:false},{selectionFails:true
  assert.equal(ai.querySelector('textarea,input,[contenteditable="true"]'),null);
  const business=f.dom.window.document.querySelector('iframe');
  await act(async()=>f.dom.window.document.querySelector('[aria-label="会话区最大，隐藏中间区域"]').click());
- assert.equal(business.hidden,true);assert.equal(ai.hidden,false);
+ assert.equal(business.parentElement.hidden,true);assert.equal(ai.hidden,false);
  await act(async()=>f.dom.window.document.querySelector('[aria-label="中间区域最大，隐藏会话区"]').click());
- assert.equal(business.hidden,false);assert.equal(ai.hidden,true);
+ assert.equal(business.parentElement.hidden,false);assert.equal(ai.hidden,true);
  await act(async()=>f.dom.window.document.querySelector('[aria-label="同时显示中间区域和会话区"]').click());
- assert.equal(business.hidden,false);assert.equal(ai.hidden,false);
+ assert.equal(business.parentElement.hidden,false);assert.equal(ai.hidden,false);
  assert.equal(f.dom.window.document.querySelector('iframe'),business,'switching modes keeps the business frame');
  assert.equal(f.counts().sessions,0);
 });

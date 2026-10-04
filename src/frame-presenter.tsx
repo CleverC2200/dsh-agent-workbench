@@ -1,9 +1,9 @@
-import React, {useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore} from "react";
+import React, {useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore} from "react";
 import type {Context} from "@deepseek-ai/cordis";
 import type {SessionReference} from "@deepseek-ai/dsh-api-session-controller/client";
 import type {SessionId} from '@deepseek-ai/dsh-session/types';
 import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
-import type {FactoryComponentPropsOf, PropsRenderFactories, PropsRenderSlots, PropsRuntime} from "@deepseek-ai/dsh-client-ui-slots";
+import type {FactoryComponentPropsOf, FactoryLocalComponentPropsOf, PropsRenderFactories, PropsRenderSlots, PropsRuntime} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import {selectResource,resourceWorkspace,type ResourceSummary,type NativeResourceSelection} from "./resource-selection.ts";
 import type {PageExecutionConnection,PageIdentitySnapshot,WorkbenchFramePage,WorkbenchPageExecution} from "./frame.ts";
@@ -159,23 +159,32 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       })().catch(failure=>{if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));});
       return()=>{controller.abort();if(preparation.current===controller)preparation.current=undefined;};
     },[identity.scope,identity.status?.authenticated,currentExecution,page.resourceId]);
+    const toolbar=<div className="gea-page-toolbar-seat"><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>;
     return <section ref={documentElement} className="agent-workbench-ui agent-workbench-document" style={{'--workbench-ai-preferred-width':conversationWidth+'px'} as React.CSSProperties}>
-      <div className={'gea-page-toolbar-anchor'+(view==='split'?' for-conversation':'')}><ConversationToolbar view={view} onViewChange={setView} onHistory={()=>showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error}/></div>
       <div className={"agent-workbench-document-body view-"+view}>
-        {Body?<div className="agent-workbench-html" hidden={view==='chat'}><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" hidden={view==='chat'} onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
+        <div className="agent-workbench-business" hidden={view==='chat'}>
+          {view==='center'&&toolbar}
+          {Body?<div className="agent-workbench-html"><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
+        </div>
         <div role="separator" aria-label="调整业务与AI栏宽" aria-orientation="vertical" className="agent-workbench-column-handle" hidden={view!=='split'}
           onPointerDown={event=>{if(event.button!==0||space.viewport<=1200||drag.current)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);drag.current={pointer:event.pointerId,x:event.clientX,width:conversationWidth};}}
           onPointerMove={event=>{if(drag.current?.pointer===event.pointerId)resizeConversation(event.clientX);}}
           onPointerUp={event=>{if(drag.current?.pointer!==event.pointerId)return;resizeConversation(event.clientX);drag.current=undefined;event.currentTarget.releasePointerCapture(event.pointerId);}}
           onPointerCancel={()=>{drag.current=undefined;}} onLostPointerCapture={()=>{drag.current=undefined;}}/>
-        <aside className="agent-workbench-native-conversation" aria-label="AI对话" hidden={view==='center'}>{selection?<SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider>:<p className="agent-workbench-page-status" role={error?"alert":"status"}>{error||t(!currentExecution||identity.state==="unknown"?"pageWait":!identity.status?.authenticated?"pageLogin":!resources()||!page.resourceId?"pageWait":busy?"pageWorking":"pageHint")}</p>}</aside>
+        <aside className="agent-workbench-native-conversation" aria-label="AI对话" hidden={view==='center'}>{view!=='center'&&toolbar}{selection?<SessionProvider session={selection.reference}>{renderSlot("agent-workbench.conversation",{page:page.id})}</SessionProvider>:<p className="agent-workbench-page-status" role={error?"alert":"status"}>{error||t(!currentExecution||identity.state==="unknown"?"pageWait":!identity.status?.authenticated?"pageLogin":!resources()||!page.resourceId?"pageWait":busy?"pageWorking":"pageHint")}</p>}</aside>
       </div>
     </section>;
   }
   ctx.effect(()=>ctx.slots.registerFactory({name:"agent-workbench.document",scope:"root",children:{"agent-workbench.conversation":{kind:"single",scope:"session"}}},Document));
-  ctx.slots.inject("agent-workbench.conversation",()=>ctx.slots.register({name:"agent-workbench.conversation"},({page,useSession,inputActions,renderFactorySlot}:PropsRuntime<"agent-workbench.conversation">&PropsRenderFactories)=>{
-    const blank=useSession(session=>session.blank&&!session.running&&!session.promptAttempted);
-    return <div className="workbench-page-conversation">{blank&&<CompanyWelcome page={page} language={ctx.locale.getSnapshot().active} onFill={text=>inputActions.setDraft(text)}/>} {renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false})}</div>;
+  ctx.slots.inject("agent-workbench.conversation",()=>ctx.slots.register({name:"agent-workbench.conversation"},({page,renderFactorySlot}:PropsRuntime<"agent-workbench.conversation">&PropsRenderFactories)=>{
+    const language=ctx.locale.getSnapshot().active;
+    const positions=useMemo(()=>({
+      views: function BusinessViews({useSession,inputActions,renderSlot}:FactoryLocalComponentPropsOf<'conversation.content','views'>){
+        const blank=useSession(session=>session.blank&&!session.running&&!session.promptAttempted);
+        return <>{blank&&<CompanyWelcome page={page} language={language} onFill={text=>inputActions.setDraft(text)}/>}<div className="workbench-page-history" hidden={blank}>{renderSlot('conversation.session',{})}</div></>;
+      },
+    }),[page,language]);
+    return <div className="workbench-page-conversation">{renderFactorySlot("conversation.content",{variant:"embedded",phase:"active",hero:false},{slots:positions})}</div>;
   }));
   return async(page,id,signal)=>{
     const reference=ctx.sessions.retain(id,{source:'agentResourceSelection',signal});
