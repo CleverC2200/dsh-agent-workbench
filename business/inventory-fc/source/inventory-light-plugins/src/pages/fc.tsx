@@ -215,7 +215,7 @@ function downloadText(
 }
 
 export function BranchInventoryAgent() {
-  const [userId, setUserId] = useState("planner-changsha");
+  const [userId, setUserId] = useState("");
   const [conversationId, setConversationId] = useState(() => {
     if (typeof window !== "undefined") {
       const session = new URLSearchParams(window.location.search).get(
@@ -229,9 +229,9 @@ export function BranchInventoryAgent() {
   const [warehouseId, setWarehouseId] = useState<WarehouseId>("changsha");
   const [authorizedWarehouseIds, setAuthorizedWarehouseIds] = useState<
     WarehouseId[]
-  >(WAREHOUSE_OPTIONS.map((warehouse) => warehouse.id));
+  >([]);
   const [warehouseOptions, setWarehouseOptions] =
-    useState<WarehouseOption[]>(WAREHOUSE_OPTIONS);
+    useState<WarehouseOption[]>([]);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionMode, setSessionMode] = useState<"local" | "gea">("gea");
   const [sessionError, setSessionError] = useState("");
@@ -359,10 +359,11 @@ export function BranchInventoryAgent() {
     window.setTimeout(() => setToast(""), 2600);
   }, []);
   useEffect(() => {
+    const controller = new AbortController();
     void (async () => {
       try {
         const response = await fetch(appPath("/api/session"), {
-          cache: "no-store",
+          cache: "no-store", signal: controller.signal,
         });
         const payload = (await response.json()) as {
           mode?: "local" | "gea";
@@ -389,6 +390,7 @@ export function BranchInventoryAgent() {
             typeof item.name === "string" &&
             item.name.trim(),
         );
+        if (controller.signal.aborted) return;
         const allowed = payload.authorizedWarehouses.filter((id) =>
           options.some((warehouse) => warehouse.id === id),
         );
@@ -412,11 +414,13 @@ export function BranchInventoryAgent() {
           setActiveTab(sharedTab);
         setSessionReady(true);
       } catch (error) {
+        if (controller.signal.aborted) return;
         setSessionError(
           error instanceof Error ? error.message : "启动会话校验失败",
         );
       }
     })();
+    return () => controller.abort();
     // The launch session is immutable for the lifetime of this mounted Agent page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1342,37 +1346,11 @@ export function BranchInventoryAgent() {
     setConversationId(createConversationId());
     setSubmissionStatus("idle");
   };
-  if (snapshotEmpty && !snapshotLoading) return (
-    <main className="launch-screen"><section className="launch-card" role="status">
-      <WarehouseSelect value={warehouseId} options={warehouseOptions}
-        disabled={planningSaving} onChange={(value) => selectWarehouse(value as WarehouseId)} />
-      <strong>当前授权范围暂无库存与计划数据</strong>
-      <p>查询已完成，未返回业务行；不代表库存数量为零。</p>
-      <button onClick={() => window.location.reload()}>重新查询</button>
-    </section></main>
-  );
-  if (
-    !sessionReady ||
-    (!readOnlyHistory &&
-      snapshotLoading &&
-      (!liveSnapshot || liveSnapshot.warehouseId !== warehouseId)) ||
-    (!readOnlyHistory &&
-      sessionMode === "gea" &&
-      (!liveSnapshot || liveSnapshot.warehouseId !== warehouseId))
-  ) {
-    const blockingError =
-      sessionError || (sessionMode === "gea" ? snapshotError : "");
-    if (!blockingError) return <WorkbenchLoading title="分仓库存经营看板" compact />;
-    return (
-      <main className="launch-screen">
-        <div className="launch-card error" role="alert">
-          <AlertTriangle size={28} />
-          <strong>无法进入分仓库存</strong>
-          <p>{blockingError}</p>
-        </div>
-      </main>
-    );
-  }
+  const awaitingData = !sessionReady || (!readOnlyHistory && (
+    (snapshotLoading && (!liveSnapshot || liveSnapshot.warehouseId !== warehouseId)) ||
+    (sessionMode === "gea" && (!liveSnapshot || liveSnapshot.warehouseId !== warehouseId))
+  ));
+  const blockingError = sessionError || (sessionMode === "gea" ? snapshotError : "");
   return (
     <main className="agent-root" data-page-reference-ready={referenceReady}
       data-page-reference-scope={referenceScope}>
@@ -1408,7 +1386,7 @@ export function BranchInventoryAgent() {
                 </Fragment>
               ))}
             </div>
-            {!hasLiveWarehouseSource(snapshot) && (
+            {!awaitingData && !snapshotEmpty && !hasLiveWarehouseSource(snapshot) && (
               <span className="readonly-badge">演示数据（非真实业务）</span>
             )}
             <button type="button" className="secondary-button" onClick={() => window.dispatchEvent(new Event("gea-page-refresh"))}>刷新</button>
@@ -1416,7 +1394,7 @@ export function BranchInventoryAgent() {
               <WarehouseSelect
                 value={warehouseId}
                 options={warehouseOptions}
-                disabled={readOnlyHistory || planningSaving}
+                disabled={!sessionReady || readOnlyHistory || planningSaving}
                 onChange={(value) => selectWarehouse(value as WarehouseId)}
               />
             </div>
@@ -1425,13 +1403,13 @@ export function BranchInventoryAgent() {
               type="button"
               aria-label="补货周期配置"
               aria-haspopup="dialog"
-              disabled={planningSaving}
+              disabled={planningSaving || awaitingData || snapshotEmpty}
               title="分仓默认周期；SKU、物料组、大类可单独配置，以明细中的生效周期为准"
               onClick={() => setDialog("cycle")}
             >
               <SlidersHorizontal size={16} />
               <span>补货周期</span>
-              <strong>{warehouseCycle.cycleDays}天</strong>
+              <strong>{awaitingData || snapshotEmpty ? "—" : `${warehouseCycle.cycleDays}天`}</strong>
             </button>
             {readOnlyHistory && (
               <span className="readonly-badge">历史快照 · 只读</span>
@@ -1440,6 +1418,7 @@ export function BranchInventoryAgent() {
         </header>
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
+            {!awaitingData && !snapshotEmpty && <>
             <div className="kpi-grid safety-stock-kpis">
               {[
                 { title: "当前库存", value: kpiQuantity(snapshot.metrics.inventoryQty), unit: "件", color: "blue", details: [["回顾周转", kpiDecimal(snapshot.metrics.turnoverDays), "天"], ["展望周转", kpiDecimal(snapshot.metrics.forecastTurnoverDays), "天"]] },
@@ -1475,6 +1454,7 @@ export function BranchInventoryAgent() {
                 </p>
               </details>
             ) : null}
+            </>}
             <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
               {TABS.map((tab) => (
                 <button
@@ -1489,6 +1469,14 @@ export function BranchInventoryAgent() {
               ))}
             </nav>
             <div className="business-panel" aria-busy={snapshotLoading}>
+              {awaitingData || snapshotEmpty ? (
+                <div className="empty-state" role={blockingError ? "alert" : "status"}>
+                  <strong>{snapshotEmpty ? "当前授权范围暂无库存与计划数据" : blockingError ? "当前分仓数据尚未就绪" : "等待分仓数据连接"}</strong>
+                  <p>{snapshotEmpty ? "查询已完成，未返回业务行；不代表库存数量为零。" : blockingError || "请先登录并连接页面能力，再读取当前分仓数据。"}</p>
+                  {sessionReady && snapshotLoading && !blockingError && <WorkbenchLoading title="正在读取当前分仓" compact />}
+                  <p>可先切换库存业务页签；未读取的数据不作为库存事实。</p>
+                </div>
+              ) : <>
               {(snapshot as any).localPreview && (
                 <div className="inline-note" role="status">
                   计划与周期试算 · 未保存
@@ -2161,6 +2149,7 @@ export function BranchInventoryAgent() {
                     )}
                 </>
               )}
+              </>}
             </div>
           </section>
         </div>

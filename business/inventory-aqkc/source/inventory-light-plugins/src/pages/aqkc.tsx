@@ -5,7 +5,7 @@ import { usePageFilter } from "../native/page-filter.tsx";
 
 import { DailyReportButton } from "./aqkc/components/analytics/daily-report-dialog.tsx";
 
-import { ask as askDsh, reportElements } from "../channel.js";
+import { ask as askDsh, reportElements, call } from "../channel.js";
 
 import { updateContext, removeContextPart, pageContext as reportContext } from "../native/context.ts";
 
@@ -133,7 +133,7 @@ const DATA_READ_FAILURE_MESSAGE = "数据读取失败，请刷新重试；若仍
 
 function readFailureText(value: unknown) {
   const message = queryErrorText(value);
-  return message === DATA_PERMISSION_MESSAGE ? message : DATA_READ_FAILURE_MESSAGE;
+  return message === DATA_PERMISSION_MESSAGE || (typeof message === "string" && /页面已显示|登录身份已变化|页面会话已切换/.test(message)) ? message : DATA_READ_FAILURE_MESSAGE;
 }
 
 const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
@@ -299,9 +299,13 @@ export function InventoryOperationsWorkbench() {
     let active = true;
     const controller = new AbortController();
     setDashboardLoading(true);
-    loadInitialDashboardPayload(controller.signal)
+    call("access", {}, { signal: controller.signal })
+      .then(() => {
+        if (!active || controller.signal.aborted) return null;
+        return loadInitialDashboardPayload(controller.signal);
+      })
       .then((payload) => {
-        if (!active) return;
+        if (!active || controller.signal.aborted) return;
         const workspace = normalizeWorkspaceState(payload?.workspace);
         if (!workspace) throw new Error("数据暂时无法展示，请刷新后重试。");
         setDashboardWorkspaceState(workspace);
