@@ -47,7 +47,7 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 公司自有主壳通过公开 `conversation.content` 的 `embedded` 呈现消费原生会话。已有 Session 的首页欢迎和工作区/Agent控件位于 Factory 的 `views` 内容流，同时保留官方 `conversation.session` 与 resident composer；提示词与 Skill 资源清单位于工作台目录，不能作为首页宽度控件挤走输入区。无 Session 时的冷启动控件保留在独立可收缩滚动容器，官方惯有输入仍呈现。工作区切换沿 Factory 的 `selectWorkspace`，保留官方草稿转移行为，不复制私有主壳样式或扫描宿主 DOM。
 
-资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。静态原型无这项前置。
+资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。静态原型无这项前置；用户可从其历史入口明确关联一个既有 Core Session，读取实际 preset 投影（包括明确的 null），不选用资源、不调用业务 grant，也不要求 GEA 登录。
 
 曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现，正文局部状态的跨全局 panel 恢复仍须由具体页面接口提供，不能通过复制 DOM 或推测数据恢复。
 

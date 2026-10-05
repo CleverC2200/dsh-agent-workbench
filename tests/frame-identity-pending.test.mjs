@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);const {JSDOM}=require('jsdom');
 const {outputFiles}=await build({stdin:{contents:`export {mountFramePresentation} from './src/frame-presenter.tsx';export {WorkbenchController} from './src/workbench.ts';export {createElement,act,useSyncExternalStore} from 'react';export {createRoot} from ${JSON.stringify(require.resolve('react-dom/client'))};`,resolveDir:process.cwd()},bundle:true,write:false,format:'cjs',platform:'node',alias:{react:resolve('node_modules/react')},loader:{'.png':'dataurl','.css':'text'}});
 const module={exports:{}};new Function('module','exports','require',outputFiles[0].text)(module,module.exports,require);
 const {mountFramePresentation,WorkbenchController,createElement,createRoot,act,useSyncExternalStore}=module.exports;
-async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=false,delayList=false,selectionFails=false,localBody=false,available=true,nativeTools=false}={}){
+async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=false,delayList=false,selectionFails=false,localBody=false,available=true,nativeTools=false,staticDocument=false}={}){
  const dom=new JSDOM('<main id="root"></main>',{url:'https://host.example/workbench',pretendToBeVisual:true});
  const keys=['window','document','navigator','IS_REACT_ACT_ENVIRONMENT','MessageChannel'];const saved=keys.map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
  for(const [key,value]of [['window',dom.window],['document',dom.window.document],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true],['MessageChannel',class{constructor(){this.port1={onmessage:null,close(){}};this.port2={postMessage:value=>setImmediate(()=>this.port1.onmessage?.({data:value})),close(){}};}}]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
@@ -29,12 +29,12 @@ async function fixture(t,{authenticated=true,enabled=true,delayFirstSelection=fa
  const workbench=new WorkbenchController({panel:()=>{},document:id=>{if(id)ctx.uiWorkspace.openSession(id);}});workbench.subscribeHistory(()=>calls.push(['history',workbench.getSnapshot().selectedDocument?.id]));
  mountFramePresentation(ctx,()=>available?host:undefined,key=>key,workbench);const root=createRoot(dom.window.document.getElementById('root'));
  const page=localBody?{id:'gea-inbox',label:'Original inbox',kind:'local',body:()=>createElement('article',{'data-original-inbox':true},'original body'),resourceId:'original'}:{id:'native',label:'Original page',src:'https://host.example/document',kind:'native',resourceId:'original'};
- workbench.registerFrame(page);await workbench.open(page.id);
+ if(staticDocument)delete page.resourceId;workbench.registerFrame(page);await workbench.open(page.id);
  function Main(){const sessionId=useSyncExternalStore(listener=>{sessionListeners.add(listener);return()=>sessionListeners.delete(listener);},()=>mainSession);return createElement(Document,{page,active:true,sessionId,useSession:selector=>sessionId?selector({blank:true,running:false,promptAttempted:false,openState:'open'}):undefined,renderSlot:()=>createElement('div',{'data-native-session':sessionId},createElement(Conversation,{page:page.id,useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderFactorySlot:(name,_options,extension)=>createElement('div',{'data-official-factory':name},extension?.slots.views&&createElement(extension.slots.views,{useSession:selector=>selector({blank:true,running:false,promptAttempted:false}),inputActions:{setDraft:text=>calls.push(['draft',text])},renderSlot:name=>createElement('article',{'data-native-seat':name})}),createElement('textarea',{'aria-label':'SDK draft fixture',defaultValue:''}))}) )});}
  const render=()=>root.render(createElement(Main));
  t.after(async()=>{await act(async()=>root.unmount());effects.reverse().forEach(off=>off());dom.window.close();for(const [key,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}});
  await act(async()=>render());
- return {dom,calls,waiting,render,toolsExpanded:()=>expanded,removeTools:async()=>act(async()=>{toolGuide=[];for(const changed of toolChanges)changed();}),dispose:async()=>act(async()=>root.unmount()),counts:()=>({sessions,listRequests,selectionRequests}),changeIdentity:async()=>act(async()=>{snapshot={...snapshot,scope:'principal-b'};for(const listener of listeners)listener();}),newConversation:async()=>act(async()=>dom.window.document.querySelector('[aria-label="新建对话"]').click()),resolve:async(item,value)=>act(async()=>item.resolve(Response.json(value)))};
+ return {dom,calls,waiting,render,historyPage:()=>workbench.takeHistoryPage(),toolsExpanded:()=>expanded,removeTools:async()=>act(async()=>{toolGuide=[];for(const changed of toolChanges)changed();}),dispose:async()=>act(async()=>root.unmount()),counts:()=>({sessions,listRequests,selectionRequests}),changeIdentity:async()=>act(async()=>{snapshot={...snapshot,scope:'principal-b'};for(const listener of listeners)listener();}),newConversation:async()=>act(async()=>dom.window.document.querySelector('[aria-label="新建对话"]').click()),resolve:async(item,value)=>act(async()=>item.resolve(Response.json(value)))};
 }
 test('formal page navigation auto-prepares one actual native Session only for an authenticated enabled resource',async t=>{
  const f=await fixture(t);assert.deepEqual(f.counts(),{sessions:1,listRequests:1,selectionRequests:1});
@@ -131,4 +131,13 @@ test('the Document consumes native tab kinds from public metadata, keeps its dra
  await open();await act(async()=>document.querySelector('[aria-label="会话区最大，隐藏中间区域"]').click());
  assert.ok(document.querySelector('.view-chat'));assert.equal(f.toolsExpanded(),false,'an explicit mode choice takes priority over temporary tool presentation');
  await f.removeTools();assert.equal(document.querySelector('[aria-label="原生工具"]'),null,'unloaded providers cease to be selectable');
+});
+
+
+test('a static Document can explicitly choose an existing native history without login, resource preparation or Session creation',async t=>{
+ const f=await fixture(t,{localBody:true,staticDocument:true,authenticated:false});
+ assert.ok(f.dom.window.document.querySelector('[data-original-inbox]'));assert.deepEqual(f.counts(),{sessions:0,listRequests:0,selectionRequests:0});
+ await act(async()=>f.dom.window.document.querySelector('[aria-label="历史对话"]').click());
+ assert.equal(f.historyPage(),'gea-inbox','the explicit history request preserves its actual static Document location');
+ assert.deepEqual(f.counts(),{sessions:0,listRequests:0,selectionRequests:0});
 });

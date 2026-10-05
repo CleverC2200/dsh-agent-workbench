@@ -15,7 +15,7 @@ export interface AgentWorkbench {
 }
 export interface DocumentSession {
     readonly sessionId: SessionId;
-    readonly preset: string;
+    readonly preset: string | null;
     readonly ownerScope: string | null;
 }
 export interface WorkbenchSnapshot {

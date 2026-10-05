@@ -75,7 +75,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const documentState=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot);
     const selection=documentState.selectedDocument?.id===page.id?documentState.selection:undefined;
     const session=useSession(value=>value);
-    const associated=active&&selection?.sessionId===sessionId&&selection!==undefined&&selection.ownerScope===identity.scope&&identity.status?.authenticated===true;
+    const associated=active&&selection?.sessionId===sessionId&&selection!==undefined&&(!page.resourceId||(selection.ownerScope===identity.scope&&identity.status?.authenticated===true));
     const restoreView=useRef<'center'|'split'|'chat'>();
     const currentTools=useSyncExternalStore(listener=>{toolListeners.add(listener);return()=>{toolListeners.delete(listener);};},()=>tools);
     const guide=useSyncExternalStore(currentTools?listener=>currentTools.sidebarRightTabs.subscribe(listener):noSubscribe,()=>currentTools?.sidebarRightTabs.guide()??emptyGuide);
@@ -125,7 +125,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
         flight.controller.abort();
         if(pending.current===flight){pending.current=undefined;setBusy(false);}
       }
-      if(selection&&(identity.scope!==selection.ownerScope||!identity.status?.authenticated)){
+      if(selection&&page.resourceId&&(identity.scope!==selection.ownerScope||!identity.status?.authenticated)){
         workbench.forgetSession(page.id);setError(t("pageChanged"));
       }
     },[identity.scope,identity.status?.authenticated,selection]);
@@ -197,7 +197,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       })().catch(failure=>{if(!controller.signal.aborted)setError(failure instanceof Error?failure.message:String(failure));});
       return()=>{controller.abort();if(preparation.current===controller)preparation.current=undefined;preparationOwner.current=undefined;};
     },[active,identity.scope,identity.status?.authenticated,currentExecution,page.resourceId]);
-    const toolbar=<div className="gea-page-toolbar-seat"><ConversationToolbar view={view} onViewChange={changeView} onHistory={()=>workbench.showHistory(page.resourceId?page.id:undefined)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error||navigationError||""} tools={associated?guide:emptyGuide} onOpenTool={openTool} onCloseTools={closeTools} toolsExpanded={toolsExpanded}/></div>;
+    const toolbar=<div className="gea-page-toolbar-seat"><ConversationToolbar view={view} onViewChange={changeView} onHistory={()=>workbench.showHistory(page.id)} onNewConversation={()=>{if(page.resourceId)void connect();}} error={error||navigationError||""} tools={associated?guide:emptyGuide} onOpenTool={openTool} onCloseTools={closeTools} toolsExpanded={toolsExpanded}/></div>;
     return <section ref={documentElement} className="agent-workbench-ui agent-workbench-document" style={{'--workbench-ai-preferred-width':conversationWidth+'px'} as React.CSSProperties}>
       <div className={"agent-workbench-document-body view-"+view}>
         <div className="agent-workbench-business" hidden={view==='chat'}>
@@ -229,7 +229,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     try{
       await reference.ready;signal.throwIfAborted();
       const preset=reference.binding.session.projections.faceOf('agentPreset').getSnapshot();
-      if(typeof preset!=='string'||!preset)throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+      if(preset!==null&&(typeof preset!=='string'||!preset))throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
       workbench.associateSession(page,{sessionId:id,preset,ownerScope:execution?.identity.getSnapshot().scope??null});
     }finally{reference.release();}
   };
