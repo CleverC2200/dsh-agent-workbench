@@ -60,6 +60,8 @@ export function ConversationToolbar({
   onOpenTool,
   onCloseTools,
   toolsExpanded = false,
+  onAssociateCurrent,
+  associateDisabled = false,
 }: {
   view: ConversationView;
   onViewChange: (view: ConversationView) => void;
@@ -70,6 +72,8 @@ export function ConversationToolbar({
   onOpenTool?: (kind:string)=>void;
   onCloseTools?: ()=>void;
   toolsExpanded?: boolean;
+  onAssociateCurrent?: ()=>void;
+  associateDisabled?: boolean;
 }) {
   const choices: { view: ConversationView; label: string; icon: React.ReactNode }[] = [
     { view: "center", label: "中间区域最大，隐藏会话区", icon: <><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></> },
@@ -88,6 +92,7 @@ export function ConversationToolbar({
     <button type="button" className="gea-conversation-toolbar-action" aria-label="新建对话" title="新建对话" onClick={onNewConversation}>
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M12 7v10M7 12h10" /></svg>
     </button>
+    {onAssociateCurrent&&<button type="button" className="gea-conversation-toolbar-action" aria-label="关联当前对话" title="关联当前对话" disabled={associateDisabled} onClick={onAssociateCurrent}>↔</button>}
     {tools.length>0&&<select className="gea-conversation-toolbar-tool" aria-label="原生工具" value="" onChange={event=>{if(event.target.value)onOpenTool?.(event.target.value);}}><option value="" disabled>工具</option>{tools.map(tool=><option key={tool.providerId+':'+tool.id} value={tool.kind}>{tool.title()}</option>)}</select>}
     {toolsExpanded&&<button type="button" className="gea-conversation-toolbar-action" aria-label="关闭原生工具并恢复视图" onClick={onCloseTools}>×</button>}
     {error && <span className="gea-conversation-toolbar-error" role="alert" title={error}>对话操作失败</span>}

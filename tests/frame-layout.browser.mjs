@@ -10,8 +10,8 @@ const bundle=await build({stdin:{contents:`
  const documents=new DocumentWorkbench({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,documents);
  const root=createRoot(document.getElementById('root'));const page={id:'business',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
  documents.registerFrame(page);documents.open(page.id);
- window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
- root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',loader:{'.png':'dataurl','.css':'text'}});
+ window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
+ root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',loader:{'.png':'dataurl','.css':'text'}});
 async function documentFixture(t){
  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1600,height:700}});

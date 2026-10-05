@@ -17,7 +17,7 @@ export declare function GeaHomeHero({ copy, }: {
         description: string;
     };
 }): React.JSX.Element;
-export declare function ConversationToolbar({ view, onViewChange, onHistory, onNewConversation, error, tools, onOpenTool, onCloseTools, toolsExpanded, }: {
+export declare function ConversationToolbar({ view, onViewChange, onHistory, onNewConversation, error, tools, onOpenTool, onCloseTools, toolsExpanded, onAssociateCurrent, associateDisabled, }: {
     view: ConversationView;
     onViewChange: (view: ConversationView) => void;
     onHistory: () => void;
@@ -32,6 +32,8 @@ export declare function ConversationToolbar({ view, onViewChange, onHistory, onN
     onOpenTool?: (kind: string) => void;
     onCloseTools?: () => void;
     toolsExpanded?: boolean;
+    onAssociateCurrent?: () => void;
+    associateDisabled?: boolean;
 }): React.JSX.Element;
 export declare function NavIcon({ kind }: {
     kind: NavIconKind;

@@ -24,7 +24,10 @@ export type ApprovalPlanAdjustment = {
 };
 export type ApprovalDetailStore = {
     plans: Record<string, ApprovalPlanAdjustment>;
+    /** Explicit unsent UI text, partitioned by the actual Core Session and current plan/version/role. */
+    liveInputs?: Record<string, Record<string, string>>;
 };
+export declare const liveInputKey: (sessionId: string, planId: string, versionId: string, role: string | undefined) => string;
 export declare const EMPTY_APPROVAL_DETAIL_STORE: ApprovalDetailStore;
 export declare const approvalPlanKey: (organizationId: string, version: ApprovalVersion) => string;
 export declare const ensureApprovalPlan: (store: ApprovalDetailStore, row: RegionalApprovalRow, version: ApprovalVersion) => ApprovalDetailStore;

@@ -32,5 +32,5 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
     }
 }
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
-export type FrameCopyKey = "pageConnect" | "pageNewChat" | "pageWorking" | "pageChanged" | "pageHint" | "pageWait" | "pageLogin" | "pageSessionUnavailable";
+export type FrameCopyKey = "pageConnect" | "pageNewChat" | "pageWorking" | "pageChanged" | "pageHint" | "pageWait" | "pageLogin" | "pageSessionUnavailable" | "pageStaticHint" | "pageCreating";
 export declare function mountFramePresentation(ctx: Context, resources: () => NativeResourceSelection | undefined, t: (key: FrameCopyKey) => string, workbench: WorkbenchController): (page: MainPanelId, sessionId: SessionId, signal: AbortSignal) => Promise<void>;

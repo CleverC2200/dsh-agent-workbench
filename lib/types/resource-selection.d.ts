@@ -8,7 +8,10 @@ export interface NativeResourceSelection {
         workspaceId: string;
     }): Promise<string>;
     select(sessionId: string, preset: string): Promise<void>;
-    open(sessionId: string, skill: string | undefined, signal: AbortSignal, beforeOpen?: () => void): Promise<void>;
+    open(sessionId: string, skill: string | undefined, signal: AbortSignal, beforeOpen?: (session: {
+        sessionId: SessionId;
+        preset: string | null;
+    }) => void): Promise<void>;
 }
 export interface ResourceSummary {
     id: string;

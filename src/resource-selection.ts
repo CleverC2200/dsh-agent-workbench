@@ -12,7 +12,7 @@ export interface NativeResourceSelection {
  workspace(path:string):Promise<string>;
  create(options:{workspaceId:string}):Promise<string>;
  select(sessionId:string,preset:string):Promise<void>;
- open(sessionId:string,skill:string|undefined,signal:AbortSignal,beforeOpen?:()=>void):Promise<void>;
+ open(sessionId:string,skill:string|undefined,signal:AbortSignal,beforeOpen?:(session:{sessionId:SessionId;preset:string|null})=>void):Promise<void>;
 }
 export interface ResourceSummary {id:string;label:string;kind:'prompt'|'skill';installed:boolean;enabled:boolean;provider:string;skills?:string[];missingSkills?:string[];error?:string}
 export async function resourceWorkspace(request:typeof fetch,signal:AbortSignal,cwd?:string):Promise<string> {
@@ -57,7 +57,9 @@ export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResou
           if(state.draft || reference.binding.ctx.bail("slash/input-insert-text",{text:`/${skill} `,span:{start:0,end:0,draftRev:state.draftRev}})!==true)throw Error("RESOURCE_DRAFT_CHANGED");
         }
         signal.throwIfAborted();
-        beforeOpen?.();
+        const preset=reference.binding.session.projections.faceOf("agentPreset").getSnapshot();
+        if(preset!==null&&(typeof preset!=="string"||!preset))throw Error("PAGE_SESSION_PRESET_UNAVAILABLE");
+        beforeOpen?.({sessionId:reference.sessionId,preset});
         signal.throwIfAborted();
         scope.uiWorkspace.openSession(id as SessionId);
         }finally{reference.release();}

@@ -4,10 +4,16 @@ export type FrameBinding = {
     frame: HTMLIFrameElement;
     reference: SessionReference;
     page: string;
+} & ({
+    mode: "business";
     surface: string;
     tool?: string;
     owner: string;
-};
+} | {
+    mode: "quote";
+    isCurrentSession: () => boolean;
+    inputActions: import("@deepseek-ai/dsh-client-ui-conversation/client").InputActions;
+});
 export type PageInteraction = {
     bindFrame(options: FrameBinding): () => void;
     mountTrigger(container: HTMLElement, sessionId: string): () => void;
