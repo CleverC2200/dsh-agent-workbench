@@ -31,14 +31,14 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
  const page=await documentFixture(t);const ai=page.getByRole('complementary',{name:'AI对话'});const handle=page.getByRole('separator',{name:'调整业务与AI栏宽'});
  await expect(handle).toBeVisible();const box=await handle.boundingBox();await page.mouse.move(box.x+box.width/2,200);await page.mouse.down();await page.mouse.move(box.x+box.width/2-160,200);await page.mouse.up();
  assert.equal((await ai.boundingBox()).width,600);
- await page.evaluate(()=>window.remount());await expect(ai).toBeVisible();assert.equal((await ai.boundingBox()).width,600,'remount remembers the plugin instance preference');
+ await page.evaluate(()=>window.remount());await expect.poll(async()=>(await ai.boundingBox())?.width,{message:'remount remembers the plugin instance preference'}).toBe(600);
  for(const [viewport,width]of [[1201,521],[1200,360],[1025,360],[1024,320],[861,320],[860,300],[859,300],[1600,600]]){
-  await page.setViewportSize({width:viewport,height:700});await expect.poll(async()=>(await ai.boundingBox()).width).toBe(width);
+  await page.setViewportSize({width:viewport,height:700});await expect.poll(async()=>(await ai.boundingBox())?.width,{message:'responsive AI width at '+viewport}).toBe(width);
   const business=await page.getByRole('textbox',{name:'业务筛选'}).boundingBox();const right=await ai.boundingBox();assert.ok(business.x<right.x,'business and AI stay side by side');
   if(viewport<=1200)await expect(handle).toBeHidden();else await expect(handle).toBeVisible();
  }
  const minBox=await handle.boundingBox();await page.mouse.move(minBox.x+4,200);await page.mouse.down();await page.mouse.move(1550,200);await page.mouse.up();assert.equal((await ai.boundingBox()).width,300);
  const maxBox=await handle.boundingBox();await page.mouse.move(maxBox.x+4,200);await page.mouse.down();await page.mouse.move(0,200);await page.mouse.up();assert.equal((await ai.boundingBox()).width,920,'the business pane retains its formal 400px minimum');
- await page.setViewportSize({width:1600,height:700});await page.evaluate(()=>{document.getElementById('root').style.marginLeft='56px'});await expect.poll(async()=>(await ai.boundingBox()).width).toBe(920);
+ await page.setViewportSize({width:1600,height:700});await page.evaluate(()=>{document.getElementById('root').style.marginLeft='56px'});await expect.poll(async()=>(await ai.boundingBox())?.width).toBe(920);
  const ratioBox=await handle.boundingBox();await page.mouse.move(ratioBox.x+4,200);await page.mouse.down();await page.mouse.move(0,200);await page.mouse.up();assert.equal((await ai.boundingBox()).width,1120,'the original whole-frame 70% maximum also applies');
 });

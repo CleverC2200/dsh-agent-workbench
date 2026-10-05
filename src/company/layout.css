@@ -2,6 +2,7 @@
 .gea-sidebar-owned {height:100%;min-height:0;display:flex;flex-direction:column;box-sizing:border-box;padding:12px;}
 .gea-sidebar-brand-row,.gea-sidebar-brand {display:flex;align-items:center;min-width:0;}
 .gea-sidebar-brand-row {position:relative;}
+html[data-platform="darwin"] .gea-sidebar-brand-row > .gea-inbox-quick-action {right:0;}
 .gea-sidebar-brand {flex:1;}
 .gea-sidebar-region {flex:1;}
 .gea-sidebar-footer {display:flex;align-items:center;flex:none;}
@@ -19,4 +20,7 @@
 .gea-owned-sidebar-toggle,.gea-shell-leading .gea-inbox-quick-action {position:static;transform:none;flex:none;}
 .gea-native-selectors {box-sizing:border-box;width:calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance));max-width:var(--dsh-composer-card-max-width);margin-left:auto;margin-right:auto;margin-bottom:8px;}
 .gea-directory-owned {height:100%;min-height:0;overflow:auto;padding:24px;box-sizing:border-box;}
+.gea-sidebar-window-row {display:flex;flex:none;align-items:center;justify-content:flex-end;height:52px;box-sizing:border-box;margin:-12px -12px 0;padding:0 12px 2px;}
+.gea-sidebar-window-row + .gea-sidebar-brand-row {margin-top:-12px;}
+html[data-fullscreen] .gea-sidebar-window-row {justify-content:flex-start;}
 .gea-shell-leading {display:flex;align-items:center;gap:8px;}

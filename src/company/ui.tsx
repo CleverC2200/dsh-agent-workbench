@@ -1,6 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {createPortal} from 'react-dom';
 import type {Context} from '@deepseek-ai/cordis';
+import {IconPanelLeftOutlineRegular,IconNewChatOutlineRegular} from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {SessionId} from '@deepseek-ai/dsh-session/types';
 import type {PropsRuntime,PropsRenderSlots,PropsRenderFactories,FactoryLocalComponentPropsOf} from '@deepseek-ai/dsh-client-ui-slots';
@@ -11,13 +12,13 @@ import type {WorkbenchController} from '../workbench.ts';
 import type {BusinessAccount} from './account.ts';
 import {zh,en,type CopyKey} from './locales.ts';
 import {BUSINESS_MENU_PRESET,resolveBusinessMenu} from './navigation.ts';
-import {AgentWelcome,GeaHomeHero,NavIcon,Chevron,MenuIcon} from './formal-components.tsx';
+import {AgentWelcome,GeaHomeHero,NavIcon,Chevron} from './formal-components.tsx';
 import * as prompts from './conversation-prompts.ts';
 import brandLogo from './brand-logo.png';
 import css from './shell.css';
 import layoutCss from './layout.css';
 import staticControlsCss from './formal-static-controls.css';
-import {IconNewChatOutline16,IconPanelLeftOutline16,IconFolderClose16,IconFolderOpen16,IconChevronDownOutline14} from './formal-static-icons.tsx';
+import {IconNewChatOutline16,IconFolderClose16,IconFolderOpen16,IconChevronDownOutline14} from './formal-static-icons.tsx';
 
 const DIRECTORY='agent-workbench' as MainPanelId;
 const INBOX='gea-inbox' as MainPanelId;
@@ -101,6 +102,8 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
  }
  function Sidebar({collapsed,width,usePanelInfo,renderSlot}:PropsRuntime<'sidebar'>&PropsRenderSlots<'sidebar.brand.mark'|'sidebar.brand.name'|'sidebar.panellist'|'sidebar.workspaces'|'sidebar.settings'|'sidebar.footer.action'>){
   useSyncExternalStore(listener=>ctx.locale.subscribe(listener),()=>ctx.locale.getSnapshot().active,()=>ctx.locale.getSnapshot().active);
+  const darwin=typeof document!=='undefined'&&document.documentElement.dataset.platform==='darwin';
+  const sidebarToggle=<button type="button" className="gea-inbox-quick-action gea-owned-sidebar-toggle" aria-label="收起侧边栏" onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutlineRegular size={16}/></button>;
   const activePanel=usePanelInfo(value=>value.activePanelId);
   const business=Boolean(activePanel&&![DIRECTORY,PLUGINS,'gea-api-log'].includes(activePanel));
   const [drawer,setDrawer]=useState<'function'|'workspace'|'none'>(()=>business?'function':'workspace');
@@ -117,8 +120,9 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const toggleDrawer=(name:'function'|'workspace')=>setDrawer(value=>value===name?'none':name);
   const modules=[{id:DIRECTORY,label:'工作台'},{id:PLUGINS,label:(()=>{const label=ctx.slots.entries('sidebar.panellist').find(entry=>entry.options.id===PLUGINS)?.options.label;return typeof label==='function'?label():label??PLUGINS;})()}];
   return <aside className="gea-sidebar-owned" data-gea-narrow={collapsed||width<=100?'':undefined} data-sidebar-collapsed={collapsed?'':undefined} aria-label={t('businessNavigation')}>
+   {darwin&&<div className="gea-sidebar-window-row" data-window-drag>{sidebarToggle}</div>}
    <SidebarGeometry.Provider value={{collapsed,expand:expandSidebar}}><div className="gea-sidebar-brand-row"><div className="gea-sidebar-brand">{renderSlot('sidebar.brand.mark',{size:38})}{!collapsed&&renderSlot('sidebar.brand.name',{})}</div>
-    {!collapsed&&<><button type="button" className="gea-inbox-quick-action" aria-label={t('messageInbox')} title="业务代办" disabled={!available.has(INBOX)} onClick={()=>void workbench.open(INBOX)}><NavIcon kind="bell"/></button><button type="button" className="gea-inbox-quick-action gea-owned-sidebar-toggle" aria-label="收起侧边栏" onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutline16 size={16}/></button></>}
+    {!collapsed&&<><button type="button" className="gea-inbox-quick-action" aria-label={t('messageInbox')} title="业务代办" disabled={!available.has(INBOX)} onClick={()=>void workbench.open(INBOX)}><NavIcon kind="bell"/></button>{!darwin&&sidebarToggle}</>}
    </div></SidebarGeometry.Provider>
    {!collapsed&&<button type="button" className="gea-formal-new-session gea-new-session" aria-label={t('newConversation')} onClick={newConversation}><IconNewChatOutline16 size={14}/><span className="gea-formal-new-session-label">AI工作台</span></button>}
    <div className="gea-sidebar-region" data-gea-drawer={drawer}>
@@ -175,7 +179,7 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
  ctx.slots.inject('settings.launcher',()=>ctx.slots.register({name:'settings.launcher',priority:-20,locale:'companyWorkbench'},Account));
  ctx.slots.inject('sidebar.brand.mark',()=>ctx.slots.register({name:'sidebar.brand.mark',priority:-10,locale:'companyWorkbench'},function Brand(){const geometry=React.useContext(SidebarGeometry);return <span className="gea-brand-switch" title={t('openBusinessNavigation')} onClick={event=>{event.stopPropagation();if(geometry.collapsed)geometry.expand();}}><img className="gea-shell-logo" src={brandLogo} alt=""/></span>;}));
  ctx.slots.inject('sidebar.brand.name',()=>ctx.slots.register({name:'sidebar.brand.name',priority:-10,locale:'companyWorkbench'},function BrandName(){return <div className="gea-brand-copy" onClick={event=>event.stopPropagation()}><span className="gea-brand-title">{t('geaBusiness')}</span><div className="gea-brand-subtitle">{t('brandSubtitle')}</div></div>;}));
- ctx.slots.inject('shell.leading',()=>ctx.slots.register({name:'shell.leading',priority:-20,locale:'companyWorkbench'},()=> <div className="gea-shell-leading"><button type="button" className="gea-inbox-quick-action" aria-label={t('openBusinessNavigation')} onClick={()=>ctx.layout.toggleSidebar()}><MenuIcon/></button><button type="button" className="gea-inbox-quick-action" aria-label={t('newConversation')} onClick={()=>ctx.uiWorkspace.startSession()}><NavIcon kind="newChat"/></button></div>));
+ ctx.slots.inject('shell.leading',()=>ctx.slots.register({name:'shell.leading',priority:-20,locale:'companyWorkbench'},()=> <div className="gea-shell-leading"><button type="button" className="gea-inbox-quick-action" aria-label={t('openBusinessNavigation')} onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutlineRegular size={16}/></button><button type="button" className="gea-inbox-quick-action" aria-label={t('newConversation')} onClick={()=>ctx.uiWorkspace.startSession()}><IconNewChatOutlineRegular size={16}/></button></div>));
  ctx.slots.inject('main.conversation',()=>ctx.slots.register({name:'main.conversation',priority:-20,locale:'companyWorkbench'},Conversation));
  ctx.slots.inject('main',()=>{const dispose=ctx.slots.register({name:'main',key:DIRECTORY,children:{'agent-workbench.directory':{kind:'single',scope:'session-maybe'}}},({renderSlot}:PropsRuntime<'main'>&PropsRenderSlots<'agent-workbench.directory'>)=>renderSlot('agent-workbench.directory',{}));const unregister=workbench.register({id:DIRECTORY,label:'工作台'});return()=>{dispose();unregister();};});
  ctx.slots.inject('agent-workbench.directory',()=>ctx.slots.register({name:'agent-workbench.directory'},Directory));

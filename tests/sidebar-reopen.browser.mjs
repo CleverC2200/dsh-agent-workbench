@@ -17,7 +17,7 @@ const bundle=await build({stdin:{contents:`
  const ctx=new Context();const dictionaries={};const localeSnapshot={active:'zh',revision:0};
  const locale={...source(localeSnapshot),register:(name,copy)=>{dictionaries[name]=copy.zh;return()=>{}},bind:name=>key=>dictionaries[name]?.[key]??key};
  ctx.provide('locale',locale);ctx.provide('theme',{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})});
- ctx.provide('shortcuts',{register:()=>()=>{}});ctx.provide('uiWorkspace',{startSession:()=>{}});
+ ctx.provide('shortcuts',{register:()=>()=>{},catalog:source([])});ctx.provide('uiWorkspace',{startSession:()=>{}});
  await ctx.plugin({apply:rendererApply}).await();
  ctx.slots.installLocale(locale);
  // Natural absent Session scope: no fabricated binding or private state writes.
@@ -52,8 +52,35 @@ async function fixture(t){
  await page.setContent('<style>'+tokens+'\n'+officialCss+'\nhtml,body,#root{margin:0;height:100%}</style><div id="root"></div>');
  await page.evaluate(()=>document.documentElement.dataset.platform='darwin');
  await page.addScriptTag({content:bundle.outputFiles.find(file=>file.path.endsWith('.js')).text});
- await expect.poll(()=>page.evaluate(()=>window.fixtureReady)).toBe(true);return page;
+ await expect.poll(()=>page.evaluate(()=>window.fixtureReady??window.fixtureFailure)).toBe(true);return page;
 }
+
+test('macOS window controls stay above company identity with one consistent panel glyph',async t=>{
+ const page=await fixture(t);
+ const brand=await page.locator('.gea-sidebar-brand-row').boundingBox();
+ const close=page.getByRole('button',{name:'收起侧边栏',exact:true});
+ const closeBox=await close.boundingBox();
+ const closeSvg=await close.locator('svg').evaluate(node=>node.innerHTML);
+ await close.click();
+ const open=page.locator('[data-shell-leading]').getByRole('button',{name:'展开业务菜单',exact:true});
+ await expect(open).toBeVisible();
+ const openBox=await open.boundingBox();
+ const facts=await page.evaluate(()=>({entries:window.sidebarProbe().leadingEntries,columns:getComputedStyle(document.querySelector('[data-sidebar-collapsed]')).gridTemplateColumns}));
+ assert.equal(facts.entries,1,'one window control occupant handles the collapsed sidebar');
+ assert.equal(parseFloat(facts.columns),0,'closed macOS sidebar occupies no rail width');
+ assert.equal(await open.locator('svg').evaluate(node=>node.innerHTML),closeSvg,'both states reuse the official panel glyph');
+ assert.equal(closeBox.y,openBox.y,'the panel toggle stays on the window-control row');
+ assert.ok(brand.y>=closeBox.y+closeBox.height,'company brand is on the lower content row');
+ await open.click();
+ await expect(page.locator('.gea-sidebar-brand-row')).toBeVisible();
+ await page.evaluate(()=>document.documentElement.setAttribute('data-fullscreen',''));
+ const fullscreenClose=await close.boundingBox();
+ await close.click();
+ const fullscreenOpen=await open.boundingBox();
+ assert.equal(fullscreenClose.x,fullscreenOpen.x,'fullscreen keeps the toggle at the shared left anchor');
+ assert.equal(fullscreenClose.y,fullscreenOpen.y,'fullscreen keeps the same window-control row');
+ await open.click();
+});
 
 for(const target of ['home','business'])test('Darwin '+target+' can reopen its sidebar after every collapse',async t=>{
  const page=await fixture(t);
