@@ -9,9 +9,9 @@ test('页面登录后续跳，详情真正可见才发送 ACK，重复轮询不�
   assert.ok(existsSync(new URL('../src/client/desktop-navigation.tsx',import.meta.url)),'缺少导航页面消费组件');
   const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{Inbox}from'./src/client/inbox.tsx';import{zh}from'./src/client/locales.ts';
     const listeners=new Set();let target=null;
-    function App(){const [item,setItem]=React.useState(null);React.useEffect(()=>{listeners.add(setItem);return()=>listeners.delete(setItem)},[]);
+    function App(){const [view,setView]=React.useState({pageNo:1,readState:''});const [item,setItem]=React.useState(null);React.useEffect(()=>{listeners.add(setItem);return()=>listeners.delete(setItem)},[]);
       const open=React.useCallback((value,signal)=>new Promise((resolve,reject)=>{window.opens=(window.opens||0)+1;target={...value,visible:resolve,failed:reject};listeners.forEach(fn=>fn(target));signal.addEventListener('abort',()=>{target=null;listeners.forEach(fn=>fn(null));reject(Error('cancelled'))},{once:true})}),[]);
-      return <><DesktopNavigation t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/><Inbox t={key=>zh[key]} navigation={item}/></>}
+      return <><DesktopNavigation t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/><Inbox t={key=>zh[key]} navigation={item} view={view} onViewChange={setView}/></>}
     createRoot(document.getElementById('root')).render(<App/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser'});
   let logged=false,finished=0,release,identityRevision=0,detailRequests=0;
   const ready={state:'ready',receipt:'receipt-1',panel:'gea-inbox',notificationId:'notice-1',interactionRequestId:'ir-1'};
