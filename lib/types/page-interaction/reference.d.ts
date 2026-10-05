@@ -1,5 +1,6 @@
 export declare const PAGE_INTERACTION = "dsh-page-interaction-v1";
 export declare const REFERENCE_SOURCE = "page-content";
+export declare const REFERENCE_TEXT_LIMIT = 6000;
 export type PageReference = {
     page: string;
     kind?: "row" | "table" | "block";
@@ -19,6 +20,8 @@ export type BoundReference = PageReference & {
 };
 /** Bounds incoming page evidence; never interprets it as an instruction. */
 export declare function pageReference(value: unknown): PageReference | undefined;
+/** Explicit authored text is lossless within the existing raw UTF-16 budget. */
+export declare function pageQuoteReference(value: unknown): PageReference | undefined;
 export type ReferenceReceipt = {
     id: string;
     label: string;

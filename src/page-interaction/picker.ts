@@ -1,5 +1,7 @@
 import { getElementAtPoint, isElementGrabbable } from "react-grab/primitives";
-import { PAGE_INTERACTION, type PageReference } from "./reference.ts";
+import { PAGE_INTERACTION, REFERENCE_TEXT_LIMIT, type PageReference } from "./reference.ts";
+import type {PageQuoteApi} from "./quote.ts";
+export {quotePage} from "./quote.ts";
 
 export type PickerOptions = {
   describe?: (element: Element, reference: PageReference) => PageReference;
@@ -148,14 +150,14 @@ export function describeElement(element: Element, page: string): PageReference {
     page,
     kind,
     label,
-    text: body.slice(0, 6000),
+    text: body.slice(0, REFERENCE_TEXT_LIMIT),
     row: kind === "row" ? rowLabel : "",
     targets: [...targets],
     capturedAt: new Date().toISOString(),
     ...(pageState?.getAttribute("data-page-reference-scope")
       ? { scope: pageState.getAttribute("data-page-reference-scope")! }
       : {}),
-    truncated: body.length > 6000,
+    truncated: body.length > REFERENCE_TEXT_LIMIT,
   };
 }
 
@@ -206,7 +208,8 @@ export function mountPicker(options: PickerOptions = {}): () => void {
     hover: Element | null = null,
     channel = "",
     page = document.title;
-  let pending: { id: string } | undefined;
+  let pending: { id: string;resolve?:()=>void;reject?:(error:Error)=>void;cleanup?:()=>void } | undefined;
+  let quoteEnabled=false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let lastSelection: { target: EventTarget | null; at: number } | undefined;
   const repeatClick = (event: Event) =>
@@ -234,11 +237,13 @@ export function mountPicker(options: PickerOptions = {}): () => void {
   };
   const clearPending = () => {
     clearTimeout(timer);
+    pending?.cleanup?.();
     pending = undefined;
   };
-  const cancelPending = () => {
-    if (pending) send({ type: "cancel-reference", requestId: pending.id });
-    clearPending();
+  const cancelPending = (error=Error("页面或对话已切换，请重新转入草稿。")) => {
+    const task=pending;
+    if (task) send({ type: "cancel-reference", requestId: task.id });
+    clearPending();task?.reject?.(error);
   };
   const mode = (next: boolean, cancel = true) => {
     active = next;
@@ -328,7 +333,7 @@ export function mountPicker(options: PickerOptions = {}): () => void {
     status.textContent = "正在加入对话…";
     send({ type: "reference", requestId: pending.id, reference });
     timer = setTimeout(() => {
-      cancelPending();
+      cancelPending(Error("引用未加入，请重试。"));
       status.textContent = "引用未加入，请重试。";
       send({ type: "selection-error", error: status.textContent });
     }, 5000);
@@ -370,6 +375,7 @@ export function mountPicker(options: PickerOptions = {}): () => void {
       cancelPending();
       clearPending();
       channel = data.channel;
+      quoteEnabled=data.quote===true;
       page = typeof data.page === "string" ? data.page : document.title;
       toggle.hidden = data.externalTrigger === true;
       pinned = false;
@@ -390,22 +396,37 @@ export function mountPicker(options: PickerOptions = {}): () => void {
       altHeld = false;
       altSuppressed = false;
       mode(false);
-      clearPending();
+      cancelPending();
+      channel="";quoteEnabled=false;
       ui.hidden = true;
     }
     if (data.type === "result" && data.requestId === pending?.id) {
-      clearPending();
+      const task=pending;clearPending();
       if (data.ok) {
         hover = null;
         paint(null);
         syncMode();
-        status.textContent = "已加入输入框，写下问题即可。";
+        status.textContent = "已加入输入框，写下问题即可。";task?.resolve?.();
       } else {
-        status.textContent = data.error || "引用未加入，请重试。";
+        status.textContent = data.error || "引用未加入，请重试。";task?.reject?.(Error(status.textContent));
         send({ type: "selection-error", error: status.textContent });
       }
     }
   };
+  const api:PageQuoteApi={available:()=>!!channel&&quoteEnabled,quote:(value,signal)=>new Promise((resolve,reject)=>{
+    if(signal?.aborted){reject(Error("转入已取消。"));return;}
+    if(!channel||!quoteEnabled){reject(Error("请先关联当前页面的真实对话，再转入草稿。"));return;}
+    if(pending){reject(Error("请等待当前引用完成，再转入草稿。"));return;}
+    if(!value.text.trim()){reject(Error("没有可转入的文字。"));return;}
+    if(value.text.length>REFERENCE_TEXT_LIMIT){reject(Error(`文字超过单次引用长度上限（${REFERENCE_TEXT_LIMIT}字符），请在真实输入框分段粘贴；保留文字未删除。`));return;}
+    stopSelection();
+    const id=crypto.randomUUID();const abort=()=>cancelPending(Error("转入已取消。"));
+    pending={id,resolve,reject,cleanup:()=>signal?.removeEventListener('abort',abort)};
+    signal?.addEventListener('abort',abort,{once:true});
+    send({type:'quote',requestId:id,reference:{page,kind:'block',label:value.label,text:value.text,targets:[],capturedAt:new Date().toISOString()}});
+    timer=setTimeout(()=>cancelPending(Error("转入未完成，请重试。")),5000);
+  })};
+  window.dshPageInteraction=api;
   window.addEventListener("message", message);
   window.addEventListener("pointermove", move, true);
   const suppressed = [
@@ -442,5 +463,6 @@ export function mountPicker(options: PickerOptions = {}): () => void {
     ui.remove();
     outline.remove();
     style.remove();
+    if(window.dshPageInteraction===api)delete window.dshPageInteraction;
   };
 }

@@ -11,8 +11,8 @@
   },
   "fixed": {
     "vendor.js": "7baba73c0456829f4eba983f2817473a106be16b5f0fa46677f3f3d2b9a2dcb1",
-    "styles.css": "963c894070d4de8e490fd34665a70a7e74e6f996f52a39ad4d5ba96422986420",
-    "data.js": "c9f0afd3072a591c301dc90687fc65013d20ec98842d3a5955b2b0035c367fc9"
+    "data.js": "c9f0afd3072a591c301dc90687fc65013d20ec98842d3a5955b2b0035c367fc9",
+    "vendor.css": "33c11909dac46275e5dd9282392ac8ead7eeb9d5f26b92cebf664f519e817fb1"
   },
   "recovery": "One-time current authored application extraction; no runtime bundle decoding; historical MPS2f0669c is semantic reference only.",
   "fixedAuthoredData": {
@@ -89,5 +89,15 @@
       "sha256": "f72d7844a038788c6e57061624b7270011e05ccf3965bf475b70601177df0b33"
     }
   },
-  "shellNewlines": "normalized to LF; original layout and app root preserved"
+  "shellNewlines": "normalized to LF; original layout and app root preserved",
+  "styleRecovery": {
+    "originalCombinedSha256": "963c894070d4de8e490fd34665a70a7e74e6f996f52a39ad4d5ba96422986420",
+    "authorBoundaryOffset": 568055,
+    "fixedVendorSha256": "33c11909dac46275e5dd9282392ac8ead7eeb9d5f26b92cebf664f519e817fb1",
+    "originalAuthorSha256": "7ee8cfe42b8526b5cf5fb3990173c47eead86e028866d1b5ccd739ea33275651",
+    "currentAuthorFile": "layout.css",
+    "currentAuthorSha256": "359d96f19573c05d064a101aeca463f293986652cad3478fd449bbcb2c10ad43",
+    "commonQuestionStyleSha256": "2578d204b2b3702393661c4b71381c246e75441b630e73f4ac7dba835c647607"
+  },
+  "currentApplicationSha256": "f2acbece6d86385460fe5a79f3e6b41795c4328a6c703cd3aff591de2a4a7da0"
 }

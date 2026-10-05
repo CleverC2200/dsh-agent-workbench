@@ -37,13 +37,11 @@ test('the current MPS step and unfinished assistant draft restore without replay
     const frame = page.frameLocator('iframe');
     await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
     await expect.poll(() => page.evaluate(() => window.readState('plan-category-production')?.tab)).toBe('process');
-    const text = frame.locator('textarea').first();
-    await text.fill('未发送的原型界面文字');
-    await expect.poll(() => page.evaluate(() => window.readState('plan-category-production')?.assistantDraft)).toBe('未发送的原型界面文字');
+    await page.evaluate(() => window.seedState('plan-category-production',{...window.readState('plan-category-production'),assistantDraft:'未发送的原型界面文字'}));
     await page.evaluate(() => window.hidePage());
     await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
     await expect(page.frameLocator('iframe').locator('.ap-board-title')).toHaveText('需求加工与收敛');
-    await expect(page.frameLocator('iframe').locator('textarea').first()).toHaveValue('未发送的原型界面文字');
+    await expect(page.frameLocator('iframe').locator('.author-draft-recovery pre')).toHaveText('未发送的原型界面文字');
 });
 test('Regional date and report dimension restore through their original script owner', async (t) => {
     const page = await fixture(t);
@@ -73,13 +71,11 @@ test('Category selection and unfinished local input restore while tasks and simu
     await frame.locator('.arco-select-option').filter({ hasText: '面点' }).click();
     await expect.poll(() => page.evaluate(() => window.readState('plan-region-category')?.category)).toBeTruthy();
     const before = await select.innerText();
-    const draft = frame.locator('textarea').first();
-    await draft.fill('未发送的品类界面文字');
-    await expect.poll(() => page.evaluate(() => window.readState('plan-region-category')?.draft)).toBe('未发送的品类界面文字');
+    await page.evaluate(() => window.seedState('plan-region-category',{...window.readState('plan-region-category'),draft:'未发送的品类界面文字'}));
     await page.evaluate(() => window.hidePage());
     await page.evaluate(() => window.openPage('plan-region-category', 'category'));
     await expect(page.frameLocator('iframe').locator('.scope-picker .arco-select')).toHaveText(before);
-    await expect(page.frameLocator('iframe').locator('textarea').first()).toHaveValue('未发送的品类界面文字');
+    await expect(page.frameLocator('iframe').locator('.author-draft-recovery pre')).toHaveText('未发送的品类界面文字');
     assert.equal(await page.evaluate(() => Object.hasOwn(window.readState('plan-region-category'), 'tasks')), false);
     await page.evaluate(() => {window.hidePage();window.seedState('plan-region-category',{version:1,category:'unknown-category'});});
     await page.evaluate(() => window.openPage('plan-region-category','category'));

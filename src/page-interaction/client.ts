@@ -9,6 +9,7 @@ import {
   PAGE_INTERACTION,
   REFERENCE_SOURCE,
   pageReference,
+  pageQuoteReference,
   serializeReference,
   type BoundReference,
 } from "./reference.ts";
@@ -207,7 +208,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           "*",
         );
       const configure = () => {
-        if (!business||generation) send({ type: "configure", page, externalTrigger: [...triggers].some(button => button.dataset.sessionId === sessionId) });
+        if (!business||generation) send({ type: "configure", page, quote: !business, externalTrigger: [...triggers].some(button => button.dataset.sessionId === sessionId) });
       };
       const binding: PickerBinding = {
         frame,
@@ -250,7 +251,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           return;
         }
         if (
-          event.data.type !== "reference" ||
+          (event.data.type !== "reference" && event.data.type !== "quote") ||
           typeof event.data.requestId !== "string"
         )
           return;
@@ -265,11 +266,13 @@ export function installPageInteraction(ctx: Context): PageInteraction {
         try {
           if (!paired() || (business&&(!ready||!generation)))
             throw Error("请先打开当前页面的对话，再加入提问。");
-          const selected = pageReference(event.data.reference);
-          if (!selected) throw Error("未读到选中内容，请重新选择。");
+          if(event.data.type==="quote"&&options.mode!=="quote")throw Error("请关联当前页面的真实对话，再转入草稿。");
+          const selected = event.data.type==="quote"?pageQuoteReference(event.data.reference):pageReference(event.data.reference);
+          if (!selected) throw Error(event.data.type==="quote"?"转入文字为空或超过单次引用长度上限，请检查原文后重试。":"未读到选中内容，请重新选择。");
           if(options.mode==="quote"){
             const quote="引用："+page+" · "+selected.label+"\n"+selected.text.split("\n").map(line=>"> "+line).join("\n")+"\n";
-            const span=options.inputActions.captureInsertion();
+            const captured=options.inputActions.captureInsertion();
+            const span=event.data.type==="quote"?{...captured,end:captured.start}:captured;
             if(!active||controller.signal.aborted||!paired())throw Error("已切换对话，请在当前页面重新引用。");
             if(!options.inputActions.insertText(quote,span))throw Error("草稿已变化或正在发送，请重新选择内容。");
             options.inputActions.persistDraft();

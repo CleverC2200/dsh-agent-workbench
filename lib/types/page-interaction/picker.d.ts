@@ -1,4 +1,5 @@
 import { type PageReference } from "./reference.ts";
+export { quotePage } from "./quote.ts";
 export type PickerOptions = {
     describe?: (element: Element, reference: PageReference) => PageReference;
 };
