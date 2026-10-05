@@ -1,0 +1,87 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { build } from 'esbuild';
+import { chromium, expect } from '@playwright/test';
+const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,undefined,owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.readState=id=>owner.readHtmlViewState(id);window.seedState=(id,state)=>owner.saveHtmlViewState(id,undefined,state);`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
+const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
+async function fixture(t) {
+    const browser = await chromium.launch({ channel: 'chrome', headless: true });
+    t.after(() => browser.close());
+    const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+    const assets = { sample: await readFile('lib/samples/index.html', 'utf8'), regional: await readFile('static/regional/index.html', 'utf8'), category: await readFile('static/category/index.html', 'utf8'), mps: await readFile('static/mps/index.html', 'utf8') };
+    if (process.env.HTML_VIEW_BASELINE === '1')
+        assets.sample = execFileSync('git', ['show', `${baseline}:samples/html-table.html`], { encoding: 'utf8' }).replace('/* SHARED_THEME_RESOURCE */', await readFile('theme/tokens.css', 'utf8'));
+    await page.route('http://127.0.0.1:19478/**', route => { const key = new URL(route.request().url()).pathname.slice(1); return route.fulfill({ contentType: 'text/html', body: assets[key] ?? '<html><body></body></html>' }); });
+    await page.goto('http://127.0.0.1:19478/');
+    await page.addScriptTag({ content: outputFiles[0].text });
+    return page;
+}
+test('sample filter intent survives destroying and reopening its real opaque iframe without GEA or a Core Session', async (t) => {
+    const page = await fixture(t);
+    await page.evaluate(() => window.openPage('workbench-html-table', 'sample'));
+    const frame = page.frameLocator('iframe');
+    await expect(frame.locator('#query')).toBeEnabled();
+    await frame.locator('#query').fill('下单');
+    await frame.locator('#stage').selectOption('进行中');
+    await expect.poll(() => page.evaluate(() => window.readState('workbench-html-table'))).toEqual({ version: 1, keyword: '下单', stage: '进行中' });
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('workbench-html-table', 'sample'));
+    await expect(page.frameLocator('iframe').locator('#query')).toHaveValue('下单');
+    await expect(page.frameLocator('iframe').locator('#stage')).toHaveValue('进行中');
+});
+test('the current MPS step and unfinished assistant draft restore without replaying a simulated response', async (t) => {
+    const page = await fixture(t);
+    await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+    const frame = page.frameLocator('iframe');
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
+    await expect.poll(() => page.evaluate(() => window.readState('plan-category-production')?.tab)).toBe('process');
+    const text = frame.locator('textarea').first();
+    await text.fill('未发送的原型界面文字');
+    await expect.poll(() => page.evaluate(() => window.readState('plan-category-production')?.assistantDraft)).toBe('未发送的原型界面文字');
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+    await expect(page.frameLocator('iframe').locator('.ap-board-title')).toHaveText('需求加工与收敛');
+    await expect(page.frameLocator('iframe').locator('textarea').first()).toHaveValue('未发送的原型界面文字');
+});
+test('Regional date and report dimension restore through their original script owner', async (t) => {
+    const page = await fixture(t);
+    await page.evaluate(() => window.openPage('gea-regional-plan', 'regional'));
+    const frame = page.frameLocator('iframe');
+    await frame.locator('#simBtn').click();
+    await frame.locator('#simDate').fill('2026-10-12');
+    await frame.locator('#simDate').dispatchEvent('change');
+    await expect.poll(() => page.evaluate(() => window.readState('gea-regional-plan')?.date)).toBe('2026-10-12');
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('gea-regional-plan', 'regional'));
+    await expect(page.frameLocator('iframe').locator('#simDate')).toHaveValue('2026-10-12');
+    await page.frameLocator('iframe').locator('#rhythmBtn').click();
+    await page.frameLocator('iframe').locator('.re-name').first().fill('未保存的节奏编辑');
+    await expect.poll(() => page.evaluate(() => window.readState('gea-regional-plan')?.rhythmDraft?.[0]?.name)).toBe('未保存的节奏编辑');
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('gea-regional-plan', 'regional'));
+    await expect(page.frameLocator('iframe').locator('.re-name').first()).toHaveValue('未保存的节奏编辑');
+    assert.equal(await page.evaluate(() => Object.hasOwn(window.readState('gea-regional-plan'), 'ctx')), false, 'derived data and contexts are not retained');
+});
+test('Category selection and unfinished local input restore while tasks and simulated replies remain transient', async (t) => {
+    const page = await fixture(t);
+    await page.evaluate(() => window.openPage('plan-region-category', 'category'));
+    const frame = page.frameLocator('iframe');
+    const select = frame.locator('.scope-picker .arco-select');
+    await select.click();
+    await frame.locator('.arco-select-option').filter({ hasText: '面点' }).click();
+    await expect.poll(() => page.evaluate(() => window.readState('plan-region-category')?.category)).toBeTruthy();
+    const before = await select.innerText();
+    const draft = frame.locator('textarea').first();
+    await draft.fill('未发送的品类界面文字');
+    await expect.poll(() => page.evaluate(() => window.readState('plan-region-category')?.draft)).toBe('未发送的品类界面文字');
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('plan-region-category', 'category'));
+    await expect(page.frameLocator('iframe').locator('.scope-picker .arco-select')).toHaveText(before);
+    await expect(page.frameLocator('iframe').locator('textarea').first()).toHaveValue('未发送的品类界面文字');
+    assert.equal(await page.evaluate(() => Object.hasOwn(window.readState('plan-region-category'), 'tasks')), false);
+    await page.evaluate(() => {window.hidePage();window.seedState('plan-region-category',{version:1,category:'unknown-category'});});
+    await page.evaluate(() => window.openPage('plan-region-category','category'));
+    await expect(page.frameLocator('iframe').locator('.scope-picker .arco-select')).toContainText('全部品类');
+});

@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState,useEffect,useRef } from "react";
+import type {CycleEdit} from '../../../../../fc/src/lib/browser-repository.ts';
 import { DataPagination } from "../../../dsh-ui/controls";
 import {
   useListPagination,
@@ -85,24 +86,45 @@ export function PersistedCycleSettings({
   initial,
   onSave,
   saving,
+  view,
+  onViewChange,
 }: {
   warehouseId: string;
   warehouseName: string;
   initial: CycleRule[];
   onSave: (rules: CycleRule[]) => Promise<void>;
   saving: boolean;
+  view?:CycleEdit|null;
+  onViewChange?:(value:CycleEdit)=>void;
 }) {
-  const [rules, setRules] = useState<CycleRule[]>(initial);
+  const mergeOverrides=(changes:CycleEdit['overrides']=[]):CycleRule[]=>[
+    ...initial.filter(rule=>!changes.some(change=>change.level===rule.level&&change.objectId===rule.objectId)),
+    ...changes.filter((change):change is Extract<CycleEdit['overrides'][number],{kind:'set'}>=>change.kind==='set'&&(change.level!=='warehouse'||change.objectId===warehouseId)).map(({kind,...change})=>({...change,id:initial.find(rule=>rule.level===change.level&&rule.objectId===change.objectId)?.id??`${change.level}-${change.objectId}`.slice(0,64),status:'effective' as const}))
+  ];
+  const [rules, setRules] = useState<CycleRule[]>(()=>mergeOverrides(view?.overrides));
   const warehouseRule = initial.find(
     (rule) => rule.level === "warehouse" && rule.objectId === warehouseId,
   );
-  const [level, setLevel] = useState<CycleRule["level"]>("warehouse");
-  const [object, setObject] = useState("");
-  const [days, setDays] = useState(String(warehouseRule?.cycleDays ?? 7));
-  const [from, setFrom] = useState(warehouseRule?.effectiveFrom ?? "");
-  const [to, setTo] = useState(warehouseRule?.effectiveTo ?? "");
+  const [level, setLevel] = useState<CycleEdit['level']>(view?.level??"warehouse");
+  const [object, setObject] = useState(view?.object??"");
+  const [days, setDays] = useState(view?.days??String(warehouseRule?.cycleDays ?? 7));
+  const [from, setFrom] = useState(view?.from??warehouseRule?.effectiveFrom ?? "");
+  const [to, setTo] = useState(view?.to??warehouseRule?.effectiveTo ?? "");
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
+  const edited=useRef(false);
+  useEffect(()=>{
+    if(!view)return;
+    setLevel(view.level);setObject(view.object);setDays(view.days);setFrom(view.from);setTo(view.to);setRules(mergeOverrides(view.overrides));setDirty(true);
+  },[view]);
+  useEffect(()=>{
+    if(!edited.current)return;edited.current=false;
+    const overrides:CycleEdit['overrides']=rules.filter(rule=>!initial.some(old=>old.level===rule.level&&old.objectId===rule.objectId&&old.cycleDays===rule.cycleDays&&old.effectiveFrom===rule.effectiveFrom&&old.effectiveTo===rule.effectiveTo))
+      .filter(rule=>['warehouse','category','material-group','sku'].includes(rule.level)&&!!rule.objectId)
+      .map(rule=>({kind:'set' as const,level:rule.level as CycleEdit['level'],objectId:rule.objectId!,cycleDays:rule.cycleDays,...(rule.effectiveFrom?{effectiveFrom:rule.effectiveFrom}:{}),...(rule.effectiveTo?{effectiveTo:rule.effectiveTo}:{})}));
+    overrides.push(...initial.filter(rule=>!!rule.objectId&&['warehouse','category','material-group','sku'].includes(rule.level)&&!rules.some(current=>current.level===rule.level&&current.objectId===rule.objectId)).map(rule=>({kind:'remove' as const,level:rule.level as CycleEdit['level'],objectId:rule.objectId!})));
+    onViewChange?.({level,object,days,from,to,overrides});
+  },[level,object,days,from,to,rules,onViewChange,initial]);
   const labels: Record<string, string> = {
     warehouse: "分仓整体",
     category: "大类",
@@ -141,6 +163,7 @@ export function PersistedCycleSettings({
       next,
     ];
     setRules(updated);
+    edited.current=true;
     setDirty(false);
     setError("");
     return updated;
@@ -164,7 +187,7 @@ export function PersistedCycleSettings({
             disabled={saving}
             value={level}
             onChange={(event) => {
-              setLevel(event.target.value as CycleRule["level"]);
+              edited.current=true;setLevel(event.target.value as CycleEdit["level"]);
               setObject("");
               setDirty(true);
             }}
@@ -183,7 +206,7 @@ export function PersistedCycleSettings({
             disabled={saving || level === "warehouse"}
             value={level === "warehouse" ? warehouseName : object}
             onChange={(event) => {
-              setObject(event.target.value);
+              edited.current=true;setObject(event.target.value);
               setDirty(true);
             }}
             placeholder="SKU编码 / 大类 / 物料组名称"
@@ -200,7 +223,7 @@ export function PersistedCycleSettings({
               max={365}
               value={days}
               onChange={(event) => {
-                setDays(event.target.value);
+                edited.current=true;setDays(event.target.value);
                 setDirty(true);
               }}
             />
@@ -214,7 +237,7 @@ export function PersistedCycleSettings({
             type="date"
             value={from}
             onChange={(event) => {
-              setFrom(event.target.value);
+              edited.current=true;setFrom(event.target.value);
               setDirty(true);
             }}
           />
@@ -226,7 +249,7 @@ export function PersistedCycleSettings({
             type="date"
             value={to}
             onChange={(event) => {
-              setTo(event.target.value);
+              edited.current=true;setTo(event.target.value);
               setDirty(true);
             }}
           />
@@ -262,11 +285,10 @@ export function PersistedCycleSettings({
                   <button
                     className="secondary-button"
                     disabled={saving}
-                    onClick={() =>
-                      setRules((rows) =>
-                        rows.filter((row) => row.id !== rule.id),
-                      )
-                    }
+                    onClick={() => {
+                      edited.current = true;
+                      setRules((rows) => rows.filter((row) => row.id !== rule.id));
+                    }}
                   >
                     移除
                   </button>

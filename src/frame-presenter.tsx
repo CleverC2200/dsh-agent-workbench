@@ -14,6 +14,8 @@ import {installPageInteraction} from "./page-interaction/client.ts";
 import {CompanyWelcome} from './company/ui.tsx';
 import {ConversationToolbar} from './company/formal-components.tsx';
 import layoutCss from './frame-presenter.css';
+import {connectHtmlViewState} from './html-view-channel.ts';
+import {isBusinessViewPage} from './html-view-state.ts';
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotFactoryMap {
@@ -77,6 +79,12 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const session=useSession(value=>value);
     const currentPreset=useProjection("agentPreset");
     const associated=active&&selection?.sessionId===sessionId&&selection!==undefined&&(!page.resourceId||(selection.ownerScope===identity.scope&&identity.status?.authenticated===true));
+    const viewScope=isBusinessViewPage(page.id)&&associated&&identity.scope&&sessionId?JSON.stringify([identity.scope,sessionId]):undefined;
+    useEffect(()=>{
+      if(!active||page.kind!=='html'||!frame.current||(isBusinessViewPage(page.id)&&!viewScope))return;
+      const controller=new AbortController();const stop=connectHtmlViewState(frame.current,page.id,viewScope,workbench,controller.signal);
+      return()=>{controller.abort();stop();};
+    },[active,page,viewScope,workbench]);
     const restoreView=useRef<'center'|'split'|'chat'>();
     const currentTools=useSyncExternalStore(listener=>{toolListeners.add(listener);return()=>{toolListeners.delete(listener);};},()=>tools);
     const guide=useSyncExternalStore(currentTools?listener=>currentTools.sidebarRightTabs.subscribe(listener):noSubscribe,()=>currentTools?.sidebarRightTabs.guide()??emptyGuide);

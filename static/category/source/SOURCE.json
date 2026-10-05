@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "312adf90f1abcc05d9421083b2386939634d8796",
+  "source": "static/category/index.html",
+  "originalHtmlSha256": "38c7bbb92aa21f729106bb1b5f742abecdef55234c3addcb8ddcaa2060fa2355",
+  "originalScriptSha256": "7bada7d6a2e88d92203aff81e7d7e34012ed73798954099a27a5700d3b32f0ee",
+  "authorBoundary": {
+    "marker": "const qu=\"2026-09-21 09:00\"",
+    "offset": 556962,
+    "firstStatementEnd": 559033
+  },
+  "fixed": {
+    "vendor.js": "7baba73c0456829f4eba983f2817473a106be16b5f0fa46677f3f3d2b9a2dcb1",
+    "styles.css": "963c894070d4de8e490fd34665a70a7e74e6f996f52a39ad4d5ba96422986420",
+    "data.js": "c9f0afd3072a591c301dc90687fc65013d20ec98842d3a5955b2b0035c367fc9"
+  },
+  "recovery": "One-time current authored application extraction; no runtime bundle decoding; historical MPS2f0669c is semantic reference only.",
+  "fixedAuthoredData": {
+    "qu": {
+      "file": "data.js",
+      "sha256": "ef6d68206b60ad5ecd31a7860ba81083cc187a041479ff3d7ba06516f6f03a60"
+    },
+    "b1": {
+      "file": "data.js",
+      "sha256": "70612d624f022ea56c8a68640d17edb4d3a17d5bcd6a1a033d68c7bfcf004dee"
+    },
+    "f8": {
+      "file": "data.js",
+      "sha256": "2d2a94df83c6a6177a8877007bbc15ba8632296f1cefc86c9bf0503f825c3b8b"
+    },
+    "_1": {
+      "file": "data.js",
+      "sha256": "2b1b9ad0a88a4fbfcebaa3b9d164056b740b777e8cefe99cc11c2fc447205a32"
+    },
+    "rt": {
+      "file": "data.js",
+      "sha256": "1c2af152d108bca7fd82333268dd4dedd374f93fa9e794de09d04617b3ee6679"
+    },
+    "Dr": {
+      "file": "data.js",
+      "sha256": "65099d97982ec0fc0199d496f1759f78abcbc2f05eea84a01d0ebd5d2f554169"
+    },
+    "Yt": {
+      "file": "app.js",
+      "sha256": "e4ae91af0d91a83ca19e54ffd359ccd49cbebcaed2192a3c56a0bcd52b4cadd1"
+    },
+    "fp": {
+      "file": "app.js",
+      "sha256": "fb6108e4a7eb4dba301bdb86c6ef4932d6135e31db4adbbd2d83b56627a65a19"
+    },
+    "h8": {
+      "file": "app.js",
+      "sha256": "bdc57e8a4c0b5112c1aaf40a30ecfd8eb3c8340603ce76f43066a2ea0a6e36b5"
+    },
+    "g8": {
+      "file": "app.js",
+      "sha256": "b24e2a5ab6a6ac35fc93bd370d74f26318fa78616687339c8269e22a09b16d99"
+    },
+    "E1": {
+      "file": "app.js",
+      "sha256": "35fbacb20a0d149085d8e10b4f107503211b55dac3df272d092d040f385a9a53"
+    },
+    "S1": {
+      "file": "app.js",
+      "sha256": "0f3adb0c5a9e8655bd59b2cdc145f59f03dfda39979020aff7bd768548e98c2f"
+    },
+    "dp": {
+      "file": "app.js",
+      "sha256": "d69bb6492e983752a409bc3d704589b2e881dd3245294335579aa84805be08ba"
+    },
+    "Mx": {
+      "file": "app.js",
+      "sha256": "f358f8bcdf47c3dc8538799f137c98233dcab3a53efc7e0133fcd935afc85ca5"
+    },
+    "C8": {
+      "file": "app.js",
+      "sha256": "c834cae384c23cd59d6e60e60212fb3cbceb2894663c6e88a67a00c44fa17279"
+    },
+    "w8": {
+      "file": "app.js",
+      "sha256": "3ced269d39f0c4c80342f10e3ee149e37bb958c4c296d39ad49e9637624e1d34"
+    },
+    "b8": {
+      "file": "app.js",
+      "sha256": "151ca60785dad344a4896b660bfab5d605ab06149ba3f364a37f840408b89d5a"
+    },
+    "_8": {
+      "file": "app.js",
+      "sha256": "f72d7844a038788c6e57061624b7270011e05ccf3965bf475b70601177df0b33"
+    }
+  },
+  "shellNewlines": "normalized to LF; original layout and app root preserved"
+}

@@ -31,6 +31,12 @@ export type LayoutPreferences = {
   frozenColumns: string[];
   columnOrder: string[];
 };
+/** Unsent controls and locally composed changes; these are never server cycle-setting results. */
+export type CycleEdit = {
+  level:'warehouse'|'category'|'material-group'|'sku';
+  object:string;days:string;from:string;to:string;
+  overrides:({kind:'set';level:CycleEdit['level'];objectId:string;cycleDays:number;effectiveFrom?:string;effectiveTo?:string}|{kind:'remove';level:CycleEdit['level'];objectId:string})[];
+};
 
 export type BusinessAuditEntry = {
   id: string;
@@ -90,6 +96,8 @@ export class BrowserRepository {
   saveCyclePreview(scope: DraftScope, rules: Record<string, string | boolean>): void {
     this.storage.setItem(scopedKey("cycle-preview", scope), JSON.stringify(rules));
   }
+  loadCycleEdit(scope:DraftScope):CycleEdit|null {return safeParse<CycleEdit>(this.storage.getItem(scopedKey('cycle-edit',scope)));}
+  saveCycleEdit(scope:DraftScope,edit:CycleEdit):void {this.storage.setItem(scopedKey('cycle-edit',scope),JSON.stringify(edit));}
 
   loadFilters(scope: DraftScope): Record<string, string | boolean | string[]> {
     return safeParse<Record<string, string | boolean | string[]>>(this.storage.getItem(scopedKey("filters", scope))) ?? {};

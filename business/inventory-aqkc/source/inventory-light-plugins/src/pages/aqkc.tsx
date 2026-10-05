@@ -1,4 +1,6 @@
 import { currentOrderMetricScopes } from "../../../aqkc/web/src/lib/workbench-current-order.ts";
+import {createPageViewState} from '../../../../../shared/view-state.js';
+const aqkcView=createPageViewState('inventory-aqkc');
 import { DashboardOverviewSkeleton, DashboardTableSkeleton } from "../dsh-ui/workbench-loading";
 import {DATA_PERMISSION_MESSAGE, queryErrorText} from '../query-error.js';
 import { usePageFilter } from "../native/page-filter.tsx";
@@ -173,6 +175,8 @@ const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
 };
 
 export function InventoryOperationsWorkbench() {
+  const restoredView=useRef<Record<string,unknown>|null>(null);
+  const restorePhase=useRef(0);
   const [activeBoardTab, setActiveBoardTab] =
     useState<BoardTabName>("基地结构");
   const role: RoleKey = "platform";
@@ -218,6 +222,7 @@ export function InventoryOperationsWorkbench() {
     [basePaths, pathSelection],
   );
   const closeDetails = () => {
+    restoredView.current=null;
     baseDetailRequestRef.current += 1;
     categoryDetailRequestRef.current += 1;
     hierarchySkuRequestRef.current += 1;
@@ -227,6 +232,7 @@ export function InventoryOperationsWorkbench() {
     removeContextPart("stockDetail");
   };
   const selectPaths = (selection: string[]) => {
+    restoredView.current = null;
     closeDetails();
     for (const requestKey of dashboardTabLoadedGroupsRef.current) {
       if (requestKey.startsWith("safety-stock:"))
@@ -432,6 +438,7 @@ export function InventoryOperationsWorkbench() {
   );
   const toggleBaseDetail = useCallback(
     async (base: string, tab: DashboardTabName, forceOpen = false) => {
+      if(!forceOpen)restoredView.current=null;
       categoryDetailRequestRef.current += 1;
       hierarchySkuRequestRef.current += 1;
       setExpandedCategoryDetail(null);
@@ -497,7 +504,8 @@ export function InventoryOperationsWorkbench() {
     [expandedBaseDetail?.base, expandedBaseDetail?.tab],
   );
   const toggleCategoryDetail = useCallback(
-    async (category: string) => {
+    async (category: string,restoring=false) => {
+      if(!restoring)restoredView.current=null;
       baseDetailRequestRef.current += 1;
       hierarchySkuRequestRef.current += 1;
       setExpandedBaseDetail(null);
@@ -571,7 +579,8 @@ export function InventoryOperationsWorkbench() {
     [expandedCategoryDetail?.category, paths],
   );
   const toggleHierarchySkuDetail = useCallback(
-    async (tab: DashboardTabName, base: string, category: string, focusMaterial?: string) => {
+    async (tab: DashboardTabName, base: string, category: string, focusMaterial?: string,restoring=false) => {
+      if(!restoring)restoredView.current=null;
       const matchesCurrent =
         expandedSkuDetail?.tab === tab &&
         expandedSkuDetail.base === base &&
@@ -649,6 +658,52 @@ export function InventoryOperationsWorkbench() {
     selectPaths(toggleWorkbenchPath(basePaths, paths, path));
     setActiveBoardTab("基地结构");
   };
+  useEffect(()=>{
+    const apply=(value:Record<string,unknown>)=>{
+      if(!Object.hasOwn(value,'activeBoardTab'))return;
+      closeDetails();
+      setActiveBoardTab(boardTabs.includes(value.activeBoardTab as BoardTabName)?value.activeBoardTab as BoardTabName:'基地结构');
+      setPathSelection(Array.isArray(value.pathSelection)?value.pathSelection.filter((path):path is string=>typeof path==='string'):null);
+      restoredView.current=value;restorePhase.current=0;
+    };
+    const stop=aqkcView.subscribe(apply);apply(aqkcView.get());return stop;
+  },[]);
+  useEffect(()=>{
+    const intent=restoredView.current;if(!intent||dashboardLoading||!dashboardWorkspace)return;
+    const base=typeof intent.expandedBaseId==='string'?intent.expandedBaseId:undefined;
+    const category=typeof intent.expandedCategoryId==='string'?intent.expandedCategoryId:undefined;
+    const tab:DashboardTabName=intent.detailTab==='货龄结构'?'货龄结构':'品类结构';
+    const baseVisible=!!base&&basePaths.some(path=>path===base||path===base+'基地');
+    if(restorePhase.current===0){
+      if(activeBoardTab==='品类结构'&&category){
+        const table=dashboardTabs?.品类结构;if(!table)return;
+        if(!table.rows.some(row=>String(row.level??'')===category)){restoredView.current=null;return;}
+        restorePhase.current=1;void toggleCategoryDetail(category,true);return;
+      }
+      if(baseVisible){restorePhase.current=1;void toggleBaseDetail(base!,tab,true);return;}
+      restoredView.current=null;return;
+    }
+    if(restorePhase.current===1){
+      const parentDetail=activeBoardTab==='品类结构'?expandedCategoryDetail:expandedBaseDetail;
+      if(parentDetail?.error){restoredView.current=null;return;}
+      if(!intent.skuExpanded){restoredView.current=null;return;}
+      const table=activeBoardTab==='品类结构'?expandedCategoryDetail?.table:expandedBaseDetail?.table;
+      if(!table)return;
+      const childVisible=activeBoardTab==='品类结构'?baseVisible&&table.rows.some(row=>String(row.level??'')===base):!!category&&table.rows.some(row=>String(row.level??'')===category);
+      if(!childVisible||!base||!category){restoredView.current=null;return;}
+      restorePhase.current=2;void toggleHierarchySkuDetail(tab,base,category,undefined,true);return;
+    }
+    if(restorePhase.current===2&&expandedSkuDetail?.error){restoredView.current=null;return;}
+    if(restorePhase.current===2&&expandedSkuDetail?.table){
+      const focus=typeof intent.expandedSkuId==='string'?intent.expandedSkuId:undefined;
+      if(focus&&expandedSkuDetail.table.rows.some(row=>String(row.level??row.materialCode??row.sku??'').split(/\s/)[0]===focus))setExpandedSkuDetail(current=>current?{...current,focusMaterial:focus}:null);
+      restoredView.current=null;
+    }
+  },[dashboardLoading,dashboardWorkspace,dashboardTabs,basePaths,activeBoardTab,expandedBaseDetail,expandedCategoryDetail,expandedSkuDetail,toggleBaseDetail,toggleCategoryDetail,toggleHierarchySkuDetail]);
+  useEffect(()=>{
+    if(restoredView.current)return;
+    aqkcView.update({activeBoardTab,pathSelection,expandedBaseId:expandedBaseDetail?.base??expandedSkuDetail?.base??null,expandedCategoryId:expandedCategoryDetail?.category??expandedSkuDetail?.category??null,expandedSkuId:expandedSkuDetail?.focusMaterial??null,skuExpanded:!!expandedSkuDetail,detailTab:expandedSkuDetail?.tab??expandedBaseDetail?.tab??'品类结构'});
+  },[activeBoardTab,pathSelection,expandedBaseDetail?.base,expandedBaseDetail?.tab,expandedCategoryDetail?.category,expandedSkuDetail?.base,expandedSkuDetail?.category,expandedSkuDetail?.tab,expandedSkuDetail?.focusMaterial]);
   const allBasesSelected =
     basePaths.length > 0 && paths.length === basePaths.length;
   const selectedPathKeys = allBasesSelected
@@ -881,6 +936,7 @@ export function InventoryOperationsWorkbench() {
                       boardTabs,
                       activeBoardTab,
                       (nextTab) => {
+                        restoredView.current=null;
                         baseDetailRequestRef.current += 1;
                         categoryDetailRequestRef.current += 1;
                         hierarchySkuRequestRef.current += 1;
@@ -893,6 +949,7 @@ export function InventoryOperationsWorkbench() {
                   }
                   onClick={() => {
                     if (activeBoardTab === tab) return;
+                    restoredView.current=null;
                     baseDetailRequestRef.current += 1;
                     categoryDetailRequestRef.current += 1;
                     hierarchySkuRequestRef.current += 1;

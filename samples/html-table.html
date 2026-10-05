@@ -70,7 +70,9 @@ summary { cursor: pointer; width: fit-content; }
   </section>
   <details><summary>演示状态</summary><p>用于验收加载、空态与错误提示，不连接业务服务。</p><div class="simulations"><button type="button" data-state="empty" disabled>演示空结果</button><button type="button" data-state="error" disabled>演示查询失败</button></div></details>
 </main>
-<script>
+<script type="module">
+import {createPageViewState} from "../business/shared/view-state.js";
+const sampleView=createPageViewState("workbench-html-table");
 (() => {
   const expectedVersion = '1.1.1';
   const $ = id => document.getElementById(id);
@@ -135,9 +137,12 @@ summary { cursor: pointer; width: fit-content; }
       if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
     }, 350);
   };
-  $('search').onclick = () => query();
+  const saveView=()=>sampleView.update({keyword:$('query').value,stage:$('stage').value});
+  sampleView.subscribe(value=>{if(typeof value.keyword==='string')$('query').value=value.keyword;if(['','进行中','已完成','待开始'].includes(value.stage))$('stage').value=value.stage;query();});
+  $('query').addEventListener('input',saveView);$('stage').addEventListener('change',saveView);
+  $('search').onclick = () => {saveView();query();};
   $('query').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); query(); } });
-  $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; query(); };
+  $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; saveView();query(); };
   $('retry').onclick = () => query();
   document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
   const projectTheme = event => {

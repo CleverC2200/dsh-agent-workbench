@@ -25,7 +25,7 @@ test("base changes and closed details cannot retain or publish obsolete query re
   globalThis.stockRangeTest = { handlers: {}, queries: [], published: [], hold: null, deferred: [],
     load: async (_ref, _op, _signal, bases) => workspace(bases),
     tabs: (_ref, base, category, tab, _op, signal) => {
-      const result = { [tab]: table(base) };
+      const result = { [tab]: {...table(base),rows:table(base).rows.map(row=>({...row,level:category?"SKU-1":"汤圆"}))} };
       stockRangeTest.queries.push({ base, category, tab, signal });
       if (stockRangeTest.hold?.base === base && Boolean(category) === stockRangeTest.hold.detail)
         return new Promise(done => stockRangeTest.deferred.push(() => done(result)));
@@ -100,5 +100,17 @@ test("base changes and closed details cannot retain or publish obsolete query re
     await settle();
     assert.equal(page.pageContext().parts.stockDetail, undefined);
     assert.equal(page.pageContext().parts.data, undefined);
+
+    stockRangeTest.hold=null;
+    const beforeRestore=stockRangeTest.queries.length;
+    await React.act(async()=>window.dispatchEvent(new window.MessageEvent('message',{source:window.parent,data:{protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-aqkc',version:1,channel:'test-ui-generation',generation:1,state:{version:1,activeBoardTab:'基地结构',pathSelection:['华南基地'],expandedBaseId:'华南',expandedCategoryId:'汤圆',expandedSkuId:'SKU-1',skuExpanded:true,detailTab:'品类结构'}}})));
+    for(let i=0;i<8;i++)await settle();
+    assert.ok(stockRangeTest.queries.slice(beforeRestore).some(query=>query.base==='华南'&&!query.category),'restore obtains the current parent detail');
+    assert.ok(stockRangeTest.queries.slice(beforeRestore).some(query=>query.base==='华南'&&query.category==='汤圆'),'only a currently visible category restores the SKU detail');
+    assert.ok(container.textContent.includes('华南品类'));
+    const beforeUnknown=stockRangeTest.queries.length;
+    await React.act(async()=>window.dispatchEvent(new window.MessageEvent('message',{source:window.parent,data:{protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-aqkc',version:1,channel:'test-ui-generation',generation:2,state:{version:1,activeBoardTab:'基地结构',pathSelection:['华南基地'],expandedBaseId:'不在当前范围',expandedCategoryId:'汤圆',skuExpanded:true}}})));
+    for(let i=0;i<4;i++)await settle();
+    assert.equal(stockRangeTest.queries.slice(beforeUnknown).some(query=>query.base==='不在当前范围'),false,'unknown restored IDs never trigger a detail read');
   }
 });
