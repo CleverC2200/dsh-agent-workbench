@@ -10,7 +10,8 @@ const { outputFiles } = await build({
       import { createRoot } from 'react-dom/client';
       import { Inbox } from './src/client/inbox.tsx';
       import { zh } from './src/client/locales.ts';
-      createRoot(document.getElementById('root')).render(<Inbox t={key => zh[key]} />);`,
+      function App(){const [view,setView]=React.useState({pageNo:1,readState:''});return <Inbox t={key=>zh[key]} view={view} onViewChange={setView}/>;}
+      createRoot(document.getElementById('root')).render(<App/>);`,
     resolveDir: process.cwd(), loader: 'tsx',
   },
   bundle: true, write: false, platform: 'browser', format: 'iife',
