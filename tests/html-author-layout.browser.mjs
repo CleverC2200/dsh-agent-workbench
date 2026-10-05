@@ -40,7 +40,8 @@ async function fixture(t) {
 for (const name of ['category', 'mps'])
     test(name + ' business board adapts inside the actual Document while author questions use the current draft CAS', async (t) => {
         const page = await fixture(t);
-        const seed = name === 'category' ? { version: 1, draft: '原型保留的未发文字' } : { version: 1, assistantDraft: '原型保留的未发文字' };
+        const rawDraft='\n  第一步\n';
+        const seed = name === 'category' ? { version: 1, draft: rawDraft } : { version: 1, assistantDraft: rawDraft };
         for (const width of [600, 900, 1200]) {
             await page.setViewportSize({ width: width + 720, height: 720 });
             await page.evaluate(({ name, width, seed }) => window.openAuthor(name, width, seed), { name, width, seed });
@@ -78,7 +79,7 @@ for (const name of ['category', 'mps'])
         await frame.locator('body').evaluate(()=>window.dshPageInteraction.quote({label:'长度边界',text:'字'.repeat(6000)}));
         assert.equal(await page.evaluate(()=>window.persisted),1,'the existing 6000-character boundary is accepted');
         const draftBeforeRejected=await page.evaluate(()=>window.peerDraft);
-        const oversized='长'.repeat(6001)+'TAIL';const key=name==='category'?'draft':'assistantDraft';
+        const oversized=' '+ '字'.repeat(5999)+' ';assert.equal(oversized.length,6001);const key=name==='category'?'draft':'assistantDraft';
         await page.evaluate(({name,seed})=>window.openAuthor(name,1200,seed),{name,seed:{version:1,[key]:oversized}});
         await expect.poll(()=>frame.locator('body').evaluate(()=>window.dshPageInteraction?.available())).toBe(true);
         await frame.getByRole('button',{name:'转入当前对话草稿',exact:true}).click();
@@ -91,11 +92,12 @@ for (const name of ['category', 'mps'])
         await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).click();
         await expect(frame.locator('.author-quote-status')).toContainText('草稿已变化');
         assert.equal(await page.evaluate(() => window.peerDraft),draftBeforeRejected);
-        assert.match(JSON.stringify(await page.evaluate(() => window.readView())), /原型保留/);
+        assert.equal((await page.evaluate(()=>window.readView()))[key],rawDraft);
         await page.evaluate(() => { window.conflict = false; });
         await frame.getByRole('button', { name: '转入当前对话草稿', exact: true }).click();
         await expect(frame.getByRole('button', { name: '转入当前对话草稿', exact: true })).toHaveCount(0);
         assert.match(await page.evaluate(() => window.peerDraft), /^历史草稿，请保留。引用：/);
+        assert.ok((await page.evaluate(()=>window.peerDraft)).endsWith('引用：'+name+' · 未发文字\n> \n>   第一步\n> \n'),'all raw indentation and boundary LF survive the real quote pathway');
         assert.equal(await page.evaluate(() => window.persisted), 2);
         await frame.locator('summary').click();
         await frame.locator('.author-question-list button').first().click();

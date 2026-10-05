@@ -124,3 +124,14 @@ test('an explicit authored quote cannot become a business receipt or prompt on a
  const f=fixture(t,()=>{throw Error('quote must not reach Host');});await new Promise(resolve=>setImmediate(resolve));await f.receive('selection-state',{active:false});await f.receive('quote',{requestId:'wrong-mode',reference:{text:'静态问题',targets:[]}});
  assert.equal(f.saves.length,0);assert.equal(f.drafts.length,0);assert.equal(f.posted.at(-1).ok,false);
 });
+
+test('explicit authored quote preserves raw indentation and boundary newlines before acknowledging success',async t=>{
+ const f=fixture(t,()=>{throw Error('business Host forbidden');},{quote:true});await f.receive('selection-state',{active:false});
+ await f.receive('quote',{requestId:'raw',reference:{label:'未发文字',text:'\n  第一步\n',targets:[]}});
+ assert.equal(f.posted.at(-1).ok,true);assert.equal(f.drafts[0].text,'引用：Original page · 未发文字\n> \n>   第一步\n> \n');assert.equal(f.drafts.at(-1).persisted,true);
+});
+test('Parent rejects an explicit raw6001 quote even when surrounding spaces make its trimmed form smaller',async t=>{
+ const f=fixture(t,()=>{throw Error('business Host forbidden');},{quote:true});await f.receive('selection-state',{active:false});
+ await f.receive('quote',{requestId:'raw-oversize',reference:{label:'未发文字',text:' '+ '字'.repeat(5999)+' ',targets:[]}});
+ assert.equal(f.posted.at(-1).ok,false);assert.equal(f.drafts.length,0);assert.equal(f.saves.length,0);
+});

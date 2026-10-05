@@ -418,7 +418,7 @@ export function mountPicker(options: PickerOptions = {}): () => void {
     if(!channel||!quoteEnabled){reject(Error("请先关联当前页面的真实对话，再转入草稿。"));return;}
     if(pending){reject(Error("请等待当前引用完成，再转入草稿。"));return;}
     if(!value.text.trim()){reject(Error("没有可转入的文字。"));return;}
-    if(value.text.trim().length>REFERENCE_TEXT_LIMIT){reject(Error(`文字超过单次引用长度上限（${REFERENCE_TEXT_LIMIT}字符），请在真实输入框分段粘贴；保留文字未删除。`));return;}
+    if(value.text.length>REFERENCE_TEXT_LIMIT){reject(Error(`文字超过单次引用长度上限（${REFERENCE_TEXT_LIMIT}字符），请在真实输入框分段粘贴；保留文字未删除。`));return;}
     stopSelection();
     const id=crypto.randomUUID();const abort=()=>cancelPending(Error("转入已取消。"));
     pending={id,resolve,reject,cleanup:()=>signal?.removeEventListener('abort',abort)};

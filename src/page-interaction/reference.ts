@@ -23,16 +23,12 @@ export type BoundReference = PageReference & {
 const text = (value: unknown, limit: number) =>
   typeof value === "string" ? value.trim().slice(0, limit) : "";
 
-/** Bounds incoming page evidence; never interprets it as an instruction. */
-export function pageReference(value: unknown): PageReference | undefined {
-  if (!value || typeof value !== "object") return;
-  const v = value as Record<string, unknown>;
-  if (typeof v.text !== "string" || !v.text.trim()) return;
+function referenceFields(v:Record<string,unknown>,content:string,truncated:boolean):PageReference {
   return {
     page: text(v.page, 160),
     kind: v.kind === "row" || v.kind === "table" ? v.kind : "block",
     label: text(v.label, 160) || "页面内容",
-    text: text(v.text, REFERENCE_TEXT_LIMIT),
+    text: content,
     row: text(v.row, 200),
     column: text(v.column, 200),
     scope: text(v.scope, 1000),
@@ -42,8 +38,24 @@ export function pageReference(value: unknown): PageReference | undefined {
         )
       : [],
     capturedAt: text(v.capturedAt, 64),
-    truncated: v.text.length > REFERENCE_TEXT_LIMIT || v.truncated === true,
+    truncated,
   };
+}
+
+/** Bounds incoming page evidence; never interprets it as an instruction. */
+export function pageReference(value: unknown): PageReference | undefined {
+  if (!value || typeof value !== "object") return;
+  const v = value as Record<string, unknown>;
+  if (typeof v.text !== "string" || !v.text.trim()) return;
+  return referenceFields(v,text(v.text,REFERENCE_TEXT_LIMIT),v.text.length>REFERENCE_TEXT_LIMIT||v.truncated===true);
+}
+
+/** Explicit authored text is lossless within the existing raw UTF-16 budget. */
+export function pageQuoteReference(value:unknown):PageReference|undefined {
+  if(!value||typeof value!=="object")return;
+  const raw=(value as Record<string,unknown>).text;
+  if(typeof raw!=="string"||!raw.trim()||raw.length>REFERENCE_TEXT_LIMIT)return;
+  return referenceFields(value as Record<string,unknown>,raw,false);
 }
 
 export type ReferenceReceipt = { id: string; label: string };

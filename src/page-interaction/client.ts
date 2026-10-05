@@ -9,6 +9,7 @@ import {
   PAGE_INTERACTION,
   REFERENCE_SOURCE,
   pageReference,
+  pageQuoteReference,
   serializeReference,
   type BoundReference,
 } from "./reference.ts";
@@ -266,8 +267,8 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           if (!paired() || (business&&(!ready||!generation)))
             throw Error("请先打开当前页面的对话，再加入提问。");
           if(event.data.type==="quote"&&options.mode!=="quote")throw Error("请关联当前页面的真实对话，再转入草稿。");
-          const selected = pageReference(event.data.reference);
-          if (!selected) throw Error("未读到选中内容，请重新选择。");
+          const selected = event.data.type==="quote"?pageQuoteReference(event.data.reference):pageReference(event.data.reference);
+          if (!selected) throw Error(event.data.type==="quote"?"转入文字为空或超过单次引用长度上限，请检查原文后重试。":"未读到选中内容，请重新选择。");
           if(options.mode==="quote"){
             const quote="引用："+page+" · "+selected.label+"\n"+selected.text.split("\n").map(line=>"> "+line).join("\n")+"\n";
             const captured=options.inputActions.captureInsertion();
