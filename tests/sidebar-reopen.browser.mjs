@@ -29,17 +29,19 @@ const bundle=await build({stdin:{contents:`
    const ColdStart=useFactorySlot('widthControls',()=>null);return <div style={{height:'100%',display:'flex',flexDirection:'column'}}><ColdStart/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></div>;
  });
  ctx.slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},({renderSlot})=>renderSlot('main.conversation',{}));
- const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
+ const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),document:()=>ctx.layout.selectPanel(null),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
  mountCompanyUI(ctx,workbench,()=>null);
  ctx.provide('inputTriggers',{registerSource:()=>()=>{}});ctx.provide('conversation',{input:{for:()=>({})}});
  ctx.provide('remote',{session:{}});ctx.provide('businessAccount',{...source({state:'confirmed',scope:null,status:{authenticated:false}})});
- mountFramePresentation(ctx,()=>undefined,key=>key);
+ mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
  const page={id:'inventory-fc',kind:'local',label:'分仓库存',body:()=> <input aria-label="业务筛选" defaultValue="保留业务筛选"/>};
- ctx.slots.register({name:'main',key:page.id},({renderFactorySlot})=>renderFactorySlot('agent-workbench.document',{page}));
+ workbench.registerFrame(page);
+ const second={id:"plan-region-category",kind:"local",label:"第二静态页面",body:()=> <input aria-label="第二页面筛选" defaultValue=""/>};workbench.registerFrame(second);
  ctx.uiRenderer.mount(document.getElementById('root'));
- window.sidebarProbe=()=>({main:ctx.layout.panelInfo.getSnapshot().activePanelId,leadingEntries:ctx.slots.entries('shell.leading').length});
- window.selectBusiness=()=>ctx.layout.selectPanel(page.id);
- window.selectHome=()=>ctx.layout.selectPanel(null);
+ window.sidebarProbe=()=>({main:ctx.layout.panelInfo.getSnapshot().activePanelId,document:workbench.getSnapshot().selectedDocument?.id,leadingEntries:ctx.slots.entries('shell.leading').length});
+ window.selectBusiness=()=>workbench.open(page.id);
+ window.selectSecond=()=>workbench.open(second.id);
+ window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel(null);};
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',platform:'browser',jsx:'automatic',define:{'process.env.DSH_CLIENT_TITLE':'"Sidebar regression"','process.env.NODE_ENV':'"test"'},alias:{react:resolve('node_modules/react'),'react-dom':resolve('node_modules/react-dom')},loader:{'.png':'dataurl','.css':'text'},plugins:[{name:'official-css-modules',setup(build){build.onLoad({filter:/\.module\.css$/},async args=>({contents:await readFile(args.path,'utf8'),loader:'local-css'}))}}]});
 
@@ -124,4 +126,17 @@ for(const target of ['home','business'])test('Darwin '+target+' can reopen its s
   }
   await expect(content).toHaveValue(preserved);
  }
+});
+
+
+test('static Documents preserve their own body and mode while the actual Core main Conversation remains selected',async t=>{
+ const page=await fixture(t);
+ await page.evaluate(()=>window.selectBusiness());const first=page.getByRole('textbox',{name:'业务筛选'});await expect(first).toBeVisible();await first.fill('第一个页面自己的筛选');
+ await page.getByRole('button',{name:'中间区域最大，隐藏会话区'}).click();
+ assert.deepEqual(await page.evaluate(()=>({main:window.sidebarProbe().main,document:window.sidebarProbe().document})),{main:null,document:'inventory-fc'});
+ await page.evaluate(()=>window.selectSecond());const second=page.getByRole('textbox',{name:'第二页面筛选'});await expect(second).toBeVisible();await second.fill('第二个页面自己的筛选');await expect(first).toBeHidden();
+ await page.evaluate(()=>window.selectBusiness());await expect(first).toHaveValue('第一个页面自己的筛选');await expect(second).toBeHidden();await expect(page.locator('.view-center:visible')).toHaveCount(1);
+ await page.evaluate(()=>window.selectHome());await expect(page.getByRole('textbox',{name:'首页草稿'})).toBeVisible();await expect(first).toBeHidden();
+ await page.evaluate(()=>window.selectSecond());await expect(second).toHaveValue('第二个页面自己的筛选');
+ assert.equal(await page.evaluate(()=>window.sidebarProbe().main),null,'no business main key or invented Session is needed for static presentation');
 });

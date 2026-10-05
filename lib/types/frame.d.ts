@@ -1,9 +1,11 @@
 import type { WorkbenchPage } from "./workbench.ts";
-/** A real document contribution; Workbench owns the frame and its attached Conversation. */
+/** A real Document contribution; Workbench owns its UI and borrows the Core main Conversation. */
 export type WorkbenchFramePage = WorkbenchPage & {
     readonly pluginId?: string;
     readonly resourceId?: string;
-    readonly onVisible?: () => void;
+    /** Page contributor owns pending navigation identity; Workbench observes only the current receipt. */
+    readonly visibleRequest?: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<string | undefined>;
+    readonly onVisible?: (receipt?: string) => void;
 } & ({
     readonly kind: "native" | "html";
     readonly src: string | (() => string);

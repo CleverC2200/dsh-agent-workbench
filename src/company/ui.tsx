@@ -104,7 +104,9 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   useSyncExternalStore(listener=>ctx.locale.subscribe(listener),()=>ctx.locale.getSnapshot().active,()=>ctx.locale.getSnapshot().active);
   const darwin=typeof document!=='undefined'&&document.documentElement.dataset.platform==='darwin';
   const sidebarToggle=<button type="button" className="gea-inbox-quick-action gea-owned-sidebar-toggle" aria-label="收起侧边栏" onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutlineRegular size={16}/></button>;
-  const activePanel=usePanelInfo(value=>value.activePanelId);
+  const documentState=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot,workbench.getSnapshot);
+  const layoutPanel=usePanelInfo(value=>value.activePanelId);
+  const activePanel=layoutPanel??documentState.selectedDocument?.id;
   const business=Boolean(activePanel&&![DIRECTORY,PLUGINS,'gea-api-log'].includes(activePanel));
   const [drawer,setDrawer]=useState<'function'|'workspace'|'none'>(()=>business?'function':'workspace');
   const previousBusiness=useRef(business);
@@ -112,11 +114,11 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const [sections,setSections]=useState({supply:true,plan:true,inventory:true,orders:true});
   const [entries,setEntries]=useState(()=>ctx.slots.entries('main'));
   useEffect(()=>{const refresh=()=>setEntries([...ctx.slots.entries('main')]);const offs=[ctx.slots.subscribe('main',refresh),ctx.slots.subscribe('sidebar.panellist',refresh),workbench.subscribe(refresh)];return()=>offs.forEach(off=>off());},[]);
-  const available=new Map(entries.filter(entry=>entry.options.key).map(entry=>[entry.options.key!,workbench.label(entry.options.key! as MainPanelId)]));
+  const available=new Map([...entries.filter(entry=>entry.options.key).map(entry=>[entry.options.key!,workbench.label(entry.options.key! as MainPanelId)] as const),...documentState.pages.map(page=>[page.id,workbench.label(page.id)] as const)]);
   const menu=resolveBusinessMenu(BUSINESS_MENU_PRESET,available);
   const expandSidebar=()=>{if(collapsed)ctx.layout.toggleSidebar();};
   useEffect(()=>workbench.subscribeHistory(()=>{setDrawer('workspace');expandSidebar();}),[collapsed]);
-  const newConversation=()=>{setDrawer('workspace');expandSidebar();ctx.uiWorkspace.startSession();};
+  const newConversation=()=>{workbench.leaveDocument();setDrawer('workspace');expandSidebar();ctx.uiWorkspace.startSession();};
   const toggleDrawer=(name:'function'|'workspace')=>setDrawer(value=>value===name?'none':name);
   const pluginLabel=ctx.slots.entries('sidebar.panellist').find(entry=>entry.options.id===PLUGINS)?.options.label;
   const modules=[{id:DIRECTORY,label:'工作台'}];
@@ -143,8 +145,23 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
  function Conversation({sessionId,useSession,useConversation,useSessions,renderFactorySlot}:PropsRuntime<'main.conversation'>&PropsRenderFactories){
   useSyncExternalStore(listener=>ctx.locale.subscribe(listener),()=>ctx.locale.getSnapshot().active,()=>ctx.locale.getSnapshot().active);
   const session=useSession(value=>value),conversation=useConversation(value=>value);
+  const documentState=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot,workbench.getSnapshot);
   const [historyError,setHistoryError]=useState('');
-  useEffect(()=>{if(!sessionId)return;const page=workbench.takeHistoryPage();if(!page)return;const controller=new AbortController();void restorePageSession(page,sessionId,controller.signal).then(()=>{controller.signal.throwIfAborted();return workbench.open(page);}).catch(error=>{if(!controller.signal.aborted)setHistoryError(error instanceof Error?error.message:String(error));});return()=>controller.abort();},[sessionId]);
+  const previousMainSession=useRef(sessionId);
+  useEffect(()=>{
+   const changed=previousMainSession.current!==sessionId;previousMainSession.current=sessionId;
+   if(!sessionId){if(changed)workbench.leaveDocument();return;}
+   setHistoryError('');
+   const page=workbench.takeHistoryPage();
+   if(!page){
+    const state=workbench.getSnapshot();
+    if((state.selection&&state.selection.sessionId!==sessionId)||(changed&&state.selectedDocument&&!state.selection))workbench.leaveDocument();
+    return;
+   }
+   const controller=new AbortController();
+   void restorePageSession(page,sessionId,controller.signal).then(()=>{controller.signal.throwIfAborted();return workbench.open(page);}).catch(error=>{if(!controller.signal.aborted)setHistoryError(error instanceof Error?error.message:String(error));});
+   return()=>controller.abort();
+  },[sessionId]);
   const blank=!session||!conversation||(conversation.activeTargets.size===0&&session.blank&&!session.running&&!session.promptAttempted);
   const loading=session?.openState==='loading'&&!blank;
   const positions=useMemo(()=>{
@@ -168,20 +185,22 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
     widthControls:function ColdStart(props:FactoryLocalComponentPropsOf<'conversation.content','widthControls'>){return sessionId===undefined?<div className="gea-cold-start"><div className="gea-home-position"><Home/></div><Choices {...props}/></div>:null;},
    };
   },[blank,sessionId,ctx.locale.getSnapshot().active]);
-  return <section className="gea-company-main">{historyError&&<p role="alert">{historyError}</p>}<div className="gea-native-content">{renderFactorySlot('conversation.content',{variant:'embedded',phase:loading?'settling':'active',hero:false},{slots:positions})}</div></section>;
+  const documents=documentState.visitedDocuments.map(page=><div key={page.id} style={{height:'100%',minHeight:0,display:documentState.selectedDocument?.id===page.id?'flex':'none',flexDirection:'column'}}>{renderFactorySlot('agent-workbench.document',{page,active:documentState.selectedDocument?.id===page.id,navigationError:documentState.selectedDocument?.id===page.id?historyError:undefined})}</div>);
+  return <>{documents}{!documentState.selectedDocument&&<section className="gea-company-main">{historyError&&<p role="alert">{historyError}</p>}<div className="gea-native-content">{renderFactorySlot('conversation.content',{variant:'embedded',phase:loading?'settling':'active',hero:false},{slots:positions})}</div></section>}</>;
  }
  function Directory({sessionId,useSessions}:PropsRuntime<'agent-workbench.directory'>){
+  const documentState=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot,workbench.getSnapshot);
   useSyncExternalStore(listener=>ctx.locale.subscribe(listener),()=>ctx.locale.getSnapshot().active,()=>ctx.locale.getSnapshot().active);
   const [entries,setEntries]=useState(()=>ctx.slots.entries('main'));
   useEffect(()=>{const refresh=()=>setEntries([...ctx.slots.entries('main')]);const offs=[ctx.slots.subscribe('main',refresh),ctx.slots.subscribe('sidebar.panellist',refresh),workbench.subscribe(refresh)];return()=>offs.forEach(off=>off());},[]);
   const cwd=useSessions(value=>sessionId?value.byId[sessionId]?.cwd:undefined);
-  return <section className="gea-directory-owned"><h1>工作台</h1><button type="button" className="gea-home-panel-item" onClick={()=>ctx.layout.selectPanel(null)}>原生对话</button><section className="gea-home-panel"><div className="gea-home-panel-head"><strong>已接入页面</strong></div><div className="gea-home-panel-list">{entries.filter(entry=>entry.options.key&&![DIRECTORY,'conversation'].includes(entry.options.key)).map(entry=>{const id=entry.options.key! as MainPanelId,label=ctx.slots.entries('sidebar.panellist').find(panel=>panel.options.id===id)?.options.label;return <button key={id} type="button" className="gea-home-panel-item" onClick={()=>void workbench.open(id)}>{typeof label==='function'?label():label??workbench.label(id)}</button>;})}</div></section><Resources cwd={cwd}/></section>;
+  return <section className="gea-directory-owned"><h1>工作台</h1><button type="button" className="gea-home-panel-item" onClick={()=>{workbench.leaveDocument();ctx.layout.selectPanel(null);}}>原生对话</button><section className="gea-home-panel"><div className="gea-home-panel-head"><strong>已接入页面</strong></div><div className="gea-home-panel-list">{[...new Set([...entries.filter(entry=>entry.options.key&&![DIRECTORY,'conversation'].includes(entry.options.key)).map(entry=>entry.options.key! as MainPanelId),...documentState.pages.filter(page=>page.id!==DIRECTORY).map(page=>page.id)])].map(id=>{const label=ctx.slots.entries('sidebar.panellist').find(panel=>panel.options.id===id)?.options.label;return <button key={id} type="button" className="gea-home-panel-item" onClick={()=>void workbench.open(id)}>{typeof label==='function'?label():label??workbench.label(id)}</button>;})}</div></section><Resources cwd={cwd}/></section>;
  }
  ctx.slots.inject('sidebar',()=>ctx.slots.register({name:'sidebar',priority:-20,locale:'companyWorkbench',children:{'sidebar.brand.mark':{kind:'single',scope:'root'},'sidebar.brand.name':{kind:'single',scope:'root'},'sidebar.panellist':{kind:'list',scope:'root'},'sidebar.workspaces':{kind:'single',scope:'root'},'sidebar.settings':{kind:'single',scope:'root'},'sidebar.footer.action':{kind:'list',scope:'root'}}},Sidebar));
  ctx.slots.inject('settings.launcher',()=>ctx.slots.register({name:'settings.launcher',priority:-20,locale:'companyWorkbench'},Account));
  ctx.slots.inject('sidebar.brand.mark',()=>ctx.slots.register({name:'sidebar.brand.mark',priority:-10,locale:'companyWorkbench'},function Brand(){const geometry=React.useContext(SidebarGeometry);return <span className="gea-brand-switch" title={t('openBusinessNavigation')} onClick={event=>{event.stopPropagation();if(geometry.collapsed)geometry.expand();}}><img className="gea-shell-logo" src={brandLogo} alt=""/></span>;}));
  ctx.slots.inject('sidebar.brand.name',()=>ctx.slots.register({name:'sidebar.brand.name',priority:-10,locale:'companyWorkbench'},function BrandName(){return <div className="gea-brand-copy" onClick={event=>event.stopPropagation()}><span className="gea-brand-title">{t('geaBusiness')}</span><div className="gea-brand-subtitle">{t('brandSubtitle')}</div></div>;}));
- ctx.slots.inject('shell.leading',()=>ctx.slots.register({name:'shell.leading',priority:-20,locale:'companyWorkbench'},()=> <div className="gea-shell-leading"><button type="button" className="gea-inbox-quick-action" aria-label={t('openBusinessNavigation')} onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutlineRegular size={16}/></button><button type="button" className="gea-inbox-quick-action" aria-label={t('newConversation')} onClick={()=>ctx.uiWorkspace.startSession()}><IconNewChatOutlineRegular size={16}/></button></div>));
+ ctx.slots.inject('shell.leading',()=>ctx.slots.register({name:'shell.leading',priority:-20,locale:'companyWorkbench'},()=> <div className="gea-shell-leading"><button type="button" className="gea-inbox-quick-action" aria-label={t('openBusinessNavigation')} onClick={()=>ctx.layout.toggleSidebar()}><IconPanelLeftOutlineRegular size={16}/></button><button type="button" className="gea-inbox-quick-action" aria-label={t('newConversation')} onClick={()=>{workbench.leaveDocument();ctx.uiWorkspace.startSession();}}><IconNewChatOutlineRegular size={16}/></button></div>));
  ctx.slots.inject('main.conversation',()=>ctx.slots.register({name:'main.conversation',priority:-20,locale:'companyWorkbench'},Conversation));
  ctx.slots.inject('main',()=>{const dispose=ctx.slots.register({name:'main',key:DIRECTORY,children:{'agent-workbench.directory':{kind:'single',scope:'session-maybe'}}},({renderSlot}:PropsRuntime<'main'>&PropsRenderSlots<'agent-workbench.directory'>)=>renderSlot('agent-workbench.directory',{}));const unregister=workbench.register({id:DIRECTORY,label:'工作台'});return()=>{dispose();unregister();};});
  ctx.slots.inject('agent-workbench.directory',()=>ctx.slots.register({name:'agent-workbench.directory'},Directory));

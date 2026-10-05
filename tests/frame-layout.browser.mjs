@@ -4,13 +4,14 @@ import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
 import {chromium,expect} from '@playwright/test';
 const bundle=await build({stdin:{contents:`
- import React from 'react';import{createRoot}from'react-dom/client';import{mountFramePresentation}from'./src/frame-presenter.tsx';
+ import React from 'react';import{createRoot}from'react-dom/client';import{mountFramePresentation}from'./src/frame-presenter.tsx';import{WorkbenchController as DocumentWorkbench}from'./src/workbench.ts';
  let Document;const locale={active:'zh'};const identity={state:'confirmed',scope:null,status:{authenticated:false}};
- const ctx={get:()=>undefined,provide(){},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({})}},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{};},register:()=>()=>{},inject:(_name,fn)=>fn()},inject:(names,fn)=>fn({...ctx,businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{}}})};
- mountFramePresentation(ctx,()=>undefined,key=>key);
+ const ctx={get:()=>undefined,provide(){},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({})}},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{};},register:()=>()=>{},inject:(_name,fn)=>fn()},inject:(names,fn)=>{if(names.includes('sidebarRight'))return;return fn({...ctx,businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{}}})}};
+ const documents=new DocumentWorkbench({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,documents);
  const root=createRoot(document.getElementById('root'));const page={id:'business',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
- window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,SessionProvider:()=>{throw Error('no invented session')},renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
- root.render(React.createElement(Document,{page,SessionProvider:()=>{throw Error('no invented session')},renderSlot:()=>{throw Error('no unbound Conversation')}}));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',loader:{'.png':'dataurl','.css':'text'}});
+ documents.registerFrame(page);documents.open(page.id);
+ window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
+ root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',loader:{'.png':'dataurl','.css':'text'}});
 async function documentFixture(t){
  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1600,height:700}});

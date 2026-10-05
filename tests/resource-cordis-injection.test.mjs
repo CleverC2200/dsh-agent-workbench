@@ -17,19 +17,20 @@ const {outputFiles}=await build({entryPoints:['src/resource-selection.ts'],bundl
 const {mountNativeResourceSelection,selectResource}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
 
 test('actual Cordis client injection admits every native resource service and releases the adapter with its fiber',async()=>{
- const ctx=new Context();const operations=[];let native;let workspaces;
+ const ctx=new Context();const operations=[];let native;let workspaces;let released=false;
  const sessionScope=new Context();
  sessionScope.on('slash/input-insert-text',request=>{operations.push(['draft',request.text]);return true;});
  const presets={select:async(id,preset)=>{operations.push(['preset',id,preset]);return {ok:true,value:preset};}};
  const provider=await ctx.plugin({name:'native-client-dependencies',apply:ctx=>{ctx.provide('remote',{agentPresets:presets});ctx.provide('remote.agentPresets',presets);
  workspaces=new WorkspaceController(ctx,new ClientWorkspaceModel({create:async({path})=>{operations.push(['workspace',path]);return {ok:true,value:{workspace:{workspaceId:'workspace-owned',path,title:'Owned',sessionIds:[],createdAt:'2026-10-04T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z'}}};}}));
- ctx.provide('sessions',{create:async options=>{assert.equal(workspaces.list.getSnapshot().items[0].workspaceId,options.workspaceId);operations.push(['create',options]);return 'new-session';},retain:(id)=>({sessionId:id,binding:{ctx:sessionScope},ready:Promise.resolve({ctx:sessionScope}),release:()=>{}})});
+ ctx.provide('sessions',{create:async options=>{assert.equal(workspaces.list.getSnapshot().items[0].workspaceId,options.workspaceId);operations.push(['create',options]);return 'new-session';},retain:(id)=>({sessionId:id,binding:{ctx:sessionScope},ready:Promise.resolve({ctx:sessionScope}),release:()=>{released=true;}})});
  ctx.provide('conversation',{input:{for:()=>({state:{getSnapshot:()=>({draft:'',draftRev:0})}})}});
- ctx.provide('uiWorkspace',{openSession:id=>operations.push(['open',id])});}});
+ ctx.provide('uiWorkspace',{openSession:id=>{assert.equal(released,false,'the actual borrowed scope survives until native main navigation');operations.push(['open',id]);}});}});
  const fiber=mountNativeResourceSelection(ctx,value=>{native=value;});await fiber;
  assert.ok(native);
  native.fetch=async path=>Response.json(path.endsWith('/config')?{cwd:'/isolated/workspace'}:{preset:'original',skill:'existing'});
- await selectResource(native,'skill:existing',new AbortController().signal);
+ await selectResource(native,'skill:existing',new AbortController().signal,undefined,()=>{assert.equal(released,false,'association is published while the original draft scope is retained');});
+ assert.equal(released,true,'the selection reference releases after the native main owner is established');
  assert.deepEqual(operations,[['workspace','/isolated/workspace'],['create',{workspaceId:'workspace-owned'}],['preset','new-session','original'],['draft','/existing '],['open','new-session']]);
  await fiber.dispose();assert.equal(native,undefined);
  await provider.dispose();await sessionScope.fiber.dispose();await ctx.fiber.dispose();

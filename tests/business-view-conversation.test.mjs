@@ -10,8 +10,8 @@ const module={exports:{}};new Function('module','exports','require',bundle.outpu
 const {mountBusinessViews,WorkbenchController}=module.exports;
 test('registered original Inbox enters the shared document with its original resource and body rather than a standalone list',async t=>{
  const frames=[],panels=[],main=[];const ctx={locale:{register(){},bind:()=>key=>key,getSnapshot:()=>({active:'zh'})},layout:{selectPanel:id=>panels.push(id)},effect:()=>{},slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{main.push({options,component});return()=>{};}},inject:(_names,fn)=>fn({...ctx,businessAccount:{getSnapshot:()=>({status:{authenticated:false}})}})};
- ctx.agentWorkbench=new WorkbenchController({panel:id=>panels.push(id),frame:page=>{frames.push(page);return()=>{};}});
- mountBusinessViews(ctx);const inbox=frames.find(page=>page.id==='gea-inbox');
+ ctx.agentWorkbench=new WorkbenchController({panel:id=>panels.push(id),document:id=>panels.push(id)});
+ mountBusinessViews(ctx);const inbox=ctx.agentWorkbench.getSnapshot().pages.find(page=>page.id==='gea-inbox');
  assert.ok(inbox,'Inbox uses the same owned document route as the existing business Conversation');assert.equal(inbox.kind,'local');assert.equal(inbox.resourceId,'gea-readonly');assert.equal(inbox.src,undefined);
  assert.equal(main.some(entry=>entry.options.name==='main'&&entry.options.key==='gea-inbox'),false,'no duplicate standalone Inbox main registration');
  const dom=new JSDOM('<main id="root"></main>',{pretendToBeVisual:true});
@@ -23,5 +23,18 @@ test('registered original Inbox enters the shared document with its original res
  t.after(async()=>{await act(async()=>bodyRoot.unmount());dom.window.close();for(const [key,descriptor]of saved){if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}});
  await act(async()=>bodyRoot.render(React.createElement(inbox.body)));
  assert.ok(document.querySelector('.gea-native-page'),'the original Inbox React page is retained');assert.ok(reads.some(read=>read.path==='/api/gea-proof/notifications'),'the original Inbox guarded HTTP read protocol is preserved');
- await ctx.agentWorkbench.open('gea-inbox');assert.deepEqual(panels,['gea-inbox']);
+ await ctx.agentWorkbench.open('gea-inbox');assert.deepEqual(panels,[undefined]);assert.equal(ctx.agentWorkbench.getSnapshot().selectedDocument.id,'gea-inbox');
+});
+
+test('native navigation owner rejects a cancelled receipt and acknowledges only the currently active request',async()=>{
+ const entries=[];const identity={getSnapshot:()=>({status:{authenticated:true}})};
+ const ctx={locale:{register(){},bind:()=>key=>key,getSnapshot:()=>({active:'zh'})},effect:()=>{},slots:{inject:(_name,fn)=>fn(),register:(options,component)=>{entries.push({options,component});return()=>{};}},inject:(_names,fn)=>fn({...ctx,businessAccount:identity})};
+ ctx.agentWorkbench=new WorkbenchController({panel:()=>{},document:()=>{}});mountBusinessViews(ctx);
+ const document=ctx.agentWorkbench.getSnapshot().pages.find(page=>page.id==='gea-proof');
+ const overlay=entries.find(entry=>entry.options.id==='gea-desktop-navigation');const {open}=overlay.component().props;
+ const first=new AbortController();const cancelled=open({panel:'gea-proof',receipt:'receipt-old'},first.signal);first.abort();await assert.rejects(cancelled,/NAVIGATION_REQUEST_CANCELLED/);
+ assert.equal(document.visibleRequest.getSnapshot(),undefined);
+ let settled=false;const current=open({panel:'gea-proof',receipt:'receipt-current'},new AbortController().signal).then(()=>{settled=true;});
+ document.onVisible('receipt-old');await Promise.resolve();assert.equal(settled,false,'a late old receipt cannot release the current navigation');
+ document.onVisible('receipt-current');await current;assert.equal(settled,true);
 });

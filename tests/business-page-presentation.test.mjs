@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {createRequire} from 'node:module';
-const {JSDOM}=createRequire(new URL('../../dsh-agent-manage/package.json',import.meta.url))('jsdom');
+import {JSDOM} from 'jsdom';
 const pause=()=>new Promise(resolve=>setTimeout(resolve,25));
 async function until(check){for(let attempt=0;attempt<80;attempt++){if(check())return;await pause();}assert.ok(check(),'the original page settles into the expected presentation');}
 
