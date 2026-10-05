@@ -3,7 +3,9 @@ import type { WorkbenchPage } from "./workbench.ts";
 export type WorkbenchFramePage = WorkbenchPage & {
     readonly pluginId?: string;
     readonly resourceId?: string;
-    readonly onVisible?: () => void;
+    /** Page contributor owns pending navigation identity; Workbench observes only the current receipt. */
+    readonly visibleRequest?: import("@deepseek-ai/dsh-client-store").ObservableSnapshot<string | undefined>;
+    readonly onVisible?: (receipt?: string) => void;
 } & ({
     readonly kind: "native" | "html";
     readonly src: string | (() => string);

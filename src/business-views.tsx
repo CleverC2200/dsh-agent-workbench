@@ -37,7 +37,7 @@ export function mountBusinessViews(ctx:Context){
     return () => { dispose(); unregister(); };
   });
   ctx.slots.inject("main",()=>ctx.agentWorkbench.registerFrame({id:INBOX,label:()=>t("businessInbox"),kind:"local",body:InboxPage,resourceId:"gea-readonly"}));
-  ctx.slots.inject("main",()=>ctx.agentWorkbench.registerFrame({id:PANEL,label:()=>t("salesPlan"),kind:"native",resourceId:"gea-readonly",src:()=>`/api/agent-workbench/native?locale=${encodeURIComponent(ctx.locale.getSnapshot().active)}`,onVisible:()=>{const navigation=incoming.getSnapshot();if(identity.getSnapshot().status?.authenticated&&navigation?.panel===PANEL)navigation.visible();}}));
+  ctx.slots.inject("main",()=>ctx.agentWorkbench.registerFrame({id:PANEL,label:()=>t("salesPlan"),kind:"native",resourceId:"gea-readonly",src:()=>`/api/agent-workbench/native?locale=${encodeURIComponent(ctx.locale.getSnapshot().active)}`,visibleRequest:{subscribe:incoming.subscribe,getSnapshot:()=>{const navigation=incoming.getSnapshot();return navigation?.panel===PANEL?navigation.receipt:undefined;}},onVisible:receipt=>{const navigation=incoming.getSnapshot();if(identity.getSnapshot().status?.authenticated&&navigation?.panel===PANEL&&navigation.receipt===receipt)navigation.visible();}}));
   const openNavigation = async (target: ReadyNavigation, signal: AbortSignal) => {
     if (![PANEL, INBOX].includes(target.panel as MainPanelId)) throw Error("NAVIGATION_TARGET_UNSUPPORTED");
     signal.throwIfAborted();

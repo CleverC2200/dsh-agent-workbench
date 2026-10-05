@@ -112,6 +112,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
     const title=typeof page.label==="function"?page.label():page.label??page.id;
     const src=typeof page.src==="function"?page.src():page.src;
     const Body=page.kind==="local"?page.body:undefined;
+    const visibleReceipt=useSyncExternalStore(page.visibleRequest?.subscribe??noSubscribe,page.visibleRequest?.getSnapshot??(()=>undefined));
     const sendTheme=()=>{const theme=ctx.theme.getTheme();frame.current?.contentWindow?.postMessage({protocol:"agent-workbench-theme",dark:theme.active.colorScheme==="dark",fontSize:theme.fontSize},"*");};
     useEffect(()=>{const off=ctx.on("theme/change",sendTheme);return()=>{off();};},[]);
     useEffect(()=>{
@@ -130,10 +131,12 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       }
     },[identity.scope,identity.status?.authenticated,selection]);
     useEffect(()=>{
-      if(page.kind!=="native"||!frame.current)return;
+      if(!active||page.kind!=="native"||!frame.current)return;
       frame.current.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);
-      if(loaded&&identity.status?.authenticated)page.onVisible?.();
-    },[identity,loaded,page]);
+    },[active,identity,loaded,page]);
+    useEffect(()=>{
+      if(active&&loaded&&identity.status?.authenticated)page.onVisible?.(visibleReceipt);
+    },[active,loaded,identity.status?.authenticated,page,visibleReceipt]);
     useEffect(()=>{
       if(!associated||session?.openState!=="open"||!loaded||!frame.current||!currentExecution||!page.resourceId)return;
       const controller=new AbortController();
@@ -202,7 +205,7 @@ export function mountFramePresentation(ctx:Context,resources:()=>NativeResourceS
       <div className={"agent-workbench-document-body view-"+view}>
         <div className="agent-workbench-business" hidden={view==='chat'}>
           {view==='center'&&toolbar}
-          {Body?<div className="agent-workbench-html"><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();if(page.kind==="native")frame.current?.contentWindow?.postMessage({type:"gea:identity-snapshot",snapshot:identity},window.location.origin);page.onVisible?.();}}/>}
+          {Body?<div className="agent-workbench-html"><Body/></div>:<iframe ref={frame} title={title} src={src} {...(page.kind==="html"?{sandbox:"allow-scripts allow-downloads"}:{})} className="agent-workbench-html" onLoad={()=>{setLoaded(value=>value+1);sendTheme();}}/>}
         </div>
         <div role="separator" aria-label="调整业务与AI栏宽" aria-orientation="vertical" className="agent-workbench-column-handle" hidden={view!=='split'}
           onPointerDown={event=>{if(event.button!==0||space.viewport<=1200||drag.current)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);drag.current={pointer:event.pointerId,x:event.clientX,width:conversationWidth};}}
