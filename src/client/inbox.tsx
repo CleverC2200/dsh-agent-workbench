@@ -15,10 +15,11 @@ type Page = {
 };
 type Translate = (key: CopyKey) => string;
 
+export interface InboxViewState { readonly pageNo:number; readonly readState:string; }
+
 /** 列表和详情读取彼此独立；导航后到达的旧响应直接丢弃。 */
-export function Inbox({ t, navigation }: { t: Translate; navigation?: PageNavigation | null }) {
-  const [pageNo, setPageNo] = useState(1);
-  const [state, setState] = useState("");
+export function Inbox({ t, navigation, view, onViewChange }: { t: Translate; navigation?: PageNavigation | null; view:InboxViewState; onViewChange:(view:InboxViewState)=>void }) {
+  const {pageNo,readState:state}=view;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   // 每次唤醒独立读取详情；手动选择不继续受上一条导航约束。
@@ -132,8 +133,7 @@ export function Inbox({ t, navigation }: { t: Translate; navigation?: PageNaviga
           {t("inboxStatusLabel")}
           <select disabled={mutationBusy} aria-label={t("notificationState")} value={state} onChange={(event) => {
             setData(null);
-            setState(event.target.value);
-            setPageNo(1);
+            onViewChange({pageNo:1,readState:event.target.value});
           }}>
             <option value="">{t("inboxAll")}</option>
             <option value="unread">{t("notificationUnread")}</option>
@@ -174,8 +174,8 @@ export function Inbox({ t, navigation }: { t: Translate; navigation?: PageNaviga
           {data.items.length === 0 && <p className="gea-inbox-empty">{t("empty")}</p>}
           <footer className="gea-inbox-pagination">
             <span>{t("total")}: {data.total} · {t("page")}: {pageNo}</span>
-            <div><button disabled={busy || pageNo === 1} onClick={() => { setData(null); setPageNo(pageNo - 1); }}>{t("previous")}</button>
-            <button disabled={busy || pageNo * data.pageSize >= data.total} onClick={() => { setData(null); setPageNo(pageNo + 1); }}>{t("next")}</button></div>
+            <div><button disabled={busy || pageNo === 1} onClick={() => { setData(null); onViewChange({...view,pageNo:pageNo-1}); }}>{t("previous")}</button>
+            <button disabled={busy || pageNo * data.pageSize >= data.total} onClick={() => { setData(null); onViewChange({...view,pageNo:pageNo+1}); }}>{t("next")}</button></div>
           </footer>
         </>}
       </div>

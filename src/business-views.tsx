@@ -2,7 +2,7 @@ import type {Context} from '@deepseek-ai/cordis';
 import React,{useEffect,useState,useSyncExternalStore} from 'react';
 import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
 import {zh,en} from './client/locales.ts';
-import {Inbox} from './client/inbox.tsx';
+import {Inbox,type InboxViewState} from './client/inbox.tsx';
 import {DesktopNavigation,createNavigationSelection,type ReadyNavigation} from './client/desktop-navigation.tsx';
 import {ApiLogCenter} from './workbench/api-log-center.tsx';
 import nativeCss from './client/native-pages.css';
@@ -13,10 +13,17 @@ export function mountBusinessViews(ctx:Context){
  const ctx=scope;
  const identity=scope.businessAccount;
   const incoming = createNavigationSelection();
+  const inboxViews=new Map<string|null,InboxViewState>();
+  const inboxViewListeners=new Set<()=>void>();
+  const initialInboxView:InboxViewState={pageNo:1,readState:""};
+  const subscribeInboxView=(listener:()=>void)=>{inboxViewListeners.add(listener);return()=>{inboxViewListeners.delete(listener);};};
+  ctx.effect(()=>()=>{inboxViews.clear();inboxViewListeners.clear();});
 
   function InboxPage() {
     const navigation = useSyncExternalStore(incoming.subscribe, incoming.getSnapshot);
-    return <section className="agent-workbench-ui gea-native-page" style={{ height: "100%", overflow: "auto" }}><style>{nativeCss}</style><Inbox t={t} navigation={navigation?.panel === INBOX ? navigation : null} /></section>;
+    const accountScope=useSyncExternalStore(identity.subscribe,identity.getSnapshot).scope;
+    const view=useSyncExternalStore(subscribeInboxView,()=>inboxViews.get(accountScope)??initialInboxView);
+    return <section className="agent-workbench-ui gea-native-page" style={{ height: "100%", overflow: "auto" }}><style>{nativeCss}</style><Inbox key={accountScope??"unconfirmed"} t={t} navigation={navigation?.panel === INBOX ? navigation : null} view={view} onViewChange={next=>{inboxViews.set(accountScope,next);for(const changed of inboxViewListeners)changed();}} /></section>;
   }
   function LogPage() {
     const [environment, setEnvironment] = useState<"production" | "test">("production");
