@@ -1,5 +1,6 @@
 export declare const PAGE_INTERACTION = "dsh-page-interaction-v1";
 export declare const REFERENCE_SOURCE = "page-content";
+export declare const REFERENCE_TEXT_LIMIT = 6000;
 export type PageReference = {
     page: string;
     kind?: "row" | "table" | "block";

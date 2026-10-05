@@ -71,6 +71,8 @@ Workbench 持有现有 Native 审批文档、Inbox/ApiLog/桌面导航呈现、H
 
 ## HTML 作者源与构建
 
-样板作者源为 `samples/html-table.html`，区域原型为 `static/regional/source/index.html`。Category/MPS 的当前正式应用作者段已一次恢复为 `static/<page>/source/{data.js,app.js}`；`SOURCE.json` 记录原提交、应用边界和固定 vendor/styles/data digest。构建先校验固定资源，再编译作者模块生成 `static/<page>/index.html` 与 `lib/static`；运行时只消费生成页面，不提取或解码旧 bundle。发布产物不包含作者源目录。当前 MPS 的 Studio、avatar/voice/persona 与模拟提示保持原边界。
+样板作者源为 `samples/html-table.html`，区域原型为 `static/regional/source/index.html`。Category/MPS 的当前正式应用作者段已一次恢复为 `static/<page>/source/{data.js,app.js}`；`SOURCE.json` 记录原提交、应用边界和固定 vendor/data digest；样式按Arco最后规则边界一次拆为固定`vendor.css`及可编辑`layout.css`，原/新摘要均记录。构建先校验固定资源，再编译作者模块生成 `static/<page>/index.html` 与 `lib/static`；运行时只消费生成页面，不提取或解码旧 bundle。发布产物不包含作者源目录。Category/MPS作者只承载业务正文；原模拟聊天、回复/流式生成路径已退出，正式Core承载唯一Conversation。MPS Studio、avatar/voice/persona保留为原型人物/语音预览设置，不改Core的模型或身份。
 
 FC继续使用原 BrowserRepository 的 filters、未发 draft、cycle 与 preferences；周期表单保存 level/object/days/from/to 和相对 fresh initial 的 set/remove 意图，恢复不会调用 onSave。AQKC仅保存 tab/path、已展开的真实基地/品类/SKU ID，恢复沿原读请求取得当前可见对象。`html-view-state.ts` 逐页验证 DTO，拒绝未声明字段。状态在 Workbench 插件实例中保留，注销清除；本接口不承诺桌面进程重启后的 UI 存储。
+
+页面快捷问题与有值时的保留未发文字使用现page-interaction页侧`quotePage({label,text}, signal)`；原picker提供`window.dshPageInteraction.quote()/available()`，沿当前quote绑定的同channel/pending/cancel/reference parser。它只用当前Main的公开InputActions captureInsertion/insertText/persistDraft，明确问题把捕获selection复制为插入点，保draftRev并保留选中文字；不setDraft、自动prompt或创建Session。未关联、取消、切换、CAS冲突均不清页面文字；成功回执后只清仍相同的保留文本。原parser预算仍是6000个UTF-16代码单元（JS字符串长度），不是字节或模型token；显式转入超过预算会拒绝，不截断后宣称成功。普通选取reference保原截断语义。

@@ -1,0 +1,8 @@
+import test from 'node:test';import assert from 'node:assert/strict';import{readFile}from'node:fs/promises';import{execFileSync}from'node:child_process';import{createHash}from'node:crypto';
+const hash=value=>createHash('sha256').update(value).digest('hex');
+for(const page of ['category','mps'])test(page+' editable author boundary preserves the exact original vendor JavaScript and Arco CSS bytes',async()=>{
+ const root='static/'+page+'/source/';const provenance=JSON.parse(await readFile(root+'SOURCE.json','utf8'));const original=execFileSync('git',['show',provenance.sourceCommit+':'+provenance.source],{maxBuffer:4*1024*1024,encoding:'utf8'});
+ assert.equal(hash(original),provenance.originalHtmlSha256);
+ const scripts=[...original.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(match=>match[1]);const script=scripts.find(value=>hash(value)===provenance.originalScriptSha256);assert.ok(script,'original published application script exists');const vendor=await readFile(root+'vendor.js','utf8');assert.equal(script.slice(0,provenance.authorBoundary.offset),vendor);assert.equal(hash(vendor),provenance.fixed['vendor.js']);
+ const styles=[...original.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/g)].map(match=>match[1]);const style=styles.find(value=>hash(value)===provenance.styleRecovery.originalCombinedSha256);assert.ok(style,'original published stylesheet exists');const vendorCss=await readFile(root+'vendor.css');assert.deepEqual(Buffer.from(style).subarray(0,provenance.styleRecovery.authorBoundaryOffset),vendorCss);assert.equal(hash(vendorCss),provenance.fixed['vendor.css']);assert.equal(hash(Buffer.from(style).subarray(vendorCss.length)),provenance.styleRecovery.originalAuthorSha256);
+});

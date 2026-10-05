@@ -5,7 +5,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 for (const name of ['category', 'mps'])
-    test(`editable ${name} author source preserves the released view before restoration fields`, async (t) => {
+    test(`editable ${name} author source preserves original business content while the duplicate chat retires`, async (t) => {
         const browser = await chromium.launch({ channel: 'chrome', headless: true });
         t.after(() => browser.close());
         const original = execFileSync('git', ['show', `${baseline}:static/${name}/index.html`], { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
@@ -18,7 +18,8 @@ for (const name of ['category', 'mps'])
             await page.route('http://static-author.test/**', route => route.fulfill({ contentType: 'text/html', body: html }));
             await page.goto('http://static-author.test/');
             await expect(page.locator('#root')).not.toBeEmpty();
-            const initial = await page.locator('body').innerText();
+            const businessText=()=>page.locator(name==='mps'?'.ap-board':'.work').evaluate(element=>{const copy=element.cloneNode(true);copy.querySelectorAll('.author-questions').forEach(node=>node.remove());copy.querySelectorAll('button').forEach(button=>{if(button.textContent==='Studio / 人物设置')button.remove();});return copy.textContent.replace(/\s+/g,' ').trim();});
+            const initial = await businessText();
             if (name === 'mps') {
                 await page.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
                 await expect(page.locator('.ap-board-title')).toHaveText('需求加工与收敛');
@@ -30,12 +31,12 @@ for (const name of ['category', 'mps'])
                 else
                     await page.getByText('面点', { exact: true }).first().click();
             }
-            const changed = await page.locator('body').innerText();
+            const changed = await businessText();
             const result = { initial, changed, errors };
             await context.close();
             return result;
         };
         const expected = await observe(original), actual = await observe(rebuilt);
-        assert.deepEqual(actual, expected, 'the same released user interface and interaction must survive author-module recovery');
+        assert.deepEqual(actual, expected, 'the original business content and interaction survive the author composition repair');
         await mkdir('.runtime/html-author-baseline', { recursive: true });
     });

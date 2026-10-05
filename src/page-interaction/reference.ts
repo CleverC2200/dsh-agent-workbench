@@ -1,5 +1,6 @@
 export const PAGE_INTERACTION = "dsh-page-interaction-v1";
 export const REFERENCE_SOURCE = "page-content";
+export const REFERENCE_TEXT_LIMIT = 6000;
 
 export type PageReference = {
   page: string;
@@ -31,7 +32,7 @@ export function pageReference(value: unknown): PageReference | undefined {
     page: text(v.page, 160),
     kind: v.kind === "row" || v.kind === "table" ? v.kind : "block",
     label: text(v.label, 160) || "页面内容",
-    text: text(v.text, 6000),
+    text: text(v.text, REFERENCE_TEXT_LIMIT),
     row: text(v.row, 200),
     column: text(v.column, 200),
     scope: text(v.scope, 1000),
@@ -41,7 +42,7 @@ export function pageReference(value: unknown): PageReference | undefined {
         )
       : [],
     capturedAt: text(v.capturedAt, 64),
-    truncated: v.text.length > 6000 || v.truncated === true,
+    truncated: v.text.length > REFERENCE_TEXT_LIMIT || v.truncated === true,
   };
 }
 

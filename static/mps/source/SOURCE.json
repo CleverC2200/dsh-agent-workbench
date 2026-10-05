@@ -11,8 +11,8 @@
   },
   "fixed": {
     "vendor.js": "791ff9912e17f4558b23bf6f245920ce02c3a5c21e655b3431d83fdb99d3e5aa",
-    "styles.css": "d568532f56ff6900db197570a003dd0ada655815ef97aab20d6c9f685739721b",
-    "data.js": "58d913eea1e4f654a3c835a43815b9ff16e3b5d38369a36e259f221aa2008392"
+    "data.js": "58d913eea1e4f654a3c835a43815b9ff16e3b5d38369a36e259f221aa2008392",
+    "vendor.css": "02f5158943b8c66f7f649b1c582a19ddc891cb40ef5962b1834903e2c8dfa11d"
   },
   "recovery": "One-time current authored application extraction; no runtime bundle decoding; historical MPS2f0669c is semantic reference only.",
   "fixedAuthoredData": {
@@ -180,14 +180,6 @@
       "file": "app.js",
       "sha256": "c520cb1c6cd793015365d2cce06a999cd6a89263a8358886436c582a8dc7985b"
     },
-    "cu": {
-      "file": "app.js",
-      "sha256": "6ba4d60bea4b6ca1a56b11476bce005d39eb90549f301df4078d71f7bc888dfe"
-    },
-    "FV": {
-      "file": "app.js",
-      "sha256": "bc04b486b35e15776e1fdeafa625a843ad8d0c3b4f848b90a53f9ad6e6bf6e7b"
-    },
     "dn": {
       "file": "app.js",
       "sha256": "4fd27b4f7cf3c5023478fd2c50fe4c32928e5cd67ab735038a3445916fa4870e"
@@ -204,14 +196,6 @@
       "file": "app.js",
       "sha256": "885a470fa7808cfda9a8b757d412db45974744bfa6297af7e12569f833f84808"
     },
-    "nH": {
-      "file": "app.js",
-      "sha256": "431030a3ce0ee639a893691e81e39fe141053b2a34d7546e14c281c9d4d3f0f5"
-    },
-    "rH": {
-      "file": "app.js",
-      "sha256": "a2d4335e5be28cd86a7ecdb9d133588c7e95e2f7177aa5d04e3bb4fe74fc5dab"
-    },
     "fH": {
       "file": "app.js",
       "sha256": "cb1f7cc742069f3d8ddc0989903aad28cc1e9cb4d38c98ad308c7bc7126ec760"
@@ -220,5 +204,37 @@
       "file": "app.js",
       "sha256": "298df6075a94cb0e6e07bce5a7bffa22aa25b150992f20bbac6770aee03c3f68"
     }
-  }
+  },
+  "styleRecovery": {
+    "originalCombinedSha256": "d568532f56ff6900db197570a003dd0ada655815ef97aab20d6c9f685739721b",
+    "authorBoundaryOffset": 567816,
+    "fixedVendorSha256": "02f5158943b8c66f7f649b1c582a19ddc891cb40ef5962b1834903e2c8dfa11d",
+    "originalAuthorSha256": "215d7c03da5f4999ac2b61f0444c11b3615aa7e46fde32f5368380feee650df7",
+    "currentAuthorFile": "layout.css",
+    "currentAuthorSha256": "43b5efb04b8c1169d9266236266570887290f603cc6b92a24dd95c74029753d5",
+    "commonQuestionStyleSha256": "2578d204b2b3702393661c4b71381c246e75441b630e73f4ac7dba835c647607"
+  },
+  "retiredSimulationData": {
+    "nH": {
+      "file": "app.js",
+      "sha256": "431030a3ce0ee639a893691e81e39fe141053b2a34d7546e14c281c9d4d3f0f5"
+    },
+    "rH": {
+      "file": "app.js",
+      "sha256": "a2d4335e5be28cd86a7ecdb9d133588c7e95e2f7177aa5d04e3bb4fe74fc5dab"
+    },
+    "FV": {
+      "file": "app.js",
+      "sha256": "bc04b486b35e15776e1fdeafa625a843ad8d0c3b4f848b90a53f9ad6e6bf6e7b"
+    },
+    "cu": {
+      "file": "app.js",
+      "sha256": "6ba4d60bea4b6ca1a56b11476bce005d39eb90549f301df4078d71f7bc888dfe"
+    }
+  },
+  "questionProjection": {
+    "source": "original cu labels/question strings; simulation fields removed",
+    "file": "app.js"
+  },
+  "currentApplicationSha256": "5a30f9868c165e1823e187d86802538a40f8b721fa10721b5e2b91126153feb2"
 }
