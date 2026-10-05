@@ -1,7 +1,7 @@
 import React,{useEffect,useMemo,useRef,useState,useSyncExternalStore} from 'react';
 import {createPortal} from 'react-dom';
 import type {Context} from '@deepseek-ai/cordis';
-import {IconPanelLeftOutlineRegular,IconNewChatOutlineRegular} from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
+import {IconPanelLeftOutlineRegular,IconNewChatOutlineRegular,IconPluginPinwheelOutlineRegular} from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type {MainPanelId} from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {SessionId} from '@deepseek-ai/dsh-session/types';
 import type {PropsRuntime,PropsRenderSlots,PropsRenderFactories,FactoryLocalComponentPropsOf} from '@deepseek-ai/dsh-client-ui-slots';
@@ -118,13 +118,15 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   useEffect(()=>workbench.subscribeHistory(()=>{setDrawer('workspace');expandSidebar();}),[collapsed]);
   const newConversation=()=>{setDrawer('workspace');expandSidebar();ctx.uiWorkspace.startSession();};
   const toggleDrawer=(name:'function'|'workspace')=>setDrawer(value=>value===name?'none':name);
-  const modules=[{id:DIRECTORY,label:'工作台'},{id:PLUGINS,label:(()=>{const label=ctx.slots.entries('sidebar.panellist').find(entry=>entry.options.id===PLUGINS)?.options.label;return typeof label==='function'?label():label??PLUGINS;})()}];
+  const pluginLabel=ctx.slots.entries('sidebar.panellist').find(entry=>entry.options.id===PLUGINS)?.options.label;
+  const modules=[{id:DIRECTORY,label:'工作台'}];
   return <aside className="gea-sidebar-owned" data-gea-narrow={collapsed||width<=100?'':undefined} data-sidebar-collapsed={collapsed?'':undefined} aria-label={t('businessNavigation')}>
    {darwin&&<div className="gea-sidebar-window-row" data-window-drag>{sidebarToggle}</div>}
    <SidebarGeometry.Provider value={{collapsed,expand:expandSidebar}}><div className="gea-sidebar-brand-row"><div className="gea-sidebar-brand">{renderSlot('sidebar.brand.mark',{size:38})}{!collapsed&&renderSlot('sidebar.brand.name',{})}</div>
     {!collapsed&&<><button type="button" className="gea-inbox-quick-action" aria-label={t('messageInbox')} title="业务代办" disabled={!available.has(INBOX)} onClick={()=>void workbench.open(INBOX)}><NavIcon kind="bell"/></button>{!darwin&&sidebarToggle}</>}
    </div></SidebarGeometry.Provider>
    {!collapsed&&<button type="button" className="gea-formal-new-session gea-new-session" aria-label={t('newConversation')} onClick={newConversation}><IconNewChatOutline16 size={14}/><span className="gea-formal-new-session-label">AI工作台</span></button>}
+   {!collapsed&&available.has(PLUGINS)&&<button type="button" className={"gea-sidebar-tab gea-plugin-entry"+(activePanel===PLUGINS?" is-active":"")} aria-current={activePanel===PLUGINS?"page":undefined} onClick={()=>void workbench.open(PLUGINS)}><IconPluginPinwheelOutlineRegular size={16}/><span>{typeof pluginLabel==='function'?pluginLabel():pluginLabel??PLUGINS}</span></button>}
    <div className="gea-sidebar-region" data-gea-drawer={drawer}>
     <div className="gea-sidebar-rail" data-gea-sidebar-rail>{([['newChat',t('newConversation'),newConversation,false],['apps',t('functionArea'),()=>{setDrawer('function');expandSidebar();},drawer==='function'],['folder',t('workspaceArea'),()=>{setDrawer('workspace');expandSidebar();},drawer==='workspace']] as const).map(([kind,label,action,selected])=><button key={kind} type="button" className={'gea-sidebar-rail-item'+(selected?' is-active':'')} title={label} aria-label={label} aria-current={selected?'page':undefined} onClick={action}><NavIcon kind={kind}/></button>)}</div>
     <div className="gea-sidebar-drawer gea-drawer-function"><button type="button" className="gea-sidebar-tab" aria-expanded={drawer==='function'} aria-controls="gea-panel-function" onClick={()=>toggleDrawer('function')}><span className="gea-drawer-title">{t('functionArea')}</span><Chevron open={drawer==='function'}/></button></div>

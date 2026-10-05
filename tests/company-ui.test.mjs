@@ -54,6 +54,7 @@ test('only the two authorized extra modules enter formal navigation and Plugins 
  const {entries,renderSlot}=fixture();const entry=entries.find(row=>row.options.name==='sidebar');
  const markup=renderToStaticMarkup(React.createElement(entry.component,{collapsed:false,width:280,usePanelInfo:fn=>fn({activePanelId:'gea-proof'}),renderSlot}));
  assert.ok(markup.includes('插件管理'));assert.ok(markup.includes('>工作台</span>'));assert.ok(!markup.includes('>plugins</span>'));
+ const dom=new JSDOM(markup);const entryButton=dom.window.document.querySelector('.gea-plugin-entry');assert.equal(entryButton.textContent,'插件管理');assert.equal(dom.window.document.querySelectorAll('.gea-plugin-entry').length,1);assert.ok(!dom.window.document.querySelector('.gea-shell-plugin-group').textContent.includes('插件管理'));assert.equal(entryButton.previousElementSibling.classList.contains('gea-new-session'),true);assert.equal(entryButton.nextElementSibling.classList.contains('gea-sidebar-region'),true);dom.window.close();
  assert.ok(!markup.includes('公共工具与原型'));
 });
 function nativeFactory(_name,options,extension,sessionId){

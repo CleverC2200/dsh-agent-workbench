@@ -24,3 +24,4 @@ html[data-platform="darwin"] .gea-sidebar-brand-row > .gea-inbox-quick-action {r
 .gea-sidebar-window-row + .gea-sidebar-brand-row {margin-top:-12px;}
 html[data-fullscreen] .gea-sidebar-window-row {justify-content:flex-start;}
 .gea-shell-leading {display:flex;align-items:center;gap:8px;}
+.gea-plugin-entry {flex:none;margin-bottom:8px;}
