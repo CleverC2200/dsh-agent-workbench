@@ -17,12 +17,21 @@ export declare function GeaHomeHero({ copy, }: {
         description: string;
     };
 }): React.JSX.Element;
-export declare function ConversationToolbar({ view, onViewChange, onHistory, onNewConversation, error, }: {
+export declare function ConversationToolbar({ view, onViewChange, onHistory, onNewConversation, error, tools, onOpenTool, onCloseTools, toolsExpanded, }: {
     view: ConversationView;
     onViewChange: (view: ConversationView) => void;
     onHistory: () => void;
     onNewConversation: () => void;
     error: string;
+    tools?: readonly {
+        readonly id: string;
+        readonly kind: string;
+        readonly providerId: string;
+        readonly title: () => string;
+    }[];
+    onOpenTool?: (kind: string) => void;
+    onCloseTools?: () => void;
+    toolsExpanded?: boolean;
 }): React.JSX.Element;
 export declare function NavIcon({ kind }: {
     kind: NavIconKind;

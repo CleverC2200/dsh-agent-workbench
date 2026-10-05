@@ -13,7 +13,7 @@ await ctx.agentWorkbench.open(panelId)
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有 frame、会话引用与呈现生命周期。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记；同组 profile 使用本候选快照中的 FC/AQKC 根，不指向旧用户目录。三个静态计划原型独立放在 `lib/static`，启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
+原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记；同组 profile 使用本候选快照中的 FC/AQKC 根，不指向旧用户目录。三个静态计划原型独立放在 `lib/static`，启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
 
 Host 公开认证 Fetch：
 
@@ -47,7 +47,11 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 公司自有主壳通过公开 `conversation.content` 的 `embedded` 呈现消费原生会话。已有 Session 的首页欢迎和工作区/Agent控件位于 Factory 的 `views` 内容流，同时保留官方 `conversation.session` 与 resident composer；提示词与 Skill 资源清单位于工作台目录，不能作为首页宽度控件挤走输入区。无 Session 时的冷启动控件保留在独立可收缩滚动容器，官方惯有输入仍呈现。工作区切换沿 Factory 的 `selectWorkspace`，保留官方草稿转移行为，不复制私有主壳样式或扫描宿主 DOM。
 
-资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。Workbench 经公开 SessionProvider 与 conversation.content factory呈现原生对话，不保存第二套全局当前会话、认证或 preset。静态原型无这项前置。
+资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。静态原型无这项前置。
+
+曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现，正文局部状态的跨全局 panel 恢复仍须由具体页面接口提供，不能通过复制 DOM 或推测数据恢复。
+
+既有 toolbar 使用 sidebarRightTabs.guide/get/subscribe 展示真实 Native tab 入口，经 sidebarRight.openTab 在 Core 唯一原生工具 seat 打开。自己开工具暂用原 center 模式，自己关闭恢复原模式；明确选择三模式优先并关闭工具。已有 Document ResizeObserver 仅在尺寸变化时刷新公开 isExpanded()，不以 DOM 猜状态，也不轮询。未造成尺寸变化的外部工具开合缺少公开展开订阅，仍待上游 interface 和 Native 证据；该入口不代替上游 Header utilities 或 bottom toggle。
 
 GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter 经 `workbenchPages.registerBusinessPage(page, authorize)` 提供实际业务 grant，凭据与权限仍由 GEA 管控。Workbench 的 PageRuntime 持有受控 open/call/close、HTML MessageChannel、owned lease 的使用/关闭、self-report/catalog/apply/cancel、主题及页面引用，提示词提交沿官方 Session API。端口、引用代际和请求都在页面释放/身份变化时撤旧，旧结果不恢复。Native 审批文档保留原呈现与规则，不强制使用 HTML lease。
 

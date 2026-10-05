@@ -28,3 +28,23 @@ test('removed pages cannot be reopened and a disposed workbench does not navigat
   assert.equal(await workbench.open('native-page'), false);
   assert.deepEqual(selected, ['native-page']);
 });
+
+test('a static Document occupies the real main Conversation and returning to it reopens only its associated native Session', async () => {
+  const visible = [];
+  const workbench = new WorkbenchController({
+    panel: id => visible.push(['panel', id]),
+    document: id => visible.push(['document', id]),
+  });
+  const remove = workbench.registerFrame({id:'static-document',kind:'html',src:'/static.html'});
+  await workbench.open('static-document');
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'static-document');
+  assert.deepEqual(visible, [['document', undefined]], 'static presentation selects the real Conversation without inventing a Session');
+  workbench.associateSession('static-document', {sessionId:'actual-native-session',preset:'original',ownerScope:'principal-a'});
+  workbench.leaveDocument();
+  await workbench.open('static-document');
+  assert.equal(workbench.getSnapshot().selection.sessionId, 'actual-native-session');
+  assert.deepEqual(visible.at(-1), ['document', 'actual-native-session']);
+  remove();
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  await assert.rejects(workbench.open('static-document'), /Unknown workbench page/);
+});

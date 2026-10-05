@@ -1,7 +1,6 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { WorkspaceId } from "@deepseek-ai/dsh-api-workspace-controller/client";
 import type { SessionId } from "@deepseek-ai/dsh-session/types";
-import type { SessionReference } from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-api-session-controller/client";
 import type {} from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-workspace/client";
@@ -13,7 +12,7 @@ export interface NativeResourceSelection {
  workspace(path:string):Promise<string>;
  create(options:{workspaceId:string}):Promise<string>;
  select(sessionId:string,preset:string):Promise<void>;
- open(sessionId:string,skill:string|undefined,signal:AbortSignal,embedded?:boolean):Promise<SessionReference|void>;
+ open(sessionId:string,skill:string|undefined,signal:AbortSignal,beforeOpen?:()=>void):Promise<void>;
 }
 export interface ResourceSummary {id:string;label:string;kind:'prompt'|'skill';installed:boolean;enabled:boolean;provider:string;skills?:string[];missingSkills?:string[];error?:string}
 export async function resourceWorkspace(request:typeof fetch,signal:AbortSignal,cwd?:string):Promise<string> {
@@ -24,7 +23,7 @@ export async function resourceWorkspace(request:typeof fetch,signal:AbortSignal,
  if(typeof config.cwd!=='string'||!config.cwd.trim())throw Error('WORKBENCH_WORKSPACE_REQUIRED');
  return config.cwd;
 }
-export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal,embedded=false,currentCwd?:string):Promise<{sessionId:string;preset:string;reference?:SessionReference}> {
+export async function selectResource(host:NativeResourceSelection,id:string,signal:AbortSignal,currentCwd?:string,beforeOpen?:(selection:{sessionId:SessionId;preset:string})=>void):Promise<{sessionId:string;preset:string}> {
  const cwd=await resourceWorkspace(host.fetch,signal,currentCwd);
  const response=await host.fetch('/api/agent-manage/resources/select',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({id,cwd}),signal});
  const resource=await response.json() as {preset?:unknown;skill?:unknown;error?:string};
@@ -35,8 +34,8 @@ export async function selectResource(host:NativeResourceSelection,id:string,sign
  const sessionId=await host.create({workspaceId});
  signal.throwIfAborted();
  await host.select(sessionId,resource.preset);signal.throwIfAborted();
- const reference=await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal,embedded);
- return {sessionId,preset:resource.preset,...(reference?{reference}:{})};
+ await host.open(sessionId,typeof resource.skill==='string' ? resource.skill : undefined,signal,()=>beforeOpen?.({sessionId:sessionId as SessionId,preset:resource.preset as string}));
+ return {sessionId,preset:resource.preset};
 }
 
 /** Bind the actual native client services under their Cordis effect lifetime. */
@@ -48,7 +47,7 @@ export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResou
       workspace: async path => (await scope.workspaces.create({path})).workspaceId,
       create: options => scope.sessions.create({workspaceId:options.workspaceId as WorkspaceId}),
       select: async (id, preset) => {const result=await scope.remote.agentPresets.select(id as SessionId,preset);if(!result.ok)throw Error(result.error.message);},
-      open: async (id,skill,signal,embedded) => {
+      open: async (id,skill,signal,beforeOpen) => {
         const reference=scope.sessions.retain(id as SessionId,{source:"agentResourceSelection",signal});
         try {
         await reference.ready;signal.throwIfAborted();
@@ -57,10 +56,11 @@ export function mountNativeResourceSelection(ctx:Context,ready:(host:NativeResou
           const state=input.state.getSnapshot();
           if(state.draft || reference.binding.ctx.bail("slash/input-insert-text",{text:`/${skill} `,span:{start:0,end:0,draftRev:state.draftRev}})!==true)throw Error("RESOURCE_DRAFT_CHANGED");
         }
-        if(embedded)return reference;
+        signal.throwIfAborted();
+        beforeOpen?.();
+        signal.throwIfAborted();
         scope.uiWorkspace.openSession(id as SessionId);
-        }catch(error){reference.release();throw error;}
-        reference.release();
+        }finally{reference.release();}
       },
     };
     active=host;ready(host);

@@ -27,7 +27,7 @@ export function mountBusinessViews(ctx:Context){
       }).catch(() => {});
       return () => controller.abort();
     }, []);
-    return <section className="agent-workbench-ui gea-native-page" style={{ height: "100%" }}><style>{nativeCss}</style><ApiLogCenter environment={environment} request={request} onClose={() => ctx.layout.selectPanel(PANEL)} /></section>;
+    return <section className="agent-workbench-ui gea-native-page" style={{ height: "100%" }}><style>{nativeCss}</style><ApiLogCenter environment={environment} request={request} onClose={() => void ctx.agentWorkbench.open(PANEL)} /></section>;
   }
   for (const [id, label, component] of [
     [API_LOG_PANEL, "apiLog", LogPage],
@@ -53,7 +53,7 @@ export function mountBusinessViews(ctx:Context){
     try { await Promise.all([ctx.agentWorkbench.open(target.panel as MainPanelId), arrival]); signal.throwIfAborted(); }
     finally { clear(); }
   };
-  ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "gea-desktop-navigation" }, () => <DesktopNavigation t={t} open={openNavigation} login={() => ctx.layout.selectPanel(PANEL)} />));
+  ctx.slots.inject("shell.overlay", () => ctx.slots.register({ name: "shell.overlay", id: "gea-desktop-navigation" }, () => <DesktopNavigation t={t} open={openNavigation} login={() => void ctx.agentWorkbench.open(PANEL)} />));
  });
 }
 async function request<T>(endpoint:string,payload:object={},signal?:AbortSignal):Promise<T>{const response=await fetch('/api/gea-proof/'+endpoint,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload),signal});const result=await response.json();if(!response.ok||result.ok!==true)throw Error(result.error?.message??'GEA_REQUEST_FAILED');return result.value;}

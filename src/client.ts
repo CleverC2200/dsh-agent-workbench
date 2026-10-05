@@ -14,7 +14,6 @@ import { WorkbenchController, type AgentWorkbench } from "./workbench.ts";
 import type { HtmlPage } from "./html-pages.ts";
 import css from "../theme/tokens.css";
 import { mountFramePresentation } from "./frame-presenter.tsx";
-import type { PropsRuntime, PropsRenderFactories } from "@deepseek-ai/dsh-client-ui-slots";
 
 export const inject = ["slots", "layout", "locale", "theme", "uiWorkspace"];
 const zh = { title: "工作台", pages: "已接入页面", conversation: "原生对话", failed: "页面目录读取失败", retry: "重试", empty: "暂无已接入页面", resources:"提示词与 Skill", start:"开始新聊天", useSkill:"在新聊天中使用", unavailable:"不可选用", missing:"当前不可用 Skill", resourcesFailed:"资源清单读取失败，请刷新。", selectionFailed:"资源选用失败，请重试。", resourceWorking:"正在装载", resourcesRefresh:"刷新资源",pageConnect:"连接页面与原生对话",pageNewChat:"开始新的页面对话",pageWorking:"正在连接…",pageChanged:"登录身份已变化，请重新选用页面能力。",pageHint:"业务读取需登录并选用页面能力。",pageWait:"页面能力尚未就绪，请稍后重试。",pageLogin:"请先登录 GEA，再连接页面能力。",pageSessionUnavailable:"页面原生会话未就绪。" };
@@ -38,14 +37,14 @@ export function apply(ctx: Context): void {
   const workbench = new WorkbenchController({
     panel: id => ctx.layout.selectPanel(id),
     hasPanel: id => ctx.slots.entries("main").some(entry => entry.options.key === id),
-    frame: page => ctx.slots.register({name:"main",key:page.id},({renderFactorySlot}:PropsRuntime<"main">&PropsRenderFactories)=>renderFactorySlot("agent-workbench.document",{page})),
+    document: id => {if(id)ctx.uiWorkspace.openSession(id);else ctx.layout.selectPanel(null);},
   });
   ctx.provide("agentWorkbench", workbench);
   ctx.effect(() => () => workbench.dispose());
 
   let nativeResources: NativeResourceSelection | undefined;
   mountNativeResourceSelection(ctx, host => {nativeResources=host;});
-  const restorePageSession=mountFramePresentation(ctx,()=>nativeResources,key=>t(key),page=>workbench.showHistory(page));
+  const restorePageSession=mountFramePresentation(ctx,()=>nativeResources,key=>t(key),workbench);
 
   function Resources({cwd}:{cwd?:string}) {
     const [rows,setRows]=useState<ResourceSummary[]>([]);
@@ -61,7 +60,7 @@ export function apply(ctx: Context): void {
     },[resourceRevision,cwd]);
     const choose=async (id:string) => {
       pending.current?.abort();const controller=new AbortController();pending.current=controller;setBusy(id);setError("");
-      try {if(!nativeResources)throw Error(t("unavailable"));await selectResource(nativeResources,id,controller.signal,false,cwd);}
+      try {if(!nativeResources)throw Error(t("unavailable"));await selectResource(nativeResources,id,controller.signal,cwd,()=>workbench.leaveDocument());}
       catch(failure){if(!controller.signal.aborted){console.error("[agent-workbench] resource selection failed",{id,error:failure instanceof Error?failure.message:String(failure)});setSelectionError(true);setError(String(failure));}}
       finally{if(!controller.signal.aborted)setBusy("");}
     };

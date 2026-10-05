@@ -17,7 +17,7 @@ test("the opaque inventory build keeps memory storage after repository formattin
   await cp("business/inventory-fc", join(workbench, "business/inventory-fc"), {
     recursive: true, filter: path => !path.split(/[\\/]/).includes("node_modules"),
   });
-  await cp("../dsh-agent-manage/business-resources/inventory-fc", join(fixture, "dsh-agent-manage/business-resources/inventory-fc"), { recursive: true });
+  await cp(resolve(process.env.WORKBENCH_TEST_MANAGE_ROOT ?? "../dsh-agent-manage", "business-resources/inventory-fc"), join(fixture, "dsh-agent-manage/business-resources/inventory-fc"), { recursive: true });
   const ui = join(workbench, "business/inventory-fc/source/inventory-light-plugins");
   // Reuse the prepared content cache, but give this build its own writable installation.
   execFileSync("corepack", ["pnpm", "install", "--frozen-lockfile", "--offline"], { cwd: ui, stdio: "pipe" });

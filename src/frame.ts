@@ -1,5 +1,5 @@
 import type { WorkbenchPage } from "./workbench.ts";
-/** A real document contribution; Workbench owns the frame and its attached Conversation. */
+/** A real Document contribution; Workbench owns its UI and borrows the Core main Conversation. */
 export type WorkbenchFramePage = WorkbenchPage & {
   readonly pluginId?: string;
   readonly resourceId?: string;
