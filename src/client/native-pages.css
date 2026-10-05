@@ -29,7 +29,7 @@
 .gea-inbox select{ font: inherit; color: inherit; border: 1px solid var(--inbox-border); border-radius: 4px; background: var(--inbox-panel); padding: 7px 12px; cursor: pointer; }
 .gea-inbox button:hover:not(:disabled){ background: var(--inbox-bg); }
 .gea-inbox button:disabled{ opacity: .5; cursor: default; }
-.gea-inbox :is(button{ outline: 2px solid var(--inbox-brand); outline-offset: 2px; }
+.gea-inbox :is(button, select):focus-visible{ outline: 2px solid var(--inbox-brand); outline-offset: 2px; }
 .gea-inbox ::selection{ background: #fbd4d4; color: #601010; }
 .gea-inbox-toolbar{ padding-block: 12px; flex-wrap: wrap; }
 .gea-inbox-filter{ display: flex; align-items: center; gap: 12px; }
