@@ -147,7 +147,21 @@ export function mountCompanyUI(ctx:Context,workbench:WorkbenchController,Resourc
   const session=useSession(value=>value),conversation=useConversation(value=>value);
   const documentState=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot,workbench.getSnapshot);
   const [historyError,setHistoryError]=useState('');
-  useEffect(()=>{if(!sessionId)return;setHistoryError('');const page=workbench.takeHistoryPage();if(!page){const state=workbench.getSnapshot();if(state.selection&&state.selection.sessionId!==sessionId)workbench.leaveDocument();return;}const controller=new AbortController();void restorePageSession(page,sessionId,controller.signal).then(()=>{controller.signal.throwIfAborted();return workbench.open(page);}).catch(error=>{if(!controller.signal.aborted)setHistoryError(error instanceof Error?error.message:String(error));});return()=>controller.abort();},[sessionId]);
+  const previousMainSession=useRef(sessionId);
+  useEffect(()=>{
+   const changed=previousMainSession.current!==sessionId;previousMainSession.current=sessionId;
+   if(!sessionId){if(changed)workbench.leaveDocument();return;}
+   setHistoryError('');
+   const page=workbench.takeHistoryPage();
+   if(!page){
+    const state=workbench.getSnapshot();
+    if((state.selection&&state.selection.sessionId!==sessionId)||(changed&&state.selectedDocument&&!state.selection))workbench.leaveDocument();
+    return;
+   }
+   const controller=new AbortController();
+   void restorePageSession(page,sessionId,controller.signal).then(()=>{controller.signal.throwIfAborted();return workbench.open(page);}).catch(error=>{if(!controller.signal.aborted)setHistoryError(error instanceof Error?error.message:String(error));});
+   return()=>controller.abort();
+  },[sessionId]);
   const blank=!session||!conversation||(conversation.activeTargets.size===0&&session.blank&&!session.running&&!session.promptAttempted);
   const loading=session?.openState==='loading'&&!blank;
   const positions=useMemo(()=>{

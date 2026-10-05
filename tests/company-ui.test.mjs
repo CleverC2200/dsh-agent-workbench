@@ -15,7 +15,7 @@ const {mountCompanyUI,WorkbenchController}=module.exports;
 function fixture(account){
  const entries=[],calls=[];
  const ctx={layout:{selectPanel:id=>calls.push(['panel',id]),toggleSidebar:()=>calls.push(['toggle'])},uiWorkspace:{startSession:()=>calls.push(['new'])},locale:{getSnapshot:()=>({active:'zh'}),subscribe:()=>()=>{},bind:()=>key=>zh[key]??key},slots:{entries:name=>name==='sidebar.panellist'?[{options:{id:'plugins',label:()=> '插件管理'}}]:[{options:{key:'gea-proof'}},{options:{key:'inventory-fc'}},{options:{key:'plugins'}},...entries.filter(entry=>entry.options.name==='main')],subscribe:()=>()=>{},inject:(_name,fn)=>fn(),register:(options,component)=>{entries.push({options,component});return()=>{};}},inject:(_names,fn)=>{if(account)fn({...ctx,businessAccount:account});},effect:()=>{}};
- const workbench=new WorkbenchController({panel:id=>calls.push(['page',id]),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
+ const workbench=new WorkbenchController({panel:id=>calls.push(['page',id]),document:id=>calls.push(['document',id]),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
  mountCompanyUI(ctx,workbench,()=>React.createElement('div',{'data-resource-selection':true},'resource-selection-fixture'));
  const renderSlot=(name,props={})=>{const entry=entries.find(entry=>entry.options.name===name);return React.createElement('div',{'data-slot':name},entry?React.createElement(entry.component,props):name);};
  return {ctx,entries,calls,workbench,renderSlot};
@@ -143,4 +143,18 @@ test('entering a business page opens its functional drawer once and preserves ma
  await act(async()=>document.querySelector('[aria-controls="gea-panel-workspace"]').click());assert.equal(drawer(),'workspace');
  await render('inventory-fc');assert.equal(drawer(),'workspace','business-to-business rerenders do not seize the user drawer');
  await render(null);assert.equal(drawer(),'workspace');await render('gea-proof');assert.equal(drawer(),'function','a later new business entry restores the original transition');
+});
+
+
+test('opening real history from a static Document returns to native Conversation without clearing the initial static presentation',async t=>{
+ const dom=new JSDOM('<main id="root"></main>',{pretendToBeVisual:true});
+ const saved=['window','document','Node','navigator','IS_REACT_ACT_ENVIRONMENT'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]);
+ for(const [key,value]of [['window',dom.window],['document',dom.window.document],['Node',dom.window.Node],['navigator',dom.window.navigator],['IS_REACT_ACT_ENVIRONMENT',true]])Object.defineProperty(globalThis,key,{value,configurable:true,writable:true});
+ const {createRoot}=await import('react-dom/client');const {act}=React;const {entries,workbench}=fixture();const entry=entries.find(row=>row.options.name==='main.conversation');const root=createRoot(document.getElementById('root'));
+ t.after(async()=>{await act(async()=>root.unmount());dom.window.close();for(const [key,value]of saved){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key];}});
+ workbench.registerFrame({id:'static-document',kind:'local',body:()=>null});await workbench.open('static-document');
+ const render=async sessionId=>act(async()=>root.render(React.createElement(entry.component,{sessionId,useSession:selector=>selector({blank:false,running:false,promptAttempted:true,openState:'open'}),useConversation:selector=>selector({activeTargets:new Set(['chat'])}),renderFactorySlot:(name,...args)=>name==='agent-workbench.document'?React.createElement('article',{'data-static-document':true}):nativeFactory(name,...args,sessionId)})));
+ await render('existing-native-session');assert.equal(workbench.getSnapshot().selectedDocument.id,'static-document');
+ await render('chosen-history-session');assert.equal(workbench.getSnapshot().selectedDocument,undefined,'the changed real main Session belongs to the native history view');
+ assert.ok(document.querySelector('.gea-company-main'));
 });
