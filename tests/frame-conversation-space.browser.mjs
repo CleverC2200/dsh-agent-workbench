@@ -28,7 +28,7 @@ const bundle=await build({stdin:{contents:`
  function renderFactorySlot(_name,options,extension){const positions=extension?.slots;return React.createElement(ConversationContent,{...shares,...options,useFactorySlot:(name,fallback)=>{const Slot=positions?.[name]??fallback;return React.useMemo(()=>props=>React.createElement(Slot,{...shares,...props}),[Slot])}})}
  // Keep selected local slot identities stable just as the public Renderer does.
  function BoundConversation(){return React.createElement(Conversation,{page:page.id,...shares,renderFactorySlot})}
- const render=()=>root.render(React.createElement(Document,{page,active:true,sessionId:reference.sessionId,useSession:selector=>selector(session),renderSlot:()=>React.createElement(BoundConversation)}));
+ const render=()=>root.render(React.createElement(Document,{page,active:true,sessionId:reference.sessionId,useSession:selector=>selector(session),useProjection:()=>"original",renderSlot:()=>React.createElement(BoundConversation)}));
  window.showHistoryMessages=()=>{session.blank=false;render()};
  window.showTrajectory=()=>{session.blank=false;selectedView='trajectory';render()};
  render();

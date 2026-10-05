@@ -23,7 +23,7 @@ test('actual Cordis client injection admits every native resource service and re
  const presets={select:async(id,preset)=>{operations.push(['preset',id,preset]);return {ok:true,value:preset};}};
  const provider=await ctx.plugin({name:'native-client-dependencies',apply:ctx=>{ctx.provide('remote',{agentPresets:presets});ctx.provide('remote.agentPresets',presets);
  workspaces=new WorkspaceController(ctx,new ClientWorkspaceModel({create:async({path})=>{operations.push(['workspace',path]);return {ok:true,value:{workspace:{workspaceId:'workspace-owned',path,title:'Owned',sessionIds:[],createdAt:'2026-10-04T00:00:00Z',updatedAt:'2026-10-04T00:00:00Z'}}};}}));
- ctx.provide('sessions',{create:async options=>{assert.equal(workspaces.list.getSnapshot().items[0].workspaceId,options.workspaceId);operations.push(['create',options]);return 'new-session';},retain:(id)=>({sessionId:id,binding:{ctx:sessionScope},ready:Promise.resolve({ctx:sessionScope}),release:()=>{released=true;}})});
+ ctx.provide('sessions',{create:async options=>{assert.equal(workspaces.list.getSnapshot().items[0].workspaceId,options.workspaceId);operations.push(['create',options]);return 'new-session';},retain:(id)=>({sessionId:id,binding:{ctx:sessionScope,session:{projections:{faceOf:()=>({getSnapshot:()=>"original"})}}},ready:Promise.resolve({ctx:sessionScope}),release:()=>{released=true;}})});
  ctx.provide('conversation',{input:{for:()=>({state:{getSnapshot:()=>({draft:'',draftRev:0})}})}});
  ctx.provide('uiWorkspace',{openSession:id=>{assert.equal(released,false,'the actual borrowed scope survives until native main navigation');operations.push(['open',id]);}});}});
  const fiber=mountNativeResourceSelection(ctx,value=>{native=value;});await fiber;

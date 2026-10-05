@@ -14,7 +14,7 @@ const quantityText = (value: string) => formatExactDecimal(value).replace(/\.0+$
 const editableQuantityText = (value: string) => quantityText(value).replace(/,/g, '');
 const draftLog = (stage: string, detail: unknown) => console.warn(`[gea-draft] ${stage}`, detail);
 
-export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName,onMetricsChange,onPendingValuesChange,draftPatch,onElementsChange}:{
+export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName,onMetricsChange,onPendingValuesChange,draftPatch,onElementsChange,initialInputValues,onInputChange}:{
  row:RegionalApprovalLiveRow;
  t:TFunction;
  detail?:GeaSalesPlanDetail;
@@ -27,6 +27,9 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
   * 也不会因为草稿里的旧值把用户刚改的数字冲掉。
   */
  onPendingValuesChange?: (values: Record<string,string>) => void;
+ initialInputValues?: Record<string,string>;
+ /** Only explicit UI edits are persisted by the page owner, never loaded service results. */
+ onInputChange?: (changes:Record<string,string>)=>void;
  /** 外部（对话）下发的草稿改写：把指定 SKU 的确认计划量改成同一个值。 */
  draftPatch?: {at: number; quantity: string; skuCodes?: string[]};
  /** 把这一块“可编辑字段 + 集合”报给工作台，供页面桥声明成本页元素。 */
@@ -37,7 +40,8 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
 }) {
   const {salesPlan}=useWorkbenchHost();
  const [skus,setSkus]=useState<GeaSalesPlanSku[]>(); const [failed,setFailed]=useState(false);
- const [confirmedValues,setConfirmedValues]=useState<Record<string,string>>({});
+ const [confirmedValues,setConfirmedValues]=useState<Record<string,string>>(()=>initialInputValues??{});
+ const userEdited=useRef(false);
  const [draftState,setDraftState]=useState<'idle'|'loading'|'saved'|'saving'|'failed'>('idle');
  const [saveRetry,setSaveRetry]=useState(0);
  // 已保存在 Host 上的草稿内容；失败时不写入，用来判断哪些行还没暂存成功。
@@ -52,12 +56,15 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
    ? skus.filter(sku=>draftPatch.skuCodes!.includes(String(sku.skuCode)))
    : skus;
   if (target.length === 0) return;
+  userEdited.current=true;
+  const changes=Object.fromEntries(target.map(sku=>[String(sku.skuCode),draftPatch.quantity]));
+  onInputChange?.(changes);
   setConfirmedValues(current=>{
    const next={...current};
    for (const sku of target) next[String(sku.skuCode)] = draftPatch.quantity;
    return next;
   });
- },[canEdit,draftPatch,skus]);
+ },[canEdit,draftPatch,skus,onInputChange]);
  useEffect(()=>{const controller=new AbortController(); setSkus(undefined); setFailed(false);
   const source = detail?.skus && detail.currentVersion.id === row.versionId ? Promise.resolve(detail.skus) : salesPlan.versionSkus.invoke({versionId:row.versionId,signal:controller.signal});
   void source.then(data=>{if(!controller.signal.aborted)setSkus(data);}).catch(()=>{if(!controller.signal.aborted)setFailed(true);});
@@ -133,7 +140,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
   });
  }, [canEdit, confirmedValues, onElementsChange, row.dealerName, row.orgName, row.planId, skus]);
  useEffect(()=>{
-  if (!canEdit || !detail || !skus || draftState === 'loading') return;
+  if (!canEdit || !detail || !skus || draftState === 'loading' || (!userEdited.current&&saveRetry===0)) return;
   const serialized=JSON.stringify(confirmedValues);
   if (serialized===savedDraft) return;
   const invalidValues=Object.values(confirmedValues).filter(value=>value.trim() && !DECIMAL.test(value));
@@ -185,7 +192,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
      return <tr key={code+':'+index} className={changed ? styles.changed : undefined}>
       <td><span className={styles.sku}>{code}</span><span className={styles.description}>{sku.materialDescription || sku.skuName || tr('missingDescription')}</span></td>
       <td>{quantityText(sku.baseQty)}</td><td>{canEdit ? <div className={styles.quantityCell}>
-       <Input className={styles.quantityInput} type='number' step={1} size='small' value={confirmed} aria-label={`${tr('columns.qty')} ${code}`} onChange={value=>setConfirmedValues(current=>({...current,[code]:value}))} />
+       <Input className={styles.quantityInput} type='number' step={1} size='small' value={confirmed} aria-label={`${tr('columns.qty')} ${code}`} onChange={value=>{userEdited.current=true;setConfirmedValues(current=>({...current,[code]:value}));onInputChange?.({[code]:value});}} />
        {savedValues[code] === confirmedValues[code] ? null : draftState === 'failed' ? <span className={styles.draftFailed} role='alert' title={tr('draft.failed')}>
         <span className={styles.draftFailedText}>{tr('draft.failedShort')}</span>
         <button type='button' className={styles.draftRetry} onClick={()=>setSaveRetry(value=>value+1)}>{tr('draft.retryShort')}</button>

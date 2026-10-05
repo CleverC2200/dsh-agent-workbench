@@ -25,6 +25,8 @@ declare const zh: {
     pageWait: string;
     pageLogin: string;
     pageSessionUnavailable: string;
+    pageStaticHint: string;
+    pageCreating: string;
 };
 declare module "@deepseek-ai/dsh-client-ui-slots" {
     interface LocaleNamespaceMap {

@@ -21,7 +21,7 @@ const bundle=await build({stdin:{contents:`
  await ctx.plugin({apply:rendererApply}).await();
  ctx.slots.installLocale(locale);
  // Natural absent Session scope: no fabricated binding or private state writes.
- const absent=source({key:undefined,hooks:{session:source(undefined),conversation:source(undefined)},keyedHooks:{},props:{}});
+ const absent=source({key:undefined,hooks:{session:source(undefined),conversation:source(undefined)},keyedHooks:{projection:undefined},props:{}});
  ctx.slots.installScope('session',{current:absent,bindingSource:()=>absent,renderArea:(_binding,{children})=>children});
  ctx.slots.provideRoot({hooks:{sessions:source({byId:{}}),workspaces:source({items:[]})},props:{selectWorkspace:()=>{},inputActions:{}}});
  await ctx.plugin({inject:layoutInject,apply:layoutApply}).await();

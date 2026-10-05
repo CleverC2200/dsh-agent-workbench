@@ -3,7 +3,7 @@ import type { TFunction } from 'i18next';
 import { type GeaSalesPlanDetail } from '../../bridge.ts';
 import { type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 import type { ApprovalStageId } from './regionalApprovalFixture.ts';
-export declare function InlineSkuDetails({ row, t, detail, canEdit, approvalRole, categoryName, onMetricsChange, onPendingValuesChange, draftPatch, onElementsChange }: {
+export declare function InlineSkuDetails({ row, t, detail, canEdit, approvalRole, categoryName, onMetricsChange, onPendingValuesChange, draftPatch, onElementsChange, initialInputValues, onInputChange }: {
     row: RegionalApprovalLiveRow;
     t: TFunction;
     detail?: GeaSalesPlanDetail;
@@ -19,6 +19,9 @@ export declare function InlineSkuDetails({ row, t, detail, canEdit, approvalRole
      * 也不会因为草稿里的旧值把用户刚改的数字冲掉。
      */
     onPendingValuesChange?: (values: Record<string, string>) => void;
+    initialInputValues?: Record<string, string>;
+    /** Only explicit UI edits are persisted by the page owner, never loaded service results. */
+    onInputChange?: (changes: Record<string, string>) => void;
     /** 外部（对话）下发的草稿改写：把指定 SKU 的确认计划量改成同一个值。 */
     draftPatch?: {
         at: number;

@@ -17,10 +17,10 @@ export type FrameBinding = {
   frame: HTMLIFrameElement;
   reference: SessionReference;
   page: string;
-  surface: string;
-  tool?: string;
-  owner: string;
-};
+} & (
+  | {mode:"business";surface:string;tool?:string;owner:string}
+  | {mode:"quote";isCurrentSession:()=>boolean;inputActions:import("@deepseek-ai/dsh-client-ui-conversation/client").InputActions}
+);
 export type PageInteraction = {
   bindFrame(options: FrameBinding): () => void;
   mountTrigger(container: HTMLElement, sessionId: string): () => void;
@@ -176,14 +176,17 @@ export function installPageInteraction(ctx: Context): PageInteraction {
         for (const binding of bindings) binding.configure();
       };
     },
-    bindFrame({ frame, reference, page, surface, tool, owner }) {
+    bindFrame(options) {
+      if(options.mode!=="business"&&options.mode!=="quote")throw Error("UNSUPPORTED_PAGE_REFERENCE_BINDING");
+      const {frame,reference,page}=options;
+      const business=options.mode==="business"?options:undefined;
       if (disposed) throw new Error("页面交互已释放。");
       const { sessionId } = reference;
       const owned = reference.binding;
       const retained = (): boolean => {
         try { return reference.binding === owned; } catch { return false; }
       };
-      const paired = (): boolean => retained() && currentPicker(sessionId) === binding && [...triggers].some(button =>
+      const paired = (): boolean => retained() && (options.mode!=="quote"||options.isCurrentSession()) && currentPicker(sessionId) === binding && [...triggers].some(button =>
         button.dataset.sessionId === sessionId && button.isConnected && button.getClientRects().length > 0);
       const input = () => {
         if (!ready || !retained()) throw new Error('对话已释放，请重新关联页面。');
@@ -204,7 +207,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           "*",
         );
       const configure = () => {
-        if (generation) send({ type: "configure", page, externalTrigger: [...triggers].some(button => button.dataset.sessionId === sessionId) });
+        if (!business||generation) send({ type: "configure", page, externalTrigger: [...triggers].some(button => button.dataset.sessionId === sessionId) });
       };
       const binding: PickerBinding = {
         frame,
@@ -260,21 +263,30 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           send({ type: "result", requestId, ok: false, error: "引用未加入，请重试。" });
         }, 5000);
         try {
-          if (!ready || !generation || !paired())
+          if (!paired() || (business&&(!ready||!generation)))
             throw Error("请先打开当前页面的对话，再加入提问。");
           const selected = pageReference(event.data.reference);
           if (!selected) throw Error("未读到选中内容，请重新选择。");
+          if(options.mode==="quote"){
+            const quote="引用："+page+" · "+selected.label+"\n"+selected.text.split("\n").map(line=>"> "+line).join("\n")+"\n";
+            const span=options.inputActions.captureInsertion();
+            if(!active||controller.signal.aborted||!paired())throw Error("已切换对话，请在当前页面重新引用。");
+            if(!options.inputActions.insertText(quote,span))throw Error("草稿已变化或正在发送，请重新选择内容。");
+            options.inputActions.persistDraft();
+            send({type:"result",requestId,ok:true});
+            return;
+          }
           const value: BoundReference = {
             ...selected,
             page,
             sessionId,
-            surface,
-            tool,
+            surface:options.surface,
+            tool:options.tool,
           };
           const response = await fetch("/api/page-interaction/reference", {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ ...value, generation, owner }),
+            body: JSON.stringify({ ...value, generation, owner:options.owner }),
             signal: controller.signal,
           });
           const receipt = await response.json();
@@ -333,7 +345,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
       };
       window.addEventListener("message", receive);
       frame.addEventListener("load", reloaded);
-      void fetch("/api/page-interaction/binding", { cache: "no-store", signal: bindingRequest.signal })
+      if(business)void fetch("/api/page-interaction/binding", { cache: "no-store", signal: bindingRequest.signal })
         .then(async response => {
           const value = await response.json();
           if (!response.ok || typeof value.generation !== "string") throw Error("页面引用连接不可用，请重新打开页面。");
@@ -345,6 +357,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           if (!active) return;
           if (ready && retained()) input().notify("error", String(error.message));
         });
+      else configure();
       const release = () => {
         if (!active) return;
         active = false;

@@ -25,7 +25,8 @@ function fixture(t, saving, options={}) {
   const api = installPageInteraction(ctx);
   const triggerAnchor = element();
   const offTrigger = api.mountTrigger(triggerAnchor, 'owned');
-  const dispose = api.bindFrame({ frame, reference, page: 'Original page', surface: 'gea-workbench',owner:'owned-lease' });
+  const inputActions={captureInsertion:()=>({start:12,end:12,draftRev:7}),insertText:(text,span)=>{drafts.push({text,span});return options.conflict!==true;},persistDraft:()=>drafts.push({persisted:true})};
+  const dispose = api.bindFrame(options.quote?{mode:'quote',frame,reference,page:'Original page',inputActions,isCurrentSession:()=>options.current!==false}:{mode:'business',frame,reference,page:'Original page',surface:'gea-workbench',owner:'owned-lease'});
   t.after(() => { dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); for (const [key, value] of globals) globalThis[key] = value });
   return { drafts, posted, saves, frame, reference, dispose, offTrigger, trigger: triggerAnchor.children[0], mountOtherTrigger: () => { const anchor = element(); const off = api.mountTrigger(anchor, 'other'); effects.push(off); return anchor.children[0] }, receive: async (type, details = {}, event = {}) => {
     const channel = posted.at(-1)?.channel;
@@ -89,4 +90,27 @@ test('a native URL frame still rejects opaque or foreign origins',async t=>{
   assert.equal(f.drafts.length,0);
   await f.receive('reference',{requestId:'native',reference:{text:'trusted',targets:[]}});
   assert.equal(f.drafts.length,1);
+});
+
+
+test('a static picker quote uses only actual inputActions CAS and preserves its Session without GEA or business receipts',async t=>{
+ const f=fixture(t,()=>{throw Error('quote cannot call business Host');},{quote:true,sandbox:'allow-scripts',origin:'null'});
+ await f.receive('selection-state',{active:true});await f.receive('reference',{requestId:'static-q',reference:{label:'样板行',text:'用户选择的静态文本',targets:[],capturedAt:'2026-10-05'}});
+ assert.equal(f.saves.length,0);assert.deepEqual(f.drafts,[{text:'引用：Original page · 样板行\n> 用户选择的静态文本\n',span:{start:12,end:12,draftRev:7}},{persisted:true}]);
+ assert.equal(f.posted.at(-1).ok,true);assert.equal(JSON.stringify(f.drafts).includes('dsh-page:'),false,'plain quote is not a fabricated business receipt');
+});
+
+test('static quote CAS conflict does not claim persistence or successful insertion',async t=>{
+ const f=fixture(t,()=>{throw Error('business Host forbidden');},{quote:true,conflict:true});await f.receive('selection-state',{active:true});await f.receive('reference',{requestId:'conflict',reference:{text:'选择',targets:[]}});
+ assert.equal(f.drafts.some(item=>item.persisted),false);assert.equal(f.posted.at(-1).ok,false);
+});
+
+test('released or hidden static quote bindings cannot edit another or resident draft',async t=>{
+ const f=fixture(t,()=>{throw Error('business Host forbidden');},{quote:true});await f.receive('selection-state',{active:true});f.reference.release();await f.receive('reference',{requestId:'late',reference:{text:'迟到文本',targets:[]}});assert.equal(f.drafts.length,0);
+ f.dispose();await f.receive('reference',{requestId:'disposed',reference:{text:'再次迟到',targets:[]}});assert.equal(f.drafts.length,0);
+});
+
+
+test('a static quote from a no-longer-current main Session is refused even while its borrowed reference remains live',async t=>{
+ const f=fixture(t,()=>{throw Error('business Host forbidden');},{quote:true,current:false});await f.receive('selection-state',{active:true});await f.receive('reference',{requestId:'cross-session',reference:{text:'旧页面内容',targets:[]}});assert.equal(f.drafts.length,0);assert.equal(f.posted.at(-1).ok,false);
 });

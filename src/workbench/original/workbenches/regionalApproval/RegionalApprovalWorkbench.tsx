@@ -98,6 +98,7 @@ import {
 import {
   EMPTY_APPROVAL_DETAIL_STORE,
   savedApprovalAdjustments,
+  liveInputKey,
   type ApprovalDetailStore,
 } from './regionalApprovalDetailModel.ts';
 import {
@@ -372,6 +373,9 @@ type PersistedApprovalWorkbenchState = {
   stageLaneOpen: boolean;
   selectedRowIds: string[];
   liveActionReceipts: Record<string, GeaSalesPlanActionReceipt>;
+  draftLiveFilters:LiveApprovalFilters;
+  appliedLiveFilters:LiveApprovalFilters;
+  liveComparison?:{planId:string;primaryVersionId:string;compareVersionId:string};
 };
 
 const APPROVAL_VERSIONS = ['current', 'previous', 'initial'] as const satisfies readonly ApprovalVersion[];
@@ -491,6 +495,9 @@ const RegionalApprovalWorkbench: React.FC<{
         ? saved.selectedRowIds.filter((value): value is string => typeof value === 'string')
         : [],
       liveActionReceipts: normalizeLiveActionReceipts(saved.liveActionReceipts),
+      draftLiveFilters:saved.draftLiveFilters??EMPTY_LIVE_APPROVAL_FILTERS,
+      appliedLiveFilters:saved.appliedLiveFilters??EMPTY_LIVE_APPROVAL_FILTERS,
+      liveComparison:saved.liveComparison,
     };
   });
   const [currentStage, setCurrentStage] = useState(initialState.currentStage);
@@ -511,8 +518,8 @@ const RegionalApprovalWorkbench: React.FC<{
   const liveCategoriesRequest = useRef(0);
   const [versionMetrics, setVersionMetrics] = useState<Record<string, {versionId?:string; qty:string; amount:string; baseQty:string; baseAmount:string; targetQty:string; targetAmount:string; compareQty?:string; compareAmount?:string; compareTargetQty?:string; compareTargetAmount?:string}>>({});
   const [inlinePlanId, setInlinePlanId] = useState<string>();
-  const [draftLiveFilters, setDraftLiveFilters] = useState<LiveApprovalFilters>(EMPTY_LIVE_APPROVAL_FILTERS);
-  const [appliedLiveFilters, setAppliedLiveFilters] = useState<LiveApprovalFilters>(EMPTY_LIVE_APPROVAL_FILTERS);
+  const [draftLiveFilters, setDraftLiveFilters] = useState<LiveApprovalFilters>(initialState.draftLiveFilters);
+  const [appliedLiveFilters, setAppliedLiveFilters] = useState<LiveApprovalFilters>(initialState.appliedLiveFilters);
   // 节点口径只认账号角色；没有角色就一个节点都没有（界面全灰），不再用通知/任务反推。
   // 默认用登录时那一份；点刷新会重新解析角色并覆盖，管理员刚改完权限的人不必重新登录。
   const [refreshedStages, setRefreshedStages] = useState<readonly ApprovalStageId[]>();
@@ -533,7 +540,10 @@ const RegionalApprovalWorkbench: React.FC<{
     }
   };
   const [liveStageFilter, setLiveStageFilter] = useState<ApprovalStageId | undefined>(() => roleStages[0]);
+  const previousRoleKey=useRef(roleKey);
   useEffect(() => {
+    if(previousRoleKey.current===roleKey)return;
+    previousRoleKey.current=roleKey;
     const firstStage = roleStages[0];
     setLiveStageFilter(firstStage);
     if (queryClient && firstStage) setDimension(APPROVAL_DIMENSIONS_BY_STAGE[firstStage][0]);
@@ -560,11 +570,12 @@ const RegionalApprovalWorkbench: React.FC<{
   const [exportFeedback, setExportFeedback] = useState<ExportFeedback>();
   const [detailRowId, setDetailRowId] = useState<string>();
   const [liveDetailPlanId, setLiveDetailPlanId] = useState<string>();
-  const [focusedLivePlanId, setFocusedLivePlanId] = useState<string>();
+  const [focusedLivePlanId, setFocusedLivePlanId] = useState<string|undefined>(initialState.liveComparison?.planId);
   const [liveVersions, setLiveVersions] = useState<GeaSalesPlanVersion[]>([]);
   const [liveVersionsLoading, setLiveVersionsLoading] = useState(false);
-  const [livePrimaryVersionId, setLivePrimaryVersionId] = useState<string>();
-  const [liveCompareVersionId, setLiveCompareVersionId] = useState<string>();
+  const [liveComparison,setLiveComparison]=useState(initialState.liveComparison);
+  const livePrimaryVersionId=liveComparison?.primaryVersionId;
+  const liveCompareVersionId=liveComparison?.compareVersionId;
   const [liveDetailInitialTab, setLiveDetailInitialTab] = useState<RegionalApprovalLivePlanDetailTab>('skus');
   const [liveAdjustmentMetrics, setLiveAdjustmentMetrics] = useState<Record<string, {quantity: string; amount: string}>>({});
   // 内联明细里当前显示的本节点确认量（用户改过但可能还没落盘）；通过时优先用这份内存值，避免丢数。
@@ -1018,8 +1029,6 @@ const RegionalApprovalWorkbench: React.FC<{
     if (!liveQuery.enabled || !detailClient || !planId || !currentVersionId) {
       setLiveVersions([]);
       setLiveVersionsLoading(false);
-      setLivePrimaryVersionId(undefined);
-      setLiveCompareVersionId(undefined);
       return;
     }
     const controller = new AbortController();
@@ -1034,21 +1043,20 @@ const RegionalApprovalWorkbench: React.FC<{
         const currentVersion = matchingVersions.find((version) => version.id === currentVersionId);
         if (!currentVersion) {
           setLiveVersions([]);
-          setLivePrimaryVersionId(undefined);
-          setLiveCompareVersionId(undefined);
+          setLiveComparison(undefined);
           return;
         }
-        const currentIndex = matchingVersions.findIndex((version) => version.id === currentVersion.id);
-        const previousVersion = matchingVersions[currentIndex + 1] ?? currentVersion;
         setLiveVersions(matchingVersions);
-        setLivePrimaryVersionId(currentVersion.id);
-        setLiveCompareVersionId(previousVersion.id);
+        setLiveComparison(previous=>{
+          const primary=previous?.planId===planId?matchingVersions.find(version=>version.id===previous.primaryVersionId)??currentVersion:currentVersion;
+          const fallbackCompare=matchingVersions.find(version=>version.seq<primary.seq)??primary;
+          const compare=previous?.planId===planId?matchingVersions.find(version=>version.id===previous.compareVersionId&&version.seq<=primary.seq)??fallbackCompare:fallbackCompare;
+          return {planId,primaryVersionId:primary.id,compareVersionId:compare.id};
+        });
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setLiveVersions([]);
-        setLivePrimaryVersionId(undefined);
-        setLiveCompareVersionId(undefined);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLiveVersionsLoading(false);
@@ -1188,6 +1196,7 @@ const RegionalApprovalWorkbench: React.FC<{
       stageLaneOpen,
       selectedRowIds,
       liveActionReceipts,
+      draftLiveFilters,appliedLiveFilters,liveComparison,
     });
   }, [
     appliedFilters,
@@ -1198,6 +1207,7 @@ const RegionalApprovalWorkbench: React.FC<{
     dimension,
     draftFilters,
     liveActionReceipts,
+    draftLiveFilters,appliedLiveFilters,liveComparison,
     page,
     pageSize,
     primaryVersion,
@@ -1697,8 +1707,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const openLiveVersionComparison = (primaryVersionId: string, compareVersionId: string) => {
     const row = focusedLiveRow;
     if (!row) return;
-    setLivePrimaryVersionId(primaryVersionId);
-    setLiveCompareVersionId(compareVersionId);
+    setLiveComparison({planId:row.planId,primaryVersionId,compareVersionId});
     setSelectedRowIds([]);
     setLiveAuthorityContext(undefined);
     setLiveDetailInitialTab('compare');
@@ -3325,6 +3334,9 @@ const RegionalApprovalWorkbench: React.FC<{
                       const access = inlineSkuAccess(record.plan);
                       return (
                         <InlineSkuDetails
+                          key={conversationId?liveInputKey(conversationId,record.plan.planId,versionMetrics[record.plan.planId]?.versionId??record.plan.versionId,access.role):record.plan.planId}
+                          initialInputValues={conversationId?detailStore.liveInputs?.[liveInputKey(conversationId,record.plan.planId,versionMetrics[record.plan.planId]?.versionId??record.plan.versionId,access.role)]:undefined}
+                          onInputChange={conversationId?changes=>{const key=liveInputKey(conversationId,record.plan.planId,versionMetrics[record.plan.planId]?.versionId??record.plan.versionId,access.role);setDetailStore(current=>({...current,liveInputs:{...current.liveInputs,[key]:{...current.liveInputs?.[key],...changes}}}));}:undefined}
                           row={{ ...record.plan, versionId: versionMetrics[record.plan.planId]?.versionId ?? record.plan.versionId }}
                           t={t}
                           detail={access.detail}

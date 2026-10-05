@@ -26,7 +26,12 @@ export type ApprovalPlanAdjustment = {
   working: Record<string, ApprovalSkuAdjustment>;
 };
 
-export type ApprovalDetailStore = { plans: Record<string, ApprovalPlanAdjustment> };
+export type ApprovalDetailStore = {
+  plans: Record<string, ApprovalPlanAdjustment>;
+  /** Explicit unsent UI text, partitioned by the actual Core Session and current plan/version/role. */
+  liveInputs?: Record<string,Record<string,string>>;
+};
+export const liveInputKey=(sessionId:string,planId:string,versionId:string,role:string|undefined)=>JSON.stringify([sessionId,planId,versionId,role??null]);
 
 export const EMPTY_APPROVAL_DETAIL_STORE: ApprovalDetailStore = { plans: {} };
 
@@ -56,6 +61,7 @@ export const ensureApprovalPlan = (
     regionalApprovalSkuFixtures(row, version).map((fixture) => [fixture.id, initialAdjustment(fixture)])
   );
   return {
+    ...store,
     plans: {
       ...store.plans,
       [key]: { organizationId: row.id, version, saved: adjustments, working: adjustments },
@@ -248,7 +254,7 @@ export const reduceApprovalDetailStore = (
     };
   }
   if (nextPlan === plan) return ensured;
-  return { plans: { ...ensured.plans, [key]: nextPlan } };
+  return { ...ensured, plans: { ...ensured.plans, [key]: nextPlan } };
 };
 
 export const approvalPlan = (
