@@ -32,7 +32,7 @@ const legacyApsIds = new Set(["inventory-apsboard", "inventory-apsdemand", "inve
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
 export class HtmlPages extends PageRuntime implements WorkbenchPages {
   private readonly packageDeclarations = new Map<string, HtmlPackage>();
-  constructor(ctx: import("@deepseek-ai/cordis").Context, private readonly css: string, private readonly picker?: () => Promise<string>) { super(ctx); }
+  constructor(ctx: import("@deepseek-ai/cordis").Context, private readonly css: string, private readonly picker: () => Promise<string>) { super(ctx); }
   async registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]> {
     const candidates = await Promise.all(roots.map(async root => {
       const directory = await realpath(root);
@@ -79,11 +79,7 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
     const html = await readFile(path, "utf8");
     if (Buffer.byteLength(html) > 5_000_000) throw Error("HTML_TOO_LARGE");
     const page = item.manifest.pages.find((page: HtmlPage) => page.id === id);
-    let document=html;
-    if(item.manifest.gea?.contract === "gea-html-v2") {
-      if(!this.picker)throw Error("WORKBENCH_PICKER_UNAVAILABLE");
-      document=injectPicker(document,await this.picker());
-    }
+    const document=injectPicker(html,await this.picker());
     return new Response(presentHtml(document, this.css), { headers: {
       "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",

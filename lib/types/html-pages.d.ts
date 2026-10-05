@@ -23,9 +23,9 @@ export interface WorkbenchPages {
 /** Owns discovery, safe package paths and HTML delivery. Business calls belong to GEA. */
 export declare class HtmlPages extends PageRuntime implements WorkbenchPages {
     private readonly css;
-    private readonly picker?;
+    private readonly picker;
     private readonly packageDeclarations;
-    constructor(ctx: import("@deepseek-ai/cordis").Context, css: string, picker?: (() => Promise<string>) | undefined);
+    constructor(ctx: import("@deepseek-ai/cordis").Context, css: string, picker: () => Promise<string>);
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
     list(): HtmlPage[];
     packages(): readonly HtmlPackage[];

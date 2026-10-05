@@ -15,7 +15,7 @@ test('registered package HTML is discoverable and readable without business iden
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'plugin.json'), JSON.stringify({ schemaVersion: 1, id: 'inventory-test', name: 'Existing page', html: 'index.html', pages: [{ id: 'inventory-test', name: 'Existing page', view: '' }] }));
   await writeFile(join(root, 'index.html'), '<html><head></head><body><button>Original interaction</button></body></html>');
-  const pages = new HtmlPages(context(t),'/* plugin theme */');
+  const pages = new HtmlPages(context(t),'/* plugin theme */',async()=>'<picker-fixture>');
   await pages.registerHtml([root]);
   assert.deepEqual(pages.list().map(page => page.id), ['inventory-test']);
   const response = await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=inventory-test'));
@@ -29,5 +29,5 @@ test('package HTML symlinks escaping the registered root are rejected', async t 
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'plugin.json'), JSON.stringify({ schemaVersion: 1, id: 'inventory-test', name: 'Page', html: 'index.html' }));
   await symlink('/etc/hosts', join(root, 'index.html'));
-  await assert.rejects(new HtmlPages(context(t),'').registerHtml([root]), /INVALID_HTML_PATH/);
+  await assert.rejects(new HtmlPages(context(t),'',async()=>'<picker-fixture>').registerHtml([root]), /INVALID_HTML_PATH/);
 });

@@ -22,7 +22,7 @@ async function mount(t,kind='html'){
  const id=SessionId('session-11111111-1111-4111-8111-111111111111'),agent={id,session:Session.create(id)};
  await ctx.plugin(Object.assign(inner=>{agent.ctx=createScope(inner,agent).ctx;},{inject:['tools','systemPrompt']}));
  await ctx.agents.register(agent);
- let pages;await ctx.plugin(Object.assign(inner=>{pages=new HtmlPages(inner,'');},{inject:['connection','tools','agents']}));
+ let pages;await ctx.plugin(Object.assign(inner=>{pages=new HtmlPages(inner,'',async()=>'<picker-fixture>');},{inject:['connection','tools','agents']}));
  const identity=new AbortController();let releases=0;
  const grant={signal:identity.signal,access:{mode:'test'},allowsEffect:effect=>effect==='draft'||effect==='view',release:()=>{releases++;},readSql:async()=>({rows:[[7]]})};
  pages.registerBusinessPage({id:kind==='html'?'inventory-test':'gea-proof',pluginId:'inventory-test',label:'Test',kind,resourceId:'test-resource',catalog:{surface:kind==='html'?'gea-html-inventory-test':'gea-workbench',tool:kind==='html'?'gea_plugin_page_apply':'gea_workbench_apply'}},async()=>grant);
