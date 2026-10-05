@@ -1,6 +1,7 @@
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
 import type { SessionId } from "@deepseek-ai/dsh-session/types";
 import type { WorkbenchFramePage } from "./frame.ts";
+import {isBusinessViewPage,validHtmlViewState,type HtmlViewState} from './html-view-state.ts';
 
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
@@ -35,6 +36,7 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly pages = new Map<MainPanelId, WorkbenchPage>();
   private readonly documents = new Map<MainPanelId, WorkbenchFramePage>();
   private readonly associations = new Map<MainPanelId, DocumentSession>();
+  private readonly htmlViews = new Map<MainPanelId,Map<string,HtmlViewState>>();
   private selectedDocument: WorkbenchFramePage | undefined;
   private readonly visited = new Set<MainPanelId>();
   private snapshot: WorkbenchSnapshot = { pages: [], visitedDocuments: [] };
@@ -54,6 +56,7 @@ export class WorkbenchController implements AgentWorkbench {
       this.documents.delete(page.id);
       this.visited.delete(page.id);
       this.associations.delete(page.id);
+      this.htmlViews.delete(page.id);
       if (this.selectedDocument?.id === page.id) this.selectedDocument = undefined;
       this.changed();
     };
@@ -86,6 +89,20 @@ export class WorkbenchController implements AgentWorkbench {
     this.changed();
   }
   forgetSession(page: MainPanelId): void { this.associations.delete(page); this.changed(); }
+  readHtmlViewState(page:string,scope?:string):HtmlViewState|undefined {
+    if(!this.documents.has(page as MainPanelId))return undefined;
+    if(isBusinessViewPage(page)&&!scope)return undefined;
+    const value=this.htmlViews.get(page as MainPanelId)?.get(isBusinessViewPage(page)?scope!:'static');
+    return value===undefined?undefined:structuredClone(value);
+  }
+  saveHtmlViewState(page:string,scope:string|undefined,value:unknown):void {
+    if(this.disposed||!this.documents.has(page as MainPanelId))throw Error('HTML_DOCUMENT_UNREGISTERED');
+    if(isBusinessViewPage(page)&&!scope)throw Error('HTML_VIEW_SCOPE_REQUIRED');
+    if(!validHtmlViewState(page,value))throw Error('INVALID_HTML_VIEW_STATE');
+    let values=this.htmlViews.get(page as MainPanelId);
+    if(!values){values=new Map();this.htmlViews.set(page as MainPanelId,values);}
+    values.set(isBusinessViewPage(page)?scope!:'static',structuredClone(value));
+  }
   leaveDocument(): void {
     if (!this.selectedDocument) return;
     this.selectedDocument = undefined;
@@ -104,5 +121,5 @@ export class WorkbenchController implements AgentWorkbench {
     this.snapshot = { pages: [...this.pages.values()], visitedDocuments: [...this.visited].map(id=>this.documents.get(id)!), selectedDocument: this.selectedDocument, selection: this.selectedDocument ? this.associations.get(this.selectedDocument.id) : undefined };
     for (const listener of this.listeners) listener();
   }
-  dispose(): void { this.disposed = true; this.pages.clear(); this.documents.clear(); this.associations.clear(); this.visited.clear(); this.selectedDocument = undefined; this.changed(); }
+  dispose(): void { this.disposed = true; this.pages.clear(); this.documents.clear(); this.associations.clear(); this.htmlViews.clear(); this.visited.clear(); this.selectedDocument = undefined; this.changed(); }
 }

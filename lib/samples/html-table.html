@@ -121,91 +121,179 @@ summary { cursor: pointer; width: fit-content; }
   </section>
   <details><summary>演示状态</summary><p>用于验收加载、空态与错误提示，不连接业务服务。</p><div class="simulations"><button type="button" data-state="empty" disabled>演示空结果</button><button type="button" data-state="error" disabled>演示查询失败</button></div></details>
 </main>
-<script>
-(() => {
-  const expectedVersion = '1.1.1';
-  const $ = id => document.getElementById(id);
-  const diagnostic = $('diagnostic');
-  const resource = document.querySelector('style[data-workbench-resource]');
-  const localVersion = resource?.getAttribute('data-workbench-resource');
-  const rows = [
-    ['DEMO-001', '工作台页面联调', '林晓', '进行中', 8],
-    ['DEMO-002', '月度资料归档', '陈宁', '已完成', 12],
-    ['DEMO-003', '帮助内容整理', '周晴', '待开始', 6],
-    ['DEMO-004', '交付清单核对', '林晓', '进行中', 5],
-  ];
-  let timer, themeReady = false;
-  const controls = enabled => {
-    $('controls').disabled = !enabled;
-    document.querySelectorAll('[data-state], #retry').forEach(button => button.disabled = !enabled);
-  };
-  const stop = message => {
-    clearTimeout(timer);
-    $('results').setAttribute('aria-busy', 'false');
-    themeReady = false;
-    controls(false);
-    diagnostic.hidden = false;
-    diagnostic.textContent = message;
-  };
-  if (!resource || localVersion !== expectedVersion) {
-    stop('共享样式资源缺失或版本不兼容，请重新构建并重新打开样板。');
-    return;
-  }
-  const showState = (title, description, retry = false) => {
-    $('table-region').hidden = true;
-    $('state').hidden = false;
-    $('state-title').textContent = title;
-    $('state-description').textContent = description;
-    $('retry').hidden = !retry;
-  };
-  const query = (simulation = '') => {
-    if (!themeReady) return;
-    clearTimeout(timer);
-    $('results').setAttribute('aria-busy', 'true');
-    $('summary').textContent = '正在查询…';
-    showState('正在加载项目', '正在读取本地演示数据。');
-    timer = setTimeout(() => {
-      $('results').setAttribute('aria-busy', 'false');
-      if (simulation === 'error') {
-        $('summary').textContent = '查询未完成';
-        showState('暂时无法读取项目', '这是演示错误；点击“重新查询”恢复本地数据。', true);
+<script>(() => {
+  // business/shared/view-state.js
+  var PROTOCOL = "dsh-workbench-view-v1";
+  function createPageViewState(page) {
+    let state = { version: 1 };
+    let binding, dirty = false;
+    const listeners = /* @__PURE__ */ new Set();
+    const releasedChannels = /* @__PURE__ */ new Set();
+    const send = () => {
+      if (binding)
+        window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
+    };
+    const ready = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
+    const receive = (event) => {
+      const value = event.data;
+      if (event.source !== window.parent || value?.protocol !== PROTOCOL || value.page !== page || value.version !== 1)
+        return;
+      if (value.type === "request-ready") {
+        ready();
         return;
       }
-      const keyword = $('query').value.trim().toLowerCase();
-      const stage = $('stage').value;
-      const result = simulation === 'empty' ? [] : rows.filter(row =>
-        (row[0] + row[1]).toLowerCase().includes(keyword) && (!stage || row[3] === stage));
-      $('summary').textContent = '共 ' + result.length + ' 个项目';
-      $('rows').replaceChildren(...result.map(row => {
-        const tr = document.createElement('tr');
-        row.forEach((value, index) => { const td = document.createElement('td'); td.textContent = value; if (index === 4) td.className = 'number'; tr.append(td); });
-        return tr;
-      }));
-      $('table-region').hidden = !result.length;
-      $('state').hidden = !!result.length;
-      if (!result.length) showState('没有匹配的项目', '试试其他名称或进度，也可以重置筛选。');
-    }, 350);
-  };
-  $('search').onclick = () => query();
-  $('query').addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); query(); } });
-  $('reset').onclick = () => { $('query').value = ''; $('stage').value = ''; query(); };
-  $('retry').onclick = () => query();
-  document.querySelectorAll('[data-state]').forEach(button => button.onclick = () => query(button.dataset.state));
-  const projectTheme = event => {
-    if (event.source !== parent || event.data?.protocol !== 'agent-workbench-theme') return;
-    const value = event.data;
-    if (!Number.isFinite(value.fontSize)) return;
-    document.body.style.setProperty('--dsh-content-font-size', `${value.fontSize}px`);
-    document.documentElement.style.colorScheme = value.dark ? 'dark' : 'light';
-    document.body.toggleAttribute('data-ds-dark-theme', value.dark === true);
-  };
-  addEventListener('message', projectTheme);
-  addEventListener('pagehide', () => { clearTimeout(timer); removeEventListener('message', projectTheme); }, { once: true });
-  themeReady = true;
-  diagnostic.hidden = true;
-  controls(true);
-  query();
+      if (value.type === "released") {
+        releasedChannels.add(value.channel);
+        if (binding?.channel === value.channel) {
+          binding = void 0;
+          if (page === "inventory-fc" || page === "inventory-aqkc") {
+            dirty = false;
+            state = { version: 1 };
+          }
+        }
+        return;
+      }
+      if (value.type !== "restore" || typeof value.channel !== "string" || !Number.isSafeInteger(value.generation) || value.generation < 0 || releasedChannels.has(value.channel) || binding?.channel === value.channel && value.generation < binding.generation)
+        return;
+      binding = { channel: value.channel, generation: value.generation };
+      state = dirty ? { ...value.state, ...state } : { ...value.state ?? {}, version: 1 };
+      dirty = false;
+      for (const listener of listeners)
+        listener(state);
+      send();
+    };
+    window.addEventListener("message", receive);
+    window.addEventListener("pagehide", () => {
+      binding = void 0;
+      window.removeEventListener("message", receive);
+      listeners.clear();
+    }, { once: true });
+    ready();
+    return { get: () => state, subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }, update: (changes) => {
+      state = { ...state, ...changes, version: 1 };
+      if (binding || page !== "inventory-fc" && page !== "inventory-aqkc")
+        dirty = true;
+      send();
+    } };
+  }
 
+  // samples/page-author.js
+  var sampleView = createPageViewState("workbench-html-table");
+  (() => {
+    const expectedVersion = "1.1.1";
+    const $ = (id) => document.getElementById(id);
+    const diagnostic = $("diagnostic");
+    const resource = document.querySelector("style[data-workbench-resource]");
+    const localVersion = resource?.getAttribute("data-workbench-resource");
+    const rows = [
+      ["DEMO-001", "\u5DE5\u4F5C\u53F0\u9875\u9762\u8054\u8C03", "\u6797\u6653", "\u8FDB\u884C\u4E2D", 8],
+      ["DEMO-002", "\u6708\u5EA6\u8D44\u6599\u5F52\u6863", "\u9648\u5B81", "\u5DF2\u5B8C\u6210", 12],
+      ["DEMO-003", "\u5E2E\u52A9\u5185\u5BB9\u6574\u7406", "\u5468\u6674", "\u5F85\u5F00\u59CB", 6],
+      ["DEMO-004", "\u4EA4\u4ED8\u6E05\u5355\u6838\u5BF9", "\u6797\u6653", "\u8FDB\u884C\u4E2D", 5]
+    ];
+    let timer, themeReady = false;
+    const controls = (enabled) => {
+      $("controls").disabled = !enabled;
+      document.querySelectorAll("[data-state], #retry").forEach((button) => button.disabled = !enabled);
+    };
+    const stop = (message) => {
+      clearTimeout(timer);
+      $("results").setAttribute("aria-busy", "false");
+      themeReady = false;
+      controls(false);
+      diagnostic.hidden = false;
+      diagnostic.textContent = message;
+    };
+    if (!resource || localVersion !== expectedVersion) {
+      stop("\u5171\u4EAB\u6837\u5F0F\u8D44\u6E90\u7F3A\u5931\u6216\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u91CD\u65B0\u6784\u5EFA\u5E76\u91CD\u65B0\u6253\u5F00\u6837\u677F\u3002");
+      return;
+    }
+    const showState = (title, description, retry = false) => {
+      $("table-region").hidden = true;
+      $("state").hidden = false;
+      $("state-title").textContent = title;
+      $("state-description").textContent = description;
+      $("retry").hidden = !retry;
+    };
+    const query = (simulation = "") => {
+      if (!themeReady) return;
+      clearTimeout(timer);
+      $("results").setAttribute("aria-busy", "true");
+      $("summary").textContent = "\u6B63\u5728\u67E5\u8BE2\u2026";
+      showState("\u6B63\u5728\u52A0\u8F7D\u9879\u76EE", "\u6B63\u5728\u8BFB\u53D6\u672C\u5730\u6F14\u793A\u6570\u636E\u3002");
+      timer = setTimeout(() => {
+        $("results").setAttribute("aria-busy", "false");
+        if (simulation === "error") {
+          $("summary").textContent = "\u67E5\u8BE2\u672A\u5B8C\u6210";
+          showState("\u6682\u65F6\u65E0\u6CD5\u8BFB\u53D6\u9879\u76EE", "\u8FD9\u662F\u6F14\u793A\u9519\u8BEF\uFF1B\u70B9\u51FB\u201C\u91CD\u65B0\u67E5\u8BE2\u201D\u6062\u590D\u672C\u5730\u6570\u636E\u3002", true);
+          return;
+        }
+        const keyword = $("query").value.trim().toLowerCase();
+        const stage = $("stage").value;
+        const result = simulation === "empty" ? [] : rows.filter((row) => (row[0] + row[1]).toLowerCase().includes(keyword) && (!stage || row[3] === stage));
+        $("summary").textContent = "\u5171 " + result.length + " \u4E2A\u9879\u76EE";
+        $("rows").replaceChildren(...result.map((row) => {
+          const tr = document.createElement("tr");
+          row.forEach((value, index) => {
+            const td = document.createElement("td");
+            td.textContent = value;
+            if (index === 4) td.className = "number";
+            tr.append(td);
+          });
+          return tr;
+        }));
+        $("table-region").hidden = !result.length;
+        $("state").hidden = !!result.length;
+        if (!result.length) showState("\u6CA1\u6709\u5339\u914D\u7684\u9879\u76EE", "\u8BD5\u8BD5\u5176\u4ED6\u540D\u79F0\u6216\u8FDB\u5EA6\uFF0C\u4E5F\u53EF\u4EE5\u91CD\u7F6E\u7B5B\u9009\u3002");
+      }, 350);
+    };
+    const saveView = () => sampleView.update({ keyword: $("query").value, stage: $("stage").value });
+    sampleView.subscribe((value) => {
+      if (typeof value.keyword === "string") $("query").value = value.keyword;
+      if (["", "\u8FDB\u884C\u4E2D", "\u5DF2\u5B8C\u6210", "\u5F85\u5F00\u59CB"].includes(value.stage)) $("stage").value = value.stage;
+      query();
+    });
+    $("query").addEventListener("input", saveView);
+    $("stage").addEventListener("change", saveView);
+    $("search").onclick = () => {
+      saveView();
+      query();
+    };
+    $("query").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        query();
+      }
+    });
+    $("reset").onclick = () => {
+      $("query").value = "";
+      $("stage").value = "";
+      saveView();
+      query();
+    };
+    $("retry").onclick = () => query();
+    document.querySelectorAll("[data-state]").forEach((button) => button.onclick = () => query(button.dataset.state));
+    const projectTheme = (event) => {
+      if (event.source !== parent || event.data?.protocol !== "agent-workbench-theme") return;
+      const value = event.data;
+      if (!Number.isFinite(value.fontSize)) return;
+      document.body.style.setProperty("--dsh-content-font-size", `${value.fontSize}px`);
+      document.documentElement.style.colorScheme = value.dark ? "dark" : "light";
+      document.body.toggleAttribute("data-ds-dark-theme", value.dark === true);
+    };
+    addEventListener("message", projectTheme);
+    addEventListener("pagehide", () => {
+      clearTimeout(timer);
+      removeEventListener("message", projectTheme);
+    }, { once: true });
+    themeReady = true;
+    diagnostic.hidden = true;
+    controls(true);
+    query();
+  })();
 })();
 </script>
 </body>

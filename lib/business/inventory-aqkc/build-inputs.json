@@ -2,6 +2,7 @@
   "sourceCommit": "13f4ae4350f8537e18383d77fd46a757ef092fda",
   "inputs": {
     "source/aqkc/web/src/lib/workbench-current-order.ts": "a80e537d42cef6dbff4ffb130eeef90ed880196906a1a9625ddfae6626288c27",
+    "../shared/view-state.js": "dcc99faea986daeda2acc2afdde03f2717d9d2861df1acf8a81b17e6c70dbb0a",
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.module.css": "5d0d3a34ccc20bc6e81d6ebd3514d73d5f836abaadf178f3d4cf80b1c3d16c11",
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.tsx": "d94c28fcfdbf295b7c10957f7a086e32eddb2083f51f03b830cb1eb401af6899",
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
@@ -34,7 +35,7 @@
     "source/aqkc/web/src/lib/inventory-insight.ts": "2782b75b3f82e8345c0a529ef547536b4fcaef32f474b33d7b89500e9e1f2e63",
     "source/inventory-light-plugins/src/pages/aqkc/components/analytics/workspace-normalizer.ts": "c8a6de346ffe8033e02b23349438166a681544bea725c0a108345638a7de0875",
     "source/inventory-light-plugins/src/pages/aqkc/components/inventory-operations-workbench.module.css": "5441823323b1d06ac5f512dc6450dd8a91bcab305b51d0cdfb5ac5b4a4a13042",
-    "source/inventory-light-plugins/src/pages/aqkc.tsx": "96b0f5e15204cc4ba5d9d27814d6a8d6814b1e9b5498ad9fa661e3231e9c5791",
+    "source/inventory-light-plugins/src/pages/aqkc.tsx": "b57336030475ce4dad8a1697562db6d29b0e6ddfb22e1f3204a726f9fa963eb9",
     "source/inventory-light-plugins/src/aqkc-transfer.ts": "e7391c65cacb999fd387b4ca6e89b5c9994b19c68e40ad68d3b913029b952edc",
     "source/inventory-light-plugins/src/data.ts": "23d57f84e100306ebfea7e49e515a181f324e06da1c74fe0aceeecc11293cd8e",
     "source/aqkc/web/src/config/target-inventory-selection-policy.json": "98691279cd7d408a0afce4195e4720f043c749c2dd042186e6767d7880f59936",

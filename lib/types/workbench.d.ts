@@ -1,6 +1,7 @@
 import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
 import type { SessionId } from "@deepseek-ai/dsh-session/types";
 import type { WorkbenchFramePage } from "./frame.ts";
+import { type HtmlViewState } from './html-view-state.ts';
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
     readonly id: MainPanelId;
@@ -35,6 +36,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly pages;
     private readonly documents;
     private readonly associations;
+    private readonly htmlViews;
     private selectedDocument;
     private readonly visited;
     private snapshot;
@@ -48,6 +50,8 @@ export declare class WorkbenchController implements AgentWorkbench {
     registerFrame(page: WorkbenchFramePage): () => void;
     associateSession(page: MainPanelId, selection: DocumentSession): void;
     forgetSession(page: MainPanelId): void;
+    readHtmlViewState(page: string, scope?: string): HtmlViewState | undefined;
+    saveHtmlViewState(page: string, scope: string | undefined, value: unknown): void;
     leaveDocument(): void;
     getSnapshot: () => WorkbenchSnapshot;
     label(id: MainPanelId): string;

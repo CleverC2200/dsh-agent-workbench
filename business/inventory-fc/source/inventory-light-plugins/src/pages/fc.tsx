@@ -290,6 +290,8 @@ export function BranchInventoryAgent() {
     dirty: false,
   });
   const [cycleRules, setCycleRules] = useState<CycleRules>(DEFAULT_CYCLE_RULES);
+  const [viewRestoration,setViewRestoration]=useState(0);
+  useEffect(()=>{const restored=()=>setViewRestoration(value=>value+1);window.addEventListener('workbench-fc-view-restored',restored);return()=>window.removeEventListener('workbench-fc-view-restored',restored);},[]);
   const [cyclePreviewApplied, setCyclePreviewApplied] = useState(false);
   const [submissionStatus, setSubmissionStatus] =
     useState<SubmissionStatus>("idle");
@@ -563,12 +565,16 @@ export function BranchInventoryAgent() {
           )
         : [],
     );
-    setImportRows([]);
+    const imported=repository?.loadPlanDraft(scope)?.rows??[];
+    setImportRows(imported);
     setHumanPlanApplied(false);
-    setCycleRules(DEFAULT_CYCLE_RULES);
+    setCycleRules({...DEFAULT_CYCLE_RULES,...repository?.loadCyclePreview(scope)});
     setCyclePreviewApplied(false);
-    setImportErrors([]);
-  }, [readOnlyHistory, repository, scope, draftScope, sessionReady]);
+    setImportErrors(imported.length?parseImportedPlans(imported,snapshot.warehouseName,warehousePickupCode(warehouseId)).errors:[]);
+  }, [readOnlyHistory, repository, scope, draftScope, sessionReady,viewRestoration]);
+  useEffect(()=>{
+    if(sessionReady&&!readOnlyHistory)repository?.saveCyclePreview(scope,cycleRules);
+  },[repository,scope,sessionReady,readOnlyHistory,cycleRules]);
   useEffect(() => {
     if (!sessionReady) return;
     if (readOnlyHistory) return;
@@ -952,13 +958,14 @@ export function BranchInventoryAgent() {
         : { key, direction: "asc" },
     );
   }
+  useEffect(()=>{const saved=repository?.loadPreferences(userId);if(saved){setColumnOrder(saved.columnOrder.filter(column=>DEFAULT_COLUMNS.includes(column)));setFrozenColumns(saved.frozenColumns.filter(column=>DEFAULT_COLUMNS.includes(column)));}},[repository,userId,viewRestoration]);
+  const rememberColumns=(columns:string[],frozen:string[])=>repository?.savePreferences(userId,{aiOpen:repository.loadPreferences(userId)?.aiOpen??true,columnOrder:columns,frozenColumns:frozen});
   function moveColumn(target: string) {
     if (!draggedColumn || draggedColumn === target) return;
-    setColumnOrder((current) => {
-      const next = current.filter((column) => column !== draggedColumn);
-      next.splice(next.indexOf(target), 0, draggedColumn);
-      return next;
-    });
+    const next = columnOrder.filter((column) => column !== draggedColumn);
+    next.splice(next.indexOf(target), 0, draggedColumn);
+    setColumnOrder(next);
+    rememberColumns(next,frozenColumns);
     setDraggedColumn(null);
   }
   async function exportCsv() {
@@ -2215,10 +2222,10 @@ export function BranchInventoryAgent() {
             <ColumnSettings
               columns={columnOrder}
               frozen={frozenColumns}
-              onFrozen={setFrozenColumns}
+              onFrozen={values=>{setFrozenColumns(values);rememberColumns(columnOrder,values);}}
               onReset={() => {
                 setColumnOrder(DEFAULT_COLUMNS);
-                setFrozenColumns(["sku", "actualQty"]);
+                setFrozenColumns(["sku", "actualQty"]);rememberColumns(DEFAULT_COLUMNS,["sku","actualQty"]);
               }}
             />
           ) : dialog === "cycle" ? (
@@ -2228,6 +2235,8 @@ export function BranchInventoryAgent() {
               warehouseName={snapshot.warehouseName}
               initial={snapshot.planning?.rules ?? []}
               saving={planningSaving || readOnlyHistory}
+              view={repository?.loadCycleEdit(scope)}
+              onViewChange={value=>repository?.saveCycleEdit(scope,value)}
               onSave={(rules) => savePlanning({ action: "cycle", rules })}
             />
           ) : dialog === "draft" ? (

@@ -49,7 +49,7 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。静态原型无这项前置；用户可从其历史入口明确关联一个既有 Core Session，读取实际 preset 投影（包括明确的 null），不选用资源、不调用业务 grant，也不要求 GEA 登录。
 
-曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现，正文局部状态的跨全局 panel 恢复仍须由具体页面接口提供，不能通过复制 DOM 或推测数据恢复。
+曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现；六个登记 HTML 页面通过 `dsh-workbench-view-v1` 向同一个 WorkbenchController 保存版本1的明确 UI 字段。静态页面按 page ID 分区，无认证或 Session 前置；FC/AQKC按唯一 GEA scope 与实际 Core Session 分区。Frame 在离页、重载、换 scope 和注销时释放通道；旧代际与旧窗口不能回写。页面重新取得可见对象后再核展开 ID，不恢复服务结果、身份、grant 或 busy，也不重放业务保存。
 
 既有 toolbar 使用 sidebarRightTabs.guide/get/subscribe 展示真实 Native tab 入口，经 sidebarRight.openTab 在 Core 唯一原生工具 seat 打开。自己开工具暂用原 center 模式，自己关闭恢复原模式；明确选择三模式优先并关闭工具。已有 Document ResizeObserver 仅在尺寸变化时刷新公开 isExpanded()，不以 DOM 猜状态，也不轮询。未造成尺寸变化的外部工具开合缺少公开展开订阅，仍待上游 interface 和 Native 证据；该入口不代替上游 Header utilities 或 bottom toggle。
 
@@ -68,3 +68,9 @@ Workbench 持有现有 Native 审批文档、Inbox/ApiLog/桌面导航呈现、H
 `npm test` 是源码与离线行为检查；`test:browser` 另由同组运行所有者执行。离线通过不表示业务登录、真实数据或正式 UI 等价已验收。
 
 当前唯一官方输入为 `dsh-v0.2.1-alpha.1` / `5badb15009ae1756c3afe0ae0cef1faafc290ccc`；开发 SDK 通过本隔离项目已构建的 `official-latest-standard` package 文件链接提供，不复制 SDK。此本地开发配置不是发行依赖或发行授权；普通类型检查与官方类型检查均使用当前 SDK，旧4878输入不再是支持路径。
+
+## HTML 作者源与构建
+
+样板作者源为 `samples/html-table.html`，区域原型为 `static/regional/source/index.html`。Category/MPS 的当前正式应用作者段已一次恢复为 `static/<page>/source/{data.js,app.js}`；`SOURCE.json` 记录原提交、应用边界和固定 vendor/styles/data digest。构建先校验固定资源，再编译作者模块生成 `static/<page>/index.html` 与 `lib/static`；运行时只消费生成页面，不提取或解码旧 bundle。发布产物不包含作者源目录。当前 MPS 的 Studio、avatar/voice/persona 与模拟提示保持原边界。
+
+FC继续使用原 BrowserRepository 的 filters、未发 draft、cycle 与 preferences；周期表单保存 level/object/days/from/to 和相对 fresh initial 的 set/remove 意图，恢复不会调用 onSave。AQKC仅保存 tab/path、已展开的真实基地/品类/SKU ID，恢复沿原读请求取得当前可见对象。`html-view-state.ts` 逐页验证 DTO，拒绝未声明字段。状态在 Workbench 插件实例中保留，注销清除；本接口不承诺桌面进程重启后的 UI 存储。

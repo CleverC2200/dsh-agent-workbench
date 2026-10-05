@@ -5,10 +5,11 @@ import { parseArgs } from "node:util";
 const { values } = parseArgs({options:{target:{type:"string"}}});
 if (values.target && values.target !== "core") throw Error("Unsupported build target");
 if (process.env.DSH_TYPECHECK_PROJECT === "tsconfig.official.json") await import("./verify-official-input.mjs");
+await import('./build-static-authors.mjs');
 await mkdir("lib", { recursive: true });
 await mkdir("lib/theme", { recursive: true });
 await copyFile("theme/tokens.css", "lib/theme/tokens.css");
-await cp("static", "lib/static", {recursive:true});
+await cp("static", "lib/static", {recursive:true,filter:source=>!source.endsWith("/source")});
 await build({
   entryPoints: ["src/host.ts", "src/shared/notifications.ts", "src/sales-plan.ts"],
   bundle: true,
