@@ -24,6 +24,7 @@ test('Host initializes package resources in a Chinese path and serves the regist
     await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'inventory-'+id,name:id,html:'index.html'}));
     await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
   }
+  await build({entryPoints:['src/page-interaction/page.ts'],bundle:true,platform:'browser',format:'iife',outfile:join(root,'page-picker.js')});
   const entry = join(root, 'host.mjs');
   await build({entryPoints: ['src/host.ts'], bundle: true, platform: 'node', format: 'esm', outfile: entry, plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:pathToFileURL(resolve('../../official-latest-standard/packages/core/tools/lib/index.js')).href,external:true}));}}]});
   const { apply } = await import(pathToFileURL(entry).href);
