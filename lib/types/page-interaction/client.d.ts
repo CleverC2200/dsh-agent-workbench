@@ -5,14 +5,14 @@ export type FrameBinding = {
     reference: SessionReference;
     page: string;
 } & ({
-    mode: "business";
+    mode: 'business';
     surface: string;
     tool?: string;
     owner: string;
 } | {
-    mode: "quote";
+    mode: 'quote';
     isCurrentSession: () => boolean;
-    inputActions: import("@deepseek-ai/dsh-client-ui-conversation/client").InputActions;
+    inputActions: import('@deepseek-ai/dsh-client-ui-conversation/client').InputActions;
 });
 export type PageInteraction = {
     bindFrame(options: FrameBinding): () => void;
@@ -22,7 +22,7 @@ export type PageInteraction = {
 export declare function installPageInteraction(ctx: Context): PageInteraction;
 export declare const inject: string[];
 export declare const apply: typeof installPageInteraction;
-declare module "@deepseek-ai/cordis" {
+declare module '@deepseek-ai/cordis' {
     interface Context {
         pageInteraction: PageInteraction;
     }

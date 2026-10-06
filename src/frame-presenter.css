@@ -1,16 +1,143 @@
 /* Business Document geometry. Formal 508feea visuals and shipped Workbench width contract. */
-.agent-workbench-document {position:relative;height:100%;min-height:0;display:flex;flex-direction:column;--workbench-ai-width:var(--workbench-ai-preferred-width,440px);}
-.agent-workbench-business {display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;}
-.agent-workbench-html {flex:1;height:100%;width:100%;min-height:0;min-width:0;border:0;display:block;}
-.agent-workbench-document-body {position:relative;min-height:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) var(--workbench-ai-width);}
-.agent-workbench-native-conversation {display:flex;flex-direction:column;min-height:0;min-width:0;border-left:1px solid #adb9c8;overflow:hidden;box-sizing:border-box;}
-.agent-workbench-document-body.view-center,.agent-workbench-document-body.view-chat {grid-template-columns:minmax(0,1fr);}
-.agent-workbench-document-body>[hidden] {display:none;}
-.agent-workbench-document-body.view-chat>.agent-workbench-native-conversation {border-left:0;}
-.gea-page-toolbar-seat {position:relative;flex:none;height:58px;}
-.agent-workbench-column-handle {position:absolute;top:0;bottom:0;right:calc(var(--workbench-ai-width) - 4px);width:8px;z-index:11;cursor:col-resize;touch-action:none;}
-.agent-workbench-page-status {margin:24px 16px;color:var(--workbench-muted);}
-.workbench-page-conversation {flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
-@media(max-width:1200px) {.agent-workbench-document {--workbench-ai-width:360px;}.agent-workbench-column-handle {display:none;}}
-@media(max-width:1024px) {.agent-workbench-document {--workbench-ai-width:320px;}}
-@media(max-width:860px) {.agent-workbench-document {--workbench-ai-width:300px;}}
+.agent-workbench-document {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  --workbench-ai-width: var(--workbench-ai-preferred-width, 440px);
+}
+.agent-workbench-business {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.agent-workbench-html {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  min-width: 0;
+  border: 0;
+  display: block;
+}
+.agent-workbench-document-body {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--workbench-ai-width);
+}
+.agent-workbench-native-conversation {
+  background: var(--workbench-surface);
+  color: var(--workbench-body);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border-left: 1px solid #adb9c8;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.agent-workbench-document-body.view-center,
+.agent-workbench-document-body.view-chat {
+  grid-template-columns: minmax(0, 1fr);
+}
+.agent-workbench-document-body > [hidden] {
+  display: none;
+}
+.agent-workbench-document-body.view-chat > .agent-workbench-native-conversation {
+  background: var(--workbench-surface);
+  color: var(--workbench-body);
+  border-left: 0;
+}
+.gea-page-toolbar-seat {
+  position: relative;
+  flex: none;
+  height: 58px;
+}
+.agent-workbench-column-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: calc(var(--workbench-ai-width) - 4px);
+  width: 8px;
+  z-index: 11;
+  cursor: col-resize;
+  touch-action: none;
+}
+.agent-workbench-page-status {
+  margin: 24px 16px;
+  color: var(--workbench-muted);
+}
+.workbench-page-conversation {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+@media (max-width: 1200px) {
+  .agent-workbench-document {
+    --workbench-ai-width: 360px;
+  }
+  .agent-workbench-column-handle {
+    display: none;
+  }
+}
+@media (max-width: 1024px) {
+  .agent-workbench-document {
+    --workbench-ai-width: 320px;
+  }
+}
+@media (max-width: 860px) {
+  .agent-workbench-document {
+    --workbench-ai-width: 300px;
+  }
+}
+
+/* Formal conversation widgets consume the shared theme in the Core Document seat. */
+.agent-workbench-document .gea-conversation-toolbar,
+.agent-workbench-document .gea-agent-welcome {
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  border-color: var(--workbench-border);
+}
+.agent-workbench-document .gea-agent-identity h2,
+.agent-workbench-document .gea-agent-intro b {
+  color: var(--workbench-text);
+}
+.agent-workbench-document .gea-agent-intro,
+.agent-workbench-document .gea-agent-prompts button {
+  background: var(--workbench-surface);
+  color: var(--workbench-body);
+  border-color: var(--workbench-border);
+}
+.agent-workbench-document .gea-agent-block h3 {
+  color: var(--workbench-body);
+}
+.agent-workbench-document .gea-agent-prompts button:hover {
+  background: var(--workbench-hover);
+  border-color: var(--workbench-brand);
+}
+.agent-workbench-document .gea-conversation-view-switch {
+  background: var(--workbench-muted-surface);
+  border-color: var(--workbench-border);
+}
+.agent-workbench-document .gea-conversation-toolbar button {
+  color: var(--workbench-body);
+}
+.agent-workbench-document .gea-conversation-toolbar button[aria-pressed='true'] {
+  color: var(--workbench-selected-text);
+}
+.agent-workbench-document .gea-conversation-toolbar-tool {
+  height: 32px;
+  max-width: 140px;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  border: 1px solid var(--workbench-control-border);
+  border-radius: 7px;
+  font: inherit;
+}

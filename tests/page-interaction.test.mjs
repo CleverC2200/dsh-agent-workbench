@@ -19,9 +19,17 @@ function fixture(t, saving, options={}) {
   const owned = { ctx: {}, sessionId: 'owned' };
   let released = false;
   const reference = { sessionId: 'owned', ready: Promise.resolve(owned), get binding() { if (released) throw Error('RELEASED'); return owned }, release() { released = true } };
-  const input = { state: { getSnapshot: () => ({ draft: 'Keep my text', draftRev: 7 }) }, notify() {}, insertReference: (ref, span) => { drafts.push({ ref, span }); return true } };
+  const input = { state: { getSnapshot: () => ({ draft: 'Keep my text', draftRev: 7 }), subscribe: () => () => {} }, notify() {}, insertReference: (ref, span) => { drafts.push({ ref, span }); return true } };
   const ctx = { get: () => undefined, provide() {}, inputTriggers: { registerSource: () => () => {} }, conversation: { input: { for: context => { assert.equal(context, owned.ctx); return input } } }, effect: fn => { const off = fn(); if (typeof off === 'function') effects.push(off) }, inject(names, fn) { if (!names.includes('slots')) fn(this) } };
-  globalThis.fetch = (url,init) => {if(url.endsWith('/binding'))return Promise.resolve(Response.json({ generation: 'live' }));saves.push(JSON.parse(init.body));return saving();};
+  globalThis.fetch = (url,init) => {
+    if(url.endsWith('/binding'))return Promise.resolve(Response.json({ generation: 'live' }));
+    if(url.endsWith('/api/agent-workbench/page')) {
+      const request=JSON.parse(init.body);
+      assert.deepEqual(request,{operation:'access',owner:'owned-lease'});
+      return Promise.resolve(Response.json({allowed:true}));
+    }
+    saves.push(JSON.parse(init.body));return saving();
+  };
   const api = installPageInteraction(ctx);
   const triggerAnchor = element();
   const offTrigger = api.mountTrigger(triggerAnchor, 'owned');

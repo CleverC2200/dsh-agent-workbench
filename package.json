@@ -69,10 +69,13 @@
         "@deepseek-ai/dsh-client-ui-conversation",
         "@deepseek-ai/dsh-client-ui-input-trigger",
         "@deepseek-ai/dsh-client-ui-workspace",
-        "@deepseek-ai/dsh-client-ui-settings"
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-chat"
       ],
       "external": [
-        "@deepseek-ai/dsh-client-store"
+        "@deepseek-ai/dsh-client-store",
+        "react-dom",
+        "@deepseek-ai/dsh-client-ui-primitives"
       ]
     },
     "bundle": {
@@ -142,7 +145,9 @@
     "@deepseek-ai/dsh-client-ui-settings": "file:../../official-latest-standard/packages/client/ui-settings",
     "@deepseek-ai/dsh-client-ui-sidebar": "file:../../official-latest-standard/packages/client/ui-sidebar",
     "@deepseek-ai/dsh-client-ui-workspace": "file:../../official-latest-standard/packages/client/ui-workspace",
-    "@deepseek-ai/dsh-client-ui-primitives": "file:../../../clean-core-rewrite-42/official-latest-standard/packages/client/ui-primitives"
+    "@deepseek-ai/dsh-client-ui-primitives": "file:../../official-latest-standard/packages/client/ui-primitives",
+    "@deepseek-ai/dsh-client-ui-chat": "file:../../official-latest-standard/packages/client/ui-chat",
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "file:../../official-latest-standard/packages/client/ui-sidebar-right"
   },
   "packageManager": "npm@11.11.0"
 }

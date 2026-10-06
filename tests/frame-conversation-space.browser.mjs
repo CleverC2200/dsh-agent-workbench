@@ -12,13 +12,13 @@ const bundle=await build({stdin:{contents:`
  import{ConversationContent}from'../../official-latest-standard/packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx';
  import{DefaultConversationViews}from'../../official-latest-standard/packages/client/ui-conversation/src/client/skeleton/DefaultConversationViews.tsx';
  import{TrajectoryView}from'../../official-latest-standard/packages/client/ui-trajectory/src/client/TrajectoryView.tsx';
- let Document,Conversation;const locale={active:'zh'};const identity={state:'confirmed',scope:'recording-principal',status:{authenticated:true}};
+ let Document,Conversation;const locale={active:'zh'};const identity={state:'confirmed',scope:'recording-principal',subject:'recording-subject',status:{authenticated:true}};
  const reference={sessionId:'recorded-session',ready:Promise.resolve(),release(){window.releases++}};window.releases=0;
  const ctx={get:()=>undefined,provide(){},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({})}},sessions:{retain:()=>reference},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{}},register:(_meta,component)=>{Conversation=component;return()=>{}},inject:(_name,fn)=>fn()},inject:(names,fn)=>{if(names.includes('sidebarRight'))return;return fn({...ctx,businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{}}})}};
  const documents=new DocumentWorkbench({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,documents);
  const root=createRoot(document.getElementById('root'));const page={id:'gea-inbox',resourceId:'original',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
  const inputActions={setDraft:text=>{document.querySelector('textarea').value=text},persistDraft(){}};
- const session={blank:true,running:false,promptAttempted:false,openState:'open'};documents.registerFrame(page);documents.associateSession(page.id,{sessionId:reference.sessionId,preset:'original',ownerScope:identity.scope});documents.open(page.id);
+ const session={blank:true,running:false,promptAttempted:false,openState:'open'};documents.registerFrame(page);documents.associateSession(page.id,{sessionId:reference.sessionId,preset:'original',ownerScope:identity.scope,subject:identity.subject});documents.open(page.id);
  let selectedView='chat';window.persistenceBindings=0;window.persistenceReleases=0;
  const trajectory={eventNodes:Array.from({length:40},(_,i)=>({kind:'user',seq:i+1,time:1000+i,content:[{type:'text',text:'真实轨迹公开快照 '+i}],source:null})),eventLocations:new Map(),requests:[],callSchemas:new Map(),partial:null,runningCalls:[]};
  const shares={sessionId:reference.sessionId,useSession:fn=>fn(session),inputActions,useSessions:fn=>fn({byId:{}}),useSessionStatus:fn=>fn(new Map()),useWorkspaces:fn=>fn({items:[],phase:'ready'}),useInput:fn=>fn({}),useComposerBlock:fn=>fn(undefined),selectWorkspace:()=>Promise.resolve(),t:key=>key,

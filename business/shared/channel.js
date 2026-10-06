@@ -1,4 +1,4 @@
-import { sqlQueryError } from "./query-error.js";
+import { sqlQueryError } from './query-error.js';
 let context;
 let channel,
   sequence = 0;
@@ -10,7 +10,7 @@ const applying = new Map();
 function reportCatalog() {
   if (!channel || !context?.session) return;
   channel.postMessage({
-    type: "catalog",
+    type: 'catalog',
     session: context.session,
     elements: [...pageGroups.values()].flatMap((group) => group.elements),
   });
@@ -30,34 +30,48 @@ let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
 });
-window.addEventListener("message", (event) => {
-  if (event.source === window.parent && event.data?.protocol === "gea-html-v2" && event.data.type === "request-ready") {
-    window.parent.postMessage({protocol:"gea-html-v2",type:"ready"},"*");return;
+window.addEventListener('message', (event) => {
+  if (
+    event.source === window.parent &&
+    event.data?.protocol === 'gea-html-v2' &&
+    event.data.type === 'request-ready'
+  ) {
+    window.parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
+    return;
   }
   if (
     event.source !== window.parent ||
     event.origin !== new URL(document.referrer).origin ||
-    typeof event.data?.context?.session !== "string" ||
-    typeof event.data?.context?.plugin !== "string" ||
-    event.data?.protocol !== "gea-html-v2" ||
-    event.data?.type !== "connect" ||
+    typeof event.data?.context?.session !== 'string' ||
+    typeof event.data?.context?.plugin !== 'string' ||
+    event.data?.protocol !== 'gea-html-v2' ||
+    event.data?.type !== 'connect' ||
     !event.ports[0] ||
     (channel && context?.session === event.data.context.session)
   )
     return;
-  if (channel) { channel.close(); for (const task of applying.values()) task.abort(); for (const item of pending.values()) {clearTimeout(item.timer);item.cleanup?.();item.reject(Error("页面会话已切换，请重新操作"));}pending.clear(); }
+  if (channel) {
+    channel.close();
+    for (const task of applying.values()) task.abort();
+    for (const item of pending.values()) {
+      clearTimeout(item.timer);
+      item.cleanup?.();
+      item.reject(Error('页面会话已切换，请重新操作'));
+    }
+    pending.clear();
+  }
   context = event.data.context;
   channel = event.ports[0];
   channel.onmessage = (event) => {
     const message = event.data;
-    if (message.type === "context") {
+    if (message.type === 'context') {
       const previousSession = context?.session;
       if (previousSession && previousSession !== message.context?.session) {
         for (const [id, item] of pending) {
           clearTimeout(item.timer);
           item.cleanup?.();
-          item.reject(Error("页面会话已切换，请重新操作"));
-          channel.postMessage({ type: "cancel", id, session: previousSession });
+          item.reject(Error('页面会话已切换，请重新操作'));
+          channel.postMessage({ type: 'cancel', id, session: previousSession });
         }
         pending.clear();
       }
@@ -66,56 +80,43 @@ window.addEventListener("message", (event) => {
       reportCatalog();
       if (context?.session)
         channel.postMessage({
-          type: "theme:subscribe",
+          type: 'theme:subscribe',
           session: context.session,
         });
       if (context?.session && previousSession !== context.session)
-        window.dispatchEvent(new Event("gea-session-changed"));
+        window.dispatchEvent(new Event('gea-session-changed'));
     }
     if (
-      message.type === "theme" &&
+      message.type === 'theme' &&
       context &&
       message.context?.session === context.session &&
       message.context?.plugin === context.plugin
     ) {
       if (
-        message.version !== "1.0.0" ||
-        !["light", "dark"].includes(message.colorScheme) ||
+        message.version !== '1.1.1' ||
+        !['light', 'dark'].includes(message.colorScheme) ||
         !message.tokens ||
         !Number.isInteger(message.fontSize) ||
         message.fontSize < 12 ||
         message.fontSize > 17 ||
         Object.entries(message.tokens).some(
           ([name, value]) =>
-            !/^--dsw-[a-z0-9-]+$/.test(name) ||
-            typeof value !== "string" ||
-            value.length > 500,
+            !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== 'string' || value.length > 500,
         )
       ) {
-        document.getElementById("app").textContent =
-          "共享样式版本不兼容，请重新打开页面";
+        document.getElementById('app').textContent = '共享样式版本不兼容，请重新打开页面';
         return;
       }
-      for (const name of appliedThemeTokens)
-        document.body.style.removeProperty(name);
+      for (const name of appliedThemeTokens) document.body.style.removeProperty(name);
       appliedThemeTokens = Object.keys(message.tokens);
       for (const [name, value] of Object.entries(message.tokens))
         document.body.style.setProperty(name, value);
-      document.body.style.setProperty(
-        "--workbench-font-size",
-        `${message.fontSize}px`,
-      );
-      document.body.style.setProperty(
-        "--dsh-content-font-size",
-        `${message.fontSize}px`,
-      );
+      document.body.style.setProperty('--workbench-font-size', `${message.fontSize}px`);
+      document.body.style.setProperty('--dsh-content-font-size', `${message.fontSize}px`);
       document.documentElement.style.colorScheme = message.colorScheme;
-      document.body.toggleAttribute(
-        "data-ds-dark-theme",
-        message.colorScheme === "dark",
-      );
+      document.body.toggleAttribute('data-ds-dark-theme', message.colorScheme === 'dark');
     }
-    if (message.type === "response") {
+    if (message.type === 'response') {
       const item = pending.get(message.id);
       if (!item) return;
       pending.delete(message.id);
@@ -123,22 +124,20 @@ window.addEventListener("message", (event) => {
       item.cleanup?.();
       if (message.error) {
         const error =
-          item.method === "sql"
-            ? sqlQueryError(Error(message.error))
-            : Error(message.error);
-        if (item.method === "sql" || item.method === "workspace")
+          item.method === 'sql' ? sqlQueryError(Error(message.error)) : Error(message.error);
+        if (item.method === 'sql' || item.method === 'workspace')
           window.dispatchEvent(
-            new CustomEvent("gea-query-warning", {
+            new CustomEvent('gea-query-warning', {
               detail: { message: error.message.slice(0, 600) },
             }),
           );
         item.reject(error);
       } else item.resolve(message.result);
     }
-    if (message.type === "cancel" && message.session === context?.session) {
+    if (message.type === 'cancel' && message.session === context?.session) {
       applying.get(message.toolCallId)?.abort();
     }
-    if (message.type === "apply" && message.session === context?.session) {
+    if (message.type === 'apply' && message.session === context?.session) {
       const session = context.session;
       const task = new AbortController();
       applying.set(message.toolCallId, task);
@@ -146,39 +145,31 @@ window.addEventListener("message", (event) => {
         .then(async () => {
           const args = message.args;
           const targets = args?.targets ?? [args?.target];
-          if (!Array.isArray(targets) || !targets.length)
-            throw Error("MISSING_TARGET");
+          if (!Array.isArray(targets) || !targets.length) throw Error('MISSING_TARGET');
           for (const target of targets) {
             task.signal.throwIfAborted();
-            if (context?.session !== session)
-              throw Error("PAGE_SESSION_CHANGED");
+            if (context?.session !== session) throw Error('PAGE_SESSION_CHANGED');
             const group = [...pageGroups.values()].find((group) =>
               group.elements.some((element) => element.id === target),
             );
-            const element = group?.elements.find(
-              (element) => element.id === target,
-            );
-            if (!element || !group.apply) throw Error("ELEMENT_GONE");
-            if (args.kind === "setValue" && !element.editable)
-              throw Error("ELEMENT_READ_ONLY");
-            if (
-              args.kind === "invoke" &&
-              !element.actions?.includes(args.action ?? "invoke")
-            )
-              throw Error("ACTION_NOT_ALLOWED");
-            if (!["setValue", "invoke", "select", "clear"].includes(args.kind))
-              throw Error("INVALID_PAGE_ACTION");
+            const element = group?.elements.find((element) => element.id === target);
+            if (!element || !group.apply) throw Error('ELEMENT_GONE');
+            if (args.kind === 'setValue' && !element.editable) throw Error('ELEMENT_READ_ONLY');
+            if (args.kind === 'invoke' && !element.actions?.includes(args.action ?? 'invoke'))
+              throw Error('ACTION_NOT_ALLOWED');
+            if (!['setValue', 'invoke', 'select', 'clear'].includes(args.kind))
+              throw Error('INVALID_PAGE_ACTION');
             await group.apply({ ...args, target }, task.signal);
           }
           task.signal.throwIfAborted();
-          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          if (context?.session !== session) throw Error('PAGE_SESSION_CHANGED');
           return { applied: true };
         })
         .catch((error) => ({ applied: false, error: error.message }))
         .then((result) => {
           applying.delete(message.toolCallId);
           channel.postMessage({
-            type: "applied",
+            type: 'applied',
             toolCallId: message.toolCallId,
             session,
             ...result,
@@ -186,75 +177,75 @@ window.addEventListener("message", (event) => {
           reportCatalog();
         });
     }
-    if (message.type === "invoke") {
+    if (message.type === 'invoke') {
       const handler = handlers.get(message.name);
       const session = context?.session;
       Promise.resolve()
         .then(() => {
-          if (!handler) throw Error("页面未注册该操作");
+          if (!handler) throw Error('页面未注册该操作');
           return handler(message.arguments);
         })
         .then(
           (result) =>
             channel.postMessage({
-              type: "invoked",
+              type: 'invoked',
               id: message.id,
               session,
               result,
             }),
           (error) =>
             channel.postMessage({
-              type: "invoked",
+              type: 'invoked',
               id: message.id,
               session,
               error: error.message,
             }),
         );
     }
-    if (message.type === "identity-changed") {
+    if (message.type === 'identity-changed') {
       for (const task of applying.values()) task.abort();
       context = null;
       for (const item of pending.values()) {
         clearTimeout(item.timer);
         item.cleanup?.();
-        item.reject(Error("登录身份已变化，请重新加载"));
+        item.reject(Error('登录身份已变化，请重新加载'));
       }
       pending.clear();
-      window.dispatchEvent(new Event("gea-identity-changed"));
+      window.dispatchEvent(new Event('gea-identity-changed'));
     }
   };
   channel.start();
   reportCatalog();
-  channel.postMessage({ type: "theme:subscribe", session: context.session });
+  channel.postMessage({ type: 'theme:subscribe', session: context.session });
   readyResolve(event.data.context);
-  window.dispatchEvent(new Event("gea-session-changed"));
+  window.dispatchEvent(new Event('gea-session-changed'));
 });
-window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+window.parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
 export async function call(method, parameters = {}, options = {}) {
   options.signal?.throwIfAborted();
-  if (!channel || !context?.session) throw Error("页面已显示，请先登录并连接页面能力。");
+  if (!channel || !context?.session) throw Error('页面已显示，请先登录并连接页面能力。');
   const session = context.session;
   const id = String(++sequence);
   return new Promise((resolve, reject) => {
-    const cleanup = () => options.signal?.removeEventListener("abort", abort);
+    const cleanup = () => options.signal?.removeEventListener('abort', abort);
     const abort = () => {
       if (!pending.delete(id)) return;
       clearTimeout(timer);
       cleanup();
-      channel.postMessage({ type: "cancel", id, session });
-      reject(options.signal.reason ?? Error("请求已取消"));
+      channel.postMessage({ type: 'cancel', id, session });
+      reject(options.signal.reason ?? Error('请求已取消'));
     };
     const timer = setTimeout(() => {
       pending.delete(id);
       cleanup();
-      channel.postMessage({ type: "cancel", id, session });
-      const error = Error("业务请求超时");
-      reject(method === "sql" ? sqlQueryError(error) : error);
+      channel.postMessage({ type: 'cancel', id, session });
+      const error = Error('业务请求超时');
+      reject(method === 'sql' ? sqlQueryError(error) : error);
     }, 120000);
     pending.set(id, { resolve, reject, timer, method, cleanup });
-    options.signal?.addEventListener("abort", abort, { once: true });
+    options.signal?.addEventListener('abort', abort, { once: true });
     channel.postMessage({
-      type: "request",
+      type: 'request',
       id,
       method,
       parameters,
@@ -264,25 +255,25 @@ export async function call(method, parameters = {}, options = {}) {
 }
 export function action(name, description, handler) {
   handlers.set(name, handler);
-  if (name === "refresh")
+  if (name === 'refresh')
     reportElements(
-      "refresh",
+      'refresh',
       [
         {
-          id: "control:refresh",
-          role: "control",
+          id: 'control:refresh',
+          role: 'control',
           label: description,
-          actions: ["invoke"],
+          actions: ['invoke'],
         },
       ],
       (args) => {
-        if (args.kind !== "invoke") throw Error("ACTION_NOT_ALLOWED");
+        if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
         return handler({});
       },
     );
   void ready.then(() =>
     channel.postMessage({
-      type: "register",
+      type: 'register',
       name,
       description,
       session: context?.session,
@@ -290,8 +281,8 @@ export function action(name, description, handler) {
   );
 }
 export function ask(text, context) {
-  return call("conversation", { text, context });
+  return call('conversation', { text, context });
 }
 export function publish(context) {
-  return call("context", context);
+  return call('context', context);
 }
