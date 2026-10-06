@@ -19,16 +19,20 @@ async function fixture(t, referrer, href) {
 for (const referrer of ['', 'dsh-app://app/']) {
   test(`native served page connects without URL exceptions, referrer=${JSON.stringify(referrer)}`, async t => {
     const f = await fixture(t, referrer, 'dsh-app://app/api/agent-workbench/html?id=inventory-fc');
+    assert.equal(f.channel.currentSessionId(), undefined);
     assert.doesNotThrow(() => f.connect('dsh-app://app', {}));
     await assert.rejects(f.channel.call('access'), /请先登录并连接/);
     assert.doesNotThrow(() => f.connect('https://other.example'));
     await assert.rejects(f.channel.call('access'), /请先登录并连接/);
     assert.doesNotThrow(() => f.connect('dsh-app://app'));
+    assert.equal(f.channel.currentSessionId(), 'owned-session');
     const result = f.channel.call('access');
     const request = f.messages.findLast(value => value.type === 'request');
     assert.equal(request.session, 'owned-session');
     f.port.onmessage({ data: { type: 'response', id: request.id, result: { allowed: true } } });
     assert.deepEqual(await result, { allowed: true });
+    f.port.onmessage({ data: { type: 'identity-changed' } });
+    assert.equal(f.channel.currentSessionId(), undefined);
   });
 }
 test('invalid referrer rejects the connect without throwing', async t => {

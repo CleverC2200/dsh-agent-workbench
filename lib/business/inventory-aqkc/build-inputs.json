@@ -7,7 +7,7 @@
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.tsx": "d94c28fcfdbf295b7c10957f7a086e32eddb2083f51f03b830cb1eb401af6899",
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "source/inventory-light-plugins/src/query-error.js": "acae5260d22b3829e7d955aadf9f1fb3167dc96f1d3902f08f2facb288809c9c",
-    "../shared/channel.js": "82e7f4b52b8886a5203b1fdc598c102ace995a5746bf1b599c08b7f7b47404bd",
+    "../shared/channel.js": "6e765e6480672c7298f74d140b2d45059db028f7eb023e8780cd1acc9f17cfb6",
     "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "source/inventory-light-plugins/src/native/context.ts": "8aeb874f3bd4f81b81d214d7fb795325607ff406ad88d8db35b7b4bed56e7001",
     "source/inventory-light-plugins/src/native/page-filter.tsx": "75997acd3592536461115231da838c1f8bcfccfcf1e4596296b88d96eb3a60df",

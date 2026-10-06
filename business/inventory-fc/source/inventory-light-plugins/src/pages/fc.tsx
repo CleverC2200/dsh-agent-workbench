@@ -1,4 +1,4 @@
-import { reportElements } from "../channel.js";
+import { reportElements, currentSessionId, ready } from "../channel.js";
 import { InventoryBatchTable } from "./fc/components/inventory-batch-table";
 import { parseActualQuantity, dmsWorkbookRows } from "../fc-feedback";
 import {queryErrorText} from '../query-error.js';
@@ -174,7 +174,7 @@ const DEFAULT_COLUMNS = REPLENISHMENT_DEFAULT_COLUMNS;
 
 const COLUMN_LABELS = REPLENISHMENT_COLUMNS;
 
-function createConversationId() {
+function createReferenceId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
     : `local-${Date.now()}`;
@@ -216,16 +216,13 @@ function downloadText(
 
 export function BranchInventoryAgent() {
   const [userId, setUserId] = useState("");
-  const [conversationId, setConversationId] = useState(() => {
-    if (typeof window !== "undefined") {
-      const session = new URLSearchParams(window.location.search).get(
-        "session",
-      );
-      if (/^session-[0-9a-f-]{36}$/.test(session ?? ""))
-        return session!.slice(8);
-    }
-    return createConversationId();
-  });
+  const [conversationId, setConversationId] = useState(() => currentSessionId()?.slice(8) ?? "");
+  useEffect(() => {
+    const adopt = () => setConversationId(currentSessionId()?.slice(8) ?? "");
+    window.addEventListener("gea-session-changed", adopt);
+    void ready.then(adopt);
+    return () => window.removeEventListener("gea-session-changed", adopt);
+  }, []);
   const [warehouseId, setWarehouseId] = useState<WarehouseId>("changsha");
   const [authorizedWarehouseIds, setAuthorizedWarehouseIds] = useState<
     WarehouseId[]
@@ -484,7 +481,7 @@ export function BranchInventoryAgent() {
         );
         if (!controller.signal.aborted) {
           appliedPageRevision.current = pageRevision;
-          setLivePage({ snapshot: currentSnapshot, requestBody: pageRequestBody, revision: pageRevision, referenceId: createConversationId() });
+          setLivePage({ snapshot: currentSnapshot, requestBody: pageRequestBody, revision: pageRevision, referenceId: createReferenceId() });
           updateContext("queryState", {state: "ready", warehouseId});
         }
       } catch (error) {
@@ -526,7 +523,7 @@ export function BranchInventoryAgent() {
     );
   }
   useEffect(() => {
-    if (!sessionReady) return;
+    if (!sessionReady || !conversationId) return;
     if (readOnlyHistory) {
       setDraft({ quantities: {}, reasons: {}, dirty: false });
       setCycleRules(DEFAULT_CYCLE_RULES);
@@ -573,10 +570,10 @@ export function BranchInventoryAgent() {
     setImportErrors(imported.length?parseImportedPlans(imported,snapshot.warehouseName,warehousePickupCode(warehouseId)).errors:[]);
   }, [readOnlyHistory, repository, scope, draftScope, sessionReady,viewRestoration]);
   useEffect(()=>{
-    if(sessionReady&&!readOnlyHistory)repository?.saveCyclePreview(scope,cycleRules);
-  },[repository,scope,sessionReady,readOnlyHistory,cycleRules]);
+    if(sessionReady&&conversationId&&!readOnlyHistory)repository?.saveCyclePreview(scope,cycleRules);
+  },[repository,scope,sessionReady,conversationId,readOnlyHistory,cycleRules]);
   useEffect(() => {
-    if (!sessionReady) return;
+    if (!sessionReady || !conversationId) return;
     if (readOnlyHistory) return;
     repository?.saveFilters(scope, {
       search,
@@ -590,6 +587,7 @@ export function BranchInventoryAgent() {
     readOnlyHistory,
     repository,
     scope,
+    conversationId,
     sessionReady,
     search,
     businessOnly,
@@ -1350,7 +1348,6 @@ export function BranchInventoryAgent() {
     setWarehouseId(nextWarehouse);
     setRestoredSnapshot(null);
     setReadOnlyHistory(false);
-    setConversationId(createConversationId());
     setSubmissionStatus("idle");
   };
   const awaitingData = !sessionReady || (!readOnlyHistory && (

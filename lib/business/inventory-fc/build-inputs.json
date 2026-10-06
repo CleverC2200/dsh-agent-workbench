@@ -2,7 +2,7 @@
   "sourceCommit": "906b3b08947b71cecf627073c0b0e9a389b692bf",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
-    "../shared/channel.js": "82e7f4b52b8886a5203b1fdc598c102ace995a5746bf1b599c08b7f7b47404bd",
+    "../shared/channel.js": "6e765e6480672c7298f74d140b2d45059db028f7eb023e8780cd1acc9f17cfb6",
     "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "source/inventory-light-plugins/src/pages/fc/components/inventory-batch-table.tsx": "df340ea99ebab5eea3bd10accbc91bad01c2ada0818eccf45b8109dcefef8d81",
     "source/inventory-light-plugins/src/fc-feedback.ts": "754dcbbb0d64a9ed2fb006ce096b00d05b96605cb0c425285aecb8013d0b685f",
@@ -45,7 +45,7 @@
     "source/fc/src/lib/replenishment-columns.ts": "112843e16a7f721dd48fdd3924ca90da0896f39c6d66d2fc3746b7ca757c7938",
     "source/fc/src/lib/workbench-page.ts": "61f8832512e74b9050cc55a6cc12141c4a2ddc1ef65e06bc8caf5ef564a98e33",
     "source/fc/src/lib/browser-repository.ts": "d87c911df3031160906a72d9309b7f3a65366c7f235e91a57ccc8000a670c275",
-    "source/inventory-light-plugins/src/pages/fc.tsx": "2acf628da1052847746cf334bd2e94e16e1c3f1999912c10d45e459a7c41f605",
+    "source/inventory-light-plugins/src/pages/fc.tsx": "e7aec1c84ac112519194bae9a5b46d56acd88ebe80ecfd7948a49005d82ae436",
     "source/inventory-light-plugins/src/governed/parameters.ts": "780117245df97ff507ab4ec5e251cb2317fd39136b7df7e0ec2d0af734ec3e10",
     "source/inventory-light-plugins/src/governed/columnar.ts": "81c248c74238004ede74b1ab17319f31323c2c2556b2a9291d104704d0efbb52",
     "source/inventory-light-plugins/src/governed/batch.ts": "ae81797a3c464262c3f601eb85d8b11c2bfdb956a19cece174ceb1ccfbd375f1",

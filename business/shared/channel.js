@@ -30,6 +30,10 @@ let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
 });
+/** Read the current Host-owned Session projection, including after a reconnect. */
+export function currentSessionId() {
+  return context?.session;
+}
 function parentOrigin() {
   try {
     const url = new URL(document.referrer || window.location.href);
