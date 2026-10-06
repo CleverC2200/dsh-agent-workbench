@@ -30,6 +30,17 @@ let readyResolve;
 export const ready = new Promise((resolve) => {
   readyResolve = resolve;
 });
+function parentOrigin() {
+  try {
+    const url = new URL(document.referrer || window.location.href);
+    if (!url.host) return undefined;
+    // Electron serializes the current registered dsh-app origin with its host.
+    if (url.origin !== 'null') return url.origin;
+    return url.protocol === 'dsh-app:' && url.host === 'app' ? 'dsh-app://app' : undefined;
+  } catch {
+    return undefined;
+  }
+}
 window.addEventListener('message', (event) => {
   if (
     event.source === window.parent &&
@@ -41,7 +52,7 @@ window.addEventListener('message', (event) => {
   }
   if (
     event.source !== window.parent ||
-    event.origin !== new URL(document.referrer).origin ||
+    event.origin !== parentOrigin() ||
     typeof event.data?.context?.session !== 'string' ||
     typeof event.data?.context?.plugin !== 'string' ||
     event.data?.protocol !== 'gea-html-v2' ||
