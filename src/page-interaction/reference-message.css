@@ -1,0 +1,6 @@
+[data-page-reference-label] {
+  color: var(--workbench-brand);
+  background: var(--workbench-brand-soft);
+  border-radius: 4px;
+  padding: 0 3px;
+}

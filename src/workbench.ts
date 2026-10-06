@@ -1,7 +1,7 @@
-import type { MainPanelId } from "@deepseek-ai/dsh-client-ui-layout/client";
-import type { SessionId } from "@deepseek-ai/dsh-session/types";
-import type { WorkbenchFramePage } from "./frame.ts";
-import {isBusinessViewPage,validHtmlViewState,type HtmlViewState} from './html-view-state.ts';
+import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
+import type { SessionId } from '@deepseek-ai/dsh-session/types';
+import type { WorkbenchFramePage } from './frame.ts';
+import { isBusinessViewPage, validHtmlViewState, type HtmlViewState } from './html-view-state.ts';
 
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
@@ -19,6 +19,9 @@ export interface DocumentSession {
   readonly sessionId: SessionId;
   readonly preset: string | null;
   readonly ownerScope: string | null;
+  readonly cwd?: string;
+  /** Stable subject supplied by GEA; this remains a presentation hint, never a grant. */
+  readonly subject?: string | null;
 }
 export interface WorkbenchSnapshot {
   readonly pages: readonly WorkbenchPage[];
@@ -31,12 +34,65 @@ export interface WorkbenchPorts {
   hasPanel?(id: MainPanelId): boolean;
   document?(sessionId?: SessionId): void;
 }
+/** Browser presentation only; Core still resolves every referenced Session. */
+export interface WorkbenchPresentation {
+  version: 2;
+  page?: MainPanelId;
+  selections: Array<DocumentSession & { page: MainPanelId; active: boolean }>;
+  views: Array<{ page: MainPanelId; scope: string; state: HtmlViewState }>;
+}
+export interface WorkbenchPresentationMemory {
+  getSnapshot(): unknown;
+  set(value: WorkbenchPresentation): void;
+}
+export const WORKBENCH_PRESENTATION_KEY = 'agent-workbench.presentation.v2';
+
+function presentation(value: unknown): WorkbenchPresentation | undefined {
+  const state = value as WorkbenchPresentation | null;
+  const text = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
+  if (
+    !state ||
+    state.version !== 2 ||
+    (state.page !== undefined && !text(state.page)) ||
+    !Array.isArray(state.selections) ||
+    !Array.isArray(state.views)
+  )
+    return;
+  if (
+    state.selections.some(
+      (item) =>
+        !item ||
+        !text(item.page) ||
+        typeof item.sessionId !== 'string' ||
+        !/^session-[0-9a-f-]{36}$/.test(item.sessionId) ||
+        (item.preset !== null && !text(item.preset)) ||
+        (item.ownerScope !== null && !text(item.ownerScope)) ||
+        (item.cwd !== undefined && !text(item.cwd)) ||
+        (item.subject !== undefined && item.subject !== null && !text(item.subject)) ||
+        typeof item.active !== 'boolean',
+    )
+  )
+    return;
+  if (
+    state.views.some(
+      (item) =>
+        !item ||
+        !text(item.page) ||
+        !text(item.scope) ||
+        !validHtmlViewState(item.page, item.state),
+    )
+  )
+    return;
+  return state;
+}
 /** Page selection and associations describe UI; Core owns every Session and its main reference. */
 export class WorkbenchController implements AgentWorkbench {
   private readonly pages = new Map<MainPanelId, WorkbenchPage>();
   private readonly documents = new Map<MainPanelId, WorkbenchFramePage>();
-  private readonly associations = new Map<MainPanelId, DocumentSession>();
-  private readonly htmlViews = new Map<MainPanelId,Map<string,HtmlViewState>>();
+  private readonly associations = new Map<MainPanelId, Map<string | null, DocumentSession>>();
+  private readonly activePresets = new Map<MainPanelId, string | null>();
+  private rememberedPage: MainPanelId | undefined;
+  private readonly htmlViews = new Map<MainPanelId, Map<string, HtmlViewState>>();
   private selectedDocument: WorkbenchFramePage | undefined;
   private readonly visited = new Set<MainPanelId>();
   private snapshot: WorkbenchSnapshot = { pages: [], visitedDocuments: [] };
@@ -44,9 +100,39 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly listeners = new Set<() => void>();
   private readonly historyListeners = new Set<() => void>();
   private historyPage: MainPanelId | undefined;
-  constructor(private readonly ports: WorkbenchPorts) {}
+  constructor(
+    private readonly ports: WorkbenchPorts,
+    private readonly memory?: WorkbenchPresentationMemory,
+  ) {
+    const saved = presentation(memory?.getSnapshot());
+    if (!saved) return;
+    this.rememberedPage = saved.page;
+    for (const { page, active, sessionId, preset, ownerScope, cwd, subject } of saved.selections) {
+      let selections = this.associations.get(page);
+      if (!selections) {
+        selections = new Map();
+        this.associations.set(page, selections);
+      }
+      selections.set(preset, {
+        sessionId,
+        preset,
+        ownerScope,
+        ...(cwd ? { cwd } : {}),
+        ...(subject === undefined ? {} : { subject }),
+      });
+      if (active) this.activePresets.set(page, preset);
+    }
+    for (const { page, scope, state } of saved.views) {
+      let values = this.htmlViews.get(page);
+      if (!values) {
+        values = new Map();
+        this.htmlViews.set(page, values);
+      }
+      values.set(scope, structuredClone(state));
+    }
+  }
   register(page: WorkbenchPage): () => void {
-    if (this.disposed) throw Error("WORKBENCH_DISPOSED");
+    if (this.disposed) throw Error('WORKBENCH_DISPOSED');
     if (this.pages.has(page.id)) throw Error(`Duplicate workbench page: ${page.id}`);
     this.pages.set(page.id, page);
     this.changed();
@@ -56,20 +142,24 @@ export class WorkbenchController implements AgentWorkbench {
       this.documents.delete(page.id);
       this.visited.delete(page.id);
       this.associations.delete(page.id);
+      this.activePresets.delete(page.id);
       this.htmlViews.delete(page.id);
       if (this.selectedDocument?.id === page.id) this.selectedDocument = undefined;
+      if (this.rememberedPage === page.id) this.rememberedPage = undefined;
       this.changed();
     };
   }
   async open(id: MainPanelId): Promise<boolean> {
     if (this.disposed) return false;
-    if (!this.pages.has(id) && !this.ports.hasPanel?.(id)) throw Error(`Unknown workbench page: ${id}`);
+    if (!this.pages.has(id) && !this.ports.hasPanel?.(id))
+      throw Error(`Unknown workbench page: ${id}`);
     const document = this.documents.get(id);
     if (document) {
       this.selectedDocument = document;
+      this.rememberedPage = undefined;
       this.visited.add(id);
       this.changed();
-      this.ports.document!(this.associations.get(id)?.sessionId);
+      this.ports.document!(this.currentSelection(id)?.sessionId);
     } else {
       this.leaveDocument();
       this.ports.panel(id);
@@ -77,7 +167,7 @@ export class WorkbenchController implements AgentWorkbench {
     return true;
   }
   registerFrame(page: WorkbenchFramePage): () => void {
-    if (!this.ports.document) throw Error("WORKBENCH_DOCUMENT_UNAVAILABLE");
+    if (!this.ports.document) throw Error('WORKBENCH_DOCUMENT_UNAVAILABLE');
     const unregister = this.register(page);
     this.documents.set(page.id, page);
     this.changed();
@@ -85,41 +175,142 @@ export class WorkbenchController implements AgentWorkbench {
   }
   associateSession(page: MainPanelId, selection: DocumentSession): void {
     if (!this.documents.has(page)) throw Error(`Unknown workbench Document: ${page}`);
-    this.associations.set(page, selection);
+    let selections = this.associations.get(page);
+    if (!selections) {
+      selections = new Map();
+      this.associations.set(page, selections);
+    }
+    selections.set(selection.preset, selection);
+    this.activePresets.set(page, selection.preset);
     this.changed();
   }
-  forgetSession(page: MainPanelId): void { this.associations.delete(page); this.changed(); }
-  readHtmlViewState(page:string,scope?:string):HtmlViewState|undefined {
-    if(!this.documents.has(page as MainPanelId))return undefined;
-    if(isBusinessViewPage(page)&&!scope)return undefined;
-    const value=this.htmlViews.get(page as MainPanelId)?.get(isBusinessViewPage(page)?scope!:'static');
-    return value===undefined?undefined:structuredClone(value);
+  /** A hint for a declared interpretation; identity confirmation and authorization remain external. */
+  selectionFor(
+    page: MainPanelId,
+    preset: string | null,
+    ownerScope: string | null,
+    cwd?: string,
+  ): DocumentSession | undefined {
+    const selection = this.associations.get(page)?.get(preset);
+    return selection?.ownerScope === ownerScope && (cwd === undefined || selection.cwd === cwd)
+      ? selection
+      : undefined;
   }
-  saveHtmlViewState(page:string,scope:string|undefined,value:unknown):void {
-    if(this.disposed||!this.documents.has(page as MainPanelId))throw Error('HTML_DOCUMENT_UNREGISTERED');
-    if(isBusinessViewPage(page)&&!scope)throw Error('HTML_VIEW_SCOPE_REQUIRED');
-    if(!validHtmlViewState(page,value))throw Error('INVALID_HTML_VIEW_STATE');
-    let values=this.htmlViews.get(page as MainPanelId);
-    if(!values){values=new Map();this.htmlViews.set(page as MainPanelId,values);}
-    values.set(isBusinessViewPage(page)?scope!:'static',structuredClone(value));
+  private currentSelection(page: MainPanelId): DocumentSession | undefined {
+    if (!this.activePresets.has(page)) return undefined;
+    return this.associations.get(page)?.get(this.activePresets.get(page)!);
+  }
+  recoveryTarget(): (DocumentSession & { page: MainPanelId; resourceId?: string }) | undefined {
+    const page = this.rememberedPage;
+    const selection = page && this.documents.has(page) ? this.currentSelection(page) : undefined;
+    const resourceId = page && this.documents.get(page)?.resourceId;
+    return selection && page
+      ? { page, ...selection, ...(resourceId ? { resourceId } : {}) }
+      : undefined;
+  }
+  forgetSession(page: MainPanelId): void {
+    this.associations.delete(page);
+    this.activePresets.delete(page);
+    this.changed();
+  }
+  readHtmlViewState(page: string, scope?: string): HtmlViewState | undefined {
+    if (!this.documents.has(page as MainPanelId)) return undefined;
+    if (isBusinessViewPage(page) && !scope) return undefined;
+    const value = this.htmlViews
+      .get(page as MainPanelId)
+      ?.get(isBusinessViewPage(page) ? scope! : 'static');
+    return value === undefined ? undefined : structuredClone(value);
+  }
+  saveHtmlViewState(page: string, scope: string | undefined, value: unknown): void {
+    if (this.disposed || !this.documents.has(page as MainPanelId))
+      throw Error('HTML_DOCUMENT_UNREGISTERED');
+    if (isBusinessViewPage(page) && !scope) throw Error('HTML_VIEW_SCOPE_REQUIRED');
+    if (!validHtmlViewState(page, value)) throw Error('INVALID_HTML_VIEW_STATE');
+    let values = this.htmlViews.get(page as MainPanelId);
+    if (!values) {
+      values = new Map();
+      this.htmlViews.set(page as MainPanelId, values);
+    }
+    values.set(isBusinessViewPage(page) ? scope! : 'static', structuredClone(value));
+    this.persist();
   }
   leaveDocument(): void {
-    if (!this.selectedDocument) return;
+    this.rememberedPage = undefined;
+    if (!this.selectedDocument) {
+      this.changed();
+      return;
+    }
     this.selectedDocument = undefined;
     this.changed();
   }
   getSnapshot = (): WorkbenchSnapshot => this.snapshot;
   label(id: MainPanelId): string {
     const label = this.pages.get(id)?.label;
-    return typeof label === "function" ? label() : label ?? id;
+    return typeof label === 'function' ? label() : (label ?? id);
   }
-  subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
-  showHistory(page?: MainPanelId): void { this.historyPage = page; for (const listener of this.historyListeners) listener(); }
-  takeHistoryPage(): MainPanelId | undefined { const page = this.historyPage; this.historyPage = undefined; return page; }
-  subscribeHistory(listener: () => void): () => void { this.historyListeners.add(listener); return () => { this.historyListeners.delete(listener); }; }
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  };
+  showHistory(page?: MainPanelId): void {
+    this.rememberedPage = undefined;
+    this.historyPage = page;
+    this.changed();
+    for (const listener of this.historyListeners) listener();
+  }
+  takeHistoryPage(): MainPanelId | undefined {
+    const page = this.historyPage;
+    this.historyPage = undefined;
+    return page;
+  }
+  subscribeHistory(listener: () => void): () => void {
+    this.historyListeners.add(listener);
+    return () => {
+      this.historyListeners.delete(listener);
+    };
+  }
   private changed(): void {
-    this.snapshot = { pages: [...this.pages.values()], visitedDocuments: [...this.visited].map(id=>this.documents.get(id)!), selectedDocument: this.selectedDocument, selection: this.selectedDocument ? this.associations.get(this.selectedDocument.id) : undefined };
+    this.snapshot = {
+      pages: [...this.pages.values()],
+      visitedDocuments: [...this.visited].map((id) => this.documents.get(id)!),
+      selectedDocument: this.selectedDocument,
+      selection: this.selectedDocument
+        ? this.currentSelection(this.selectedDocument.id)
+        : undefined,
+    };
+    if (!this.disposed) this.persist();
     for (const listener of this.listeners) listener();
   }
-  dispose(): void { this.disposed = true; this.pages.clear(); this.documents.clear(); this.associations.clear(); this.htmlViews.clear(); this.visited.clear(); this.selectedDocument = undefined; this.changed(); }
+  private persist(): void {
+    this.memory?.set({
+      version: 2,
+      ...(this.selectedDocument?.id || this.rememberedPage
+        ? { page: this.selectedDocument?.id ?? this.rememberedPage }
+        : {}),
+      selections: [...this.associations].flatMap(([page, values]) =>
+        [...values.values()].map((selection) => ({
+          page,
+          ...selection,
+          active: this.activePresets.get(page) === selection.preset,
+        })),
+      ),
+      views: [...this.htmlViews].flatMap(([page, values]) =>
+        [...values].map(([scope, state]) => ({ page, scope, state })),
+      ),
+    });
+  }
+  dispose(): void {
+    this.disposed = true;
+    this.pages.clear();
+    this.documents.clear();
+    this.associations.clear();
+    this.activePresets.clear();
+    this.htmlViews.clear();
+    this.visited.clear();
+    this.selectedDocument = undefined;
+    this.rememberedPage = undefined;
+    this.changed();
+  }
 }

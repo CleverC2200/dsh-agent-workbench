@@ -3,6 +3,7 @@ export interface BusinessAccount {
     getSnapshot(): Readonly<{
         state: string;
         scope: string | null;
+        subject?: string | null;
         status: Readonly<{
             authenticated: boolean;
             user: {

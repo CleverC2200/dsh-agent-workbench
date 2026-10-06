@@ -1,5 +1,8 @@
 /** 独立销售计划页面使用的本地化文案。 */
 declare const copy: {
+    readonly identityObservationFailed: readonly ["无法确认 GEA 身份，请稍后重试。", "Unable to confirm the GEA identity. Please try again later."];
+    readonly pageRecoveryPending: readonly ["正在恢复已关联页面…", "Restoring the associated page…"];
+    readonly pageRecoveryIdentityUnavailable: readonly ["账号信息暂不可用，请重试后恢复页面。", "Identity information is unavailable. Retry before restoring this page."];
     readonly navigationLogin: readonly ["请登录以打开飞书消息。", "Sign in to open the Feishu message."];
     readonly navigationLoginAction: readonly ["登录并继续", "Sign in and continue"];
     readonly navigationOpening: readonly ["正在打开消息对应页面…", "Opening the message destination…"];

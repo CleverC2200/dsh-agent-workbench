@@ -9,18 +9,22 @@
     "allowJs": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "declaration": true,
     "emitDeclarationOnly": true,
     "rootDir": "src",
-    "outDir": "lib/types"
+    "outDir": "lib/types",
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-chat/src/client/contract/slots.ts": [
+        "../../official-latest-standard/packages/client/ui-chat/lib/types/client/contract/slots.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-chat/src/client/chat/MessageItem.tsx": [
+        "../../official-latest-standard/packages/client/ui-chat/lib/types/client/chat/MessageItem.d.ts"
+      ],
+      "@deepseek-ai/dsh-client-ui-chat/src/client/chat/MessageIconActions.tsx": [
+        "../../official-latest-standard/packages/client/ui-chat/lib/types/client/chat/MessageIconActions.d.ts"
+      ]
+    }
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
