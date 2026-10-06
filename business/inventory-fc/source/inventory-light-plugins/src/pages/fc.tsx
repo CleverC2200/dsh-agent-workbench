@@ -1164,7 +1164,7 @@ export function BranchInventoryAgent() {
           applied: false,
         });
         repository?.appendAudit(scope, {
-          id: createConversationId(),
+          id: createReferenceId(),
           type: "plan-import",
           occurredAt: new Date().toISOString(),
           operator: userId,

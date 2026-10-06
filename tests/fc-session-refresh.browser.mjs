@@ -3,7 +3,15 @@ import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
+import ts from 'typescript';
+import assert from 'node:assert/strict';
 const resolver = createRequire(resolve('business/inventory-fc/source/inventory-light-plugins/package.json'));
+test('the actual FC component has no unresolved local identifiers in retained consumers', () => {
+  const file = resolve('business/inventory-fc/source/inventory-light-plugins/src/pages/fc.tsx');
+  const program = ts.createProgram([file], { noEmit: true, allowJs: true, skipLibCheck: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, jsx: ts.JsxEmit.ReactJSX, allowImportingTsExtensions: true });
+  const diagnostics = program.getSemanticDiagnostics(program.getSourceFile(file)).filter(value => value.code === 2304 || value.code === 2552);
+  assert.deepEqual(diagnostics.map(value => ts.flattenDiagnosticMessageText(value.messageText, '\n')), []);
+});
 
 const child = (await build({
   stdin: { contents: `
