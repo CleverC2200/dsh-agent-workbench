@@ -4,6 +4,8 @@ import { build } from 'esbuild';
 import { JSDOM } from 'jsdom';
 const code=(await build({entryPoints:['src/html-document.ts'],bundle:true,write:false,format:'esm',platform:'node'})).outputFiles[0].text;
 const {presentHtml}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const injectCode=(await build({entryPoints:['src/page-interaction/inject.ts'],bundle:true,write:false,format:'esm',platform:'node'})).outputFiles[0].text;
+const {injectPicker}=await import('data:text/javascript;base64,'+Buffer.from(injectCode).toString('base64'));
 for(const [name,html] of [
   ['explicit head','<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="connect-src none"></head><body><main>库存数据</main></body></html>'],
   ['implicit head','<!doctype html><html><meta charset="utf-8"><title>库存</title><body><main>库存数据</main></body></html>'],
@@ -25,6 +27,27 @@ for(const [name,html] of [
   post({}, {protocol:'agent-workbench-theme',dark:true,fontSize:17});
   assert.equal(dom.window.document.body.hasAttribute('data-ds-dark-theme'),false);
   post(dom.window.parent,{protocol:'agent-workbench-theme',dark:true,fontSize:17});
+  assert.equal(dom.window.document.body.hasAttribute('data-ds-dark-theme'),true);
+  assert.equal(dom.window.document.documentElement.style.getPropertyValue('--dsh-content-font-size'),'17px');
+});
+
+for(const [name,rawtext] of [
+  ['script body literal','<script>window.authorLiteral="</body>";window.authorDone=true;</script>'],
+  ['script head literal','<script>window.authorLiteral="</head>";window.authorDone=true;</script>'],
+  ['style closing literals','<style id="author-style">#inventory { --author-rawtext: "</body> </head>"; color: rgb(20, 30, 40); }</style><script>window.authorDone=true;</script>'],
+])test(`the current picker and theme chain preserves ${name} when real closing tags are omitted`,async t=>{
+  const html='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="connect-src none"><title>库存</title><main id="inventory">库存数据</main>'+rawtext;
+  const dom=new JSDOM(presentHtml(injectPicker(html,'window.pickerDone=true;'),'body { font-size:14px; }'),{url:'https://host.example/page',runScripts:'dangerously'});
+  t.after(()=>dom.window.close());
+  await new Promise(done=>dom.window.document.addEventListener('DOMContentLoaded',done));
+  assert.equal(dom.window.authorDone,true,'the complete original script executes');
+  assert.equal(dom.window.pickerDone,true,'the picker still initializes after the author');
+  assert.equal(dom.window.document.compatMode,'CSS1Compat');
+  assert.equal(dom.window.document.querySelector('#inventory').textContent,'库存数据');
+  assert.equal(dom.window.document.querySelector('meta[http-equiv]').content,'connect-src none');
+  if(name==='style closing literals')assert.equal(dom.window.document.querySelector('#author-style').textContent,'#inventory { --author-rawtext: "</body> </head>"; color: rgb(20, 30, 40); }');
+  else assert.equal(dom.window.authorLiteral,name==='script body literal'?'</body>':'</head>');
+  dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,data:{protocol:'agent-workbench-theme',dark:true,fontSize:17}}));
   assert.equal(dom.window.document.body.hasAttribute('data-ds-dark-theme'),true);
   assert.equal(dom.window.document.documentElement.style.getPropertyValue('--dsh-content-font-size'),'17px');
 });
