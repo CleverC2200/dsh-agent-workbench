@@ -170,12 +170,12 @@ function catalogElements(value: unknown): PageElement[] {
     const text = (candidate: unknown, max: number) =>
       candidate === undefined
         ? undefined
-        : catalogText(candidate, max);
-    const list = (candidate: unknown, max: number): readonly string[] | undefined => {
+        : catalogText(candidate, max, true);
+    const list = (candidate: unknown, max: number, allowEmpty = false): readonly string[] | undefined => {
       if (candidate === undefined) return undefined;
       if (!Array.isArray(candidate) || candidate.length > max)
         throw new Error("INVALID_PAGE_CATALOG");
-      return candidate.map((item) => catalogText(item, 120));
+      return candidate.map((item) => catalogText(item, 120, allowEmpty));
     };
     if (element.editable !== undefined && typeof element.editable !== "boolean")
       throw new Error("INVALID_PAGE_CATALOG");
@@ -194,9 +194,9 @@ function catalogElements(value: unknown): PageElement[] {
       ...(text(element.value, 200) === undefined
         ? {}
         : { value: text(element.value, 200) as string }),
-      ...(list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues) === undefined
+      ...(list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues, true) === undefined
         ? {}
-        : { options: list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues)! }),
+        : { options: list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues, true)! }),
       ...(list(element.actions, 8) === undefined
         ? {}
         : { actions: list(element.actions, 8)! }),
@@ -220,8 +220,8 @@ function catalogObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function catalogText(value: unknown, max: number): string {
-  if (typeof value !== "string" || value.length === 0 || value.length > max)
+function catalogText(value: unknown, max: number, allowEmpty = false): string {
+  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || value.length > max)
     throw new Error("INVALID_PAGE_CATALOG");
   return value;
 }

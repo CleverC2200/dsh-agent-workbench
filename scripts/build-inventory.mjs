@@ -67,7 +67,7 @@ export async function buildInventory(id, sourceCommit) {
             () => ({ path: resolve(ui, "src/data.ts") }),
           );
           api.onResolve({ filter: /^node:crypto$/ }, () => ({
-            path: resolve(ui, "src/browser-crypto.ts"),
+            path: resolve(root, "business/shared/browser-crypto.ts"),
           }));
           api.onResolve({ filter: /^node:(fs|path)$/ }, () => ({
             path: resolve(ui, "src/no-server.ts"),

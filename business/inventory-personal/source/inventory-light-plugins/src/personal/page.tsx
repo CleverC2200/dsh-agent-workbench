@@ -22,7 +22,9 @@ import {
 } from "../native/context";
 import css from "./style.module.css";
 import { ObjectPicker } from "./object-picker";
+import { createHash } from "../../../../../shared/browser-crypto";
 import { coverageNotes } from "./coverage";
+const riskTargetId = (id: string) => "personal:risk:" + createHash("sha256").update(id).digest("hex");
 const fmt = (v: number | null) =>
   v === null ? "—" : v.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
 function Details({ value }: { value: any }) {
@@ -381,7 +383,7 @@ export default function Personal({
             };
           }),
           ...filtered.slice((page - 1) * size, page * size).map((r) => ({
-            id: "personal:risk:" + r.id,
+            id: riskTargetId(r.id),
             role: "row",
             label: r.object + " · " + r.sku + " · " + r.type,
             value: r.issue,
@@ -773,7 +775,7 @@ export default function Personal({
                 {filtered.slice((page - 1) * size, page * size).map((r, i) => (
                   <tr
                     key={r.id}
-                    data-page-target={"personal:risk:" + r.id}
+                    data-page-target={riskTargetId(r.id)}
                     data-page-label={r.object + " · " + r.sku + " · " + r.type}
                   >
                     <td>

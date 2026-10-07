@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../../../dsh-ui/controls";
 import { TrendChart } from "../../../dsh-ui/chart";
 import { reportElements } from "../../../channel.js";
-import { createHash } from "../../../browser-crypto";
+import { createHash } from "../../../../../../../shared/browser-crypto";
 import { referenceText } from "./structure-evidence";
 import { ownContextPart } from "../../../native/context";
 import type { FullChainWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-types";

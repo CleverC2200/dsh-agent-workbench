@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Context } from '@deepseek-ai/cordis';
+import type { SessionId } from '@deepseek-ai/dsh-session';
+import type {} from '@deepseek-ai/dsh-api-session-controller';
 import { defineTool } from '@deepseek-ai/dsh-tools';
 import { createPageBridge } from './page-bridge/host.ts';
 import { createPageToolRegistry } from './page-bridge/registry.ts';
@@ -102,7 +104,7 @@ export class PageRuntime {
       if(owned.session!==value.sessionId||value.surface!==surface||(value.tool!==undefined&&value.tool!==tool))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
     }});
     ctx.effect(()=>ctx.connection.fetch.register({path:'/api/agent-workbench/page',methods:['POST'],requestBody:'buffered',fetch:request=>this.fetchOperation(request)}));
-    ctx.effect(()=>ctx.on('agent/disposed',({agent})=>{for(const owner of [...this.owners.values()])if(owner.session===agent.id)this.close(owner.token);}));
+    ctx.effect(()=>ctx.on('agent/disposed',({agent})=>{this.opening.get(agent.id)?.abort();for(const owner of [...this.owners.values()])if(owner.session===agent.id)this.close(owner.token);}));
     ctx.effect(()=>()=>{for(const owner of [...this.owners.values()])this.close(owner.token);for(const transition of this.opening.values())transition.abort();this.opening.clear();this.tools.shutdown();this.bridge.resetAll();this.html.clear();});
     ctx.inject(['tools'],scope=>scope.effect(()=>scope.tools.register(defineTool({
       name:'gea_page',description:'读取当前业务页面的观察内容或执行页面自述的 refresh/filter/draft 动作。页面观察不是业务权限，草稿不是提交。',
@@ -142,13 +144,20 @@ export class PageRuntime {
   private async open(pageId:string,sessionId:string,resourceId:string,signal:AbortSignal){
     const declaration=this.declarations.get(pageId);
     if(!declaration||resourceId!==declaration.page.resourceId)throw Error('PAGE_RESOURCE_NOT_ALLOWED');
-    if(!/^session-[0-9a-f-]{36}$/.test(sessionId)||!this.ctx.agents.get(sessionId as any))throw Error('PAGE_AGENT_MISSING');
+    if(!/^session-[0-9a-f-]{36}$/.test(sessionId))throw Error('PAGE_AGENT_MISSING');
     this.opening.get(sessionId)?.abort();
     const transition=new AbortController();this.opening.set(sessionId,transition);
     for(const old of [...this.owners.values()])if(old.session===sessionId)this.close(old.token);
     signal=AbortSignal.any([signal,transition.signal]);
     let grant:PageBusinessGrant;
-    try{grant=await declaration.authorize(sessionId,resourceId,signal);}finally{if(this.opening.get(sessionId)===transition)this.opening.delete(sessionId);}
+    try{
+      signal.throwIfAborted();
+      const resolved=await this.ctx.sessionController.resolveAgent(sessionId as SessionId);
+      signal.throwIfAborted();
+      if(this.declarations.get(pageId)!==declaration)throw Error('BUSINESS_PAGE_RELEASED');
+      if('error' in resolved)throw resolved.error;
+      grant=await declaration.authorize(sessionId,resourceId,signal);
+    }finally{if(this.opening.get(sessionId)===transition)this.opening.delete(sessionId);}
 
     try{signal.throwIfAborted();grant.signal.throwIfAborted();if(this.declarations.get(pageId)!==declaration)throw Error("BUSINESS_PAGE_RELEASED");}catch(error){grant.release();throw error;}
     for(const old of [...this.owners.values()])if(old.session===sessionId)this.close(old.token);

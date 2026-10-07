@@ -1,4 +1,4 @@
-import {createHash} from "../../../browser-crypto";
+import {createHash} from "../../../../../../../shared/browser-crypto";
 import {completeTotal,summarizeStructure} from "dsh-agent-manage/inventory-compute/full-chain-category-structure";
 import type {StructureRow,FullChainWorkspace} from "dsh-agent-manage/inventory-compute/full-chain-types";
 

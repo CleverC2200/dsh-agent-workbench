@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { JSDOM } from 'jsdom';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 const core = resolve('../../official-latest-standard'),
   official = (path) => pathToFileURL(resolve(core, path)).href;
 const { Context } = await import(official('vendor/cordis/lib/index.js'));
@@ -13,7 +15,11 @@ const { default: SystemPrompt } = await import(
 );
 const { default: Agents } = await import(official('packages/core/agent/lib/index.js'));
 const { createScope } = await import(official('packages/core/scope/lib/index.js'));
-const { Session, SessionId } = await import(official('packages/core/session/lib/index.js'));
+const { default:Sessions, Session, SessionId } = await import(official('packages/core/session/lib/index.js'));
+const {default:Projections}=await import(official('packages/session/session-projection/lib/index.js'));
+const {default:Query}=await import(official('packages/session-query/session-query/lib/index.js'));
+const {default:Typert}=await import(official('packages/typert/registry/lib/index.js'));
+const {default:SessionController}=await import(official('packages/api/session-controller/lib/index.js'));
 await mkdir('.scratch', { recursive: true });
 const result = await build({
   entryPoints: ['src/html-pages.ts'],
@@ -47,6 +53,13 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     },
   });
   await ctx.plugin(SystemPrompt, {});
+  await ctx.plugin(Typert);
+  await ctx.plugin(Sessions);
+  await ctx.plugin(Projections);
+  new Query(ctx);
+  ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-model'}),saveSelection:async()=>{}});
+  ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{},resolve:()=>undefined,bindPrompt:()=>({commit(){},[Symbol.dispose](){}}),retirePrompt(){}});
+  new SessionController(ctx,{nativeOpen:false});
   await ctx.plugin(Tools);
   await ctx.plugin(Agents);
   const id = SessionId('session-11111111-1111-4111-8111-111111111111'),
@@ -135,6 +148,50 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   };
   return { call, open, identity, id, releases: () => releases, execute, reference };
 }
+async function authorCatalog(t,id){
+  const dom=new JSDOM(await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
+  t.after(()=>dom.window.close());
+  Object.assign(dom.window,{AbortController,AbortSignal,TextEncoder,TextDecoder,structuredClone});
+  dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
+  Object.defineProperty(dom.window.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
+  dom.window.fetch=()=>{throw Error('Unexpected real I/O');};
+  const messages=[];
+  dom.window.parent.postMessage=message=>messages.push(message);
+  const port={start(){},close(){},postMessage(message){messages.push(message);if(message.type==='request')queueMicrotask(()=>port.onmessage?.({data:{type:'response',id:message.id,result:{accepted:true}}}));}};
+  for(const script of dom.window.document.querySelectorAll('script'))dom.window.eval(script.textContent);
+  dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',ports:[port],data:{protocol:'gea-html-v2',type:'connect',context:{session:'catalog-fixture',plugin:'inventory-'+id}}}));
+  if(id==='personal'){
+    for(let i=0;i<100&&!messages.some(m=>m.protocol==='dsh-workbench-view-v1'&&m.type==='ready');i++)await new Promise(done=>setTimeout(done,10));
+    dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',data:{protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-personal',version:1,channel:'catalog-view',generation:1,state:{version:1}}}));
+  }
+  let catalog;
+  for(let i=0;i<100;i++){catalog=messages.filter(m=>m.type==='catalog').at(-1);if(catalog?.elements?.some(e=>id==='dealer'?e.id==='filter:customer'&&e.options.includes('customer-A'):e.id.startsWith('personal:risk:')))break;await new Promise(done=>setTimeout(done,10));}
+  return{dom,catalog,messages};
+}
+test('the real dealer author catalog accepts its empty all-customers option through the real page route and registry',async t=>{
+  const {catalog}=await authorCatalog(t,'dealer');
+  const filter=catalog?.elements?.find(e=>e.id==='filter:customer');
+  assert.equal(filter?.value,'');assert.deepEqual(Array.from(filter.options),['','customer-A']);
+  const h=await mount(t),{value:{owner}}=await h.open();
+  const send=elements=>h.call('catalog',{owner,parameters:{catalog:{elements},pageSource:'self-report',toolMessages:[]}});
+  const accepted=await send(JSON.parse(JSON.stringify(catalog.elements)));
+  assert.equal(accepted.status,200,JSON.stringify(accepted.value));
+  const strictInvalid=[{...filter,id:''},{...filter,label:''},{...filter,actions:['']},{...filter,members:['']},{...filter,value:42},{...filter,value:'x'.repeat(201)},{...filter,options:[42]},{...filter,options:['x'.repeat(121)]},{...filter,options:Array(25).fill('a')}];
+  for(const invalid of strictInvalid){const rejected=await send([invalid]);assert.equal(rejected.status,400);assert.equal(rejected.value.error,'INVALID_PAGE_CATALOG');}
+  assert.equal((await send(JSON.parse(JSON.stringify(catalog.elements)))).status,200,'strict invalid declarations do not break the valid current author');
+});
+test('personal actual risk rows use legal matching catalog and DOM targets while original business keys stay intact',async t=>{
+  const {dom,catalog,messages}=await authorCatalog(t,'personal');
+  const context=messages.filter(m=>m.method==='context').at(-1).parameters;
+  const risk=context.parts.personalWorkbench.risks.find(r=>r.id==='["郑州","AGE","60天以上库存"]');
+  assert.ok(risk,'the original business risk key is preserved');
+  const target='personal:risk:'+createHash('sha256').update(risk.id).digest('hex');
+  assert.ok(catalog.elements.some(e=>e.id===target));
+  assert.ok(dom.window.document.querySelector(`[data-page-target="${target}"]`),'the visible row targets exactly the published element');
+  const h=await mount(t),{value:{owner}}=await h.open();
+  const response=await h.call('catalog',{owner,parameters:{catalog:{elements:JSON.parse(JSON.stringify(catalog.elements))},pageSource:'self-report',toolMessages:[]}});
+  assert.equal(response.status,200,JSON.stringify(response.value));
+});
 test('HTML keeps self-reported actions and AG-UI as two real channels on one exact owner', async (t) => {
   const h = await mount(t);
   const {
@@ -297,10 +354,7 @@ test('a missing page is reported and a different resource or Session cannot acqu
     (await h.open({ resourceId: 'unrelated-plugin' })).value.error,
     'PAGE_RESOURCE_NOT_ALLOWED',
   );
-  assert.equal(
-    (await h.open({ sessionId: 'session-22222222-2222-4222-8222-222222222222' })).value.error,
-    'PAGE_AGENT_MISSING',
-  );
+  assert.match((await h.open({ sessionId: 'session-22222222-2222-4222-8222-222222222222' })).value.error,/session .* not found/);
   const owner = (await h.open()).value.owner;
   assert.equal((await h.call('access', { owner })).status, 200);
   await h.call('close', { owner });
