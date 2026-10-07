@@ -21,7 +21,7 @@ export function usePageFilter(current: any, apply: (args: any) => void) {
       const changed=Object.fromEntries(Object.entries(values).filter(([key,value])=>value!==c[key]));
       if(!Object.keys(changed).length)return {unchanged:true};
       if(Object.keys(changed).some(key=>key!=="tab")){
-        for(const key of ["fullChainWorkspace","structureView","detail","selectedStock"])removeContextPart(key);
+        for(const key of ["fullChainWorkspace","structureView","detail","selectedStock","trendView"])removeContextPart(key);
         updateContext("queryState",{state:"loading",requested:changed});
         await publish(pageContext());
       }

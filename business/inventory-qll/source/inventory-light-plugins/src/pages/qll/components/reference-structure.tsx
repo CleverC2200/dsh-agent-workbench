@@ -42,7 +42,7 @@ export function ReferenceStructure({workspace,mode,sku,onSku,status,onStatus,too
   const visit=(node:Node)=>{if(node.source)visible.push(node.source);if(expanded.includes(node.key)){node.children?.forEach(visit);}};
   roots.map(attach).forEach(visit);
   if(selected && !visible.some(row=>row.key===selected.key))visible.push(selected);
- const references=structureReferences(workspace.workspaceId,visible,selected);
+ const references=structureReferences(workspace.workspaceId,visible,selected,298);
  useEffect(()=>{
   pages.retainVisible(roots.map(attach),expanded);
   const unregister=reportElements('chain-structure',references.elements);
