@@ -35,7 +35,7 @@ const result = await build({
 });
 await writeFile('.scratch/page-runtime.mjs', result.outputFiles[0].text);
 const { HtmlPages } = await import(pathToFileURL(resolve('.scratch/page-runtime.mjs')).href);
-async function mount(t, kind = 'html', viewOnly = false) {
+async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   const ctx = new Context(),
     routes = new Map();
   ctx.provide('connection', {
@@ -74,7 +74,7 @@ async function mount(t, kind = 'html', viewOnly = false) {
   const grant = {
     signal: identity.signal,
     access: { mode: 'test' },
-    allowsEffect: (effect) => effect === 'view' || (!viewOnly && effect === 'draft'),
+    allowsEffect: (effect) => enabled && (effect === 'view' || (!viewOnly && effect === 'draft')),
     release: () => {
       releases++;
     },
@@ -390,4 +390,17 @@ test('explicit view filters keep the existing public cancellation, rate limit an
   const unavailable=await h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'});
   assert.equal(unavailable.isError,true);
   assert.equal((await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).status,400);
+});
+
+
+test('disabled capability keeps its static owner but rejects page actions and reference capture',async t=>{
+  const h=await mount(t,'html',true,false);
+  const opened=await h.open();
+  assert.equal(opened.status,200);
+  const owner=opened.value.owner;
+  assert.match(JSON.stringify(await h.execute('gea_page',{action:'context'})),/EFFECT_NOT_ALLOWED/);
+  assert.match(JSON.stringify(await h.execute('gea_page',{action:'refresh'})),/EFFECT_NOT_ALLOWED/);
+  const receipt=await h.reference({owner,surface:'gea-html-inventory-test'});
+  assert.equal(receipt.status,400);
+  assert.match(receipt.value.error,/PAGE_REFERENCE_ACCESS_DENIED/);
 });

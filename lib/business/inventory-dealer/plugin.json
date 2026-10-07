@@ -11,8 +11,7 @@
   "gea": {
     "consumerCode": "dealer-inventory-replenishment",
     "readonly": true,
-    "contract": "gea-html-v2",
-    "mock": true
+    "contract": "gea-html-v2"
   },
   "status": "mock-reception",
   "declarations": {
@@ -22,5 +21,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "mode": "mock"
 }

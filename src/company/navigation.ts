@@ -67,7 +67,7 @@ export function businessMenuTitle(
  * 原型中尚未接入的页面也保留为禁用占位，避免不同账号看到的目录结构跳动。
  */
 export type BusinessMenuSection = "supply" | "plan" | "inventory" | "orders";
-export type BusinessMenuItem = { id: string; title: string };
+export type BusinessMenuItem = { id: string; title: string; onlyWhenRegistered?: boolean };
 export type BusinessMenuGroup = {
   key: BusinessMenuSection;
   title: string;
@@ -111,7 +111,9 @@ export const BUSINESS_MENU_PRESET: readonly BusinessMenuGroup[] = [
       { id: "inventory-qll", title: "全链库存工作台" },
       { id: "inventory-aqkc", title: "基地库存" },
       { id: "inventory-fc", title: "分仓库存" },
+      { id: "inventory-dealer", title: "经销商库存", onlyWhenRegistered: true },
       { id: "inventory-customer", title: "客户库存(开发中)" },
+      { id: "inventory-personal", title: "个人库存", onlyWhenRegistered: true },
     ],
   },
   // 保留开发中页面入口；页面仍遵守 mock 数据限制。
@@ -138,6 +140,7 @@ export function resolveBusinessMenu(
       icon: group.icon,
       flat: group.flat === true,
       entries: group.items
+        .filter(item => !item.onlyWhenRegistered || available.has(item.id))
         .map((item) => ({
           id: item.id,
           title: item.title,
