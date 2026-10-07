@@ -28,7 +28,7 @@ export declare function InlineSkuDetails({ row, t, detail, canEdit, approvalRole
         quantity: string;
         skuCodes?: string[];
     };
-    /** 把这一块“可编辑字段 + 集合”报给工作台，供页面桥声明成本页元素。 */
+    /** Report displayed fields; only quantity fields can belong to the editable collection. */
     onElementsChange?: (fields: Array<{
         id: string;
         label: string;
