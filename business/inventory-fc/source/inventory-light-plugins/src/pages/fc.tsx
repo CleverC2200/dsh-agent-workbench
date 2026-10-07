@@ -358,6 +358,9 @@ export function BranchInventoryAgent() {
     window.setTimeout(() => setToast(""), 2600);
   }, []);
   useEffect(() => {
+    setSessionReady(false);
+    setSessionError("");
+    if (!conversationId) return;
     const controller = new AbortController();
     void (async () => {
       try {
@@ -420,9 +423,9 @@ export function BranchInventoryAgent() {
       }
     })();
     return () => controller.abort();
-    // The launch session is immutable for the lifetime of this mounted Agent page.
+    // Read only after the existing page port supplies the actual Host Session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [conversationId]);
   const pageRequestBody = JSON.stringify({
     warehouseId,
     tab: activeTab,

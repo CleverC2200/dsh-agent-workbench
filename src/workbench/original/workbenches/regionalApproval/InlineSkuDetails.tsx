@@ -32,7 +32,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
  onInputChange?: (changes:Record<string,string>)=>void;
  /** 外部（对话）下发的草稿改写：把指定 SKU 的确认计划量改成同一个值。 */
  draftPatch?: {at: number; quantity: string; skuCodes?: string[]};
- /** 把这一块“可编辑字段 + 集合”报给工作台，供页面桥声明成本页元素。 */
+ /** Report displayed fields; only quantity fields can belong to the editable collection. */
  onElementsChange?: (
   fields: Array<{id:string;label:string;value:string;editable:boolean}>,
   collection?: {id:string;label:string;members:string[]},
@@ -116,16 +116,16 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
   return DECIMAL.test(adjustQty) && !/^[-+]?0(?:\.0{1,3})?$/.test(adjustQty) ? {skuCode:code,adjustQty} : undefined;
  }).filter((item): item is {skuCode:string;adjustQty:string} => Boolean(item)), [confirmedValues,skus,row.status,row.planTypeCode,approvalRole]);
  useEffect(() => { onPendingValuesChange?.(confirmedValues); }, [confirmedValues, onPendingValuesChange]);
- // 元素上报：字段 id / label / 当前值 / 是否可编辑，外加一个“整列一起改”的集合。
+ // Report the same loaded values shown by the table, including read-only evidence.
  useEffect(() => {
   if (!onElementsChange) return;
   if (!skus || skus.length === 0) {
    onElementsChange([]);
    return;
   }
-  const fields = skus.map(sku => {
+  const quantityFields = skus.map(sku => {
    const code = String(sku.skuCode);
-   const quantity = confirmedValues[code] ?? baselineFor(sku);
+   const quantity = canEdit ? confirmedValues[code] ?? baselineFor(sku) : sku.qty;
    return {
     id: `field:${row.planId}:${code}:qty`,
     label: `${sku.materialDescription ?? sku.productCategName ?? code} 确认计划量`,
@@ -133,12 +133,23 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
     editable: Boolean(canEdit),
    };
   });
-  onElementsChange(fields, {
+  const readOnlyFields = skus.flatMap(sku => {
+   const code = String(sku.skuCode);
+   const confirmed = confirmedValues[code] ?? editableQuantityText(baselineFor(sku));
+   const amount = multiplyExactDecimals(confirmed, String(sku.price));
+   return [
+    {id:`field:${row.planId}:${code}:baseQty`,label:`${code} ${tr('columns.baseQty')}`,value:quantityText(sku.baseQty),editable:false},
+    {id:`field:${row.planId}:${code}:baseAmount`,label:`${code} ${tr('columns.baseAmount')}`,value:formatExactDecimal(sku.amtBase),editable:false},
+    {id:`field:${row.planId}:${code}:amount`,label:`${code} ${tr('columns.amount')}`,value:amount === undefined ? '—' : formatExactDecimal(amount),editable:false},
+    {id:`field:${row.planId}:${code}:description`,label:`${code} ${tr('columns.sku')}`,value:sku.materialDescription || sku.skuName || tr('missingDescription'),editable:false},
+   ];
+  });
+  onElementsChange([...quantityFields, ...readOnlyFields], {
    id: `collection:${row.planId}:qty`,
    label: `${row.dealerName ?? row.orgName ?? row.planId} 全部 SKU 的确认计划量`,
-   members: fields.map(field => field.id),
+   members: quantityFields.map(field => field.id),
   });
- }, [canEdit, confirmedValues, onElementsChange, row.dealerName, row.orgName, row.planId, skus]);
+ }, [canEdit, confirmedValues, onElementsChange, row.dealerName, row.orgName, row.planId, skus, t]);
  useEffect(()=>{
   if (!canEdit || !detail || !skus || draftState === 'loading' || (!userEdited.current&&saveRetry===0)) return;
   const serialized=JSON.stringify(confirmedValues);

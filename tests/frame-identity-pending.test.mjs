@@ -44,6 +44,7 @@ async function fixture(
     visibleRequests = false,
     initialSession,
     initialPreset = null,
+    restoredSelection,
   } = {},
 ) {
   const dom = new JSDOM('<main id="root"></main>', {
@@ -232,7 +233,10 @@ async function fixture(
     document: (id) => {
       if (id) ctx.uiWorkspace.openSession(id);
     },
-  });
+  }, restoredSelection ? {
+    getSnapshot: () => ({ version: 2, selections: [{ page: 'native', active: true, ...restoredSelection }], views: [] }),
+    set() {},
+  } : undefined);
   workbench.subscribeHistory(() =>
     calls.push(['history', workbench.getSnapshot().selectedDocument?.id]),
   );
@@ -413,6 +417,19 @@ async function fixture(
     resolve: async (item, value) => act(async () => item.resolve(Response.json(value))),
   };
 }
+test('reopening a restored Document revalidates the same subject Session after its Host scope changes', async (t) => {
+  const sessionId = 'session-00000000-0000-4000-8000-000000000034';
+  const f = await fixture(t, {
+    initialSession: sessionId,
+    initialPreset: 'original',
+    restoredSelection: { sessionId, preset: 'original', ownerScope: 'previous-host-run', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+  });
+  assert.equal(f.selection()?.sessionId, sessionId);
+  assert.equal(f.selection()?.ownerScope, 'principal-a', 'the confirmed current scope must be rebound through the public resource open callback');
+  assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 }, 'restoring a reference cannot replace the original Session');
+});
+
 test('formal page navigation auto-prepares one actual native Session only for an authenticated enabled resource', async (t) => {
   const f = await fixture(t);
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });

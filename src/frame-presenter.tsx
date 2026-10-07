@@ -591,9 +591,16 @@ export function mountFramePresentation(
             ...(identity.subject ? { subject: identity.subject } : {}),
           });
         };
-        const cached = reuse
+        let cached = reuse
           ? workbench.selectionFor(page.id, interpreter ?? null, identity.scope, directory)
           : undefined;
+        // Host scope changes across restarts. Reopen the same subject's retained
+        // Session through the public owner, which validates its preset and cwd.
+        if (
+          !cached && reuse && selection && identity.subject &&
+          selection.subject === identity.subject &&
+          selection.preset === (interpreter ?? null) && selection.cwd === directory
+        ) cached = selection;
         if (cached)
           await host.open(cached.sessionId, undefined, signal, (selected) => {
             if (selected.preset !== cached.preset || selected.cwd !== directory)
@@ -685,7 +692,9 @@ export function mountFramePresentation(
       resourceRows.current = [];
       resourceRowsOwner.current = undefined;
       const owner = identity.scope + '\0' + page.resourceId;
-      const prepare = !selection && preparationOwner.current !== owner;
+      const prepare = (!selection || (
+        selection.ownerScope !== identity.scope && selection.subject === identity.subject
+      )) && preparationOwner.current !== owner;
       if (prepare) preparationOwner.current = owner;
       const controller = new AbortController();
       preparation.current = controller;

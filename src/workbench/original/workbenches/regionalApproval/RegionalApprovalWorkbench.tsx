@@ -829,6 +829,10 @@ const RegionalApprovalWorkbench: React.FC<{
     return rows;
   }, [liveTableRows]);
   const [expandedLiveGroups, setExpandedLiveGroups] = useState<Array<string | number>>([]);
+  const expandedLiveRowKeys = useMemo(
+    () => [...new Set([...expandedLiveGroups, ...(inlinePlanId ? [inlinePlanId] : [])])],
+    [expandedLiveGroups, inlinePlanId],
+  );
   // 对话下发的草稿改写（确认计划量），交给对应行的内联编辑器应用。
   const [draftPatch, setDraftPatch] = useState<{
     at: number;
@@ -1517,11 +1521,11 @@ const RegionalApprovalWorkbench: React.FC<{
           ? selectedLiveRows.map((row) => projectLiveContextEntity(row, dimension))
           : selectedFixtureRows.map((row) => projectFixtureContextEntity(row, primaryVersion)),
         expandedPlanIds: usingLiveQueue
-          ? expandedLiveGroups.filter((id): id is string => typeof id === 'string')
+          ? expandedLiveRowKeys.filter((id): id is string => typeof id === 'string')
           : [],
         expandedFields: usingLiveQueue
           ? liveRows
-              .filter((row) => expandedLiveGroups.includes(row.planId))
+              .filter((row) => expandedLiveRowKeys.includes(row.planId))
               .flatMap((row) => inlineElements[row.planId]?.fields ?? [])
               .slice(0, 120)
           : [],
@@ -1567,7 +1571,8 @@ const RegionalApprovalWorkbench: React.FC<{
     liveRows,
     liveCurrentPage,
     liveOuterRows,
-    expandedLiveGroups,
+    expandedLiveRowKeys,
+    inlineElements,
     onContextChange,
     page,
     pageData,
@@ -3355,7 +3360,7 @@ const RegionalApprovalWorkbench: React.FC<{
                     // V1.8 #10：去掉行首独立展开箭头，展开/收起统一走组织名称；这里只保留展开能力。
                     // 宽度必须给非 0 值：Arco 计算固定列偏移时用 `width || 40`，给 0 会被当成 40，左列会压掉 40px。
                     expandProps={{ width: 1, icon: () => null }}
-                    expandedRowKeys={[...expandedLiveGroups, ...(inlinePlanId ? [inlinePlanId] : [])]}
+                    expandedRowKeys={expandedLiveRowKeys}
                     onExpandedRowsChange={setExpandedLiveGroups}
                     loading={liveCategoriesLoading}
                     rowClassName={(row) => row.kind === 'category' ? styles.categoryComparisonRow : row.members ? styles.organizationGroupRow : ''}
