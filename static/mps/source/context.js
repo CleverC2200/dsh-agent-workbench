@@ -1,6 +1,7 @@
 import {
   ready,
   publish,
+  currentSessionId,
   reportElements,
   action,
 } from "../../../business/shared/channel.js";
@@ -10,44 +11,94 @@ const parts = new Map();
 let restored = false,
   restoration = 0;
 const restorationListeners = new Set();
+let connected = false,
+  scheduled = false,
+  active = true,
+  revision = 0,
+  epoch = 0,
+  publishing = false;
+let latest;
+let lifetime = new AbortController();
+const notice =
+  "模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。";
 mpsView.subscribe(() => {
+  latest = undefined;
+  revision++;
   restored = true;
   restoration++;
   for (const listener of restorationListeners) listener(restoration);
 });
-let connected = false,
-  scheduled = false,
-  active = true,
-  revision = 0;
-const notice =
-  "模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。";
+async function flush() {
+  if (publishing || !active || !connected || !restored) return;
+  publishing = true;
+  try {
+    while (latest && active && connected && restored) {
+      const next = latest;
+      latest = undefined;
+      if (next.epoch !== epoch || next.session !== currentSessionId()) continue;
+      const signal = lifetime.signal;
+      try {
+        // Await the previous delivery before sending the latest authored context.
+        await publish(next.snapshot, { signal });
+        if (
+          active &&
+          !signal.aborted &&
+          next.epoch === epoch &&
+          next.revision === revision
+        )
+          document.getElementById("mps-context-status").textContent = "";
+      } catch (error) {
+        if (
+          active &&
+          !signal.aborted &&
+          next.epoch === epoch &&
+          next.revision === revision
+        )
+          document.getElementById("mps-context-status").textContent =
+            "页面上下文连接失败：" + error.message;
+      }
+    }
+  } finally {
+    publishing = false;
+  }
+}
 function schedule() {
   revision++;
   if (!connected || scheduled || !active) return;
   scheduled = true;
   queueMicrotask(() => {
     scheduled = false;
-    if (!active || !restored || !parts.has("navigation")) return;
-    const current = revision;
-    const snapshot = {
-      page: "主生产计划(MPS) · 模拟原型",
-      mock: true,
-      notice,
-      parts: Object.fromEntries(
-        [...parts].map(([key, part]) => [key, part.value]),
-      ),
+    const session = currentSessionId();
+    if (
+      !active ||
+      !restored ||
+      !session ||
+      !parts.has("navigation") ||
+      [...parts.values()].some((part) => part.restoration !== restoration)
+    )
+      return;
+    latest = {
+      revision,
+      epoch,
+      session,
+      snapshot: {
+        page: "主生产计划(MPS) · 模拟原型",
+        mock: true,
+        notice,
+        parts: Object.fromEntries(
+          [...parts].map(([key, part]) => [key, part.value]),
+        ),
+      },
     };
-    void publish(snapshot)
-      .then(() => {
-        if (current === revision && active)
-          document.getElementById("mps-context-status").textContent = "";
-      })
-      .catch((error) => {
-        if (current === revision && active)
-          document.getElementById("mps-context-status").textContent =
-            "页面上下文连接失败：" + error.message;
-      });
+    void flush();
   });
+}
+function cancelPublication() {
+  epoch++;
+  revision++;
+  lifetime.abort();
+  lifetime = new AbortController();
+  latest = undefined;
 }
 /** Component owners report their current state, without discovering DOM. */
 export function useMpsPart(react, key, value, label) {
@@ -59,7 +110,11 @@ export function useMpsPart(react, key, value, label) {
     return () => restorationListeners.delete(setRestoreRevision);
   }, []);
   react.useEffect(() => {
-    const part = { value: JSON.parse(serialized), stop: () => {} };
+    const part = {
+      value: JSON.parse(serialized),
+      restoration: restoreRevision,
+      stop: () => {},
+    };
     parts.set(key, part);
     const stop =
       key === "navigation"
@@ -133,6 +188,7 @@ reportElements(
   },
 );
 window.addEventListener("gea-session-changed", () => {
+  cancelPublication();
   restored = false;
   for (const part of parts.values()) part.stop();
   parts.clear();
@@ -150,11 +206,13 @@ window.addEventListener("gea-session-changed", () => {
 });
 window.addEventListener("gea-identity-changed", () => {
   active = false;
-  revision++;
+  connected = false;
+  cancelPublication();
   parts.clear();
 });
 window.addEventListener("pagehide", () => {
   active = false;
-  revision++;
+  connected = false;
+  cancelPublication();
   parts.clear();
 });

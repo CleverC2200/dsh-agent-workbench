@@ -117,6 +117,9 @@ Error generating stack: `+i.message+`
   var ready = new Promise((resolve) => {
     readyResolve = resolve;
   });
+  function currentSessionId() {
+    return context?.session;
+  }
   function parentOrigin() {
     try {
       const url = new URL(document.referrer || window.location.href);
@@ -442,40 +445,75 @@ Error generating stack: `+i.message+`
   var restored = false;
   var restoration = 0;
   var restorationListeners = /* @__PURE__ */ new Set();
-  mpsView.subscribe(() => {
-    restored = true;
-    restoration++;
-    for (const listener of restorationListeners) listener(restoration);
-  });
   var connected = false;
   var scheduled = false;
   var active = true;
   var revision = 0;
+  var epoch = 0;
+  var publishing = false;
+  var latest;
+  var lifetime = new AbortController();
   var notice = "\u6A21\u62DF\u539F\u578B\uFF1A\u6240\u6709\u6570\u636E\u548C\u64CD\u4F5C\u5747\u4E3A\u6A21\u62DF\uFF0C\u4FDD\u5B58\u3001\u63D0\u4EA4\u3001\u5BFC\u51FA\u53CA\u7ED3\u8F6C\u4E0D\u4F1A\u5199\u5165\u4E1A\u52A1\u7CFB\u7EDF\u3002\u5F53\u524DSession\u4FDD\u7559\u754C\u9762\u610F\u56FE\u548C\u672A\u53D1\u9001\u6587\u5B57\uFF1B\u6A21\u62DF\u6D3E\u751F\u7ED3\u679C\u4E0D\u5B58\u4E1A\u52A1\u5E93\u3002";
+  mpsView.subscribe(() => {
+    latest = void 0;
+    revision++;
+    restored = true;
+    restoration++;
+    for (const listener of restorationListeners) listener(restoration);
+  });
+  async function flush() {
+    if (publishing || !active || !connected || !restored) return;
+    publishing = true;
+    try {
+      while (latest && active && connected && restored) {
+        const next = latest;
+        latest = void 0;
+        if (next.epoch !== epoch || next.session !== currentSessionId()) continue;
+        const signal = lifetime.signal;
+        try {
+          await publish(next.snapshot, { signal });
+          if (active && !signal.aborted && next.epoch === epoch && next.revision === revision)
+            document.getElementById("mps-context-status").textContent = "";
+        } catch (error) {
+          if (active && !signal.aborted && next.epoch === epoch && next.revision === revision)
+            document.getElementById("mps-context-status").textContent = "\u9875\u9762\u4E0A\u4E0B\u6587\u8FDE\u63A5\u5931\u8D25\uFF1A" + error.message;
+        }
+      }
+    } finally {
+      publishing = false;
+    }
+  }
   function schedule() {
     revision++;
     if (!connected || scheduled || !active) return;
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
-      if (!active || !restored || !parts.has("navigation")) return;
-      const current = revision;
-      const snapshot = {
-        page: "\u4E3B\u751F\u4EA7\u8BA1\u5212(MPS) \xB7 \u6A21\u62DF\u539F\u578B",
-        mock: true,
-        notice,
-        parts: Object.fromEntries(
-          [...parts].map(([key, part]) => [key, part.value])
-        )
+      const session = currentSessionId();
+      if (!active || !restored || !session || !parts.has("navigation") || [...parts.values()].some((part) => part.restoration !== restoration))
+        return;
+      latest = {
+        revision,
+        epoch,
+        session,
+        snapshot: {
+          page: "\u4E3B\u751F\u4EA7\u8BA1\u5212(MPS) \xB7 \u6A21\u62DF\u539F\u578B",
+          mock: true,
+          notice,
+          parts: Object.fromEntries(
+            [...parts].map(([key, part]) => [key, part.value])
+          )
+        }
       };
-      void publish(snapshot).then(() => {
-        if (current === revision && active)
-          document.getElementById("mps-context-status").textContent = "";
-      }).catch((error) => {
-        if (current === revision && active)
-          document.getElementById("mps-context-status").textContent = "\u9875\u9762\u4E0A\u4E0B\u6587\u8FDE\u63A5\u5931\u8D25\uFF1A" + error.message;
-      });
+      void flush();
     });
+  }
+  function cancelPublication() {
+    epoch++;
+    revision++;
+    lifetime.abort();
+    lifetime = new AbortController();
+    latest = void 0;
   }
   function useMpsPart(react, key, value, label) {
     const serialized = JSON.stringify(value);
@@ -486,8 +524,12 @@ Error generating stack: `+i.message+`
       return () => restorationListeners.delete(setRestoreRevision);
     }, []);
     react.useEffect(() => {
-      const part = { value: JSON.parse(serialized), stop: () => {
-      } };
+      const part = {
+        value: JSON.parse(serialized),
+        restoration: restoreRevision,
+        stop: () => {
+        }
+      };
       parts.set(key, part);
       const stop = key === "navigation" ? () => {
       } : reportElements("mps-part:" + key, [
@@ -555,6 +597,7 @@ Error generating stack: `+i.message+`
     }
   );
   window.addEventListener("gea-session-changed", () => {
+    cancelPublication();
     restored = false;
     for (const part of parts.values()) part.stop();
     parts.clear();
@@ -570,12 +613,14 @@ Error generating stack: `+i.message+`
   });
   window.addEventListener("gea-identity-changed", () => {
     active = false;
-    revision++;
+    connected = false;
+    cancelPublication();
     parts.clear();
   });
   window.addEventListener("pagehide", () => {
     active = false;
-    revision++;
+    connected = false;
+    cancelPublication();
     parts.clear();
   });
 
