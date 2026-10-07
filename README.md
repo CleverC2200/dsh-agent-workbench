@@ -24,6 +24,8 @@ Host 公开认证 Fetch：
 
 页面可见和资源存在均不授予 GEA Consumer 权限。受控业务桥及资源进入原生会话是独立动作，由 Manage/GEA 接线；静态呈现不等待它们。宿主持久会话和浏览器中的旧数据不清空、不迁移、不解析为新的运行时兼容层。
 
+业务页面接入资源后，已有历史 Session 继续展示其原 Agent 组合与草稿。点击“新建对话”时，仍有效的页面解释者可以沿用；旧 Session 的 Core 预设不属于当前已安装启用的页面解释者时，新会话选用该页面声明的资源。旧 Core 预设不会被当作 Manage 资源 ID，也不会自动将新 Prompt 应用到旧会话。
+
 ## 官方输入与构建
 
 `cordis.patch.yml` 插入本插件并公开禁用默认 `ui-sidebar`；Workbench 声明原公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务/Factory保持启用。macOS 公司品牌行位于独立窗口控制行下方；两种侧栏状态使用官方公共图标，收起后整列退出布局。本隔离项目的 `tsconfig.official.json` 将声明精确指向同组成组工作树旁的 `official-latest-standard` 标准产物，包括官方 Cordis `4.0.5-alpha.1`。npm锁登记本项目当前官方SDK的文件链接，实际SDK与宿主来自同一个已构建官方输入；类型/离线通过仍不代表实际客户端验收。
