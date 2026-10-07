@@ -145,12 +145,14 @@ import { publishReport } from "./publication.js";
       renderWorkbenchTasks();
     }
     function renderWorkbenchEvents() {
+      workbenchView.querySelectorAll('[data-wb-event-filter]').forEach(button => button.classList.toggle('active', button.dataset.wbEventFilter === eventFilter));
       const events = activeReport()?.events || [];
       const shown = eventFilter === 'focus' ? events.filter(event => event.focus) : events;
       document.getElementById('wbEventCount').textContent = `${shown.length} 项事项`;
       document.getElementById('wbEvents').innerHTML = shown.map(event => `<article class="wb-event"><div class="wb-event-top"><span class="wb-event-kind ${event.kind === '关注' ? 'focus' : ''}">${event.kind}</span><strong>${escapeHtml(event.title)}</strong><time>${activeReport()?.kind === 'week' ? '9.6' : '9.13'}</time></div><p>${escapeHtml(event.summary)}</p><div class="wb-event-foot"><button type="button" data-wb-event-detail="${event.id}">查看依据</button></div></article>`).join('');
     }
     function renderWorkbenchTasks() {
+      workbenchView.querySelectorAll('[data-wb-task-filter]').forEach(button => button.classList.toggle('active', button.dataset.wbTaskFilter === taskFilter));
       const tasks = currentCreatedTasks();
       const pending = tasks.filter(task => task.status !== '已完成').length;
       const done = tasks.length - pending;
@@ -163,9 +165,9 @@ import { publishReport } from "./publication.js";
     }
     workbenchView.addEventListener('click', event => {
       const eventTab = event.target.closest('[data-wb-event-filter]');
-      if (eventTab) { eventFilter = eventTab.dataset.wbEventFilter; workbenchView.querySelectorAll('[data-wb-event-filter]').forEach(button => button.classList.toggle('active', button === eventTab)); renderWorkbenchEvents(); return; }
+      if (eventTab) { eventFilter = eventTab.dataset.wbEventFilter; renderWorkbenchEvents(); return; }
       const taskTab = event.target.closest('[data-wb-task-filter]');
-      if (taskTab) { taskFilter = taskTab.dataset.wbTaskFilter; workbenchView.querySelectorAll('[data-wb-task-filter]').forEach(button => button.classList.toggle('active', button === taskTab)); renderWorkbenchTasks(); return; }
+      if (taskTab) { taskFilter = taskTab.dataset.wbTaskFilter; renderWorkbenchTasks(); return; }
       const eventDetail = event.target.closest('[data-wb-event-detail]');
       if (eventDetail) { openWorkbenchDetail('event', eventDetail.dataset.wbEventDetail); return; }
       const taskDetail = event.target.closest('[data-wb-task-detail]');
@@ -179,7 +181,6 @@ import { publishReport } from "./publication.js";
     });
     function focusCreatedTask(id) {
       taskFilter = 'all';
-      workbenchView.querySelectorAll('[data-wb-task-filter]').forEach(button => button.classList.toggle('active', button.dataset.wbTaskFilter === 'all'));
       renderWorkbenchTasks();
       const row = [...workbenchView.querySelectorAll('[data-wb-task-row]')].find(item => item.dataset.wbTaskRow === id);
       if (row) { row.classList.add('is-linked'); row.scrollIntoView({ block:'center', behavior:'smooth' }); schedule(() => row.classList.remove('is-linked'), 2800); }
