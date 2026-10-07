@@ -5,7 +5,7 @@
   --line: var(--ui-border);
   --soft: var(--ui-soft);
   --canvas: var(--ui-canvas);
-  --surface: #fff;
+  --surface: var(--ui-surface);
   --accent: var(--ui-accent-ink);
   --accent-soft: var(--ui-accent-soft);
   --observation: #2467bd;
@@ -31,7 +31,7 @@
   overflow-x: auto;
   padding: 0 16px;
   border-bottom: 1px solid var(--line);
-  background: #fff;
+  background: var(--ui-surface);
 }
 .workspacePanels {
   display: grid;
@@ -107,7 +107,7 @@
   color: var(--ui-accent-ink);
 }
 .layoutControls button.activeLayout {
-  background: #fff;
+  background: var(--ui-surface);
   color: var(--ui-accent-ink);
   box-shadow: 0 2px 8px #17203314;
 }
@@ -216,7 +216,7 @@
 }
 .controls :global(.dsh-radio-checked) {
   color: var(--accent);
-  background: #fff;
+  background: var(--ui-surface);
   border-radius: 6px;
   font-weight: 600;
   box-shadow: 0 2px 8px #17203314;
@@ -225,7 +225,7 @@
 .controls :global(.dsh-btn-secondary) {
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--ui-surface);
   color: var(--body);
 }
 .boardScroll {
@@ -519,7 +519,7 @@
   padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--ui-surface);
   color: var(--body);
   font-size: 12px;
   text-align: left;
@@ -574,7 +574,7 @@
   border: 0;
   border-radius: 0;
   overflow: visible;
-  background: #fff;
+  background: var(--ui-surface);
 }
 .detailCard > :global(.dsh-card-body) {
   padding: 0;
@@ -590,7 +590,7 @@
   position: sticky;
   top: 0;
   z-index: 12;
-  background: #fff;
+  background: var(--ui-surface);
 }
 .detailCard :global(.dsh-tabs-header) {
   margin: 0;
@@ -643,7 +643,7 @@
   gap: 12px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--ui-border);
-  background: #fff;
+  background: var(--ui-surface);
 }
 .tabIntro > div:first-child {
   display: grid;
@@ -661,7 +661,7 @@
 .detailCard :global(.dsh-table-container) {
   border: 0;
   border-radius: 0;
-  background: #fff;
+  background: var(--ui-surface);
   font-size: 12px;
 }
 .detailCard :global(.dsh-table-th) {
@@ -837,7 +837,7 @@
   padding: 14px 12px 8px;
   border: 1px solid var(--ui-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--ui-surface);
   font-size: 11px;
 }
 .chartHeader {
@@ -861,7 +861,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: #fff;
+  background: var(--ui-surface);
   z-index: 21;
 }
 .assistantHeader {
@@ -1211,21 +1211,21 @@
 }
 
 /* Match the shared AI insight surface. */
-.aiInsight {border-color:#e4e6ea;border-radius:18px;background:#fff7f7;box-shadow:none;}
+.aiInsight {border-color:#e4e6ea;border-radius:18px;background:var(--ui-accent-soft);box-shadow:none;}
 .aiInsight::before {display:none;}
 
 /* Use the APS workbench canvas beneath page content. */
-.shell { --canvas: #fff; }
+.shell { --canvas:var(--ui-canvas); }
 
 /* Keep the detail tabs unboxed; frame only the data table, as in base inventory. */
 .detailCard { background: transparent; box-shadow: none; }
 .detailCard :global(.dsh-tabs-content) { background: transparent; }
-.detailCard :global(.dsh-tabs-header) { background: #fff; }
+.detailCard :global(.dsh-tabs-header) { background:var(--ui-surface); }
 .detailCard [data-viewport-table] {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: var(--ui-surface);
 }
 
 /* Match the APS Sparkles mark in the AI insight heading. */
@@ -1239,7 +1239,7 @@
 .aiInsightHeading > strong { display:inline-flex;align-items:center;height:36px;padding:0 12px 0 2px;background:#df1732;color:#fff;font-size:14px;font-weight:800;letter-spacing:.08em; }
 
 /* Match the APS briefing card's stroke, spacing, and type scale. */
-.aiInsight { padding:22px 24px;border:1px solid #f2dadd;border-radius:10px;background:#fff7f7;box-shadow:none; }
+.aiInsight { padding:22px 24px;border:1px solid #f2dadd;border-radius:10px;background:var(--ui-accent-soft);box-shadow:none; }
 .aiInsightHeading { gap:0; }
 .aiInsightIcon { box-sizing:border-box;width:27px;height:24px;justify-content:flex-end;padding:0 5px 0 8px; }
 .aiInsightIcon::before { width:14px;height:14px;flex:none; }
@@ -1248,13 +1248,13 @@
 
 /* V1.7 central work area: compact toolbar, five metrics, one insight, structured detail. */
 .shell { --canvas:var(--ui-canvas); font-family:var(--ui-font); }
-.header { min-height:54px; height:auto; padding:0 20px; border-bottom:1px solid var(--ui-border); background:#fff; }
+.header { min-height:54px; height:auto; padding:0 20px; border-bottom:1px solid var(--ui-border); background:var(--ui-surface); }
 .header > .controls { width:100%; min-height:54px; display:flex; align-items:center; gap:14px; }
 .headerActions { margin-left:auto; }
 .channelSwitch { display:inline-flex; align-items:center; gap:8px; white-space:nowrap; font-size:12px; color:var(--ui-ink); cursor:pointer; position:relative; }
 .channelSwitch input { position:absolute; width:34px; height:20px; opacity:0; }
 .channelSwitch > span { width:34px; height:20px; padding:2px; box-sizing:border-box; border-radius:12px; background:#cbd0d8; transition:background 160ms; }
-.channelSwitch > span::after { content:''; display:block; width:16px; height:16px; border-radius:50%; background:#fff; transition:transform 160ms; }
+.channelSwitch > span::after { content:''; display:block; width:16px; height:16px; border-radius:50%; background:var(--ui-surface); transition:transform 160ms; }
 .channelSwitch input:checked + span { background:var(--ui-accent); }
 .channelSwitch input:checked + span::after { transform:translateX(14px); }
 .channelSwitch input:focus-visible + span { outline:2px solid var(--ui-accent); outline-offset:3px; }
@@ -1269,7 +1269,7 @@
 .kpiHelpers > div { display:flex; justify-content:space-between; gap:6px; min-width:0; margin:3px 0; }
 .kpiHelpers dt { font-size:10px; color:var(--ui-muted); }
 .kpiHelpers dd { font-size:11px; margin:0; color:var(--ui-secondary); overflow-wrap:anywhere; }
-.aiInsight { margin:0 0 12px; padding:16px 18px; border:1px solid #f2dadd; border-radius:10px; background:#fff7f7; }
+.aiInsight { margin:0 0 12px; padding:16px 18px; border:1px solid #f2dadd; border-radius:10px; background:var(--ui-accent-soft); }
 .aiInsightHeading { gap:0; }
 .aiInsightIcon { height:30px; width:28px; border-radius:6px 0 0 6px; }
 .aiInsightHeading > strong { height:30px; padding-right:12px; border-radius:0 6px 6px 0; font-size:12px; letter-spacing:0; }
@@ -1277,23 +1277,23 @@
 .aiInsight p { margin:8px 0 0; font-size:12px; line-height:1.75; color:var(--ui-secondary); }
 .aiInsight p b { color:var(--ui-ink); }
 .statusFilters { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
-.statusFilters button { display:flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--ui-border); border-radius:999px; background:#fff; color:var(--ui-secondary); font:inherit; font-size:11px; cursor:pointer; }
+.statusFilters button { display:flex; align-items:center; gap:6px; padding:5px 10px; border:1px solid var(--ui-border); border-radius:999px; background:var(--ui-surface); color:var(--ui-secondary); font:inherit; font-size:11px; cursor:pointer; }
 .statusFilters button[aria-pressed=true] { background:var(--ui-accent-soft); border-color:var(--ui-accent); color:var(--ui-accent); }
 .statusFilters i { font-style:normal; background:var(--ui-soft); border-radius:999px; padding:0 5px; font-size:10px; }
-.confidence { margin:0 0 12px; border:1px solid var(--ui-border); border-radius:10px; background:#fff; }
+.confidence { margin:0 0 12px; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); }
 .confidence summary { padding:12px 16px; font-size:12px; color:var(--ui-secondary); }
-.detailCard { border:1px solid var(--ui-border); border-radius:10px; background:#fff; overflow:hidden; }
+.detailCard { border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); overflow:hidden; }
 .detailCard :global(.dsh-tabs-header) { padding:0 16px; }
-.detailCard :global(.dsh-tabs-content) { background:#fff; }
+.detailCard :global(.dsh-tabs-content) { background:var(--ui-surface); }
 .detailCard [data-viewport-table] { border:0; border-radius:0; }
 .referenceFilters { display:flex; align-items:center; flex-wrap:wrap; gap:10px 12px; padding:12px 16px; border-bottom:1px solid var(--ui-border); }
 .referenceFilters label { display:flex; align-items:center; gap:6px; color:var(--ui-secondary); font-size:11px; }
-.referenceFilters select,.referenceFilters input { min-width:100px; max-width:190px; height:32px; padding:0 8px; border:1px solid var(--ui-border); border-radius:6px; background:#fff; color:var(--ui-ink); font:inherit; }
+.referenceFilters select,.referenceFilters input { min-width:100px; max-width:190px; height:32px; padding:0 8px; border:1px solid var(--ui-border); border-radius:6px; background:var(--ui-surface); color:var(--ui-ink); font:inherit; }
 .referenceFilters input { width:145px; }
 .filteredCount { margin-left:auto; color:var(--ui-muted); font-size:10px; }
 .referenceStructure td { font-size:11px; }
 .referenceStructure th { font-size:10px; }
-.referenceStructure th:first-child,.referenceStructure td:first-child { position:sticky; left:0; background:#fff; z-index:2; }
+.referenceStructure th:first-child,.referenceStructure td:first-child { position:sticky; left:0; background:var(--ui-surface); z-index:2; }
 .referenceStructure th:first-child { background:var(--ui-soft); z-index:3; }
 .referenceStructure tr:hover td:first-child { background:var(--ui-hover); }
 .treeName { display:inline; padding:0; border:0; background:none; color:var(--ui-ink); font:inherit; font-weight:600; text-align:left; cursor:pointer; }

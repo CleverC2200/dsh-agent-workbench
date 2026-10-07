@@ -162,12 +162,12 @@
   outline: 2px solid rgba(223, 29, 40, 0.28);
   outline-offset: 1px;
   color: var(--ui-accent-ink);
-  background: #fff;
+  background: var(--ui-surface);
 }
 .layoutControls .activeLayout,
 .layoutControls .activeLayout:hover,
 .layoutControls .activeLayout:active {
-  background: #fff;
+  background: var(--ui-surface);
   color: #df1d28;
   box-shadow: 0 2px 8px #17203314;
 }
@@ -289,7 +289,7 @@
   place-items: center;
   border: 1px solid #9aa6b6;
   border-radius: 6px;
-  background: #fff;
+  background: var(--ui-surface);
   color: #fff;
   font-size: 11px;
   font-weight: 800;
@@ -522,7 +522,7 @@
   border: 0;
   border-bottom: 1px solid #e5e7eb;
   border-radius: 0;
-  background: #fff;
+  background: var(--ui-surface);
   overflow-x: auto;
   box-shadow: 0 2px 8px #17203314;
 }
@@ -642,14 +642,14 @@
 }
 .resultTableError {
   border-top: 1px solid var(--line);
-  background: #fff7f7;
+  background: var(--ui-accent-soft);
   padding: 8px 16px;
   color: var(--red-deep);
   font-size: 12px;
 }
 .expandedRow > td {
   padding: 12px 28px;
-  background: #fff8ee;
+  background: var(--ui-warning-soft);
 }
 .inlineDetailState {
   display: flex;
@@ -679,7 +679,7 @@
 .inlineDetailTable th {
   height: 40px;
   padding: 0 10px;
-  background: #fff4e8;
+  background: var(--ui-warning-soft);
   color: var(--muted);
   text-align: left;
   white-space: nowrap;
@@ -692,7 +692,7 @@
 }
 .skuExpandedRow > td {
   padding: 10px 12px !important;
-  background: #fffaf5;
+  background: var(--ui-warning-soft);
 }
 .skuDetailSection {
   display: grid;
@@ -928,7 +928,7 @@
   margin: 0;
   padding: 9px 12px;
   border-bottom: 1px solid #edf0f4;
-  background: #fff;
+  background: var(--ui-surface);
 }
 .skeletonTableHeading {
   width: 64px;
@@ -1170,12 +1170,12 @@
 .workspaceToolbar > .workspaceActions { position:relative; top:5px; }
 
 /* Match the shared AI insight surface. */
-.summaryBox {border-color:#e4e6ea;border-radius:18px;background:#fff7f7;box-shadow:none;}
+.summaryBox {border-color:#e4e6ea;border-radius:18px;background:var(--ui-accent-soft);box-shadow:none;}
 .summaryBox::before {display:none;}
 
 /* Use the APS workbench canvas beneath page content. */
-.shell { --canvas: #fff; }
-.boardPanel { background: #fff; }
+.shell { --canvas:var(--ui-canvas); }
+.boardPanel { background:var(--ui-surface); }
 
 /* Match the APS Sparkles mark in the AI insight heading. */
 .insightHeading > span { background:#df1732;color:transparent;font-size:0;border-radius:3px; }
@@ -1188,7 +1188,7 @@
 .insightHeading > small { margin-left:10px; }
 
 /* Match the APS briefing card's stroke, spacing, and type scale. */
-.summaryBox { padding:22px 24px;border:1px solid #f2dadd;border-radius:10px;background:#fff7f7;box-shadow:none; }
+.summaryBox { padding:22px 24px;border:1px solid #f2dadd;border-radius:10px;background:var(--ui-accent-soft);box-shadow:none; }
 .insightHeading { gap:0; }
 .insightHeading > span { box-sizing:border-box;width:27px;height:24px;justify-content:end;padding:0 5px 0 8px; }
 .insightHeading > span::before { width:14px;height:14px; }

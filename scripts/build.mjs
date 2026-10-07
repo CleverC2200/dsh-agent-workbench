@@ -10,6 +10,7 @@ await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
 await mkdir('lib/theme', { recursive: true });
 await copyFile('theme/tokens.css', 'lib/theme/tokens.css');
+await copyFile('theme/html-defaults.css', 'lib/theme/html-defaults.css');
 await cp('static', 'lib/static', {
   recursive: true,
   filter: (source) => !source.endsWith('/source'),

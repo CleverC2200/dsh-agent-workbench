@@ -1,17 +1,5 @@
 /* Current ThemeSnapshot tokens feed the retained page's semantic paint names. */
 html body {
-  /* Builtin Core themes have no token overrides. Body defaults follow the
-   * current shared palette; Host-projected inline overrides remain primary. */
-  --dsw-font-family: var(--workbench-font-family);
-  --dsw-alias-label-primary: var(--workbench-text);
-  --dsw-alias-label-secondary: var(--workbench-body);
-  --dsw-alias-label-tertiary: var(--workbench-muted);
-  --dsw-alias-bg-base: var(--workbench-page);
-  --dsw-alias-bg-layer-1: var(--workbench-surface);
-  --dsw-alias-bg-layer-2: var(--workbench-muted-surface);
-  --dsw-alias-border-l3: var(--workbench-border);
-  --dsw-alias-border-l4: var(--workbench-control-border);
-  --dsw-alias-state-business-primary: var(--workbench-brand);
   --ui-font: var(--dsw-font-family);
   --ui-ink: var(--dsw-alias-label-primary);
   --ui-secondary: var(--dsw-alias-label-secondary);

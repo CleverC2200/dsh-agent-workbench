@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 
 test('Host initializes package resources in a Chinese path and serves the registered HTML', async t => {
   const root = await mkdtemp(join(tmpdir(), '工作台初始化-'));
@@ -16,7 +17,8 @@ test('Host initializes package resources in a Chinese path and serves the regist
     await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'plan-'+id,name:id,html:'index.html'}));
     await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
   }
-  await writeFile(join(root, 'theme/tokens.css'), 'body { --workbench-text: #20232a; }');
+  const themeInputs=Object.fromEntries(await Promise.all(['tokens.css','html-defaults.css'].map(async name=>[name,await readFile('theme/'+name,'utf8')])));
+  for(const [name,contents] of Object.entries(themeInputs))await writeFile(join(root,'theme',name),contents);
   await writeFile(join(root, 'samples/plugin.json'), JSON.stringify({schemaVersion: 1, id: 'workbench-html-table', name: '表格样板', html: 'index.html'}));
   await writeFile(join(root, 'samples/index.html'), '<html><head></head><body>中文资源已加载</body></html>');
   for (const id of ['fc','aqkc','qll','dealer','customer','orderworkbench','orderfulfillment']) {
@@ -43,7 +45,14 @@ test('Host initializes package resources in a Chinese path and serves the regist
   assert.equal(context.workbenchPages.packages().length,11);
   const response = await routes.get('/api/agent-workbench/html').fetch(new Request('https://localhost' + pages[0].url));
   assert.equal(response.status, 200);
-  assert.match(await response.text(), /中文资源已加载/);
+  const servedHtml=await response.text();
+  assert.match(servedHtml, /中文资源已加载/);
+  assert.match(servedHtml,/--dsw-alias-label-primary: var\(--workbench-text\)/,'Host loads the packaged HTML-only defaults into actual HTML responses');
+  const nativeTheme=await(await routes.get('/api/agent-workbench/theme.css').fetch(new Request('https://localhost/api/agent-workbench/theme.css'))).text();
+  assert.doesNotMatch(nativeTheme,/--dsw-alias-label-primary/,'the Native theme endpoint retains its original resource');
+  assert.equal(nativeTheme,themeInputs['tokens.css']);
+  assert.ok(servedHtml.includes(themeInputs['html-defaults.css']));
+  if(process.env.THEME_PRESENT_INPUT_EVIDENCE)await writeFile(process.env.THEME_PRESENT_INPUT_EVIDENCE,JSON.stringify({inputs:Object.fromEntries(Object.entries(themeInputs).map(([name,contents])=>['theme/'+name,createHash('sha256').update(contents).digest('hex')])),runtimePaths:['lib/theme/tokens.css','lib/theme/html-defaults.css'],htmlIncludesDefaults:true,nativeThemeUnchanged:true},null,2)+'\n');
   // The same official configuration withdraws one original source without changing the other roots.
   const retainedRoots = context.workbenchPages.packages().map(item=>item.directory)
     .filter(directory=>!directory.endsWith('/samples') && !directory.endsWith('/static/regional'));

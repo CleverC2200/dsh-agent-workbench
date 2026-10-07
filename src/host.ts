@@ -3,10 +3,11 @@
 import { isAbsolute } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-client-connection";
+import type {} from "@deepseek-ai/dsh-api-session-controller";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { HtmlPages, type WorkbenchPages } from "./html-pages.ts";
-export const inject = ["connection", "agents", "tools"];
+export const inject = ["connection", "agents", "tools", "sessionController"];
 /** The workspace directory used for new business Sessions. */
 /** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
 export interface Config {
@@ -20,7 +21,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // Fail before publishing configuration if the explicit workspace path is invalid.
   if (!config || typeof config.cwd !== "string" || !isAbsolute(config.cwd))
     throw new Error("agent-workbench: cwd must be absolute");
-  const pages = new HtmlPages(ctx, await readFile(new URL("./theme/tokens.css", import.meta.url), "utf8"),()=>readFile(new URL("./page-picker.js",import.meta.url),"utf8"));
+  const htmlStyles = (await Promise.all(["tokens.css", "html-defaults.css"].map(name => readFile(new URL(`./theme/${name}`, import.meta.url), "utf8")))).join("\n");
+  const pages = new HtmlPages(ctx, htmlStyles,()=>readFile(new URL("./page-picker.js",import.meta.url),"utf8"));
   if (config.htmlRoots?.some(root => typeof root !== "string" || !isAbsolute(root))) throw Error("INVALID_WORKBENCH_HTML_ROOTS");
   await pages.registerHtml([
     fileURLToPath(new URL("./samples/", import.meta.url)),
