@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';const viewScope=id=>isBusinessViewPage(id)?'mock-session':undefined;window.mockContexts={};window.mockCatalogs={};window.mockErrors=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();channel.port1.onmessage=({data})=>{if(data.type==='request'){if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'session-11111111-1111-4111-8111-111111111111',plugin:id}},'*',[channel.port2]);});`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
+const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';const viewScope=id=>isBusinessViewPage(id)?window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;channel.port1.onmessage=({data})=>{if(data.type==='applied')window.mockReplies[data.toolCallId]=data;if(data.type==='request'){if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 async function fixture(t, includedAssets) {
     const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -141,4 +141,95 @@ test('received fulfillment mock restores its filters and visible page without a 
   await expect(page.frameLocator('iframe').locator('#customerSearch')).toHaveValue('10010126');
   await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-orderfulfillment']?.rows.length)).toBe(1);
   assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
+});
+
+
+test('regional author reports the current module, period, dimension and original visible data through the public iframe', async t => {
+  const page=await fixture(t);
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  const frame=page.frameLocator('iframe');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.source)).toBe('regional-plan-prototype');
+  await frame.locator('.modtab[data-mod="follow"]').click();
+  await frame.locator('#repDim button[data-dim="province"]').click();
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters)).toMatchObject({module:'follow',dimension:'province',date:'2026-09-18'});
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.period)).toMatchObject({order:'M',phase:'open',label:'月计划'});
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.customers.length??0)).toBeGreaterThan(0);
+  await expect.poll(()=>page.evaluate(()=>window.mockCatalogs['gea-regional-plan']?.map(row=>row.id)??[])).toContain('filter:dimension');
+  assert.equal(await page.evaluate(()=>window.mockCatalogs['gea-regional-plan'].some(row=>row.id==='filter:date')),false);
+  await frame.locator('#simBtn').click();
+  await expect.poll(()=>page.evaluate(()=>window.mockCatalogs['gea-regional-plan']?.map(row=>row.id)??[])).toContain('filter:date');
+  await frame.locator('#simDate').fill('2026-10-12');
+  await frame.locator('#simDate').dispatchEvent('change');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.period)).toMatchObject({order:'Z',phase:'open',label:'纠偏计划'});
+  await page.evaluate(()=>window.hidePage());
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  await expect(page.frameLocator('iframe').locator('.modtab[data-mod="follow"]')).toHaveClass(/on/);
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters)).toMatchObject({module:'follow',dimension:'province',date:'2026-10-12'});
+  assert.deepEqual(await page.evaluate(()=>window.mockErrors),[]);
+});
+
+test('regional UI restores only within its Core Session and a different Session starts with the original date', async t => {
+  const page=await fixture(t);
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  await page.frameLocator('iframe').locator('#simBtn').click();
+  await page.frameLocator('iframe').locator('#simDate').fill('2026-10-12');
+  await page.frameLocator('iframe').locator('#simDate').dispatchEvent('change');
+  await expect.poll(()=>page.evaluate(()=>window.readState('gea-regional-plan')?.date)).toBe('2026-10-12');
+  await page.evaluate(()=>{window.hidePage();window.mockSession='session-22222222-2222-4222-8222-222222222222';});
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  await expect(page.frameLocator('iframe').locator('#simDate')).toHaveValue('2026-09-18');
+  await page.evaluate(()=>{window.hidePage();window.mockSession='session-11111111-1111-4111-8111-111111111111';});
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  await expect(page.frameLocator('iframe').locator('#simDate')).toHaveValue('2026-10-12');
+});
+
+
+test('regional visible filters use the current public catalog and cancellation leaves the original author value unchanged', async t => {
+  const page=await fixture(t);
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  await expect.poll(()=>page.evaluate(()=>window.mockCatalogs['gea-regional-plan']?.length??0)).toBeGreaterThan(0);
+  const apply=(id,target,value,cancel=false)=>page.evaluate(({id,target,value,cancel})=>{
+    const port=window.mockChannels['gea-regional-plan'];
+    port.postMessage({type:'apply',session:window.mockSession,toolCallId:id,args:{kind:'setValue',target,value}});
+    if(cancel)port.postMessage({type:'cancel',session:window.mockSession,toolCallId:id});
+  },{id,target,value,cancel});
+  await apply('hidden-dimension','filter:dimension','province');
+  await expect.poll(()=>page.evaluate(()=>window.mockReplies['hidden-dimension']?.applied)).toBe(false);
+  await apply('cancel-module','filter:module','follow',true);
+  await expect.poll(()=>page.evaluate(()=>window.mockReplies['cancel-module']?.applied)).toBe(false);
+  await expect(page.frameLocator('iframe').locator('.modtab[data-mod="overview"]')).toHaveClass(/on/);
+  await apply('change-module','filter:module','follow');
+  await expect.poll(()=>page.evaluate(()=>window.mockReplies['change-module']?.applied)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters.module)).toBe('follow');
+  await expect.poll(()=>page.evaluate(()=>window.mockCatalogs['gea-regional-plan']?.map(row=>row.id)??[])).toContain('filter:dimension');
+  await apply('change-dimension','filter:dimension','province');
+  await expect.poll(()=>page.evaluate(()=>window.mockReplies['change-dimension']?.applied)).toBe(true);
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters.dimension)).toBe('province');
+  await page.frameLocator('iframe').locator('#simBtn').click();
+  await expect.poll(()=>page.evaluate(()=>window.mockCatalogs['gea-regional-plan']?.map(row=>row.id)??[])).toContain('filter:date');
+  await apply('invalid-date','filter:date','2026-02-30');
+  await expect.poll(()=>page.evaluate(()=>window.mockReplies['invalid-date']?.applied)).toBe(false);
+  await expect(page.frameLocator('iframe').locator('#simDate')).toHaveValue('2026-09-18');
+  assert.deepEqual(await page.evaluate(()=>window.mockErrors),[]);
+});
+
+
+test('regional mounted author restores and republishes after its existing channels move to another Core Session', async t => {
+  const page=await fixture(t);
+  await page.evaluate(()=>window.openPage('gea-regional-plan','regional'));
+  const frame=page.frameLocator('iframe');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.source)).toBe('regional-plan-prototype');
+  await frame.locator('#simBtn').click();
+  await frame.locator('#simDate').fill('2026-10-12');
+  await frame.locator('#simDate').dispatchEvent('change');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters.date)).toBe('2026-10-12');
+  await page.evaluate(()=>window.rebindSession('session-22222222-2222-4222-8222-222222222222'));
+  await expect(frame.locator('#simDate')).toHaveValue('2026-09-18');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters.date)).toBe('2026-09-18');
+  await frame.locator('#simDate').fill('2026-11-12');
+  await frame.locator('#simDate').dispatchEvent('change');
+  await expect.poll(()=>page.evaluate(()=>window.readState('gea-regional-plan')?.date)).toBe('2026-11-12');
+  await page.evaluate(()=>window.rebindSession('session-11111111-1111-4111-8111-111111111111'));
+  await expect(frame.locator('#simDate')).toHaveValue('2026-10-12');
+  await expect.poll(()=>page.evaluate(()=>window.mockContexts['gea-regional-plan']?.filters.date)).toBe('2026-10-12');
 });

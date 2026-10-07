@@ -11,6 +11,7 @@ export const inject = ["connection", "agents", "tools"];
 /** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
 export interface Config {
   cwd: string;
+  /** All installed HTML package roots except the built-in table sample. Omit to use bundled roots. */
   htmlRoots?: readonly string[];
 }
 /** Publish configuration through the normal authenticated DSH connection. */
@@ -23,8 +24,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (config.htmlRoots?.some(root => typeof root !== "string" || !isAbsolute(root))) throw Error("INVALID_WORKBENCH_HTML_ROOTS");
   await pages.registerHtml([
     fileURLToPath(new URL("./samples/", import.meta.url)),
-    ...["regional", "category", "mps"].map(id => fileURLToPath(new URL(`./static/${id}/`, import.meta.url))),
-    ...(config.htmlRoots ?? ["fc", "aqkc", "customer", "orderworkbench", "orderfulfillment"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url)))),
+    ...(config.htmlRoots ?? [
+      ...["regional", "category", "mps"].map(id => fileURLToPath(new URL(`./static/${id}/`, import.meta.url))),
+      ...["fc", "aqkc", "customer", "orderworkbench", "orderfulfillment"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url))),
+    ]),
   ]);
   ctx.provide("workbenchPages", pages);
   const nativeHtml='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GEA</title><link rel="stylesheet" href="/api/agent-workbench/native.css"><link rel="stylesheet" href="/api/agent-workbench/theme.css"><style>html,body,#gea-workbench{height:100%;margin:0}</style></head><body><div id="gea-workbench"></div><script type="module" src="/api/agent-workbench/native.js"></script></body></html>';

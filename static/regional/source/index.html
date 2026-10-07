@@ -2006,6 +2006,8 @@
           <div class="logo">区</div>
           <div>
             <h1>区域计划工作台 <span class="demo-tag">V9.2 事件线版 · 模拟数据</span></h1>
+            <div role="note">跟催、提醒、导出和保存均为本页模拟，无真实业务写入。</div>
+            <div id="regionalSyncStatus" role="status" aria-live="polite"></div>
             <div class="org">
               <span>华中大区</span><span class="sep">/</span><span>河南省区</span
               ><span class="sep">/</span><span>郑州区域</span> <span class="sep">|</span
@@ -2218,6 +2220,7 @@
     </div>
 
     <script type="module">
+      import { ready, publish, reportElements } from '../../../business/shared/channel.js';
       import { createPageViewState } from '../../../business/shared/view-state.js';
       const regionalView = createPageViewState('gea-regional-plan');
       (function () {
@@ -2719,7 +2722,7 @@
         /* ================= 4. 当前状态 ================= */
 
         var T0 = new Date(2026, 8, 18);
-        var state = { ctx: resolveContext(T0), selDay: null, selEv: null, repDim: 'customer' };
+        var state = { ctx: resolveContext(T0), selDay: null, selEv: null, repDim: 'customer', module: 'overview' };
         var HIST = [];
         var HIST_SEED = [
           {
@@ -4656,13 +4659,89 @@
         /* ================= 16. 页签 ================= */
 
         var MODS = ['overview', 'follow', 'category', 'review', 'analysis'];
+        var connected = false, attached = true, publication = 0, publishing = false;
+        var snapshot, unregisterRegional = function () {};
+        async function publishRegional() {
+          publishing = true;
+          try {
+            var current;
+            do {
+              current = publication;
+              var value = snapshot;
+              try {
+                await publish(value);
+                if (!attached) return;
+                if (current !== publication) continue;
+                unregisterRegional = reportElements('regional-plan', [
+                  { id: 'field:simulation', role: 'field', label: '数据来源', value: value.notice },
+                  { id: 'field:period', role: 'field', label: '期间', value: value.filters.date + ' · ' + value.period.label + ' · ' + value.period.phase },
+                  { id: 'filter:module', role: 'field', label: '工作台模块', value: value.filters.module, options: MODS, editable: true, effect: 'view' },
+                  ...(value.controls.dimension ? [{ id: 'filter:dimension', role: 'field', label: '提报维度', value: value.filters.dimension, options: ['customer', 'region', 'province', 'bigr'], editable: true, effect: 'view' }] : []),
+                  ...(value.controls.date ? [{ id: 'filter:date', role: 'field', label: '模拟日期', value: value.filters.date, editable: true, effect: 'view' }] : []),
+                ], async function (args, signal) {
+                  if (args.kind !== 'setValue') throw Error('ACTION_NOT_ALLOWED');
+                  var key = args.target.slice(7), input = args.value;
+                  if (key === 'module' && !MODS.includes(input)) throw Error('INVALID_REGIONAL_MODULE');
+                  if (key === 'dimension' && !['customer', 'region', 'province', 'bigr'].includes(input)) throw Error('INVALID_REGIONAL_DIMENSION');
+                  if (key === 'date' && (typeof input !== 'string' || !/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(input) || !Number.isFinite(Date.parse(input + 'T12:00:00Z')) || new Date(input + 'T12:00:00Z').toISOString().slice(0, 10) !== input)) throw Error('INVALID_SIMULATION_DATE');
+                  await new Promise(function (resolve) { requestAnimationFrame(resolve); });
+                  signal.throwIfAborted();
+                  if ((key === 'dimension' && state.module !== 'follow') || (key === 'date' && !$('simBox').classList.contains('open'))) throw Error('ELEMENT_GONE');
+                  if (key === 'module') switchMod(input);
+                  else if (key === 'dimension') {
+                    state.repDim = input;
+                    [].forEach.call($('repDim').querySelectorAll('button'), function (b) {
+                      b.classList.toggle('on', b.getAttribute('data-dim') === input);
+                    });
+                  } else if (key === 'date') {
+                    $('simDate').value = input;
+                    state.ctx = resolveContext(new Date(input + 'T12:00:00'));
+                    state.selDay = null; state.selEv = null;
+                  } else throw Error('ELEMENT_GONE');
+                  renderAll();
+                  saveView();
+                });
+                $('regionalSyncStatus').textContent = '';
+              } catch (error) {
+                if (attached && current === publication)
+                  $('regionalSyncStatus').textContent = '原型上下文同步失败：' + error.message.slice(0, 300) + '。请重新进入，或调整筛选后重试。';
+              }
+            } while (current !== publication);
+          } finally { publishing = false; }
+        }
+        function reportRegional() {
+          snapshot = {
+            source: 'regional-plan-prototype', simulation: true,
+            notice: '模拟数据；跟催和保存均为本页演示，无真实业务写入',
+            filters: { module: state.module, dimension: state.repDim, date: $('simDate').value },
+            controls: { dimension: state.module === 'follow', date: $('simBox').classList.contains('open') },
+            period: { order: state.ctx.order, label: WINDOW_CFG[state.ctx.order].label, phase: state.ctx.phase },
+            selectedDay: state.selDay, selectedEvent: state.selEv,
+            rhythm: clone(RHYTHM_BACKUP || RHYTHM),
+            customers: customers, categoryRows: catRows, history: HIST,
+          };
+          if (!attached || !connected) return;
+          unregisterRegional();
+          publication++;
+          if (!publishing) void publishRegional();
+        }
+        ready.then(function () { connected = true; reportRegional(); });
+        window.addEventListener('gea-identity-changed', function () {
+          attached = false; publication++; unregisterRegional();
+          $('regionalSyncStatus').textContent = '页面连接已变化，请重新进入。';
+        });
+        window.addEventListener('pagehide', function () {
+          attached = false; publication++; unregisterRegional();
+        }, { once: true });
         function switchMod(mod) {
+          state.module = mod;
           document.querySelectorAll('.modtab').forEach(function (b) {
             b.classList.toggle('on', b.dataset.mod === mod);
           });
           MODS.forEach(function (m) {
             $('mod-' + m).classList.toggle('hidden', m !== mod);
           });
+          reportRegional();
         }
 
         /* ================= 17. 渲染总控 ================= */
@@ -4698,11 +4777,13 @@
           renderAlert();
           renderEntrance();
           renderUnsub();
+          reportRegional();
         }
 
         function saveView() {
           regionalView.update({
             date: $('simDate').value,
+            module: state.module,
             selDay: state.selDay,
             selEv: state.selEv,
             repDim: state.repDim,
@@ -4710,16 +4791,17 @@
             rhythmEditing,
             rhythmDraft: rhythmEditing ? clone(RHYTHM) : null,
           });
+          reportRegional();
         }
         regionalView.subscribe(function (value) {
-          if (!value.date || !Array.isArray(value.rhythm)) return;
-          var d = new Date(value.date + 'T12:00:00');
+          var date = value.date || '2026-09-18';
+          var d = new Date(date + 'T12:00:00');
           if (!Number.isFinite(d.getTime())) return;
           if (rhythmEditing) closeEditor();
           RHYTHM_BACKUP = null;
-          RHYTHM = clone(value.rhythm);
+          RHYTHM = clone(value.rhythm || RHYTHM_DEFAULT);
           state.ctx = resolveContext(d);
-          state.selDay = value.selDay;
+          state.selDay = value.selDay ?? null;
           state.selEv = RHYTHM.some(function (row) {
             return row.id === value.selEv;
           })
@@ -4728,7 +4810,11 @@
           state.repDim = ['customer', 'region', 'province', 'bigr'].includes(value.repDim)
             ? value.repDim
             : 'customer';
-          $('simDate').value = value.date;
+          $('simDate').value = date;
+          [].forEach.call($('repDim').querySelectorAll('button'), function (b) {
+            b.classList.toggle('on', b.getAttribute('data-dim') === state.repDim);
+          });
+          switchMod(MODS.includes(value.module) ? value.module : 'overview');
           renderAll();
           if (value.rhythmEditing && Array.isArray(value.rhythmDraft)) {
             RHYTHM_BACKUP = clone(RHYTHM);
@@ -4864,11 +4950,12 @@
         document.querySelectorAll('.modtab').forEach(function (b) {
           b.addEventListener('click', function () {
             switchMod(b.dataset.mod);
+            saveView();
           });
         });
         $('modEntrance').addEventListener('click', function (e) {
           var c = e.target.closest('[data-go]');
-          if (c) switchMod(c.getAttribute('data-go'));
+          if (c) { switchMod(c.getAttribute('data-go')); saveView(); }
         });
 
         $('repDim').addEventListener('click', function (e) {
@@ -4893,16 +4980,16 @@
 
         document.addEventListener('click', function (e) {
           var b = e.target.closest('[data-ev]');
-          if (b) {
+          if (b && !b.closest('#tlTrack')) {
             var who = b.getAttribute('data-who') || '';
             var kind = b.getAttribute('data-ev');
             b.disabled = true;
             b.textContent = kind === 'chase' ? '已催办' : kind === 'remind' ? '已提醒' : '已打开';
             toast(
               kind === 'chase'
-                ? '已向 ' + who + ' 发送提报催办'
+                ? '模拟催办：' + who + '（未发送真实消息）'
                 : kind === 'remind'
-                  ? '已提醒『' + (b.getAttribute('data-node') || '节点负责人') + '』处理 ' + who
+                  ? '模拟提醒『' + (b.getAttribute('data-node') || '节点负责人') + '』处理 ' + who + '（未发送真实消息）'
                   : '打开明细：' + who,
             );
             return;
@@ -4912,7 +4999,7 @@
           var act = a.getAttribute('data-act');
           if (act === 'chase') {
             a.disabled = true;
-            toast('已向 ' + unsubCount() + ' 家未提报客户发送催办');
+            toast('模拟催办：' + unsubCount() + ' 家未提报客户（未发送真实消息）');
           } else if (act === 'export') {
             toast('导出本期间提报与审批跟进清单（原型演示）');
           } else if (act === 'advise') {
@@ -4928,6 +5015,7 @@
         $('simBtn').addEventListener('click', function () {
           $('simBox').classList.toggle('open');
           if ($('simBox').classList.contains('open')) $('simDate').focus();
+          reportRegional();
         });
         $('simDate').addEventListener('change', function () {
           var v = $('simDate').value;

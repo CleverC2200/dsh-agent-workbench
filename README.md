@@ -13,7 +13,7 @@ await ctx.agentWorkbench.open(panelId)
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记；同组 profile 使用本候选快照中的 FC/AQKC 根，不指向旧用户目录。三个静态计划原型独立放在 `lib/static`，启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
+原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记。该配置覆盖样板以外的全部包根，包括 `lib/static` 下三个计划原型与 `lib/business` 下库存、订单原型。省略时默认登记区域、品类、MPS、FC、AQKC、客户库存、订单工作台和订单履约八个包，表格样板固定登记。显式配置只装载所列根；撤回一个来源时从这份清单排除该根，其它页面与用户 Session 保留。已存在的 profile 在普通安装前一次更新完整八根，不使用运行时旧配置回退。启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
 
 Host 公开认证 Fetch：
 
@@ -53,7 +53,7 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 销售计划的原组织名称入口与表格展开共用同一展开状态；已加载SKU的数量、金额和描述按实际显示值上报到只读页面快照。新增金额/描述字段不可编辑，也不加入数量批量改写集合。上报与恢复不会执行保存或审批。
 
-曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现；六个登记 HTML 页面通过 `dsh-workbench-view-v1` 向同一个 WorkbenchController 保存版本1的明确 UI 字段。静态页面按 page ID 分区，无认证或 Session 前置；FC/AQKC按唯一 GEA scope 与实际 Core Session 分区。Frame 在离页、重载、换 scope 和注销时释放通道；旧代际与旧窗口不能回写。页面重新取得可见对象后再核展开 ID，不恢复服务结果、身份、grant 或 busy，也不重放业务保存。
+曾访问的 Document 正文在同一个主 Conversation 呈现内保留稳定页面树；切页时取消准备与页面桥，只有当前页面渲染 Conversation。三模式与宽度记忆沿正式规则，草稿由 Core 保存。外部 main panel 会卸载这一主呈现；登记 HTML 页面通过 `dsh-workbench-view-v1` 向同一个 WorkbenchController 保存版本1的明确 UI 字段。表格样板按 page ID 分区，无认证或 Session 前置；登记业务页面按唯一 GEA scope 与实际 Core Session 分区。区域原型保留日期、模块、提报维度与节奏草稿，恢复后重新派生上下文。Frame 在离页、重载、换 scope 和注销时释放通道；旧代际与旧窗口不能回写。页面重新取得可见对象后再核展开 ID，不恢复服务结果、身份、grant 或 busy，也不重放业务保存。
 
 既有 toolbar 使用 sidebarRightTabs.guide/get/subscribe 展示真实 Native tab 入口，经 sidebarRight.openTab 在 Core 唯一原生工具 seat 打开。自己开工具暂用原 center 模式，自己关闭恢复原模式；明确选择三模式优先并关闭工具。已有 Document ResizeObserver 仅在尺寸变化时刷新公开 isExpanded()，不以 DOM 猜状态，也不轮询。未造成尺寸变化的外部工具开合缺少公开展开订阅，仍待上游 interface 和 Native 证据；该入口不代替上游 Header utilities 或 bottom toggle。
 
@@ -88,3 +88,5 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 ## 已接收的模拟页面
 
 客户库存、订单工作台与订单履约保留原页面标识，由Workbench打包原展示与模拟交互。Manage持有其原Prompt、Skill和零业务能力声明，GEA登记view范围的公开页面grant并拒绝SQL读取。资源选用关联官方Core Session，不发送模型请求。筛选、周期与分页等页面意图按当前身份和Session保存；订单工作台的本地演示任务仍按原说明在冷刷新后清空。区域、品类与MPS继续使用现有静态页面，没有新增业务Agent声明。
+
+可见目录中的 UI 视图控件明确声明 `effect: "view"`，例如区域页的模块、提报维度和模拟日期。`gea_plugin_page_apply` 仍核对当前 owner、可编辑性和 grant 的实际影响范围，并沿同一取消、限流和回执流程执行。未声明影响等级的字段继续按 `draft` 判断；只读 mock 不因此获得草稿、提交、审批、SQL或工作区写权限。

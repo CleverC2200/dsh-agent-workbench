@@ -237,11 +237,11 @@ export function createPageToolRegistry(
     // 只读元素不能被改、后台元素不存在：宿主按页面声明先挡一道。
     const violation = resolvePageAction(catalog, args);
     if (violation) return refuse(violation, "页面没有开放这个元素/动作，命令没有下发。");
-    if (kind === "setValue" && !options.dataAllowed)
+    const effect = pageActionEffect(catalog, args);
+    if (kind === "setValue" && effect !== "view" && !options.dataAllowed)
       return refuse("DATA_ACTION_NOT_ALLOWED", "这个页面只允许改视图，不允许写字段。");
     // 影响等级由契约卡住：只声明"改草稿"的页面，提交/审批类元素不下载到页面。
-    const effect = pageActionEffect(catalog, args);
-    const allowsEffect = consumer.allowsEffect ?? (() => effect === "draft");
+    const allowsEffect = consumer.allowsEffect ?? (() => effect === "view" || effect === "draft");
     if (!allowsEffect(catalog.surface, effect, sessionId))
       return refuse(
         "EFFECT_NOT_ALLOWED",

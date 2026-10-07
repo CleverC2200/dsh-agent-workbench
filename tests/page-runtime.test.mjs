@@ -35,7 +35,7 @@ const result = await build({
 });
 await writeFile('.scratch/page-runtime.mjs', result.outputFiles[0].text);
 const { HtmlPages } = await import(pathToFileURL(resolve('.scratch/page-runtime.mjs')).href);
-async function mount(t, kind = 'html') {
+async function mount(t, kind = 'html', viewOnly = false) {
   const ctx = new Context(),
     routes = new Map();
   ctx.provide('connection', {
@@ -74,7 +74,7 @@ async function mount(t, kind = 'html') {
   const grant = {
     signal: identity.signal,
     access: { mode: 'test' },
-    allowsEffect: (effect) => effect === 'draft' || effect === 'view',
+    allowsEffect: (effect) => effect === 'view' || (!viewOnly && effect === 'draft'),
     release: () => {
       releases++;
     },
@@ -337,4 +337,57 @@ test('correlated HTML replies resolve only the matching action and cancellation 
   abort.abort();
   assert.equal((await cancelled).isError, true);
   assert.deepEqual((await h.call('events', { owner })).value, []);
+});
+
+
+test('the original regional view-only grant allows its visible module filter through the official page tool', async t => {
+  const h=await mount(t,'html',true);
+  const {value:{owner}}=await h.open();
+  const catalog={elements:[{id:'filter:module',role:'field',label:'工作台模块',value:'overview',options:['overview','follow','category','review','analysis'],editable:true,effect:'view'}]};
+  await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}});
+  const action=h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow',reason:'查看模拟提报跟催'});
+  await new Promise(resolve=>setTimeout(resolve,10));
+  const events=(await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).value.events;
+  if(events.length){
+    const toolCallId=events[0].toolCallId;
+    await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[{id:'regional-view-receipt',role:'tool',toolCallId,content:JSON.stringify({toolCallId,applied:true})}]}});
+  }
+  assert.match((await action).value,/"applied":true/);
+  const protectedCatalog={elements:[
+    {id:'field:draft',role:'field',label:'普通草稿',editable:true},
+    {id:'field:readonly',role:'field',label:'只读',effect:'view'},
+    {id:'action:submit',role:'control',label:'提交',actions:['invoke'],effect:'submit'},
+    {id:'action:approve',role:'control',label:'审批',actions:['invoke'],effect:'approve'},
+  ]};
+  await h.call('catalog',{owner,parameters:{catalog:protectedCatalog,pageSource:'self-report',toolMessages:[]}});
+  for(const [args,error] of [
+    [{kind:'setValue',target:'field:draft',value:'draft'},'DATA_ACTION_NOT_ALLOWED'],
+    [{kind:'setValue',target:'field:readonly',value:'readonly'},'ELEMENT_NOT_EDITABLE'],
+    [{kind:'invoke',target:'action:submit',action:'invoke',confirm:true},'EFFECT_NOT_ALLOWED'],
+    [{kind:'invoke',target:'action:approve',action:'invoke',confirm:true},'EFFECT_NOT_ALLOWED'],
+  ]) assert.equal(JSON.parse((await h.execute('gea_plugin_page_apply',args)).value).error,error);
+  const queued=(await h.call('catalog',{owner,parameters:{catalog:protectedCatalog,pageSource:'self-report',toolMessages:[]}})).value.events;
+  assert.deepEqual(queued,[]);
+});
+
+
+test('explicit view filters keep the existing public cancellation, rate limit and owner release protections', async t => {
+  const h=await mount(t,'html',true), owner=(await h.open()).value.owner;
+  const catalog={elements:[{id:'filter:module',role:'field',label:'工作台模块',editable:true,effect:'view'}]};
+  await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}});
+  for(let index=0;index<30;index++){
+    const abort=new AbortController();
+    const pending=h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'},abort.signal);
+    await new Promise(resolve=>setTimeout(resolve,1));
+    abort.abort();
+    assert.equal((await pending).isError,true);
+  }
+  const limited=JSON.parse((await h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'})).value);
+  assert.equal(limited.error,'DRAFT_RATE_LIMITED');
+  const events=(await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).value.events;
+  assert.deepEqual(events,[]);
+  await h.call('close',{owner});
+  const unavailable=await h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'});
+  assert.equal(unavailable.isError,true);
+  assert.equal((await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).status,400);
 });
