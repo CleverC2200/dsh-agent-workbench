@@ -1,4 +1,6 @@
-/** Current page's UI projection. Workbench owns storage; the author owns every named field. */
+/** Current page's UI projection. Workbench owns storage; the author owns every named field.
+ * Subscribers receive the snapshot and its lifecycle event, 'restore' or 'released'.
+ */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
     const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal'].includes(page);
@@ -25,7 +27,7 @@ export function createPageViewState(page) {
                 if (sessionPage) {
                     dirty = false;
                     state = { version: 1 };
-                    for (const listener of listeners) listener(state);
+                    for (const listener of listeners) listener(state, 'released');
                 }
             }
             return;
@@ -36,7 +38,7 @@ export function createPageViewState(page) {
         state = dirty ? { ...value.state, ...state } : { ...(value.state ?? {}), version: 1 };
         dirty = false;
         for (const listener of listeners)
-            listener(state);
+            listener(state, 'restore');
         send();
     };
     window.addEventListener('message', receive);

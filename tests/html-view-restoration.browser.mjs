@@ -322,9 +322,20 @@ test('received MPS commits the restored inputs before publishing into a rebound 
   await expect.poll(()=>page.evaluate(()=>window.mockContexts['plan-category-production']?.parts?.process?.weights)).toEqual({report:20,growth:50,ship:30});
   const records=await page.evaluate(()=>window.contextMessages.filter(row=>row.session==='session-22222222-2222-4222-8222-222222222222'));
   assert.ok(records.length>0);
-  assert.ok(records.every(row=>row.context.parts.process?.rows[0].finalDemand===1900000));
-  await page.evaluate(()=>window.switchViewSession('mock-session'));
+  assert.ok(records.every(row=>row.context.parts.process?.rows[0].finalDemand===1900000),JSON.stringify(records.map(row=>({session:row.session,parts:Object.keys(row.context.parts),tab:row.context.parts.navigation?.tab,weights:row.context.parts.process?.weights,row:row.context.parts.process?.rows[0]})),null,2));
+  for (const row of records) {
+    assert.equal(row.context.parts.navigation.tab,'process');
+    assert.deepEqual(row.context.parts.process.weights,{report:20,growth:50,ship:30});
+  }
+  await page.evaluate(()=>{window.contextMessages=[];window.switchViewSession('mock-session');});
   await expect.poll(()=>page.evaluate(()=>window.mockContexts['plan-category-production']?.parts?.process?.weights)).toEqual({report:40,growth:40,ship:20});
+  const returning=await page.evaluate(()=>window.contextMessages.filter(row=>row.session==='mock-session'));
+  assert.ok(returning.length>0);
+  for (const row of returning) {
+    assert.equal(row.context.parts.navigation.tab,'process');
+    assert.deepEqual(row.context.parts.process.weights,{report:40,growth:40,ship:20});
+    assert.deepEqual(row.context.parts.process.adjustments,{});
+  }
   assert.deepEqual(await page.evaluate(()=>window.mockErrors),[]);
 });
 
