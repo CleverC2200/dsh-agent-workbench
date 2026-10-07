@@ -84,3 +84,7 @@ FC继续使用原 BrowserRepository 的 filters、未发 draft、cycle 与 prefe
 页面快捷问题与有值时的保留未发文字使用现page-interaction页侧`quotePage({label,text}, signal)`；原picker提供`window.dshPageInteraction.quote()/available()`，沿当前quote绑定的同channel/pending/cancel/reference parser。它只用当前Main的公开InputActions captureInsertion/insertText/persistDraft，明确问题把捕获selection复制为插入点，保draftRev并保留选中文字；不setDraft、自动prompt或创建Session。未关联、取消、切换、CAS冲突均不清页面文字；成功回执后只清仍相同的保留文本。原parser预算仍是6000个UTF-16代码单元（JS字符串长度），不是字节或模型token；显式转入只用trim判非空，按完整raw字符串长度核6000预算；正文不trim或slice，首行缩进与边界换行均保留，超过预算拒绝，不截断后宣称成功。普通选取reference保原截断语义。
 
 Workbench restores saved page hints through the current Core snapshot, Session and workspace interfaces. Business recovery checks the actual Session, preset, canonical workspace and GEA subject before opening the page. It keeps user drafts in Core. Page references use the current owner and input consume token, so an identity change rejects delayed responses. Manage supplies validated Interpreter choices and GEA authorizes their execution. See [Presentation recovery](docs/presentation-recovery.md).
+
+## 已接收的模拟页面
+
+客户库存、订单工作台与订单履约保留原页面标识，由Workbench打包原展示与模拟交互。Manage持有其原Prompt、Skill和零业务能力声明，GEA登记view范围的公开页面grant并拒绝SQL读取。资源选用关联官方Core Session，不发送模型请求。筛选、周期与分页等页面意图按当前身份和Session保存；订单工作台的本地演示任务仍按原说明在冷刷新后清空。区域、品类与MPS继续使用现有静态页面，没有新增业务Agent声明。

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-orderfulfillment",
+  "name": "订单履约",
+  "version": "0.1.0-preview.3-split.22",
+  "html": "index.html",
+  "skills": [
+    "skills/orderfulfillment/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "mode": "mock",
+  "pageContext": "live",
+  "gea": {
+    "consumerCode": "orderfulfillment-preview",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

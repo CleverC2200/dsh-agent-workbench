@@ -325,6 +325,7 @@ html body[data-ds-dark-theme] {
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
+    const sessionPage = ["inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -346,7 +347,7 @@ html body[data-ds-dark-theme] {
         releasedChannels.add(value.channel);
         if (binding?.channel === value.channel) {
           binding = void 0;
-          if (page === "inventory-fc" || page === "inventory-aqkc") {
+          if (sessionPage) {
             dirty = false;
             state = { version: 1 };
           }
@@ -374,7 +375,7 @@ html body[data-ds-dark-theme] {
       return () => listeners.delete(listener);
     }, update: (changes) => {
       state = { ...state, ...changes, version: 1 };
-      if (binding || page !== "inventory-fc" && page !== "inventory-aqkc")
+      if (binding || !sessionPage)
         dirty = true;
       send();
     } };

@@ -24,7 +24,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   await pages.registerHtml([
     fileURLToPath(new URL("./samples/", import.meta.url)),
     ...["regional", "category", "mps"].map(id => fileURLToPath(new URL(`./static/${id}/`, import.meta.url))),
-    ...(config.htmlRoots ?? ["fc", "aqkc"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url)))),
+    ...(config.htmlRoots ?? ["fc", "aqkc", "customer", "orderworkbench", "orderfulfillment"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url)))),
   ]);
   ctx.provide("workbenchPages", pages);
   const nativeHtml='<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GEA</title><link rel="stylesheet" href="/api/agent-workbench/native.css"><link rel="stylesheet" href="/api/agent-workbench/theme.css"><style>html,body,#gea-workbench{height:100%;margin:0}</style></head><body><div id="gea-workbench"></div><script type="module" src="/api/agent-workbench/native.js"></script></body></html>';

@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-fc' | 'inventory-aqkc';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment';
 type Rhythm = {
     id: string;
     type: string;
@@ -180,17 +180,21 @@ export type RegionalViewState = {
     rhythmEditing?: boolean;
     rhythmDraft?: Rhythm[] | null;
 };
+export type CustomerViewState = { version: 1; role?: string; path?: string[]; metric?: string; tab?: string; status?: string; region?: string; search?: string; page?: number; assistant?: boolean };
+export type OrderWorkbenchViewState = { version: 1; mode?: string; month?: string; week?: string; weekInitialized?: boolean; event?: string; task?: string };
+export type FulfillmentViewState = { version: 1; order?: string; customer?: string; warehouse?: string; status?: string; page?: number; size?: number };
 export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState;
-const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc']);
+} | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState;
+const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment']);
 export const isHtmlViewPage = (page: string): page is HtmlViewPage => pages.has(page);
-export const isBusinessViewPage = (page: string): boolean => page === 'inventory-fc' || page === 'inventory-aqkc';
+export const isBusinessViewPage = (page: string): boolean => ['inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 10000;
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const positiveInteger = (v: unknown) => Number.isSafeInteger(v) && (v as number) > 0;
 const boolean = (v: unknown): v is boolean => typeof v === 'boolean';
 const nullable = (test: (v: unknown) => boolean) => (v: unknown) => v === null || test(v);
 const array = (test: (v: unknown) => boolean) => (v: unknown) => Array.isArray(v) && v.length <= 5000 && v.every(test);
@@ -222,6 +226,9 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
     if (!isHtmlViewPage(page) || !object(value) || value.version !== 1)
         return false;
     switch (page) {
+        case 'inventory-customer': return shape(value, { version, role: text, path: strings, metric: text, tab: text, status: text, region: text, search: text, page: positiveInteger, assistant: boolean }, ['version']);
+        case 'inventory-orderworkbench': return shape(value, { version, mode: v => ['month', 'week'].includes(v as string), month: text, week: text, weekInitialized: boolean, event: v => ['focus', 'all'].includes(v as string), task: v => ['all', 'pending', 'done'].includes(v as string) }, ['version']);
+        case 'inventory-orderfulfillment': return shape(value, { version, order: text, customer: text, warehouse: text, status: text, page: positiveInteger, size: v => [10, 20, 50].includes(v as number) }, ['version']);
         case 'workbench-html-table': return shape(value, { version, keyword: text, stage: text });
         case 'gea-regional-plan': return shape(value, { version, date: text, selDay: nullable(number), selEv: nullable(text), repDim: text, rhythm: array(rhythm), rhythmEditing: boolean, rhythmDraft: nullable(array(rhythm)) }, ['version', 'date', 'selDay', 'selEv', 'repDim', 'rhythm']);
         case 'plan-region-category': return shape(value, { version, category: nullable(text), view: text, draft: text, eventStatus: text, drill: nullable(text), eventId: nullable(text), suggestionId: nullable(text), taskId: nullable(text), detail: nullable(text) }, ['version']);

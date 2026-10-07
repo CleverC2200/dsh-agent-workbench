@@ -4,13 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,undefined,owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.readState=id=>owner.readHtmlViewState(id);window.seedState=(id,state)=>owner.saveHtmlViewState(id,undefined,state);`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
+const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';const viewScope=id=>isBusinessViewPage(id)?'mock-session':undefined;window.mockContexts={};window.mockCatalogs={};window.mockErrors=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();channel.port1.onmessage=({data})=>{if(data.type==='request'){if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'session-11111111-1111-4111-8111-111111111111',plugin:id}},'*',[channel.port2]);});`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 async function fixture(t) {
     const browser = await chromium.launch({ channel: 'chrome', headless: true });
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
-    const assets = { sample: await readFile('lib/samples/index.html', 'utf8'), regional: await readFile('static/regional/index.html', 'utf8'), category: await readFile('static/category/index.html', 'utf8'), mps: await readFile('static/mps/index.html', 'utf8') };
+    const assets = { sample: await readFile('lib/samples/index.html', 'utf8'), regional: await readFile('static/regional/index.html', 'utf8'), category: await readFile('static/category/index.html', 'utf8'), mps: await readFile('static/mps/index.html', 'utf8'), customer: await readFile('lib/business/inventory-customer/index.html','utf8'), orderworkbench: await readFile('lib/business/inventory-orderworkbench/index.html','utf8'), fulfillment: await readFile('lib/business/inventory-orderfulfillment/index.html','utf8') };
     if (process.env.HTML_VIEW_BASELINE === '1')
         assets.sample = execFileSync('git', ['show', `${baseline}:samples/html-table.html`], { encoding: 'utf8' }).replace('/* SHARED_THEME_RESOURCE */', await readFile('theme/tokens.css', 'utf8'));
     await page.route('http://127.0.0.1:19478/**', route => { const key = new URL(route.request().url()).pathname.slice(1); return route.fulfill({ contentType: 'text/html', body: assets[key] ?? '<html><body></body></html>' }); });
@@ -80,4 +80,41 @@ test('Category selection and unfinished local input restore while tasks and simu
     await page.evaluate(() => {window.hidePage();window.seedState('plan-region-category',{version:1,category:'unknown-category'});});
     await page.evaluate(() => window.openPage('plan-region-category','category'));
     await expect(page.frameLocator('iframe').locator('.scope-picker .arco-select')).toContainText('全部品类');
+});
+
+test('received customer mock preserves filters, pagination and visible current rows across iframe replacement', async t => {
+  const page = await fixture(t);
+  await page.evaluate(() => window.openPage('inventory-customer','customer'));
+  await expect(page.frameLocator('iframe').getByPlaceholder('经销商筛选')).toBeVisible();
+  await page.frameLocator('iframe').getByPlaceholder('经销商筛选').fill('佳特');
+  await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-customer']?.search)).toBe('佳特');
+  await page.evaluate(() => window.hidePage());
+  await page.evaluate(() => window.openPage('inventory-customer','customer'));
+  await expect(page.frameLocator('iframe').getByPlaceholder('经销商筛选')).toHaveValue('佳特');
+  await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-customer']?.totalFilteredRows)).toBe(1);
+  assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
+});
+test('received order report restores the selected week and publishes current supported elements', async t => {
+  const page = await fixture(t);
+  await page.evaluate(() => window.openPage('inventory-orderworkbench','orderworkbench'));
+  await page.frameLocator('iframe').locator('#weekMode').click();
+  await expect.poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.mode)).toBe('week');
+  await page.evaluate(() => window.hidePage());
+  await page.evaluate(() => window.openPage('inventory-orderworkbench','orderworkbench'));
+  await expect(page.frameLocator('iframe').locator('#weekMode')).toHaveAttribute('aria-pressed','true');
+  await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.period.mode)).toBe('week');
+  assert.equal(await page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.period.available),true,JSON.stringify(await page.evaluate(()=>({state:window.readState('inventory-orderworkbench'),period:window.mockContexts['inventory-orderworkbench']?.period}))));
+  await expect.poll(() => page.evaluate(() => window.mockCatalogs['inventory-orderworkbench']?.length ?? 0)).toBeGreaterThan(1);
+  assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
+});
+test('received fulfillment mock restores its filters and visible page without a business query', async t => {
+  const page = await fixture(t);
+  await page.evaluate(() => window.openPage('inventory-orderfulfillment','fulfillment'));
+  await page.frameLocator('iframe').locator('#customerSearch').fill('10010126');
+  await expect.poll(() => page.evaluate(() => window.readState('inventory-orderfulfillment')?.customer)).toBe('10010126');
+  await page.evaluate(() => window.hidePage());
+  await page.evaluate(() => window.openPage('inventory-orderfulfillment','fulfillment'));
+  await expect(page.frameLocator('iframe').locator('#customerSearch')).toHaveValue('10010126');
+  await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-orderfulfillment']?.rows.length)).toBe(1);
+  assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
 });

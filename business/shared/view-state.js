@@ -1,6 +1,7 @@
 /** Current page's UI projection. Workbench owns storage; the author owns every named field. */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
+    const sessionPage = ['inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
     /** @type {Record<string,unknown>} */
     let state = { version: 1 };
     let binding, dirty = false;
@@ -21,7 +22,7 @@ export function createPageViewState(page) {
             releasedChannels.add(value.channel);
             if (binding?.channel === value.channel) {
                 binding = undefined;
-                if (page === 'inventory-fc' || page === 'inventory-aqkc') {
+                if (sessionPage) {
                     dirty = false;
                     state = { version: 1 };
                 }
@@ -40,7 +41,7 @@ export function createPageViewState(page) {
     window.addEventListener('message', receive);
     window.addEventListener('pagehide', () => { binding = undefined; window.removeEventListener('message', receive); listeners.clear(); }, { once: true });
     ready();
-    return { get: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, update: changes => { state = { ...state, ...changes, version: 1 }; if (binding || (page !== 'inventory-fc' && page !== 'inventory-aqkc'))
+    return { get: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, update: changes => { state = { ...state, ...changes, version: 1 }; if (binding || !sessionPage)
             dirty = true; send(); } };
 }
 /** Bind an explicit authored React field; restores update the existing setter without replaying user actions. */

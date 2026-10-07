@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-customer",
+  "name": "客户库存(开发中)",
+  "version": "0.1.0-preview.3-split.20",
+  "html": "index.html",
+  "skills": [
+    "skills/customer/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "mode": "mock",
+  "gea": {
+    "consumerCode": "customer-inventory-preview",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "development-prototype",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

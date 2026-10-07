@@ -58,3 +58,20 @@ test('FC UI records stay partitioned by the real identity and Session address an
     assert.throws(() => workbench.saveHtmlViewState('inventory-fc', 'actual-account-scope/actual-session', { ...state, grant: { allowed: true } }), /INVALID_HTML_VIEW_STATE/);
     assert.deepEqual(workbench.readHtmlViewState('inventory-fc', 'actual-account-scope/actual-session'), state);
 });
+
+test('received mock pages keep only authored UI intent under their actual Session address', async () => {
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const states = {
+    'inventory-customer': {version:1, search:'佳特', page:2},
+    'inventory-orderworkbench': {version:1,mode:'week',month:'2026-09',week:'2026-08-31',event:'focus',task:'all'},
+    'inventory-orderfulfillment': {version:1,customer:'10010126',page:1,size:10}
+  };
+  for (const [id,state] of Object.entries(states)) {
+    owner.registerFrame({id,kind:'html',src:'/mock',resourceId:'gea-html-'+id});
+    owner.saveHtmlViewState(id,'subject/session-A',state);
+    assert.equal(owner.readHtmlViewState(id,'subject/session-B'),undefined);
+    assert.deepEqual(owner.readHtmlViewState(id,'subject/session-A'),state);
+    assert.throws(()=>owner.saveHtmlViewState(id,undefined,state),/HTML_VIEW_SCOPE_REQUIRED/);
+    assert.throws(()=>owner.saveHtmlViewState(id,'subject/session-A',{...state,rows:[{secret:'derived'}]}),/INVALID_HTML_VIEW_STATE/);
+  }
+});

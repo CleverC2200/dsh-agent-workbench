@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>订单履约</title>
+  <style>
+    :root { --bg:#f6f7f9; --surface:#fff; --line:#e8ebf0; --text:#20242c; --muted:#6b7280; --faint:#9aa2af; --brand:#f5222d; --brand-soft:#fff1f0; font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; color:var(--text); background:var(--bg); font-size:14px; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid rgba(245,34,45,.38); outline-offset:2px; }
+    [hidden] { display:none !important; }
+    .shell { height:100vh; min-height:650px; }
+    .sidebar { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:#fff; }
+    .brand { display:flex; align-items:center; gap:10px; height:56px; padding:0 18px; border-bottom:1px solid var(--line); color:var(--brand); font-weight:800; }
+    .brand-mark { display:grid; place-items:center; width:28px; height:28px; border-radius:7px; color:#fff; background:var(--brand); box-shadow:0 7px 18px rgba(245,34,45,.22); font-size:11px; }
+    .brand-ai { margin-left:auto; color:#3a404b; font-size:11px; }
+    .nav { flex:1; padding:15px 10px; }
+    .nav-head, .nav-item { display:flex; align-items:center; width:100%; min-height:35px; border:0; border-radius:7px; background:transparent; color:#3a404b; text-align:left; font-size:13px; }
+    .nav-head { gap:8px; padding:0 10px; font-weight:700; }
+    .nav-head svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .nav-head .chevron { margin-left:auto; font-size:15px; color:#8b94a2; }
+    .nav-head:hover, .nav-item:hover { background:#fff7f7; }
+    .nav-item { padding:0 10px 0 37px; color:#565e6c; }
+    .nav-item.active { color:var(--brand); background:#fff7f7; font-weight:700; }
+    .nav.is-collapsed .nav-item { display:none; }
+    .nav.is-collapsed .chevron { transform:rotate(-90deg); }
+    .account { display:flex; align-items:center; gap:10px; min-height:70px; padding:12px 16px; border-top:1px solid var(--line); }
+    .avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; color:#fff; background:#8d97a7; font-weight:700; }
+    .account div { display:grid; gap:2px; }
+    .account strong { font-size:12px; }.account small { color:var(--muted); font-size:11px; }
+    .main { display:grid; grid-template-rows:minmax(0,1fr); height:100%; min-width:0; min-height:0; }
+    .topbar { display:flex; align-items:center; justify-content:center; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
+    .page-tabs { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .page-tab { min-width:104px; height:32px; padding:0 16px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .page-tab.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .period-label { color:#5c6573; font-size:12px; font-weight:700; }
+    .period-switch { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .period-switch button { min-width:58px; height:29px; padding:0 11px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .period-switch button.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-control { display:flex; align-items:center; gap:7px; color:#667080; font-size:12px; }
+    .period-control[hidden] { display:none; }
+    .period-control input,.period-control select { min-height:32px; padding:4px 9px; border:1px solid #dce2eb; border-radius:6px; color:#343b47; background:#fff; font-size:12px; }
+    .period-control select { max-width:245px; }
+    .period-meta { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .layout { min-height:0; overflow:hidden; }
+    .workspace { height:100%; min-width:0; min-height:0; overflow:auto; background:#fff; }
+    .content { max-width:1500px; margin:0 auto; padding:24px 28px 36px; background:#fff; }
+    .card { margin-bottom:16px; padding:18px 20px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .card h2 { margin:0 0 14px; font-size:15px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { padding:15px 17px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .metric span { display:block; color:var(--muted); font-size:12px; }.metric strong { display:block; margin:7px 0 3px; font-size:24px; }.metric small { color:var(--faint); }
+    .table-wrap { overflow-x:auto; }
+    .orders { width:100%; min-width:1000px; border-collapse:collapse; font-size:12px; }
+    .orders th { padding:11px 12px; border-bottom:1px solid var(--line); color:#66707e; background:#fafbfc; text-align:left; font-weight:600; }
+    .orders td { padding:13px 12px; border-bottom:1px solid #f0f2f5; vertical-align:top; }
+    .orders tbody tr:last-child td { border-bottom:0; }.orders strong { display:block; font-size:12px; }.orders small { display:block; margin-top:3px; color:var(--faint); }
+    .orders-card-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .orders-card-head h2 { margin:0; }
+    .orders-count { color:#8b96a5; font-size:11px; white-space:nowrap; }
+    .order-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+    .order-filters > input,.warehouse-picker input,.order-filters > select { height:34px; padding:0 10px; border:1px solid #dce2eb; border-radius:6px; color:#364050; background:#fff; font-size:11px; }
+    .order-filters > input::placeholder,.warehouse-picker input::placeholder { color:#9aa4b1; }
+    .order-filters > input:focus,.warehouse-picker input:focus,.order-filters > select:focus { border-color:#f2aab0; outline:2px solid #fff0f1; }
+    #orderNumberSearch { width:150px; } #customerSearch { width:192px; }
+    .warehouse-picker { position:relative; width:148px; }
+    #omsStatusFilter { width:142px; cursor:pointer; }
+    .warehouse-picker input { width:100%; padding-right:30px; }
+    .warehouse-picker > button { position:absolute; top:1px; right:1px; width:30px; height:32px; border:0; border-radius:0 6px 6px 0; color:#8490a0; background:transparent; font-size:14px; }
+    .warehouse-options { position:absolute; top:calc(100% + 4px); left:0; z-index:5; width:100%; padding:4px; border:1px solid #e0e5ed; border-radius:7px; background:#fff; box-shadow:0 8px 24px rgba(32,44,62,.12); }
+    .warehouse-options button { display:block; width:100%; min-height:30px; padding:5px 8px; border:0; border-radius:4px; color:#4b5666; background:#fff; text-align:left; font-size:11px; }
+    .warehouse-options button:hover,.warehouse-options button[aria-selected="true"] { color:var(--brand); background:#fff5f5; }
+    .warehouse-options .no-option { padding:8px; color:#9aa4b1; font-size:11px; }
+    .orders-empty td { padding:24px 12px; color:#8d98a6; text-align:center; }
+    .order-pagination { display:flex; justify-content:flex-end; align-items:center; gap:17px; padding:17px 4px 0; border-top:1px solid #f0f2f5; color:#5f6978; font-size:12px; }
+    .order-page-size select { padding:3px 18px 3px 3px; border:0; color:#5f6978; background:#fff; font:inherit; cursor:pointer; }
+    .order-page-size select:focus { border-radius:4px; outline:2px solid #fff0f1; }
+    .order-page-button { width:26px; height:26px; padding:0; border:0; border-radius:5px; color:#8a95a4; background:transparent; font-size:20px; line-height:1; }
+    .order-page-button:hover:not(:disabled) { color:var(--brand); background:#fff5f5; }
+    .order-page-button:disabled { color:#cbd1d9; cursor:not-allowed; }
+    .order-page-status { display:inline-flex; align-items:center; gap:7px; min-width:44px; justify-content:center; }
+    .order-page-status strong { color:#273140; font-size:13px; }
+    @media(max-width:1050px) { .order-filters { width:100%; margin-left:0; }.order-filters > input { flex:1 1 150px; }.warehouse-picker { flex:1 1 148px; } #omsStatusFilter { flex:1 1 142px; } }
+    .period-empty { margin:0 0 16px; padding:18px 20px; border:1px dashed #d9e0ea; border-radius:8px; color:#637084; background:#fff; font-size:12px; line-height:1.7; }
+    .status { display:inline-block; padding:3px 8px; border-radius:4px; color:#13854a; background:#e8f7ee; white-space:nowrap; }
+    .status.issue { color:#c83239; background:#fff0ef; }.status.progress { color:#2266d8; background:#eaf4ff; }.status.pending { color:#a96900; background:#fff5e5; }
+    .wb-hero { display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; }
+    .wb-hero > .wb-link { margin-left:auto; }
+    .wb-hero .wb-context { margin:0; }
+    .wb-hero-main { min-width:0; }
+    .wb-title-line { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+    .wb-title-line .period-bar { padding:0; border:0; background:none; }
+    .wb-title-line .period-control input { width:126px; }
+    .wb-title-line .period-control select { max-width:190px; }
+    .wb-hero h1 { margin:8px 0; font-size:26px; }.wb-hero p,.wb-section p { margin:0; color:#7a8290; font-size:12px; line-height:1.6; }
+    .wb-eyebrow { color:#bf2330; font-size:12px; font-weight:700; }.wb-eyebrow::before { content:""; display:inline-block; width:7px; height:7px; margin-right:9px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 4px #ffe5e7; }
+    .wb-link,.wb-priority button { padding:3px 0; border:0; color:var(--brand); background:none; font-size:11px; white-space:nowrap; }.wb-link:hover,.wb-priority button:hover { text-decoration:underline; }
+    .wb-note { padding:10px 13px; margin-bottom:14px; border:1px solid #dce8fa; border-radius:7px; color:#617590; background:#f4f8ff; font-size:11px; line-height:1.6; }
+    .wb-section { margin-bottom:14px; }.wb-section-head,.wb-card-title,.wb-task-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:10px; }
+    .wb-section h2,.wb-card h2 { margin:0 0 4px; font-size:16px; }.wb-section-head > span,.wb-card-title > span,.wb-task-head > span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .wb-kicker { color:#8b93a0; font-size:11px; }.wb-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .wb-kpi { min-height:126px; padding:15px 17px; border:1px solid var(--line); border-radius:10px; background:#fff; text-align:left; }.wb-kpi:hover { border-color:#f1b5bb; box-shadow:0 5px 16px rgba(190,70,80,.07); }.wb-kpi span { display:block; color:#68717e; font-size:12px; }.wb-kpi strong { display:block; margin:10px 0 3px; font-size:28px; }.wb-kpi small { display:block; color:#9aa2af; font-size:11px; }.wb-kpi em { display:block; margin-top:8px; color:#c24f5b; font-size:10px; font-style:normal; }
+    .wb-kpi.urgent strong { color:#e33740; }.wb-kpi.warning strong { color:#df7c29; }
+    .wb-card { min-width:0; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }.wb-card p { margin:0; color:#7a8290; font-size:11px; line-height:1.6; }
+    .wb-analysis { border-color:#f0d8dc; background:linear-gradient(105deg,#fffafa,#fff 56%,#fffdfd); }.wb-analysis-head,.wb-analysis-body,.wb-analysis-foot { padding:15px 20px; }.wb-analysis-head,.wb-analysis-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; }.wb-analysis-head { padding-bottom:0; }.wb-analysis-head h2 { margin:0; font-size:14px; }.wb-analysis-head span,.wb-analysis-foot span { color:#9fa8b5; font-size:11px; }.wb-analysis-body h3 { margin:0 0 8px; font-size:17px; }.wb-analysis-body p { margin:0; color:#707a89; font-size:12px; line-height:1.7; }.wb-analysis-foot { padding-top:0; }
+    .wb-spark { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:8px; border-radius:7px; color:#ed5268; background:#fff0f2; }.wb-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }.wb-tags span { padding:4px 9px; border:1px solid #f1dadd; border-radius:5px; color:#9a7180; background:#fffafb; font-size:11px; }.wb-tags b { color:#df5161; }
+    .wb-panels { display:grid; grid-template-columns:minmax(0,1.12fr) minmax(300px,.88fr); gap:14px; }.wb-card-title { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-priority { display:flex; align-items:center; gap:10px; min-height:62px; padding:10px 17px; border-top:1px solid #f0f1f4; }.wb-priority > div { min-width:0; flex:1; }.wb-priority strong,.wb-priority small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-priority strong { font-size:12px; }.wb-priority small { margin-top:5px; color:#8b93a0; font-size:11px; }
+    .wb-status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:5px; color:#4a86d8; background:#edf5ff; font-size:11px; white-space:nowrap; }.wb-status::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }.wb-status.issue { color:#d94d58; background:#fff0f1; }.wb-status.pending { color:#ba7928; background:#fff5e8; }.wb-status.ready { color:#39a078; background:#eaf8f1; }
+    .wb-flow { padding:4px 18px 12px; }.wb-flow-item { display:flex; gap:12px; padding:13px 0; border-top:1px solid #f0f1f4; }.wb-flow-item:first-child { border-top:0; }.wb-flow-item b { display:grid; place-items:center; width:25px; height:25px; flex:0 0 auto; border-radius:7px; color:#d84b57; background:#fff0f2; font-size:11px; }.wb-flow-item strong { font-size:12px; }.wb-flow-item p { margin:4px 0 0; color:#7a8290; font-size:11px; line-height:1.5; }
+    .wb-task-head { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-filters { display:flex; gap:16px; overflow-x:auto; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-filters button { position:relative; flex:0 0 auto; height:34px; border:0; color:#8b93a0; background:none; font-size:11px; }.wb-filters button.active { color:var(--brand); font-weight:700; }.wb-filters button.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; background:var(--brand); }
+    .wb-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 15px; color:#788391; font-size:11px; }.wb-context strong { color:#425066; font-size:12px; }.wb-context span { padding:6px 10px; border:1px solid #e3e8f0; border-radius:6px; background:#fff; }.wb-context small { margin-left:auto; color:#a0a8b5; font-size:10px; }
+    .wb-report-date { margin:0 0 15px; color:#a0a8b5; font-size:10px; text-align:right; }
+    .wb-kpi { position:relative; }.wb-kpi .wb-kpi-goal { margin-top:5px; color:#8d98a8; }.wb-kpi .wb-kpi-state { display:inline-flex; align-items:center; width:auto; margin-top:8px; padding:3px 7px; border-radius:4px; color:#278565; background:#eaf8f1; font-size:10px; }.wb-kpi .wb-kpi-state.bad { color:#cb4751; background:#fff0f1; }.wb-kpi .wb-kpi-state.unknown { color:#7d8898; background:#f0f3f7; }.wb-kpi .wb-kpi-trend { position:absolute; right:15px; bottom:17px; color:#9aa4b2; font-size:10px; }
+    .wb-analysis { position:relative; }.wb-analysis::before { content:""; position:absolute; top:17px; bottom:17px; left:0; width:3px; border-radius:0 3px 3px 0; background:#ef6b80; }.wb-analysis-evidence { display:flex; gap:7px; flex-wrap:wrap; margin-top:13px; }.wb-analysis-evidence span { padding:4px 8px; border:1px solid #e9edf4; border-radius:5px; color:#8390a2; background:#fff; font-size:10px; }
+    .wb-panels { align-items:stretch; }.wb-panels > .wb-card { display:flex; flex-direction:column; }.wb-events-tabs { display:flex; gap:16px; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-events-tabs button { position:relative; height:32px; padding:0; border:0; color:#8b93a0; background:transparent; font-size:11px; }.wb-events-tabs button.active { color:var(--brand); font-weight:700; }.wb-events-tabs button.active::after { content:""; position:absolute; bottom:-1px; right:0; left:0; height:2px; background:var(--brand); }
+    .wb-event { padding:13px 17px; border-bottom:1px solid #eef0f3; }.wb-event:last-child { border-bottom:0; }.wb-event-top { display:flex; align-items:center; gap:7px; }.wb-event-top strong { min-width:0; flex:1; color:#343c49; font-size:12px; }.wb-event-top time { color:#a0a8b5; font-size:10px; }.wb-event p { margin:6px 0 5px 21px; color:#7d8796; font-size:11px; line-height:1.55; }.wb-event-foot { display:flex; align-items:center; gap:9px; margin-left:21px; }.wb-event-foot button { padding:0; border:0; color:#818b9a; background:none; font-size:10px; }.wb-event-foot button:hover { color:var(--brand); }.wb-event-foot button:last-child { color:#cf5765; }.wb-event-kind { flex:0 0 auto; padding:2px 5px; border-radius:4px; color:#d45462; background:#fff0f2; font-size:10px; }.wb-event-kind.focus { color:#c28636; background:#fff6e7; }
+    .wb-action { padding:14px 17px; border-bottom:1px solid #eef0f3; }.wb-action:last-child { border-bottom:0; }.wb-action-main { display:flex; gap:9px; }.wb-action-icon { display:grid; place-items:center; width:23px; height:23px; flex:0 0 auto; border-radius:7px; color:#e28a43; background:#fff2e4; }.wb-action strong { display:block; color:#343c49; font-size:12px; }.wb-action small { display:block; margin-top:4px; color:#9aa3af; font-size:10px; }.wb-action p { margin:7px 0 0 32px; color:#7d8796; font-size:11px; line-height:1.6; }.wb-action-links { display:flex; gap:8px; margin:10px 0 0 32px; }.wb-action-links button { padding:5px 8px; border:1px solid #dfe5ee; border-radius:5px; color:#7b8797; background:#fff; font-size:10px; }.wb-action-links button.primary { color:#fff; border-color:#d84959; background:#d84959; }.wb-panel-foot { margin-top:auto; padding:10px 17px; border-top:1px solid #eef0f3; color:#a0a8b5; font-size:10px; }
+    .wb-task-summary { display:flex; align-items:center; gap:12px; color:#9aa3af; font-size:10px; }.wb-task-summary button { padding:0; border:0; color:#8c96a4; background:none; font-size:10px; }.wb-task-summary button:hover { color:var(--brand); }.wb-task-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; font-size:11px; }.wb-task-table th { padding:10px 16px; border-bottom:1px solid #eef0f3; color:#9ca6b3; background:#fbfcfd; font-weight:500; }.wb-task-table td { padding:11px 16px; border-bottom:1px solid #eef0f3; color:#6d7787; }.wb-task-table tr:last-child td { border-bottom:0; }.wb-task-table th:first-child { width:38%; }.wb-task-table th:nth-child(2) { width:20%; }.wb-task-table th:nth-child(3) { width:16%; }.wb-task-table th:nth-child(4) { width:15%; }.wb-task-table th:nth-child(5) { width:11%; }.wb-task-table strong { display:block; color:#3c4552; font-size:11px; }.wb-task-table small { display:block; margin-top:3px; color:#9ca6b2; font-size:10px; }.wb-task-status { display:inline-block; padding:4px 7px; border-radius:5px; color:#bb842f; background:#fff6e9; font-size:10px; }.wb-task-status.done { color:#3c9b78; background:#eaf8f1; }.wb-task-link { padding:0; border:0; color:#7d8b9c; background:none; font-size:10px; }.wb-task-link:hover { color:var(--brand); }.wb-task-table-wrap { overflow-x:auto; }.wb-task-table { min-width:650px; }
+    .wb-detail-overlay { position:fixed; inset:0; z-index:12; display:grid; place-items:center; padding:20px; background:rgba(30,38,54,.32); }.wb-detail-dialog { width:min(580px,100%); max-height:80vh; overflow:auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(30,38,54,.18); }.wb-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.wb-detail-head h2 { margin:0; font-size:17px; }.wb-detail-head button { border:0; color:#7d8796; background:none; font-size:21px; }.wb-detail-dialog p { color:#687486; font-size:12px; line-height:1.7; }.wb-detail-dialog h3 { margin:16px 0 5px; font-size:12px; }
+    .wb-adopt-overlay { position:fixed; inset:0; z-index:14; display:grid; place-items:center; padding:20px; background:rgba(34,39,52,.34); }
+    .wb-adopt-dialog { width:min(850px,100%); max-height:min(90vh,760px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #e7eaf0; border-radius:16px; background:#fff; box-shadow:0 20px 55px rgba(27,35,50,.18); }
+    .wb-adopt-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:25px 28px 21px; border-bottom:1px solid #edf0f4; }
+    .wb-adopt-head h2 { margin:0; color:#2f3744; font-size:19px; }.wb-adopt-head p { margin:7px 0 0; color:#9aa4b2; font-size:12px; }
+    .wb-adopt-close { width:38px; height:38px; flex:0 0 auto; border:1px solid #e2e7ef; border-radius:11px; color:#8793a3; background:#fff; font-size:21px; line-height:1; }
+    .wb-adopt-close:hover { border-color:#e6a4ae; color:#cb4051; }
+    .wb-adopt-form { display:flex; flex-direction:column; min-height:0; }
+    .wb-adopt-body { overflow:auto; padding:36px 28px 52px; }
+    .wb-adopt-notice { padding:15px 16px; border:1px solid #f4dce2; border-radius:9px; color:#ad8790; background:#fff8fa; font-size:12px; line-height:1.6; }
+    .wb-adopt-content { margin-top:15px; padding:16px; border:1px solid #dfe7f5; border-radius:9px; }
+    .wb-adopt-content strong { display:block; margin-bottom:9px; color:#657183; font-size:12px; }.wb-adopt-content p { margin:0; color:#8793a3; font-size:12px; line-height:1.8; white-space:pre-line; }
+    .wb-adopt-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px; }
+    .wb-adopt-field { display:grid; gap:8px; color:#919baa; font-size:12px; }.wb-adopt-field input,.wb-adopt-field textarea { width:100%; padding:10px 11px; border:1px solid #dce4f2; border-radius:7px; color:#596779; background:#fff; font-size:13px; }.wb-adopt-field input { height:40px; }.wb-adopt-field textarea { min-height:102px; resize:vertical; }.wb-adopt-field.note { margin-top:18px; }
+    .wb-adopt-foot { display:flex; align-items:center; gap:8px; padding:17px 28px; border-top:1px solid #edf0f4; }.wb-adopt-foot p { flex:1; margin:0; color:#a0aabb; font-size:11px; line-height:1.5; }.wb-adopt-foot button { min-height:36px; padding:0 15px; border:1px solid #dce4f0; border-radius:7px; color:#778397; background:#fff; font-size:12px; white-space:nowrap; }.wb-adopt-foot button.primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .wb-definitions { padding:17px 18px 18px; }.wb-definitions > p { margin:0 0 13px; color:#7a8290; font-size:11px; line-height:1.6; }.wb-definition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.wb-definition { padding:12px 13px; border:1px solid #e8ebf0; border-radius:7px; background:#fbfcfd; }.wb-definition strong { display:block; margin-bottom:6px; color:#384252; font-size:12px; }.wb-definition span,.wb-definition small { display:block; color:#687486; font-size:11px; line-height:1.65; }.wb-definition small { margin-top:6px; color:#9aa2af; }
+    .wb-table-wrap { overflow-x:auto; }.wb-table { width:100%; min-width:800px; border-collapse:collapse; text-align:left; font-size:11px; }.wb-table th { padding:10px 14px; border-bottom:1px solid #eef0f3; color:#9aa3af; background:#fbfcfd; font-weight:500; }.wb-table td { padding:11px 14px; border-bottom:1px solid #f0f1f4; color:#626d7b; vertical-align:middle; }.wb-table tr:last-child td { border-bottom:0; }.wb-table td strong,.wb-table td small { display:block; }.wb-table td strong { color:#3c4552; }.wb-table td small { margin-top:4px; color:#9ca5b2; font-size:10px; }.wb-foot { padding:12px 18px; border-top:1px solid #f0f1f4; color:#9aa2af; font-size:11px; }.wb-boundary { display:flex; justify-content:space-between; gap:12px; padding:17px 18px; }.wb-boundary strong { font-size:13px; }.wb-boundary p { margin:5px 0 0; color:#7a8290; font-size:11px; }.wb-boundary span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .orders tr.is-linked, .wb-task-table tr.is-linked { background:#fff8ea; }
+    .assistant { display:grid; grid-template-rows:42px minmax(0,1fr) auto; min-width:0; min-height:0; margin:8px 10px 8px 0; overflow:hidden; border:1px solid #e6e2ec; border-radius:18px; background:linear-gradient(155deg,#fff5f6 0%,#fff9fb 27%,#f7faff 62%,#f3f8ff 100%); }
+    .assistant-head { display:flex; align-items:center; gap:5px; padding:0 16px; color:#828c9c; font-size:12px; }
+    .assistant-head strong { margin-right:auto; font-weight:700; }
+    .assistant-head button { width:28px; height:28px; border:0; border-radius:6px; color:#718095; background:transparent; font-size:17px; }
+    .assistant-head button:hover { color:var(--brand); background:rgba(255,255,255,.72); }
+    .assistant-body { min-height:0; overflow:auto; padding:0 19px 14px; }
+    .hero { display:grid; justify-items:center; padding:17px 4px 26px; text-align:center; }
+    .robot { position:relative; display:grid; place-items:center; width:82px; height:68px; margin:8px 0 22px; border:6px solid #fff; border-radius:31px; background:linear-gradient(150deg,#fff,#ffe3e8); box-shadow:0 12px 24px rgba(205,89,110,.19),inset 0 -4px 9px rgba(236,120,144,.14); }
+    .robot::before,.robot::after { content:""; position:absolute; top:22px; width:10px; height:23px; border:2px solid #fff; border-radius:9px; background:#ff859b; }
+    .robot::before { left:-14px; }.robot::after { right:-14px; }
+    .robot i { position:absolute; top:-15px; left:34px; width:5px; height:13px; border-radius:5px; background:#ffd5dd; }
+    .robot i::after { content:""; position:absolute; left:-3px; top:-5px; width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:#ffa3b3; }
+    .robot span { display:flex; align-items:center; justify-content:center; gap:16px; width:59px; height:36px; border-radius:18px; background:radial-gradient(circle at 50% 0%,#ff7280,#9f0d27 65%,#650b1f); box-shadow:inset 0 2px 5px rgba(255,255,255,.7),0 3px 8px rgba(142,10,36,.27); }
+    .robot span::before,.robot span::after { content:""; width:4px; height:10px; border-radius:50%; background:#fff; box-shadow:0 0 7px #fff; }
+    .hero h2 { margin:0 0 8px; font-size:19px; }.hero p { margin:0; color:#77849a; font-size:13px; line-height:1.8; }
+    .quick-actions,.prompts { display:grid; gap:8px; }
+    .quick-actions button,.prompts button { width:100%; min-height:49px; padding:8px 14px; border:1px solid #dce4f5; border-radius:11px; color:#25303f; background:#fff; text-align:left; font-size:13px; font-weight:600; box-shadow:0 2px 4px rgba(63,90,136,.025); }
+    .quick-actions button:hover,.prompts button:hover { border-color:#f2a9af; color:var(--brand); background:#fffafa; }
+    .quick-actions button span { display:inline-grid; place-items:center; width:27px; margin-right:7px; color:#ef3153; vertical-align:middle; }
+    .quick-actions button:nth-child(2) span,.quick-actions button:nth-child(3) span { color:#3979ff; }.quick-actions button:nth-child(4) span { color:#ff7528; }
+    .quick-actions svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .prompt-section { margin-top:23px; }.prompt-section h3 { margin:0 0 12px; font-size:14px; }
+    .prompts button { min-height:40px; padding:7px 19px; border-radius:22px; color:#7c8a9f; font-size:12px; font-weight:400; }
+    .assistant-foot { padding:10px 12px 12px; }
+    .composer { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; align-items:center; height:58px; padding:0 10px; border:1px solid #dbe3f5; border-radius:17px; background:#fff; box-shadow:0 4px 14px rgba(77,105,155,.05); }
+    .composer button { display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:50%; color:#8290a4; background:#f0f3f8; font-size:22px; }
+    .composer .send { color:#73a3fc; background:#eef4ff; font-size:19px; }.composer .send:disabled { opacity:.7; cursor:default; }
+    .composer input { width:100%; min-width:0; border:0; outline:0; color:var(--text); background:transparent; font-size:11px; }
+    .composer input::placeholder { color:#9ba5b5; }
+    .disclaimer { margin:7px 0 0; color:#abb1ba; font-size:10px; text-align:center; }
+    .chat { display:grid; gap:12px; padding-top:12px; }.chat .question { justify-self:end; max-width:92%; padding:9px 12px; border-radius:10px; background:#f0f3f8; color:#455064; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .answer { padding:14px; border:1px solid #e2e8f3; border-radius:10px; background:rgba(255,255,255,.94); font-size:12px; line-height:1.65; }
+    .answer h3 { margin:0 0 8px; font-size:14px; }.answer p { margin:7px 0; }.answer ul { margin:8px 0; padding-left:18px; }.answer li { margin:5px 0; }
+    .answer small { display:block; margin-top:12px; color:var(--faint); }.back-home { margin:4px 0 10px; padding:0; border:0; color:#657a9b; background:none; font-size:11px; }
+    .history-overlay { position:fixed; inset:0; z-index:10; display:grid; place-items:center; background:rgba(26,35,50,.28); }
+    .history-dialog { width:min(420px,calc(100vw - 32px)); max-height:70vh; overflow:auto; padding:18px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(25,31,45,.16); }
+    .history-dialog header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }.history-dialog h2 { margin:0; font-size:16px; }
+    .history-dialog header button { border:0; background:none; font-size:20px; }.history-dialog .empty { color:var(--muted); font-size:12px; }
+    .history-row { display:block; width:100%; padding:10px; border:1px solid var(--line); border-radius:7px; margin:7px 0; background:#fff; text-align:left; font-size:12px; }.history-row small { display:block; margin-top:4px; color:var(--faint); }
+    .toast { position:fixed; right:20px; bottom:18px; z-index:20; padding:10px 14px; border:1px solid var(--line); border-radius:7px; background:#fff; box-shadow:0 8px 25px rgba(25,31,45,.1); font-size:12px; }
+    .metric { transition:background-color 160ms ease,border-color 160ms ease,box-shadow 160ms ease,transform 160ms ease; }
+    .metric:hover { border-color:#efabb4; background:#fffafb; box-shadow:0 8px 20px #20273312; transform:translateY(-1px); }
+    .orders tbody tr[data-order-row]:hover td { background:#fffafb; }
+    @media(max-width:1200px) { .content { padding:20px; }.wb-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }.wb-panels { grid-template-columns:1fr; } }
+    @media(max-width:800px) { .summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media(max-width:560px) { .topbar { height:48px; padding:0 12px; }.page-tabs { width:100%; }.page-tab { min-width:0; flex:1; }.period-control select { max-width:200px; }.content { padding:16px 12px; }.wb-definition-grid { grid-template-columns:1fr; }.wb-hero { align-items:flex-start; flex-direction:column; }.wb-title-line { gap:8px; }.wb-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.wb-boundary { flex-direction:column; }.wb-context small { width:100%; margin-left:0; }.wb-adopt-overlay { padding:10px; }.wb-adopt-head,.wb-adopt-body,.wb-adopt-foot { padding-left:17px; padding-right:17px; }.wb-adopt-body { padding-top:20px; padding-bottom:24px; }.wb-adopt-fields { grid-template-columns:1fr; }.wb-adopt-foot { flex-wrap:wrap; }.wb-adopt-foot p { flex-basis:100%; } }
+  </style>
+<style id="gea-compact-page-header">
+/* Embedded business pages share compact inventory-page top spacing. */
+.workspace > .content { width:100%; max-width:none; padding-top:8px; }
+.wb-hero h1 { display:none; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <main class="main fulfillment-page" id="mainPage">
+      <div class="layout" id="layout">
+        <div class="workspace">
+          <section class="content" id="fulfillmentView" aria-label="订单履约">
+            <div class="summary"><div class="metric"><span>接收订单</span><strong data-summary="received">17</strong><small>来自 DMS / KMS</small></div><div class="metric"><span>校验中</span><strong data-summary="checking">4</strong><small>规则执行中</small></div><div class="metric"><span>异常待核实</span><strong data-summary="issues">4</strong><small>暂不生成 OMS 单</small></div><div class="metric"><span>待推送</span><strong data-summary="ready">6</strong><small>OMS 单已生成</small></div></div>
+            <section class="card"><div class="orders-card-head"><h2>订单履约进度</h2><span class="orders-count" id="ordersCount">显示 17 / 17 条</span><div class="order-filters" role="search" aria-label="筛选订单履约进度"><input id="orderNumberSearch" type="search" autocomplete="off" placeholder="来源单号 / OMS 单号" aria-label="按来源订单号或 OMS 单号模糊查询"><input id="customerSearch" type="search" autocomplete="off" placeholder="客户名称 / 编码" aria-label="按客户名称或客户编码模糊查询"><div class="warehouse-picker" id="warehousePicker"><input id="warehouseSearch" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="warehouseOptions" placeholder="全部发货仓" aria-label="搜索并单选发货仓"><button id="warehouseToggle" type="button" aria-label="展开发货仓选项">⌄</button><div class="warehouse-options" id="warehouseOptions" role="listbox" hidden></div></div><select id="omsStatusFilter" aria-label="按 OMS 状态筛选"><option value="">全部 OMS 状态</option><option value="待推送">待推送</option><option value="校验中">校验中</option><option value="校验异常">校验异常</option><option value="待生成 OMS 单">待生成 OMS 单</option></select></div></div><div class="table-wrap"><table class="orders"><thead><tr><th>来源订单 / OMS 单</th><th>客户 / 来源</th><th>接收时间</th><th>商品 / 数量</th><th>发货仓</th><th>OMS 状态</th><th>当前关注点</th></tr></thead><tbody>
+              <tr data-order-row data-customer-code="10010124"><td><strong>DMS-C-0920-001</strong><small>OMS-SO-0920-001</small></td><td><strong>叶县联桥商贸有限公司</strong><small>DMS 客户订单 · 客户编码 10010124</small></td><td>09-20 09:42</td><td>8 SKU / 420 箱</td><td>郑州分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code=""><td><strong>DMS-R-0920-002</strong><small>OMS 单尚未生成</small></td><td><strong>郑州直营门店组</strong><small>DMS 零售订单 · 编码未提供</small></td><td>09-20 09:36</td><td>5 SKU / 86 箱</td><td>郑州分仓</td><td><span class="status progress">校验中</span></td><td>商品与仓配规则校验中</td></tr>
+              <tr data-order-row data-customer-code="10010126"><td><strong>DMS-C-0920-003</strong><small>OMS 单尚未生成</small></td><td><strong>洛阳冷链商贸有限公司</strong><small>DMS 客户订单 · 客户编码 10010126</small></td><td>09-20 09:18</td><td>6 SKU / 310 箱</td><td>待确定</td><td><span class="status issue">校验异常</span></td><td>商品销售范围待核实</td></tr>
+              <tr data-order-row data-customer-code="10010127"><td><strong>KMS-0920-004</strong><small>OMS 单尚未生成</small></td><td><strong>西南冷链经销商</strong><small>KMS 系统订单 · 客户编码 10010127</small></td><td>09-20 08:57</td><td>3 SKU / 160 箱</td><td>成都分仓</td><td><span class="status pending">待生成 OMS 单</span></td><td>校验已完成</td></tr>
+              <tr data-order-row data-customer-code="10010128"><td><strong>DMS-C-0920-005</strong><small>OMS-SO-0920-005</small></td><td><strong>华中食品经销商</strong><small>DMS 客户订单 · 客户编码 10010128</small></td><td>09-20 08:42</td><td>7 SKU / 275 箱</td><td>武汉分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code=""><td><strong>DMS-R-0920-006</strong><small>OMS 单尚未生成</small></td><td><strong>华中直营门店组</strong><small>DMS 零售订单 · 编码未提供</small></td><td>09-20 08:23</td><td>4 SKU / 68 箱</td><td>待确定</td><td><span class="status issue">校验异常</span></td><td>收货信息不完整</td></tr>
+              <tr data-order-row data-customer-code="10010129"><td><strong>DMS-C-0920-007</strong><small>OMS-SO-0920-007</small></td><td><strong>开封区域经销商</strong><small>DMS 客户订单 · 客户编码 10010129</small></td><td>09-20 08:10</td><td>9 SKU / 350 箱</td><td>郑州分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code=""><td><strong>DMS-R-0920-008</strong><small>OMS 单尚未生成</small></td><td><strong>洛阳直营门店组</strong><small>DMS 零售订单 · 编码未提供</small></td><td>09-20 07:56</td><td>6 SKU / 92 箱</td><td>郑州分仓</td><td><span class="status progress">校验中</span></td><td>客户信用与价格校验中</td></tr>
+              <tr data-order-row data-customer-code="10010130"><td><strong>KMS-0920-009</strong><small>OMS 单尚未生成</small></td><td><strong>河南冷链配送中心</strong><small>KMS 系统订单 · 客户编码 10010130</small></td><td>09-20 07:41</td><td>5 SKU / 188 箱</td><td>待确定</td><td><span class="status issue">校验异常</span></td><td>价格条件未维护</td></tr>
+              <tr data-order-row data-customer-code="10010131"><td><strong>DMS-C-0920-010</strong><small>OMS 单尚未生成</small></td><td><strong>襄阳食品经销商</strong><small>DMS 客户订单 · 客户编码 10010131</small></td><td>09-20 07:28</td><td>8 SKU / 260 箱</td><td>武汉分仓</td><td><span class="status pending">待生成 OMS 单</span></td><td>校验已完成</td></tr>
+              <tr data-order-row data-customer-code="10010132"><td><strong>DMS-C-0920-011</strong><small>OMS-SO-0920-011</small></td><td><strong>鄂东区域经销商</strong><small>DMS 客户订单 · 客户编码 10010132</small></td><td>09-20 07:12</td><td>10 SKU / 405 箱</td><td>武汉分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code="10010133"><td><strong>KMS-0920-012</strong><small>OMS-SO-0920-012</small></td><td><strong>川北冷链经销商</strong><small>KMS 系统订单 · 客户编码 10010133</small></td><td>09-20 06:54</td><td>4 SKU / 210 箱</td><td>成都分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code=""><td><strong>DMS-R-0920-013</strong><small>OMS 单尚未生成</small></td><td><strong>成都直营门店组</strong><small>DMS 零售订单 · 编码未提供</small></td><td>09-20 06:39</td><td>7 SKU / 106 箱</td><td>成都分仓</td><td><span class="status progress">校验中</span></td><td>收货时段校验中</td></tr>
+              <tr data-order-row data-customer-code="10010134"><td><strong>DMS-C-0920-014</strong><small>OMS 单尚未生成</small></td><td><strong>南阳商贸有限公司</strong><small>DMS 客户订单 · 客户编码 10010134</small></td><td>09-20 06:20</td><td>5 SKU / 195 箱</td><td>待确定</td><td><span class="status issue">校验异常</span></td><td>库存可用量不足</td></tr>
+              <tr data-order-row data-customer-code="10010135"><td><strong>KMS-0920-015</strong><small>OMS 单尚未生成</small></td><td><strong>豫南食品经销商</strong><small>KMS 系统订单 · 客户编码 10010135</small></td><td>09-20 05:58</td><td>6 SKU / 230 箱</td><td>郑州分仓</td><td><span class="status pending">待生成 OMS 单</span></td><td>校验已完成</td></tr>
+              <tr data-order-row data-customer-code="10010136"><td><strong>DMS-C-0920-016</strong><small>OMS-SO-0920-016</small></td><td><strong>荆州冷链商贸</strong><small>DMS 客户订单 · 客户编码 10010136</small></td><td>09-20 05:37</td><td>8 SKU / 315 箱</td><td>武汉分仓</td><td><span class="status">待推送</span></td><td>等待下游交接</td></tr>
+              <tr data-order-row data-customer-code=""><td><strong>DMS-R-0920-017</strong><small>OMS 单尚未生成</small></td><td><strong>西南直营门店组</strong><small>DMS 零售订单 · 编码未提供</small></td><td>09-20 05:14</td><td>3 SKU / 74 箱</td><td>成都分仓</td><td><span class="status progress">校验中</span></td><td>商品与收货信息校验中</td></tr>
+              <tr class="orders-empty" id="ordersNoMatch" hidden><td colspan="7">未找到符合条件的订单，请调整筛选条件。</td></tr>
+            </tbody></table></div><div class="order-pagination" id="ordersPagination" aria-label="订单履约进度分页"><span id="ordersTotal">共17条</span><label class="order-page-size"><select id="ordersPageSize" aria-label="每页显示数量"><option value="10">10条/页</option><option value="20">20条/页</option><option value="50">50条/页</option></select></label><button class="order-page-button" id="ordersPrevPage" type="button" aria-label="上一页">‹</button><span class="order-page-status" aria-live="polite"><strong id="ordersCurrentPage">1</strong><span>/</span><span id="ordersPageCount">2</span></span><button class="order-page-button" id="ordersNextPage" type="button" aria-label="下一页">›</button></div></section>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>const fulfillmentView = document.getElementById('fulfillmentView');
+    const fulfillmentRows = [...fulfillmentView.querySelectorAll('.orders tbody tr[data-order-row]')];
+    const orderNumberSearch = document.getElementById('orderNumberSearch');
+    const customerSearch = document.getElementById('customerSearch');
+    const warehousePicker = document.getElementById('warehousePicker');
+    const warehouseSearch = document.getElementById('warehouseSearch');
+    const warehouseOptions = document.getElementById('warehouseOptions');
+    const omsStatusFilter = document.getElementById('omsStatusFilter');
+    const ordersPageSize = document.getElementById('ordersPageSize');
+    const ordersPrevPage = document.getElementById('ordersPrevPage');
+    const ordersNextPage = document.getElementById('ordersNextPage');
+    const warehouseNames = [...new Set(fulfillmentRows.map(row => row.cells[4].textContent.trim()))];
+    let selectedWarehouse = '';
+    let currentOrderPage = 1;
+    function normalizeSearch(value) { return String(value).trim().toLocaleLowerCase('zh-CN'); }
+    function filterFulfillmentRows(resetPage = false) {
+      const numberQuery = normalizeSearch(orderNumberSearch.value);
+      const customerQuery = normalizeSearch(customerSearch.value);
+      const selectedStatus = omsStatusFilter.value;
+      if (resetPage) currentOrderPage = 1;
+      const matchedRows = fulfillmentRows.filter(row => {
+        const sourceNumber = normalizeSearch(row.cells[0].querySelector('strong').textContent);
+        const omsText = row.cells[0].querySelector('small').textContent.trim();
+        const omsNumber = omsText.startsWith('OMS-') ? normalizeSearch(omsText) : '';
+        const customerName = normalizeSearch(row.cells[1].querySelector('strong').textContent);
+        const customerCode = normalizeSearch(row.dataset.customerCode);
+        const warehouse = row.cells[4].textContent.trim();
+        const omsStatus = row.cells[5].textContent.trim();
+        const matchesNumber = !numberQuery || sourceNumber.includes(numberQuery) || omsNumber.includes(numberQuery);
+        const matchesCustomer = !customerQuery || customerName.includes(customerQuery) || customerCode.includes(customerQuery);
+        const matchesWarehouse = !selectedWarehouse || warehouse === selectedWarehouse;
+        const matchesStatus = !selectedStatus || omsStatus === selectedStatus;
+        return matchesNumber && matchesCustomer && matchesWarehouse && matchesStatus;
+      });
+      const pageSize = Number(ordersPageSize.value);
+      const pageCount = Math.max(1, Math.ceil(matchedRows.length / pageSize));
+      currentOrderPage = Math.min(currentOrderPage, pageCount);
+      const pageStart = (currentOrderPage - 1) * pageSize;
+      const pageRows = new Set(matchedRows.slice(pageStart, pageStart + pageSize));
+      fulfillmentRows.forEach(row => { row.hidden = !pageRows.has(row); });
+      document.getElementById('ordersNoMatch').hidden = matchedRows.length !== 0;
+      document.getElementById('ordersCount').textContent = `显示 ${matchedRows.length} / ${fulfillmentRows.length} 条`;
+      document.getElementById('ordersTotal').textContent = `共${matchedRows.length}条`;
+      document.getElementById('ordersCurrentPage').textContent = currentOrderPage;
+      document.getElementById('ordersPageCount').textContent = pageCount;
+      ordersPrevPage.disabled = currentOrderPage <= 1;
+      ordersNextPage.disabled = currentOrderPage >= pageCount || matchedRows.length === 0;
+    }
+    function closeWarehouseOptions() {
+      warehouseOptions.hidden = true;
+      warehouseSearch.setAttribute('aria-expanded', 'false');
+      warehouseSearch.value = selectedWarehouse;
+    }
+    function openWarehouseOptions() {
+      const search = normalizeSearch(warehouseSearch.value);
+      warehouseOptions.replaceChildren();
+      const options = [{ label:'全部发货仓', value:'' }, ...warehouseNames.map(value => ({ label:value, value }))]
+        .filter(option => !search || normalizeSearch(option.label).includes(search));
+      if (!options.length) { const empty = document.createElement('div'); empty.className = 'no-option'; empty.textContent = '无匹配发货仓'; warehouseOptions.appendChild(empty); }
+      options.forEach(option => {
+        const button = document.createElement('button'); button.type = 'button'; button.setAttribute('role', 'option');
+        button.textContent = option.label; button.setAttribute('aria-selected', String(option.value === selectedWarehouse));
+        button.addEventListener('click', () => { selectedWarehouse = option.value; warehouseSearch.focus(); closeWarehouseOptions(); filterFulfillmentRows(true); });
+        warehouseOptions.appendChild(button);
+      });
+      warehouseOptions.hidden = false;
+      warehouseSearch.setAttribute('aria-expanded', 'true');
+    }
+    orderNumberSearch.addEventListener('input', () => filterFulfillmentRows(true));
+    customerSearch.addEventListener('input', () => filterFulfillmentRows(true));
+    omsStatusFilter.addEventListener('change', () => filterFulfillmentRows(true));
+    warehouseSearch.addEventListener('focus', openWarehouseOptions);
+    warehouseSearch.addEventListener('input', () => { if (warehouseSearch.value !== selectedWarehouse) { selectedWarehouse = ''; filterFulfillmentRows(true); } openWarehouseOptions(); });
+    warehouseSearch.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closeWarehouseOptions(); warehouseSearch.blur(); }
+      if (event.key === 'ArrowDown' && !warehouseOptions.hidden) { const first = warehouseOptions.querySelector('button'); if (first) { event.preventDefault(); first.focus(); } }
+      if (event.key === 'Enter' && !warehouseOptions.hidden) { const first = warehouseOptions.querySelector('button'); if (first) { event.preventDefault(); first.click(); } }
+    });
+    document.getElementById('warehouseToggle').addEventListener('click', () => { if (warehouseOptions.hidden) { warehouseSearch.value = ''; openWarehouseOptions(); warehouseSearch.focus(); } else closeWarehouseOptions(); });
+    warehousePicker.addEventListener('focusout', () => { setTimeout(() => { if (!warehousePicker.contains(document.activeElement)) closeWarehouseOptions(); }, 0); });
+    document.addEventListener('click', event => { if (!warehousePicker.contains(event.target)) closeWarehouseOptions(); });
+    ordersPageSize.addEventListener('change', () => filterFulfillmentRows(true));
+    ordersPrevPage.addEventListener('click', () => { if (currentOrderPage > 1) { currentOrderPage--; filterFulfillmentRows(); } });
+    ordersNextPage.addEventListener('click', () => { currentOrderPage++; filterFulfillmentRows(); });
+    filterFulfillmentRows();
+</script>
+</body>
+</html>
