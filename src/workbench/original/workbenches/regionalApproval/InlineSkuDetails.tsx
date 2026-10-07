@@ -40,6 +40,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
 }) {
   const {salesPlan}=useWorkbenchHost();
  const [skus,setSkus]=useState<GeaSalesPlanSku[]>(); const [failed,setFailed]=useState(false);
+ const displayedSkus=useMemo(()=>skus?.filter(sku=>categoryName === undefined || (sku.productCategName.trim() || '其他') === categoryName),[skus,categoryName]);
  const [confirmedValues,setConfirmedValues]=useState<Record<string,string>>(()=>initialInputValues??{});
  const userEdited=useRef(false);
  const [draftState,setDraftState]=useState<'idle'|'loading'|'saved'|'saving'|'failed'>('idle');
@@ -119,11 +120,11 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
  // Report the same loaded values shown by the table, including read-only evidence.
  useEffect(() => {
   if (!onElementsChange) return;
-  if (!skus || skus.length === 0) {
+  if (!displayedSkus || displayedSkus.length === 0) {
    onElementsChange([]);
    return;
   }
-  const quantityFields = skus.map(sku => {
+  const quantityFields = displayedSkus.map(sku => {
    const code = String(sku.skuCode);
    const quantity = canEdit ? confirmedValues[code] ?? baselineFor(sku) : sku.qty;
    return {
@@ -133,7 +134,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
     editable: Boolean(canEdit),
    };
   });
-  const readOnlyFields = skus.flatMap(sku => {
+  const readOnlyFields = displayedSkus.flatMap(sku => {
    const code = String(sku.skuCode);
    const confirmed = confirmedValues[code] ?? editableQuantityText(baselineFor(sku));
    const amount = multiplyExactDecimals(confirmed, String(sku.price));
@@ -149,7 +150,7 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
    label: `${row.dealerName ?? row.orgName ?? row.planId} 全部 SKU 的确认计划量`,
    members: quantityFields.map(field => field.id),
   });
- }, [canEdit, confirmedValues, onElementsChange, row.dealerName, row.orgName, row.planId, skus, t]);
+ }, [canEdit, confirmedValues, onElementsChange, row.dealerName, row.orgName, row.planId, displayedSkus, t]);
  useEffect(()=>{
   if (!canEdit || !detail || !skus || draftState === 'loading' || (!userEdited.current&&saveRetry===0)) return;
   const serialized=JSON.stringify(confirmedValues);
@@ -179,9 +180,8 @@ export function InlineSkuDetails({row,t,detail,canEdit,approvalRole,categoryName
   } catch { return {}; }
  },[savedDraft]);
  const groups = new Map<string, GeaSalesPlanSku[]>();
- for (const sku of skus ?? []) {
+ for (const sku of displayedSkus ?? []) {
   const category = sku.productCategName.trim() || '其他';
-  if (categoryName !== undefined && category !== categoryName) continue;
   groups.set(category, [...(groups.get(category) ?? []), sku]);
  }
  // 暂存状态就近展示在改过的数字旁；失败给就地重试，不再用表格顶部通栏。

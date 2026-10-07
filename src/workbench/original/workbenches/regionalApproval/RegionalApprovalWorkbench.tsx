@@ -1309,7 +1309,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const catalogElements = useMemo<PageElement[]>(() => {
     if (!liveQuery.enabled) return [];
     const fields = liveRows.flatMap((row) =>
-      expandedLiveGroups.includes(row.planId)
+      expandedLiveRowKeys.includes(row.planId)
         ? inlineElements[row.planId]?.fields ?? []
         : [],
     );
@@ -1317,9 +1317,7 @@ const RegionalApprovalWorkbench: React.FC<{
     const collections = liveRows.map((row) => {
       const label =
         projectRegionalApprovalLiveDimension(row, dimension).name ?? row.planId;
-      const members = (inlineElements[row.planId]?.fields ?? []).map(
-        (field) => field.id,
-      );
+      const members = inlineElements[row.planId]?.collection?.members ?? [];
       return {
         id: `collection:${row.planId}:qty`,
         label: `${label} 全部 SKU 的确认计划量（无需展开，填同一个值）`,
@@ -1461,7 +1459,7 @@ const RegionalApprovalWorkbench: React.FC<{
   }, [
     appliedLiveFilters,
     dimension,
-    expandedLiveGroups,
+    expandedLiveRowKeys,
     inlineElements,
     liveDetailPlanId,
     liveFilterOptions,
@@ -1873,6 +1871,8 @@ const RegionalApprovalWorkbench: React.FC<{
             continue;
           }
           if (id.startsWith("field:") || id.startsWith("collection:")) {
+            if (id.startsWith("field:") && !id.endsWith(":qty"))
+              return rejectWith("READ_ONLY_FIELD");
             const planId = id.split(":")[1];
             const row = liveRows.find((candidate) => candidate.planId === planId);
             if (!row) return rejectWith("PLAN_NOT_ON_CURRENT_PAGE");
@@ -1897,7 +1897,7 @@ const RegionalApprovalWorkbench: React.FC<{
               const reported = inlineElementsRef.current[row.planId]?.fields ?? [];
               const target = skuCode
                 ? reported.filter((field) => field.id.endsWith(`:${skuCode}:qty`))
-                : reported;
+                : reported.filter((field) => field.id.endsWith(':qty'));
               if (
                 target.length > 0 &&
                 target.every((field) => field.value === value)
