@@ -1,10 +1,10 @@
-import { buildFullChainWorkspace } from "../../qll/src/lib/full-chain/workspace-service.ts";
+import { buildFullChainWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-workspace-service";
 import type {
   FullChainData,
   WorkspaceFilters,
   WorkspaceScope,
-} from "../../qll/src/lib/full-chain/types.ts";
-import { summarizeStructure } from "../../qll/src/lib/full-chain/category-structure.ts";
+} from "dsh-agent-manage/inventory-compute/full-chain-types";
+import { summarizeStructure } from "dsh-agent-manage/inventory-compute/full-chain-category-structure";
 import history from "./qll-trend-mock.json";
 import { currentSessionId } from "./channel.js";
 
@@ -228,13 +228,8 @@ async function workspace(
   historical = false,
 ) {
   signal?.throwIfAborted();
-  const value = await buildFullChainWorkspace({
-    ...request,
-    adapter: {
-      load: async () =>
-        historical ? historyData(request) : structuredClone(data),
-    },
-  });
+  const input = historical ? historyData(request) : structuredClone(data);
+  const value = buildFullChainWorkspace(input,request);
   signal?.throwIfAborted();
   return {
     ...value,

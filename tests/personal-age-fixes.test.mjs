@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {
     contents: `export {loadPersonal} from './business/inventory-personal/source/inventory-light-plugins/src/personal/data.ts';
-      export {summarize,dedupeRisks} from './business/inventory-personal/source/inventory-light-plugins/src/personal/model.ts';
+      export {summarize,dedupeRisks} from 'dsh-agent-manage/inventory-compute/personal';
       export {pageContext} from './business/inventory-personal/source/inventory-light-plugins/src/native/context.ts';
       export {default as Page} from './business/inventory-personal/source/inventory-light-plugins/src/personal/page.tsx';`,
     resolveDir: process.cwd(),

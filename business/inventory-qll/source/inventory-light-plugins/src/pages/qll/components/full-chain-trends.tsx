@@ -5,7 +5,7 @@ import { reportElements } from "../../../channel.js";
 import { createHash } from "../../../browser-crypto";
 import { referenceText } from "./structure-evidence";
 import { ownContextPart } from "../../../native/context";
-import type { FullChainWorkspace } from "../../../../../qll/src/lib/full-chain/types";
+import type { FullChainWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-types";
 import styles from "./full-chain-workbench.module.css";
 
 type Metric = "inventory" | "orders" | "aging";

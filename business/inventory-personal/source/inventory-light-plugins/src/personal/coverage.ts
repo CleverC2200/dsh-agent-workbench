@@ -1,4 +1,4 @@
-import type { ObjectData } from "./model";
+import type { ObjectData } from "dsh-agent-manage/inventory-compute/personal";
 /** Describe only evidence available to this consumer; absence never proves a source-wide zero. */
 export function coverageNotes(o: ObjectData): string[] {
   if (o.error) return [o.error];

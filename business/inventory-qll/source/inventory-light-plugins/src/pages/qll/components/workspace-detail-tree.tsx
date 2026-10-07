@@ -12,7 +12,7 @@ import { Table } from "./viewport-table";
 import type {
   FullChainWorkspace,
   WorkspaceDetailNode,
-} from "../../../../../qll/src/lib/full-chain/types.ts";
+} from "dsh-agent-manage/inventory-compute/full-chain-types";
 import { appPath } from "../../../../../qll/src/lib/app-path.ts";
 import { workspaceViewKey } from "../../../../../qll/src/lib/workspace-stream.ts";
 import styles from "./full-chain-workbench.module.css";

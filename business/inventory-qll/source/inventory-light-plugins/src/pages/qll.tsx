@@ -1,7 +1,7 @@
 import {FullChainTrends} from "./qll/components/full-chain-trends";
 import {scopeDescription} from "./qll/components/structure-evidence";
 import {ReferenceStructure, rowStatus} from "./qll/components/reference-structure";
-import { customerMetrics } from "../qll-customer-metrics";
+import { customerMetrics } from "dsh-agent-manage/inventory-compute/full-chain-customer-metrics";
 import { WorkbenchLoading } from "../dsh-ui/workbench-loading";
 import { reportElements } from "../channel.js";
 import { updateContext, removeContextPart } from "../native/context";
@@ -39,7 +39,7 @@ import type {
   MetricValue,
   StructureRow,
   WorkspaceScope,
-} from "../../../qll/src/lib/full-chain/types.ts";
+} from "dsh-agent-manage/inventory-compute/full-chain-types";
 
 import { appPath } from "../../../qll/src/lib/app-path.ts";
 

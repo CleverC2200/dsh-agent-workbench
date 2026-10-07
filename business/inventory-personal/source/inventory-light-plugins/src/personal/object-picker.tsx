@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { ObjectData } from "./model";
+import type { ObjectData } from "dsh-agent-manage/inventory-compute/personal";
 import css from "./object-picker.module.css";
 
 export function ObjectPicker({

@@ -5,7 +5,7 @@ import {
   createPageViewState,
   usePageViewField,
 } from "../../../../../shared/view-state.js";
-import { dedupeRisks, summarize, type ObjectData, type Risk } from "./model";
+import { dedupeRisks, summarize, type ObjectData, type Risk } from "dsh-agent-manage/inventory-compute/personal";
 import { Button, DataPagination } from "../dsh-ui/controls";
 import { WorkbenchLoading } from "../dsh-ui/workbench-loading";
 import {
