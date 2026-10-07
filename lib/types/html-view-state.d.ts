@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-dealer' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
 type Rhythm = {
     id: string;
     type: string;
@@ -211,6 +211,45 @@ export type FulfillmentViewState = {
     page?: number;
     size?: number;
 };
+export type DealerViewState = {
+    version: 1;
+    customer?: string;
+    tab?: string;
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    catalogSearch?: string;
+    catalogFilters?: {
+        search: string;
+        category: string;
+        productTag: string;
+    };
+    stockCategory?: string;
+    stockAction?: string;
+    orderPanel?: string;
+    view?: string;
+    cart?: Record<string, {
+        key: string;
+        customerCode: string;
+        code: string;
+        name: string;
+        quantity: number;
+        suggestedQuantity: number | null;
+        reason: string;
+        evidence?: string;
+        source: 'manual' | 'suggestion';
+        status: 'local-only';
+        selectedAt: string;
+        unitPrice?: number | null;
+        category?: string;
+        policyId?: string;
+    }>;
+    orderHeaders?: Record<string, {
+        car: string;
+        pickup: string;
+        receive: string;
+    }>;
+};
 export type QllViewState = {
     version: 1;
     scope?: "company" | "all-channel";
@@ -235,7 +274,7 @@ export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | PersonalViewState;
+} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | DealerViewState | PersonalViewState;
 export declare const isHtmlViewPage: (page: string) => page is HtmlViewPage;
 export declare const isBusinessViewPage: (page: string) => boolean;
 /** Reject undeclared fields rather than turning a page snapshot into a generic state/authority store. */

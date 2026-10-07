@@ -19,7 +19,7 @@ test('Host initializes package resources in a Chinese path and serves the regist
   await writeFile(join(root, 'theme/tokens.css'), 'body { --workbench-text: #20232a; }');
   await writeFile(join(root, 'samples/plugin.json'), JSON.stringify({schemaVersion: 1, id: 'workbench-html-table', name: '表格样板', html: 'index.html'}));
   await writeFile(join(root, 'samples/index.html'), '<html><head></head><body>中文资源已加载</body></html>');
-  for (const id of ['fc','aqkc','qll','customer','orderworkbench','orderfulfillment']) {
+  for (const id of ['fc','aqkc','qll','dealer','customer','orderworkbench','orderfulfillment']) {
     const directory=join(root,'business','inventory-'+id);await mkdir(directory,{recursive:true});
     await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'inventory-'+id,name:id,html:'index.html'}));
     await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
@@ -39,8 +39,8 @@ test('Host initializes package resources in a Chinese path and serves the regist
   const metadata = await routes.get('/api/agent-workbench/pages').fetch(new Request('https://localhost/api/agent-workbench/pages'));
   const pages = await metadata.json();
   assert.equal(pages[0].name, '表格样板');
-  for (const id of ['inventory-qll','inventory-customer','inventory-orderworkbench','inventory-orderfulfillment']) assert.equal(pages.filter(page=>page.id===id).length,1);
-  assert.equal(context.workbenchPages.packages().length,10);
+  for (const id of ['inventory-qll','inventory-dealer','inventory-customer','inventory-orderworkbench','inventory-orderfulfillment']) assert.equal(pages.filter(page=>page.id===id).length,1);
+  assert.equal(context.workbenchPages.packages().length,11);
   const response = await routes.get('/api/agent-workbench/html').fetch(new Request('https://localhost' + pages[0].url));
   assert.equal(response.status, 200);
   assert.match(await response.text(), /中文资源已加载/);

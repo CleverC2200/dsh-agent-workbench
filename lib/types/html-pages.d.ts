@@ -13,6 +13,8 @@ export interface HtmlPackage {
     directory: string;
     htmlPath: string;
     manifest: Record<string, any>;
+    /** Only controls menu discovery; installed resources and static delivery remain owned. */
+    visible?: boolean;
 }
 export interface WorkbenchPages {
     /** Register explicit installed package roots. No capability body or business credentials are read. */

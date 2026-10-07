@@ -41,6 +41,7 @@ export type BusinessMenuSection = "supply" | "plan" | "inventory" | "orders";
 export type BusinessMenuItem = {
     id: string;
     title: string;
+    onlyWhenRegistered?: boolean;
 };
 export type BusinessMenuGroup = {
     key: BusinessMenuSection;
