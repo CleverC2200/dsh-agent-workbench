@@ -177,3 +177,52 @@ test('full-chain content is readable and scrollable in the actual 559px PC panel
   assert.ok(await frame.locator('#app').evaluate(app=>[...app.querySelectorAll('*')].some(el=>el.scrollTop>0)),'scrolling reaches the trend below the table');
   if(evidence)await page.screenshot({path:evidence+'/qll-trend-559.png'});
 });
+
+test('PC trend chart labels keep real glyph size and complete dates inside narrow opaque panels',async t=>{
+  const {page,frame}=await fixture(t,'qll',400);
+  const trend=frame.getByRole('region',{name:'全链库存趋势与缺口'});
+  await expect.poll(()=>page.evaluate(()=>window.requests.filter(m=>m.method==='context').at(-1)?.parameters.parts?.queryState?.state)).toBe('ready');
+  await trend.getByRole('button',{name:'查询趋势',exact:true}).press('Enter');
+  await expect(trend).toContainText('缺失期间或层级以断线表示');
+  const svg=trend.getByRole('img');
+  for(const width of [400,559,1199]){
+    await page.setViewportSize({width:width+721,height:780});
+    await page.locator('iframe').evaluate((el,width)=>{el.style.width=width+'px';el.style.height='780px';},width);
+    await page.locator('#chat').evaluate((el,width)=>el.style.left=(width+280)+'px',width);
+    await svg.scrollIntoViewIfNeeded();
+    const geometry=await svg.evaluate(el=>{
+      const matrix=el.getScreenCTM(),scale=Math.hypot(matrix.a,matrix.b);
+      const dates=[...el.querySelectorAll('text[font-size="10"]')],last=dates.at(-1),box=last.getBBox();
+      return{svgWidth:el.getBoundingClientRect().width,scale,xGlyphSize:parseFloat(getComputedStyle(last).fontSize)*scale,yGlyphSize:parseFloat(getComputedStyle(el.querySelector('text[font-size="11"]')).fontSize)*scale,lastDate:last.textContent,lastRight:box.x+box.width,viewWidth:el.viewBox.baseVal.width,segmentCount:el.querySelectorAll('polyline').length,circleTitles:[...el.querySelectorAll('circle title')].map(title=>title.textContent)};
+    });
+    if(evidence){await mkdir(evidence,{recursive:true});await writeFile(evidence+`/chart-${width}.json`,JSON.stringify(geometry,null,2));await page.screenshot({path:evidence+`/chart-${width}.png`});}
+    assert.ok(geometry.xGlyphSize>=9.99,`x-axis glyphs must stay 10px, actually ${geometry.xGlyphSize}`);
+    assert.ok(geometry.yGlyphSize>=10.99,`y-axis glyphs must stay 11px, actually ${geometry.yGlyphSize}`);
+    assert.ok(geometry.lastRight<=geometry.viewWidth,'the complete last date stays inside the SVG instead of clipped at its right edge');
+    const scroll=trend.getByRole('region',{name:'趋势图横向滚动'});
+    const metrics=await scroll.evaluate(el=>({client:el.clientWidth,total:el.scrollWidth}));
+    if(metrics.client<780){await scroll.focus();await scroll.press('ArrowRight');await expect.poll(()=>scroll.evaluate(el=>el.scrollLeft)).toBeGreaterThan(0);for(let i=0;i<20;i++)await scroll.press('ArrowRight');}
+    const last=svg.locator('text[font-size="10"]').last();
+    await expect(last).toBeInViewport();
+    await expect(trend.getByRole('button',{name:'查询趋势',exact:true})).toBeVisible();
+    assert.equal(geometry.segmentCount,3,'missing September 29 observation keeps the original separate segments');
+    assert.ok(geometry.circleTitles.some(text=>/基地库存\/件 0$/.test(text)),'a real zero is still a visible point');
+  }
+  const zero=svg.locator('circle').filter({hasText:/基地库存\/件 0$/});
+  await zero.focus();await expect(trend.locator('figcaption')).toContainText('基地库存/件：0');
+  // A fresh author page checks the original order values independently of prior focus.
+  await page.goto('http://inventory-layout.test/');
+  await page.locator('iframe').evaluate(el=>el.style.height='780px');
+  const next=page.frameLocator('iframe').getByRole('region',{name:'全链库存趋势与缺口'});
+  await expect.poll(()=>page.evaluate(()=>window.requests.filter(m=>m.method==='context').at(-1)?.parameters.parts?.queryState?.state)).toBe('ready');
+  await next.getByLabel('趋势指标').selectOption('orders');
+  await next.getByRole('button',{name:'查询趋势',exact:true}).press('Enter');
+  const point=next.locator('circle').filter({hasText:/原始需求\/件 100$/});
+  await expect(point).toBeVisible();
+  await expect(next.locator('figcaption')).not.toContainText('：100');
+  await point.focus();
+  await expect(next.locator('figcaption')).toContainText('原始需求/件：100');
+  await expect(next.locator('figcaption')).toContainText('发运后缺口/件：12');
+  await expect(next.locator('figcaption')).toContainText('2026-09-30');
+  if(evidence)await page.screenshot({path:evidence+'/chart-keyboard-100-12.png'});
+});

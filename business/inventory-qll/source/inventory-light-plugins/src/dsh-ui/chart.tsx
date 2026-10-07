@@ -55,9 +55,15 @@ export function TrendChart({
     v.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
   return (
     <figure style={{ margin: 0 }}>
+      <div
+        role="region"
+        aria-label="趋势图横向滚动"
+        tabIndex={0}
+        style={{ maxWidth: "100%", overflowX: "auto" }}
+      >
       <svg
         viewBox={`0 0 ${w} ${h}`}
-        style={{ width: "100%", height: h }}
+        style={{ display: "block", width: "100%", minWidth: w, height: h }}
         role="img"
         aria-label={shown.map((s) => s.name ?? s.key).join("、") + "趋势"}
       >
@@ -123,7 +129,7 @@ export function TrendChart({
               key={i}
               x={x(i)}
               y={h - 7}
-              textAnchor="middle"
+              textAnchor={i === data.length - 1 ? "end" : "middle"}
               fontSize="10"
               fill="currentColor"
             >
@@ -132,6 +138,7 @@ export function TrendChart({
           ) : null,
         )}
       </svg>
+      </div>
       <figcaption style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {shown.map((s) => (
           <span key={s.key} style={{ color: s.color }}>
