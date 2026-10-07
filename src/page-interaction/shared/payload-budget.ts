@@ -48,7 +48,7 @@ export const truncateText = (value: string, maxChars: number): string =>
 
 type Narrowed = { value: unknown; omitted: number };
 
-/** 递归收窄：数组按 focus 过滤 + 限长，字符串截断，对象逐键处理。 */
+/** 递归收窄：记录数组按 focus 过滤，标识/标量列表只限长，字符串截断。 */
 function narrow(
   value: unknown,
   tokens: string[],
@@ -58,7 +58,9 @@ function narrow(
     return { value: truncateText(value, options.maxChars), omitted: 0 };
   if (value === null || typeof value !== "object") return { value, omitted: 0 };
   if (Array.isArray(value)) {
-    const matched = value.filter((item) => includesFocus(item, tokens));
+    // 标识列表没有组织名称或字段标签，不能靠 focus 判定它的状态是否存在。
+    const scalars = value.every((item) => item === null || typeof item !== "object");
+    const matched = scalars ? value : value.filter((item) => includesFocus(item, tokens));
     const kept = matched.slice(0, options.maxItems);
     // 省略数按"原数组里没进上下文"的条数算：既包括没命中 focus 的，也包括超出上限的。
     const omitted = value.length - kept.length;
@@ -166,7 +168,7 @@ export function compressForModel(
     tokens.length > 0
       ? `已按 focus「${tokens.join(" ")}」只保留相关行/字段`
       : "已只保留摘要（数量与字段名）",
-    omitted > 0 ? `另有 ${omitted} 条未展开` : undefined,
+    omitted > 0 ? `另有 ${omitted} 项未保留；该数量包含不同数组的条目，不是业务行数或未展开行数` : undefined,
     "需要更多明细时带上更具体的 focus（用户提到的对象或字段名），不要重复整屏拉取。",
   ]
     .filter((text): text is string => text !== undefined)
