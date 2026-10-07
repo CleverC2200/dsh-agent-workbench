@@ -12,6 +12,8 @@ export async function buildInventory(id, sourceCommit) {
   const manifest = JSON.parse(
     await readFile(resolve(resource, "plugin.json"), "utf8"),
   );
+  const computeRoot = resolve(root, "../dsh-agent-manage");
+  let computeExport;
   const resolver = createRequire(resolve(id === "personal" ? root : ui, "package.json"));
   const result = await build({
     entryPoints: [resolve(ui, id === "personal" ? "src/personal/entry.tsx" : "src/native/entry.tsx")],
@@ -39,6 +41,11 @@ export async function buildInventory(id, sourceCommit) {
       {
         name: "inventory-browser",
         setup(api) {
+          api.onResolve({filter:/^dsh-agent-manage\/inventory-compute\/[a-z-]+$/}, async a => {
+            computeExport ??= JSON.parse(await readFile(resolve(computeRoot,"package.json"),"utf8")).exports["./inventory-compute/*"];
+            if (computeExport?.source !== "./src/inventory-compute/*.ts") throw Error("MANAGE_COMPUTE_PUBLIC_EXPORT_MISMATCH");
+            return {path:resolve(computeRoot,computeExport.source.replace("*",a.path.split("/").at(-1)))};
+          });
           api.onResolve(
             { filter: /^react(?:\/|$)|^react-dom(?:\/|$)|^clsx$|^zod(?:\/|$)/ },
             (a) => ({ path: resolver.resolve(a.path) }),
@@ -133,20 +140,22 @@ export async function buildInventory(id, sourceCommit) {
     const path = resolve(input);
     if (
       !path.startsWith(resource + "/") &&
-      !path.startsWith(resolve(root, "business/shared") + "/")
+      !path.startsWith(resolve(root, "business/shared") + "/") &&
+      !path.startsWith(resolve(computeRoot,"src/inventory-compute") + "/")
     )
       continue;
     inputs[
       path.startsWith(resource + "/")
         ? path.slice(resource.length + 1)
-        : "../shared/" + path.split("/shared/")[1]
+        : path.startsWith(computeRoot+"/") ? "../dsh-agent-manage/"+path.slice(computeRoot.length+1) : "../shared/" + path.split("/shared/")[1]
     ] = createHash("sha256")
       .update(await readFile(path))
       .digest("hex");
   }
+  if(computeExport) inputs["../dsh-agent-manage/package.json"] = createHash("sha256").update(await readFile(resolve(computeRoot,"package.json"))).digest("hex");
   await writeFile(
     resolve(out, "build-inputs.json"),
-    JSON.stringify({ sourceCommit, inputs }, null, 2) + "\n",
+    JSON.stringify({ sourceCommit, ...(computeExport?{computeOwner:"dsh-agent-manage", computePublicExport:"./inventory-compute/*"}:{}), inputs }, null, 2) + "\n",
   );
   console.log(
     `Built inventory-${id} from Workbench source and Manage resources`,

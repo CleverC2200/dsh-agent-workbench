@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildFullChainWorkspace } from "./workspace-service";
-import type { FullChainDataAdapter } from "./types";
+import { buildFullChainWorkspace as computeWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-workspace-service";
+import type { BuildWorkspaceRequest, FullChainData } from "dsh-agent-manage/inventory-compute/full-chain-types";
 
+type FullChainDataAdapter={load:(request:BuildWorkspaceRequest)=>Promise<FullChainData>};
+async function buildFullChainWorkspace(request:BuildWorkspaceRequest & {adapter:FullChainDataAdapter}) {
+ return computeWorkspace(await request.adapter.load(request),request);
+}
 const adapter: FullChainDataAdapter = {
   async load() {
     return {
@@ -427,19 +431,10 @@ test("empty allowlists deny every layer instead of widening access", async () =>
   assert.equal(result.coverage.coveredCustomers, 0);
 });
 
-test("rejects untrusted access before reading data", async () => {
-  let called = false;
-  await assert.rejects(
-    buildFullChainWorkspace({
-      access: { ...trustedAccess, trusted: false },
-      scope: "company",
-      filters: {},
-      now: new Date("2026-09-04T08:00:00+08:00"),
-      adapter: { load: async () => { called = true; return adapter.load({ access: trustedAccess, scope: "company", filters: {}, now: new Date() }); } },
-    }),
-    /trusted access context/i,
-  );
-  assert.equal(called, false);
+test("pure calculation rejects an untrusted supplied scope", async () => {
+  const request={access:trustedAccess,scope:"company" as const,filters:{},now:new Date("2026-09-04T08:00:00+08:00")};
+  const input=await adapter.load(request);
+  assert.throws(()=>computeWorkspace(input,{...request,access:{...trustedAccess,trusted:false}}), /trusted access context/i);
 });
 
 

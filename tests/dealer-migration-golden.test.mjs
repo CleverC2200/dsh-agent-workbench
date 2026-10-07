@@ -9,7 +9,7 @@ const fixed = "67e1007aa400a8a9c65c132f144dabd5168a49df";
 async function engine(source) {
   const result = await build({
     stdin: {
-      contents: `export {dealerOverviewFacts} from '${source}/dealer/web/src/lib/dealer-overview-facts.ts';export {suggestedStockQuantity} from '${source}/dealer/web/src/lib/dealer-demo-live-data.ts';export {dealerWorkbenchSql} from '${source}/dealer/web/src/lib/dealer-workbench-sql.ts';export {makeDraft,draftProblems} from '${source}/inventory-light-plugins/src/dealer-draft.ts';export {applicablePolicies,orderTotals} from '${source}/inventory-light-plugins/src/dealer-order.ts';`,
+      contents: `export {dealerOverviewFacts} from '${source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-overview-facts' : source + '/dealer/web/src/lib/dealer-overview-facts.ts'}';export {suggestedStockQuantity} from '${source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-recommendation' : source + '/dealer/web/src/lib/dealer-demo-live-data.ts'}';export {dealerWorkbenchSql} from '${source}/dealer/web/src/lib/dealer-workbench-sql.ts';export {makeDraft,draftProblems} from '${source}/inventory-light-plugins/src/dealer-draft.ts';export {applicablePolicies,orderTotals} from '${source.endsWith('/source') && source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-order' : source + '/inventory-light-plugins/src/dealer-order.ts'}';`,
       resolveDir: process.cwd(),
       loader: "ts",
     },
@@ -219,7 +219,7 @@ test("migration retains fixed-source metrics, SQL scope, recommendation and loca
     assert.equal(
       await readFile(
         resolve(
-          "business/inventory-dealer/source/dealer/config/biz-rules/" +
+          "../dsh-agent-manage/src/inventory-compute/dealer-config/" +
             file +
             ".json",
         ),

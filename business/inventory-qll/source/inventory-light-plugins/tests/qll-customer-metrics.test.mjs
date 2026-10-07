@@ -2,7 +2,7 @@ import {fileURLToPath} from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-const built=await build({entryPoints:[fileURLToPath(new URL('../src/qll-customer-metrics.ts',import.meta.url))],bundle:true,platform:'node',format:'esm',write:false});
+const built=await build({stdin:{contents:"export * from 'dsh-agent-manage/inventory-compute/full-chain-customer-metrics'",resolveDir:fileURLToPath(new URL('../../../../../',import.meta.url)),loader:'ts'},bundle:true,platform:'node',format:'esm',write:false});
 const {customerMetrics}=await import('data:text/javascript;base64,'+Buffer.from(built.outputFiles[0].text).toString('base64'));
 const fixture=(rows,planCustomerTotal=360)=>({structure:rows.map(row=>({layer:'customer',...row})),kpis:{inventoryLevel:{companyCurrent:640,observedTotal:1000,planCustomerTotal}},agingDetails:[{layer:'customer',values:{averageAgeDays:44}}],aging:{over30ByLayer:{customer:260}},customerObservationRisks:[{}]});
 test('customer metrics aggregate demand instead of averaging turnover and use batch age summary',()=>{

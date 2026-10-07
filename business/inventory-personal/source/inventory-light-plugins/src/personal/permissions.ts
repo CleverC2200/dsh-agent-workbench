@@ -1,4 +1,4 @@
-import type { ObjectData } from "./model";
+import type { ObjectData } from "dsh-agent-manage/inventory-compute/personal";
 import { DATA_PERMISSION_MESSAGE } from "../../../../../shared/query-error.js";
 /** Keep independent sources visible; never calculate zero from a cropped input. */
 export function applySourcePermissions(

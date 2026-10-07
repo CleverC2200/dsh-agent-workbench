@@ -1,4 +1,4 @@
-import type { FullChainWorkspace } from "./full-chain/types";
+import type { FullChainWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-types";
 
 export type WorkspaceEvent = { type: "workspace"; workspace: FullChainWorkspace } | { type: "error"; error: string };
 

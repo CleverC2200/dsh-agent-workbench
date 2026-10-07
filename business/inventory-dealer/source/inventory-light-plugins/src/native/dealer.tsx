@@ -1,5 +1,5 @@
 import { WorkbenchLoading } from "../dsh-ui/workbench-loading";
-import { applicablePolicies, orderTotals } from "../dealer-order";
+import { applicablePolicies, orderTotals } from "dsh-agent-manage/inventory-compute/dealer-order";
 import { DealerOverview } from "../pages/dealer/overview";
 import css from "../pages/dealer/workbench.module.css";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";

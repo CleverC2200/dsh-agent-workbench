@@ -28,7 +28,7 @@ async function loader(entry) {
           );
           api.onResolve({ filter: /daily-report$/ }, () => ({
             path: resolve(
-              "business/inventory-personal/source/aqkc/web/src/lib/daily-report.ts",
+              "../../../../.scratch/plugin-split-migration/evidence/26/original-source-snapshot/aqkc/web/src/lib/daily-report.ts",
             ),
           }));
           api.onLoad({ filter: /.*/, namespace: "fixture" }, ({ path }) => ({

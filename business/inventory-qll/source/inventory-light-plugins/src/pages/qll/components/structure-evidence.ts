@@ -1,6 +1,6 @@
 import {createHash} from "../../../browser-crypto";
-import {completeTotal,summarizeStructure} from "../../../../../qll/src/lib/full-chain/category-structure";
-import type {StructureRow,FullChainWorkspace} from "../../../../../qll/src/lib/full-chain/types";
+import {completeTotal,summarizeStructure} from "dsh-agent-manage/inventory-compute/full-chain-category-structure";
+import type {StructureRow,FullChainWorkspace} from "dsh-agent-manage/inventory-compute/full-chain-types";
 
 export const scopeDescription=(scope:string)=>scope==='company'
  ? '公司范围：基地＋分仓可用，不含客户渠道'
