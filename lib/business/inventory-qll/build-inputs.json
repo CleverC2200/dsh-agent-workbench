@@ -9,7 +9,7 @@
     "source/inventory-light-plugins/src/dsh-ui/DshButton.tsx": "fb45bad260a59a51359a80262abd619d44d439f0825230f157303eb1cf391a18",
     "source/inventory-light-plugins/src/dsh-ui/controls.module.css": "d41567d543907b929f6f4e108ec36a6991d73a764458988a34a8156d2e460864",
     "source/inventory-light-plugins/src/dsh-ui/controls.tsx": "49318b6eb3bd1718fde4c8734400bc60654243a2634a966f0c621ad86023caa5",
-    "source/inventory-light-plugins/src/dsh-ui/chart.tsx": "f525b7f196f0881e81be7ef3a6f0c3af726f8c8be9c894964f0392b442ddb72c",
+    "source/inventory-light-plugins/src/dsh-ui/chart.tsx": "ce8cdca568c9c919e9437d47ba0d4471df1c68d696758e20e0329104a3b5365e",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
     "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "../shared/browser-crypto.ts": "53ba9e2a0546ca0619e9d71868995226390bd1f721076d060b80f9b187e95db8",
