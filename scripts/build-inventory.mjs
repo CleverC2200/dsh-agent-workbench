@@ -76,7 +76,7 @@ export async function buildInventory(id, sourceCommit) {
             api.resolve(
               resolve(
                 source,
-                id === "fc" ? "fc/src" : `${id}/web/src`,
+                id === "fc" ? "fc/src" : id === "qll" ? "qll/src" : `${id}/web/src`,
                 a.path.slice(2),
               ),
               {
@@ -109,13 +109,13 @@ export async function buildInventory(id, sourceCommit) {
     resolve(out, "index.html"),
     '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' +
       manifest.name +
-      "</title><style>" +
+      (id === "qll" ? "</title><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'\"><style>" : "</title><style>") +
       styles +
       "\n" +
       theme +
       "\n" +
       adapter +
-      '</style><body><main id="app"></main><script>' +
+      '</style><body>' + (id === "qll" ? '<aside role="note" style="padding:12px;background:#fff7e8;color:#8a4800">全链库存分布 · 固定模拟输入 · 不代表真实数据、行权限或模型结果。公司件数与客户箱数分列，禁止混算。</aside>' : '') + '<main id="app"></main><script>' +
       code.replace(/<\/script/gi, "<\\/script") +
       "</script></body></html>",
   );
