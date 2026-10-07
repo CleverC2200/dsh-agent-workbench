@@ -908,12 +908,14 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
     renderWorkbenchTasks();
   }
   function renderWorkbenchEvents() {
+    workbenchView.querySelectorAll("[data-wb-event-filter]").forEach((button) => button.classList.toggle("active", button.dataset.wbEventFilter === eventFilter));
     const events = activeReport()?.events || [];
     const shown = eventFilter === "focus" ? events.filter((event) => event.focus) : events;
     document.getElementById("wbEventCount").textContent = `${shown.length} \u9879\u4E8B\u9879`;
     document.getElementById("wbEvents").innerHTML = shown.map((event) => `<article class="wb-event"><div class="wb-event-top"><span class="wb-event-kind ${event.kind === "\u5173\u6CE8" ? "focus" : ""}">${event.kind}</span><strong>${escapeHtml(event.title)}</strong><time>${activeReport()?.kind === "week" ? "9.6" : "9.13"}</time></div><p>${escapeHtml(event.summary)}</p><div class="wb-event-foot"><button type="button" data-wb-event-detail="${event.id}">\u67E5\u770B\u4F9D\u636E</button></div></article>`).join("");
   }
   function renderWorkbenchTasks() {
+    workbenchView.querySelectorAll("[data-wb-task-filter]").forEach((button) => button.classList.toggle("active", button.dataset.wbTaskFilter === taskFilter));
     const tasks = currentCreatedTasks();
     const pending2 = tasks.filter((task) => task.status !== "\u5DF2\u5B8C\u6210").length;
     const done = tasks.length - pending2;
@@ -928,14 +930,12 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
     const eventTab = event.target.closest("[data-wb-event-filter]");
     if (eventTab) {
       eventFilter = eventTab.dataset.wbEventFilter;
-      workbenchView.querySelectorAll("[data-wb-event-filter]").forEach((button) => button.classList.toggle("active", button === eventTab));
       renderWorkbenchEvents();
       return;
     }
     const taskTab = event.target.closest("[data-wb-task-filter]");
     if (taskTab) {
       taskFilter = taskTab.dataset.wbTaskFilter;
-      workbenchView.querySelectorAll("[data-wb-task-filter]").forEach((button) => button.classList.toggle("active", button === taskTab));
       renderWorkbenchTasks();
       return;
     }
@@ -967,7 +967,6 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
   });
   function focusCreatedTask(id) {
     taskFilter = "all";
-    workbenchView.querySelectorAll("[data-wb-task-filter]").forEach((button) => button.classList.toggle("active", button.dataset.wbTaskFilter === "all"));
     renderWorkbenchTasks();
     const row = [...workbenchView.querySelectorAll("[data-wb-task-row]")].find((item) => item.dataset.wbTaskRow === id);
     if (row) {
