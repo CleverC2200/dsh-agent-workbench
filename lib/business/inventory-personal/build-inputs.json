@@ -22,8 +22,9 @@
     "source/inventory-light-plugins/src/personal/style.module.css": "af85f13ccf0d825676bf1141eb8c8f8f7e2b2b78f7f17ea60e00e894fd57cec7",
     "source/inventory-light-plugins/src/personal/object-picker.module.css": "32e1fe134ef324583b890cdbcf1d0a37e8978bde31fc7e2251756b87c4aa79d3",
     "source/inventory-light-plugins/src/personal/object-picker.tsx": "13fc1ba66e4b05cf66ab034435b5e85b09481e1c1fe48e84d77bc7fed6b1bc6c",
+    "../shared/browser-crypto.ts": "53ba9e2a0546ca0619e9d71868995226390bd1f721076d060b80f9b187e95db8",
     "source/inventory-light-plugins/src/personal/coverage.ts": "7166d00c692e18d2461a4e46f760b9691784650c3b0b8b0c319211599d8dc892",
-    "source/inventory-light-plugins/src/personal/page.tsx": "cc6b0de471613db3e1e352fcc5304ad723d621e4c1a2bda7af1548fce0f8da4d",
+    "source/inventory-light-plugins/src/personal/page.tsx": "4e287acb2d281a948e03b64f2af4214c0973668eee2e1c12f39f675ff3e557c9",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
     "source/inventory-light-plugins/src/personal/entry.tsx": "251ab8fa9976e1feb94907710b41b71e81f52a944af3159d7ad683c7171d52b4",
     "../dsh-agent-manage/package.json": "2f123eecd8635bcbec41b602c4b46b80924379c6283ce88baf4ab6b85e425ba1"
