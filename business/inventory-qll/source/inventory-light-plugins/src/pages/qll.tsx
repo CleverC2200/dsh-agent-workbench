@@ -1,3 +1,4 @@
+import {FullChainTrends} from "./qll/components/full-chain-trends";
 import {scopeDescription} from "./qll/components/structure-evidence";
 import {ReferenceStructure, rowStatus} from "./qll/components/reference-structure";
 import { customerMetrics } from "../qll-customer-metrics";
@@ -188,39 +189,6 @@ function groupBy<T>(rows: T[], key: (row: T) => string) {
   for (const row of rows)
     groups.set(key(row), [...(groups.get(key(row)) ?? []), row]);
   return groups;
-}
-
-function inventoryTrendSeries(rows: FullChainWorkspace["trends"]["inventory"]) {
-  return [...groupBy(rows, (row) => row.snapshotDate).entries()]
-    .map(([snapshotDate, values]) => {
-      const layerTotal = (layer: StructureRow["layer"]) => {
-        const layerRows = values.filter((row) => row.layer === layer);
-        return layerRows.length
-          ? layerRows.reduce((total, row) => total + row.qty, 0)
-          : null;
-      };
-      const base = layerTotal("base");
-      const branch = layerTotal("branch");
-      const customer = layerTotal("customer");
-      return {
-        snapshotDate,
-        base,
-        branch,
-        customer,
-        company: base != null && branch != null ? base + branch : null,
-      };
-    })
-    .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
-}
-
-function agingTrendSeries(rows: FullChainWorkspace["trends"]["aging"]) {
-  return [...groupBy(rows, (row) => row.snapshotDate).entries()]
-    .map(([snapshotDate, values]) => ({
-      snapshotDate,
-      base: values.find((row) => row.layer === "base")?.averageAge ?? null,
-      branch: values.find((row) => row.layer === "branch")?.averageAge ?? null,
-    }))
-    .sort((a, b) => a.snapshotDate.localeCompare(b.snapshotDate));
 }
 
 function aggregateStructureNode(key: string, layer: StructureRow["layer"], objectName: string, category: string, rows: StructureRow[], children: StructureRow[]): StructureRow {
@@ -460,35 +428,6 @@ function InventoryKpiDetail({
             },
           ]),
   ];
-  const trend =
-    metricKey === "inventoryLevel"
-      ? [
-          ...groupBy(
-            result.trends.inventory.filter((row) =>
-              selection
-                ? row.layer === selection.layer
-                : row.layer !== "customer",
-            ),
-            (row) => row.snapshotDate,
-          ),
-        ].map(([snapshotDate, rows]) => ({
-          snapshotDate,
-          value:
-            !selection &&
-            !["base", "branch"].every((layer) =>
-              rows.some((row) => row.layer === layer),
-            )
-              ? null
-              : rows.reduce((sum, row) => sum + row.qty, 0),
-        }))
-      : metricKey === "aging" && selection
-        ? result.trends.aging
-            .filter((row) => row.layer === selection.layer)
-            .map((row) => ({
-              snapshotDate: row.snapshotDate,
-              value: row.averageAge,
-            }))
-        : [];
   return (
     <>
       <Table
@@ -518,7 +457,6 @@ export function FullChainWorkbench() {
   const structurePages = useTreePages(workspace, 'structure');
   const viewKey = workspaceViewKey(workspace);
   const [loading, setLoading] = useState(true);
-  const [trendError, setTrendError] = useState<string | null>(null);
   const loadController = useRef<AbortController | null>(null);
   useEffect(() => () => loadController.current?.abort(), []);
   const [error, setError] = useState<string | null>(null);
@@ -527,8 +465,6 @@ export function FullChainWorkbench() {
   const [riskFilter,setRiskFilter] = usePageViewField(React,view,"risk","");
   const [filterToolbar,setFilterToolbar] = useState<HTMLDivElement|null>(null);
   const [structureFilters,setStructureFilters] = usePageViewField(React,view,"structureFilters",()=>({category:"",org:""}));
-  const historyRequest = useRef<AbortController | null>(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
   const [detailKpi, setDetailKpi] = useState<KpiKey | null>(null);
 
   const [boardWidth, setBoardWidth] = useState<number | null>(null);
@@ -570,18 +506,12 @@ export function FullChainWorkbench() {
       });
     });
   }, []);
-  const [selectedStructure, setSelectedStructure] = useState<{
-    key: string;
-    label: string;
-    trend: FullChainWorkspace["trends"]["inventory"];
-  } | null>(null);
   const [expandedRows, setExpandedRows] = useState<(string | number)[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRequest = useRef<AbortController | null>(null);
   useEffect(() => {
     detailRequest.current?.abort();
     setExpandedRows([]);
-    setSelectedStructure(null);
     setDetailLoading(false);
     return () => detailRequest.current?.abort();
   }, [viewKey]);
@@ -589,22 +519,17 @@ export function FullChainWorkbench() {
   const load = useCallback(
     async (signal?: AbortSignal) => {
       loadController.current?.abort();
-      historyRequest.current?.abort();
-      historyRequest.current = null;
-      setHistoryLoading(false);
       const controller = new AbortController();
       loadController.current = controller;
       const requestSignal = signal
         ? AbortSignal.any([signal, controller.signal])
         : controller.signal;
-      let receivedCurrent = false;
       setLoading(true);
       setWorkspace(null);
       removeContextPart("fullChainWorkspace"); removeContextPart("structureView");
-      removeContextPart("detail");
+      removeContextPart("detail"); removeContextPart("trendView");
       updateContext("queryState", {state:"loading",scope,month,sku:skuFilter});
       setError(null);
-      setTrendError(null);
       try {
         const params = new URLSearchParams({ scope, month, part: "current", ...(skuFilter ? {sku:skuFilter} : {}) });
 
@@ -617,8 +542,6 @@ export function FullChainWorkbench() {
           response,
           (payload) => {
             setWorkspace(payload);
-            if (!receivedCurrent) setSelectedStructure(null);
-            receivedCurrent = true;
             setLoading(false);
           },
           requestSignal,
@@ -627,11 +550,8 @@ export function FullChainWorkbench() {
         if (requestSignal.aborted) return;
         const message =
           caught instanceof Error ? caught.message : "全链路库存加载失败";
-        if (receivedCurrent) setTrendError(message);
-        else {
-          setWorkspace(null);
-          setError(message);
-        }
+        setWorkspace(null);
+        setError(message);
       } finally {
         if (!requestSignal.aborted) setLoading(false);
       }
@@ -646,7 +566,6 @@ export function FullChainWorkbench() {
     setWorkspace(null);
     setLoading(true);
     setError(null);
-    setTrendError(null);
     setDetailKpi(null);
   };
   useEffect(() => {
@@ -657,98 +576,7 @@ export function FullChainWorkbench() {
   useEffect(() => {
     detailRequest.current?.abort();
     setDetailLoading(false);
-    setSelectedStructure(null);
   }, [scope, month]);
-  const loadTrends = useCallback(async () => {
-    if (!workspace || workspace.trends.state !== "loading" || historyRequest.current) return;
-    const controller = new AbortController();
-    historyRequest.current = controller;
-    setHistoryLoading(true);
-    setTrendError(null);
-    try {
-      const params = new URLSearchParams({workspaceId: workspace.workspaceId});
-      const response = await fetch(appPath(`/api/workspace/history?${params}`), {signal: controller.signal});
-      await readWorkspaceResponse(response, payload => {
-        setWorkspace(current => current?.workspaceId === workspace.workspaceId ? payload : current);
-      }, controller.signal);
-    } catch (caught) {
-      if (!controller.signal.aborted) setTrendError(caught instanceof Error ? caught.message : "历史趋势加载失败");
-    } finally {
-      if (historyRequest.current === controller) {
-        historyRequest.current = null;
-        setHistoryLoading(false);
-      }
-    }
-  }, [workspace]);
-  useEffect(() => {
-    if (!workspace || workspace.trends.state !== "loading" || trendError) return;
-    const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) { observer.disconnect(); void loadTrends(); }
-    });
-    boardScrollRef.current?.querySelectorAll(`.${styles.chartBlock}`).forEach(element => observer.observe(element));
-    return () => observer.disconnect();
-  }, [workspace, activeTab, loadTrends, trendError]);
-  useEffect(() => () => {
-    historyRequest.current?.abort();
-    historyRequest.current = null;
-  }, [scope, month]);
-
-  const selectStructureRow = useCallback(
-    async (row: StructureRow) => {
-      detailRequest.current?.abort();
-      if (row.key === `group:${row.layer}` && workspace) {
-        setDetailLoading(false);
-        setSelectedStructure({
-          key: row.key,
-          label: row.objectName,
-          trend: workspace.trends.inventory.filter(
-            (item) => item.layer === row.layer,
-          ),
-        });
-        return;
-      }
-      const controller = new AbortController();
-      detailRequest.current = controller;
-      setDetailLoading(true);
-      const params = new URLSearchParams({
-        scope,
-        month,
-        ...workspace?.filters,
-      });
-      params.delete("base");
-      params.delete("branch");
-      params.delete("customerId");
-      if (row.layer === "base") params.set("base", row.objectName);
-      if (row.layer === "branch") params.set("branch", row.objectName);
-      if (row.layer === "customer" && row.objectId)
-        params.set("customerId", row.objectId);
-      if (row.category !== "全部品类") params.set("category", row.category);
-      if (row.sku !== "全部SKU") params.set("sku", row.sku);
-      try {
-        const response = await fetch(appPath('/api/workspace/trend'), {
-          method: 'POST', headers: {'content-type':'application/json'},
-          body: JSON.stringify({workspaceId: workspace?.workspaceId, filters: Object.fromEntries([...params].filter(([key])=>!['scope','month'].includes(key)))}),
-          signal: controller.signal,
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload.trends) throw Error(payload.error ?? '趋势加载失败');
-        if (controller.signal.aborted) return;
-        setSelectedStructure({
-          key: row.key,
-          label: `${row.objectName} · ${row.category}${row.sku === "全部SKU" ? "" : ` · ${row.sku}`}`,
-          trend: payload.trends.inventory,
-        });
-      } catch (error) {
-        if (!controller.signal.aborted)
-          Message.error(
-            error instanceof Error ? error.message : "明细加载失败，请重试",
-          );
-      } finally {
-        if (!controller.signal.aborted) setDetailLoading(false);
-      }
-    },
-    [month, scope, workspace],
-  );
   const structureColumns = useMemo(
     () => [
       {
@@ -890,17 +718,6 @@ export function FullChainWorkbench() {
       turnoverDays: workspace?.layerMetrics?.[row.layer].turnoverDays ?? row.turnoverDays,
     }));
   }, [workspace?.structure, workspace?.filters, workspace?.layerMetrics]);
-  const visibleInventoryTrend = useMemo(
-    () =>
-      inventoryTrendSeries(
-        selectedStructure?.trend ?? workspace?.trends.inventory ?? [],
-      ),
-    [selectedStructure?.trend, workspace?.trends.inventory],
-  );
-  const visibleAgingTrend = useMemo(
-    () => agingTrendSeries(workspace?.trends.aging ?? []),
-    [workspace?.trends.aging],
-  );
   const agingRows = workspace
     ? (
         [
@@ -972,14 +789,6 @@ export function FullChainWorkbench() {
     : [];
   const selectedMetric =
     detailKpi && workspace ? workspace.kpis[detailKpi] : null;
-  const detailTrend: Array<Record<string, string | number | null>> =
-    workspace && detailKpi === "aging"
-      ? visibleAgingTrend
-      : workspace && (detailKpi === "fulfillment" || detailKpi === "orderGap")
-        ? workspace.trends.orders.map((item) => ({ ...item }))
-        : detailKpi === "turnover"
-          ? []
-          : visibleInventoryTrend;
   useEffect(() => {
     const current = !loading && !error && workspace && workspace.filters.month === month && (workspace.filters.sku ?? "") === skuFilter;
     updateContext("queryState", {state:loading || (!error && !current) ? "loading" : error ? "error" : "ready", message:error ?? undefined, requestedScope:scope, month, sku:skuFilter});
@@ -1005,10 +814,9 @@ export function FullChainWorkbench() {
         evidence: workspace.evidence,
         risks: workspace.risks,
         fullScopeStructureRowCount: workspace.structure.length,
-        selectedStructure: selectedStructure?.label,
         tab: activeTab,
       });
-  }, [workspace, selectedStructure, activeTab, loading, error, scope, month, skuFilter, structureFilters, riskFilter]);
+  }, [workspace, activeTab, loading, error, scope, month, skuFilter, structureFilters, riskFilter]);
   usePageFilter(
     {
       allowedFields: ["tab", "scope", "month", "search"],
@@ -1341,6 +1149,7 @@ export function FullChainWorkbench() {
                         </Tabs.TabPane>
                       </Tabs>
                     </Card>
+                    <FullChainTrends key={JSON.stringify([viewKey, structureFilters])} workspace={workspace} filters={structureFilters} />
                   </>
                 )}
               </>}

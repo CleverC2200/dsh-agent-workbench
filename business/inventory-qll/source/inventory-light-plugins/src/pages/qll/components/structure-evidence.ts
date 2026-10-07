@@ -13,10 +13,10 @@ export function referenceText(text:string){
 }
 
 /** External IDs obey the existing page contract; business/tree keys stay intact. */
-export function structureReferences(workspaceId:string,visible:StructureRow[],selected:StructureRow|null){
+export function structureReferences(workspaceId:string,visible:StructureRow[],selected:StructureRow|null,maxRows=299){
  const ordered=[...(selected?[selected]:[]),...visible.filter(r=>r.sku!=='全部SKU'),...visible.filter(r=>r.sku==='全部SKU')];
  const unique=[...new Map(ordered.map(row=>[row.key,row])).values()];
- const rows=unique.slice(0,299); // The refresh control owns the remaining slot.
+ const rows=unique.slice(0,maxRows); // Reserve the remaining slots for page controls and trend references.
  return {rows,coverage:{visibleRows:unique.length,referencedRows:rows.length,omittedRows:unique.length-rows.length},elements:rows.map(row=>({
   id:'chain:row:'+createHash('sha256').update(JSON.stringify([workspaceId,row.key])).digest('hex'),
   role:'row' as const,

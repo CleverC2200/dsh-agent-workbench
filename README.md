@@ -96,3 +96,5 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 MPS 原型 `plan-category-production` 在 `lib/static/mps` 接收原 `inventory-mps` 资源。当前挂载步骤的作者state通过公共业务channel发布模拟上下文和页签目录，切步移除旧数据。选用Prompt/Skill复用当前Core Session；界面意图、调整输入和未发送文字按Session恢复，模拟派生数据不存业务库。保存、导出、提交和结转仍只显示模拟提示。构建从相邻Manage的 `business-resources/inventory-mps` 装配原资源。
 
 全链分布 `inventory-qll` 从原14固定Git候选接收，Manage资源在相邻 `business-resources/inventory-qll`。当前包固定为 `mode=mock`、无SQL能力。页面从105个模拟基地SKU生成原业务计算，保持公司件数与客户箱数分列、零值和null。范围、月份、SKU与筛选意图按当前Session恢复，事实和快照重新计算。历史真实客户数据集与行权限未验；当前模拟入口不发业务请求。
+
+The received `inventory-qll` page also renders the captured distribution range as fixed mock inventory, order gap and aging trends. The same Session, page ID and resource apply. Missing periods stay null; changing the range withdraws old historical facts and references. Native and live acceptance remain open.
