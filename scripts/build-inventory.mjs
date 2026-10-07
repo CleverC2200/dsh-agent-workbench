@@ -12,9 +12,9 @@ export async function buildInventory(id, sourceCommit) {
   const manifest = JSON.parse(
     await readFile(resolve(resource, "plugin.json"), "utf8"),
   );
-  const resolver = createRequire(resolve(ui, "package.json"));
+  const resolver = createRequire(resolve(id === "personal" ? root : ui, "package.json"));
   const result = await build({
-    entryPoints: [resolve(ui, "src/native/entry.tsx")],
+    entryPoints: [resolve(ui, id === "personal" ? "src/personal/entry.tsx" : "src/native/entry.tsx")],
     outfile: `inventory-${id}.js`,
     bundle: true,
     write: false,

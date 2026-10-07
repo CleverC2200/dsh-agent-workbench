@@ -308,7 +308,7 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
+    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment", "inventory-personal"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -333,6 +333,7 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
           if (sessionPage) {
             dirty = false;
             state = { version: 1 };
+            for (const listener of listeners) listener(state);
           }
         }
         return;
@@ -394,6 +395,11 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
   var appliedThemeTokens = [];
   var pageGroups = /* @__PURE__ */ new Map();
   var applying = /* @__PURE__ */ new Map();
+  var invoking = /* @__PURE__ */ new Map();
+  function cancelActions() {
+    for (const task of applying.values()) task.abort();
+    for (const task of invoking.values()) task.controller.abort();
+  }
   function reportCatalog() {
     if (!channel || !context?.session) return;
     channel.postMessage({
@@ -434,8 +440,9 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
     if (event.source !== window.parent || event.origin !== parentOrigin() || typeof event.data?.context?.session !== "string" || typeof event.data?.context?.plugin !== "string" || event.data?.protocol !== "gea-html-v2" || event.data?.type !== "connect" || !event.ports[0] || channel && context?.session === event.data.context.session)
       return;
     if (channel) {
+      window.dispatchEvent(new Event("gea-session-changing"));
       channel.close();
-      for (const task of applying.values()) task.abort();
+      cancelActions();
       for (const item of pending.values()) {
         clearTimeout(item.timer);
         item.cleanup?.();
@@ -450,6 +457,7 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
       if (message.type === "context") {
         const previousSession = context?.session;
         if (previousSession && previousSession !== message.context?.session) {
+          window.dispatchEvent(new Event("gea-session-changing"));
           for (const [id, item] of pending) {
             clearTimeout(item.timer);
             item.cleanup?.();
@@ -458,7 +466,7 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
           }
           pending.clear();
         }
-        for (const task of applying.values()) task.abort();
+        cancelActions();
         context = message.context;
         reportCatalog();
         if (context?.session)
@@ -504,6 +512,7 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
       }
       if (message.type === "cancel" && message.session === context?.session) {
         applying.get(message.toolCallId)?.abort();
+        invoking.get(message.id)?.controller.abort();
       }
       if (message.type === "apply" && message.session === context?.session) {
         const session = context.session;
@@ -542,29 +551,27 @@ body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[da
           reportCatalog();
         });
       }
-      if (message.type === "invoke") {
+      if (message.type === "invoke" && message.session === context?.session) {
         const handler = handlers.get(message.name);
-        const session = context?.session;
-        Promise.resolve().then(() => {
+        const session = context.session, ownerChannel = channel;
+        const controller = new AbortController();
+        invoking.set(message.id, { controller, handler });
+        Promise.resolve().then(async () => {
           if (!handler) throw Error("\u9875\u9762\u672A\u6CE8\u518C\u8BE5\u64CD\u4F5C");
-          return handler(message.arguments);
+          controller.signal.throwIfAborted();
+          const result = await handler(message.arguments, { signal: controller.signal });
+          controller.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          return result;
         }).then(
-          (result) => channel.postMessage({
-            type: "invoked",
-            id: message.id,
-            session,
-            result
-          }),
-          (error) => channel.postMessage({
-            type: "invoked",
-            id: message.id,
-            session,
-            error: error.message
-          })
-        );
+          (result) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, result }),
+          (error) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, error: error.message })
+        ).finally(() => {
+          if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id);
+        });
       }
       if (message.type === "identity-changed") {
-        for (const task of applying.values()) task.abort();
+        cancelActions();
         context = null;
         for (const item of pending.values()) {
           clearTimeout(item.timer);

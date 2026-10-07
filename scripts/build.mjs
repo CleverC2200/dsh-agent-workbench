@@ -108,6 +108,7 @@ await import('./build-html-sample.mjs');
 await import('./build-customer-prototype.mjs');
 await import('./build-orderworkbench.mjs');
 await import('./build-order-fulfillment.mjs');
+await import('./build-inventory-personal.mjs');
 if (values.target !== 'core') {
   await import('./build-inventory-fc.mjs');
   await import('./build-inventory-aqkc.mjs');

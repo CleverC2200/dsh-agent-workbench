@@ -43,5 +43,6 @@ export interface WorkbenchPageExecution {
     open(page: WorkbenchFramePage, sessionId: string, resourceId: string, signal: AbortSignal): Promise<PageExecutionConnection>;
     call(connection: PageExecutionConnection, method: string, parameters: unknown, signal: AbortSignal): Promise<any>;
     close(connection: PageExecutionConnection): Promise<void>;
+    draft(connection: PageExecutionConnection, text: string, signal: AbortSignal): Promise<void>;
     prompt(connection: PageExecutionConnection, text: string, signal: AbortSignal): Promise<void>;
 }

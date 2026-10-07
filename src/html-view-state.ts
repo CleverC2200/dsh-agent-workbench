@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
 type Rhythm = {
     id: string;
     type: string;
@@ -184,14 +184,15 @@ export type RegionalViewState = {
 export type CustomerViewState = { version: 1; role?: string; path?: string[]; metric?: string; tab?: string; status?: string; region?: string; search?: string; page?: number; assistant?: boolean };
 export type OrderWorkbenchViewState = { version: 1; mode?: string; month?: string; week?: string; weekInitialized?: boolean; event?: string; task?: string };
 export type FulfillmentViewState = { version: 1; order?: string; customer?: string; warehouse?: string; status?: string; page?: number; size?: number };
+export type PersonalViewState = { version: 1; selected?: string; riskType?: string; page?: number; size?: number; feedbackNotes?: Record<string, string> };
 export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState;
-const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment']);
+} | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | PersonalViewState;
+const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal']);
 export const isHtmlViewPage = (page: string): page is HtmlViewPage => pages.has(page);
-export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal'].includes(page);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 10000;
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -227,6 +228,7 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
     if (!isHtmlViewPage(page) || !object(value) || value.version !== 1)
         return false;
     switch (page) {
+        case 'inventory-personal': return shape(value, { version, selected: text, riskType: v => ['全部','缺货','低库存','货龄','大日期','滞库'].includes(v as string), page: positiveInteger, size: v => [10,20,50].includes(v as number), feedbackNotes: record(text) }, ['version']);
         case 'inventory-customer': return shape(value, { version, role: text, path: strings, metric: text, tab: text, status: text, region: text, search: text, page: positiveInteger, assistant: boolean }, ['version']);
         case 'inventory-orderworkbench': return shape(value, { version, mode: v => ['month', 'week'].includes(v as string), month: text, week: text, weekInitialized: boolean, event: v => ['focus', 'all'].includes(v as string), task: v => ['all', 'pending', 'done'].includes(v as string) }, ['version']);
         case 'inventory-orderfulfillment': return shape(value, { version, order: text, customer: text, warehouse: text, status: text, page: positiveInteger, size: v => [10, 20, 50].includes(v as number) }, ['version']);
