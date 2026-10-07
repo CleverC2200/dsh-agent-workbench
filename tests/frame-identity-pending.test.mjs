@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const { JSDOM } = require('jsdom');
 const { outputFiles } = await build({
   stdin: {
-    contents: `export {mountFramePresentation} from './src/frame-presenter.tsx';export {WorkbenchController} from './src/workbench.ts';export {createElement,act,useSyncExternalStore} from 'react';export {createRoot} from ${JSON.stringify(require.resolve('react-dom/client'))};`,
+    contents: `export {mountFramePresentation} from './src/frame-presenter.tsx';export {mountNativeResourceSelection} from './src/resource-selection.ts';export {WorkbenchController} from './src/workbench.ts';export {createElement,act,useSyncExternalStore} from 'react';export {createRoot} from ${JSON.stringify(require.resolve('react-dom/client'))};`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -21,6 +21,7 @@ const module = { exports: {} };
 new Function('module', 'exports', 'require', outputFiles[0].text)(module, module.exports, require);
 const {
   mountFramePresentation,
+  mountNativeResourceSelection,
   WorkbenchController,
   createElement,
   createRoot,
@@ -45,6 +46,8 @@ async function fixture(
     initialSession,
     initialPreset = null,
     restoredSelection,
+    nativeResourceSdk = false,
+    declareSecondInterpreter = true,
   } = {},
 ) {
   const dom = new JSDOM('<main id="root"></main>', {
@@ -171,7 +174,8 @@ async function fixture(
             waiting.push({ kind: 'list', resolve, signal: options.signal }),
           );
         return Response.json([
-          { id: 'original', label: 'Original', kind: 'prompt', installed: true, enabled },
+          { id: 'original', label: 'Original', kind: 'prompt', installed: true, enabled,
+            ...(nativeResourceSdk && secondInstalled && declareSecondInterpreter ? { interpreters: ['original', 'other'] } : {}) },
           ...(secondInstalled &&
           (!secondInterpreterOnlyInFirstScope || snapshot.scope === 'principal-a')
             ? [{ id: 'other', label: 'Other', kind: 'prompt', installed: true, enabled: true }]
@@ -185,10 +189,13 @@ async function fixture(
         );
       if (selectionFails)
         return Response.json({ error: 'ORIGINAL_RESOURCE_FAILURE' }, { status: 400 });
+      const resourceId = JSON.parse(options.body).id;
+      if (nativeResourceSdk && resourceId !== 'original' && !(secondInstalled && resourceId === 'other'))
+        return Response.json({ error: 'AGENT_RESOURCE_DISABLED_OR_MISSING' }, { status: 400 });
       return enabled
         ? Response.json({
-            preset: 'original',
-            ...(secondInstalled &&
+            preset: nativeResourceSdk ? resourceId : 'original',
+            ...(secondInstalled && (!nativeResourceSdk || declareSecondInterpreter) &&
             (!secondInterpreterOnlyInFirstScope || snapshot.scope === 'principal-a')
               ? { interpreters: ['original', 'other'] }
               : {}),
@@ -228,6 +235,43 @@ async function fixture(
     },
   };
   let currentHost = host;
+  const sdkDrafts = new Map(initialSession ? [[initialSession, '未发送的历史草稿']] : []);
+  if (nativeResourceSdk) {
+    const presets = new Map(initialSession ? [[initialSession, initialPreset]] : []);
+    ctx.sessions.list.getSnapshot = () => ({
+      phase: 'ready',
+      ids: [...presets.keys()],
+      byId: Object.fromEntries([...presets.keys()].map(id => [id, { cwd: '/owned/workspace' }])),
+    });
+    ctx.workspaces = { create: ({ path }) => host.workspace(path) };
+    ctx.sessions.create = async options => {
+      calls.push(['core-create', options]);
+      const id = await host.create(options);
+      presets.set(id, null);
+      sdkDrafts.set(id, '');
+      return id;
+    };
+    ctx.sessions.retain = (id, { signal }) => {
+      signal.throwIfAborted();
+      if (!presets.has(id)) throw Error('PAGE_SESSION_UNAVAILABLE');
+      return {
+        sessionId: id,
+        ready: Promise.resolve(),
+        binding: { ctx: { id }, session: { projections: { faceOf: () => ({ getSnapshot: () => presets.get(id) }) } } },
+        release: () => calls.push(['core-release', id]),
+      };
+    };
+    ctx.remote = { agentPresets: { select: async (id, preset) => {
+      calls.push(['core-select-preset', id, preset]);
+      presets.set(id, preset);
+      return { ok: true, value: preset };
+    } } };
+    ctx.conversation.input.for = binding => ({ state: { getSnapshot: () => ({ draft: sdkDrafts.get(binding.id), draftRev: 0 }) } });
+    const openSession = ctx.uiWorkspace.openSession;
+    ctx.uiWorkspace.openSession = id => { mainPreset = presets.get(id); openSession(id); };
+    mountNativeResourceSelection(ctx, value => { currentHost = value; });
+    currentHost.fetch = host.fetch;
+  }
   const workbench = new WorkbenchController({
     panel: () => {},
     document: (id) => {
@@ -240,7 +284,7 @@ async function fixture(
   workbench.subscribeHistory(() =>
     calls.push(['history', workbench.getSnapshot().selectedDocument?.id]),
   );
-  mountFramePresentation(
+  const restorePageSession = mountFramePresentation(
     ctx,
     () => (available ? currentHost : undefined),
     (key) => key,
@@ -298,7 +342,7 @@ async function fixture(
       renderSlot: () =>
         createElement(
           'div',
-          { 'data-native-session': sessionId },
+          { 'data-native-session': sessionId, ...(nativeResourceSdk ? { key: sessionId } : {}) },
           createElement(Conversation, {
             page: page.id,
             useSession: (selector) =>
@@ -315,7 +359,7 @@ async function fixture(
                     inputActions: { setDraft: (text) => calls.push(['draft', text]) },
                     renderSlot: (name) => createElement('article', { 'data-native-seat': name }),
                   }),
-                createElement('textarea', { 'aria-label': 'SDK draft fixture', defaultValue: '' }),
+                createElement('textarea', { 'aria-label': 'SDK draft fixture', defaultValue: nativeResourceSdk ? sdkDrafts.get(sessionId) ?? '' : '' }),
               ),
           }),
         ),
@@ -414,6 +458,10 @@ async function fixture(
       }),
     newConversation: async () =>
       act(async () => dom.window.document.querySelector('[aria-label="新建对话"]').click()),
+    selectHistory: async id => act(async () => {
+      await restorePageSession(page.id, id, new AbortController().signal);
+      await workbench.open(page.id);
+    }),
     resolve: async (item, value) => act(async () => item.resolve(Response.json(value))),
   };
 }
@@ -429,6 +477,75 @@ test('reopening a restored Document revalidates the same subject Session after i
   assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
   assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 }, 'restoring a reference cannot replace the original Session');
 });
+
+for (const oldPreset of ['agent-resource-skill', null, 'standard', 'original']) {
+  test(`new conversation on a received business page uses its current resource after restoring the old ${oldPreset} Core Session`, async t => {
+    const sessionId = 'session-00000000-0000-4000-8000-000000000024';
+    const f = await fixture(t, {
+      nativeResourceSdk: true,
+      initialSession: sessionId,
+      initialPreset: oldPreset,
+      restoredSelection: { sessionId, preset: oldPreset, ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    });
+    const document = f.dom.window.document;
+    assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
+    assert.equal(f.counts().sessions, 0, 'opening historical presentation creates no replacement Session');
+    assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+    await f.newConversation();
+    assert.equal(document.querySelector('[role="alert"]')?.getAttribute('title'), undefined, document.body.textContent);
+    assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, 'session-1');
+    assert.deepEqual(
+      JSON.parse(f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1].body),
+      { id: 'original', cwd: '/owned/workspace' },
+      'the received page resource is a Manage resource ID, while the old projection remains a Core preset',
+    );
+    assert.deepEqual(f.calls.filter(([operation]) => operation === 'core-select-preset'), [['core-select-preset', 'session-1', 'original']]);
+    assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '');
+    await act(async () => document.querySelector('[aria-label="历史对话"]').click());
+    await f.selectHistory(sessionId);
+    assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
+    assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+    assert.equal(f.association().preset, oldPreset, 'the public history borrow observes the unchanged original Core composition');
+  });
+}
+
+for (const declareSecondInterpreter of [true, false]) {
+  test(`new conversation ${declareSecondInterpreter ? 'keeps' : 'does not borrow'} an installed Interpreter ${declareSecondInterpreter ? 'declared' : 'not declared'} by the current page`, async t => {
+    const sessionId = 'session-00000000-0000-4000-8000-000000000024';
+    const f = await fixture(t, {
+      nativeResourceSdk: true,
+      secondInterpreter: true,
+      declareSecondInterpreter,
+      initialSession: sessionId,
+      initialPreset: 'other',
+      restoredSelection: { sessionId, preset: 'other', ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    });
+    await f.newConversation();
+    assert.equal(f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'), undefined);
+    assert.deepEqual(
+      JSON.parse(f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1].body),
+      { id: declareSecondInterpreter ? 'other' : 'original', cwd: '/owned/workspace' },
+    );
+    assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, 'session-1');
+  });
+}
+
+for (const oldPreset of ['agent-resource-skill', null]) {
+  test(`restoring an old ${oldPreset ?? 'plain'} Session after Host restart borrows its unchanged composition before explicitly creating from the received page resource`, async t => {
+    const sessionId = 'session-00000000-0000-4000-8000-000000000024';
+    const f = await fixture(t, {
+      nativeResourceSdk: true,
+      initialSession: sessionId,
+      initialPreset: oldPreset,
+      restoredSelection: { sessionId, preset: oldPreset, ownerScope: 'previous-host-run', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    });
+    assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
+    assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+    await f.newConversation();
+    assert.equal(f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'), undefined);
+    assert.deepEqual(f.calls.filter(([operation]) => operation === 'core-select-preset'), [['core-select-preset', 'session-1', 'original']]);
+  });
+}
 
 test('formal page navigation auto-prepares one actual native Session only for an authenticated enabled resource', async (t) => {
   const f = await fixture(t);

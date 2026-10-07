@@ -536,10 +536,11 @@ export function mountFramePresentation(
         reference.release();
       };
     }, [page.resourceId, associated, session?.openState, selection, inputActions, loaded, title]);
+    const interpreter = interpreters.find((row) => row.id === selection?.preset)?.id ?? page.resourceId;
     const connect = async (
       cwd?: string,
       ownerSignal?: AbortSignal,
-      interpreter = selection?.preset ?? page.resourceId,
+      interpreterId: string | null | undefined = interpreter,
       reuse = true,
     ) => {
       if (!ownerSignal) preparation.current?.abort();
@@ -592,14 +593,14 @@ export function mountFramePresentation(
           });
         };
         let cached = reuse
-          ? workbench.selectionFor(page.id, interpreter ?? null, identity.scope, directory)
+          ? workbench.selectionFor(page.id, interpreterId ?? null, identity.scope, directory)
           : undefined;
         // Host scope changes across restarts. Reopen the same subject's retained
         // Session through the public owner, which validates its preset and cwd.
         if (
           !cached && reuse && selection && identity.subject &&
           selection.subject === identity.subject &&
-          selection.preset === (interpreter ?? null) && selection.cwd === directory
+          selection.preset === (interpreterId ?? null) && selection.cwd === directory
         ) cached = selection;
         if (cached)
           await host.open(cached.sessionId, undefined, signal, (selected) => {
@@ -607,7 +608,11 @@ export function mountFramePresentation(
               throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
             associated(selected);
           });
-        else await selectResource(host, interpreter!, signal, directory, associated);
+        else {
+          if (interpreterId !== page.resourceId && !interpreters.some((row) => row.id === interpreterId))
+            throw Error('PAGE_INTERPRETER_UNAVAILABLE');
+          await selectResource(host, interpreterId!, signal, directory, associated);
+        }
       } catch (failure) {
         if (!signal.aborted) setError(failure instanceof Error ? failure.message : String(failure));
       } finally {
@@ -724,7 +729,7 @@ export function mountFramePresentation(
           ),
         );
         if (prepare && resource?.installed && resource.enabled)
-          await connect(cwd, controller.signal);
+          await connect(cwd, controller.signal, selection ? selection.preset : page.resourceId);
       })().catch((failure) => {
         if (!controller.signal.aborted)
           setError(failure instanceof Error ? failure.message : String(failure));
@@ -751,7 +756,7 @@ export function mountFramePresentation(
           onHistory={() => workbench.showHistory(page.id)}
           onNewConversation={() => {
             if (page.resourceId)
-              void connect(undefined, undefined, selection?.preset ?? page.resourceId, false);
+              void connect(undefined, undefined, interpreter, false);
             else void newPlainConversation();
           }}
           onAssociateCurrent={!page.resourceId ? associateCurrent : undefined}
