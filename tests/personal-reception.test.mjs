@@ -348,3 +348,15 @@ test("personal source declarations retain their unique identities and default hi
     false,
   );
 });
+
+test('a released view scope clears feedback fields before another Session restore and rejects the old channel',async t=>{
+  const page=await mount(t,{version:1,riskType:'货龄',feedbackNotes:{'base:郑州:AGE':'旧Session未提交字段'}});
+  const emit=data=>page.dom.window.dispatchEvent(new page.dom.window.MessageEvent('message',{source:page.dom.window.parent,origin:'https://host.example',data:{protocol:'dsh-workbench-view-v1',page:'inventory-personal',version:1,...data}}));
+  const saved=page.view();
+  emit({type:'released',channel:'owned-view',generation:1});
+  emit({type:'restore',channel:'session-B-view',generation:1,state:{version:1}});
+  emit({type:'restore',channel:'owned-view',generation:2,state:saved});
+  await until(()=>page.context().parts.personalWorkbench.filters?.current.riskType==='全部');
+  assert.deepEqual(page.view().feedbackNotes,undefined);
+  assert.equal(Object.hasOwn(saved.feedbackNotes,'base:郑州:AGE'),true,'previous Session record remains recoverable under its owner');
+});

@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
 type Rhythm = {
     id: string;
     type: string;
@@ -211,6 +211,18 @@ export type FulfillmentViewState = {
     page?: number;
     size?: number;
 };
+export type QllViewState = {
+    version: 1;
+    scope?: "company" | "all-channel";
+    month?: string;
+    tab?: string;
+    sku?: string;
+    risk?: string;
+    structureFilters?: {
+        category: string;
+        org: string;
+    };
+};
 export type PersonalViewState = {
     version: 1;
     selected?: string;
@@ -223,7 +235,7 @@ export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | PersonalViewState;
+} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | PersonalViewState;
 export declare const isHtmlViewPage: (page: string) => page is HtmlViewPage;
 export declare const isBusinessViewPage: (page: string) => boolean;
 /** Reject undeclared fields rather than turning a page snapshot into a generic state/authority store. */
