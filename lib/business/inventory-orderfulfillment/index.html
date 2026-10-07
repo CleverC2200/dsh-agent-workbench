@@ -585,7 +585,7 @@ function fulfillmentSnapshot() {
           if (sessionPage) {
             dirty = false;
             state = { version: 1 };
-            for (const listener of listeners) listener(state);
+            for (const listener of listeners) listener(state, "released");
           }
         }
         return;
@@ -596,7 +596,7 @@ function fulfillmentSnapshot() {
       state = dirty ? { ...value.state, ...state } : { ...value.state ?? {}, version: 1 };
       dirty = false;
       for (const listener of listeners)
-        listener(state);
+        listener(state, "restore");
       send();
     };
     window.addEventListener("message", receive);

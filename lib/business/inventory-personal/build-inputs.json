@@ -1,13 +1,16 @@
 {
   "sourceCommit": "ca58152db40b06df10ad08d9ec97bc6813e13f18",
+  "computeOwner": "dsh-agent-manage",
+  "computePublicExport": "./inventory-compute/*",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
-    "source/inventory-light-plugins/src/personal/permissions.ts": "322a40ce219745c65767d6230b8b82137f2b9021eeff8b16054bbb8517ca3193",
-    "source/inventory-light-plugins/src/personal/mock-input.ts": "e40c986ca9ae18ddaf486a4fabc66a3d7007c6a38134d7554e9490ea6c071c94",
-    "source/aqkc/web/src/lib/daily-report.ts": "0400307836bf95eb86a97eb48246d2e3a293403bc24487f347236ba78cf839a8",
-    "source/inventory-light-plugins/src/personal/model.ts": "afef5b0cb83ae9fe44f898ef4c9d2a23c08e81bbe8fd3a69ecd1cdb081d63688",
-    "source/inventory-light-plugins/src/personal/data.ts": "e2cce328e826bfef79e569ca696112faba57e3b17fbf42f316529cee14f7ad6e",
-    "../shared/view-state.js": "022097b8c45ea0e354df7b7738e2a520cbce00cf9a1da166abb8638be9c63b8a",
+    "source/inventory-light-plugins/src/personal/permissions.ts": "3872e3fffc1887c9368e567aa1c664cebff47cb872566bdb81ac43e644c93bae",
+    "source/inventory-light-plugins/src/personal/mock-input.ts": "b575cc5e0564c52c40e71d87547a27ed3125a1b55f571182dc660774b462f2ef",
+    "../dsh-agent-manage/src/inventory-compute/daily-report.ts": "d511cba9ae7a01b32b903d922f59542d6a10cd8e917fa9f9d60fc642539f63ad",
+    "../dsh-agent-manage/src/inventory-compute/personal.ts": "b9b63d2181dc020c61b3cf3a019c10f949606cde682a249a9af699645ad600d2",
+    "../dsh-agent-manage/src/inventory-compute/personal-sources.ts": "a0ef2c16ee228ace5726985e2556b9ebacb97937f1eba09a5cc6d1e271f68567",
+    "source/inventory-light-plugins/src/personal/data.ts": "24849693da68c3ab139ad6a510217c1cd955892d1e1e6f1abab64ba4baa0f7d0",
+    "../shared/view-state.js": "1cb6e6dacccbaac3d22f4b1342e50018b8215bdb0a0cb5dbc10bb8902c6fe6e1",
     "source/inventory-light-plugins/src/dsh-ui/Button.module.css": "bd4e040fd382438378a7bee43b7630d0680e336dbd8fd9ac43515967625973d5",
     "source/inventory-light-plugins/src/dsh-ui/DshButton.tsx": "fa88ac2b8ed0bd72809b651e165a5ac45594539b90fd6d01f2408937f8fa623c",
     "source/inventory-light-plugins/src/dsh-ui/controls.module.css": "a6feaa59f034d91b7f0651565eb5b726804d2e5096e2b3c5734cc0565dcc2132",
@@ -18,10 +21,11 @@
     "source/inventory-light-plugins/src/native/context.ts": "6da78d9fbf213bb5cacdc6a3666ace34d2341e2c585b35a59363aa9c94aa8137",
     "source/inventory-light-plugins/src/personal/style.module.css": "af85f13ccf0d825676bf1141eb8c8f8f7e2b2b78f7f17ea60e00e894fd57cec7",
     "source/inventory-light-plugins/src/personal/object-picker.module.css": "32e1fe134ef324583b890cdbcf1d0a37e8978bde31fc7e2251756b87c4aa79d3",
-    "source/inventory-light-plugins/src/personal/object-picker.tsx": "57b3142162e55d5fdfc1dd51ad91890e3e2837d14176d992680689baea7c9ad6",
-    "source/inventory-light-plugins/src/personal/coverage.ts": "362c9ee298bde189b0a4bb5dc86e0a870cc9dfd4376b18e774283a10856be766",
-    "source/inventory-light-plugins/src/personal/page.tsx": "ecf41c5b85c0b0460da0dad0270311150ca54c879175a369c0f94fae3ab6dcf6",
+    "source/inventory-light-plugins/src/personal/object-picker.tsx": "13fc1ba66e4b05cf66ab034435b5e85b09481e1c1fe48e84d77bc7fed6b1bc6c",
+    "source/inventory-light-plugins/src/personal/coverage.ts": "7166d00c692e18d2461a4e46f760b9691784650c3b0b8b0c319211599d8dc892",
+    "source/inventory-light-plugins/src/personal/page.tsx": "cc6b0de471613db3e1e352fcc5304ad723d621e4c1a2bda7af1548fce0f8da4d",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
-    "source/inventory-light-plugins/src/personal/entry.tsx": "251ab8fa9976e1feb94907710b41b71e81f52a944af3159d7ad683c7171d52b4"
+    "source/inventory-light-plugins/src/personal/entry.tsx": "251ab8fa9976e1feb94907710b41b71e81f52a944af3159d7ad683c7171d52b4",
+    "../dsh-agent-manage/package.json": "2f123eecd8635bcbec41b602c4b46b80924379c6283ce88baf4ab6b85e425ba1"
   }
 }
