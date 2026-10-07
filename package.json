@@ -136,6 +136,7 @@
     "i18next": "23.7.16",
     "xlsx-republish": "0.20.3",
     "decimal.js": "10.6.0",
+    "clsx": "2.1.1",
     "@deepseek-ai/dsh-tools": "file:../../official-latest-standard/packages/core/tools",
     "@deepseek-ai/dsh-agent": "file:../../official-latest-standard/packages/core/agent",
     "@playwright/test": "1.58.2",
