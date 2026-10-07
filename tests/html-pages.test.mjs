@@ -31,3 +31,10 @@ test('package HTML symlinks escaping the registered root are rejected', async t 
   await symlink('/etc/hosts', join(root, 'index.html'));
   await assert.rejects(new HtmlPages(context(t),'',async()=>'<picker-fixture>').registerHtml([root]), /INVALID_HTML_PATH/);
 });
+
+test('the received MPS keeps one original menu entry with its original selectable resource identity', async t => {
+  const pages = new HtmlPages(context(t),'',async()=>'<picker-fixture>');
+  await pages.registerHtml([resolve('static/mps')]);
+  assert.deepEqual(pages.list().map(page=>({id:page.id,resourceId:page.resourceId})),[{id:'plan-category-production',resourceId:'gea-html-inventory-mps'}]);
+  assert.equal((await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=plan-category-production'))).status,200);
+});

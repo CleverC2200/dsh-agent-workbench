@@ -75,3 +75,15 @@ test('received mock pages keep only authored UI intent under their actual Sessio
     assert.throws(()=>owner.saveHtmlViewState(id,'subject/session-A',{...state,rows:[{secret:'derived'}]}),/INVALID_HTML_VIEW_STATE/);
   }
 });
+
+test('received MPS UI intent belongs to its Session while derived demand and grants are excluded', () => {
+  const owner = new WorkbenchController({panel() {},document() {}});
+  const id = 'plan-category-production';
+  owner.registerFrame({id,kind:'html',src:'/mps',resourceId:'gea-html-inventory-mps'});
+  const intent = {version:1,tab:'process',assistantDraft:'未发送的MPS文字',weights:{report:40,growth:40,ship:20}};
+  owner.saveHtmlViewState(id,'subject/session-A',intent);
+  assert.equal(owner.readHtmlViewState(id,'subject/session-B'),undefined);
+  assert.deepEqual(owner.readHtmlViewState(id,'subject/session-A'),intent);
+  assert.throws(()=>owner.saveHtmlViewState(id,undefined,intent),/HTML_VIEW_SCOPE_REQUIRED/);
+  assert.throws(()=>owner.saveHtmlViewState(id,'subject/session-A',{...intent,parts:{process:{rows:[]}}}),/INVALID_HTML_VIEW_STATE/);
+});

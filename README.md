@@ -88,3 +88,5 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 ## 已接收的模拟页面
 
 客户库存、订单工作台与订单履约保留原页面标识，由Workbench打包原展示与模拟交互。Manage持有其原Prompt、Skill和零业务能力声明，GEA登记view范围的公开页面grant并拒绝SQL读取。资源选用关联官方Core Session，不发送模型请求。筛选、周期与分页等页面意图按当前身份和Session保存；订单工作台的本地演示任务仍按原说明在冷刷新后清空。区域、品类与MPS继续使用现有静态页面，没有新增业务Agent声明。
+
+MPS 原型 `plan-category-production` 在 `lib/static/mps` 接收原 `inventory-mps` 资源。当前挂载步骤的作者state通过公共业务channel发布模拟上下文和页签目录，切步移除旧数据。选用Prompt/Skill复用当前Core Session；界面意图、调整输入和未发送文字按Session恢复，模拟派生数据不存业务库。保存、导出、提交和结转仍只显示模拟提示。构建从相邻Manage的 `business-resources/inventory-mps` 装配原资源。

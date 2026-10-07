@@ -14,6 +14,8 @@ await cp('static', 'lib/static', {
   recursive: true,
   filter: (source) => !source.endsWith('/source'),
 });
+for (const file of ['prompt.json', 'capability.json', 'mcp.json', 'skills', 'SOURCE.json'])
+  await cp(`../dsh-agent-manage/business-resources/inventory-mps/${file}`, `lib/static/mps/${file}`, {recursive: true});
 await build({
   entryPoints: ['src/host.ts', 'src/shared/notifications.ts', 'src/sales-plan.ts'],
   bundle: true,

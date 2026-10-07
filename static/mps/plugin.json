@@ -1,6 +1,33 @@
 {
   "schemaVersion": 1,
-  "id": "plan-category-production",
-  "name": "主生产计划",
-  "html": "index.html"
+  "id": "inventory-mps",
+  "name": "主生产计划(MPS) · 模拟原型",
+  "version": "0.1.0-preview.25",
+  "mode": "mock",
+  "html": "index.html",
+  "pages": [
+    {
+      "id": "plan-category-production",
+      "name": "主生产计划(MPS)",
+      "view": "",
+      "order": 18
+    }
+  ],
+  "skills": [
+    "skills/inventory-mps/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "mps-prototype",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
 }
