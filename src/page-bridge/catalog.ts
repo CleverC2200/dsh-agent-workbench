@@ -83,10 +83,10 @@ export type PageActionVerb = (typeof PAGE_ACTION_VERBS)[number];
 export type PageElementRole = "row" | "field" | "control" | "collection";
 
 /**
- * 元素的影响等级：draft 只改页面草稿（默认）；submit / approve 会提交或审批，
+ * 元素的影响等级：view 只改UI视图；draft 修改页面草稿（默认）；submit / approve 会提交或审批，
  * 必须由用户明确要求、且页面当前可点时才允许。
  */
-export const PAGE_ELEMENT_EFFECTS = ["draft", "submit", "approve"] as const;
+export const PAGE_ELEMENT_EFFECTS = ["view", "draft", "submit", "approve"] as const;
 export type PageElementEffect = (typeof PAGE_ELEMENT_EFFECTS)[number];
 
 /**
@@ -709,11 +709,18 @@ export function pageActionEffect(
         )
       : []),
   ];
-  let effect: PageElementEffect = "draft";
+  let effect: PageElementEffect = targets.length ? "view" : "draft";
+  const visited = new Set<string>();
   for (const id of targets) {
-    const declared = byId.get(id)?.effect;
+    if (visited.has(id)) continue;
+    visited.add(id);
+    const element = byId.get(id);
+    if (args.kind === "setValue" && element?.role === "collection")
+      targets.push(...(element.members ?? []));
+    const declared = element?.effect ?? "draft";
     if (declared === "approve") return "approve";
     if (declared === "submit") effect = "submit";
+    else if (declared === "draft" && effect === "view") effect = "draft";
   }
   return effect;
 }

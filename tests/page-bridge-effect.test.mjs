@@ -133,6 +133,17 @@ test("一次调用按涉及元素的最高等级取影响面", () => {
   );
 });
 
+test("明确视图筛选保持view，混合普通字段或集合成员仍按草稿判断", () => {
+  const parsed = catalog([
+    {id:"filter:module",role:"field",label:"模块",editable:true,effect:"view"},
+    {id:"field:draft",role:"field",label:"草稿",editable:true},
+    {id:"fields:mixed",role:"collection",label:"混合字段",effect:"view",members:["filter:module","field:draft"]},
+  ]);
+  assert.equal(m.pageActionEffect(parsed,{kind:"setValue",target:"filter:module"}),"view");
+  assert.equal(m.pageActionEffect(parsed,{kind:"setValue",targets:["filter:module","field:draft"]}),"draft");
+  assert.equal(m.pageActionEffect(parsed,{kind:"setValue",target:"fields:mixed"}),"draft");
+});
+
 test("说明里标出提交/审批类元素，并暴露 confirm 参数", () => {
   const parsed = catalog([
     {

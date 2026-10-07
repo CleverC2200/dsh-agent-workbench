@@ -1,5 +1,5 @@
 /** Build editable author modules while preserving the existing vendor, data and visual resources. */
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -28,3 +28,6 @@ for (const page of ['category', 'mps']) {
 }
 const regionalSource = new URL('../static/regional/source/index.html', import.meta.url);
 await writeFile(new URL('../static/regional/index.html', import.meta.url), await compileHtmlAuthor(await readFile(regionalSource, 'utf8'), fileURLToPath(new URL('../static/regional/source/', import.meta.url))));
+// Manage remains the owner of the original declared resource; the installed page carries its files.
+for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
+    await cp(new URL(`../../dsh-agent-manage/business-resources/plan-regional/${name}`, import.meta.url), new URL(`../static/regional/${name}`, import.meta.url), { recursive: true });

@@ -44,4 +44,13 @@ test('Host initializes package resources in a Chinese path and serves the regist
   const response = await routes.get('/api/agent-workbench/html').fetch(new Request('https://localhost' + pages[0].url));
   assert.equal(response.status, 200);
   assert.match(await response.text(), /中文资源已加载/);
+  // The same official configuration withdraws one original source without changing the other roots.
+  const retainedRoots = context.workbenchPages.packages().map(item=>item.directory)
+    .filter(directory=>!directory.endsWith('/samples') && !directory.endsWith('/static/regional'));
+  const nextRoutes=new Map();
+  const next={...context,connection:{fetch:{register:route=>{nextRoutes.set(route.path,route);return()=>nextRoutes.delete(route.path);}}},provide:(name,value)=>{next[name]=value;}};
+  await apply(next,{cwd:root,htmlRoots:retainedRoots});
+  const withdrawn=await(await nextRoutes.get('/api/agent-workbench/pages').fetch(new Request('https://localhost/api/agent-workbench/pages'))).json();
+  assert.equal(withdrawn.some(page=>page.id==='plan-regional'),false);
+  assert.deepEqual(withdrawn.map(page=>page.id).sort(),pages.filter(page=>page.id!=='plan-regional').map(page=>page.id).sort());
 });

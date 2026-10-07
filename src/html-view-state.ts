@@ -173,6 +173,7 @@ export type CategoryViewState = {
 export type RegionalViewState = {
     version: 1;
     date: string;
+    module?: string;
     selDay: number | null;
     selEv: string | null;
     repDim: string;
@@ -190,7 +191,7 @@ export type HtmlViewState = {
 } | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState;
 const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment']);
 export const isHtmlViewPage = (page: string): page is HtmlViewPage => pages.has(page);
-export const isBusinessViewPage = (page: string): boolean => ['inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 10000;
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -230,7 +231,7 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
         case 'inventory-orderworkbench': return shape(value, { version, mode: v => ['month', 'week'].includes(v as string), month: text, week: text, weekInitialized: boolean, event: v => ['focus', 'all'].includes(v as string), task: v => ['all', 'pending', 'done'].includes(v as string) }, ['version']);
         case 'inventory-orderfulfillment': return shape(value, { version, order: text, customer: text, warehouse: text, status: text, page: positiveInteger, size: v => [10, 20, 50].includes(v as number) }, ['version']);
         case 'workbench-html-table': return shape(value, { version, keyword: text, stage: text });
-        case 'gea-regional-plan': return shape(value, { version, date: text, selDay: nullable(number), selEv: nullable(text), repDim: text, rhythm: array(rhythm), rhythmEditing: boolean, rhythmDraft: nullable(array(rhythm)) }, ['version', 'date', 'selDay', 'selEv', 'repDim', 'rhythm']);
+        case 'gea-regional-plan': return shape(value, { version, date: text, module: v => ['overview', 'follow', 'category', 'review', 'analysis'].includes(v as string), selDay: nullable(number), selEv: nullable(text), repDim: text, rhythm: array(rhythm), rhythmEditing: boolean, rhythmDraft: nullable(array(rhythm)) }, ['version', 'date', 'selDay', 'selEv', 'repDim', 'rhythm']);
         case 'plan-region-category': return shape(value, { version, category: nullable(text), view: text, draft: text, eventStatus: text, drill: nullable(text), eventId: nullable(text), suggestionId: nullable(text), taskId: nullable(text), detail: nullable(text) }, ['version']);
         case 'plan-category-production': return shape(value, { version, tab: text, preview: nullable(text), pullType: text, months: strings, shipPeriod: text, weights: v => shape(v, { report: number, growth: number, ship: number }), demandEdits: record(number), masterOpen: boolean, masterTab: number, masterBlanks: boolean, masterSearch: text, masterSelected: nullable(text), masterSkus: array(sku), masterLines: array(line), masterTransfers: array(transfer), plansOpen: boolean, shipBase: text, shipRemaining: record(number), avatar, voice, persona, studioOpen: boolean, studioTab: text, assistantDraft: text }, ['version']);
         case 'inventory-fc': return shape(value, { version, filters: entries('filters', filters), drafts: entries('order-draft', draft), plans: entries('plan-draft', plan), cycles: entries('cycle-preview', cycle), preferences: entries('preferences', preferences), cycleEdits: entries('cycle-edit', cycleEdit) }, ['version', 'filters', 'drafts', 'plans', 'cycles', 'preferences']);

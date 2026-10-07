@@ -10,6 +10,13 @@ await writeFile('.scratch/html-pages-test.mjs',outputFiles[0].text);
 const {HtmlPages}=await import(pathToFileURL(resolve('.scratch/html-pages-test.mjs')).href);
 
 function context(t){const cleanups=[];t.after(()=>cleanups.forEach(stop=>stop?.()));return {effect(start){cleanups.push(start());},on(){return()=>{};},inject(){},connection:{fetch:{register(){return()=>{};}}}};}
+test('the existing regional menu declares its original interpreter resource without a second page', async t => {
+  const pages = new HtmlPages(context(t),'',async()=>'<picker-fixture>');
+  await pages.registerHtml([resolve('static/regional')]);
+  assert.deepEqual(pages.list().map(({id,pluginId,resourceId})=>({id,pluginId,resourceId})), [{
+    id:'gea-regional-plan', pluginId:'plan-regional', resourceId:'gea-html-plan-regional',
+  }]);
+});
 test('registered package HTML is discoverable and readable without business identity or a Session', async t => {
   const root = await mkdtemp(join(tmpdir(), 'workbench-pages-'));
   t.after(() => rm(root, { recursive: true, force: true }));
