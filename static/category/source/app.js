@@ -107,10 +107,10 @@ function N8({ category: e, setCategory: t, view: n, setView: r, adopted: a, extr
         stop();
         stop = reportElements('category', [
           {id:'category:scope',role:'field',label:'当前品类（模拟）',value:I},
-          ...Dr.map(key => ({id:'kpi:'+key,role:'field',label:'模拟指标 '+rt[key].name,value:JSON.stringify(m[key])})),
-          ...events.map(row => ({id:'event:'+row.id,role:'row',label:row.title,value:JSON.stringify(row)})),
-          ...O.map(row => ({id:'suggestion:'+row.id,role:'row',label:row.title,value:JSON.stringify({...row,adopted:a.includes(row.id)})})),
-          ...tasks.map(row => ({id:'task:'+row.id,role:'row',label:row.title,value:JSON.stringify(row)})),
+          ...Dr.map(key => ({id:'kpi:'+key,role:'field',label:'模拟指标 '+rt[key].name,value:`${m[key].value}${rt[key].unit} · 目标 ${rt[key].target ?? '未报备'} · ${m[key].status.label}`})),
+          ...events.map(row => ({id:'event:'+row.id,role:'row',label:row.title,value:`${S1[row.level]} · ${T8(row.type)} · ${row.time}${row.overdue ? " · 超时" : ""}`})),
+          ...O.map(row => ({id:'suggestion:'+row.id,role:'row',label:row.title,value:`${row.target} · ${row.grade} · 置信度 ${row.confidence} · ${a.includes(row.id) ? "已进入任务跟踪" : "待人工确认"}`})),
+          ...tasks.map(row => ({id:'task:'+row.id,role:'row',label:row.title,value:`${row.owner} · ${row.due} · ${E1[row.status]} · ${row.origin}`})),
           {id:'prototype:boundary',role:'field',label:'数据边界',value:'本地模拟快照与临时任务；没有真实业务回执。'},
         ]);
       }).catch(error => { if (!controller.signal.aborted) setSyncError('页面快照发布失败，请重新连接。'+error.message); });
@@ -126,6 +126,9 @@ const k8 = Gr.TextArea, _i = (e) => {
   return t ? t.name : "\u5168\u54C1\u7C7B";
 };
 
+function T8(e) {
+  return { plan: "计划节点", risk: "异常风险", data: "数据质量", co: "协同确认", decision: "决策授权", exec: "执行履约" }[e] || "业务事件";
+}
 const j8 = () => Dr;
 
 function $8() {

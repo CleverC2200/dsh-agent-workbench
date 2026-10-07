@@ -596,10 +596,10 @@ Error generating stack: `+i.message+`
         stop();
         stop = reportElements("category", [
           { id: "category:scope", role: "field", label: "\u5F53\u524D\u54C1\u7C7B\uFF08\u6A21\u62DF\uFF09", value: I },
-          ...Dr.map((key) => ({ id: "kpi:" + key, role: "field", label: "\u6A21\u62DF\u6307\u6807 " + rt[key].name, value: JSON.stringify(m[key]) })),
-          ...events.map((row) => ({ id: "event:" + row.id, role: "row", label: row.title, value: JSON.stringify(row) })),
-          ...O.map((row) => ({ id: "suggestion:" + row.id, role: "row", label: row.title, value: JSON.stringify({ ...row, adopted: a.includes(row.id) }) })),
-          ...tasks.map((row) => ({ id: "task:" + row.id, role: "row", label: row.title, value: JSON.stringify(row) })),
+          ...Dr.map((key) => ({ id: "kpi:" + key, role: "field", label: "\u6A21\u62DF\u6307\u6807 " + rt[key].name, value: `${m[key].value}${rt[key].unit} \xB7 \u76EE\u6807 ${rt[key].target ?? "\u672A\u62A5\u5907"} \xB7 ${m[key].status.label}` })),
+          ...events.map((row) => ({ id: "event:" + row.id, role: "row", label: row.title, value: `${S1[row.level]} \xB7 ${T8(row.type)} \xB7 ${row.time}${row.overdue ? " \xB7 \u8D85\u65F6" : ""}` })),
+          ...O.map((row) => ({ id: "suggestion:" + row.id, role: "row", label: row.title, value: `${row.target} \xB7 ${row.grade} \xB7 \u7F6E\u4FE1\u5EA6 ${row.confidence} \xB7 ${a.includes(row.id) ? "\u5DF2\u8FDB\u5165\u4EFB\u52A1\u8DDF\u8E2A" : "\u5F85\u4EBA\u5DE5\u786E\u8BA4"}` })),
+          ...tasks.map((row) => ({ id: "task:" + row.id, role: "row", label: row.title, value: `${row.owner} \xB7 ${row.due} \xB7 ${E1[row.status]} \xB7 ${row.origin}` })),
           { id: "prototype:boundary", role: "field", label: "\u6570\u636E\u8FB9\u754C", value: "\u672C\u5730\u6A21\u62DF\u5FEB\u7167\u4E0E\u4E34\u65F6\u4EFB\u52A1\uFF1B\u6CA1\u6709\u771F\u5B9E\u4E1A\u52A1\u56DE\u6267\u3002" }
         ]);
       }).catch((error) => {
@@ -620,6 +620,9 @@ Error generating stack: `+i.message+`
     const t = Yt.find((n) => n.key === e);
     return t ? t.name : "\u5168\u54C1\u7C7B";
   };
+  function T8(e) {
+    return { plan: "\u8BA1\u5212\u8282\u70B9", risk: "\u5F02\u5E38\u98CE\u9669", data: "\u6570\u636E\u8D28\u91CF", co: "\u534F\u540C\u786E\u8BA4", decision: "\u51B3\u7B56\u6388\u6743", exec: "\u6267\u884C\u5C65\u7EA6" }[e] || "\u4E1A\u52A1\u4E8B\u4EF6";
+  }
   var j8 = () => Dr;
   function $8() {
     const [e, t] = usePageViewField(y, categoryView, "category", null, (value) => value, (value) => value === null || Yt.some((row) => row.key === value) ? value : null), [n, r] = usePageViewField(y, categoryView, "view", "all"), [a, i] = y.useState([]), [l, o] = y.useState([]), [v, p] = usePageViewField(y, categoryView, "draft", ""), [m, C] = usePageViewField(y, categoryView, "eventId", null, (value) => value?.id ?? null, (id) => vp(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [O, g] = usePageViewField(y, categoryView, "suggestionId", null, (value) => value?.id ?? null, (id) => y8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [h, x] = usePageViewField(y, categoryView, "drill", null, (value) => value, (value) => Object.hasOwn(rt, value) ? value : null), [b, E] = usePageViewField(y, categoryView, "taskId", null, (value) => value?.id ?? null, (id) => x8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [_, P] = usePageViewField(y, categoryView, "detail", null, (value) => value?.kind ?? null, (value) => ["calendar", "evidence"].includes(value) ? { kind: value } : null), N = y.useMemo(() => ph(e), [e]), k = y.useMemo(() => ef(e), [e]), $ = e ? _i(e) : "\u5168\u90E8\u54C1\u7C7B", actions = useAuthorQuote(y), I = (text, label) => actions.quote(text, label ?? "\u54C1\u7C7B\u5206\u6790\u95EE\u9898"), W = (event) => I(`\u8BF7\u5206\u6790\u201C${event.title}\u201D\uFF0C\u8BF4\u660E\u5B83\u5BF9\u300C${rt[event.kpi].name}\u300D\u7684\u5F71\u54CD\u3001\u4F9D\u636E\u548C\u4F18\u5148\u884C\u52A8\u3002`, "\u4E8B\u4EF6\u5206\u6790"), L = () => {
