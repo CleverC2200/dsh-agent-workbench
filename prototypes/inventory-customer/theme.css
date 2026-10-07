@@ -26,4 +26,7 @@ body .dealer-table-card .table-filters .arco-select-view-value, body .dealer-tab
 body .metric-card-head .arco-typography, body .metric-card .arco-statistic-value, body .dealer-table-card .dealer-name, body .dealer-table-card .metric-cell strong {color:var(--workbench-text)!important;}
 body .inventory-context .arco-select-view, body .inventory-context .arco-cascader-view {background:var(--workbench-surface)!important;border-color:var(--workbench-control-border);}
 body .inventory-context .arco-select-view-value, body .inventory-context .arco-select-suffix, body .inventory-context .arco-cascader-view-value {color:var(--workbench-body)!important;}
+body[data-ds-dark-theme] .dealer-table-card .dealer-name strong {color:var(--workbench-text);}
+body[data-ds-dark-theme] .metric-card .metric-benchmark {background:var(--workbench-surface);color:var(--workbench-muted);}
+body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span,small) {color:var(--workbench-muted);}
 @media(max-width:760px){.prototype-notice{padding:8px 12px;}}

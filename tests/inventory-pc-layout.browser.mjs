@@ -226,3 +226,28 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
   await expect(next.locator('figcaption')).toContainText('2026-09-30');
   if(evidence)await page.screenshot({path:evidence+'/chart-keyboard-100-12.png'});
 });
+
+for(const theme of ['light','dark'])test(`customer name and metric explanation children keep their original geometry in ${theme} theme`,async t=>{
+  const {page,frame}=await fixture(t,'customer',1199,theme,undefined,15);
+  const strong=frame.locator('.dealer-name strong').first();
+  await expect(strong).toContainText('郑州佳特商贸有限公司');
+  const benchmarks=frame.locator('.metric-card .metric-benchmark');
+  await expect(benchmarks).toHaveCount(6);
+  const parent=await readablePaint(frame.locator('.dealer-name').first());
+  const name=await readablePaint(strong);
+  const children=[];for(const node of await benchmarks.locator('span,small').all())children.push(await readablePaint(node));
+  const geometry=await frame.locator('body').evaluate(()=>{
+    const measure=el=>{const box=el.getBoundingClientRect(),style=getComputedStyle(el);return{text:el.textContent.trim(),x:box.x,y:box.y,width:box.width,height:box.height,font:style.fontSize,weight:style.fontWeight};};
+    return{strong:measure(document.querySelector('.dealer-name strong')),cards:[...document.querySelectorAll('.metric-card')].map(measure),benchmarks:[...document.querySelectorAll('.metric-benchmark')].map(measure),children:[...document.querySelectorAll('.metric-benchmark span,.metric-benchmark small')].map(measure)};
+  });
+  const observation={parent,name,children,geometry};
+  if(evidence){await mkdir(evidence,{recursive:true});await writeFile(evidence+`/customer-children-${theme}.json`,JSON.stringify(observation,null,2));await page.screenshot({path:evidence+`/customer-children-${theme}.png`});}
+  if(process.env.CUSTOMER_GEOMETRY_BASELINE){const before=JSON.parse(await readFile(process.env.CUSTOMER_GEOMETRY_BASELINE+`/customer-children-${theme}.json`,'utf8'));assert.deepEqual(geometry,before.geometry,'only paint changes; card/name/explanation positions, font and data stay unchanged');}
+  if(theme==='dark'){
+    for(const paint of [name,...children])assert.ok(paint.contrast>=4.5,`${paint.text}: actual child contrast ${paint.contrast.toFixed(2)}`);
+    assert.equal(await benchmarks.first().evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(36, 38, 43)');
+  }else{
+    assert.equal(name.color,'rgb(37, 43, 53)');
+    assert.ok(children.every(paint=>paint.color==='rgb(138, 147, 162)'&&paint.background==='rgb(255, 255, 255)'),'the retained light explanation paint is unchanged');
+  }
+});
