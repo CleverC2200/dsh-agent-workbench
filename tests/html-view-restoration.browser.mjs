@@ -6,11 +6,12 @@ import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';const viewScope=id=>isBusinessViewPage(id)?window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;channel.port1.onmessage=({data})=>{if(data.type==='applied')window.mockReplies[data.toolCallId]=data;if(data.type==='request'){if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
-async function fixture(t) {
+async function fixture(t, includedAssets) {
     const browser = await chromium.launch({ channel: 'chrome', headless: true });
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
-    const assets = { sample: await readFile('lib/samples/index.html', 'utf8'), regional: await readFile('static/regional/index.html', 'utf8'), category: await readFile('static/category/index.html', 'utf8'), mps: await readFile('static/mps/index.html', 'utf8'), customer: await readFile('lib/business/inventory-customer/index.html','utf8'), orderworkbench: await readFile('lib/business/inventory-orderworkbench/index.html','utf8'), fulfillment: await readFile('lib/business/inventory-orderfulfillment/index.html','utf8') };
+    const assetPaths = { sample: 'lib/samples/index.html', regional: 'static/regional/index.html', category: 'static/category/index.html', mps: 'static/mps/index.html', customer: 'lib/business/inventory-customer/index.html', orderworkbench: 'lib/business/inventory-orderworkbench/index.html', fulfillment: 'lib/business/inventory-orderfulfillment/index.html' };
+    const assets = Object.fromEntries(await Promise.all((includedAssets ?? Object.keys(assetPaths)).map(async name => [name, await readFile(assetPaths[name], 'utf8')])));
     if (process.env.HTML_VIEW_BASELINE === '1')
         assets.sample = execFileSync('git', ['show', `${baseline}:samples/html-table.html`], { encoding: 'utf8' }).replace('/* SHARED_THEME_RESOURCE */', await readFile('theme/tokens.css', 'utf8'));
     await page.route('http://127.0.0.1:19478/**', route => { const key = new URL(route.request().url()).pathname.slice(1); return route.fulfill({ contentType: 'text/html', body: assets[key] ?? '<html><body></body></html>' }); });
@@ -95,7 +96,7 @@ test('received customer mock preserves filters, pagination and visible current r
   assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
 });
 test('received order report restores the selected week and publishes current supported elements', async t => {
-  const page = await fixture(t);
+  const page = await fixture(t, ['orderworkbench']);
   await page.evaluate(() => window.openPage('inventory-orderworkbench','orderworkbench'));
   await page.frameLocator('iframe').locator('#weekMode').click();
   await expect.poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.mode)).toBe('week');
@@ -107,6 +108,29 @@ test('received order report restores the selected week and publishes current sup
   await expect.poll(() => page.evaluate(() => window.mockCatalogs['inventory-orderworkbench']?.length ?? 0)).toBeGreaterThan(1);
   assert.deepEqual(await page.evaluate(() => window.mockErrors),[]);
 });
+for (const [taskFilter, taskLabel] of [['pending', '待跟进'], ['done', '已完成']]) {
+  test(`received order report restores all events and the ${taskLabel} task filter highlight with their visible lists`, async t => {
+    const page = await fixture(t, ['orderworkbench']);
+    await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
+    const frame = page.frameLocator('iframe');
+    await frame.getByRole('button', { name: '全部事项', exact: true }).click();
+    await frame.getByRole('button', { name: new RegExp(`^${taskLabel}`) }).click();
+    await expect.poll(() => page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.filters)).toEqual({ event: 'all', task: taskFilter });
+    await expect(frame.locator('[data-wb-event-filter].active')).toHaveText('全部事项');
+    await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
+    await expect(frame.locator('#wbEvents .wb-event')).toHaveCount(5);
+    await expect(frame.locator('#wbEvents')).toContainText('火锅料与汤圆可发货天数偏高');
+    await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
+    await page.evaluate(() => window.hidePage());
+    await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
+    await expect(frame.locator('[data-wb-event-filter].active')).toHaveText('全部事项');
+    await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
+    await expect(frame.locator('#wbEvents .wb-event')).toHaveCount(5);
+    await expect(frame.locator('#wbEvents')).toContainText('火锅料与汤圆可发货天数偏高');
+    await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
+    assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
+  });
+}
 test('received fulfillment mock restores its filters and visible page without a business query', async t => {
   const page = await fixture(t);
   await page.evaluate(() => window.openPage('inventory-orderfulfillment','fulfillment'));
