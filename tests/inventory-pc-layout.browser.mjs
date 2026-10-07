@@ -12,11 +12,11 @@ const {injectPicker}=await import('data:text/javascript;base64,'+Buffer.from(inj
 const picker=(await build({entryPoints:['src/page-interaction/page.ts'],bundle:true,write:false,format:'iife',platform:'browser'})).outputFiles[0].text;
 const coreTheme=(await Promise.all(['base.css','design-platform.css'].map(name=>readFile('../../official-latest-standard/packages/client/ui-theme/src/styles/'+name,'utf8')))).join('\n');
 const evidence=process.env.INVENTORY_LAYOUT_EVIDENCE;
-async function fixture(t,id,width=559,theme='light') {
+async function fixture(t,id,width=559,theme='light',authorDocument) {
   const browser=await chromium.launch({channel:'chrome',headless:true});
   t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:width+721,height:820},deviceScaleFactor:1});
-  const authored=await readFile(`lib/business/inventory-${id}/index.html`,'utf8');
+  const authored=authorDocument??await readFile(`lib/business/inventory-${id}/index.html`,'utf8');
   const html=process.env.INVENTORY_LAYOUT_AUTHORED==='1'?authored:presentHtml(injectPicker(authored,picker),await readFile('theme/tokens.css','utf8'));
   const network=[],errors=[];
   page.on('pageerror',e=>errors.push(e.message));
@@ -28,6 +28,7 @@ async function fixture(t,id,width=559,theme='light') {
     window.addEventListener('message',event=>{
       if(event.source!==frame.contentWindow)return;
       const data=event.data;
+      if(data?.protocol==='agent-workbench-theme'&&data.type==='ready')window.themeReady=true;
       if(data?.protocol==='gea-html-v2'&&data.type==='ready'&&!connected){connected=true;const pair=new MessageChannel();pair.port1.onmessage=event=>{const message=event.data;window.requests.push(message);if(message.type==='request')pair.port1.postMessage({type:'response',id:message.id,result:{accepted:true}});if(message.type==='theme:subscribe'){const style=getComputedStyle(document.body);const tokens=${process.env.INVENTORY_LAYOUT_CORE_TOKENS==='1'?"Object.fromEntries([...style].filter(name=>name.startsWith('--dsw-')).map(name=>[name,style.getPropertyValue(name)]))":"{}"};pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'inventory-${id}'},colorScheme:'${theme}',fontSize:14,tokens});}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'inventory-${id}'}},'*',[pair.port2]);}
       if(data?.protocol==='dsh-workbench-view-v1'&&data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-${id}',version:1,channel:'layout-view',generation:1,state:{version:1}},'*');
     });</script>`});
@@ -37,6 +38,23 @@ async function fixture(t,id,width=559,theme='light') {
   t.after(async()=>{assert.deepEqual(network,[]);assert.deepEqual(errors,[]);});
   return {page,frame};
 }
+test('opaque PC author document keeps raw script/style text and current picker/theme with omitted closing tags',async t=>{
+  const csp="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'";
+  const author='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="'+csp+'"><title>库存原文</title><style id="author-style">#inventory { --author-rawtext: "</body> </head>"; color: rgb(20, 30, 40); }</style><main id="inventory">库存数据 0 / 未知</main><script>window.authorLiteral="</body> </head>";window.authorDone=true;</script>';
+  const {page,frame}=await fixture(t,'qll',559,'light',author);
+  await expect.poll(()=>page.evaluate(()=>window.themeReady)).toBe(true);
+  const observed=await frame.locator('body').evaluate(()=>({mode:document.compatMode,literal:window.authorLiteral,done:window.authorDone,picker:typeof window.dshPageInteraction?.available,csp:document.querySelector('meta[http-equiv]').content,style:document.querySelector('#author-style').textContent}));
+  assert.equal(observed.mode,'CSS1Compat');
+  assert.equal(observed.done,true);
+  assert.equal(observed.literal,'</body> </head>');
+  assert.equal(observed.picker,'function');
+  assert.equal(observed.csp,csp);
+  assert.equal(observed.style,'#inventory { --author-rawtext: "</body> </head>"; color: rgb(20, 30, 40); }');
+  await expect(frame.locator('#inventory')).toHaveText('库存数据 0 / 未知');
+  await page.evaluate(()=>document.querySelector('iframe').contentWindow.postMessage({protocol:'agent-workbench-theme',dark:true,fontSize:17},'*'));
+  await expect.poll(()=>frame.locator('body').evaluate(()=>({dark:document.body.hasAttribute('data-ds-dark-theme'),size:document.documentElement.style.getPropertyValue('--dsh-content-font-size')}))).toEqual({dark:true,size:'17px'});
+  if(evidence){await mkdir(evidence,{recursive:true});await writeFile(evidence+'/rawtext-document.json',JSON.stringify(observed,null,2));await page.screenshot({path:evidence+'/rawtext-document.png'});}
+});
 test('dealer metrics retain their authored grid in the PC split panel',async t=>{
   const {page,frame}=await fixture(t,'dealer');
   const metrics=frame.locator('[aria-label="库存总览指标"]');
