@@ -21,7 +21,12 @@ let latest;
 let lifetime = new AbortController();
 const notice =
   "模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。";
-mpsView.subscribe(() => {
+mpsView.subscribe((_snapshot, event) => {
+  if (event === "released") {
+    cancelPublication();
+    restored = false;
+    return;
+  }
   latest = undefined;
   revision++;
   restored = true;
@@ -187,6 +192,10 @@ reportElements(
     window.location.reload();
   },
 );
+window.addEventListener("gea-session-changing", () => {
+  cancelPublication();
+  restored = false;
+});
 window.addEventListener("gea-session-changed", () => {
   cancelPublication();
   restored = false;
