@@ -1,6 +1,33 @@
 {
   "schemaVersion": 1,
-  "id": "plan-region-category",
-  "name": "品类计划",
-  "html": "index.html"
+  "id": "category-plan",
+  "name": "品类计划工作台（模拟原型）",
+  "version": "0.1.0-ticket24",
+  "mode": "mock",
+  "html": "index.html",
+  "skills": [
+    "skills/category-plan/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "category-plan-prototype",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "prototype",
+  "pages": [
+    {
+      "id": "plan-region-category",
+      "name": "品类计划",
+      "view": ""
+    }
+  ],
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
 }

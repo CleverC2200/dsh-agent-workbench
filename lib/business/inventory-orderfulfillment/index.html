@@ -560,7 +560,7 @@ function fulfillmentSnapshot() {
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
+    const sessionPage = ["plan-region-category", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -893,8 +893,8 @@ function fulfillmentSnapshot() {
       })
     );
   }
-  function publish(context2) {
-    return call("context", context2);
+  function publish(context2, options) {
+    return call("context", context2, options);
   }
 
   // prototypes/inventory-orderfulfillment/entry.js

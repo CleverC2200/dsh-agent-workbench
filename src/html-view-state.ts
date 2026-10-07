@@ -191,7 +191,7 @@ export type HtmlViewState = {
 } | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState;
 const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment']);
 export const isHtmlViewPage = (page: string): page is HtmlViewPage => pages.has(page);
-export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'plan-region-category', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 10000;
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);

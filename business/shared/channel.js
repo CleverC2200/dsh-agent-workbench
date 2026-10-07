@@ -298,6 +298,6 @@ export function action(name, description, handler) {
 export function ask(text, context) {
   return call('conversation', { text, context });
 }
-export function publish(context) {
-  return call('context', context);
+export function publish(context, options) {
+  return call('context', context, options);
 }

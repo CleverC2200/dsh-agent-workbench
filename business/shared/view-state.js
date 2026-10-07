@@ -1,7 +1,7 @@
 /** Current page's UI projection. Workbench owns storage; the author owns every named field. */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
-    const sessionPage = ['gea-regional-plan', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
     /** @type {Record<string,unknown>} */
     let state = { version: 1 };
     let binding, dirty = false;
@@ -46,17 +46,25 @@ export function createPageViewState(page) {
 }
 /** Bind an explicit authored React field; restores update the existing setter without replaying user actions. */
 export function usePageViewField(react, view, key, initial, encode = value => value, decode = value => value) {
-    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : typeof initial === 'function' ? initial() : initial);
+    const fallback = react.useRef({ initial, initialized: false, value: undefined });
+    const defaultValue = () => {
+        if (!fallback.current.initialized) {
+            fallback.current.value = typeof fallback.current.initial === 'function' ? fallback.current.initial() : fallback.current.initial;
+            fallback.current.initialized = true;
+        }
+        return fallback.current.value;
+    };
+    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : defaultValue());
     const current = react.useRef(value), encoder = react.useRef(encode), decoder = react.useRef(decode);
     current.current = value;
     encoder.current = encode;
     decoder.current = decode;
     react.useEffect(() => {
-        const apply = snapshot => { if (Object.hasOwn(snapshot, key)) {
-            const next = decoder.current(snapshot[key]);
+        const apply = snapshot => {
+            const next = Object.hasOwn(snapshot, key) ? decoder.current(snapshot[key]) : defaultValue();
             current.current = next;
             set(next);
-        } };
+        };
         const stop = view.subscribe(apply);
         apply(view.get());
         return stop;
