@@ -1,0 +1,56 @@
+{
+  "scope": "offline-only; synthetic values, never production evidence",
+  "snapshotDate": "2026-09-30",
+  "planMonth": "2026-10",
+  "authorizedCustomer": "customer-A",
+  "deniedCustomer": "customer-denied",
+  "directory": {
+    "total": 41,
+    "offset": 20,
+    "limit": 20
+  },
+  "inheritedSinglePage": {
+    "backendTotal": 201,
+    "returnedRows": 200
+  },
+  "metricGolden": {
+    "target": 100,
+    "stock": 60,
+    "transit": 12,
+    "suggestion": 28
+  },
+  "sku": "sku-A",
+  "main": {
+    "snapshot_date": "2026-09-30",
+    "plan_month": "2026-10",
+    "cust_code": "customer-A",
+    "cust_name": "客户A",
+    "material_code": "sku-A",
+    "material_name": "商品A",
+    "product_categ_name": "汤圆",
+    "record_count": 1,
+    "stock_qty": 60,
+    "in_transit_qty": 12,
+    "target_inventory": 100,
+    "daily_sales": 4,
+    "average_stock_age": 30,
+    "planned_qty": 100,
+    "pre_order_qty": 28
+  },
+  "daily": {
+    "stat_date": "2026-09-30",
+    "inventory_snapshot_date": "2026-09-30",
+    "cust_code": "customer-A",
+    "material_code": "sku-A",
+    "stock_qty": 60,
+    "in_transit_qty": 12,
+    "normal_stock_qty": 60,
+    "stock_amount": 600,
+    "sales_qty_7days": 28,
+    "sales_qty_7days_avg": 4,
+    "sales_qty_30days": 120,
+    "sales_qty_30days_avg": 4,
+    "cif_price": 10,
+    "inventory_source": "fixed-mock"
+  }
+}

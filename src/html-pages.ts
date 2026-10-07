@@ -18,6 +18,8 @@ export interface HtmlPackage {
   directory: string;
   htmlPath: string;
   manifest: Record<string, any>;
+  /** Only controls menu discovery; installed resources and static delivery remain owned. */
+  visible?: boolean;
 }
 export interface WorkbenchPages {
   /** Register explicit installed package roots. No capability body or business credentials are read. */
@@ -46,12 +48,21 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
         throw Error(`INVALID_HTML_PLUGIN_PAGES [source: ${directory}/plugin.json]`);
       const htmlPath = await realpath(resolve(directory, manifest.html));
       if (!htmlPath.startsWith(directory + sep)) throw Error("INVALID_HTML_PATH");
-      return { directory, htmlPath, manifest: { ...manifest, pages } };
+      let visible = true;
+      if (manifest.declarations?.page !== undefined) {
+        if (typeof manifest.declarations.page !== "string" || !manifest.declarations.page.trim()) throw Error("INVALID_PAGE_DECLARATION_REFERENCE");
+        const pagePath = await realpath(resolve(directory, manifest.declarations.page));
+        if (!pagePath.startsWith(directory + sep)) throw Error("INVALID_PAGE_DECLARATION_PATH");
+        const declaration = JSON.parse(await readFile(pagePath, "utf8"));
+        if (!declaration || typeof declaration !== "object" || Array.isArray(declaration) || (declaration.visible !== undefined && typeof declaration.visible !== "boolean")) throw Error("INVALID_PAGE_VISIBILITY");
+        visible = declaration.visible !== false;
+      }
+      return { directory, htmlPath, visible, manifest: { ...manifest, pages } };
     }));
     const unified = candidates.find(item => item.manifest.id === "inventory-apsplan");
     const replaced = new Set(Array.isArray(unified?.manifest.replaces) ? unified.manifest.replaces.filter((id: string) => legacyApsIds.has(id)) : []);
     const selected = candidates.filter(item => !replaced.has(item.manifest.id));
-    const ids = new Set(this.list().map(page => page.id));
+    const ids = new Set([...this.packageDeclarations.values()].flatMap(item => item.manifest.pages.map((page: HtmlPage) => page.id)));
     for (const item of selected) {
       const previous = this.packageDeclarations.get(item.manifest.id);
       if (previous?.directory === item.directory) continue;
@@ -62,7 +73,7 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
     return selected;
   }
   list(): HtmlPage[] {
-    return [...this.packageDeclarations.values()].flatMap(item => item.manifest.pages.map((page: HtmlPage) => ({
+    return [...this.packageDeclarations.values()].filter(item => item.visible !== false).flatMap(item => item.manifest.pages.map((page: HtmlPage) => ({
       id: page.id, name: page.name, view: page.view, pluginId: item.manifest.id,
       order: typeof page.order === "number" ? page.order : 20,
       url: `/api/agent-workbench/html?id=${encodeURIComponent(page.id)}&page=${encodeURIComponent(page.view)}`,

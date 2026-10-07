@@ -112,3 +112,5 @@ if (values.target !== 'core') {
   await import('./build-inventory-fc.mjs');
   await import('./build-inventory-aqkc.mjs');
 }
+
+await import('./build-inventory-dealer.mjs');
