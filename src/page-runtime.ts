@@ -97,6 +97,7 @@ export class PageRuntime {
     });
     this.clearReferences=applyReferences(ctx,{authorize:input=>{
       const value=input as {sessionId:string;owner:string;surface:string;tool?:string}; const owned=this.assert(value.owner);
+      if(!owned.grant.allowsEffect('view'))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
       const {surface,tool}=owned.page.catalog;
       if(owned.session!==value.sessionId||value.surface!==surface||(value.tool!==undefined&&value.tool!==tool))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
     }});

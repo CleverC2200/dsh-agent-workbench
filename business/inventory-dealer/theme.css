@@ -1,0 +1,118 @@
+/* Bind the retained business layout to shared theme 1.0.0. */
+body {
+  --ui-font: var(--workbench-font-family);
+  --ui-ink: var(--workbench-text);
+  --ui-secondary: var(--workbench-body);
+  --ui-muted: var(--workbench-muted);
+  --ui-faint: var(--workbench-muted);
+  --ui-border: var(--workbench-border);
+  --ui-border-strong: var(--workbench-control-border);
+  --ui-divider: var(--workbench-border);
+  --ui-canvas: var(--workbench-page);
+  --ui-surface: var(--workbench-surface);
+  --ui-subtle: var(--workbench-subtle);
+  --ui-soft: var(--workbench-muted-surface);
+  --ui-accent: var(--workbench-brand);
+  --ui-accent-hover: var(--workbench-brand-hover);
+  --ui-accent-ink: var(--workbench-brand);
+  --ui-accent-soft: var(--workbench-brand-soft);
+  --ui-accent-line: var(--workbench-control-border);
+  --ui-hover: var(--workbench-hover);
+  --ui-selected: var(--workbench-brand-soft);
+  --ui-success: #168e58;
+  --ui-success-soft: #eaf7ef;
+  --ui-warning: #956900;
+  --ui-warning-soft: #fff4d9;
+  --ui-risk: #c8112a;
+  --ui-risk-soft: #ffe9ec;
+  --surface: var(--workbench-surface);
+  --dsw-alias-label-primary-foreground: #ffffff;
+  --dsw-alias-bg-base: var(--workbench-surface);
+  font-size: var(--workbench-font-size);
+  color: var(--workbench-text);
+  background: var(--workbench-page);
+}
+
+body[data-ds-dark-theme] {
+  --dsw-alias-label-primary-foreground: #301019;
+  --ui-success: #8ddbb2;
+  --ui-success-soft: #20382c;
+  --ui-warning: #edd18c;
+  --ui-warning-soft: #3b321f;
+  --ui-risk: #ff9aa8;
+  --ui-risk-soft: #442630;
+}
+body {
+  --text: var(--ui-ink);
+  --body: var(--ui-secondary);
+  --muted: var(--ui-muted);
+  --line: var(--ui-border);
+  --soft: var(--ui-soft);
+  --bg: var(--ui-canvas);
+  --dealer-page-bg: var(--ui-canvas);
+  --dealer-workspace-bg: var(--ui-canvas);
+  --dealer-chat-bg: var(--ui-surface);
+  --dealer-divider: var(--ui-border);
+  --dsw-alias-button-primary-fill: var(--ui-accent);
+  --dsw-alias-button-primary-hover: var(--ui-accent-hover);
+  --dsw-alias-button-tool-bar-fill: var(--ui-soft);
+  --dsw-alias-button-tool-bar-hover: var(--ui-hover);
+}
+.agent-root {
+  background: var(--ui-canvas);
+}
+.agent-root .kpi-card .kpi-value {
+  color: var(--ui-ink);
+}
+.agent-root .kpi-card.red .kpi-value {
+  color: var(--ui-risk);
+}
+.agent-root .priority-analysis {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-border);
+}
+.agent-root .priority-analysis :is(p, h3 small) {
+  color: var(--ui-secondary);
+}
+.agent-root .priority-analysis :is(b, .analysis-title) {
+  color: var(--ui-ink);
+}
+.agent-root .priority-analysis .analysis-label {
+  background: var(--ui-accent);
+  color: var(--dsw-alias-label-primary-foreground);
+}
+.agent-root :is(.panel-primary, .primary-button) {
+  color: var(--dsw-alias-label-primary-foreground);
+}
+.agent-root
+  :is(.secondary-button, .warehouse-cycle-context, .draft-quantity input) {
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  border-color: var(--ui-border-strong);
+}
+.agent-root :is(.order-number-link, .sku-link) {
+  color: var(--ui-accent);
+}
+.agent-root .business-panel > .table-scroll {
+  background: var(--ui-surface);
+}
+.agent-root :is(.compact-topbar .steps button, .compact-topbar .steps > b) {
+  color: var(--ui-muted);
+}
+.agent-root .compact-topbar .steps button.active {
+  color: var(--ui-ink);
+}
+.agent-root .compact-topbar .warehouse-cycle-context strong {
+  color: var(--ui-ink);
+}
+.agent-root .tabs.dealer-style-tabs {
+  background: var(--ui-surface);
+}
+.agent-root .data-table input {
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+}
+.agent-root .agent-topbar.compact-topbar {
+  max-height: none;
+  overflow: visible;
+}

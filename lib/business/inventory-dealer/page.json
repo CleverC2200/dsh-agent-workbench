@@ -1,0 +1,8 @@
+{
+  "surface": "gea-html-inventory-dealer",
+  "protocol": "self-report",
+  "pageIds": ["inventory-dealer"],
+  "consumerCode": "dealer-inventory-replenishment",
+  "maxEffect": "view",
+  "visible": true
+}

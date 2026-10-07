@@ -53,3 +53,17 @@ test('the received MPS keeps one original menu entry with its original selectabl
   assert.deepEqual(pages.list().map(page=>({id:page.id,resourceId:page.resourceId})),[{id:'plan-category-production',resourceId:'gea-html-inventory-mps'}]);
   assert.equal((await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=plan-category-production'))).status,200);
 });
+
+test('a hidden declared page leaves its package and interpreter resource installed and its HTML readable', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'workbench-hidden-'));
+  t.after(() => rm(root, {recursive:true,force:true}));
+  await writeFile(join(root,'plugin.json'),JSON.stringify({schemaVersion:1,id:'inventory-dealer',name:'经销商库存',html:'index.html',gea:{contract:'gea-html-v2'},declarations:{page:'page.json',capability:'capability.json'}}));
+  await writeFile(join(root,'page.json'),JSON.stringify({visible:false}));
+  await writeFile(join(root,'index.html'),'<html><body>Hidden dealer static page</body></html>');
+  const pages = new HtmlPages(context(t),'',async()=>'<picker-fixture>');
+  await pages.registerHtml([root]);
+  assert.deepEqual(pages.list(),[]);
+  assert.equal(pages.packages().length,1);
+  assert.equal(pages.packages()[0].manifest.id,'inventory-dealer');
+  assert.equal((await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=inventory-dealer'))).status,200);
+});

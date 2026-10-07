@@ -1,7 +1,7 @@
 /** Current page's UI projection. Workbench owns storage; the author owns every named field. */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
-    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
     /** @type {Record<string,unknown>} */
     let state = { version: 1 };
     let binding, dirty = false;
@@ -44,7 +44,16 @@ export function createPageViewState(page) {
     return { get: () => state, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, update: changes => { state = { ...state, ...changes, version: 1 }; if (binding || !sessionPage)
             dirty = true; send(); } };
 }
-/** Bind an explicit authored React field; restores update the existing setter without replaying user actions. */
+/** Bind an explicit authored React field; restores update the existing setter without replaying user actions.
+ * @template T
+ * @param {typeof import('react')} react
+ * @param {ReturnType<typeof createPageViewState>} view
+ * @param {string} key
+ * @param {T | (() => T)} initial
+ * @param {(value: T) => unknown} [encode]
+ * @param {(value: unknown) => T} [decode]
+ * @returns {[T, import('react').Dispatch<import('react').SetStateAction<T>>]}
+ */
 export function usePageViewField(react, view, key, initial, encode = value => value, decode = value => value) {
     const fallback = react.useRef({ initial, initialized: false, value: undefined });
     const defaultValue = () => {
