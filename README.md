@@ -47,7 +47,7 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 公司自有主壳通过公开 `conversation.content` 的 `embedded` 呈现消费原生会话。已有 Session 的首页欢迎和工作区/Agent控件位于 Factory 的 `views` 内容流，同时保留官方 `conversation.session` 与 resident composer；提示词与 Skill 资源清单位于工作台目录，不能作为首页宽度控件挤走输入区。无 Session 时的冷启动控件保留在独立可收缩滚动容器，官方惯有输入仍呈现。工作区切换沿 Factory 的 `selectWorkspace`，保留官方草稿转移行为，不复制私有主壳样式或扫描宿主 DOM。
 
-资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。静态原型无这项前置；用户可从其历史入口明确关联一个既有 Core Session，读取实际 preset 投影（包括明确的 null），不选用资源、不调用业务 grant，也不要求 GEA 登录。
+资源关联业务页按 Manage 的 stable resource id 选原资源，新建并借用真实官方 SessionReference。只有身份已认证、原资源实际已安装并启用时，页面才自动准备一次会话；失败不随重渲染自动重试。“新建对话”沿同一个公开资源动作开始新的页面会话。资源选择器在真实借用引用仍存活时完成 Skill 草稿、取消检查与页面 UI 关联回调，再正常打开主 Session，最后释放借用引用。Document 通过 session-maybe 工厂继承真正主 scope，消费 conversation.content；不另建 embedded SessionProvider 或当前 Session 权威。历史入口等待实际 Session 并读取公开 agentPreset 投影，页面动作按原 Host 独立校验。未声明资源的静态原型无这项前置；用户可从其历史入口明确关联一个既有 Core Session，读取实际 preset 投影（包括明确的 null），不选用资源、不调用业务 grant，也不要求 GEA 登录。
 
 同一用户重启Host后，GEA运行范围会变化。重新打开已保存的资源页时，Workbench沿公开资源入口重新核实际Session的preset和工作区，再关联当前范围；保留原Session与草稿，不另建替代会话。用户、租户或环境不匹配时不复用旧关联。FC只有取得页面端口提供的真实Host Session后才启动读取，未连接时只呈现等待状态。
 
@@ -87,4 +87,4 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 
 ## 已接收的模拟页面
 
-客户库存、订单工作台与订单履约保留原页面标识，由Workbench打包原展示与模拟交互。Manage持有其原Prompt、Skill和零业务能力声明，GEA登记view范围的公开页面grant并拒绝SQL读取。资源选用关联官方Core Session，不发送模型请求。筛选、周期与分页等页面意图按当前身份和Session保存；订单工作台的本地演示任务仍按原说明在冷刷新后清空。区域、品类与MPS继续使用现有静态页面，没有新增业务Agent声明。
+客户库存、订单工作台与订单履约保留原页面标识，由Workbench打包原展示与模拟交互。Manage持有其原Prompt、Skill和零业务能力声明，GEA登记view范围的公开页面grant并拒绝SQL读取。资源选用关联官方Core Session，不发送模型请求。筛选、周期与分页等页面意图按当前身份和Session保存；订单工作台的本地演示任务仍按原说明在冷刷新后清空。品类计划复用现有静态作者页，并接回原 `category-plan` Prompt、Skill 和空 MCP 声明。指标、事件、建议和任务由作者状态发布为模拟快照；UI 意图与未发文字按真实 Session 恢复，临时模拟任务不落库。区域与 MPS 在其它接收票中处理。

@@ -31,3 +31,11 @@ test('package HTML symlinks escaping the registered root are rejected', async t 
   await symlink('/etc/hosts', join(root, 'index.html'));
   await assert.rejects(new HtmlPages(context(t),'',async()=>'<picker-fixture>').registerHtml([root]), /INVALID_HTML_PATH/);
 });
+test('the received category artifact exposes one original page and its original resource identity',async t=>{
+ const pages=new HtmlPages(context(t),'',async()=>'<picker-fixture>');
+ const root=resolve('lib/static/category');
+ await pages.registerHtml([root]);await pages.registerHtml([root]);
+ assert.deepEqual(pages.list().map(({id,pluginId,resourceId})=>({id,pluginId,resourceId})),[{id:'plan-region-category',pluginId:'category-plan',resourceId:'gea-html-category-plan'}]);
+ const response=await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=plan-region-category'));
+ assert.equal(response.status,200);assert.match(await response.text(),/category:scope/);
+});

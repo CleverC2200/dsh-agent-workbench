@@ -72,7 +72,7 @@ Error generating stack: `+i.message+`
 
   // business/shared/author-questions.js
   function useAuthorQuote(react) {
-    const [pending, setPending] = react.useState(false), [status, setStatus] = react.useState("");
+    const [pending2, setPending] = react.useState(false), [status, setStatus] = react.useState("");
     const task = react.useRef();
     react.useEffect(() => () => task.current?.abort(), []);
     const quote = async (text, label = "\u5206\u6790\u95EE\u9898") => {
@@ -100,7 +100,7 @@ Error generating stack: `+i.message+`
         }
       }
     };
-    return { quote, pending, status };
+    return { quote, pending: pending2, status };
   }
   function AuthorQuestions({ react, jsx, Button, questions, draft = "", onClearDraft, actions }) {
     const currentDraft = react.useRef(draft);
@@ -120,7 +120,7 @@ Error generating stack: `+i.message+`
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
+    const sessionPage = ["plan-region-category", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -129,13 +129,13 @@ Error generating stack: `+i.message+`
       if (binding)
         window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
     };
-    const ready = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
+    const ready2 = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
     const receive = (event) => {
       const value = event.data;
       if (event.source !== window.parent || value?.protocol !== PROTOCOL || value.page !== page || value.version !== 1)
         return;
       if (value.type === "request-ready") {
-        ready();
+        ready2();
         return;
       }
       if (value.type === "released") {
@@ -164,7 +164,7 @@ Error generating stack: `+i.message+`
       window.removeEventListener("message", receive);
       listeners.clear();
     }, { once: true });
-    ready();
+    ready2();
     return { get: () => state, subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -176,18 +176,24 @@ Error generating stack: `+i.message+`
     } };
   }
   function usePageViewField(react, view, key, initial, encode = (value) => value, decode = (value) => value) {
-    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : typeof initial === "function" ? initial() : initial);
+    const fallback = react.useRef({ initial, initialized: false, value: void 0 });
+    const defaultValue = () => {
+      if (!fallback.current.initialized) {
+        fallback.current.value = typeof fallback.current.initial === "function" ? fallback.current.initial() : fallback.current.initial;
+        fallback.current.initialized = true;
+      }
+      return fallback.current.value;
+    };
+    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : defaultValue());
     const current = react.useRef(value), encoder = react.useRef(encode), decoder = react.useRef(decode);
     current.current = value;
     encoder.current = encode;
     decoder.current = decode;
     react.useEffect(() => {
       const apply = (snapshot) => {
-        if (Object.hasOwn(snapshot, key)) {
-          const next = decoder.current(snapshot[key]);
-          current.current = next;
-          set(next);
-        }
+        const next = Object.hasOwn(snapshot, key) ? decoder.current(snapshot[key]) : defaultValue();
+        current.current = next;
+        set(next);
       };
       const stop = view.subscribe(apply);
       apply(view.get());
@@ -199,6 +205,263 @@ Error generating stack: `+i.message+`
       set(result);
       view.update({ [key]: encoder.current(result) });
     }, [view, key])];
+  }
+
+  // business/shared/query-error.js
+  var DATA_PERMISSION_MESSAGE = "\u5F53\u524D\u8D26\u53F7\u6682\u65E0\u6570\u636E\u6743\u9650";
+  function sqlQueryError(cause) {
+    if (cause?.name === "AbortError") return cause;
+    if (cause?.code === "GEA_SQL_DISPLAY_ERROR") return cause;
+    const code = String(cause?.code ?? "");
+    const message = String(cause?.message ?? "");
+    const denied = /(?:DATA_PERMISSION_DENIED|RETURN_PERMISSION_DENIED|NO_RETURN_COLUMN_ALLOWED|ACCESS_DENIED)/.test(
+      code + " " + message
+    );
+    const expired = /(?:SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)|会话已失效)/.test(
+      code + " " + message
+    );
+    const error = new Error(
+      denied ? DATA_PERMISSION_MESSAGE : expired ? "\u6570\u636E\u4F1A\u8BDD\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5" : "\u6570\u636E\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A5\u53E3\u9519\u8BEF\u8BE6\u60C5",
+      { cause }
+    );
+    error.code = "GEA_SQL_DISPLAY_ERROR";
+    return error;
+  }
+
+  // business/shared/channel.js
+  var context;
+  var channel;
+  var sequence = 0;
+  var pending = /* @__PURE__ */ new Map();
+  var handlers = /* @__PURE__ */ new Map();
+  var appliedThemeTokens = [];
+  var pageGroups = /* @__PURE__ */ new Map();
+  var applying = /* @__PURE__ */ new Map();
+  function reportCatalog() {
+    if (!channel || !context?.session) return;
+    channel.postMessage({
+      type: "catalog",
+      session: context.session,
+      elements: [...pageGroups.values()].flatMap((group) => group.elements)
+    });
+  }
+  function reportElements(key, elements, apply) {
+    const group = { elements, apply };
+    pageGroups.set(key, group);
+    reportCatalog();
+    return () => {
+      if (pageGroups.get(key) !== group) return;
+      pageGroups.delete(key);
+      reportCatalog();
+    };
+  }
+  var readyResolve;
+  var ready = new Promise((resolve) => {
+    readyResolve = resolve;
+  });
+  function currentSessionId() {
+    return context?.session;
+  }
+  function parentOrigin() {
+    try {
+      const url = new URL(document.referrer || window.location.href);
+      if (!url.host) return void 0;
+      if (url.origin !== "null") return url.origin;
+      return url.protocol === "dsh-app:" && url.host === "app" ? "dsh-app://app" : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source === window.parent && event.data?.protocol === "gea-html-v2" && event.data.type === "request-ready") {
+      window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+      return;
+    }
+    if (event.source !== window.parent || event.origin !== parentOrigin() || typeof event.data?.context?.session !== "string" || typeof event.data?.context?.plugin !== "string" || event.data?.protocol !== "gea-html-v2" || event.data?.type !== "connect" || !event.ports[0] || channel && context?.session === event.data.context.session)
+      return;
+    if (channel) {
+      channel.close();
+      for (const task of applying.values()) task.abort();
+      for (const item of pending.values()) {
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+      }
+      pending.clear();
+    }
+    context = event.data.context;
+    channel = event.ports[0];
+    channel.onmessage = (event2) => {
+      const message = event2.data;
+      if (message.type === "context") {
+        const previousSession = context?.session;
+        if (previousSession && previousSession !== message.context?.session) {
+          for (const [id, item] of pending) {
+            clearTimeout(item.timer);
+            item.cleanup?.();
+            item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+            channel.postMessage({ type: "cancel", id, session: previousSession });
+          }
+          pending.clear();
+        }
+        for (const task of applying.values()) task.abort();
+        context = message.context;
+        reportCatalog();
+        if (context?.session)
+          channel.postMessage({
+            type: "theme:subscribe",
+            session: context.session
+          });
+        if (context?.session && previousSession !== context.session)
+          window.dispatchEvent(new Event("gea-session-changed"));
+      }
+      if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
+        if (message.version !== "1.1.1" || !["light", "dark"].includes(message.colorScheme) || !message.tokens || !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 || Object.entries(message.tokens).some(
+          ([name, value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== "string" || value.length > 500
+        )) {
+          document.getElementById("app").textContent = "\u5171\u4EAB\u6837\u5F0F\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9875\u9762";
+          return;
+        }
+        for (const name of appliedThemeTokens) document.body.style.removeProperty(name);
+        appliedThemeTokens = Object.keys(message.tokens);
+        for (const [name, value] of Object.entries(message.tokens))
+          document.body.style.setProperty(name, value);
+        document.body.style.setProperty("--workbench-font-size", `${message.fontSize}px`);
+        document.body.style.setProperty("--dsh-content-font-size", `${message.fontSize}px`);
+        document.documentElement.style.colorScheme = message.colorScheme;
+        document.body.toggleAttribute("data-ds-dark-theme", message.colorScheme === "dark");
+      }
+      if (message.type === "response") {
+        const item = pending.get(message.id);
+        if (!item) return;
+        pending.delete(message.id);
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        if (message.error) {
+          const error = item.method === "sql" ? sqlQueryError(Error(message.error)) : Error(message.error);
+          if (item.method === "sql" || item.method === "workspace")
+            window.dispatchEvent(
+              new CustomEvent("gea-query-warning", {
+                detail: { message: error.message.slice(0, 600) }
+              })
+            );
+          item.reject(error);
+        } else item.resolve(message.result);
+      }
+      if (message.type === "cancel" && message.session === context?.session) {
+        applying.get(message.toolCallId)?.abort();
+      }
+      if (message.type === "apply" && message.session === context?.session) {
+        const session = context.session;
+        const task = new AbortController();
+        applying.set(message.toolCallId, task);
+        Promise.resolve().then(async () => {
+          const args = message.args;
+          const targets = args?.targets ?? [args?.target];
+          if (!Array.isArray(targets) || !targets.length) throw Error("MISSING_TARGET");
+          for (const target of targets) {
+            task.signal.throwIfAborted();
+            if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+            const group = [...pageGroups.values()].find(
+              (group2) => group2.elements.some((element2) => element2.id === target)
+            );
+            const element = group?.elements.find((element2) => element2.id === target);
+            if (!element || !group.apply) throw Error("ELEMENT_GONE");
+            if (args.kind === "setValue" && !element.editable) throw Error("ELEMENT_READ_ONLY");
+            if (args.kind === "invoke" && !element.actions?.includes(args.action ?? "invoke"))
+              throw Error("ACTION_NOT_ALLOWED");
+            if (!["setValue", "invoke", "select", "clear"].includes(args.kind))
+              throw Error("INVALID_PAGE_ACTION");
+            await group.apply({ ...args, target }, task.signal);
+          }
+          task.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          return { applied: true };
+        }).catch((error) => ({ applied: false, error: error.message })).then((result) => {
+          applying.delete(message.toolCallId);
+          channel.postMessage({
+            type: "applied",
+            toolCallId: message.toolCallId,
+            session,
+            ...result
+          });
+          reportCatalog();
+        });
+      }
+      if (message.type === "invoke") {
+        const handler = handlers.get(message.name);
+        const session = context?.session;
+        Promise.resolve().then(() => {
+          if (!handler) throw Error("\u9875\u9762\u672A\u6CE8\u518C\u8BE5\u64CD\u4F5C");
+          return handler(message.arguments);
+        }).then(
+          (result) => channel.postMessage({
+            type: "invoked",
+            id: message.id,
+            session,
+            result
+          }),
+          (error) => channel.postMessage({
+            type: "invoked",
+            id: message.id,
+            session,
+            error: error.message
+          })
+        );
+      }
+      if (message.type === "identity-changed") {
+        for (const task of applying.values()) task.abort();
+        context = null;
+        for (const item of pending.values()) {
+          clearTimeout(item.timer);
+          item.cleanup?.();
+          item.reject(Error("\u767B\u5F55\u8EAB\u4EFD\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u52A0\u8F7D"));
+        }
+        pending.clear();
+        window.dispatchEvent(new Event("gea-identity-changed"));
+      }
+    };
+    channel.start();
+    reportCatalog();
+    channel.postMessage({ type: "theme:subscribe", session: context.session });
+    readyResolve(event.data.context);
+    window.dispatchEvent(new Event("gea-session-changed"));
+  });
+  window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+  async function call(method, parameters = {}, options = {}) {
+    options.signal?.throwIfAborted();
+    if (!channel || !context?.session) throw Error("\u9875\u9762\u5DF2\u663E\u793A\uFF0C\u8BF7\u5148\u767B\u5F55\u5E76\u8FDE\u63A5\u9875\u9762\u80FD\u529B\u3002");
+    const session = context.session;
+    const id = String(++sequence);
+    return new Promise((resolve, reject) => {
+      const cleanup = () => options.signal?.removeEventListener("abort", abort);
+      const abort = () => {
+        if (!pending.delete(id)) return;
+        clearTimeout(timer);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        reject(options.signal.reason ?? Error("\u8BF7\u6C42\u5DF2\u53D6\u6D88"));
+      };
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        const error = Error("\u4E1A\u52A1\u8BF7\u6C42\u8D85\u65F6");
+        reject(method === "sql" ? sqlQueryError(error) : error);
+      }, 12e4);
+      pending.set(id, { resolve, reject, timer, method, cleanup });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      channel.postMessage({
+        type: "request",
+        id,
+        method,
+        parameters,
+        session
+      });
+    });
+  }
+  function publish(context2, options) {
+    return call("context", context2, options);
   }
 
   // static/category/source/category-author.js
@@ -293,7 +556,61 @@ Error generating stack: `+i.message+`
           return true;
       }
     }).map((S) => ({ key: S.id, event: S, score: { p1: 0, p2: 1, p3: 2, watch: 3 }[S.level] })).sort((S, F) => S.score - F.score), V = (S) => w.jsx(C1, { className: "data-table", size: "small", border: false, rowKey: "id", pagination: false, data: S, noDataElement: w.jsx(qs, { description: "\u5F53\u524D\u7B5B\u9009\u4E0B\u6682\u65E0\u4EFB\u52A1" }), columns: [{ title: "\u4EFB\u52A1 / \u5173\u8054\u4E8B\u4EF6", dataIndex: "title", width: 268, render: (F, Q) => w.jsxs("div", { children: [w.jsx("div", { style: { fontWeight: 700, color: "var(--text-strong)", fontSize: 11 }, children: F }), w.jsx("div", { style: { fontSize: 9, color: "var(--text-faint)", marginTop: 2 }, children: Q.origin })] }) }, { title: "\u5173\u8054\u54C1\u7C7B", dataIndex: "category", width: 84, render: (F) => w.jsx(bt, { size: "small", bordered: true, children: Ls(F) }) }, { title: "\u8D23\u4EFB\u89D2\u8272", dataIndex: "owner", width: 108 }, { title: "\u65F6\u9650", dataIndex: "due", width: 88, render: (F) => F.replace("2026-", "").replace("-", ".") }, { title: "\u72B6\u6001", dataIndex: "status", width: 88, render: (F) => E8(F) }, { title: "\u64CD\u4F5C", dataIndex: "op", width: 66, render: (F, Q) => w.jsx(et, { type: "text", size: "mini", style: { color: "var(--brand)", padding: 0 }, onClick: () => d(Q), children: "\u67E5\u770B" }) }] });
-    return w.jsxs("div", { className: "work", children: [w.jsxs("div", { className: "boundary", children: [w.jsx("b", { children: "\u6F14\u793A\u8FB9\u754C" }), w.jsxs("span", { children: ["\u6307\u6807\u53E3\u5F84\u4E0E\u76EE\u6807\u503C\u53C2\u8003\u5185\u90E8\u6587\u4EF6\uFF08F26 \u8D22\u5E74\u54C1\u7C7B\u8BA1\u5212\u7EC4\uFF09\uFF0C\u6570\u503C\u4E3A\u672C\u5730\u6A21\u62DF\u5FEB\u7167\uFF08", qu, "\uFF09\uFF1B \u4E0D\u8FDE\u63A5 SAP / DMS / BI / APS / OMS\uFF0C\u4E0D\u4EE3\u8868\u771F\u5B9E\u4E1A\u52A1\u7ED3\u679C\u3002"] })] }), w.jsx("div", { className: "work-head", children: w.jsxs("div", { className: "work-head-row", children: [w.jsxs("div", { style: { minWidth: 0 }, children: [w.jsx("h2", { children: "\u54C1\u7C7B\u8BA1\u5212\u7BA1\u7406\u5DE5\u4F5C\u53F0" }), w.jsx("p", { className: "sub", children: "\u56F4\u7ED5\u54C1\u7C7B\u8BA1\u5212\u5728\u7BA1\u7684\u4E94\u4EF6\u4E8B\u2014\u2014\u8BA2\u5355\u6EE1\u8DB3\u7387\u3001\u9700\u6C42\u8BA1\u5212\u51C6\u786E\u7387\u3001\u5E93\u5B58\u5468\u8F6C\u3001\u5168\u94FE\u5468\u8F6C\u4E0E\u4EA7\u54C1\u65B0\u9C9C\u5EA6\uFF1BAI \u8D1F\u8D23\u9884\u8B66\u4E0E\u5EFA\u8BAE\uFF0C\u4EBA\u6765\u51B3\u7B56\u4E0E\u6388\u6743\u3002" })] }), w.jsx("div", { className: "work-head-actions", children: w.jsxs("span", { className: "scope-picker", children: [w.jsx("span", { className: "sp-label", children: "\u54C1\u7C7B" }), w.jsxs(ha, { size: "small", value: e || "all", style: { width: 116 }, onChange: (S) => t(S === "all" ? null : S), children: [w.jsx(ha.Option, { value: "all", children: "\u5168\u90E8\u54C1\u7C7B" }), Yt.map((S) => w.jsx(ha.Option, { value: S.key, children: S.name }, S.key))] })] }) })] }) }), w.jsxs("div", { className: "work-body", children: [questionTools, w.jsx("div", { className: "block", children: w.jsx(P8, { cells: A, onJump: W }) }), w.jsxs("div", { className: "block", children: [w.jsxs("div", { className: "block-head", children: [w.jsx("h3", { children: "\u54C1\u7C7B\u8BA1\u5212\u6307\u6807\u76D1\u63A7" }), w.jsxs("span", { className: "hint", children: [b1, " \xB7 \u5168\u94FE\u53E3\u5F84\uFF08\u57FA\u5730\u4ED3 + \u5206\u4ED3 + \u7ECF\u9500\u5546\u7AEF\uFF09\xB7 \u70B9\u51FB\u4EFB\u610F\u6307\u6807\u67E5\u770B\u53E3\u5F84\u4E0E\u660E\u7EC6"] })] }), w.jsx("div", { className: "kpi-grid", children: Dr.map((S) => w.jsx(S8, { item: m[S], onOpen: l }, S)) })] }), w.jsx("div", { className: "block", children: w.jsxs("div", { className: "panel insight", children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("span", { style: { width: 18, height: 18, borderRadius: 6, background: "var(--brand-soft)", color: "var(--brand)", display: "grid", placeItems: "center", fontSize: 11 }, children: "\u2726" }), w.jsx("h3", { children: "AI \u6D1E\u5BDF \xB7 \u6307\u6807\u7F3A\u53E3\u5F52\u56E0" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u7ED3\u679C\u6307\u6807 \u2190 \u9A71\u52A8\u6307\u6807\uFF0C\u89C4\u5219\u62FC\u88C5\uFF0C\u975E\u6A21\u578B\u751F\u6210" }), w.jsx("span", { className: "spacer" }), w.jsxs("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: ["\u5FEB\u7167 ", qu] })] }), w.jsxs("div", { className: "panel-body", children: [w.jsx("div", { className: "insight-lead", children: R }), w.jsxs("table", { className: "mini-table", style: { marginTop: 10 }, children: [w.jsx("thead", { children: w.jsxs("tr", { children: [w.jsx("th", { children: "\u76D1\u63A7\u6307\u6807" }), w.jsx("th", { children: "\u5F53\u524D\u503C / \u72B6\u6001" }), w.jsx("th", { children: "\u4E3B\u8981\u9A71\u52A8\u4E0E\u4E8B\u5B9E" }), w.jsx("th", { children: "\u5224\u65AD" })] }) }), w.jsx("tbody", { children: M.map((S) => w.jsxs("tr", { children: [w.jsx("td", { children: S.name }), w.jsxs("td", { style: { whiteSpace: "nowrap" }, children: [w.jsx("span", { className: `dot-state is-${S.tone}` }), S.state] }), w.jsx("td", { children: S.driver }), w.jsx("td", { style: { color: "var(--text-muted)" }, children: S.judge })] }, S.name)) })] }), w.jsxs("div", { className: "chip-row", children: [w.jsxs("span", { className: "chip is-brand", children: [p.categoryCount, " \u4E2A\u54C1\u7C7B"] }), w.jsxs("span", { className: "chip", children: ["\u5168\u94FE\u5E93\u5B58 ", p.chainStock, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u5168\u94FE\u53EF\u552E ", p.chainDays, " \u5929"] }), w.jsxs("span", { className: "chip", children: ["RCCP \u7F3A\u53E3 ", p.gapTons, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u8D85\u671F ", p.overstockTons, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u672A\u6EE1\u8DB3\u8BA2\u5355 ", p.unmetOrders, " \u5F20"] })] }), w.jsxs("div", { className: "insight-foot", children: [w.jsx(et, { type: "primary", size: "small", onClick: v, children: "\u5728\u4F1A\u8BDD\u4E2D\u6DF1\u5165\u5206\u6790" }), w.jsx(et, { size: "small", onClick: () => l("evidence"), children: "\u53E3\u5F84\u4E0E\u5206\u6790\u4F9D\u636E" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6D1E\u5BDF\u7531\u672C\u5730\u89C4\u5219\u57FA\u4E8E\u5F53\u524D\u5FEB\u7167\u62FC\u88C5\uFF0C\u4E0D\u542B\u9884\u6D4B\u7ED3\u679C" })] })] })] }) }), w.jsxs("div", { className: "block panel-two", children: [w.jsxs("div", { className: "panel", ref: h, children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("h3", { children: "\u4E8B\u4EF6\u9884\u8B66" }), w.jsxs(bt, { color: "red", size: "small", bordered: true, children: [P.length, " \u5F85\u5904\u7406"] }), $.length > 0 ? w.jsxs(bt, { color: "orangered", size: "small", bordered: true, children: [$.length, " \u8D85\u65F6"] }) : null, w.jsx("span", { className: "spacer" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6309\u76D1\u63A7\u6307\u6807\u5F52\u53E3" })] }), w.jsxs("div", { className: "panel-body", style: { padding: "4px 0 0" }, children: [w.jsx("div", { style: { padding: "8px 14px 10px" }, children: w.jsxs(Bl, { size: "small", type: "line", activeTab: ["all", "p1", "verify", "overdue"].includes(n) ? n : "all", onChange: r, children: [w.jsx(qr, { title: `\u5168\u90E8\u4E8B\u4EF6 ${C.length}` }, "all"), w.jsx(qr, { title: `\u4F18\u5148 ${C.filter((S) => S.level === "p1").length}` }, "p1"), w.jsx(qr, { title: `\u5F85\u6838\u9A8C ${C.filter((S) => S.type === "data" || S.type === "co").length}` }, "verify"), w.jsx(qr, { title: `\u8D85\u65F6 ${$.length}` }, "overdue")] }) }), w.jsxs("div", { className: "event-list", children: [T.length === 0 ? w.jsx("div", { style: { padding: "24px 14px" }, children: w.jsx(qs, { description: "\u5F53\u524D\u8303\u56F4\u6CA1\u6709\u5BF9\u5E94\u4E8B\u4EF6\uFF0C\u53EF\u66F4\u6362\u54C1\u7C7B\u8303\u56F4\u6216\u5207\u6362\u6807\u7B7E\u67E5\u770B" }) }) : null, T.map(({ event: S }) => w.jsxs("div", { className: "event-item", children: [w.jsxs("div", { className: "event-top", children: [O8(S.level), w.jsx("span", { className: "event-title", children: S.title }), S.overdue ? w.jsx(bt, { color: "orangered", size: "small", bordered: true, children: "\u8D85\u65F6" }) : null, w.jsx("span", { className: "event-time", children: S.time })] }), w.jsx("div", { className: "event-desc", children: S.desc }), w.jsxs("div", { className: "event-acts", children: [w.jsx(et, { size: "mini", onClick: () => o(S), children: "\u67E5\u770B\u8BE6\u60C5" }), w.jsx(et, { size: "mini", type: "text", style: { color: "var(--brand)" }, onClick: () => u(S), children: "\u4EA4\u7ED9 AI \u5206\u6790" }), w.jsxs("span", { className: "event-meta", style: { marginLeft: "auto" }, children: ["\u5F71\u54CD\uFF1A", rt[S.kpi].short, " \xB7 ", Ls(S.category), " \xB7 ", S.owner] })] })] }, S.id))] })] })] }), w.jsxs("div", { className: "panel", ref: x, children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("h3", { children: "\u884C\u52A8\u5EFA\u8BAE" }), w.jsxs(bt, { color: "orangered", size: "small", bordered: true, children: [N.length, " \u5F85\u786E\u8BA4"] }), w.jsx("span", { className: "spacer" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6BCF\u6761\u5EFA\u8BAE\u6807\u6CE8\u5F71\u54CD\u7684\u6307\u6807" })] }), w.jsxs("div", { children: [O.length === 0 ? w.jsx("div", { style: { padding: "24px 14px" }, children: w.jsx(qs, { description: "\u5F53\u524D\u8303\u56F4\u6682\u65E0\u884C\u52A8\u5EFA\u8BAE" }) }) : null, O.map((S) => {
+    const [connectionRevision, reconnect] = y.useState(0), [syncError, setSyncError] = y.useState("");
+    y.useEffect(() => {
+      const changed = () => reconnect((value) => value + 1);
+      window.addEventListener("gea-session-changed", changed);
+      window.addEventListener("gea-identity-changed", changed);
+      return () => {
+        window.removeEventListener("gea-session-changed", changed);
+        window.removeEventListener("gea-identity-changed", changed);
+      };
+    }, []);
+    y.useEffect(() => {
+      let stop = reportElements("category", []);
+      if (!currentSessionId()) return stop;
+      const controller = new AbortController();
+      const events = T.map((row) => row.event);
+      const tasks = E === "running" ? k : E === "todo" ? g.filter((row) => row.status !== "done") : E === "done" ? g.filter((row) => row.status === "done") : g;
+      const parts = {
+        category: e,
+        categoryLabel: I,
+        view: n,
+        taskStatus: E,
+        snapshot: qu,
+        summary: p,
+        kpis: m,
+        events,
+        suggestions: O.map((row) => ({ ...row, adopted: a.includes(row.id) })),
+        tasks
+      };
+      setSyncError("");
+      publish({
+        mock: true,
+        pageId: "plan-region-category",
+        instance: "default",
+        parts,
+        boundary: "\u672C\u5730\u6A21\u62DF\u5FEB\u7167\u4E0E\u4E34\u65F6\u4EFB\u52A1\uFF0C\u4E0D\u4EE3\u8868\u771F\u5B9E\u4E1A\u52A1\u3001\u6A21\u578B\u7ED3\u679C\u6216\u7CFB\u7EDF\u56DE\u6267\u3002"
+      }, { signal: controller.signal }).then(() => {
+        if (controller.signal.aborted) return;
+        stop();
+        stop = reportElements("category", [
+          { id: "category:scope", role: "field", label: "\u5F53\u524D\u54C1\u7C7B\uFF08\u6A21\u62DF\uFF09", value: I },
+          ...Dr.map((key) => ({ id: "kpi:" + key, role: "field", label: "\u6A21\u62DF\u6307\u6807 " + rt[key].name, value: JSON.stringify(m[key]) })),
+          ...events.map((row) => ({ id: "event:" + row.id, role: "row", label: row.title, value: JSON.stringify(row) })),
+          ...O.map((row) => ({ id: "suggestion:" + row.id, role: "row", label: row.title, value: JSON.stringify({ ...row, adopted: a.includes(row.id) }) })),
+          ...tasks.map((row) => ({ id: "task:" + row.id, role: "row", label: row.title, value: JSON.stringify(row) })),
+          { id: "prototype:boundary", role: "field", label: "\u6570\u636E\u8FB9\u754C", value: "\u672C\u5730\u6A21\u62DF\u5FEB\u7167\u4E0E\u4E34\u65F6\u4EFB\u52A1\uFF1B\u6CA1\u6709\u771F\u5B9E\u4E1A\u52A1\u56DE\u6267\u3002" }
+        ]);
+      }).catch((error) => {
+        if (!controller.signal.aborted) setSyncError("\u9875\u9762\u5FEB\u7167\u53D1\u5E03\u5931\u8D25\uFF0C\u8BF7\u91CD\u65B0\u8FDE\u63A5\u3002" + error.message);
+      });
+      return () => {
+        controller.abort();
+        stop();
+      };
+    }, [e, n, E, a, i, connectionRevision]);
+    return w.jsxs("div", { className: "work", children: [syncError && w.jsx("p", { className: "category-sync-status", role: "status", children: syncError }), w.jsxs("div", { className: "boundary", children: [w.jsx("b", { children: "\u6F14\u793A\u8FB9\u754C" }), w.jsxs("span", { children: ["\u6307\u6807\u53E3\u5F84\u4E0E\u76EE\u6807\u503C\u53C2\u8003\u5185\u90E8\u6587\u4EF6\uFF08F26 \u8D22\u5E74\u54C1\u7C7B\u8BA1\u5212\u7EC4\uFF09\uFF0C\u6570\u503C\u4E3A\u672C\u5730\u6A21\u62DF\u5FEB\u7167\uFF08", qu, "\uFF09\uFF1B \u4E0D\u8FDE\u63A5 SAP / DMS / BI / APS / OMS\uFF0C\u4E0D\u4EE3\u8868\u771F\u5B9E\u4E1A\u52A1\u7ED3\u679C\u3002"] })] }), w.jsx("div", { className: "work-head", children: w.jsxs("div", { className: "work-head-row", children: [w.jsxs("div", { style: { minWidth: 0 }, children: [w.jsx("h2", { children: "\u54C1\u7C7B\u8BA1\u5212\u7BA1\u7406\u5DE5\u4F5C\u53F0" }), w.jsx("p", { className: "sub", children: "\u56F4\u7ED5\u54C1\u7C7B\u8BA1\u5212\u5728\u7BA1\u7684\u4E94\u4EF6\u4E8B\u2014\u2014\u8BA2\u5355\u6EE1\u8DB3\u7387\u3001\u9700\u6C42\u8BA1\u5212\u51C6\u786E\u7387\u3001\u5E93\u5B58\u5468\u8F6C\u3001\u5168\u94FE\u5468\u8F6C\u4E0E\u4EA7\u54C1\u65B0\u9C9C\u5EA6\uFF1BAI \u8D1F\u8D23\u9884\u8B66\u4E0E\u5EFA\u8BAE\uFF0C\u4EBA\u6765\u51B3\u7B56\u4E0E\u6388\u6743\u3002" })] }), w.jsx("div", { className: "work-head-actions", children: w.jsxs("span", { className: "scope-picker", children: [w.jsx("span", { className: "sp-label", children: "\u54C1\u7C7B" }), w.jsxs(ha, { size: "small", value: e || "all", style: { width: 116 }, onChange: (S) => t(S === "all" ? null : S), children: [w.jsx(ha.Option, { value: "all", children: "\u5168\u90E8\u54C1\u7C7B" }), Yt.map((S) => w.jsx(ha.Option, { value: S.key, children: S.name }, S.key))] })] }) })] }) }), w.jsxs("div", { className: "work-body", children: [questionTools, w.jsx("div", { className: "block", children: w.jsx(P8, { cells: A, onJump: W }) }), w.jsxs("div", { className: "block", children: [w.jsxs("div", { className: "block-head", children: [w.jsx("h3", { children: "\u54C1\u7C7B\u8BA1\u5212\u6307\u6807\u76D1\u63A7" }), w.jsxs("span", { className: "hint", children: [b1, " \xB7 \u5168\u94FE\u53E3\u5F84\uFF08\u57FA\u5730\u4ED3 + \u5206\u4ED3 + \u7ECF\u9500\u5546\u7AEF\uFF09\xB7 \u70B9\u51FB\u4EFB\u610F\u6307\u6807\u67E5\u770B\u53E3\u5F84\u4E0E\u660E\u7EC6"] })] }), w.jsx("div", { className: "kpi-grid", children: Dr.map((S) => w.jsx(S8, { item: m[S], onOpen: l }, S)) })] }), w.jsx("div", { className: "block", children: w.jsxs("div", { className: "panel insight", children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("span", { style: { width: 18, height: 18, borderRadius: 6, background: "var(--brand-soft)", color: "var(--brand)", display: "grid", placeItems: "center", fontSize: 11 }, children: "\u2726" }), w.jsx("h3", { children: "AI \u6D1E\u5BDF \xB7 \u6307\u6807\u7F3A\u53E3\u5F52\u56E0" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u7ED3\u679C\u6307\u6807 \u2190 \u9A71\u52A8\u6307\u6807\uFF0C\u89C4\u5219\u62FC\u88C5\uFF0C\u975E\u6A21\u578B\u751F\u6210" }), w.jsx("span", { className: "spacer" }), w.jsxs("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: ["\u5FEB\u7167 ", qu] })] }), w.jsxs("div", { className: "panel-body", children: [w.jsx("div", { className: "insight-lead", children: R }), w.jsxs("table", { className: "mini-table", style: { marginTop: 10 }, children: [w.jsx("thead", { children: w.jsxs("tr", { children: [w.jsx("th", { children: "\u76D1\u63A7\u6307\u6807" }), w.jsx("th", { children: "\u5F53\u524D\u503C / \u72B6\u6001" }), w.jsx("th", { children: "\u4E3B\u8981\u9A71\u52A8\u4E0E\u4E8B\u5B9E" }), w.jsx("th", { children: "\u5224\u65AD" })] }) }), w.jsx("tbody", { children: M.map((S) => w.jsxs("tr", { children: [w.jsx("td", { children: S.name }), w.jsxs("td", { style: { whiteSpace: "nowrap" }, children: [w.jsx("span", { className: `dot-state is-${S.tone}` }), S.state] }), w.jsx("td", { children: S.driver }), w.jsx("td", { style: { color: "var(--text-muted)" }, children: S.judge })] }, S.name)) })] }), w.jsxs("div", { className: "chip-row", children: [w.jsxs("span", { className: "chip is-brand", children: [p.categoryCount, " \u4E2A\u54C1\u7C7B"] }), w.jsxs("span", { className: "chip", children: ["\u5168\u94FE\u5E93\u5B58 ", p.chainStock, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u5168\u94FE\u53EF\u552E ", p.chainDays, " \u5929"] }), w.jsxs("span", { className: "chip", children: ["RCCP \u7F3A\u53E3 ", p.gapTons, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u8D85\u671F ", p.overstockTons, " \u5428"] }), w.jsxs("span", { className: "chip", children: ["\u672A\u6EE1\u8DB3\u8BA2\u5355 ", p.unmetOrders, " \u5F20"] })] }), w.jsxs("div", { className: "insight-foot", children: [w.jsx(et, { type: "primary", size: "small", onClick: v, children: "\u5728\u4F1A\u8BDD\u4E2D\u6DF1\u5165\u5206\u6790" }), w.jsx(et, { size: "small", onClick: () => l("evidence"), children: "\u53E3\u5F84\u4E0E\u5206\u6790\u4F9D\u636E" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6D1E\u5BDF\u7531\u672C\u5730\u89C4\u5219\u57FA\u4E8E\u5F53\u524D\u5FEB\u7167\u62FC\u88C5\uFF0C\u4E0D\u542B\u9884\u6D4B\u7ED3\u679C" })] })] })] }) }), w.jsxs("div", { className: "block panel-two", children: [w.jsxs("div", { className: "panel", ref: h, children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("h3", { children: "\u4E8B\u4EF6\u9884\u8B66" }), w.jsxs(bt, { color: "red", size: "small", bordered: true, children: [P.length, " \u5F85\u5904\u7406"] }), $.length > 0 ? w.jsxs(bt, { color: "orangered", size: "small", bordered: true, children: [$.length, " \u8D85\u65F6"] }) : null, w.jsx("span", { className: "spacer" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6309\u76D1\u63A7\u6307\u6807\u5F52\u53E3" })] }), w.jsxs("div", { className: "panel-body", style: { padding: "4px 0 0" }, children: [w.jsx("div", { style: { padding: "8px 14px 10px" }, children: w.jsxs(Bl, { size: "small", type: "line", activeTab: ["all", "p1", "verify", "overdue"].includes(n) ? n : "all", onChange: r, children: [w.jsx(qr, { title: `\u5168\u90E8\u4E8B\u4EF6 ${C.length}` }, "all"), w.jsx(qr, { title: `\u4F18\u5148 ${C.filter((S) => S.level === "p1").length}` }, "p1"), w.jsx(qr, { title: `\u5F85\u6838\u9A8C ${C.filter((S) => S.type === "data" || S.type === "co").length}` }, "verify"), w.jsx(qr, { title: `\u8D85\u65F6 ${$.length}` }, "overdue")] }) }), w.jsxs("div", { className: "event-list", children: [T.length === 0 ? w.jsx("div", { style: { padding: "24px 14px" }, children: w.jsx(qs, { description: "\u5F53\u524D\u8303\u56F4\u6CA1\u6709\u5BF9\u5E94\u4E8B\u4EF6\uFF0C\u53EF\u66F4\u6362\u54C1\u7C7B\u8303\u56F4\u6216\u5207\u6362\u6807\u7B7E\u67E5\u770B" }) }) : null, T.map(({ event: S }) => w.jsxs("div", { className: "event-item", children: [w.jsxs("div", { className: "event-top", children: [O8(S.level), w.jsx("span", { className: "event-title", children: S.title }), S.overdue ? w.jsx(bt, { color: "orangered", size: "small", bordered: true, children: "\u8D85\u65F6" }) : null, w.jsx("span", { className: "event-time", children: S.time })] }), w.jsx("div", { className: "event-desc", children: S.desc }), w.jsxs("div", { className: "event-acts", children: [w.jsx(et, { size: "mini", onClick: () => o(S), children: "\u67E5\u770B\u8BE6\u60C5" }), w.jsx(et, { size: "mini", type: "text", style: { color: "var(--brand)" }, onClick: () => u(S), children: "\u4EA4\u7ED9 AI \u5206\u6790" }), w.jsxs("span", { className: "event-meta", style: { marginLeft: "auto" }, children: ["\u5F71\u54CD\uFF1A", rt[S.kpi].short, " \xB7 ", Ls(S.category), " \xB7 ", S.owner] })] })] }, S.id))] })] })] }), w.jsxs("div", { className: "panel", ref: x, children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("h3", { children: "\u884C\u52A8\u5EFA\u8BAE" }), w.jsxs(bt, { color: "orangered", size: "small", bordered: true, children: [N.length, " \u5F85\u786E\u8BA4"] }), w.jsx("span", { className: "spacer" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u6BCF\u6761\u5EFA\u8BAE\u6807\u6CE8\u5F71\u54CD\u7684\u6307\u6807" })] }), w.jsxs("div", { children: [O.length === 0 ? w.jsx("div", { style: { padding: "24px 14px" }, children: w.jsx(qs, { description: "\u5F53\u524D\u8303\u56F4\u6682\u65E0\u884C\u52A8\u5EFA\u8BAE" }) }) : null, O.map((S) => {
       const F = a.includes(S.id);
       return w.jsxs("div", { className: "sug", children: [w.jsx("div", { className: "sug-title", children: S.title }), w.jsx("div", { className: "sug-target", children: S.target }), w.jsxs("div", { className: "sug-reason", children: [w.jsx("b", { children: "\u5EFA\u8BAE\u539F\u56E0\uFF1A" }), S.reason] }), w.jsxs("div", { className: "sug-meta", children: [w.jsx(bt, { size: "small", color: F ? "green" : "gray", bordered: true, children: F ? "\u5DF2\u8FDB\u5165\u4EFB\u52A1\u8FFD\u8E2A" : "\u5F85\u4EBA\u5DE5\u786E\u8BA4" }), w.jsxs(bt, { size: "small", color: "red", bordered: true, children: ["\u5F71\u54CD\uFF1A", rt[S.kpiKey].short] }), w.jsxs(bt, { size: "small", bordered: true, children: [S.grade, " \xB7 ", dp[S.grade]] }), w.jsxs(bt, { size: "small", bordered: true, children: ["\u7F6E\u4FE1\u5EA6 ", S.confidence] })] }), w.jsxs("div", { className: "sug-acts", children: [w.jsx(et, { size: "mini", onClick: () => s(S), children: "\u67E5\u770B\u4F9D\u636E" }), w.jsx(et, { size: "mini", type: F ? "secondary" : "primary", onClick: () => f(S), disabled: F, children: F ? "\u5DF2\u91C7\u7EB3" : S.cta })] })] }, S.id);
     })] })] })] }), w.jsx("div", { className: "block", ref: b, children: w.jsxs("div", { className: "panel", children: [w.jsxs("div", { className: "panel-head", children: [w.jsx("h3", { children: "\u4EFB\u52A1\u8FFD\u8E2A" }), w.jsxs("span", { className: "hint", style: { fontSize: 10, color: "var(--text-faint)" }, children: [g.filter((S) => S.status !== "done").length, " \u9879\u5F85\u8DDF\u8FDB \xB7 ", k.length, " \u9879\u5904\u7406\u4E2D \xB7 ", g.filter((S) => S.status === "done").length, " \u9879\u5DF2\u5B8C\u6210"] }), w.jsx("span", { className: "spacer" }), w.jsx("span", { className: "hint", style: { fontSize: 9, color: "var(--text-faint)" }, children: "\u4EBA\u673A\u534F\u540C \xB7 \u8FC7\u7A0B\u53EF\u8FFD\u8E2A" })] }), w.jsx("div", { className: "panel-body", style: { padding: "10px 14px 4px" }, children: w.jsxs(Bl, { size: "small", type: "line", activeTab: E, onChange: _, children: [w.jsx(qr, { title: `\u5168\u90E8 ${g.length}`, children: V(g) }, "all"), w.jsx(qr, { title: `\u5904\u7406\u4E2D ${k.length}`, children: V(k) }, "running"), w.jsx(qr, { title: `\u5F85\u8DDF\u8FDB ${g.filter((S) => S.status !== "done").length}`, children: V(g.filter((S) => S.status !== "done")) }, "todo"), w.jsx(qr, { title: `\u5DF2\u5B8C\u6210 ${g.filter((S) => S.status === "done").length}`, children: V(g.filter((S) => S.status === "done")) }, "done")] }) })] }) }), w.jsx("div", { style: { fontSize: 9, color: "var(--text-faint)", lineHeight: 1.7, padding: "2px 2px 6px" }, children: "\u5EFA\u8BAE\u4E0E\u4EFB\u52A1\u4EC5\u7528\u4E8E\u8BC4\u5BA1\u6F14\u793A\uFF1A\u91C7\u7EB3\u5EFA\u8BAE\u53EA\u4F1A\u5728\u672C\u9875\u751F\u6210\u8DDF\u8E2A\u4EFB\u52A1\uFF0C\u4E0D\u4F1A\u5411\u4EFB\u4F55\u4E1A\u52A1\u7CFB\u7EDF\u4E0B\u8FBE\u52A8\u4F5C\uFF1B\u6B63\u5F0F\u52A8\u4F5C\u9700\u7ECF\u6388\u6743\u5E76\u901A\u8FC7\u52A8\u4F5C\u7F51\u5173\u6267\u884C\u3002" })] })] });
@@ -305,7 +622,7 @@ Error generating stack: `+i.message+`
   };
   var j8 = () => Dr;
   function $8() {
-    const [e, t] = usePageViewField(y, categoryView, "category", null, (value) => value, (value) => value === null || Yt.some((row) => row.key === value) ? value : null), [n, r] = usePageViewField(y, categoryView, "view", "all"), [a, i] = y.useState([]), [l, o] = y.useState([]), [v, p] = usePageViewField(y, categoryView, "draft", ""), [m, C] = usePageViewField(y, categoryView, "eventId", null, (value) => value?.id ?? null, (id) => x8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [O, g] = usePageViewField(y, categoryView, "suggestionId", null, (value) => value?.id ?? null, (id) => ef(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [h, x] = usePageViewField(y, categoryView, "drill", null, (value) => value, (value) => Object.hasOwn(rt, value) ? value : null), [b, E] = usePageViewField(y, categoryView, "taskId", null, (value) => value?.id ?? null, (id) => y8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [_, P] = usePageViewField(y, categoryView, "detail", null, (value) => value?.kind ?? null, (value) => ["calendar", "evidence"].includes(value) ? { kind: value } : null), N = y.useMemo(() => ph(e), [e]), k = y.useMemo(() => ef(e), [e]), $ = e ? _i(e) : "\u5168\u90E8\u54C1\u7C7B", actions = useAuthorQuote(y), I = (text, label) => actions.quote(text, label ?? "\u54C1\u7C7B\u5206\u6790\u95EE\u9898"), W = (event) => I(`\u8BF7\u5206\u6790\u201C${event.title}\u201D\uFF0C\u8BF4\u660E\u5B83\u5BF9\u300C${rt[event.kpi].name}\u300D\u7684\u5F71\u54CD\u3001\u4F9D\u636E\u548C\u4F18\u5148\u884C\u52A8\u3002`, "\u4E8B\u4EF6\u5206\u6790"), L = () => {
+    const [e, t] = usePageViewField(y, categoryView, "category", null, (value) => value, (value) => value === null || Yt.some((row) => row.key === value) ? value : null), [n, r] = usePageViewField(y, categoryView, "view", "all"), [a, i] = y.useState([]), [l, o] = y.useState([]), [v, p] = usePageViewField(y, categoryView, "draft", ""), [m, C] = usePageViewField(y, categoryView, "eventId", null, (value) => value?.id ?? null, (id) => vp(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [O, g] = usePageViewField(y, categoryView, "suggestionId", null, (value) => value?.id ?? null, (id) => y8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [h, x] = usePageViewField(y, categoryView, "drill", null, (value) => value, (value) => Object.hasOwn(rt, value) ? value : null), [b, E] = usePageViewField(y, categoryView, "taskId", null, (value) => value?.id ?? null, (id) => x8(categoryView.get().category ?? null).find((row) => row.id === id) ?? null), [_, P] = usePageViewField(y, categoryView, "detail", null, (value) => value?.kind ?? null, (value) => ["calendar", "evidence"].includes(value) ? { kind: value } : null), N = y.useMemo(() => ph(e), [e]), k = y.useMemo(() => ef(e), [e]), $ = e ? _i(e) : "\u5168\u90E8\u54C1\u7C7B", actions = useAuthorQuote(y), I = (text, label) => actions.quote(text, label ?? "\u54C1\u7C7B\u5206\u6790\u95EE\u9898"), W = (event) => I(`\u8BF7\u5206\u6790\u201C${event.title}\u201D\uFF0C\u8BF4\u660E\u5B83\u5BF9\u300C${rt[event.kpi].name}\u300D\u7684\u5F71\u54CD\u3001\u4F9D\u636E\u548C\u4F18\u5148\u884C\u52A8\u3002`, "\u4E8B\u4EF6\u5206\u6790"), L = () => {
       I(`\u8BF7\u7ED3\u5408${$}\u8303\u56F4\uFF0C\u8BF4\u660E\u5404\u9879\u8003\u6838\u6307\u6807\u7684\u8FBE\u6210\u60C5\u51B5\u3001\u672A\u8FBE\u6807\u9879\u7684\u9A71\u52A8\u539F\u56E0\uFF0C\u4EE5\u53CA\u4F18\u5148\u884C\u52A8\u4E0E\u9700\u8981\u4EBA\u5DE5\u6838\u9A8C\u7684\u4E8B\u9879\u3002`);
     }, z = (T) => {
       if (a.includes(T.id)) return;
@@ -341,6 +658,18 @@ Error generating stack: `+i.message+`
       const V = k[T];
       return w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: rt[T].short }), w.jsxs("span", { children: [V.value == null ? "\u76EE\u6807\u503C\u672A\u62A5\u5907" : `${V.value}${rt[T].unit}`, ` \xB7 \u76EE\u6807 ${rt[T].target != null ? `${rt[T].target}${rt[T].unit}` : "\u672A\u62A5\u5907"} \xB7 ${V.status.label}`] })] }, T);
     })] }), w.jsxs("div", { className: "detail-sec", children: [w.jsx("h5", { children: "\u9A71\u52A8\u6307\u6807\uFF08\u4E8B\u5B9E\uFF09" }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u5168\u94FE\u53EF\u552E\u5929\u6570" }), w.jsxs("span", { children: [N.chainDays, " \u5929\uFF08", N.chainStock, " \u5428 \xF7 ", N.dailyShip, " \u5428/\u65E5\uFF09"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u5DE5\u5382\u4ED3\u53EF\u552E\u5929\u6570" }), w.jsxs("span", { children: [N.baseDays, " \u5929\uFF08\u5DE5\u5382\u4ED3 ", N.baseStock, " \u5428\uFF09"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "RCCP \u6EE1\u8DB3\u7387" }), w.jsxs("span", { children: [N.rccpRate, "%\uFF0C\u7F3A\u53E3 ", N.gapTons, " \u5428"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u4EA7\u9500\u7387" }), w.jsxs("span", { children: [N.dealRate, "%\uFF08\u4EA7\u91CF ", N.produceTons, " \u5428 / \u53D1\u8D27 ", N.shipTons, " \u5428\uFF09"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u8D85\u671F\u5E93\u5B58" }), w.jsxs("span", { children: [N.overstockTons, " \u5428\uFF08\u8D85 60 \u5929\u53E3\u5F84\uFF09"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u672A\u6EE1\u8DB3\u8BA2\u5355" }), w.jsxs("span", { children: [N.unmetOrders, " \u5F20"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u504F\u79BB AI \u57FA\u7EBF" }), w.jsxs("span", { children: [N.deviation, " \u5428\uFF08\u03A3 \u4E0A\u62A5 \u2212 \u03A3 \u57FA\u7EBF\uFF09"] })] })] }), w.jsxs("div", { className: "detail-sec", children: [w.jsx("h5", { children: "\u4ECE\u4E8B\u5B9E\u5230\u6D1E\u5BDF" }), w.jsx("p", { children: "\u5148\u6309\u5404\u6307\u6807\u53E3\u5F84\u7B97\u51FA\u5B9E\u9645\u503C\u4E0E\u76EE\u6807\u503C\u7684\u5BF9\u7167\uFF0C\u518D\u628A\u672A\u8FBE\u6807\u7684\u9879\u5F52\u56E0\u5230\u53EF\u5E72\u9884\u7684\u9A71\u52A8\u6307\u6807\uFF08\u4EA7\u80FD\u3001\u5E93\u5B58\u7ED3\u6784\u3001\u8BA1\u5212\u504F\u5DEE\u3001\u8D85\u671F\u6279\u6B21\uFF09\uFF1B \u6700\u540E\u6309\u4E8B\u4EF6\u7C7B\u578B\u5206\u7EA7\uFF0C\u53EA\u6709\u8FBE\u5230\u6570\u636E\u8D28\u91CF\u95E8\u69DB\u3001\u4E14\u9700\u8981\u8DE8\u89D2\u8272\u534F\u540C\u6216\u51B3\u7B56\u7684\u4FE1\u53F7\u624D\u8FDB\u5165\u9884\u8B66\u6E05\u5355\u3002" })] }), w.jsxs("div", { className: "detail-sec", children: [w.jsx("h5", { children: "\u4E09\u7C7B\u53E3\u5F84\u4E0D\u53EF\u4E92\u63A8\uFF08\u6613\u6DF7\u70B9\uFF09" }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u5E93\u5B58\u5468\u8F6C\u5929\u6570" }), w.jsx("span", { children: "\u5168\u56FD\u5DE5\u5382\u4ED3\u6708\u672B\u5E93\u5B58 \xF7\uFF08\u4E0B\u6708\u9500\u552E\u8BA1\u5212 \xF7 \u4E0B\u6708\u5B9E\u9645\u5929\u6570\uFF09\uFF1B\u76EE\u6807 11 \u5929" })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u5168\u94FE\u5468\u8F6C\u5929\u6570" }), w.jsxs("span", { children: ["\u5F53\u6708\u5929\u6570 \xF7 ", "[ \u6708\u9500\u552E\u51FA\u5E93\u4EF6\u6570 \xF7 \u5E73\u5747\u5E93\u5B58\u4EF6\u6570 ]", "\uFF1B\u8986\u76D6\u603B\u4ED3 + \u5206\u4ED3 + \u7ECF\u9500\u5546\u4ED3\uFF0C\u76EE\u6807\u6309\u5355\u72EC\u5907\u6848"] })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "\u4EA7\u54C1\u65B0\u9C9C\u5EA6" }), w.jsx("span", { children: "1 \u2212 \u5DE5\u5382\u6708\u672B\u8D85\u671F\u4EA7\u54C1\u91CF \xF7 \u603B\u5E93\u5B58\u91CF\uFF1B\u8D85\u671F\u53E3\u5F84\u4E3A\u8D85 60 \u5929\uFF08BP/\u7535\u5546/DC \u4E13\u4F9B\u6309 90 \u5929\uFF09" })] }), w.jsx("div", { className: "callout warn", style: { marginTop: 8 }, children: "\u300C\u5168\u94FE\u53EF\u552E 45 \u5929\u504F\u9AD8\u63D0\u9192\u300D\u662F\u672C\u5DE5\u4F5C\u53F0\u7684\u64CD\u4F5C\u6027\u63D0\u793A\u53E3\u5F84\uFF0C\u4E0E\u4E0A\u8FF0\u76D1\u63A7\u53E3\u5F84\u4E0D\u540C\uFF0C\u4E0D\u53EF\u4E92\u76F8\u6362\u7B97\u3002" })] }), w.jsxs("div", { className: "detail-sec", children: [w.jsx("h5", { children: "\u52A8\u4F5C\u5206\u7EA7\u4E0E\u6743\u9650" }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "A1" }), w.jsx("span", { children: "Agent \u8D77\u8349\uFF0C\u4EBA\u5DE5\u8865\u8BC1\uFF08\u5982\u9000\u56DE\u62A5\u6587\uFF09" })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "A2" }), w.jsx("span", { children: "Agent \u751F\u6210\uFF0C\u8BA1\u5212\u5458\u786E\u8BA4\u540E\u63A8\u8FDB" })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "A3" }), w.jsx("span", { children: "\u9700\u6388\u6743\uFF1A\u8DE8\u57FA\u5730\u8C03\u62E8\u3001\u4EA7\u80FD\u8C03\u5242\u7B49\u53D6\u820D\u7C7B\u52A8\u4F5C" })] }), w.jsxs("div", { className: "kv-line", children: [w.jsx("b", { children: "A4" }), w.jsx("span", { children: "\u987B\u4E1A\u52A1 Owner \u51B3\u7B56\uFF1A\u76EE\u6807\u503C\u62A5\u5907\u3001\u89C4\u5219\u4E0E\u9608\u503C\u53D8\u66F4" })] })] }), w.jsxs("div", { className: "detail-sec", children: [w.jsx("h5", { children: "\u4E94\u6761\u6D41\u7A0B\u7EAA\u5F8B" }), w.jsx("p", { children: "\u65E0\u4E8B\u4EF6\u5361\u4E0D\u534F\u540C\uFF1B\u65E0\u51B3\u7B56\u4E8B\u9879\u4E0D\u5F00\u4F1A\uFF1B\u65E0\u539F\u56E0\u7801\u4E0D\u8986\u76D6 AI \u5EFA\u8BAE\uFF1B\u65E0\u8D23\u4EFB\u4EBA\u3001\u65F6\u9650\u548C\u9A8C\u6536\u6807\u51C6\u4E0D\u6D3E\u53D1\u4EFB\u52A1\uFF1B \u65E0\u7CFB\u7EDF\u56DE\u6267\u548C\u7ED3\u679C\u590D\u76D8\u4E0D\u5173\u95ED\u4E8B\u4EF6\u3002" })] }), w.jsx("div", { className: "callout warn", children: "\u672C\u539F\u578B\u7684\u201CAI \u6D1E\u5BDF\u201D\u7531\u672C\u5730\u89C4\u5219\u57FA\u4E8E\u6240\u9644\u5FEB\u7167\u62FC\u88C5\uFF0C\u672A\u8C03\u7528\u771F\u5B9E\u5927\u6A21\u578B\uFF1B\u5230\u8D27\u65F6\u95F4\u3001\u4FC3\u9500\u3001\u4EA7\u80FD\u3001\u4FE1\u7528\u3001\u6279\u6B21\u660E\u7EC6\u7B49\u672A\u77E5\u9879\u5747\u4E0D\u4F5C\u8865\u5145\u5047\u8BBE\u3002" })] }) : null;
+    y.useEffect(() => {
+      const reset = () => {
+        i([]);
+        o([]);
+      };
+      window.addEventListener("gea-session-changed", reset);
+      window.addEventListener("gea-identity-changed", reset);
+      return () => {
+        window.removeEventListener("gea-session-changed", reset);
+        window.removeEventListener("gea-identity-changed", reset);
+      };
+    }, []);
     return w.jsxs("div", { className: "app", children: [w.jsx(N8, { category: e, setCategory: t, view: n, setView: r, adopted: a, extraTasks: l, onDrill: H, onEventDetail: C, onEventAsk: W, onSugDetail: g, onSugAdopt: z, onTaskOpen: E, onInsightAsk: L, questionTools: w.jsx(AuthorQuestions, { react: y, jsx: w, Button: et, questions: [...Mx.map((row) => ({ label: row.label, text: row.prompt })), ...C8.map((text) => ({ label: text, text }))], draft: v, onClearDraft: () => p(""), actions }) }), R(), M(), j(), A(), D()] });
   }
   Yw(document.getElementById("root")).render(w.jsx(c.StrictMode, { children: w.jsx($8, {}) }));

@@ -120,7 +120,7 @@ Error generating stack: `+i.message+`
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
+    const sessionPage = ["plan-region-category", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -176,18 +176,24 @@ Error generating stack: `+i.message+`
     } };
   }
   function usePageViewField(react, view, key, initial, encode = (value) => value, decode = (value) => value) {
-    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : typeof initial === "function" ? initial() : initial);
+    const fallback = react.useRef({ initial, initialized: false, value: void 0 });
+    const defaultValue = () => {
+      if (!fallback.current.initialized) {
+        fallback.current.value = typeof fallback.current.initial === "function" ? fallback.current.initial() : fallback.current.initial;
+        fallback.current.initialized = true;
+      }
+      return fallback.current.value;
+    };
+    const [value, set] = react.useState(() => Object.hasOwn(view.get(), key) ? decode(view.get()[key]) : defaultValue());
     const current = react.useRef(value), encoder = react.useRef(encode), decoder = react.useRef(decode);
     current.current = value;
     encoder.current = encode;
     decoder.current = decode;
     react.useEffect(() => {
       const apply = (snapshot) => {
-        if (Object.hasOwn(snapshot, key)) {
-          const next = decoder.current(snapshot[key]);
-          current.current = next;
-          set(next);
-        }
+        const next = Object.hasOwn(snapshot, key) ? decoder.current(snapshot[key]) : defaultValue();
+        current.current = next;
+        set(next);
       };
       const stop = view.subscribe(apply);
       apply(view.get());

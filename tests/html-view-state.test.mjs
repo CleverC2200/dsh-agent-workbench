@@ -75,3 +75,12 @@ test('received mock pages keep only authored UI intent under their actual Sessio
     assert.throws(()=>owner.saveHtmlViewState(id,'subject/session-A',{...state,rows:[{secret:'derived'}]}),/INVALID_HTML_VIEW_STATE/);
   }
 });
+test('the received category page partitions its UI intent by the owned Session', () => {
+ const owner=new WorkbenchController({panel(){},document(){}});
+ owner.registerFrame({id:'plan-region-category',kind:'html',src:'/category',resourceId:'gea-html-category-plan'});
+ const state={version:1,category:'mianmo',draft:'未发送的品类说明'};
+ owner.saveHtmlViewState('plan-region-category','subject/session-A',state);
+ assert.equal(owner.readHtmlViewState('plan-region-category','subject/session-B'),undefined);
+ assert.throws(()=>owner.saveHtmlViewState('plan-region-category',undefined,state),/HTML_VIEW_SCOPE_REQUIRED/);
+ assert.deepEqual(owner.readHtmlViewState('plan-region-category','subject/session-A'),state);
+});
