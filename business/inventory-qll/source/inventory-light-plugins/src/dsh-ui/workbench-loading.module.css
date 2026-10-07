@@ -1,0 +1,132 @@
+.dashboardSkeleton {
+  margin-bottom: 0;
+}
+.loadingStatus {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--ui-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+.loadingDot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ui-accent);
+  animation: loadingPulse 1.4s ease-in-out infinite;
+}
+.skeletonBlock {
+  display: block;
+  height: 8px;
+  border-radius: 6px;
+  background: #e8edf3;
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+.skeletonCard {
+  min-height: 119px;
+}
+.skeletonLabel {
+  width: 58%;
+}
+.skeletonPill {
+  width: 45px;
+  height: 18px;
+  border-radius: 999px;
+}
+.skeletonValue {
+  width: 48%;
+  height: 25px;
+  margin: 14px 0 12px;
+}
+.skeletonHelpers {
+  display: grid;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid #edf0f4;
+}
+.skeletonHelpers .skeletonBlock:first-child {
+  width: 82%;
+}
+.skeletonHelpers .skeletonBlock:last-child {
+  width: 68%;
+}
+.skeletonSummary {
+  display: grid;
+  gap: 9px;
+  min-height: 86px;
+}
+.skeletonSummaryTitle {
+  width: 92px;
+  height: 13px;
+}
+.skeletonSummary > .skeletonBlock:not(.skeletonSummaryTitle) {
+  width: 92%;
+}
+.skeletonSummaryLine {
+  width: 67% !important;
+}
+.tableSkeleton {
+  margin-bottom: 12px;
+}
+.tableSkeleton .loadingStatus {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid #edf0f4;
+  background: #fff;
+}
+.skeletonTableHeading {
+  width: 64px;
+}
+.skeletonTablePrimary {
+  width: 74px;
+  height: 11px;
+}
+.skeletonTableCell {
+  width: 58px;
+}
+@keyframes skeletonPulse {
+  0%,
+  100% {
+    opacity: 0.52;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes loadingPulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.workbench { min-width:0; width:100%; background:var(--ui-canvas); color:var(--ui-ink); }
+.header { min-height:56px; display:flex; align-items:center; padding:12px 16px; background:var(--ui-surface); border-bottom:1px solid var(--ui-border); }
+.header h2 { margin:0; font-size:18px; line-height:1.35; }
+.content { padding:16px; min-width:0; }
+.kpiGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(154px,1fr)); gap:12px; margin-bottom:12px; }
+.kpiCard { min-width:0; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); padding:12px; box-shadow:var(--ui-shadow); }
+.kpiCard > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:4px; }
+.summaryBox { margin-bottom:12px; padding:16px; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); box-shadow:var(--ui-shadow); }
+.tableCard { max-width:100%; overflow:auto; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); }
+.tableCard table { width:100%; min-width:950px; border-collapse:collapse; }
+.tableCard th { height:38px; padding:0 14px; background:var(--ui-soft); }
+.tableCard td { height:44px; padding:0 14px; border-bottom:1px solid var(--ui-divider); }
+.wideMetrics { grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); }
+.compactMetrics { grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr)); }
+.compactMetrics.wideMetrics { grid-template-columns:repeat(auto-fit,minmax(min(112px,100%),1fr)); }
+.compactMetrics .skeletonPill { max-width:30%; }
+@media(max-width:520px) { .kpiGrid, .compactMetrics.wideMetrics { grid-template-columns:1fr; } .content { padding:12px; } }
+@media(prefers-reduced-motion:reduce) { .loadingDot, .skeletonBlock { animation:none; } }
+
+/* Embedded panels already provide the same padding as their loaded cards. */
+.embedded .content { padding:0; }

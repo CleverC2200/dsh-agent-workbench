@@ -62,6 +62,7 @@ test('FC UI records stay partitioned by the real identity and Session address an
 test('received mock pages keep only authored UI intent under their actual Session address', async () => {
   const owner = new WorkbenchController({ panel() {}, document() {} });
   const states = {
+    'inventory-qll': {version:1, scope:'all-channel',month:'2026-09',tab:'category',sku:'MOCK-001',risk:'',structureFilters:{category:'饺子',org:''}},
     'inventory-customer': {version:1, search:'佳特', page:2},
     'inventory-orderworkbench': {version:1,mode:'week',month:'2026-09',week:'2026-08-31',event:'focus',task:'all'},
     'inventory-orderfulfillment': {version:1,customer:'10010126',page:1,size:10}

@@ -13,7 +13,7 @@ await ctx.agentWorkbench.open(panelId)
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记。该配置覆盖样板以外的全部包根，包括 `lib/static` 下三个计划原型与 `lib/business` 下库存、订单原型。省略时默认登记区域、品类、MPS、FC、AQKC、客户库存、订单工作台和订单履约八个包，表格样板固定登记。显式配置只装载所列根；撤回一个来源时从这份清单排除该根，其它页面与用户 Session 保留。已存在的 profile 在普通安装前一次更新完整八根，不使用运行时旧配置回退。启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
+原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记。该配置覆盖样板以外的全部包根，包括 `lib/static` 下三个计划原型与 `lib/business` 下库存、订单原型。省略时默认登记区域、品类、MPS、FC、AQKC、全链分布模拟页、客户库存、订单工作台和订单履约九个包，表格样板固定登记。显式配置只装载所列根；撤回一个来源时从这份清单排除该根，其它页面与用户 Session 保留。已存在的 profile 在普通安装前一次更新完整九根，不使用运行时旧配置回退。启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
 
 Host 公开认证 Fetch：
 
@@ -94,3 +94,5 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 可见目录中的 UI 视图控件明确声明 `effect: "view"`，例如区域页的模块、提报维度和模拟日期。`gea_plugin_page_apply` 仍核对当前 owner、可编辑性和 grant 的实际影响范围，并沿同一取消、限流和回执流程执行。未声明影响等级的字段继续按 `draft` 判断；只读 mock 不因此获得草稿、提交、审批、SQL或工作区写权限。
 
 MPS 原型 `plan-category-production` 在 `lib/static/mps` 接收原 `inventory-mps` 资源。当前挂载步骤的作者state通过公共业务channel发布模拟上下文和页签目录，切步移除旧数据。选用Prompt/Skill复用当前Core Session；界面意图、调整输入和未发送文字按Session恢复，模拟派生数据不存业务库。保存、导出、提交和结转仍只显示模拟提示。构建从相邻Manage的 `business-resources/inventory-mps` 装配原资源。
+
+全链分布 `inventory-qll` 从原14固定Git候选接收，Manage资源在相邻 `business-resources/inventory-qll`。当前包固定为 `mode=mock`、无SQL能力。页面从105个模拟基地SKU生成原业务计算，保持公司件数与客户箱数分列、零值和null。范围、月份、SKU与筛选意图按当前Session恢复，事实和快照重新计算。历史真实客户数据集与行权限未验；当前模拟入口不发业务请求。
