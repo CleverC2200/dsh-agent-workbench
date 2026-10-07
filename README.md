@@ -98,3 +98,7 @@ MPS 原型 `plan-category-production` 在 `lib/static/mps` 接收原 `inventory-
 全链分布 `inventory-qll` 从原14固定Git候选接收，Manage资源在相邻 `business-resources/inventory-qll`。当前包固定为 `mode=mock`、无SQL能力。页面从105个模拟基地SKU生成原业务计算，保持公司件数与客户箱数分列、零值和null。范围、月份、SKU与筛选意图按当前Session恢复，事实和快照重新计算。历史真实客户数据集与行权限未验；当前模拟入口不发业务请求。
 
 The received `inventory-qll` page also renders the captured distribution range as fixed mock inventory, order gap and aging trends. The same Session, page ID and resource apply. Missing periods stay null; changing the range withdraws old historical facts and references. Native and live acceptance remain open.
+
+个人库存接收包位于 `lib/business/inventory-personal`，使用统一 `mode: "mock"`、空MCP读取能力和 `page.visible=false`，默认不新增可见入口。页面保留原日监控、优先事项及年龄修复规则，只消费固定模拟输入。业务值不写入恢复状态，未提交反馈字段按当前身份与真实Session地址保存。
+
+页面桥 `draft` 方法只接收 `{text}`，通过当前已授权连接的真实Session追加未发送纯文字。Core公开 `slash/input-insert-text` 事件校验编辑revision并持久化语义草稿，已有文字与引用保留。忙态、取消或编辑变化拒绝插入。`conversation` 仍会发送模型Task，本批个人反馈按钮只调用 `draft`。

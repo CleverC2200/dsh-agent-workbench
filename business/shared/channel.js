@@ -7,6 +7,11 @@ const pending = new Map(),
 let appliedThemeTokens = [];
 const pageGroups = new Map();
 const applying = new Map();
+const invoking = new Map();
+function cancelActions() {
+  for (const task of applying.values()) task.abort();
+  for (const task of invoking.values()) task.controller.abort();
+}
 function reportCatalog() {
   if (!channel || !context?.session) return;
   channel.postMessage({
@@ -66,8 +71,9 @@ window.addEventListener('message', (event) => {
   )
     return;
   if (channel) {
+    window.dispatchEvent(new Event('gea-session-changing'));
     channel.close();
-    for (const task of applying.values()) task.abort();
+    cancelActions();
     for (const item of pending.values()) {
       clearTimeout(item.timer);
       item.cleanup?.();
@@ -82,6 +88,7 @@ window.addEventListener('message', (event) => {
     if (message.type === 'context') {
       const previousSession = context?.session;
       if (previousSession && previousSession !== message.context?.session) {
+        window.dispatchEvent(new Event('gea-session-changing'));
         for (const [id, item] of pending) {
           clearTimeout(item.timer);
           item.cleanup?.();
@@ -90,7 +97,7 @@ window.addEventListener('message', (event) => {
         }
         pending.clear();
       }
-      for (const task of applying.values()) task.abort();
+      cancelActions();
       context = message.context;
       reportCatalog();
       if (context?.session)
@@ -151,6 +158,7 @@ window.addEventListener('message', (event) => {
     }
     if (message.type === 'cancel' && message.session === context?.session) {
       applying.get(message.toolCallId)?.abort();
+      invoking.get(message.id)?.controller.abort();
     }
     if (message.type === 'apply' && message.session === context?.session) {
       const session = context.session;
@@ -192,33 +200,28 @@ window.addEventListener('message', (event) => {
           reportCatalog();
         });
     }
-    if (message.type === 'invoke') {
+    if (message.type === 'invoke' && message.session === context?.session) {
       const handler = handlers.get(message.name);
-      const session = context?.session;
+      const session = context.session, ownerChannel = channel;
+      const controller = new AbortController();
+      invoking.set(message.id, { controller, handler });
       Promise.resolve()
-        .then(() => {
+        .then(async () => {
           if (!handler) throw Error('页面未注册该操作');
-          return handler(message.arguments);
+          controller.signal.throwIfAborted();
+          const result = await handler(message.arguments, { signal: controller.signal });
+          controller.signal.throwIfAborted();
+          if (context?.session !== session) throw Error('PAGE_SESSION_CHANGED');
+          return result;
         })
         .then(
-          (result) =>
-            channel.postMessage({
-              type: 'invoked',
-              id: message.id,
-              session,
-              result,
-            }),
-          (error) =>
-            channel.postMessage({
-              type: 'invoked',
-              id: message.id,
-              session,
-              error: error.message,
-            }),
-        );
+          result => ownerChannel.postMessage({ type: 'invoked', id: message.id, session, result }),
+          error => ownerChannel.postMessage({ type: 'invoked', id: message.id, session, error: error.message }),
+        )
+        .finally(() => { if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id); });
     }
     if (message.type === 'identity-changed') {
-      for (const task of applying.values()) task.abort();
+      cancelActions();
       context = null;
       for (const item of pending.values()) {
         clearTimeout(item.timer);
@@ -270,34 +273,29 @@ export async function call(method, parameters = {}, options = {}) {
 }
 export function action(name, description, handler) {
   handlers.set(name, handler);
-  if (name === 'refresh')
-    reportElements(
-      'refresh',
-      [
-        {
-          id: 'control:refresh',
-          role: 'control',
-          label: description,
-          actions: ['invoke'],
-        },
-      ],
-      (args) => {
-        if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
-        return handler({});
-      },
-    );
-  void ready.then(() =>
-    channel.postMessage({
-      type: 'register',
-      name,
-      description,
-      session: context?.session,
-    }),
-  );
+  const release = name === 'refresh' ? reportElements(
+    'refresh', [{ id: 'control:refresh', role: 'control', label: description, actions: ['invoke'] }],
+    (args, signal) => {
+      if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
+      return handler({}, { signal });
+    },
+  ) : undefined;
+  void ready.then(() => {
+    if (handlers.get(name) === handler && context?.session)
+      channel.postMessage({ type: 'register', name, description, session: context.session });
+  });
+  return () => {
+    if (handlers.get(name) === handler) handlers.delete(name);
+    for (const task of invoking.values()) if (task.handler === handler) task.controller.abort();
+    release?.();
+  };
 }
-export function ask(text, context) {
-  return call('conversation', { text, context });
+export function ask(text, context, options) {
+  return call('conversation', { text, context }, options);
 }
 export function publish(context, options) {
   return call('context', context, options);
 }
+
+/** Insert unsent text through the current owned Core input. No model or business write. */
+export function draft(text, options) { return call('draft', { text }, options); }

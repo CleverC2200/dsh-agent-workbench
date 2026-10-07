@@ -1,3 +1,4 @@
+import { insertPageFeedbackDraft } from './page-feedback-draft.ts';
 import React, {
   useEffect,
   useLayoutEffect,
@@ -97,7 +98,7 @@ export function mountFramePresentation(
   let rememberedConversationWidth: number | undefined;
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();
-  ctx.inject(['businessAccount', 'remote.session'], (scope) => {
+  ctx.inject(['businessAccount', 'remote.session', 'sessions', 'conversation'], (scope) => {
     const owned = createExecution(scope, scope.businessAccount);
     execution = owned;
     for (const changed of backendListeners) changed();
@@ -1006,6 +1007,7 @@ function createExecution(
     close: async (connection) => {
       await request('close', { owner: connection.owner }, AbortSignal.timeout(5000));
     },
+    draft: (connection, text, signal) => insertPageFeedbackDraft(ctx, connection.sessionId, text, signal),
     prompt: async (connection, text, signal) => {
       signal.throwIfAborted();
       const result = await ctx.remote.session.prompt(

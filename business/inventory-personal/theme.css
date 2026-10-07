@@ -1,0 +1,36 @@
+/* Current ThemeSnapshot tokens feed the retained page's semantic paint names. */
+html body {
+  --ui-font: var(--dsw-font-family);
+  --ui-ink: var(--dsw-alias-label-primary);
+  --ui-secondary: var(--dsw-alias-label-secondary);
+  --ui-muted: var(--dsw-alias-label-tertiary);
+  --ui-faint: var(--dsw-alias-label-tertiary);
+  --ui-border: var(--dsw-alias-border-l3);
+  --ui-border-strong: var(--dsw-alias-border-l4);
+  --ui-divider: var(--dsw-alias-border-l3);
+  --ui-canvas: var(--dsw-alias-bg-base);
+  --ui-surface: var(--dsw-alias-bg-layer-1);
+  --ui-soft: var(--dsw-alias-bg-layer-2);
+  --ui-subtle: var(--dsw-alias-bg-layer-2);
+  --ui-accent: var(--dsw-alias-state-business-primary);
+  --ui-accent-ink: var(--dsw-alias-state-business-primary);
+  --ui-accent-hover: var(--workbench-brand-hover);
+  --ui-accent-soft: var(--workbench-brand-soft);
+  --ui-accent-line: var(--workbench-brand);
+  --ui-hover: var(--workbench-hover);
+  --ui-selected: var(--workbench-brand-soft);
+  --ui-neutral: var(--dsw-alias-label-secondary);
+  --ui-neutral-soft: var(--dsw-alias-bg-layer-2);
+  font-family: var(--ui-font);
+  font-size: var(--workbench-font-size);
+  color: var(--ui-ink);
+  background: var(--ui-canvas);
+}
+html body[data-ds-dark-theme] {
+  --ui-risk: #ff8092;
+  --ui-risk-soft: #442630;
+  --ui-warning: #ecc66d;
+  --ui-warning-soft: #3d331c;
+  --ui-success: #72d1a5;
+  --ui-success-soft: #20392e;
+}
