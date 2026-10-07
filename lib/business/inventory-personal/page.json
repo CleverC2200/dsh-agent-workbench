@@ -1,0 +1,8 @@
+{
+  "surface": "gea-html-inventory-personal",
+  "protocol": "self-report",
+  "pageIds": ["inventory-personal"],
+  "consumerCode": "inventory-personal-workbench",
+  "maxEffect": "view",
+  "visible": false
+}

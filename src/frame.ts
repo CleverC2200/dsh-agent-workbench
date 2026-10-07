@@ -49,5 +49,6 @@ export interface WorkbenchPageExecution {
     signal: AbortSignal,
   ): Promise<any>;
   close(connection: PageExecutionConnection): Promise<void>;
+  draft(connection: PageExecutionConnection, text: string, signal: AbortSignal): Promise<void>;
   prompt(connection: PageExecutionConnection, text: string, signal: AbortSignal): Promise<void>;
 }

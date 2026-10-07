@@ -34,3 +34,24 @@ for(const cause of ['abort','timeout'])test(`real business channel ${cause} canc
   for(let index=0;index<20&&!requestSignal.aborted;index++)await tick();
   assert.equal(requestSignal.aborted,true,'the real cancel envelope must reach the pending owned bridge task');
 });
+
+test('a page feedback draft uses the owned Core input interface and never submits a prompt', async t => {
+  const saved = {window:globalThis.window,document:globalThis.document};
+  const hostListeners=new Set(), pageListeners=new Set();
+  const host={parent:null,addEventListener:(name,fn)=>{if(name==='message')hostListeners.add(fn)},removeEventListener:(_name,fn)=>hostListeners.delete(fn),dispatchEvent(){}}; host.parent=host;
+  const page={parent:host,addEventListener:(name,fn)=>{if(name==='message')pageListeners.add(fn)},dispatchEvent(){}};
+  host.postMessage=data=>{for(const fn of hostListeners)fn({source:page,origin:'null',data});};
+  page.postMessage=(data,_origin,ports=[])=>{for(const fn of pageListeners)fn({source:host,origin:'https://host.example',data,ports});};
+  globalThis.window=page; globalThis.document={referrer:'https://host.example/workbench',body:{style:{setProperty(){},removeProperty(){}},toggleAttribute(){}},documentElement:{style:{}},getElementById:()=>({textContent:''})};
+  const channel=await load('business/shared/channel.js','feedback-draft'); globalThis.window=host;
+  const {connectHtmlFrame}=await load('src/html-bridge.ts','feedback-draft');
+  let prompted=0; const drafts=[];
+  const execution={call:async()=>[],prompt:async()=>{prompted++},draft:async(connection,text,signal)=>{signal.throwIfAborted();drafts.push({session:connection.sessionId,text});}};
+  const stop=connectHtmlFrame({contentWindow:page},{page:{kind:'html',pluginId:'inventory-personal'},sessionId:'owned',resourceId:'personal'},execution,()=>({active:{colorScheme:'light',tokens:{}},fontSize:14}),new AbortController().signal,()=>{});
+  t.after(async()=>{stop();await new Promise(done=>setTimeout(done,10));for(const [key,value] of Object.entries(saved))globalThis[key]=value;});
+  assert.deepEqual(await channel.call('draft',{text:'请继续核对本事项。未发送。'}),{drafted:true});
+  assert.deepEqual(drafts,[{session:'owned',text:'请继续核对本事项。未发送。'}]);
+  assert.equal(prompted,0);
+  await assert.rejects(channel.call('draft',{text:'',rpc:'submit'}),/INVALID_PAGE_DRAFT/);
+  assert.equal(drafts.length,1);
+});

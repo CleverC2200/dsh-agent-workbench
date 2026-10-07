@@ -59,7 +59,11 @@ export function connectHtmlFrame(
       const task=new AbortController();tasks.set(message.id,task);
       try{
         let result:unknown;
-        if(message.method==="conversation"){
+        if(message.method==="draft"){
+          const input=message.parameters;
+          if(!input||Object.keys(input).some(key=>key!=="text")||typeof input.text!=="string"||!input.text.trim()||input.text.length>10000)throw Error("INVALID_PAGE_DRAFT");
+          await execution.draft(connection,input.text,AbortSignal.any([signal,lifetime.signal,task.signal]));result={drafted:true};
+        }else if(message.method==="conversation"){
           const text=message.parameters?.text;
           if(typeof text!=="string"||!text.trim()||text.length>10000||JSON.stringify(message.parameters?.context??{}).length>100000)throw Error("INVALID_PAGE_QUESTION");
           await call("context",message.parameters?.context,task.signal);

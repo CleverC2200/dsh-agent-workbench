@@ -97,3 +97,16 @@ test('received MPS UI intent belongs to its Session while derived demand and gra
   assert.throws(()=>owner.saveHtmlViewState(id,undefined,intent),/HTML_VIEW_SCOPE_REQUIRED/);
   assert.throws(()=>owner.saveHtmlViewState(id,'subject/session-A',{...intent,parts:{process:{rows:[]}}}),/INVALID_HTML_VIEW_STATE/);
 });
+
+test('personal feedback fields persist in their Session and never accept returned facts or a login flag', () => {
+  const owner = new WorkbenchController({panel() {}, document() {}});
+  const page = 'inventory-personal';
+  owner.registerFrame({id:page,kind:'html',src:'/personal-mock',resourceId:'gea-html-inventory-personal'});
+  const state = {version:1, selected:'base:郑州', riskType:'货龄', page:1, size:10, feedbackNotes:{'base:郑州:A':'核对后继续草稿'}};
+  owner.saveHtmlViewState(page,'subject/session-A',state);
+  assert.deepEqual(owner.readHtmlViewState(page,'subject/session-A'),state);
+  assert.equal(owner.readHtmlViewState(page,'subject/session-B'),undefined);
+  assert.throws(()=>owner.saveHtmlViewState(page,undefined,state),/HTML_VIEW_SCOPE_REQUIRED/);
+  assert.throws(()=>owner.saveHtmlViewState(page,'subject/session-A',{...state,objects:[]}),/INVALID_HTML_VIEW_STATE/);
+  assert.throws(()=>owner.saveHtmlViewState(page,'subject/session-A',{...state,loggedIn:true}),/INVALID_HTML_VIEW_STATE/);
+});
