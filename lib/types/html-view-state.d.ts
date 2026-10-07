@@ -173,6 +173,7 @@ export type CategoryViewState = {
 export type RegionalViewState = {
     version: 1;
     date: string;
+    module?: string;
     selDay: number | null;
     selEv: string | null;
     repDim: string;

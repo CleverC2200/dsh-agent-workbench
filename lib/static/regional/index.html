@@ -2006,6 +2006,8 @@
           <div class="logo">区</div>
           <div>
             <h1>区域计划工作台 <span class="demo-tag">V9.2 事件线版 · 模拟数据</span></h1>
+            <div role="note">跟催、提醒、导出和保存均为本页模拟，无真实业务写入。</div>
+            <div id="regionalSyncStatus" role="status" aria-live="polite"></div>
             <div class="org">
               <span>华中大区</span><span class="sep">/</span><span>河南省区</span
               ><span class="sep">/</span><span>郑州区域</span> <span class="sep">|</span
@@ -2218,10 +2220,264 @@
     </div>
 
     <script>(() => {
+  // business/shared/query-error.js
+  var DATA_PERMISSION_MESSAGE = "\u5F53\u524D\u8D26\u53F7\u6682\u65E0\u6570\u636E\u6743\u9650";
+  function sqlQueryError(cause) {
+    if (cause?.name === "AbortError") return cause;
+    if (cause?.code === "GEA_SQL_DISPLAY_ERROR") return cause;
+    const code = String(cause?.code ?? "");
+    const message = String(cause?.message ?? "");
+    const denied = /(?:DATA_PERMISSION_DENIED|RETURN_PERMISSION_DENIED|NO_RETURN_COLUMN_ALLOWED|ACCESS_DENIED)/.test(
+      code + " " + message
+    );
+    const expired = /(?:SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)|会话已失效)/.test(
+      code + " " + message
+    );
+    const error = new Error(
+      denied ? DATA_PERMISSION_MESSAGE : expired ? "\u6570\u636E\u4F1A\u8BDD\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5" : "\u6570\u636E\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A5\u53E3\u9519\u8BEF\u8BE6\u60C5",
+      { cause }
+    );
+    error.code = "GEA_SQL_DISPLAY_ERROR";
+    return error;
+  }
+
+  // business/shared/channel.js
+  var context;
+  var channel;
+  var sequence = 0;
+  var pending = /* @__PURE__ */ new Map();
+  var handlers = /* @__PURE__ */ new Map();
+  var appliedThemeTokens = [];
+  var pageGroups = /* @__PURE__ */ new Map();
+  var applying = /* @__PURE__ */ new Map();
+  function reportCatalog() {
+    if (!channel || !context?.session) return;
+    channel.postMessage({
+      type: "catalog",
+      session: context.session,
+      elements: [...pageGroups.values()].flatMap((group) => group.elements)
+    });
+  }
+  function reportElements(key, elements, apply) {
+    const group = { elements, apply };
+    pageGroups.set(key, group);
+    reportCatalog();
+    return () => {
+      if (pageGroups.get(key) !== group) return;
+      pageGroups.delete(key);
+      reportCatalog();
+    };
+  }
+  var readyResolve;
+  var ready = new Promise((resolve) => {
+    readyResolve = resolve;
+  });
+  function parentOrigin() {
+    try {
+      const url = new URL(document.referrer || window.location.href);
+      if (!url.host) return void 0;
+      if (url.origin !== "null") return url.origin;
+      return url.protocol === "dsh-app:" && url.host === "app" ? "dsh-app://app" : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source === window.parent && event.data?.protocol === "gea-html-v2" && event.data.type === "request-ready") {
+      window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+      return;
+    }
+    if (event.source !== window.parent || event.origin !== parentOrigin() || typeof event.data?.context?.session !== "string" || typeof event.data?.context?.plugin !== "string" || event.data?.protocol !== "gea-html-v2" || event.data?.type !== "connect" || !event.ports[0] || channel && context?.session === event.data.context.session)
+      return;
+    if (channel) {
+      channel.close();
+      for (const task of applying.values()) task.abort();
+      for (const item of pending.values()) {
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+      }
+      pending.clear();
+    }
+    context = event.data.context;
+    channel = event.ports[0];
+    channel.onmessage = (event2) => {
+      const message = event2.data;
+      if (message.type === "context") {
+        const previousSession = context?.session;
+        if (previousSession && previousSession !== message.context?.session) {
+          for (const [id, item] of pending) {
+            clearTimeout(item.timer);
+            item.cleanup?.();
+            item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+            channel.postMessage({ type: "cancel", id, session: previousSession });
+          }
+          pending.clear();
+        }
+        for (const task of applying.values()) task.abort();
+        context = message.context;
+        reportCatalog();
+        if (context?.session)
+          channel.postMessage({
+            type: "theme:subscribe",
+            session: context.session
+          });
+        if (context?.session && previousSession !== context.session)
+          window.dispatchEvent(new Event("gea-session-changed"));
+      }
+      if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
+        if (message.version !== "1.1.1" || !["light", "dark"].includes(message.colorScheme) || !message.tokens || !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 || Object.entries(message.tokens).some(
+          ([name, value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== "string" || value.length > 500
+        )) {
+          document.getElementById("app").textContent = "\u5171\u4EAB\u6837\u5F0F\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9875\u9762";
+          return;
+        }
+        for (const name of appliedThemeTokens) document.body.style.removeProperty(name);
+        appliedThemeTokens = Object.keys(message.tokens);
+        for (const [name, value] of Object.entries(message.tokens))
+          document.body.style.setProperty(name, value);
+        document.body.style.setProperty("--workbench-font-size", `${message.fontSize}px`);
+        document.body.style.setProperty("--dsh-content-font-size", `${message.fontSize}px`);
+        document.documentElement.style.colorScheme = message.colorScheme;
+        document.body.toggleAttribute("data-ds-dark-theme", message.colorScheme === "dark");
+      }
+      if (message.type === "response") {
+        const item = pending.get(message.id);
+        if (!item) return;
+        pending.delete(message.id);
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        if (message.error) {
+          const error = item.method === "sql" ? sqlQueryError(Error(message.error)) : Error(message.error);
+          if (item.method === "sql" || item.method === "workspace")
+            window.dispatchEvent(
+              new CustomEvent("gea-query-warning", {
+                detail: { message: error.message.slice(0, 600) }
+              })
+            );
+          item.reject(error);
+        } else item.resolve(message.result);
+      }
+      if (message.type === "cancel" && message.session === context?.session) {
+        applying.get(message.toolCallId)?.abort();
+      }
+      if (message.type === "apply" && message.session === context?.session) {
+        const session = context.session;
+        const task = new AbortController();
+        applying.set(message.toolCallId, task);
+        Promise.resolve().then(async () => {
+          const args = message.args;
+          const targets = args?.targets ?? [args?.target];
+          if (!Array.isArray(targets) || !targets.length) throw Error("MISSING_TARGET");
+          for (const target of targets) {
+            task.signal.throwIfAborted();
+            if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+            const group = [...pageGroups.values()].find(
+              (group2) => group2.elements.some((element2) => element2.id === target)
+            );
+            const element = group?.elements.find((element2) => element2.id === target);
+            if (!element || !group.apply) throw Error("ELEMENT_GONE");
+            if (args.kind === "setValue" && !element.editable) throw Error("ELEMENT_READ_ONLY");
+            if (args.kind === "invoke" && !element.actions?.includes(args.action ?? "invoke"))
+              throw Error("ACTION_NOT_ALLOWED");
+            if (!["setValue", "invoke", "select", "clear"].includes(args.kind))
+              throw Error("INVALID_PAGE_ACTION");
+            await group.apply({ ...args, target }, task.signal);
+          }
+          task.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          return { applied: true };
+        }).catch((error) => ({ applied: false, error: error.message })).then((result) => {
+          applying.delete(message.toolCallId);
+          channel.postMessage({
+            type: "applied",
+            toolCallId: message.toolCallId,
+            session,
+            ...result
+          });
+          reportCatalog();
+        });
+      }
+      if (message.type === "invoke") {
+        const handler = handlers.get(message.name);
+        const session = context?.session;
+        Promise.resolve().then(() => {
+          if (!handler) throw Error("\u9875\u9762\u672A\u6CE8\u518C\u8BE5\u64CD\u4F5C");
+          return handler(message.arguments);
+        }).then(
+          (result) => channel.postMessage({
+            type: "invoked",
+            id: message.id,
+            session,
+            result
+          }),
+          (error) => channel.postMessage({
+            type: "invoked",
+            id: message.id,
+            session,
+            error: error.message
+          })
+        );
+      }
+      if (message.type === "identity-changed") {
+        for (const task of applying.values()) task.abort();
+        context = null;
+        for (const item of pending.values()) {
+          clearTimeout(item.timer);
+          item.cleanup?.();
+          item.reject(Error("\u767B\u5F55\u8EAB\u4EFD\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u52A0\u8F7D"));
+        }
+        pending.clear();
+        window.dispatchEvent(new Event("gea-identity-changed"));
+      }
+    };
+    channel.start();
+    reportCatalog();
+    channel.postMessage({ type: "theme:subscribe", session: context.session });
+    readyResolve(event.data.context);
+    window.dispatchEvent(new Event("gea-session-changed"));
+  });
+  window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+  async function call(method, parameters = {}, options = {}) {
+    options.signal?.throwIfAborted();
+    if (!channel || !context?.session) throw Error("\u9875\u9762\u5DF2\u663E\u793A\uFF0C\u8BF7\u5148\u767B\u5F55\u5E76\u8FDE\u63A5\u9875\u9762\u80FD\u529B\u3002");
+    const session = context.session;
+    const id = String(++sequence);
+    return new Promise((resolve, reject) => {
+      const cleanup = () => options.signal?.removeEventListener("abort", abort);
+      const abort = () => {
+        if (!pending.delete(id)) return;
+        clearTimeout(timer);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        reject(options.signal.reason ?? Error("\u8BF7\u6C42\u5DF2\u53D6\u6D88"));
+      };
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        const error = Error("\u4E1A\u52A1\u8BF7\u6C42\u8D85\u65F6");
+        reject(method === "sql" ? sqlQueryError(error) : error);
+      }, 12e4);
+      pending.set(id, { resolve, reject, timer, method, cleanup });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      channel.postMessage({
+        type: "request",
+        id,
+        method,
+        parameters,
+        session
+      });
+    });
+  }
+  function publish(context2, options) {
+    return call("context", context2, options);
+  }
+
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["plan-region-category", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
+    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-fc", "inventory-aqkc", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment"].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
@@ -2230,13 +2486,13 @@
       if (binding)
         window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
     };
-    const ready = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
+    const ready2 = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
     const receive = (event) => {
       const value = event.data;
       if (event.source !== window.parent || value?.protocol !== PROTOCOL || value.page !== page || value.version !== 1)
         return;
       if (value.type === "request-ready") {
-        ready();
+        ready2();
         return;
       }
       if (value.type === "released") {
@@ -2265,7 +2521,7 @@
       window.removeEventListener("message", receive);
       listeners.clear();
     }, { once: true });
-    ready();
+    ready2();
     return { get: () => state, subscribe: (listener) => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -2716,7 +2972,7 @@
       }, 2400);
     }
     var T0 = new Date(2026, 8, 18);
-    var state = { ctx: resolveContext(T0), selDay: null, selEv: null, repDim: "customer" };
+    var state = { ctx: resolveContext(T0), selDay: null, selEv: null, repDim: "customer", module: "overview" };
     var HIST = [];
     var HIST_SEED = [
       {
@@ -3744,13 +4000,106 @@
       toast("\u8282\u594F\u914D\u7F6E\u5DF2\u4FDD\u5B58 \xB7 \u65E5\u5386\u6309\u65E5\u671F\u89C4\u5219\u91CD\u65B0\u63A8\u5BFC");
     }
     var MODS = ["overview", "follow", "category", "review", "analysis"];
+    var connected = false, attached = true, publication = 0, publishing = false;
+    var snapshot, unregisterRegional = function() {
+    };
+    async function publishRegional() {
+      publishing = true;
+      try {
+        var current;
+        do {
+          current = publication;
+          var value = snapshot;
+          try {
+            await publish(value);
+            if (!attached) return;
+            if (current !== publication) continue;
+            unregisterRegional = reportElements("regional-plan", [
+              { id: "field:simulation", role: "field", label: "\u6570\u636E\u6765\u6E90", value: value.notice },
+              { id: "field:period", role: "field", label: "\u671F\u95F4", value: value.filters.date + " \xB7 " + value.period.label + " \xB7 " + value.period.phase },
+              { id: "filter:module", role: "field", label: "\u5DE5\u4F5C\u53F0\u6A21\u5757", value: value.filters.module, options: MODS, editable: true, effect: "view" },
+              ...value.controls.dimension ? [{ id: "filter:dimension", role: "field", label: "\u63D0\u62A5\u7EF4\u5EA6", value: value.filters.dimension, options: ["customer", "region", "province", "bigr"], editable: true, effect: "view" }] : [],
+              ...value.controls.date ? [{ id: "filter:date", role: "field", label: "\u6A21\u62DF\u65E5\u671F", value: value.filters.date, editable: true, effect: "view" }] : []
+            ], async function(args, signal) {
+              if (args.kind !== "setValue") throw Error("ACTION_NOT_ALLOWED");
+              var key = args.target.slice(7), input = args.value;
+              if (key === "module" && !MODS.includes(input)) throw Error("INVALID_REGIONAL_MODULE");
+              if (key === "dimension" && !["customer", "region", "province", "bigr"].includes(input)) throw Error("INVALID_REGIONAL_DIMENSION");
+              if (key === "date" && (typeof input !== "string" || !/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(input) || !Number.isFinite(Date.parse(input + "T12:00:00Z")) || (/* @__PURE__ */ new Date(input + "T12:00:00Z")).toISOString().slice(0, 10) !== input)) throw Error("INVALID_SIMULATION_DATE");
+              await new Promise(function(resolve) {
+                requestAnimationFrame(resolve);
+              });
+              signal.throwIfAborted();
+              if (key === "dimension" && state.module !== "follow" || key === "date" && !$("simBox").classList.contains("open")) throw Error("ELEMENT_GONE");
+              if (key === "module") switchMod(input);
+              else if (key === "dimension") {
+                state.repDim = input;
+                [].forEach.call($("repDim").querySelectorAll("button"), function(b) {
+                  b.classList.toggle("on", b.getAttribute("data-dim") === input);
+                });
+              } else if (key === "date") {
+                $("simDate").value = input;
+                state.ctx = resolveContext(/* @__PURE__ */ new Date(input + "T12:00:00"));
+                state.selDay = null;
+                state.selEv = null;
+              } else throw Error("ELEMENT_GONE");
+              renderAll();
+              saveView();
+            });
+            $("regionalSyncStatus").textContent = "";
+          } catch (error) {
+            if (attached && current === publication)
+              $("regionalSyncStatus").textContent = "\u539F\u578B\u4E0A\u4E0B\u6587\u540C\u6B65\u5931\u8D25\uFF1A" + error.message.slice(0, 300) + "\u3002\u8BF7\u91CD\u65B0\u8FDB\u5165\uFF0C\u6216\u8C03\u6574\u7B5B\u9009\u540E\u91CD\u8BD5\u3002";
+          }
+        } while (current !== publication);
+      } finally {
+        publishing = false;
+      }
+    }
+    function reportRegional() {
+      snapshot = {
+        source: "regional-plan-prototype",
+        simulation: true,
+        notice: "\u6A21\u62DF\u6570\u636E\uFF1B\u8DDF\u50AC\u548C\u4FDD\u5B58\u5747\u4E3A\u672C\u9875\u6F14\u793A\uFF0C\u65E0\u771F\u5B9E\u4E1A\u52A1\u5199\u5165",
+        filters: { module: state.module, dimension: state.repDim, date: $("simDate").value },
+        controls: { dimension: state.module === "follow", date: $("simBox").classList.contains("open") },
+        period: { order: state.ctx.order, label: WINDOW_CFG[state.ctx.order].label, phase: state.ctx.phase },
+        selectedDay: state.selDay,
+        selectedEvent: state.selEv,
+        rhythm: clone(RHYTHM_BACKUP || RHYTHM),
+        customers,
+        categoryRows: catRows,
+        history: HIST
+      };
+      if (!attached || !connected) return;
+      unregisterRegional();
+      publication++;
+      if (!publishing) void publishRegional();
+    }
+    ready.then(function() {
+      connected = true;
+      reportRegional();
+    });
+    window.addEventListener("gea-identity-changed", function() {
+      attached = false;
+      publication++;
+      unregisterRegional();
+      $("regionalSyncStatus").textContent = "\u9875\u9762\u8FDE\u63A5\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u8FDB\u5165\u3002";
+    });
+    window.addEventListener("pagehide", function() {
+      attached = false;
+      publication++;
+      unregisterRegional();
+    }, { once: true });
     function switchMod(mod) {
+      state.module = mod;
       document.querySelectorAll(".modtab").forEach(function(b) {
         b.classList.toggle("on", b.dataset.mod === mod);
       });
       MODS.forEach(function(m) {
         $("mod-" + m).classList.toggle("hidden", m !== mod);
       });
+      reportRegional();
     }
     function renderAll() {
       var ctx = state.ctx;
@@ -3776,10 +4125,12 @@
       renderAlert();
       renderEntrance();
       renderUnsub();
+      reportRegional();
     }
     function saveView() {
       regionalView.update({
         date: $("simDate").value,
+        module: state.module,
         selDay: state.selDay,
         selEv: state.selEv,
         repDim: state.repDim,
@@ -3787,21 +4138,26 @@
         rhythmEditing,
         rhythmDraft: rhythmEditing ? clone(RHYTHM) : null
       });
+      reportRegional();
     }
     regionalView.subscribe(function(value) {
-      if (!value.date || !Array.isArray(value.rhythm)) return;
-      var d = /* @__PURE__ */ new Date(value.date + "T12:00:00");
+      var date = value.date || "2026-09-18";
+      var d = /* @__PURE__ */ new Date(date + "T12:00:00");
       if (!Number.isFinite(d.getTime())) return;
       if (rhythmEditing) closeEditor();
       RHYTHM_BACKUP = null;
-      RHYTHM = clone(value.rhythm);
+      RHYTHM = clone(value.rhythm || RHYTHM_DEFAULT);
       state.ctx = resolveContext(d);
-      state.selDay = value.selDay;
+      state.selDay = value.selDay ?? null;
       state.selEv = RHYTHM.some(function(row) {
         return row.id === value.selEv;
       }) ? value.selEv : null;
       state.repDim = ["customer", "region", "province", "bigr"].includes(value.repDim) ? value.repDim : "customer";
-      $("simDate").value = value.date;
+      $("simDate").value = date;
+      [].forEach.call($("repDim").querySelectorAll("button"), function(b) {
+        b.classList.toggle("on", b.getAttribute("data-dim") === state.repDim);
+      });
+      switchMod(MODS.includes(value.module) ? value.module : "overview");
       renderAll();
       if (value.rhythmEditing && Array.isArray(value.rhythmDraft)) {
         RHYTHM_BACKUP = clone(RHYTHM);
@@ -3928,11 +4284,15 @@
     document.querySelectorAll(".modtab").forEach(function(b) {
       b.addEventListener("click", function() {
         switchMod(b.dataset.mod);
+        saveView();
       });
     });
     $("modEntrance").addEventListener("click", function(e) {
       var c = e.target.closest("[data-go]");
-      if (c) switchMod(c.getAttribute("data-go"));
+      if (c) {
+        switchMod(c.getAttribute("data-go"));
+        saveView();
+      }
     });
     $("repDim").addEventListener("click", function(e) {
       var b = e.target.closest("[data-dim]");
@@ -3951,13 +4311,13 @@
     });
     document.addEventListener("click", function(e) {
       var b = e.target.closest("[data-ev]");
-      if (b) {
+      if (b && !b.closest("#tlTrack")) {
         var who = b.getAttribute("data-who") || "";
         var kind = b.getAttribute("data-ev");
         b.disabled = true;
         b.textContent = kind === "chase" ? "\u5DF2\u50AC\u529E" : kind === "remind" ? "\u5DF2\u63D0\u9192" : "\u5DF2\u6253\u5F00";
         toast(
-          kind === "chase" ? "\u5DF2\u5411 " + who + " \u53D1\u9001\u63D0\u62A5\u50AC\u529E" : kind === "remind" ? "\u5DF2\u63D0\u9192\u300E" + (b.getAttribute("data-node") || "\u8282\u70B9\u8D1F\u8D23\u4EBA") + "\u300F\u5904\u7406 " + who : "\u6253\u5F00\u660E\u7EC6\uFF1A" + who
+          kind === "chase" ? "\u6A21\u62DF\u50AC\u529E\uFF1A" + who + "\uFF08\u672A\u53D1\u9001\u771F\u5B9E\u6D88\u606F\uFF09" : kind === "remind" ? "\u6A21\u62DF\u63D0\u9192\u300E" + (b.getAttribute("data-node") || "\u8282\u70B9\u8D1F\u8D23\u4EBA") + "\u300F\u5904\u7406 " + who + "\uFF08\u672A\u53D1\u9001\u771F\u5B9E\u6D88\u606F\uFF09" : "\u6253\u5F00\u660E\u7EC6\uFF1A" + who
         );
         return;
       }
@@ -3966,7 +4326,7 @@
       var act = a.getAttribute("data-act");
       if (act === "chase") {
         a.disabled = true;
-        toast("\u5DF2\u5411 " + unsubCount() + " \u5BB6\u672A\u63D0\u62A5\u5BA2\u6237\u53D1\u9001\u50AC\u529E");
+        toast("\u6A21\u62DF\u50AC\u529E\uFF1A" + unsubCount() + " \u5BB6\u672A\u63D0\u62A5\u5BA2\u6237\uFF08\u672A\u53D1\u9001\u771F\u5B9E\u6D88\u606F\uFF09");
       } else if (act === "export") {
         toast("\u5BFC\u51FA\u672C\u671F\u95F4\u63D0\u62A5\u4E0E\u5BA1\u6279\u8DDF\u8FDB\u6E05\u5355\uFF08\u539F\u578B\u6F14\u793A\uFF09");
       } else if (act === "advise") {
@@ -3980,6 +4340,7 @@
     $("simBtn").addEventListener("click", function() {
       $("simBox").classList.toggle("open");
       if ($("simBox").classList.contains("open")) $("simDate").focus();
+      reportRegional();
     });
     $("simDate").addEventListener("change", function() {
       var v = $("simDate").value;

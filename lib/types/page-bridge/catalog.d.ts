@@ -64,10 +64,10 @@ export declare const PAGE_ACTION_VERBS: readonly ["invoke", "setValue", "select"
 export type PageActionVerb = (typeof PAGE_ACTION_VERBS)[number];
 export type PageElementRole = "row" | "field" | "control" | "collection";
 /**
- * 元素的影响等级：draft 只改页面草稿（默认）；submit / approve 会提交或审批，
+ * 元素的影响等级：view 只改UI视图；draft 修改页面草稿（默认）；submit / approve 会提交或审批，
  * 必须由用户明确要求、且页面当前可点时才允许。
  */
-export declare const PAGE_ELEMENT_EFFECTS: readonly ["draft", "submit", "approve"];
+export declare const PAGE_ELEMENT_EFFECTS: readonly ["view", "draft", "submit", "approve"];
 export type PageElementEffect = (typeof PAGE_ELEMENT_EFFECTS)[number];
 /**
  * 页面上的一个元素。页面只声明"渲染出来、人能看见/能操作"的东西；

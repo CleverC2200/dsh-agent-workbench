@@ -46,3 +46,10 @@ test('the received category artifact exposes one original page and its original 
  const response=await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=plan-region-category'));
  assert.equal(response.status,200);assert.match(await response.text(),/category:scope/);
 });
+
+test('the received MPS keeps one original menu entry with its original selectable resource identity', async t => {
+  const pages = new HtmlPages(context(t),'',async()=>'<picker-fixture>');
+  await pages.registerHtml([resolve('static/mps')]);
+  assert.deepEqual(pages.list().map(page=>({id:page.id,resourceId:page.resourceId})),[{id:'plan-category-production',resourceId:'gea-html-inventory-mps'}]);
+  assert.equal((await pages.fetch(new Request('https://localhost/api/agent-workbench/html?id=plan-category-production'))).status,200);
+});

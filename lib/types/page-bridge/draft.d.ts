@@ -7,7 +7,7 @@
  *
  * 这一层只记账和把关，不认识任何具体业务，也不碰业务数据。
  */
-export type DraftEffect = "draft" | "submit" | "approve";
+export type DraftEffect = "view" | "draft" | "submit" | "approve";
 export type DraftRequest = {
     sessionId: string;
     /** 页面标识（能力契约里的 surface）。 */

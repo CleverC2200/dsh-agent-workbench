@@ -1,7 +1,7 @@
 /** Current page's UI projection. Workbench owns storage; the author owns every named field. */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
-    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
+    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-fc', 'inventory-aqkc', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment'].includes(page);
     /** @type {Record<string,unknown>} */
     let state = { version: 1 };
     let binding, dirty = false;

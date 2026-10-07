@@ -5,10 +5,10 @@
     "sha256": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66"
   },
   "inputs": {
-    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/spec45-category/dsh-agent-workbench/business/shared/view-state.js": "81a284becffd75e01874d327326762da3c77e2b687d08f92f84b1ba578d78bad",
-    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/spec45-category/dsh-agent-workbench/prototypes/inventory-customer/application.js": "0706cdadd2c95532da1aa7a60d8de60fa43fe82688f3e3c253cbbe7ed2d257c8",
-    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/spec45-category/dsh-agent-workbench/business/shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
-    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/spec45-category/dsh-agent-workbench/business/shared/channel.js": "c1e1d1caafcb44060d594e990e7cdfd93aab9f13333c0d9c11e247365b0fa023",
-    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/spec45-category/dsh-agent-workbench/prototypes/inventory-customer/entry.js": "fb59852f02127f0fbd838c930cf35fc8223aa58960dd160dc335458587666f9d"
+    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/integration/dsh-agent-workbench/business/shared/view-state.js": "57a2c02b32df004eb5336b72ca8de4272af19dccb71287f1c7b40f32b8f17780",
+    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/integration/dsh-agent-workbench/prototypes/inventory-customer/application.js": "0706cdadd2c95532da1aa7a60d8de60fa43fe82688f3e3c253cbbe7ed2d257c8",
+    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/integration/dsh-agent-workbench/business/shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
+    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/integration/dsh-agent-workbench/business/shared/channel.js": "c1e1d1caafcb44060d594e990e7cdfd93aab9f13333c0d9c11e247365b0fa023",
+    "/Users/synear/Documents/ChatGPT/插件拆分/.parallel/clean-core-rewrite-42/integration/dsh-agent-workbench/prototypes/inventory-customer/entry.js": "fb59852f02127f0fbd838c930cf35fc8223aa58960dd160dc335458587666f9d"
   }
 }

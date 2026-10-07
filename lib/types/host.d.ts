@@ -5,6 +5,7 @@ export declare const inject: string[];
 /** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
 export interface Config {
     cwd: string;
+    /** All installed HTML package roots except the built-in table sample. Omit to use bundled roots. */
     htmlRoots?: readonly string[];
 }
 /** Publish configuration through the normal authenticated DSH connection. */
