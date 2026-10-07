@@ -19,6 +19,9 @@ const child = (await build({
     import{BranchInventoryAgent}from'./business/inventory-fc/source/inventory-light-plugins/src/pages/fc.tsx';
     import{buildWarehouseSnapshot}from'./business/inventory-fc/source/fc/src/lib/domain.ts';
     const snapshot=buildWarehouseSnapshot('east-china');
+    snapshot.businessPeriods={operationsMonth:'2026-11',productionStart:'2026-11-01',productionEnd:'2026-11-07'};
+    snapshot.metricScopes={fulfillment:'2026-11 本月履约，与近60天待分配独立',pendingOrders:'近60天待分配'};
+    snapshot.metrics.orderQty=null;
     // Offline UI fixture only, shaped for the existing snapshot validator; no GEA call.
     snapshot.dataSource='GEA SQL data_service 分仓库存标准表';snapshot.version='pg-fixture-only';
     window.fixtureSessionReads=0;
@@ -49,11 +52,16 @@ test('FC waits for its actual Host Session and initializes once when the page po
   assert.equal(await page.frames()[1].evaluate(() => window.fixtureSessionReads), 0, 'a visible disconnected page must not read a business session');
   await page.evaluate(() => {
     const frame=document.querySelector('iframe');const ports=new MessageChannel();
-    ports.port1.onmessage=event=>{if(event.data.type==='request')ports.port1.postMessage({type:'response',id:event.data.id,result:{synced:true}})};ports.port1.start();
+    window.fixturePublished=[];
+    ports.port1.onmessage=event=>{if(event.data.type==='request'){if(event.data.method==='context')window.fixturePublished.push(event.data.parameters);ports.port1.postMessage({type:'response',id:event.data.id,result:{synced:true}})}};ports.port1.start();
     frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{plugin:'inventory-fc',session:'session-33333333-3333-4333-8333-333333333333'}},'*',[ports.port2]);
   });
   await expect(page.frameLocator('iframe').getByPlaceholder('搜索 SKU / 产品名称')).toBeEnabled();
   assert.equal(await page.frames()[1].evaluate(() => window.fixtureSessionReads), 1);
+  await expect.poll(() => page.evaluate(() => window.fixturePublished.find(value => value.parts?.data?.metricScopes)?.parts.data.metricScopes.fulfillment)).toBe('2026-11 本月履约，与近60天待分配独立');
+  const data=await page.evaluate(() => window.fixturePublished.find(value => value.parts?.data?.metricScopes).parts.data);
+  assert.equal(data.businessPeriods.operationsMonth,'2026-11');
+  assert.equal(data.summary.orderQty,null);
 });
 
 test('the actual FC component retains its search across remounts in one Host Session', async t => {

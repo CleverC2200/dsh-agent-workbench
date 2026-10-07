@@ -56,7 +56,7 @@ export function pageContext() {
             metricLabels: {
               bigDateQty: "超龄库存量（大日期库存），不是待发订单量",
               stagnantQty: "滞库风险量，不是待发订单量",
-              orderQty: "待分配订单量；缺失时保持未知，不能用超龄或滞库库存量替代",
+              orderQty: "本月履约口径订单量，月份和来源以 metricScopes.fulfillment 为准；不是近60天待分配订单量。缺失时保持未知，不能用超龄或滞库库存量替代",
               inventoryQty: "全仓库存量；页面向上取整为件，正文原值与显示值分开引用",
             },
             plan: "BI表示同步来源，其来源细分仍以sourceTrace为准，可能是历史估算；人工计划和周期仅本页预览，查看 localPreview 标识，不是 GEA 正式配置",

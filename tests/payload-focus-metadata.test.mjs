@@ -22,3 +22,10 @@ test('metadata arrays still obey the item limit and report removed entries as it
   assert.deepEqual(JSON.parse(result.json).dimensions, ['north', 'south']);
   assert.equal(result.omitted, 1);
 });
+
+test('omissions inside retained records count once alongside removed outer records', () => {
+  const result = compressForModel({ groups: [{ organization: 'Alpha', lines: [{ name: 'Alpha detail' }, { name: 'Beta detail' }] }, { organization: 'Gamma', lines: [{ name: 'Gamma detail' }] }] }, { focus: 'Alpha' });
+  const data = JSON.parse(result.json);
+  assert.deepEqual(data.groups, [{ organization: 'Alpha', lines: [{ name: 'Alpha detail' }] }]);
+  assert.equal(result.omitted, 2, 'one retained child and one whole outer record were removed');
+});

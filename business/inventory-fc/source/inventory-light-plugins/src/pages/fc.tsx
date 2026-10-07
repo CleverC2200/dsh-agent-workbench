@@ -761,6 +761,8 @@ export function BranchInventoryAgent() {
       parameters,
       loadedAt: new Date().toISOString(),
       summary: snapshot.metrics,
+      metricScopes: snapshot.metricScopes,
+      businessPeriods: snapshot.businessPeriods,
       computedOverview: snapshot.page?.overview,
       sourceTrace: snapshot.ruleTrace,
       localPreview: (snapshot as any).localPreview,

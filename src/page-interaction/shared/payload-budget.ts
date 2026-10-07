@@ -62,10 +62,11 @@ function narrow(
     const scalars = value.every((item) => item === null || typeof item !== "object");
     const matched = scalars ? value : value.filter((item) => includesFocus(item, tokens));
     const kept = matched.slice(0, options.maxItems);
+    const children = kept.map((item) => narrow(item, tokens, options));
     // 省略数按"原数组里没进上下文"的条数算：既包括没命中 focus 的，也包括超出上限的。
-    const omitted = value.length - kept.length;
+    const omitted = value.length - kept.length + children.reduce((total, child) => total + child.omitted, 0);
     return {
-      value: kept.map((item) => narrow(item, tokens, options).value),
+      value: children.map((child) => child.value),
       omitted,
     };
   }
