@@ -44,7 +44,7 @@ export async function buildInventory(id, sourceCommit) {
             (a) => ({ path: resolver.resolve(a.path) }),
           );
           api.onResolve({ filter: /^@business-page$/ }, () => ({
-            path: resolve(ui, `src/pages/${id}.tsx`),
+            path: resolve(ui, id === "dealer" ? "src/native/dealer.tsx" : `src/pages/${id}.tsx`),
           }));
           api.onResolve({ filter: /^@business-style$/ }, () => ({
             path: resolve(ui, "src/dsh-ui/base.css"),
@@ -55,7 +55,7 @@ export async function buildInventory(id, sourceCommit) {
           api.onResolve(
             {
               filter:
-                /(^|\/)(database|business-database|gea-sql|planning-store|workbench-sql-client|workbench-sql-executor|gea-sql-client)(\.ts)?$/,
+                /(^|\/)(database|business-database|gea-sql|planning-store|workbench-sql-client|workbench-sql-executor|gea-sql-client|dealer-direct-sql-client)(\.ts)?$/,
             },
             () => ({ path: resolve(ui, "src/data.ts") }),
           );
@@ -76,11 +76,11 @@ export async function buildInventory(id, sourceCommit) {
             api.resolve(
               resolve(
                 source,
-                id === "fc" ? "fc/src" : id === "qll" ? "qll/src" : "aqkc/web/src",
+                id === "fc" ? "fc/src" : id === "qll" ? "qll/src" : `${id}/web/src`,
                 a.path.slice(2),
               ),
               {
-                kind: a.kind,
+                kind: a.kind, resolveDir: source,
               },
             ),
           );

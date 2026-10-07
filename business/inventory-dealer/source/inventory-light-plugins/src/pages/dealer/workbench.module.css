@@ -1,0 +1,655 @@
+/* workbench-ui-style: page structure stays with the dealer business workflow. */
+.shell {
+  min-height: 100%;
+  min-width: 0;
+  padding: 0 16px 20px;
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+  font-family: var(--ui-font);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.navigation {
+  display: flex;
+  gap: 0;
+  margin: 0 -16px;
+  padding: 0 16px;
+  height: 46px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.navigation::-webkit-scrollbar {
+  display: none;
+}
+.navigation button {
+  flex: none;
+  min-width: 90px;
+  height: 46px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.navigation button:hover {
+  color: var(--ui-accent);
+  background: var(--ui-hover);
+}
+.navigation button[aria-current="true"] {
+  color: var(--ui-accent);
+  border-bottom-color: var(--ui-accent);
+  background: var(--ui-surface);
+  font-weight: 800;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-height: 72px;
+  margin: 0 -16px 16px;
+  padding: 12px 16px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+}
+.header h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.header small,
+.coverage,
+.product small {
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ui-muted);
+}
+.customerPicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.metric,
+.healthCard {
+  min-width: 0;
+  text-align: left;
+  color: var(--ui-ink);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: var(--ui-shadow);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 12px;
+  gap: 0;
+}
+.metricTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 24px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--ui-muted);
+}
+.metric > strong {
+  display: block;
+  margin: 14px 0 11px;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.metricStatus {
+  flex: none;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 8px;
+  line-height: 1.25;
+  font-weight: 700;
+}
+.metricCurrent {
+  color: var(--ui-success);
+  background: var(--ui-success-soft);
+}
+.metricMissing {
+  color: var(--ui-neutral);
+  background: var(--ui-neutral-soft);
+}
+.metricUnit {
+  margin-left: 3px;
+  color: var(--ui-ink);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.metricDetails {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+  min-height: 42px;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--ui-border);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.metricDetails > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.metricDetails dt {
+  color: var(--ui-muted);
+  font-weight: 400;
+  flex: none;
+}
+.metricDetails dd {
+  margin: 0;
+  text-align: right;
+  color: var(--ui-secondary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric:hover,
+.healthCard:hover {
+  background: var(--ui-hover);
+  border-color: var(--ui-accent-line);
+  box-shadow: var(--ui-shadow-hover);
+}
+.metric[aria-expanded="true"] {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+}
+.health {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.healthCard {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 12px;
+}
+.healthCard h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--ui-divider);
+  color: var(--ui-ink);
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+.healthCard h3 span {
+  flex: none;
+  color: var(--ui-accent);
+  font-size: 10px;
+  font-weight: 400;
+}
+.healthCard dl {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.healthCard dl div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.healthCard dt {
+  color: var(--ui-muted);
+}
+.healthCard dd {
+  margin: 0;
+  color: var(--ui-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.coverage {
+  margin: 12px 0;
+}
+.coverage p {
+  color: var(--ui-secondary);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.listPanel {
+  min-width: 0;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: var(--ui-shadow);
+}
+.listPanel > [role="tablist"] {
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 10px 10px 0 0;
+  background: var(--ui-surface);
+}
+.listPanel > [role="tablist"] button {
+  flex: none;
+  min-width: 90px;
+  height: 46px;
+  padding: 0 14px;
+  border-bottom: 2px solid transparent;
+  color: var(--ui-secondary);
+  font-weight: 600;
+}
+.listPanel > [role="tablist"] button:hover {
+  color: var(--ui-accent);
+  background: var(--ui-hover);
+}
+.listPanel > [role="tablist"] button[aria-selected="true"] {
+  color: var(--ui-accent);
+  border-bottom-color: var(--ui-accent);
+  font-weight: 800;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+}
+.toolbar + .toolbar {
+  padding-top: 0;
+}
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.toolbar small {
+  color: var(--ui-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.shell select,
+.shell input:not([type="checkbox"]):not([type="radio"]) {
+  min-height: 36px;
+  border-radius: 8px;
+  border-color: var(--ui-border-strong);
+  font-size: 11px;
+}
+.shell select:hover,
+.shell input:not([type="checkbox"]):not([type="radio"]):hover {
+  border-color: var(--ui-accent-line);
+}
+.shell :global(.dsh-table-body) {
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+.listPanel :global(.dsh-table-body) {
+  border: 0;
+  border-top: 1px solid var(--ui-border);
+  border-radius: 0 0 10px 10px;
+}
+.shell table {
+  width: 100%;
+}
+.shell th {
+  height: 38px;
+  padding: 8px 14px;
+  background: var(--ui-soft);
+  color: #747b86;
+  font-size: 9px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+.shell td {
+  height: 44px;
+  padding: 5px 14px;
+  color: var(--ui-secondary);
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 400;
+  border-bottom: 1px solid var(--ui-divider);
+}
+.shell tbody tr {
+  background: var(--ui-surface);
+}
+.shell tbody tr:hover {
+  background: var(--ui-hover);
+}
+.shell td > button {
+  height: 28px;
+  min-height: 28px;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.listPanel nav {
+  padding: 12px 16px;
+}
+.product {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+  max-width: 240px;
+  white-space: normal;
+  line-height: 1.4;
+}
+.product strong {
+  color: var(--ui-ink);
+  font-weight: 600;
+}
+.orderHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+}
+.orderHeader h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+.orderMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+}
+.orderMeta label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  min-width: 150px;
+  max-width: 100%;
+}
+.orderFooter {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--ui-border);
+}
+@media (max-width: 1200px) {
+  .metrics {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+  .customerPicker {
+    width: 100%;
+  }
+}
+
+/* Keep the three health dimensions side by side in the client split pane. */
+.health {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow-x: auto;
+}
+.healthCard {
+  min-width: 0;
+}
+.healthCard h3 {
+  flex-wrap: wrap;
+}
+.healthCard dl div {
+  flex-wrap: wrap;
+}
+@media (max-width: 520px) {
+  .health {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+}
+
+.stockSectionHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+}
+.stockSectionHead h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.stockFilters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+.stockFilters input {
+  width: 180px;
+  max-width: 100%;
+}
+@media (max-width: 640px) {
+  .stockFilters {
+    margin-left: 0;
+  }
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 -16px 12px;
+  padding: 0 16px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+}
+.topbar .navigation {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.customerMenu {
+  position: relative;
+  width: 260px;
+  max-width: 100%;
+}
+.customerMenu summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  font-size: 11px;
+}
+.customerMenu summary:hover,
+.customerMenu[open] summary {
+  color: var(--ui-accent);
+  border-color: var(--ui-accent-line);
+  background: var(--ui-hover);
+}
+.customerMenu summary:focus-visible,
+.navigation button:focus-visible,
+.listPanel > [role="tablist"] button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.customerMenu summary::-webkit-details-marker {
+  display: none;
+}
+.customerOptions {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 40px);
+  max-height: 320px;
+  overflow: auto;
+  z-index: 10;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-hover);
+}
+.customerOptions button {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  border: 0;
+  background: var(--ui-surface);
+  padding: 6px 8px;
+}
+.customerOptions button:hover,
+.customerOptions button[aria-pressed="true"] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+}
+.customerPicker > small {
+  font-size: 10px;
+  color: var(--ui-muted);
+}
+.orderNavigation,
+.orderPanels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.orderNavigation {
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+.orderNavigation button,
+.orderPanels button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--ui-secondary);
+  font-size: 11px;
+}
+.orderNavigation button[aria-current="true"],
+.orderPanels button[aria-current="true"] {
+  color: var(--ui-accent);
+  border-bottom-color: var(--ui-accent);
+}
+.orderNavigation button:hover,
+.orderPanels button:hover {
+  background: var(--ui-hover);
+  color: var(--ui-accent);
+}
+.orderHeader {
+  margin: 0;
+  padding: 8px 12px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+}
+.orderMeta {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(
+      200px,
+      2fr
+    );
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  border-radius: 0;
+  gap: 12px;
+  padding: 12px;
+}
+.orderMeta label {
+  min-width: 0;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.orderMeta select {
+  min-width: 0;
+  flex: 1;
+  width: 100%;
+}
+.orderBody {
+  padding: 12px;
+  background: var(--ui-surface);
+}
+@media (max-width: 900px) {
+  .orderMeta {
+    grid-template-columns: 1fr 1fr;
+  }
+  .orderMeta label:last-child {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 520px) {
+  .orderMeta {
+    grid-template-columns: 1fr;
+  }
+  .topbar .customerPicker {
+    padding-bottom: 8px;
+  }
+}
