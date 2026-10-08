@@ -6,6 +6,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import React from "react";
 import { createRoot } from "react-dom/client";
+import {Simulate} from "react-dom/test-utils";
 import { JSDOM } from "jsdom";
 import {createCompanyWire} from "./fixtures/full-chain-company-wire.mjs";
 
@@ -92,7 +93,12 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   const file = resolve(".runtime/full-chain-trends-restore.mjs");
   await writeFile(file, built.outputFiles[0].text);
   globalThis.restoreCatalog = new Map();
-  globalThis.companyWire = createCompanyWire();
+  const sourceWire = createCompanyWire();
+  const sourceDates = [];
+  globalThis.companyWire = (...args) => {
+    if (args[0] === "sql") sourceDates.push(args[1].parameters.gea_p1);
+    return sourceWire(...args);
+  };
   const api = await import(pathToFileURL(file));
   const owner = new api.WorkbenchController({ panel() {}, document() {} });
   owner.registerFrame({
@@ -161,6 +167,17 @@ test("actual distribution page restores scoped filters and re-queries trends aft
       intent.structureFilters.org,
     );
     assert.equal(api.pageContext().parts.trendView.state, "idle");
+    const dateInput = document.querySelector('[aria-label="读取时点"]');
+    sourceDates.length = 0;
+    await React.act(async () => {
+      Simulate.change(dateInput, {target: {value: "2026-10-03"}});
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    assert.ok(sourceDates.length > 0 && sourceDates.every(value => value === "2026-10-03"), JSON.stringify(sourceDates));
+    await React.act(async () => {
+      Simulate.change(dateInput, {target: {value: "2026-10-02"}});
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
     await click();
     const first = api.pageContext().parts.trendView;
     assert.equal(first.state, "ready");

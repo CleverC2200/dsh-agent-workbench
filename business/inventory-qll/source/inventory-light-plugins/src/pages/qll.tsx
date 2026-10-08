@@ -558,7 +558,7 @@ export function FullChainWorkbench() {
         if (!requestSignal.aborted) setLoading(false);
       }
     },
-    [month, scope, skuFilter],
+    [month, scope, skuFilter, asOf],
   );
   const changeScope = (next: WorkspaceScope) => {
     if (next === scope) return;
