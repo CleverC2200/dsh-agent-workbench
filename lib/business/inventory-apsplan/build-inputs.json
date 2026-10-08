@@ -4,7 +4,7 @@
   "inputs": {
     "source/public/images/sop-digital-human-avatar-cartoon.png": "a88838b6f4a130f44f4d38ff6379c2dd3f9debaa70d0625cfe240afde9407ae3",
     "source/reference/provided-board.css": "743fbaebcffd31a45c14732fe267271acccee26a79cde3285f3f2a1453b74a50",
-    "source/app/data/plugin-host.css": "a1765f68ad48678ba2bc5026b58c5c3d1019935d599e73c599d8a81d6547c32b",
+    "source/app/data/plugin-host.css": "285ae1e8c465275cc0ae1d445e7bc49a8ee56e280bfcc045131db58ffae0c13b",
     "../../theme/tokens.css": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66",
     "theme.css": "8c287ae8acb15e0bff71098b322de6deb87f902bec20fe5801ca736b8dfe28c2",
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
