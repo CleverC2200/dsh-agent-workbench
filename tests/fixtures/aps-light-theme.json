@@ -199,6 +199,220 @@
           "lineHeight": "18px",
           "fontWeight": "700"
         }
+      },
+      "lightDetails": {
+        ".risk-dimension-filters button.selected": {
+          "background": "rgb(255, 240, 242)",
+          "color": "rgb(223, 23, 50)",
+          "width": 40,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        },
+        ".risk-dimension-filters button:nth-child(2)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 40,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        },
+        ".risk-dimension-filters button:nth-child(3)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 60,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        },
+        ".summary-strip .summary-copy strong": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(32, 35, 42)",
+          "width": 130,
+          "height": 18,
+          "padding": "0px",
+          "fontSize": "13px",
+          "lineHeight": "22.1px",
+          "fontWeight": "700"
+        },
+        ".summary-strip .summary-copy": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(32, 35, 42)",
+          "width": 453,
+          "height": 66.28125,
+          "padding": "0px",
+          "fontSize": "13px",
+          "lineHeight": "22.1px",
+          "fontWeight": "400"
+        },
+        ".summary-strip .score strong": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(223, 23, 50)",
+          "width": 12.3125,
+          "height": 45,
+          "padding": "0px",
+          "fontSize": "30px",
+          "lineHeight": "45px",
+          "fontWeight": "700"
+        },
+        ".summary-strip .score p": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(114, 119, 131)",
+          "width": 84,
+          "height": 18,
+          "padding": "0px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "400"
+        },
+        "#overview-detail-list .overview-list-head span": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(52, 58, 68)",
+          "width": 142.640625,
+          "height": 13.5,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "800"
+        },
+        "#overview-detail-list .overview-list-row:not(.overview-list-head)>strong": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 142.640625,
+          "height": 15,
+          "padding": "0px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        },
+        ".category-period-heading h3": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(40, 46, 55)",
+          "width": 129,
+          "height": 24,
+          "padding": "0px",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".category-period-heading p": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(138, 145, 155)",
+          "width": 251.234375,
+          "height": 13.5,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "400"
+        },
+        ".category-drill-head>strong": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(89, 97, 109)",
+          "width": 220,
+          "height": 31,
+          "padding": "8px 7px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "800"
+        },
+        ".category-drill-head>span": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(89, 97, 109)",
+          "width": 70,
+          "height": 31,
+          "padding": "8px 7px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "800"
+        },
+        ".category-drill-head>span>small": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(146, 153, 163)",
+          "width": 104,
+          "height": 10.5,
+          "padding": "0px",
+          "fontSize": "7px",
+          "lineHeight": "10.5px",
+          "fontWeight": "600"
+        },
+        ".category-card-metric>span": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(113, 120, 131)",
+          "width": 80,
+          "height": 26,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "400"
+        }
+      },
+      "lightCross": {
+        ".production-dimension-tabs button.selected": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(223, 23, 50)",
+          "width": 176,
+          "height": 42,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        "#cross-analysis .cross-tabs button:not(.selected)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(85, 93, 104)",
+          "width": 132,
+          "height": 31,
+          "padding": "0px 12px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "600"
+        },
+        "#cross-analysis .cross-heading h2": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 415.53125,
+          "height": 24.296875,
+          "padding": "0px",
+          "fontSize": "18px",
+          "lineHeight": "24.3px",
+          "fontWeight": "400"
+        },
+        "#cross-analysis .matrix-header>span": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(52, 58, 68)",
+          "width": 64,
+          "height": 28,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        "#cross-analysis button.matrix-unavailable": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 67.84375,
+          "height": 52,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "400"
+        },
+        ".risk-dimension-filters button.selected": {
+          "background": "rgb(255, 240, 242)",
+          "color": "rgb(223, 23, 50)",
+          "width": 60,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        }
       }
     },
     "850": {
@@ -397,7 +611,223 @@
           "lineHeight": "18px",
           "fontWeight": "700"
         }
+      },
+      "lightDetails": {
+        ".risk-dimension-filters button.selected": {
+          "background": "rgb(255, 240, 242)",
+          "color": "rgb(223, 23, 50)",
+          "width": 40,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        },
+        ".risk-dimension-filters button:nth-child(2)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 40,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        },
+        ".risk-dimension-filters button:nth-child(3)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 60,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        },
+        ".summary-strip .summary-copy strong": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(32, 35, 42)",
+          "width": 130,
+          "height": 18,
+          "padding": "0px",
+          "fontSize": "13px",
+          "lineHeight": "22.1px",
+          "fontWeight": "700"
+        },
+        ".summary-strip .summary-copy": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(32, 35, 42)",
+          "width": 741,
+          "height": 66.28125,
+          "padding": "0px",
+          "fontSize": "13px",
+          "lineHeight": "22.1px",
+          "fontWeight": "400"
+        },
+        ".summary-strip .score strong": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(223, 23, 50)",
+          "width": 12.3125,
+          "height": 45,
+          "padding": "0px",
+          "fontSize": "30px",
+          "lineHeight": "45px",
+          "fontWeight": "700"
+        },
+        ".summary-strip .score p": {
+          "background": "rgb(255, 247, 247)",
+          "color": "rgb(114, 119, 131)",
+          "width": 84,
+          "height": 18,
+          "padding": "0px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "400"
+        },
+        "#overview-detail-list .overview-list-head span": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(52, 58, 68)",
+          "width": 142.640625,
+          "height": 13.5,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "800"
+        },
+        "#overview-detail-list .overview-list-row:not(.overview-list-head)>strong": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 142.640625,
+          "height": 15,
+          "padding": "0px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        },
+        ".category-period-heading h3": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(40, 46, 55)",
+          "width": 129,
+          "height": 24,
+          "padding": "0px",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".category-period-heading p": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(138, 145, 155)",
+          "width": 251.234375,
+          "height": 13.5,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "400"
+        },
+        ".category-drill-head>strong": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(89, 97, 109)",
+          "width": 220,
+          "height": 31,
+          "padding": "8px 7px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "800"
+        },
+        ".category-drill-head>span": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(89, 97, 109)",
+          "width": 70,
+          "height": 31,
+          "padding": "8px 7px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "800"
+        },
+        ".category-drill-head>span>small": {
+          "background": "rgb(245, 246, 248)",
+          "color": "rgb(146, 153, 163)",
+          "width": 104,
+          "height": 10.5,
+          "padding": "0px",
+          "fontSize": "7px",
+          "lineHeight": "10.5px",
+          "fontWeight": "600"
+        },
+        ".category-card-metric>span": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(113, 120, 131)",
+          "width": 152,
+          "height": 26,
+          "padding": "0px",
+          "fontSize": "9px",
+          "lineHeight": "13.5px",
+          "fontWeight": "400"
+        }
+      },
+      "lightCross": {
+        ".production-dimension-tabs button.selected": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(223, 23, 50)",
+          "width": 272,
+          "height": 42,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        "#cross-analysis .cross-tabs button:not(.selected)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(85, 93, 104)",
+          "width": 97,
+          "height": 31,
+          "padding": "0px 12px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "600"
+        },
+        "#cross-analysis .cross-heading h2": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 295.53125,
+          "height": 24.296875,
+          "padding": "0px",
+          "fontSize": "18px",
+          "lineHeight": "24.3px",
+          "fontWeight": "400"
+        },
+        "#cross-analysis .matrix-header>span": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(52, 58, 68)",
+          "width": 64,
+          "height": 28,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        "#cross-analysis button.matrix-unavailable": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "width": 99.5625,
+          "height": 52,
+          "padding": "0px",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "400"
+        },
+        ".risk-dimension-filters button.selected": {
+          "background": "rgb(255, 240, 242)",
+          "color": "rgb(223, 23, 50)",
+          "width": 60,
+          "height": 27,
+          "padding": "5px 9px",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "700"
+        }
       }
     }
-  }
+  },
+  "detailSourceWorkbench": "64af2d993dc0ab8ce333497cdab8d54e8c00838d",
+  "detailSourceHtmlSha256": "5c908ebdfde321628cf7bb1fb8798dc91c48824ad8567f08f153ef33ed474094"
 }
