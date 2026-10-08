@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "b68615a2e362bf2f482fad77fd374b3e67600352",
+  "sourceCommit": "67e1007aa400a8a9c65c132f144dabd5168a49df",
   "computeOwner": "dsh-agent-manage",
   "computePublicExport": "./inventory-compute/*",
   "inputs": {

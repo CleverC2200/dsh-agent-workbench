@@ -6,6 +6,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { build } from 'esbuild';
+import { mountReferenceStorage } from './helpers/reference-storage.mjs';
 
 const core=resolve('../../official-latest-standard');
 const requireCore=createRequire(resolve(core,'packages/api/session-controller/package.json'));
@@ -40,6 +41,7 @@ async function fixture(t,options={}) {
   const root=await mkdtemp(join(tmpdir(),'workbench-cold-session-'));
   const cwd=join(root,'workspace');await mkdir(cwd);
   const ctx=new Context(),routes=new Map(),gate=deferred(),started=deferred();
+  await mountReferenceStorage(ctx, join(root, 'reference-storage'));
   let mounts=0,authorizations=0,modelRequests=0;
   const followAbort=new AbortController();
   t.after(async()=>{gate.resolve();followAbort.abort();await ctx.fiber.dispose();await rm(root,{recursive:true,force:true});});

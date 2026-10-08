@@ -3,6 +3,8 @@ import type { PageElementEffect } from './page-bridge/catalog.ts';
 /** The installed business adapter owns credentials, identity and actual authorization. */
 export interface PageBusinessGrant {
     readonly signal: AbortSignal;
+    /** Stable environment/tenant/user ownership from the installed authority; never a grant. */
+    readonly referenceScope: string;
     readonly access: unknown;
     readSql?(input: any, signal: AbortSignal): Promise<unknown>;
     workspace?(input: any, signal: AbortSignal): Promise<unknown>;
@@ -35,7 +37,6 @@ export declare class PageRuntime {
     private readonly bridge;
     private readonly html;
     private readonly tools;
-    private readonly clearReferences;
     constructor(ctx: Context);
     registerBusinessPage(page: BusinessPage, authorize: AuthorizeBusinessPage): () => void;
     private ownerFor;

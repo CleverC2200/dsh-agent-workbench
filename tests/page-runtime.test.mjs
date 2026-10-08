@@ -6,6 +6,7 @@ import { JSDOM } from 'jsdom';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
 const core = resolve('../../official-latest-standard'),
   official = (path) => pathToFileURL(resolve(core, path)).href;
 const { Context } = await import(official('vendor/cordis/lib/index.js'));
@@ -44,6 +45,7 @@ const { HtmlPages } = await import(pathToFileURL(resolve('.scratch/page-runtime.
 async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   const ctx = new Context(),
     routes = new Map();
+  await temporaryReferenceStorage(t, ctx);
   ctx.provide('connection', {
     fetch: {
       register(route) {
@@ -62,17 +64,16 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   new SessionController(ctx,{nativeOpen:false});
   await ctx.plugin(Tools);
   await ctx.plugin(Agents);
-  const id = SessionId('session-11111111-1111-4111-8111-111111111111'),
-    agent = { id, session: Session.create(id) };
-  await ctx.plugin(
-    Object.assign(
-      (inner) => {
-        agent.ctx = createScope(inner, agent).ctx;
-      },
-      { inject: ['tools', 'systemPrompt'] },
-    ),
-  );
-  await ctx.agents.register(agent);
+  const registerSession = async id => {
+    const agent = { id, session: Session.create(id) };
+    await ctx.plugin(Object.assign(inner => {
+      agent.ctx = createScope(inner, agent).ctx;
+    }, { inject: ['tools', 'systemPrompt'] }));
+    await ctx.agents.register(agent);
+    return agent;
+  };
+  const id = SessionId('session-11111111-1111-4111-8111-111111111111');
+  const agent = await registerSession(id);
   let pages;
   await ctx.plugin(
     Object.assign(
@@ -84,8 +85,10 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   );
   const identity = new AbortController();
   let releases = 0;
+  let referenceScope = 'fixture-principal';
   const grant = {
     signal: identity.signal,
+    get referenceScope() { return referenceScope; },
     access: { mode: 'test' },
     allowsEffect: (effect) => enabled && (effect === 'view' || (!viewOnly && effect === 'draft')),
     release: () => {
@@ -146,7 +149,15 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     );
     return { status: response.status, value: await response.json() };
   };
-  return { call, open, identity, id, releases: () => releases, execute, reference };
+  const readReference = async (referenceId, sessionId = id) => {
+    const response = await routes.get('/api/page-interaction/reference/read').fetch(
+      new Request('https://local/api/page-interaction/reference/read', { method: 'POST',
+        body: JSON.stringify({ sessionId, id: referenceId }) }));
+    return { status: response.status, value: await response.json() };
+  };
+  return { call, open, identity, id, releases: () => releases, execute, reference, readReference, registerSession,
+    generation: async () => (await (await routes.get('/api/page-interaction/binding').fetch()).json()).generation,
+    changeReferenceScope: value => { referenceScope = value; } };
 }
 async function authorCatalog(t,id){
   const dom=new JSDOM(await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
@@ -324,6 +335,41 @@ test('references are bound to their exact owner and cannot claim a Native surfac
     /REFERENCE_UNAVAILABLE/,
   );
   assert.equal((await h.reference({ owner, surface: 'gea-html-inventory-test' })).status, 400);
+});
+
+test('closing one Session preserves another page cached binding, while identity revocation rejects both', async t => {
+  const h = await mount(t);
+  const other = SessionId('session-22222222-2222-4222-8222-222222222222');
+  await h.registerSession(other);
+  const ownerA = (await h.open()).value.owner;
+  const ownerB = (await h.open({ sessionId: other })).value.owner;
+  const generation = await h.generation();
+  const captureB = () => h.reference({ owner: ownerB, sessionId: other, surface: 'gea-html-inventory-test', generation });
+  assert.equal((await captureB()).status, 200);
+  await h.call('close', { owner: ownerA });
+  const kept = await captureB();
+  assert.equal(kept.status, 200, 'B must keep capturing with its existing client binding after A closes');
+  assert.equal((await h.readReference(kept.value.id, other)).status, 200);
+  assert.equal((await h.reference({ owner: ownerA, surface: 'gea-html-inventory-test', generation })).status, 400);
+  h.identity.abort();
+  assert.equal((await captureB()).status, 400);
+  assert.equal((await h.readReference(kept.value.id, other)).status, 403);
+});
+
+test('a saved reference survives normal page reopen but requires its current view grant and original principal', async t => {
+  const h = await mount(t), owner = (await h.open()).value.owner;
+  const receipt = (await h.reference({ owner, surface: 'gea-html-inventory-test' })).value;
+  assert.equal((await h.readReference(receipt.id)).value.text, 'chosen original content');
+  assert.equal((await h.readReference(receipt.id, 'session-other')).status, 404);
+  await h.call('close', { owner });
+  assert.equal((await h.readReference(receipt.id)).status, 403);
+  await h.open();
+  assert.equal((await h.readReference(receipt.id)).value.text, 'chosen original content');
+  h.changeReferenceScope('different-environment-tenant-user');
+  assert.equal((await h.readReference(receipt.id)).status, 403);
+  h.changeReferenceScope('fixture-principal');
+  h.identity.abort();
+  assert.equal((await h.readReference(receipt.id)).status, 403);
 });
 
 // Migrated from GEA's retired html-sessions tests: exercise the owned fetch/tool interface.

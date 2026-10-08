@@ -69,6 +69,8 @@ function compressPageContext(
 /** The installed business adapter owns credentials, identity and actual authorization. */
 export interface PageBusinessGrant {
   readonly signal: AbortSignal;
+  /** Stable environment/tenant/user ownership from the installed authority; never a grant. */
+  readonly referenceScope: string;
   readonly access: unknown;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
   workspace?(input: any, signal: AbortSignal): Promise<unknown>;
@@ -89,7 +91,6 @@ export class PageRuntime {
   private readonly bridge=createPageBridge();
   private readonly html=createHtmlSessions();
   private readonly tools;
-  private readonly clearReferences;
   constructor(private readonly ctx:Context) {
     this.tools=createPageToolRegistry(ctx,this.bridge,{
       stateSnapshot:session=>this.ownerFor(session)?.grant.snapshot?.(),
@@ -97,11 +98,17 @@ export class PageRuntime {
       allowsDataAction:(_surface,session)=>this.ownerFor(session)?.grant.allowsEffect('draft')===true,
       denyGlobalToolsInWorkbench:['mcp__browser__browser_find','mcp__browser__browser_evaluate','mcp__browser__browser_navigate','mcp__browser__browser_snapshot'],
     });
-    this.clearReferences=applyReferences(ctx,{authorize:input=>{
+    applyReferences(ctx,{authorize:input=>{
       const value=input as {sessionId:string;owner:string;surface:string;tool?:string}; const owned=this.assert(value.owner);
       if(!owned.grant.allowsEffect('view'))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
       const {surface,tool}=owned.page.catalog;
       if(owned.session!==value.sessionId||value.surface!==surface||(value.tool!==undefined&&value.tool!==tool))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
+      return owned.grant.referenceScope;
+    },authorizeRead:snapshot=>{
+      const owner=this.ownerFor(snapshot.sessionId);
+      if(!owner||owner.controller.signal.aborted||owner.grant.signal.aborted||!owner.grant.allowsEffect('view')||
+        owner.grant.referenceScope!==snapshot.principal||owner.page.catalog.surface!==snapshot.surface||
+        (snapshot.tool!==undefined&&snapshot.tool!==owner.page.catalog.tool))throw Error('PAGE_REFERENCE_ACCESS_DENIED');
     }});
     ctx.effect(()=>ctx.connection.fetch.register({path:'/api/agent-workbench/page',methods:['POST'],requestBody:'buffered',fetch:request=>this.fetchOperation(request)}));
     ctx.effect(()=>ctx.on('agent/disposed',({agent})=>{this.opening.get(agent.id)?.abort();for(const owner of [...this.owners.values()])if(owner.session===agent.id)this.close(owner.token);}));
@@ -139,7 +146,8 @@ export class PageRuntime {
     const owner=this.owners.get(token);if(!owner)return;
     this.owners.delete(token);owner.off();owner.controller.abort();this.tools.dispose(owner.session);this.bridge.reset(owner.session);
     if(owner.htmlLease)this.html.close(owner.htmlLease);
-    this.clearReferences(owner.session);owner.grant.release();
+    // Reference access checks this owner again after saving; other Sessions keep their binding.
+    owner.grant.release();
   }
   private async open(pageId:string,sessionId:string,resourceId:string,signal:AbortSignal){
     const declaration=this.declarations.get(pageId);

@@ -1,29 +1,12 @@
 import { type ReferenceReceipt } from "./reference.ts";
-/** Immutable, session-local snapshots; the conversation only carries a small receipt. */
-export declare function createReferenceStore(): {
-    put(input: unknown): ReferenceReceipt;
-    read(sessionId: string, id: string): {
-        page: string;
-        kind?: "row" | "table" | "block";
-        label: string;
-        text: string;
-        row?: string;
-        column?: string;
-        scope?: string;
-        targets: string[];
-        capturedAt: string;
-        truncated?: boolean;
-        sessionId: string;
-        surface: string;
-        tool?: string;
-        source: string;
-        error?: undefined;
-        message?: undefined;
-    } | {
+import type { KvTable } from '@deepseek-ai/dsh-storage-domain';
+import { type StoredReference } from './reference-domain.ts';
+/** Core owns durability; the conversation only carries a small receipt. */
+export declare function createReferenceStore(table: Pick<KvTable<string, StoredReference>, 'get' | 'put'>): {
+    put(input: unknown, principal: string): Promise<ReferenceReceipt>;
+    read(sessionId: string, id: string): StoredReference | {
         error: string;
         message: string;
     };
-    clear(sessionId: string): void;
-    clearAll(): void;
     dispose(): void;
 };
