@@ -406,7 +406,8 @@ async function fixture(
         mainPreset = preset;
         ctx.uiWorkspace.openSession(id);
       }),
-    historyPage: () => workbench.takeHistoryPage(),
+    historyPage: () => workbench.takeHistoryTarget()?.page,
+    restoreHistory: restorePageSession,
     toolsExpanded: () => expanded,
     removeTools: async () =>
       act(async () => {
@@ -1064,4 +1065,26 @@ test('a new resource adapter lifetime refreshes Interpreter metadata without pre
     'refreshing display metadata does not replace the Core Session',
   );
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 2, selectionRequests: 1 });
+});
+
+
+test('the current public restore interface refuses stale preset/cwd and returns to an existing blank with its resident SDK draft', async t => {
+  const sessionId='session-00000000-0000-4000-8000-000000000147';
+  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
+  const document=f.dom.window.document;
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
+  const signal=new AbortController().signal;
+  for(const expected of [{preset:'other',cwd:'/owned/workspace'},{preset:'original',cwd:'/other/workspace'}])
+    await assert.rejects(f.restoreHistory('native',sessionId,signal,expected),/PAGE_SESSION_RECOVERY_MISMATCH/);
+  assert.equal(f.association().sessionId,sessionId);
+  await f.newConversation();
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'');
+  await act(async()=>f.restoreHistory('native',sessionId,signal,{preset:'original',cwd:'/owned/workspace'}));
+  await f.selectMain(sessionId,'original');
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
+  assert.equal(f.association().sessionId,sessionId);
+  assert.deepEqual(f.calls.filter(row=>row[0]==='core-select-preset'),[['core-select-preset','session-1','original']]);
+  const cancelled=new AbortController();cancelled.abort();
+  await assert.rejects(f.restoreHistory('native',sessionId,cancelled.signal,{preset:'original',cwd:'/owned/workspace'}));
+  assert.equal(f.association().sessionId,sessionId);
 });
