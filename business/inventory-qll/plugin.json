@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "inventory-qll",
-  "name": "全链库存分布(模拟)",
-  "version": "0.2.6-preview.13-split.46",
+  "name": "全链库存分布",
+  "version": "0.2.6-preview.14-split.48",
   "html": "index.html",
   "skills": [
     "skills/qll/SKILL.md"
@@ -13,7 +13,7 @@
     "readonly": true,
     "contract": "gea-html-v2"
   },
-  "status": "integration-preview",
+  "status": "company-readonly",
   "declarations": {
     "page": "page.json",
     "capability": "capability.json"
@@ -22,5 +22,5 @@
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
   },
-  "mode": "mock"
+  "mode": "real"
 }

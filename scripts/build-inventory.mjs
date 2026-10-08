@@ -122,7 +122,7 @@ export async function buildInventory(id, sourceCommit) {
       theme +
       "\n" +
       adapter +
-      '</style><body>' + (id === "qll" ? '<aside role="note" style="padding:12px;background:#fff7e8;color:#8a4800">全链库存分布 · 固定模拟输入 · 不代表真实数据、行权限或模型结果。公司件数与客户箱数分列，禁止混算。</aside>' : '') + '<main id="app"></main><script>' +
+      '</style><body><main id="app"></main><script>' +
       code.replace(/<\/script/gi, "<\\/script") +
       "</script></body></html>",
   );

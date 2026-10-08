@@ -24,8 +24,9 @@ export function pageContext() {
   const state = parts.get("queryState") as
     { state: string; message?: string } | undefined;
   return {
-    source: "MOCK_DATA_ONLY",
-    dataMode: "MOCK_DATA_ONLY",
+    source: "GEA_LIVE_READONLY",
+    dataMode: "GEA_LIVE_READONLY",
+    realData: state?.state === "ready" && (parts.get("fullChainWorkspace") as {realData?: boolean} | undefined)?.realData === true,
     capturedAt: new Date().toISOString(),
     parts: Object.fromEntries(parts),
     visibleText:

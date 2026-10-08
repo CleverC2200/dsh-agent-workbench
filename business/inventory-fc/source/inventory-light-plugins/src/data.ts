@@ -1,6 +1,6 @@
 import { call } from "./channel.js";
 import { DATA_PERMISSION_MESSAGE, sqlQueryError } from "./query-error.js";
-import { bindGovernedSql } from "./governed/parameters";
+import { bindGovernedSql } from "../../../../shared/governed-parameters";
 import {columnarQuery, unpackColumns} from "./governed/columnar";
 import {createQueryBatch} from "./governed/batch";
 const batchRead = createQueryBatch(call);

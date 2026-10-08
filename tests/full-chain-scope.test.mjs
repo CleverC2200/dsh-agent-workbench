@@ -44,14 +44,15 @@ test('the actual Qll filter hook mounts with Qll fields and applies scope/month/
     const filter=chainFilter.handlers.filter;
     assert.ok(filter);assert.deepEqual(await filter({scope:'company',month:'2026-09',search:'',tab:'category'}),{unchanged:true});
     let confirm;chainFilter.wait=new Promise(resolve=>confirm=resolve);
-    const change=filter({scope:'all-channel'});await Promise.resolve();assert.equal(chainFilter.applied.length,0);
+    await assert.rejects(filter({scope:'all-channel'}),/范围/);
+    const change=filter({month:'2026-10'});await Promise.resolve();assert.equal(chainFilter.applied.length,0);
     confirm();await change;delete chainFilter.wait;
     assert.equal(chainFilter.host.queryState.state,'loading');assert.equal(chainFilter.host.fullChainWorkspace,undefined);assert.equal(chainFilter.host.structureView,undefined);
-    for(const args of [{month:'2026-10'},{search:' A '},{tab:'aging'}])await filter(args);
-    assert.deepEqual(chainFilter.applied,[{scope:'all-channel'},{month:'2026-10'},{search:'A'},{tab:'aging'}]);
+    for(const args of [{month:'2026-11'},{search:' A '},{tab:'aging'}])await filter(args);
+    assert.deepEqual(chainFilter.applied,[{month:'2026-10'},{month:'2026-11'},{search:'A'},{tab:'aging'}]);
     assert.equal(chainFilter.updates.filter(([key])=>key==='queryState').length,3);
     let finish;chainFilter.wait=new Promise(resolve=>finish=resolve);const controller=new AbortController();
-    const cancelled=filter({scope:'all-channel'},{signal:controller.signal});await Promise.resolve();controller.abort(Error('page switched'));finish();await assert.rejects(cancelled,/page switched/);delete chainFilter.wait;assert.equal(chainFilter.applied.length,4);
+    const cancelled=filter({search:'B'},{signal:controller.signal});await Promise.resolve();controller.abort(Error('page switched'));finish();await assert.rejects(cancelled,/page switched/);delete chainFilter.wait;assert.equal(chainFilter.applied.length,4);
     await assert.rejects(filter({scope:'untrusted'}),/范围/);await assert.rejects(filter({month:'2026-13'}),/月份/);await assert.rejects(filter({bases:['hidden']}),/字段/);
   } finally {
     await React.act(async()=>root.unmount());dom.window.close();delete globalThis.chainFilter;

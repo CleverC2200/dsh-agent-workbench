@@ -5,98 +5,19 @@ import type {
   WorkspaceScope,
 } from "dsh-agent-manage/inventory-compute/full-chain-types";
 import { summarizeStructure } from "dsh-agent-manage/inventory-compute/full-chain-category-structure";
-import history from "./qll-trend-mock.json";
-import { currentSessionId } from "./channel.js";
+import { currentSessionId, call } from "./channel.js";
+import { readCompanySource } from "./qll-source";
 
-// This reception build has no live adapter. All reads use this explicit fixed fixture.
-const access = {
-  trusted: true,
-  principalId: "mock-principal",
-  allowedBases: ["华东"],
-  allowedBranches: ["上海分仓"],
-  allowedCustomerIds: ["C1"],
-};
-const fixed = { snapshotDate: "2026-09-30", category: "饺子" };
-const data: FullChainData = {
-  baseInventory: Array.from({ length: 105 }, (_, i) => ({
-    ...fixed,
-    base: "华东",
-    sku: `MOCK-${String(i + 1).padStart(3, "0")}`,
-    currentQty: i + 1,
-    targetQty: i === 0 ? null : 20,
-    plannedDailyQty: 2,
-    externalDemand30d: 30,
-    confirmedTransferOut30d: null,
-  })),
-  branchInventory: [1, 2].map((i) => ({
-    ...fixed,
-    base: null,
-    branch: "上海分仓",
-    sku: `MOCK-${String(i).padStart(3, "0")}`,
-    currentQty: 50,
-    availableQty: i === 1 ? 15 : 0,
-    targetQty: 30,
-    plannedDailyQty: 3,
-    externalDemand30d: 60,
-  })),
-  customerInventory: [
-    {
-      ...fixed,
-      sku: "MOCK-001",
-      customerId: "C1",
-      customer: "授权模拟客户",
-      branch: null,
-      currentQty: 100,
-      targetQty: null,
-      sales30d: 300,
-      sourceConflict: false,
-    },
-    {
-      ...fixed,
-      sku: "MOCK-001",
-      customerId: "C2",
-      customer: "范围外模拟客户",
-      branch: null,
-      currentQty: 999,
-      targetQty: null,
-      sales30d: 300,
-      sourceConflict: false,
-    },
-  ],
-  customerPlanInventory: [
-    {
-      snapshotDate: fixed.snapshotDate,
-      customerId: "C1",
-      stockQty: 0,
-      inTransitQty: 0,
-    },
-  ],
-  agingBatches: [
-    {
-      ...fixed,
-      sku: "MOCK-001",
-      layer: "customer",
-      objectId: "C1",
-      objectName: "授权模拟客户",
-      batch: "mock-batch",
-      qty: 100,
-      ageDays: 44,
-      dailyVelocity: 10,
-      source: "MOCK_DATA_ONLY",
-    },
-  ],
-  orders: [],
-  pendingOrders: [],
-  activeCustomerIds30d: ["C1", "C2"],
-  inventoryTrend: [],
-};
 const currentSnapshots = new Map<
   string,
-  { request: any; workspace: any; session: string | undefined; expires: number }
+  { request: any; data: FullChainData; workspace: any; accessKey: string; session: string; expires: number;
+    history?: {key: string; data: FullChainData}; historyRequest?: number }
 >();
 let sequence = 0;
+let epoch = 0;
 export function clearFacts() {
   currentSnapshots.clear();
+  epoch++;
 }
 if (typeof window !== "undefined")
   for (const event of [
@@ -106,8 +27,9 @@ if (typeof window !== "undefined")
     "light-refresh",
   ])
     window.addEventListener(event, clearFacts);
-function validate(scope: string, filters: WorkspaceFilters) {
-  if (!["company", "all-channel"].includes(scope)) throw Error("查询范围无效");
+function validate(scope: string, filters: WorkspaceFilters, access: any) {
+  if (access?.trusted !== true || typeof access.principalId !== "string" || !access.principalId) throw Error("需要当前GEA可信身份");
+  if (scope !== "company") throw Error("当前只开放公司库存读取");
   if (!filters || typeof filters !== "object" || Array.isArray(filters))
     throw Error("筛选参数无效");
   for (const [key, value] of Object.entries(filters))
@@ -122,14 +44,15 @@ function validate(scope: string, filters: WorkspaceFilters) {
       throw Error("筛选参数无效");
   if (filters.month && !/^20\d{2}-(0[1-9]|1[0-2])$/.test(filters.month))
     throw Error("月份无效");
-  if (filters.customerId && scope !== "all-channel")
+  if (filters.customerId)
     throw Error("当前范围不可查看客户明细");
   for (const [key, allow] of [
     ["base", access.allowedBases],
     ["branch", access.allowedBranches],
     ["customerId", access.allowedCustomerIds],
   ] as const)
-    if (filters[key] && !allow.includes(filters[key]!))
+    if (allow !== undefined && allow !== null && (!Array.isArray(allow) || allow.some((value: unknown) => typeof value !== "string"))) throw Error("授权范围格式无效");
+    else if (filters[key] && Array.isArray(allow) && !allow.includes(filters[key]!))
       throw Error("无权访问该组织范围");
   if (
     [filters.base, filters.branch, filters.customerId].filter(Boolean).length >
@@ -159,106 +82,36 @@ function detailRequest(item: any, input: any) {
       throw Error("明细不能改变当前查询范围");
     filters[key] = value;
   }
-  validate(item.request.scope, filters);
+  validate(item.request.scope, filters, item.request.access);
   return { ...item.request, filters };
 }
-function historyData(request: any): FullChainData {
-  // Match the original 30-day window before projecting aggregate rows into the unchanged calculator.
-  const end = request.now.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Shanghai",
-  });
-  const start = new Date(`${end}T00:00:00Z`);
-  start.setUTCDate(start.getUTCDate() - 29);
-  const first = start.toISOString().slice(0, 10),
-    f = request.filters;
-  const visible = (row: any) =>
-    row.snapshotDate >= first &&
-    row.snapshotDate <= end &&
-    (!f.category || row.category === f.category) &&
-    (!f.sku || row.sku === f.sku) &&
-    (row.layer !== "customer" || request.scope === "all-channel") &&
-    (row.layer === "base"
-      ? access.allowedBases.includes(row.objectName) &&
-        !f.branch &&
-        !f.customerId &&
-        (!f.base || row.objectName === f.base)
-      : row.layer === "branch"
-        ? access.allowedBranches.includes(row.objectName) &&
-          !f.base &&
-          !f.customerId &&
-          (!f.branch || row.objectName === f.branch)
-        : access.allowedCustomerIds.includes(row.objectId) &&
-          !f.base &&
-          !f.branch &&
-          (!f.customerId || row.objectId === f.customerId));
-  return {
-    ...structuredClone(data),
-    inventoryTrend: history.inventory
-      .filter(visible)
-      .map(({ snapshotDate, layer, qty }) => ({
-        snapshotDate,
-        layer: layer as "base" | "branch" | "customer",
-        qty,
-      })),
-    orderHistory: history.orders
-      .filter(
-        (row) =>
-          visible({
-            ...row,
-            layer: row.pickupType === "factory" ? "base" : "branch",
-          }) &&
-          (!f.month || row.month === f.month),
-      )
-      .map((row) => ({
-        ...row,
-        pickupType: row.pickupType as "factory" | "branch",
-      })),
-    agingHistory: history.aging
-      .filter(visible)
-      .map(({ snapshotDate, layer, averageAge }) => ({
-        snapshotDate,
-        layer: layer as "base" | "branch",
-        averageAge,
-      })),
-  };
+function workspace(request: any, input: FullChainData, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  return {...buildFullChainWorkspace(input, request), dataMode: "GEA_LIVE_READONLY", realData: true};
 }
-async function workspace(
-  request: any,
-  signal?: AbortSignal,
-  historical = false,
-) {
+async function checkSnapshot(item: ReturnType<typeof snapshot>, signal?: AbortSignal) {
+  const access = await call("access", undefined, {signal});
   signal?.throwIfAborted();
-  const input = historical ? historyData(request) : structuredClone(data);
-  const value = buildFullChainWorkspace(input,request);
-  signal?.throwIfAborted();
-  return {
-    ...value,
-    dataMode: "MOCK_DATA_ONLY",
-    fixture: "ticket14-fixed-channel + 105 fixed base SKUs",
-    notice: "固定模拟输入，不代表真实客户数据或行权限",
-  };
+  if (item.session !== currentSessionId() || JSON.stringify(access) !== item.accessKey) throw Error("当前会话或授权范围已变化");
 }
 export async function load(options: any = {}) {
-  const request = {
-    access,
-    scope: options.scope ?? "company",
-    filters: options.filters ?? {},
-    now: new Date("2026-10-02T03:00:00Z"),
-  };
-  validate(request.scope, request.filters);
+  if ((options.scope ?? "company") !== "company") throw Error("当前只开放公司库存读取");
   const session = currentSessionId();
-  const value = await workspace(request, options.signal);
-  if (session !== currentSessionId()) throw Error("页面会话已变化，请重新查询");
-  // Unique generations prevent a late reader from aliasing a refreshed snapshot.
-  value.workspaceId = `${value.workspaceId}:mock:${++sequence}`;
-  currentSnapshots.set(value.workspaceId, {
-    request,
-    workspace: value,
-    session,
-    expires: Date.now() + 300000,
-  });
-  while (currentSnapshots.size > 4)
-    currentSnapshots.delete(currentSnapshots.keys().next().value!);
+  if (!session) throw Error("需要当前工作台会话");
+  const generation = epoch;
+  const access = await call("access", undefined, {signal: options.signal});
+  options.signal?.throwIfAborted();
+  const request = {access, scope: "company" as const, filters: options.filters ?? {}, now: new Date()};
+  validate(request.scope, request.filters, access);
+  const accessKey = JSON.stringify(access);
+  const data = await readCompanySource(request, "current", options.signal);
+  const value = workspace(request, data, options.signal);
+  const latestAccess = await call("access", undefined, {signal: options.signal});
+  options.signal?.throwIfAborted();
+  if (generation !== epoch || session !== currentSessionId() || JSON.stringify(latestAccess) !== accessKey) throw Error("当前会话或授权范围已变化");
+  value.workspaceId = `${value.workspaceId}:source:${++sequence}`;
+  currentSnapshots.set(value.workspaceId, {request, data, workspace: value, accessKey, session, expires: Date.now() + 300000});
+  while (currentSnapshots.size > 4) currentSnapshots.delete(currentSnapshots.keys().next().value!);
   return value;
 }
 export async function loadDetails(options: any, signal?: AbortSignal) {
@@ -290,7 +143,8 @@ export async function loadDetails(options: any, signal?: AbortSignal) {
   )
     throw Error("明细层级与筛选范围不一致");
   if (request.filters.sku) throw Error("SKU 已是最后一级");
-  const value = await workspace(request, signal);
+  await checkSnapshot(item, signal);
+  const value = workspace(request, item.data, signal);
   snapshot(options.workspaceId, signal);
   const objectSelected = Boolean(
     request.filters.base ||
@@ -320,7 +174,7 @@ export async function loadDetails(options: any, signal?: AbortSignal) {
       rows = [...groups.values()].map((group) => ({
         ...summarizeStructure(
           group,
-          `mock:${level}:${group[0].key}`,
+          `source:${level}:${group[0].key}`,
           group[0].objectName,
         ),
         category: level === "object" ? "全部品类" : group[0].category,
@@ -368,27 +222,32 @@ export async function loadDetails(options: any, signal?: AbortSignal) {
     total: rows.length,
     pageNo,
     pageSize,
-    dataMode: "MOCK_DATA_ONLY",
+    dataMode: "GEA_LIVE_READONLY",
   };
+}
+async function historicalWorkspace(item: ReturnType<typeof snapshot>, request: any, signal?: AbortSignal) {
+  await checkSnapshot(item, signal);
+  const key = JSON.stringify(request.filters);
+  let history = item.history?.key === key ? item.history.data : undefined;
+  if (!history) {
+    const owner = item.historyRequest = (item.historyRequest ?? 0) + 1;
+    history = await readCompanySource(request, "history", signal);
+    snapshot(item.workspace.workspaceId, signal);
+    await checkSnapshot(item, signal);
+    if (owner === item.historyRequest) item.history = {key, data: history};
+  }
+  return workspace(request, {...item.data, inventoryTrend: history.inventoryTrend,
+    orderHistory: history.orderHistory, agingHistory: history.agingHistory, historyDeferred: false}, signal);
 }
 export async function loadHistory(workspaceId: string, signal?: AbortSignal) {
   const item = snapshot(workspaceId, signal);
-  const value = await workspace(item.request, signal, true);
-  snapshot(workspaceId, signal);
-  return { ...value, workspaceId };
+  return {...await historicalWorkspace(item, item.request, signal), workspaceId};
 }
 export async function loadTrend(options: any, signal?: AbortSignal) {
-  const item = snapshot(options.workspaceId, signal),
-    request = detailRequest(item, options.filters);
-  const value = await workspace(request, signal, true);
+  const item = snapshot(options.workspaceId, signal), request = detailRequest(item, options.filters);
+  const value = await historicalWorkspace(item, request, signal);
   snapshot(options.workspaceId, signal);
-  return {
-    workspaceId: options.workspaceId,
-    scope: request.scope,
-    filters: request.filters,
-    generatedAt: item.request.now.toISOString(),
-    trends: value.trends,
-    dataMode: "MOCK_DATA_ONLY",
-  };
+  return {workspaceId: options.workspaceId, scope: request.scope, filters: request.filters,
+    generatedAt: item.request.now.toISOString(), trends: value.trends, dataMode: "GEA_LIVE_READONLY"};
 }
 export { buildFullChainWorkspace };

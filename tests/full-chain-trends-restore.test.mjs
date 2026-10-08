@@ -7,6 +7,7 @@ import { pathToFileURL } from "node:url";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { JSDOM } from "jsdom";
+import {createCompanyWire} from "./fixtures/full-chain-company-wire.mjs";
 
 test("actual distribution page restores scoped filters and re-queries trends after refresh without persisting historical facts", async () => {
   const dom = new JSDOM('<main id="app"></main>', {
@@ -81,7 +82,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
             contents:
               a.path === "css"
                 ? "export default {};"
-                : 'export const currentSessionId=()=>"mock-session";export const ready=Promise.resolve();export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=(key,elements)=>{globalThis.restoreCatalog.set(key,elements);return()=>globalThis.restoreCatalog.delete(key);};',
+                : 'export const currentSessionId=()=>"mock-session";export const call=(...args)=>globalThis.companyWire(...args);export const ready=Promise.resolve();export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=(key,elements)=>{globalThis.restoreCatalog.set(key,elements);return()=>globalThis.restoreCatalog.delete(key);};',
           }));
         },
       },
@@ -91,6 +92,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   const file = resolve(".runtime/full-chain-trends-restore.mjs");
   await writeFile(file, built.outputFiles[0].text);
   globalThis.restoreCatalog = new Map();
+  globalThis.companyWire = createCompanyWire();
   const api = await import(pathToFileURL(file));
   const owner = new api.WorkbenchController({ panel() {}, document() {} });
   owner.registerFrame({
@@ -101,14 +103,14 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   });
   const intent = {
     version: 1,
-    scope: "all-channel",
+    scope: "company",
     month: "2026-09",
     tab: "category",
     sku: "MOCK-001",
     risk: "",
     structureFilters: {
       category: "饺子",
-      org: JSON.stringify(["customer", "C1"]),
+      org: JSON.stringify(["base", "华东"]),
     },
   };
   owner.saveHtmlViewState("inventory-qll", "subject/mock-session", intent);
@@ -144,7 +146,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   try {
     await render();
     await React.act(async () => new Promise((r) => setTimeout(r, 5)));
-    assert.equal(document.querySelector('[aria-label="含渠道"]').checked, true);
+    assert.equal(document.querySelector('[aria-label="含渠道"]').checked, false);
     assert.ok(
       document.querySelector('[aria-label="SKU编码筛选"]'),
       document.body.textContent,
@@ -161,11 +163,11 @@ test("actual distribution page restores scoped filters and re-queries trends aft
     await click();
     const first = api.pageContext().parts.trendView;
     assert.equal(first.state, "ready");
-    assert.equal(first.filters.customerId, "C1");
+    assert.equal(first.filters.base, "华东");
     assert.equal(first.filters.category, "饺子");
     assert.equal(
-      first.data.find((row) => row.snapshotDate === "2026-09-30").customer,
-      100,
+      first.data.find((row) => row.snapshotDate === "2026-09-30").base,
+      0,
     );
     const ref = globalThis.restoreCatalog.get("chain-trend")[0].id;
     await React.act(async () => root.unmount());
@@ -179,7 +181,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
     assert.equal(fresh.state, "idle");
     assert.equal(fresh.data, undefined);
     assert.notEqual(fresh.workspaceId, first.workspaceId);
-    assert.equal(fresh.filters.customerId, "C1");
+    assert.equal(fresh.filters.base, "华东");
     await click();
     assert.equal(api.pageContext().parts.trendView.state, "ready");
     assert.notEqual(globalThis.restoreCatalog.get("chain-trend")[0].id, ref);
@@ -193,6 +195,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
     api.clearContext();
     dom.window.close();
     delete globalThis.restoreCatalog;
+    delete globalThis.companyWire;
     for (const [key, value] of saved)
       if (value) Object.defineProperty(globalThis, key, value);
       else delete globalThis[key];

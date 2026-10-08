@@ -1,6 +1,12 @@
 import type { FullChainWorkspace } from "dsh-agent-manage/inventory-compute/full-chain-types";
 
-export type WorkspaceEvent = { type: "workspace"; workspace: FullChainWorkspace } | { type: "error"; error: string };
+export type CompanyWorkspace = FullChainWorkspace & {dataMode: "GEA_LIVE_READONLY"; realData: true};
+export type WorkspaceEvent = { type: "workspace"; workspace: CompanyWorkspace } | { type: "error"; error: string };
+
+function assertCompanyWorkspace(value: any): asserts value is CompanyWorkspace {
+  if (value?.contractVersion !== "full-chain-workspace/v1" || value.dataMode !== "GEA_LIVE_READONLY" || value.realData !== true || value.scope !== "company")
+    throw Error("公司库存数据来源或范围无效");
+}
 
 /** Background history enriches the same view; a new query resets selections. */
 export function workspaceViewKey(workspace: FullChainWorkspace | null) {
@@ -8,12 +14,13 @@ export function workspaceViewKey(workspace: FullChainWorkspace | null) {
 }
 
 /** Handles split UTF-8 characters/lines and treats a truncated stream as failure. */
-export async function readWorkspaceResponse(response: Response, receive: (workspace: FullChainWorkspace) => void, signal?: AbortSignal) {
+export async function readWorkspaceResponse(response: Response, receive: (workspace: CompanyWorkspace) => void, signal?: AbortSignal) {
   signal?.throwIfAborted();
   if (!response.headers.get("content-type")?.includes("application/x-ndjson")) {
     const workspace = await response.json();
     signal?.throwIfAborted();
-    if (!response.ok || workspace.contractVersion !== "full-chain-workspace/v1") throw new Error(workspace.error || "全链路库存加载失败");
+    if (!response.ok) throw new Error(workspace.error || "全链路库存加载失败");
+    assertCompanyWorkspace(workspace);
     receive(workspace);
     return;
   }
@@ -28,6 +35,7 @@ export async function readWorkspaceResponse(response: Response, receive: (worksp
     const event = JSON.parse(line) as WorkspaceEvent;
     if (event.type === "error") throw new Error(event.error);
     if (event.type !== "workspace" || event.workspace?.contractVersion !== "full-chain-workspace/v1" || complete) throw new Error("库存数据响应无效");
+    assertCompanyWorkspace(event.workspace);
     receive(event.workspace);
     complete = event.workspace.trends.state !== "loading";
   };

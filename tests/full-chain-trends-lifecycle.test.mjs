@@ -83,7 +83,7 @@ test("actual trend panel switches analysis, keeps missing days and zeros, withdr
   };
   const response = () =>
     Response.json({
-      dataMode: "MOCK_DATA_ONLY",
+      dataMode: "GEA_LIVE_READONLY",
       workspaceId: workspace.workspaceId,
       scope: workspace.scope,
       filters: {
@@ -127,7 +127,7 @@ test("actual trend panel switches analysis, keeps missing days and zeros, withdr
     assert.equal(globalThis.trendCatalog.get("chain-trend").length, 1);
     assert.match(
       globalThis.trendCatalog.get("chain-trend")[0].value,
-      /固定模拟/,
+      /GEA只读/,
     );
     const firstReference = globalThis.trendCatalog.get("chain-trend")[0].id;
     assert.equal(context.data.length, 30);

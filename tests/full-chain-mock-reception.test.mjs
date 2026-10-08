@@ -4,25 +4,26 @@ import {build} from 'esbuild';
 import {mkdir,writeFile} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import {resolve} from 'node:path';
-const result=await build({entryPoints:['business/inventory-qll/source/inventory-light-plugins/src/qll-engine.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'session',setup(api){
+import {createCompanyWire,syntheticDomainData,companyGrant} from './fixtures/full-chain-company-wire.mjs';
+const result=await build({entryPoints:['business/inventory-qll/source/inventory-light-plugins/src/qll-engine.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'manage-source',setup(api){api.onResolve({filter:/^dsh-agent-manage\/inventory-compute\/[a-z-]+$/},x=>({path:resolve('../dsh-agent-manage/src/inventory-compute',x.path.split('/').at(-1)+'.ts')}));}},{name:'session',setup(api){
  api.onResolve({filter:/channel\.js$/},()=>({path:'session',namespace:'fixture'}));
- api.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const currentSessionId=()=>globalThis.mockSession; export const call=()=>{throw Error("REAL_HOST_CALL_FORBIDDEN")};'}));
+ api.onLoad({filter:/.*/,namespace:'fixture'},()=>({contents:'export const currentSessionId=()=>globalThis.mockSession; export const call=(...args)=>globalThis.companyWire(...args);'}));
 }}]});
 await mkdir('.runtime',{recursive:true});const bundle=resolve('.runtime/qll-mock-test.mjs');await writeFile(bundle,result.outputFiles[0].text);
 const engine=await import(pathToFileURL(bundle));
 test('default fixed input preserves company/customer units, zero/null, complete pages and current Session',async()=>{
- globalThis.mockSession='session-A';
+ globalThis.mockSession='session-A';globalThis.companyWire=createCompanyWire();
  const company=await engine.load({scope:'company',part:'current',filters:{month:'2026-09'}});
- assert.equal(company.dataMode,'MOCK_DATA_ONLY');
+ assert.equal(company.dataMode,'GEA_LIVE_READONLY');
  assert.equal(company.kpis.inventoryLevel.companyCurrent,5580);
  assert.equal(company.structure.some(row=>row.layer==='customer'),false);
- const channel=await engine.load({scope:'all-channel',part:'current',filters:{month:'2026-09'}});
+ const channel=engine.buildFullChainWorkspace(syntheticDomainData(),{access:companyGrant,scope:'all-channel',filters:{month:'2026-09'},now:new Date('2026-10-02T03:00:00Z')});
  assert.equal(channel.kpis.inventoryLevel.companyCurrent,5580);
  assert.equal(channel.kpis.inventoryLevel.planCustomerTotal,0);
  assert.equal(channel.structure.find(row=>row.layer==='customer').targetQty,null);
  const rows=[];
  for(let pageNo=1;pageNo<=3;pageNo++){
-  const page=await engine.loadDetails({workspaceId:channel.workspaceId,kind:'structure',layer:'base',filters:{base:'华东',category:'饺子'},pageNo,pageSize:50});
+  const page=await engine.loadDetails({workspaceId:company.workspaceId,kind:'structure',layer:'base',filters:{base:'华东',category:'饺子'},pageNo,pageSize:50});
   assert.equal(page.total,105);rows.push(...page.rows);
  }
  assert.equal(rows.length,105);assert.equal(new Set(rows.map(row=>row.sku)).size,105);
@@ -36,6 +37,6 @@ test('default fixed input preserves company/customer units, zero/null, complete 
  const controller=new AbortController();controller.abort(Error('cancelled'));
  await assert.rejects(engine.load({signal:controller.signal}),/cancelled/);
  globalThis.mockSession='session-B';
- await assert.rejects(engine.loadHistory(channel.workspaceId),/会话|快照/);
- engine.clearFacts();delete globalThis.mockSession;
+ await assert.rejects(engine.loadHistory(company.workspaceId),/会话|快照/);
+ engine.clearFacts();delete globalThis.mockSession;delete globalThis.companyWire;
 });

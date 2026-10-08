@@ -10,7 +10,7 @@ import styles from "./full-chain-workbench.module.css";
 
 type Metric = "inventory" | "orders" | "aging";
 type TrendResult = {
-  dataMode: "MOCK_DATA_ONLY";
+  dataMode: "GEA_LIVE_READONLY";
   workspaceId: string;
   scope: string;
   filters: Record<string, string>;
@@ -133,7 +133,7 @@ export function FullChainTrends({
   useEffect(
     () =>
       ownContextPart("trendView", {
-        dataMode: "MOCK_DATA_ONLY",
+        dataMode: "GEA_LIVE_READONLY",
         state,
         message: error || undefined,
         workspaceId: workspace.workspaceId,
@@ -147,11 +147,11 @@ export function FullChainTrends({
               capturedAt: result.generatedAt,
               data,
               coverage:
-                "所选组织、品类与SKU的最近30天模拟历史观察；缺失日期与层级为null，不表示当前库存覆盖率。",
+                "所选组织、品类与SKU的最近30天GEA历史观察；缺失日期与层级为null，不表示当前库存覆盖率。",
             }
           : {}),
         notice:
-          "固定模拟输入的最近30天观察；订单限定目标月；缺失不补零。公司库存不含客户观察。风险标签仅筛选结构表。",
+          "GEA只读结果的最近30天观察；订单限定目标月；缺失不补零。公司库存不含客户观察。风险标签仅筛选结构表。",
       }),
     [queryKey, state, error, metric, result, data],
   );
@@ -164,10 +164,10 @@ export function FullChainTrends({
       )
       .at(-1);
     const label = referenceText(
-      `固定模拟 · ${labels[metric]} · ${organization?.objectName ?? "当前授权组织"} · ${queryFilters.category ?? "全部品类"} · ${queryFilters.sku ?? "全部SKU"}`,
+      `GEA只读 · ${labels[metric]} · ${organization?.objectName ?? "当前授权组织"} · ${queryFilters.category ?? "全部品类"} · ${queryFilters.sku ?? "全部SKU"}`,
     );
     const value = referenceText(
-      `固定模拟；目标月 ${queryFilters.month}；${last ? `${last.snapshotDate}：${shownSeries.map((item) => `${item.name} ${last[item.key] ?? "缺失"}`).join("，")}` : "暂无可验证趋势"}；缺失不补零；${unit}；快照 ${result.workspaceId}`,
+      `GEA只读；目标月 ${queryFilters.month}；${last ? `${last.snapshotDate}：${shownSeries.map((item) => `${item.name} ${last[item.key] ?? "缺失"}`).join("，")}` : "暂无可验证趋势"}；缺失不补零；${unit}；快照 ${result.workspaceId}`,
     );
     const unregister = reportElements("chain-trend", [
       {
@@ -218,7 +218,7 @@ export function FullChainTrends({
       if (!response.ok)
         throw Error(payload.error ?? "趋势查询失败，请重试当前范围。");
       if (
-        payload.dataMode !== "MOCK_DATA_ONLY" ||
+        payload.dataMode !== "GEA_LIVE_READONLY" ||
         payload.workspaceId !== workspace.workspaceId ||
         payload.scope !== workspace.scope ||
         JSON.stringify(payload.filters) !== JSON.stringify(queryFilters)

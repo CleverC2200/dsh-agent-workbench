@@ -14,7 +14,7 @@ export function usePageFilter(current: any, apply: (args: any) => void) {
       const {current:c,apply}=ref.current;
       if(Object.keys(input).some(key=>!c.allowedFields.includes(key)))throw Error("不支持的筛选字段");
       if(input.tab!==undefined && !c.tabs.includes(input.tab))throw Error("页签无效");
-      if(input.scope!==undefined && !["company","all-channel"].includes(input.scope))throw Error("查询范围无效");
+      if(input.scope!==undefined && input.scope!=="company")throw Error("查询范围无效");
       if(input.month!==undefined && (typeof input.month!=="string" || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(input.month)))throw Error("月份无效");
       if(input.search!==undefined && (typeof input.search!=="string" || input.search.length>100))throw Error("SKU 编码无效");
       const values={...input,...(input.search!==undefined?{search:input.search.trim()}:{})};

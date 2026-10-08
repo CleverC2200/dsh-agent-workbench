@@ -46,6 +46,7 @@ import { appPath } from "../../../qll/src/lib/app-path.ts";
 import {
   readWorkspaceResponse,
   workspaceViewKey,
+  type CompanyWorkspace,
 } from "../../../qll/src/lib/workspace-stream.ts";
 
 import styles from "./qll/components/full-chain-workbench.module.css";
@@ -453,7 +454,7 @@ function InventoryKpiDetail({
 export function FullChainWorkbench() {
   const [scope, setScope] = usePageViewField(React,view,"scope","company") as [WorkspaceScope,React.Dispatch<React.SetStateAction<WorkspaceScope>>];
   const [month, setMonth] = usePageViewField(React,view,"month","2026-09");
-  const [workspace, setWorkspace] = useState<(FullChainWorkspace & {channelUnavailable?: string}) | null>(null);
+  const [workspace, setWorkspace] = useState<(CompanyWorkspace & {channelUnavailable?: string}) | null>(null);
   const structurePages = useTreePages(workspace, 'structure');
   const viewKey = workspaceViewKey(workspace);
   const [loading, setLoading] = useState(true);
@@ -536,7 +537,7 @@ export function FullChainWorkbench() {
         const response = await fetch(appPath(`/api/workspace?${params}`), {
           signal: requestSignal,
           cache: "no-store",
-          headers: { accept: "application/x-ndjson" },
+          headers: { accept: "application/json" },
         });
         await readWorkspaceResponse(
           response,
@@ -794,7 +795,8 @@ export function FullChainWorkbench() {
     updateContext("queryState", {state:loading || (!error && !current) ? "loading" : error ? "error" : "ready", message:error ?? undefined, requestedScope:scope, month, sku:skuFilter});
     if (!current) { removeContextPart("fullChainWorkspace"); removeContextPart("structureView"); removeContextPart("detail"); removeContextPart("selectedStock"); return; }
       updateContext("fullChainWorkspace", {
-        dataMode: "MOCK_DATA_ONLY",
+        dataMode: workspace.dataMode,
+        realData: workspace.realData === true,
         requestedScope: scope,
         channelUnavailable: workspace.channelUnavailable,
         scope: workspace.scope,
@@ -840,7 +842,7 @@ export function FullChainWorkbench() {
           <header ref={headerRef} className={styles.header}>
             <h1 className={styles.title}>全链路库存</h1>
             <div className={styles.controls}>
-              <label className={styles.channelSwitch}><input type="checkbox" aria-label="含渠道" checked={scope === "all-channel"} onChange={e=>changeScope(e.target.checked ? "all-channel" : "company")}/><span aria-hidden="true"/>含渠道</label>
+              <label className={styles.channelSwitch}><input type="checkbox" aria-label="含渠道" checked={scope === "all-channel"} disabled={scope === "company"} onChange={()=>changeScope("company")} title="渠道读取未启用"/><span aria-hidden="true"/>含渠道</label>
               <span className={styles.objectCount}>{workspace ? `${new Set(workspace.structure.filter(r=>r.layer==='base').map(r=>r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter(r=>r.layer==='branch').map(r=>r.objectName)).size} 个分仓${workspace.scope==='all-channel'?` · ${workspace.coverage.coveredCustomers} 家已覆盖客户`:''}` : '正在读取库存范围'}</span>
               <div className={styles.headerActions}>
                 <DatePicker.MonthPicker

@@ -95,9 +95,9 @@ Workbench restores saved page hints through the current Core snapshot, Session a
 
 MPS 原型 `plan-category-production` 在 `lib/static/mps` 接收原 `inventory-mps` 资源。当前挂载步骤的作者state通过公共业务channel发布模拟上下文和页签目录，切步移除旧数据。选用Prompt/Skill复用当前Core Session；界面意图、调整输入和未发送文字按Session恢复，模拟派生数据不存业务库。保存、导出、提交和结转仍只显示模拟提示。构建从相邻Manage的 `business-resources/inventory-mps` 装配原资源。
 
-全链分布 `inventory-qll` 从原14固定Git候选接收，Manage资源在相邻 `business-resources/inventory-qll`。当前包固定为 `mode=mock`、无SQL能力。页面从105个模拟基地SKU生成原业务计算，保持公司件数与客户箱数分列、零值和null。范围、月份、SKU与筛选意图按当前Session恢复，事实和快照重新计算。历史真实客户数据集与行权限未验；当前模拟入口不发业务请求。
+全链分布 `inventory-qll` 保持原14页面和当前Session接口，源查询选自原15固定Git对象。公司reader经GEA grant的access/SQL通道读取七表、验证完整分页，原字段和数量/速度映射由Manage唯一 `full-chain-source-rows` 维护。取消、身份/Session变化与刷新清事实；意图恢复不重放事实。当前渠道读取未启用，不恢复旧pool/channel或拒绝后的兜底读取。源码与fixture通过不代真实授权或普通包验收。
 
-The received `inventory-qll` page also renders the captured distribution range as fixed mock inventory, order gap and aging trends. The same Session, page ID and resource apply. Missing periods stay null; changing the range withdraws old historical facts and references. Native and live acceptance remain open.
+The same `inventory-qll` page, resource and Session support company inventory, order-gap and aging history through fixed governed queries. Captured scopes remain narrow, missing periods stay null, and range changes withdraw old facts and references. Source receipt is separate from reviewed ordinary-package, live identity and real-data acceptance.
 
 个人库存接收包位于 `lib/business/inventory-personal`，使用统一 `mode: "mock"`、空MCP读取能力和 `page.visible=false`，默认不新增可见入口。页面保留原日监控、优先事项及年龄修复规则，只消费固定模拟输入。业务值不写入恢复状态，未提交反馈字段按当前身份与真实Session地址保存。
 
