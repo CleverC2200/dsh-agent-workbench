@@ -166,6 +166,8 @@ test("actual distribution page restores scoped filters and re-queries trends aft
       Simulate.change(document.querySelector('[aria-label="读取时点"]'), {target: {value: "2026-10-02"}});
       await new Promise(resolve => setTimeout(resolve, 10));
     });
+    assert.equal(sourceDates.length, 0, "editing the complete initial form must not query");
+    await React.act(async () => {Simulate.submit(document.querySelector('[aria-label="库存查询条件"]')); await new Promise(resolve => setTimeout(resolve, 10));});
     assert.ok(sourceParameters.length > 0 && sourceParameters.every(values => Object.values(values).includes("MOCK-001")), JSON.stringify(sourceParameters));
     assert.equal(document.querySelector('[aria-label="含渠道"]').checked, false);
     assert.ok(
@@ -187,11 +189,18 @@ test("actual distribution page restores scoped filters and re-queries trends aft
       Simulate.change(dateInput, {target: {value: "2026-10-03"}});
       await new Promise(resolve => setTimeout(resolve, 10));
     });
+    assert.equal(sourceDates.length, 0, "editing date must wait for complete submission");
+    for (const draft of ["M", "MOCK-00", ""]) {
+      await React.act(async () => {Simulate.change(initialSku, {target: {value: draft}}); await new Promise(resolve => setTimeout(resolve, 10));});
+      assert.equal(sourceDates.length, 0, "partial or empty SKU draft must not query");
+    }
+    await React.act(async () => {Simulate.change(initialSku, {target: {value: "MOCK-001"}});await new Promise(resolve => setTimeout(resolve, 5));Simulate.submit(document.querySelector('[aria-label="库存查询条件"]'));await new Promise(resolve => setTimeout(resolve, 10));});
     assert.ok(sourceDates.length > 0 && sourceDates.every(value => value === "2026-10-03"), JSON.stringify(sourceDates));
     await React.act(async () => {
       Simulate.change(dateInput, {target: {value: "2026-10-02"}});
       await new Promise(resolve => setTimeout(resolve, 10));
     });
+    await React.act(async () => {Simulate.submit(document.querySelector('[aria-label="库存查询条件"]'));await new Promise(resolve => setTimeout(resolve, 10));});
     await click();
     const first = api.pageContext().parts.trendView;
     assert.equal(first.state, "ready");
