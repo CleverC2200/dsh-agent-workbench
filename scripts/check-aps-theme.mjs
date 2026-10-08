@@ -27,6 +27,19 @@ try{
  const frame=page.frameLocator('iframe');
  const styles=async selectors=>frame.locator('body').evaluate((body,selectors)=>Object.fromEntries(selectors.map(selector=>{const element=body.querySelector(selector);if(!element)throw Error('MISSING_THEME_ELEMENT:'+selector);const style=getComputedStyle(element),rect=element.getBoundingClientRect();return[selector,{background:style.backgroundColor,color:style.color,borderColor:style.borderColor,width:rect.width,height:rect.height,padding:style.padding,gap:style.gap,fontSize:style.fontSize,lineHeight:style.lineHeight,fontWeight:style.fontWeight}]})),selectors);
  const selectors=['.main-content','.dashboard-module-toolbar','.open-intelligent-tasks','.scope-tabs button.selected','.time-granularity-tabs','.time-granularity-tabs button:not(.selected)','.time-granularity-tabs button.selected','.date-picker-button>span','.week-button>span','.kpi-grid.overview-flat-kpi-grid','.period-kpi-card','.period-kpi-card .kpi-name','.active-period-range'];
+ const detailSelectors=['.risk-dimension-filters button.selected','.risk-dimension-filters button:nth-child(2)','.risk-dimension-filters button:nth-child(3)','.summary-strip .summary-copy strong','.summary-strip .summary-copy','.summary-strip .score strong','.summary-strip .score p','#overview-detail-list .overview-list-head span','#overview-detail-list .overview-list-row:not(.overview-list-head)>strong','.category-period-heading h3','.category-period-heading p','.category-drill-head>strong','.category-drill-head>span','.category-drill-head>span>small','.category-card-metric>span'];
+ const inspect=async selectors=>frame.locator('body').evaluate((body,selectors)=>Object.fromEntries(selectors.map(selector=>{
+  const element=body.querySelector(selector);if(!element)throw Error('MISSING_THEME_ELEMENT:'+selector);
+  const style=getComputedStyle(element),rect=element.getBoundingClientRect();let parent=element,background;
+  while(parent){background=getComputedStyle(parent).backgroundColor;if(!/rgba\([^)]*,\s*0\)/.test(background)&&background!=='transparent')break;parent=parent.parentElement}
+  return[selector,{background,color:style.color,width:rect.width,height:rect.height,padding:style.padding,fontSize:style.fontSize,lineHeight:style.lineHeight,fontWeight:style.fontWeight}];
+ })),selectors);
+ const invokeFilter=async input=>{
+  const id=await page.evaluate(input=>{const f=window.apsFixture,id=String(++f.sequence);f.port.postMessage({type:'invoke',id,name:'filter',session:f.session,arguments:input});return id},input);
+  await page.waitForFunction(id=>window.apsFixture.invocations[id],id);
+  assert.equal(await page.evaluate(id=>window.apsFixture.invocations[id].error,id),undefined);
+ };
+ const crossInspect=async()=>{await invokeFilter({productionDimension:'cross'});await frame.locator('#cross-analysis').waitFor();const values=await inspect(['.production-dimension-tabs button.selected','#cross-analysis .cross-tabs button:not(.selected)','#cross-analysis .cross-heading h2','#cross-analysis .matrix-header>span','#cross-analysis button.matrix-unavailable','.risk-dimension-filters button.selected']);await invokeFilter({productionDimension:'category'});await frame.locator('#category-operations').waitFor();return values};
  const snapshots={};
  for(const width of [550,850]){
   await page.locator('iframe').evaluate((element,width)=>element.style.width=width+'px',width);
@@ -35,7 +48,7 @@ try{
   await frame.locator('.scope-tabs button.selected').evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished)));
   await frame.locator('.time-granularity-tabs').evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished)));
   await frame.locator('.kpi-grid').first().evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished)));
-  snapshots[width]={light:await styles(selectors)};
+  snapshots[width]={light:await styles(selectors),lightDetails:await inspect(detailSelectors),lightCross:await crossInspect()};
   await frame.getByRole('button',{name:'2026年8月',exact:true}).click();
   snapshots[width].lightMenu=await styles(['.month-menu','.date-picker-menu .date-picker-sections button:not(.selected):not(:disabled)','.date-picker-menu .date-picker-sections button.selected']);
   await frame.getByRole('button',{name:'2026年8月',exact:true}).click();
@@ -45,21 +58,39 @@ try{
   await frame.locator('.time-granularity-tabs').evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished)));
   await frame.locator('.kpi-grid').first().evaluate(element=>Promise.all(element.getAnimations({subtree:true}).map(animation=>animation.finished)));
   snapshots[width].dark=await styles(selectors);
+  snapshots[width].darkDetails=await inspect(detailSelectors);
+  snapshots[width].darkCross=await crossInspect();
   snapshots[width].darkIndicator=await frame.locator('.time-granularity-tabs').evaluate(element=>getComputedStyle(element,'::before').backgroundColor);
   await frame.getByRole('button',{name:'2026年8月',exact:true}).click();
   snapshots[width].darkMenu=await styles(['.month-menu','.date-picker-menu .date-picker-sections button:not(.selected):not(:disabled)','.date-picker-menu .date-picker-sections button.selected']);
   await frame.getByRole('button',{name:'2026年8月',exact:true}).click();
   await frame.locator('.week-button').click();
   snapshots[width].darkWeek=await styles(['.week-filter-menu','.week-filter-menu button:not(.selected):not(:disabled)','.week-filter-menu button.selected']);
-  await frame.locator('.week-button').click();
+  snapshots[width].weekHit=await frame.locator('.week-filter-menu button').last().evaluate(element=>{
+   const rect=element.getBoundingClientRect(),hit=document.elementFromPoint(rect.left+rect.width/2,rect.top+rect.height/2);
+   const ancestors=[];for(let parent=element.parentElement;parent;parent=parent.parentElement){const style=getComputedStyle(parent);if(['auto','hidden','scroll','clip'].includes(style.overflowY))ancestors.push({className:parent.className,overflowY:style.overflowY,rect:parent.getBoundingClientRect().toJSON()})}
+   return{hit:!!hit&&element.contains(hit),label:element.textContent,ancestors};
+  });
+  if(process.env.APS_THEME_CAPTURE_ONLY!=='1'){
+   await frame.locator('.week-filter-menu button').filter({hasText:'W35'}).click();
+   await page.waitForFunction(()=>window.apsFixture.context?.period?.date==='2026-08-30'&&window.apsFixture.context.simulated);
+   await invokeFilter({date:'2026-08-10'});
+   await page.waitForFunction(()=>window.apsFixture.context?.period?.date==='2026-08-16'&&window.apsFixture.context.simulated);
+  }else await frame.locator('.week-button').click();
  }
  await writeFile(resolve(evidence,'theme-styles.json'),JSON.stringify({snapshots,errors},null,2)+'\n');
  await page.screenshot({path:resolve(evidence,'aps-dark-pc.png')});
+ await frame.locator('.risk-dimension-filters').scrollIntoViewIfNeeded();
+ await page.screenshot({path:resolve(evidence,'aps-dark-risk-pc.png')});
+ await frame.locator('.summary-strip').scrollIntoViewIfNeeded();
+ await page.screenshot({path:resolve(evidence,'aps-dark-summary-pc.png')});
  if(process.env.APS_THEME_CAPTURE_ONLY==='1'){console.log('Captured original light geometry and dark colors');}
  else {
   const luminance=color=>{const rgb=color.match(/[\d.]+/g).slice(0,3).map(Number).map(value=>value/255).map(value=>value<=.04045?value/12.92:((value+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722};
   const contrast=(front,back)=>{const a=luminance(front),b=luminance(back);return(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
   for(const snapshot of Object.values(snapshots)){
+   for(const group of [snapshot.darkDetails,snapshot.darkCross])for(const [selector,item]of Object.entries(group))assert.ok(contrast(item.color,item.background)>=4.5,selector+' actual plain text contrast');
+   assert.equal(snapshot.weekHit.hit,true,'week menu final option must be mouse-visible, not clipped');
    assert.equal(snapshot.dark['.main-content'].background,'rgb(27, 29, 33)','page canvas uses shared dark page');
    for(const selector of ['.dashboard-module-toolbar','.scope-tabs button.selected','.kpi-grid.overview-flat-kpi-grid','.period-kpi-card'])assert.equal(snapshot.dark[selector].background,'rgb(36, 38, 43)',selector+' uses the shared dark surface');
    assert.equal(snapshot.dark['.time-granularity-tabs'].background,'rgb(48, 52, 59)');
@@ -71,7 +102,7 @@ try{
     for(const item of values.slice(1))assert.ok(contrast(item.color,item.background)>=4.5,'menu labels readable');
    }
   }
-  {const original=JSON.parse(await readFile(process.env.APS_THEME_BASELINE??new URL('../tests/fixtures/aps-light-theme.json',import.meta.url),'utf8'));for(const width of [550,850]){assert.deepEqual(snapshots[width].light,original.snapshots[width].light,'original light style and geometry '+width);assert.deepEqual(snapshots[width].lightMenu,original.snapshots[width].lightMenu,'original light menu '+width)}}
+  {const original=JSON.parse(await readFile(process.env.APS_THEME_BASELINE??new URL('../tests/fixtures/aps-light-theme.json',import.meta.url),'utf8'));for(const width of [550,850]){assert.deepEqual(snapshots[width].light,original.snapshots[width].light,'original light style and geometry '+width);assert.deepEqual(snapshots[width].lightMenu,original.snapshots[width].lightMenu,'original light menu '+width);if(original.snapshots[width].lightDetails)assert.deepEqual(snapshots[width].lightDetails,original.snapshots[width].lightDetails,'original light detail geometry/paints '+width);if(original.snapshots[width].lightCross)assert.deepEqual(snapshots[width].lightCross,original.snapshots[width].lightCross,'original light cross geometry/paints '+width)}}
   assert.deepEqual(errors,[]);
   assert.deepEqual(await page.evaluate(()=>window.apsFixture.requests.filter(value=>['sql','workspace','conversation'].includes(value.method))),[]);
   console.log('APS PC550/850 light geometry, dark surfaces/menus/text contrast and zero business requests passed');
