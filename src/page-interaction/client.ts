@@ -19,12 +19,12 @@ export type FrameBinding = {
   frame: HTMLIFrameElement;
   reference: SessionReference;
   page: string;
+  inputActions: import('@deepseek-ai/dsh-client-ui-conversation/client').InputActions;
 } & (
   | { mode: 'business'; surface: string; tool?: string; owner: string }
   | {
       mode: 'quote';
       isCurrentSession: () => boolean;
-      inputActions: import('@deepseek-ai/dsh-client-ui-conversation/client').InputActions;
     }
 );
 export type PageInteraction = {
@@ -385,7 +385,7 @@ export function installPageInteraction(ctx: Context): PageInteraction {
           if (!access.ok || invalidated) throw Error('登录身份已变化，请重新选择引用。');
           if (!ready || !paired()) throw Error('已切换对话，请在当前页面重新引用。');
           const composer = input();
-          const state = composer.state.getSnapshot();
+          const captured = options.inputActions.captureInsertion();
           const inserted = composer.insertReference(
             {
               source: REFERENCE_SOURCE,
@@ -395,12 +395,11 @@ export function installPageInteraction(ctx: Context): PageInteraction {
               clipboardText: serializeReference(receipt),
             },
             {
-              start: state.draft.length,
-              end: state.draft.length,
-              draftRev: state.draftRev,
+              ...captured,
+              start: captured.end,
             },
           );
-          if (!inserted) throw Error('输入框正在发送，请稍后再加入提问。');
+          if (!inserted) throw Error('草稿已变化或正在发送，请重新选择内容。');
           ownedReferences.add(JSON.stringify(receipt));
           if (!observedInput) {
             observedInput = composer;

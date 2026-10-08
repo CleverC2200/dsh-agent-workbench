@@ -397,6 +397,7 @@ export function mountFramePresentation(
         !loaded ||
         !frame.current ||
         !currentExecution ||
+        !inputActions ||
         !page.resourceId
       )
         return;
@@ -458,6 +459,7 @@ export function mountFramePresentation(
           frame: target,
           reference: reference!,
           page: title,
+          inputActions,
           surface: connection.binding.surface,
           tool: connection.binding.tool,
           owner: connection.owner,
@@ -496,7 +498,7 @@ export function mountFramePresentation(
           })
           .catch(() => {});
       };
-    }, [associated, selection, session?.openState, loaded, currentExecution, page, title]);
+    }, [associated, selection, session?.openState, loaded, currentExecution, inputActions, page, title]);
     useEffect(() => {
       if (
         page.resourceId ||

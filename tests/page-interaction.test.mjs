@@ -34,7 +34,7 @@ function fixture(t, saving, options={}) {
   const triggerAnchor = element();
   const offTrigger = api.mountTrigger(triggerAnchor, 'owned');
   const inputActions={captureInsertion:()=>({start:12,end:options.selectionEnd??12,draftRev:7}),insertText:(text,span)=>{drafts.push({text,span});return options.conflict!==true;},persistDraft:()=>drafts.push({persisted:true})};
-  const dispose = api.bindFrame(options.quote?{mode:'quote',frame,reference,page:'Original page',inputActions,isCurrentSession:()=>options.current!==false}:{mode:'business',frame,reference,page:'Original page',surface:'gea-workbench',owner:'owned-lease'});
+  const dispose = api.bindFrame(options.quote?{mode:'quote',frame,reference,page:'Original page',inputActions,isCurrentSession:()=>options.current!==false}:{mode:'business',frame,reference,page:'Original page',inputActions,surface:'gea-workbench',owner:'owned-lease'});
   t.after(() => { dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); for (const [key, value] of globals) globalThis[key] = value });
   return { drafts, posted, saves, frame, reference, dispose, offTrigger, trigger: triggerAnchor.children[0], mountOtherTrigger: () => { const anchor = element(); const off = api.mountTrigger(anchor, 'other'); effects.push(off); return anchor.children[0] }, receive: async (type, details = {}, event = {}) => {
     const channel = posted.at(-1)?.channel;

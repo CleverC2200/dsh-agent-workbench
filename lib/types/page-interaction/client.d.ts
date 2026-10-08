@@ -4,6 +4,7 @@ export type FrameBinding = {
     frame: HTMLIFrameElement;
     reference: SessionReference;
     page: string;
+    inputActions: import('@deepseek-ai/dsh-client-ui-conversation/client').InputActions;
 } & ({
     mode: 'business';
     surface: string;
@@ -12,7 +13,6 @@ export type FrameBinding = {
 } | {
     mode: 'quote';
     isCurrentSession: () => boolean;
-    inputActions: import('@deepseek-ai/dsh-client-ui-conversation/client').InputActions;
 });
 export type PageInteraction = {
     bindFrame(options: FrameBinding): () => void;
