@@ -99,6 +99,11 @@ export declare class WorkbenchController implements AgentWorkbench {
         expected?: Pick<DocumentSession, 'preset' | 'cwd'>;
         signal: AbortSignal;
     } | undefined;
+    /** Finish the still-owned History navigation without revoking its own restore. */
+    completeHistory(target: {
+        page: MainPanelId;
+        signal: AbortSignal;
+    }): Promise<boolean>;
     cancelHistory(): void;
     subscribeHistory(listener: () => void): () => void;
     private changed;
