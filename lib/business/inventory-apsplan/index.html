@@ -210,6 +210,56 @@ html.aps-plugin-host body[data-ds-dark-theme] .embed-mode .main-content {
   background: var(--workbench-page);
 }
 
+/* Match the remaining plain text/surface pairs in the original lower board.
+   The supplied white detail rows retain their readable original ink. */
+html.aps-plugin-host body[data-ds-dark-theme] .risk-dimension-filters:not(.sliding-risk-switch) button {
+  color: var(--workbench-body);
+  background: var(--workbench-surface);
+  border-color: var(--workbench-control-border);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .risk-dimension-filters:not(.sliding-risk-switch) button.selected {
+  color: var(--workbench-selected-text);
+  background: var(--workbench-brand-soft);
+  border-color: var(--workbench-brand);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .risk-dimension-filters:not(.sliding-risk-switch) button:not(.selected):hover {
+  color: var(--workbench-selected-text);
+  background: var(--workbench-hover);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .summary-strip,
+html.aps-plugin-host body[data-ds-dark-theme] .category-period-heading {
+  background: var(--workbench-surface);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .summary-copy,
+html.aps-plugin-host body[data-ds-dark-theme] .category-period-heading h3 {
+  color: var(--workbench-text);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .summary-strip .score > span,
+html.aps-plugin-host body[data-ds-dark-theme] .summary-strip .score p,
+html.aps-plugin-host body[data-ds-dark-theme] .category-period-heading p,
+html.aps-plugin-host body[data-ds-dark-theme] .category-card-metric > span,
+html.aps-plugin-host body[data-ds-dark-theme] .base-card-metric > span {
+  color: var(--workbench-muted);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .summary-strip .score strong {
+  color: var(--workbench-selected-text);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .overview-list-head > *,
+html.aps-plugin-host body[data-ds-dark-theme] .matrix-header > * {
+  color: var(--workbench-body);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > small {
+  color: inherit;
+}
+
+/* These controls already wrap on narrow PC panes. Keep their authored menus
+   outside the toolbar's scroll clip while preserving the control geometry. */
+@media(max-width:720px) {
+  html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
+    overflow: visible;
+  }
+}
+
 /* Shared workbench resource 1.1.1. State belongs to DSH ui-theme.
  * html + body specificity keeps the adapter stable when base sheets reload.
  * Inline user token overrides retain priority. Status palettes stay upstream. */
