@@ -26,6 +26,5 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  },
-  "mode": "mock"
+  }
 }

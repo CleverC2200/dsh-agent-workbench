@@ -1,6 +1,6 @@
 {
   "sourceCommit": "4c7ffa6a53493b599627a2eb0bb2ae152460c494",
-  "mode": "mock",
+  "mode": "governed-read",
   "inputs": {
     "source/public/images/sop-digital-human-avatar-cartoon.png": "a88838b6f4a130f44f4d38ff6379c2dd3f9debaa70d0625cfe240afde9407ae3",
     "source/reference/provided-board.css": "743fbaebcffd31a45c14732fe267271acccee26a79cde3285f3f2a1453b74a50",

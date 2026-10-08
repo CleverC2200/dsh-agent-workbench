@@ -25,37 +25,17 @@
       "agents_scm_sales_accuracy",
       "agents_scm_shortage_supply_match"
     ],
-    "rules": [
-      "复用原指标计算与固定只读查询；查询周期、快照及单位分别解释。",
-      "缺失、失败、空结果与零分开；组织、品类、物料筛选后仅解释当前页面范围。"
-    ],
-    "mock": true
+    "rules": ["复用原指标计算与固定只读查询；查询周期、快照及单位分别解释。", "缺失、失败、空结果与零分开；组织、品类、物料筛选后仅解释当前页面范围。"]
   },
   "maxEffect": "view",
-  "layers": [
-    "read"
-  ],
-  "skills": [
-    "inventory-apsplan",
-    "sales-forecast-result-analysis",
-    "sales-ops-problem-analysis"
-  ],
+  "layers": ["read"],
+  "skills": ["inventory-apsplan", "sales-forecast-result-analysis", "sales-ops-problem-analysis"],
   "resourceReferences": {
-    "skills": [
-      "sales-forecast-result-analysis",
-      "sales-ops-problem-analysis"
-    ],
-    "consumers": [
-      "sales_forecast"
-    ]
+    "skills": ["sales-forecast-result-analysis", "sales-ops-problem-analysis"],
+    "consumers": ["sales_forecast"]
   },
   "routing": {
-    "keywords": [
-      "产销协同",
-      "经营指标",
-      "inventory-apsplan",
-      "aps"
-    ],
+    "keywords": ["产销协同", "经营指标", "inventory-apsplan", "aps"],
     "summary": "读取当前授权范围的产销经营指标、来源和缺失信息；保留现有预测及问题分析资源引用。"
   }
 }
