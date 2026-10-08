@@ -129,10 +129,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
         Object.values(x.parameters).includes("MOCK-002"),
     ),
   );
-  const structure = frame
-    .getByRole("textbox", { name: "SKU编码筛选" })
-    .locator("..")
-    .locator("..");
+  const structure = frame.getByRole("group", { name: "库存结构筛选" });
   const beforeStructure = await child.evaluate(() => sqlCalls.length);
   await frame.getByRole("textbox", { name: "SKU编码筛选" }).fill("MOCK-003");
   assert.equal(await child.evaluate(() => sqlCalls.length), beforeStructure);
