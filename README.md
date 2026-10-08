@@ -108,3 +108,5 @@ The received `inventory-qll` page also renders the captured distribution range a
 DMS回写演示位于 `prototypes/dms`，通过原型演示菜单打开唯一页面 `inventory-dms`。运行 `node scripts/build-dms-prototype.mjs` 生成 `lib/prototypes/dms`；完整构建也包含此入口。Manage拥有 `inventory-dms` 解释资源和报文纯计算，页面内存模型可由公共 `./dms-mock` 导出供纠偏离线夹具消费。
 
 页面上下文标记 `DMS_MOCK`、`simulated=true` 和 `realWriteback=false`。M一笔、Z的ADD/CUT两笔、UNKNOWN先对账和原键补齐沿原模型。页面实例持有模拟回执和完成状态；刷新清空模拟状态，仅类型和场景选择通过当前官方Session范围恢复。模拟按钮没有Agent写动作，MCP能力列表为空。实际Native、引用授权及PC视觉接收在47同组材料中另记。
+
+历史对话侧栏补充显示当前页面可用的未发送会话。列表来自官方 `sessions.list`，只显示当前工作区、普通 blank 会话及 Manage 已启用的解读预设。缺少冷会话预设提示时，通过官方 `refreshProjections` 读取元数据，仍由同一个 Core 列表持有结果。选择仅调用 `uiWorkspace.openSession`，现有页面恢复在 `retain.ready` 后核对真实 preset/cwd。新对话、离开页面和取消会撤销旧恢复；不创建替代 Session，不改预设或草稿，不保存独立历史列表。

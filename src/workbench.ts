@@ -24,6 +24,7 @@ export interface DocumentSession {
   readonly subject?: string | null;
 }
 export interface WorkbenchSnapshot {
+  readonly historyPage?: MainPanelId;
   readonly pages: readonly WorkbenchPage[];
   readonly visitedDocuments: readonly WorkbenchFramePage[];
   readonly selectedDocument?: WorkbenchFramePage;
@@ -100,6 +101,8 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly listeners = new Set<() => void>();
   private readonly historyListeners = new Set<() => void>();
   private historyPage: MainPanelId | undefined;
+  private historySelection?: {sessionId: SessionId; expected: Pick<DocumentSession, 'preset' | 'cwd'>};
+  private historyController?: AbortController;
   constructor(
     private readonly ports: WorkbenchPorts,
     private readonly memory?: WorkbenchPresentationMemory,
@@ -235,6 +238,7 @@ export class WorkbenchController implements AgentWorkbench {
     this.persist();
   }
   leaveDocument(): void {
+    this.cancelHistory();
     this.rememberedPage = undefined;
     if (!this.selectedDocument) {
       this.changed();
@@ -256,14 +260,33 @@ export class WorkbenchController implements AgentWorkbench {
   };
   showHistory(page?: MainPanelId): void {
     this.rememberedPage = undefined;
+    this.historyController?.abort();
+    this.historyController = new AbortController();
+    this.historySelection = undefined;
     this.historyPage = page;
     this.changed();
     for (const listener of this.historyListeners) listener();
   }
-  takeHistoryPage(): MainPanelId | undefined {
-    const page = this.historyPage;
+  /** A selection intent, not a Core Session or persisted Session directory. */
+  selectHistorySession(page: MainPanelId, sessionId: SessionId, expected: Pick<DocumentSession, 'preset' | 'cwd'>): void {
+    if (this.historyPage !== page || !this.historyController || this.historyController.signal.aborted) throw Error('PAGE_HISTORY_CANCELLED');
+    this.historySelection = {sessionId, expected};
+  }
+  takeHistoryTarget(sessionId?: SessionId): {page: MainPanelId; expected?: Pick<DocumentSession, 'preset' | 'cwd'>; signal: AbortSignal} | undefined {
+    if (!this.historyPage) return undefined;
+    const page = this.historyPage, selection = this.historySelection, controller = this.historyController;
     this.historyPage = undefined;
-    return page;
+    this.historySelection = undefined;
+    this.changed();
+    if (!page || !controller || controller.signal.aborted || (selection && selection.sessionId !== sessionId)) return undefined;
+    return {page, signal: controller.signal, ...(selection ? {expected: selection.expected} : {})};
+  }
+  cancelHistory(): void {
+    const changed = this.historyPage !== undefined;
+    this.historyController?.abort();
+    this.historyPage = undefined;
+    this.historySelection = undefined;
+    if (changed) this.changed();
   }
   subscribeHistory(listener: () => void): () => void {
     this.historyListeners.add(listener);
@@ -273,6 +296,7 @@ export class WorkbenchController implements AgentWorkbench {
   }
   private changed(): void {
     this.snapshot = {
+      ...(this.historyPage ? {historyPage: this.historyPage} : {}),
       pages: [...this.pages.values()],
       visitedDocuments: [...this.visited].map((id) => this.documents.get(id)!),
       selectedDocument: this.selectedDocument,
@@ -302,6 +326,9 @@ export class WorkbenchController implements AgentWorkbench {
     });
   }
   dispose(): void {
+    this.historyController?.abort();
+    this.historyPage = undefined;
+    this.historySelection = undefined;
     this.disposed = true;
     this.pages.clear();
     this.documents.clear();

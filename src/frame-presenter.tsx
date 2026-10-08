@@ -756,6 +756,7 @@ export function mountFramePresentation(
           onViewChange={changeView}
           onHistory={() => workbench.showHistory(page.id)}
           onNewConversation={() => {
+            workbench.cancelHistory();
             if (page.resourceId)
               void connect(undefined, undefined, interpreter, false);
             else void newPlainConversation();
