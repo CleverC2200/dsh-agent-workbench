@@ -42,7 +42,8 @@ export function createGeaWorkspace(transport:SqlTransport){
      return transport(method,payload,{signal:input.signal});
     }),q.sql,parameters,{signal:input.signal}).catch(error=>{
      if(sharedReads.get(cacheKey)===job)sharedReads.delete(cacheKey);
-     if(!input.signal?.aborted && /RESOURCE_NOT_PUBLISHED|数据表未发布/.test(String(error?.code)+' '+String(error?.message)))unavailable.set(q.sql,error);
+     const denied=/^(RESOURCE_NOT_PUBLISHED|RESOURCE_NOT_IN_DATASET|FIELD_NOT_PUBLISHED|NO_RETURN_COLUMN_ALLOWED|RETURN_PERMISSION_DENIED|GEA_RETURN_COLUMNS_REJECTED|GEA_SQL_PERMISSION_DENIED|DATA_PERMISSION_DENIED|AI_GATEWAY_DATA_PERMISSION_DENIED|ACCESS_DENIED)$/.test(String(error?.code));
+     if(!input.signal?.aborted && (denied || /数据表未发布/.test(String(error?.message))))unavailable.set(q.sql,error);
      throw error;
     });
     sharedReads.set(cacheKey,job);

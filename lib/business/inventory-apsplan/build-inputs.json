@@ -18,7 +18,7 @@
     "source/app/data/host-bridge.ts": "5efbcf7494e31a755299f861fbc72ad9390fd0500d6df35667617de052b602f5",
     "source/app/data/gea-queries.json": "c1502c3d4db85284752b1a9400b688d41b45a38970ab35619a7e14dea89ef122",
     "source/app/data/gea-sql.ts": "3e75f8781dccaf591420b05acf3f29ed1a59523d295cef6ea32dcfa09869c3ee",
-    "source/app/data/gea-workspace.ts": "45358571f0e191da4db1c455a62c110175f1c0c7c07ab87ae476e235ebda8474",
+    "source/app/data/gea-workspace.ts": "538922d4b943322b0e8184ba9ab32800c23910f27d2145e91a06e5f147556edf",
     "source/app/data/mock-workspace.ts": "5fad90b9d6e1e4a40766df24d22f3a065553aba612f1339d37c8fe6f22a2c983",
     "source/app/data/use-workspace.ts": "68657596af8d81a2974c2cf80de5ae5644304f3e10a43e65102aa7508bbbced9",
     "manage/src/aps-compute/perspective-analysis.ts": "0e8b6ead6fd64a30c130e30ae19581bc40331e47065ed4cf1c791eb8bd381b4c",
