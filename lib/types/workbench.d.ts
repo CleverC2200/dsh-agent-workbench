@@ -23,6 +23,7 @@ export interface DocumentSession {
     readonly subject?: string | null;
 }
 export interface WorkbenchSnapshot {
+    readonly historyPage?: MainPanelId;
     readonly pages: readonly WorkbenchPage[];
     readonly visitedDocuments: readonly WorkbenchFramePage[];
     readonly selectedDocument?: WorkbenchFramePage;
@@ -69,6 +70,8 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly listeners;
     private readonly historyListeners;
     private historyPage;
+    private historySelection?;
+    private historyController?;
     constructor(ports: WorkbenchPorts, memory?: WorkbenchPresentationMemory | undefined);
     register(page: WorkbenchPage): () => void;
     open(id: MainPanelId): Promise<boolean>;
@@ -89,7 +92,14 @@ export declare class WorkbenchController implements AgentWorkbench {
     label(id: MainPanelId): string;
     subscribe: (listener: () => void) => (() => void);
     showHistory(page?: MainPanelId): void;
-    takeHistoryPage(): MainPanelId | undefined;
+    /** A selection intent, not a Core Session or persisted Session directory. */
+    selectHistorySession(page: MainPanelId, sessionId: SessionId, expected: Pick<DocumentSession, 'preset' | 'cwd'>): void;
+    takeHistoryTarget(sessionId?: SessionId): {
+        page: MainPanelId;
+        expected?: Pick<DocumentSession, 'preset' | 'cwd'>;
+        signal: AbortSignal;
+    } | undefined;
+    cancelHistory(): void;
     subscribeHistory(listener: () => void): () => void;
     private changed;
     private persist;
