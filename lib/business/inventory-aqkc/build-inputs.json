@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "0f0c18396134e3b8337b1571a6adfdc17e515a8a",
+  "sourceCommit": "b68615a2e362bf2f482fad77fd374b3e67600352",
   "inputs": {
     "source/aqkc/web/src/lib/workbench-current-order.ts": "a80e537d42cef6dbff4ffb130eeef90ed880196906a1a9625ddfae6626288c27",
     "../shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
@@ -45,7 +45,7 @@
     "source/aqkc/web/src/lib/workbench-sql.ts": "027d595a6cf2ae2375cbfb245a8dca76ad3ba53c0b8b0bd06c4d7fa749b6717f",
     "source/aqkc/web/src/lib/cube-dashboard.ts": "a6fabe994467292020d4932e2d3da8cb258408d95bdfdaab9d54421820712821",
     "source/aqkc/web/src/lib/daily-report-sql.ts": "3c7d5f4c64f4a6de05b57367d5edaf7b21adc89b6119d5ca9250b78102c556db",
-    "source/inventory-light-plugins/src/aqkc-report.ts": "a9166dac27401a21f2614a184b7b7224fdec512f7ba091bc614a5c47ad92a9e3",
+    "source/inventory-light-plugins/src/aqkc-report.ts": "7f3dab1bde7368582229a71a61eebcd0ec5875154a668733e3453fe78032926a",
     "source/inventory-light-plugins/src/aqkc-engine.ts": "9f2e48e41fbe3c32208135c70b5323c06e1ea29083c752ae02a1b820ec0f5a24",
     "source/inventory-light-plugins/src/native/api.ts": "b6e8b9cfa99b6c38ff239494840ec7414d7ba835c59bf5a9792860348db7e427",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e834b61874dc4b2dcbd671323fd6ff00ba3d7fc81d8d4270d4fa5b295fa939d2",

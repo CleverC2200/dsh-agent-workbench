@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "0f0c18396134e3b8337b1571a6adfdc17e515a8a",
+  "sourceCommit": "b68615a2e362bf2f482fad77fd374b3e67600352",
   "computeOwner": "dsh-agent-manage",
   "computePublicExport": "./inventory-compute/*",
   "inputs": {
@@ -26,7 +26,7 @@
     "../dsh-agent-manage/src/inventory-compute/dealer-dashboard.ts": "2f72ec31cc67e8d1571c43572e6d69ec5b770266ed1b5cf1e56a3323d9916824",
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
-    "../shared/sql-reader.ts": "13be6da5dd5c5b14d11772ed5e862fc69b4cd4ce57a97b954e5cda7baa8f798a",
+    "../shared/sql-reader.ts": "eee07a381f4c1b8a12d92c772fc52d79bd0385b4fdb43f66462bd6806fcc37ec",
     "source/inventory-light-plugins/src/data.ts": "1afa767a935322b562660a2a38fe5c7d1d8256413e8d587abf4e0812f1ff8e4e",
     "source/dealer/web/src/lib/dealer-workbench-sql.ts": "10b534640287c75d2f99323d03b891f89d6dc9f0d7afec7b482cb21847a6cef4",
     "source/dealer/web/src/lib/dealer-dashboard.ts": "decdade8fede7d5728831d78bc59e87c7be50bd9348842e1fc48a724092dedf9",

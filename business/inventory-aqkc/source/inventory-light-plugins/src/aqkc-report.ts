@@ -6,17 +6,21 @@ import { buildDailyReport, reportNumber, type DailySource, type DailyReportInput
 import type { WorkbenchSqlRow } from "../../aqkc/web/src/lib/workbench-sql-types";
 const text = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
 const nonnegative = (value: unknown) => { const n = reportNumber(value); return n !== null && n >= 0 ? n : null; };
-export async function loadDailyReportInput(signal?: AbortSignal, read = queryStock): Promise<DailyReportInput> {
+export async function loadDailyReportInput(signal?: AbortSignal, read = queryStock): Promise<DailyReportInput & {sourceErrors: Record<string,{code:string;message:string}>}> {
   const sources = Object.keys(dailyReportSql) as DailySource[];
   const results = await Promise.allSettled(sources.map(source => read(dailyReportSql[source], signal)));
   signal?.throwIfAborted();
   const rows = results.map(result => result.status === "fulfilled" ? result.value : []);
   const data = Object.fromEntries(sources.map((source,index) => [source,rows[index]])) as Record<DailySource,WorkbenchSqlRow[]>;
   const failedSources: DailySource[] = sources.filter((_,index) => results[index].status === "rejected");
+  const sourceErrors = Object.fromEntries(results.flatMap((result,index) => result.status === "rejected" ? [[sources[index],{
+    code:String(result.reason?.cause?.code ?? result.reason?.code ?? "QUERY_FAILED"),
+    message:String(result.reason?.message ?? result.reason),
+  }]] : []));
   const generatedAt = new Date().toISOString();
   const selected = selectWorkbenchTargetRows(data.stock, new Date(generatedAt));
   return {
-    generatedAt,localPreview:false,failedSources,
+    generatedAt,localPreview:false,failedSources,sourceErrors,
     targetMonth:selected.scope.targetMonthLabel,targetVersion:selected.scope.versionLabel,targetRule:selected.scope.selectionRule,
     stock:selected.rows.map(row => {
       const seasonal = ["safety_stock.product_categ_name","safety_stock.product_label","safety_stock.material_name"].some(field=>text(row[field]).includes("粽子"));

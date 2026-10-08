@@ -7,12 +7,18 @@ export function bindGovernedSql(sql: string, values: unknown[] = []) {
     parameters[name] = value;
     return ':' + name;
   };
-  const bound = sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\r\n]*|\/\*[\s\S]*?\*\/|:scope_(\d+)\b|:list_(\d+)\b|\$(\d+)\b/g,
-    (token, scope, list, scalar) => {
-      const index = Number(scope || list || scalar);
+  const bound = sql.replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\r\n]*|\/\*[\s\S]*?\*\/|:scope_(\d+)\b|:list_(\d+)\b|=\s*ANY\(\$(\d+)::text\[\]\)|\$(\d+)\b/g,
+    (token, scope, list, membership, scalar) => {
+      const index = Number(scope || list || membership || scalar);
       if (!index) return token;
       if (index > values.length) throw Error('GEA_SQL_PARAMETER_MISSING');
       const value = values[index - 1];
+      if (membership) {
+        // Current branch order/SKU queries supply nonempty text lists. Keep
+        // every business value in named scalar parameters, including quotes.
+        if (!Array.isArray(value) || !value.length || value.some(item => typeof item !== 'string')) throw Error('GEA_SQL_PARAMETER_INVALID');
+        return 'IN (' + value.map((item, i) => put(`list_${index}_${i}`, item)).join(', ') + ')';
+      }
       if (scope) return put('scope_' + index, value === null);
       if (list) {
         if (value !== null && !Array.isArray(value)) throw Error('GEA_SQL_PARAMETER_INVALID');

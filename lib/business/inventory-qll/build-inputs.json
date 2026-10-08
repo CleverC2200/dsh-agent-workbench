@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "eab392344ab2081222683f2d6d2ae2741fde8e06",
+  "sourceCommit": "b68615a2e362bf2f482fad77fd374b3e67600352",
   "computeOwner": "dsh-agent-manage",
   "computePublicExport": "./inventory-compute/*",
   "inputs": {
@@ -34,7 +34,7 @@
     "source/inventory-light-plugins/src/pages/qll.tsx": "39e13b1d1c8244ecdb2145860a8da56bd092c720b34d2204b85eb4054af2c756",
     "../dsh-agent-manage/src/inventory-compute/full-chain-workspace-service.ts": "ca5894ab04ff225c3dd0bf43ffe77783db9268786facd069d153351cf5a55050",
     "../dsh-agent-manage/src/inventory-compute/full-chain-source-rows.ts": "5c7b4944e3e7276f4a74f2f3f038d3bb6aaf07d7f6d262ff7e0ed1e3c00ef82c",
-    "../shared/governed-parameters.ts": "780117245df97ff507ab4ec5e251cb2317fd39136b7df7e0ec2d0af734ec3e10",
+    "../shared/governed-parameters.ts": "77eb783dce8b71fb9787cd6e5adedaad3ee4989d4ea987f89754eebd78624086",
     "source/inventory-light-plugins/src/qll-sql.ts": "23be6e636120cbd2bb18c3bd8d723414219bea26c12a29b65c6b93dba3a96553",
     "source/inventory-light-plugins/src/qll-source.ts": "3b1e899e9f0159b1563bd980752ce5ed12d0af803b06b805a9a5d45b55d81847",
     "source/inventory-light-plugins/src/qll-engine.ts": "102c1c3a3269e3ba0f010fea5892bb15137e3f6e601c368135a74009a1f51c7e",

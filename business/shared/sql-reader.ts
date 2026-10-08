@@ -111,6 +111,13 @@ export async function executeAllGeaSqlPages(
       );
     total = page.total;
     permissions = pagePermissions;
+    if (Array.isArray(page.rejectedColumns) && page.rejectedColumns.length)
+      throw new GeaSqlApiError(
+        "返回字段权限不完整，未使用裁剪结果",
+        "RETURN_PERMISSION_DENIED",
+        403,
+        false,
+      );
     rows.push(...page.rows);
     if (rows.length === total) return rows;
   }

@@ -27,9 +27,10 @@ export async function loadPersonal(
       try {
         const input = await loadDailyReportInput(signal);
         if (input.failedSources.length)
-          errors.push(
-            "基地部分数据源未返回：" + input.failedSources.join("、"),
-          );
+          errors.push("基地部分数据源未返回：" + input.failedSources.map(source => {
+            const failure = input.sourceErrors?.[source];
+            return failure ? `${source}：${failure.message}（${failure.code}）` : source;
+          }).join("；"));
         const names = [
           ...new Set(
             [...input.stock, ...input.age].map((r) => r.base).filter(Boolean),

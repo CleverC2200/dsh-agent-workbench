@@ -89,6 +89,12 @@ test("changed column permissions reject all pages even when the total stays 201"
   assert.equal(f.calls.length, 2);
 });
 
+test("stable rejected columns refuse the whole read before business facts are used", async t => {
+  const f = await fixture(t, () => ({rows:[{sku:"A"}],total:1,returnedColumns:["sku"],rejectedColumns:[{alias:"quantity",reason:"RETURN_PERMISSION_DENIED"}]}));
+  await assert.rejects(f.executeAllGeaSqlPages("SELECT sku,quantity FROM fixture"),error=>error.code==="RETURN_PERMISSION_DENIED");
+  assert.equal(f.calls.length,1);
+});
+
 test("caller cancellation and identity/cache invalidation stop a whole multi-page read", async t => {
   for (const reason of ["caller", "identity"]) {
     let f;

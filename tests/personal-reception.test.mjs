@@ -77,7 +77,7 @@ async function mount(t, restore = { version: 1 }, live = false) {
             type: "response",
             id: message.id,
             result:
-              message.method === "sql" ? {rows:[],total:0,returnedColumns:[],rejectedColumns:[]} : message.method === "draft"
+              message.method === "sql" ? (live === "denied" ? {rows:[{sku:"CLIPPED"}],total:1,returnedColumns:["sku"],rejectedColumns:[{alias:"quantity",reason:"RETURN_PERMISSION_DENIED"}]} : {rows:[],total:0,returnedColumns:[],rejectedColumns:[]}) : message.method === "draft"
                 ? { drafted: true }
                 : { accepted: true },
           },
@@ -376,3 +376,12 @@ test('a released view scope clears feedback fields before another Session restor
  assert.deepEqual(page.requests.filter(m=>m.method==="conversation"||m.method==="draft"),[]);
  assert.deepEqual(page.errors,[]);
  });
+
+test("the actual built personal page rejects stable clipped fields and reports the source permission reason without real facts",async t=>{
+ const page=await mount(t,{version:1},"denied");
+ assert.equal(page.context().realData,false);
+ assert.equal(page.context().parts.personalWorkbench.scope.length,0);
+ assert.match(JSON.stringify(page.context().parts.personalWorkbench.errors),/RETURN_PERMISSION_DENIED/);
+ assert.doesNotMatch(JSON.stringify(page.context().parts.personalWorkbench.risks),/CLIPPED/);
+ assert.deepEqual(page.errors,[]);
+});
