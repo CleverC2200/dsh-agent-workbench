@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "b68615a2e362bf2f482fad77fd374b3e67600352",
+  "sourceCommit": "9bbab8c2809af7ce15fdfd27efddcf7d80dcb511",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
@@ -54,7 +54,7 @@
     "source/fc/src/lib/server/warehouse-catalog.ts": "4ed1790d35ec8ae607a9abeaee1813b6a9cb17e2c166b4e686eb7fd22417dd35",
     "source/fc/src/lib/server/warehouse-scope.ts": "a34ba7fd0e6d8c16b84ee9b92e52c44db97a396a54461da0fc7afe3ecdc958fe",
     "source/fc/src/lib/server/plan-product-metadata.ts": "8ccb233b72519877ed7938df795ef6e30b110e7433f2cec1c2c5e66dbf00a2bd",
-    "source/fc/src/lib/server/warehouse-snapshot.ts": "e58d8e84105249b7466be7463ceeb75709e16ed7ec6e2fb705876aab30442764",
+    "source/fc/src/lib/server/warehouse-snapshot.ts": "2c86576ee179e89514f4c2cab09c4ea64137c77220786c1bbf7c0df0a814b0f1",
     "source/inventory-light-plugins/src/warehouse-input.ts": "82183a5b1ba33efd7d412c4810acd3fd3e378d255105f98ea8b634bc0030d033",
     "source/fc/src/lib/server/base-resources.ts": "f289112bfb8b392a0b36d7c930217df00ee1315a8c4cc7c18c246db37325be56",
     "source/inventory-light-plugins/src/local-planning.ts": "65dad87e96b8b126eb4ae7c5ac02091dde2988dd97dd41b96d96f175b4a7c0fd",

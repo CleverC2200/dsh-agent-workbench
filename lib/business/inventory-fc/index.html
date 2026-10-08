@@ -434,7 +434,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
     WHERE pickup_point=$1 AND metric_name='out_qty_daily'
       AND business_date >= $2::date - INTERVAL '29 days' AND business_date <= $2::date
     GROUP BY material_code
-  `,[s.pickupPointCode,zo(o,-1)])];for(let g of u)g.catch(()=>{});let[p,f]=await l,h=g=>G(g)==="MONTH_START"?0:G(g)==="ROLLING"?1:2,w=new Map;for(let g of[...p.rows].sort((j,re)=>h(j.plan_version)-h(re.plan_version)||G(j.plan_version).localeCompare(G(re.plan_version)))){let j=G(g.target_month);w.has(j)||w.set(j,G(g.plan_version))}p.rows=p.rows.filter(g=>G(g.plan_version)===w.get(G(g.target_month)));let k=[...new Set(p.rows.map(g=>G(g.target_month)).filter(Boolean))].sort(),$=k[0]??`${zo(o,-1).slice(0,7)}-01`,P=k[1]??(k[0]||`${Ji($.slice(0,7))}-01`),b=p.rows.filter(g=>G(g.target_month)===$),y=[...new Set(b.map(g=>G(g.material_code)).filter(Boolean))];if(p.rows.length&&(!k.length||!y.length))throw new ps(`${s.warehouseName}\u6700\u65B0\u8BA1\u5212\u7F3A\u5C11\u6708\u4EFD\u6216 SKU`);let _=!!f.rows[0]?.order_fulfillment,E=!!(f.rows[0]?.imported_plans&&f.rows[0]?.cycle_config),T=[u[0],u[1],u[2],t.query(`
+  `,[s.pickupPointCode,zo(o,-1)])];for(let g of u)g.catch(()=>{});let[p,f]=await l,h=g=>G(g)==="MONTH_START"?0:G(g)==="ROLLING"?1:2,w=new Map;for(let g of[...p.rows].sort((j,re)=>h(j.plan_version)-h(re.plan_version)||G(j.plan_version).localeCompare(G(re.plan_version)))){let j=G(g.target_month);w.has(j)||w.set(j,G(g.plan_version))}p.rows=p.rows.filter(g=>G(g.plan_version)===w.get(G(g.target_month)));let k=[...new Set(p.rows.map(g=>G(g.target_month)).filter(Boolean))].sort(),$=k[0]??`${zo(o,-1).slice(0,7)}-01`,P=k[1]??(k[0]||`${Ji($.slice(0,7))}-01`),b=p.rows.filter(g=>G(g.target_month)===$),y=[...new Set(b.map(g=>G(g.material_code)).filter(Boolean))];if(p.rows.length&&(!k.length||!y.length))throw new ps(`${s.warehouseName}\u6700\u65B0\u8BA1\u5212\u7F3A\u5C11\u6708\u4EFD\u6216 SKU`);let _=!!f.rows[0]?.order_fulfillment,E=!!(f.rows[0]?.imported_plans&&f.rows[0]?.cycle_config),T=[u[0],u[1],u[2],y.length?t.query(`
       SELECT
         p.base_finish_date::text AS base_finish_date,
         p.warehouse_group_id,
@@ -449,7 +449,7 @@ Set the \`cycles\` parameter to \`"ref"\` to resolve cyclical schemas with defs.
         AND p.base_finish_date <= $2::date + INTERVAL '6 days'
       GROUP BY p.base_finish_date, p.warehouse_group_id, p.warehouse_group_name, p.base_name, p.material_code
       ORDER BY p.base_finish_date, p.warehouse_group_name, p.material_code, p.warehouse_group_id
-    `,[y,o]),u[3],u[4]],q=T[2].then(async g=>{let j=[...new Set(g.rows.map(_e=>G(_e.executeorderno)).filter(Boolean))],re=g.rows.flatMap(_e=>[G(_e.executeorderno),G(_e.material_code)]),De=g.rows.map((_e,We)=>`(f.executeorderno = $${3+We*2}::text AND f.new_material_code = $${4+We*2}::text)`).join(" OR ");return _&&j.length?t.query(`
+    `,[y,o]):Promise.resolve({rows:[]}),u[3],u[4]],q=T[2].then(async g=>{let j=[...new Set(g.rows.map(_e=>G(_e.executeorderno)).filter(Boolean))],re=g.rows.flatMap(_e=>[G(_e.executeorderno),G(_e.material_code)]),De=g.rows.map((_e,We)=>`(f.executeorderno = $${3+We*2}::text AND f.new_material_code = $${4+We*2}::text)`).join(" OR ");return _&&j.length?t.query(`
     WITH ranked_order_details AS (
       SELECT f.executeorderno, f.new_material_code, f.new_material_name,
         f.cust_code, f.cust_name, f.header_addtime, f.qtyshipped, f.snapshot_date,

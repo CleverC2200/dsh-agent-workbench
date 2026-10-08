@@ -333,7 +333,7 @@ export async function loadWarehouseSnapshot(
   const planningEnabled = Boolean(optionalTables.rows[0]?.imported_plans && optionalTables.rows[0]?.cycle_config);
 
   const queries = [independentQueries[0], independentQueries[1], independentQueries[2],
-    database.query(`
+    planMaterialCodes.length ? database.query(`
       SELECT
         p.base_finish_date::text AS base_finish_date,
         p.warehouse_group_id,
@@ -348,7 +348,7 @@ export async function loadWarehouseSnapshot(
         AND p.base_finish_date <= $2::date + INTERVAL '6 days'
       GROUP BY p.base_finish_date, p.warehouse_group_id, p.warehouse_group_name, p.base_name, p.material_code
       ORDER BY p.base_finish_date, p.warehouse_group_name, p.material_code, p.warehouse_group_id
-    `, [planMaterialCodes, calculationDate]),
+    `, [planMaterialCodes, calculationDate]) : Promise.resolve({ rows: [] }),
     independentQueries[3], independentQueries[4],
   ];
 

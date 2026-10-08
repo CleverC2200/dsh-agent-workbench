@@ -686,7 +686,7 @@ ORDER BY belong_base, new_material_code`}};g();function cs(e){if(e==null||e===""
     WHERE pickup_point=$1 AND metric_name='out_qty_daily'
       AND business_date >= $2::date - INTERVAL '29 days' AND business_date <= $2::date
     GROUP BY material_code
-  `,[u.pickupPointCode,Li(o,-1)])];for(let p of s)p.catch(()=>{});let[c,f]=await l,h=p=>F(p)==="MONTH_START"?0:F(p)==="ROLLING"?1:2,$=new Map;for(let p of[...c.rows].sort((j,ee)=>h(j.plan_version)-h(ee.plan_version)||F(j.plan_version).localeCompare(F(ee.plan_version)))){let j=F(p.target_month);$.has(j)||$.set(j,F(p.plan_version))}c.rows=c.rows.filter(p=>F(p.plan_version)===$.get(F(p.target_month)));let w=[...new Set(c.rows.map(p=>F(p.target_month)).filter(Boolean))].sort(),O=w[0]??`${Li(o,-1).slice(0,7)}-01`,P=w[1]??(w[0]||`${Nu(O.slice(0,7))}-01`),_=c.rows.filter(p=>F(p.target_month)===O),y=[...new Set(_.map(p=>F(p.material_code)).filter(Boolean))];if(c.rows.length&&(!w.length||!y.length))throw new oa(`${u.warehouseName}\u6700\u65B0\u8BA1\u5212\u7F3A\u5C11\u6708\u4EFD\u6216 SKU`);let S=!!f.rows[0]?.order_fulfillment,E=!!(f.rows[0]?.imported_plans&&f.rows[0]?.cycle_config),U=[s[0],s[1],s[2],t.query(`
+  `,[u.pickupPointCode,Li(o,-1)])];for(let p of s)p.catch(()=>{});let[c,f]=await l,h=p=>F(p)==="MONTH_START"?0:F(p)==="ROLLING"?1:2,$=new Map;for(let p of[...c.rows].sort((j,ee)=>h(j.plan_version)-h(ee.plan_version)||F(j.plan_version).localeCompare(F(ee.plan_version)))){let j=F(p.target_month);$.has(j)||$.set(j,F(p.plan_version))}c.rows=c.rows.filter(p=>F(p.plan_version)===$.get(F(p.target_month)));let w=[...new Set(c.rows.map(p=>F(p.target_month)).filter(Boolean))].sort(),O=w[0]??`${Li(o,-1).slice(0,7)}-01`,P=w[1]??(w[0]||`${Nu(O.slice(0,7))}-01`),_=c.rows.filter(p=>F(p.target_month)===O),y=[...new Set(_.map(p=>F(p.material_code)).filter(Boolean))];if(c.rows.length&&(!w.length||!y.length))throw new oa(`${u.warehouseName}\u6700\u65B0\u8BA1\u5212\u7F3A\u5C11\u6708\u4EFD\u6216 SKU`);let S=!!f.rows[0]?.order_fulfillment,E=!!(f.rows[0]?.imported_plans&&f.rows[0]?.cycle_config),U=[s[0],s[1],s[2],y.length?t.query(`
       SELECT
         p.base_finish_date::text AS base_finish_date,
         p.warehouse_group_id,
@@ -701,7 +701,7 @@ ORDER BY belong_base, new_material_code`}};g();function cs(e){if(e==null||e===""
         AND p.base_finish_date <= $2::date + INTERVAL '6 days'
       GROUP BY p.base_finish_date, p.warehouse_group_id, p.warehouse_group_name, p.base_name, p.material_code
       ORDER BY p.base_finish_date, p.warehouse_group_name, p.material_code, p.warehouse_group_id
-    `,[y,o]),s[3],s[4]],H=U[2].then(async p=>{let j=[...new Set(p.rows.map(_e=>F(_e.executeorderno)).filter(Boolean))],ee=p.rows.flatMap(_e=>[F(_e.executeorderno),F(_e.material_code)]),Te=p.rows.map((_e,at)=>`(f.executeorderno = $${3+at*2}::text AND f.new_material_code = $${4+at*2}::text)`).join(" OR ");return S&&j.length?t.query(`
+    `,[y,o]):Promise.resolve({rows:[]}),s[3],s[4]],H=U[2].then(async p=>{let j=[...new Set(p.rows.map(_e=>F(_e.executeorderno)).filter(Boolean))],ee=p.rows.flatMap(_e=>[F(_e.executeorderno),F(_e.material_code)]),Te=p.rows.map((_e,at)=>`(f.executeorderno = $${3+at*2}::text AND f.new_material_code = $${4+at*2}::text)`).join(" OR ");return S&&j.length?t.query(`
     WITH ranked_order_details AS (
       SELECT f.executeorderno, f.new_material_code, f.new_material_name,
         f.cust_code, f.cust_name, f.header_addtime, f.qtyshipped, f.snapshot_date,
