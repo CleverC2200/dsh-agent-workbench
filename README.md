@@ -102,3 +102,9 @@ The received `inventory-qll` page also renders the captured distribution range a
 个人库存接收包位于 `lib/business/inventory-personal`，使用统一 `mode: "mock"`、空MCP读取能力和 `page.visible=false`，默认不新增可见入口。页面保留原日监控、优先事项及年龄修复规则，只消费固定模拟输入。业务值不写入恢复状态，未提交反馈字段按当前身份与真实Session地址保存。
 
 页面桥 `draft` 方法只接收 `{text}`，通过当前已授权连接的真实Session追加未发送纯文字。Core公开 `slash/input-insert-text` 事件校验编辑revision并持久化语义草稿，已有文字与引用保留。忙态、取消或编辑变化拒绝插入。`conversation` 仍会发送模型Task，本批个人反馈按钮只调用 `draft`。
+
+## DMS模拟原型
+
+DMS回写演示位于 `prototypes/dms`，通过原型演示菜单打开唯一页面 `inventory-dms`。运行 `node scripts/build-dms-prototype.mjs` 生成 `lib/prototypes/dms`；完整构建也包含此入口。Manage拥有 `inventory-dms` 解释资源和报文纯计算，页面内存模型可由公共 `./dms-mock` 导出供纠偏离线夹具消费。
+
+页面上下文标记 `DMS_MOCK`、`simulated=true` 和 `realWriteback=false`。M一笔、Z的ADD/CUT两笔、UNKNOWN先对账和原键补齐沿原模型。页面实例持有模拟回执和完成状态；刷新清空模拟状态，仅类型和场景选择通过当前官方Session范围恢复。模拟按钮没有Agent写动作，MCP能力列表为空。实际Native、引用授权及PC视觉接收在47同组材料中另记。

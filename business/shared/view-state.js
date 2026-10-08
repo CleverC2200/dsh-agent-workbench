@@ -3,7 +3,7 @@
  */
 const PROTOCOL = 'dsh-workbench-view-v1';
 export function createPageViewState(page) {
-    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal', 'inventory-apsplan'].includes(page);
+    const sessionPage = ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal', 'inventory-apsplan', 'inventory-dms'].includes(page);
     /** @type {Record<string,unknown>} */
     let state = { version: 1 };
     let binding, dirty = false;

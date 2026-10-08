@@ -119,3 +119,5 @@ if (values.target !== 'core') {
 await import('./build-inventory-dealer.mjs');
 
 await import("./build-aps-metrics.mjs");
+
+await import('./build-dms-prototype.mjs');
