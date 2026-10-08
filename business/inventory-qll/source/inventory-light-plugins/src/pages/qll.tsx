@@ -467,6 +467,7 @@ export function FullChainWorkbench() {
   const [skuFilter,setSkuFilter] = usePageViewField(React,view,"sku","");
   const [queryDraft,setQueryDraft] = useState(()=>({asOf,month,sku:skuFilter}));
   useEffect(()=>setQueryDraft({asOf,month,sku:skuFilter}),[asOf,month,skuFilter]);
+  const submitQuery = () => {setAsOf(queryDraft.asOf);setMonth(queryDraft.month);setSkuFilter(queryDraft.sku.trim());};
   const [riskFilter,setRiskFilter] = usePageViewField(React,view,"risk","");
   const [filterToolbar,setFilterToolbar] = useState<HTMLDivElement|null>(null);
   const [structureFilters,setStructureFilters] = usePageViewField(React,view,"structureFilters",()=>({category:"",org:""}));
@@ -850,8 +851,8 @@ export function FullChainWorkbench() {
             <div className={styles.controls}>
               <label className={styles.channelSwitch}><input type="checkbox" aria-label="含渠道" checked={scope === "all-channel"} disabled={scope === "company"} onChange={()=>changeScope("company")} title="渠道读取未启用"/><span aria-hidden="true"/>含渠道</label>
               <span className={styles.objectCount}>{workspace ? `${new Set(workspace.structure.filter(r=>r.layer==='base').map(r=>r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter(r=>r.layer==='branch').map(r=>r.objectName)).size} 个分仓${workspace.scope==='all-channel'?` · ${workspace.coverage.coveredCustomers} 家已覆盖客户`:''}` : '正在读取库存范围'}</span>
-              <form className={styles.headerActions} aria-label="库存查询条件" onSubmit={event=>{event.preventDefault();setAsOf(queryDraft.asOf);setMonth(queryDraft.month);setSkuFilter(queryDraft.sku.trim());}}>
-                <Input aria-label="查询 SKU" placeholder="SKU 编码，留空读全部" value={queryDraft.sku} maxLength={100} onChange={value=>setQueryDraft(draft=>({...draft,sku:value}))} style={{width:180}} />
+              <div className={styles.headerActions} role="group" aria-label="库存查询条件">
+                <Input aria-label="查询 SKU" placeholder="SKU 编码，留空读全部" value={queryDraft.sku} maxLength={100} onChange={value=>setQueryDraft(draft=>({...draft,sku:value}))} onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();submitQuery();}}} style={{width:180}} />
                 <DatePicker.DayPicker aria-label="读取时点" placeholder="读取时点" value={queryDraft.asOf} onChange={value=>setQueryDraft(draft=>({...draft,asOf:value ?? ""}))} />
                 <DatePicker.MonthPicker
                   aria-label="库存查询月份"
@@ -861,7 +862,7 @@ export function FullChainWorkbench() {
                   allowClear={false}
                   style={{ width: 120 }}
                 />
-                <Button htmlType="submit" size="small">查询</Button>
+                <Button size="small" onClick={submitQuery}>查询</Button>
                 <Tooltip content="刷新库存数据">
                   <Button
                     aria-label="刷新库存数据"
@@ -871,7 +872,7 @@ export function FullChainWorkbench() {
                     onClick={() => void load()}
                   />
                 </Tooltip>
-              </form>
+              </div>
             </div>
           </header>
 

@@ -31,7 +31,7 @@
     "../shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
     "source/inventory-light-plugins/src/dsh-ui/icons.tsx": "9fb880a33c2d8c32f56657487d2761d7f0258437ab6c09edbb0b6fa115ea5fb7",
     "source/inventory-light-plugins/src/pages/qll/components/workspace-detail-tree.tsx": "ec076315bb3d918450f6a3cfb39978f4b46a071344621ba51c6bc0df13e1b2a6",
-    "source/inventory-light-plugins/src/pages/qll.tsx": "73110d23d297dd1192f168bb4f5a7414e34f8e0420d38bbee08ef35ff85db830",
+    "source/inventory-light-plugins/src/pages/qll.tsx": "39e13b1d1c8244ecdb2145860a8da56bd092c720b34d2204b85eb4054af2c756",
     "../dsh-agent-manage/src/inventory-compute/full-chain-workspace-service.ts": "ca5894ab04ff225c3dd0bf43ffe77783db9268786facd069d153351cf5a55050",
     "../dsh-agent-manage/src/inventory-compute/full-chain-source-rows.ts": "5c7b4944e3e7276f4a74f2f3f038d3bb6aaf07d7f6d262ff7e0ed1e3c00ef82c",
     "../shared/governed-parameters.ts": "780117245df97ff507ab4ec5e251cb2317fd39136b7df7e0ec2d0af734ec3e10",
