@@ -236,6 +236,7 @@ async function fixture(
   };
   let currentHost = host;
   const sdkDrafts = new Map(initialSession ? [[initialSession, '未发送的历史草稿']] : []);
+  let sdkReadyGate;
   if (nativeResourceSdk) {
     const presets = new Map(initialSession ? [[initialSession, initialPreset]] : []);
     ctx.sessions.list.getSnapshot = () => ({
@@ -256,7 +257,7 @@ async function fixture(
       if (!presets.has(id)) throw Error('PAGE_SESSION_UNAVAILABLE');
       return {
         sessionId: id,
-        ready: Promise.resolve(),
+        ready: sdkReadyGate?.promise ?? Promise.resolve(),
         binding: { ctx: { id }, session: { projections: { faceOf: () => ({ getSnapshot: () => presets.get(id) }) } } },
         release: () => calls.push(['core-release', id]),
       };
@@ -408,6 +409,9 @@ async function fixture(
       }),
     historyPage: () => workbench.takeHistoryTarget()?.page,
     restoreHistory: restorePageSession,
+    currentSession: () => mainSession,
+    workbench,
+    deferSessionReady: () => { sdkReadyGate = Promise.withResolvers(); return sdkReadyGate; },
     toolsExpanded: () => expanded,
     removeTools: async () =>
       act(async () => {
@@ -1087,4 +1091,49 @@ test('the current public restore interface refuses stale preset/cwd and returns 
   const cancelled=new AbortController();cancelled.abort();
   await assert.rejects(f.restoreHistory('native',sessionId,cancelled.signal,{preset:'original',cwd:'/owned/workspace'}));
   assert.equal(f.association().sessionId,sessionId);
+});
+
+
+test('opening another unassociated Document cancels a deferred History restore even when the main Session does not change', async t => {
+  const sessionId='session-00000000-0000-4000-8000-000000000147';
+  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
+  let target,gate,opening;
+  await act(async()=>{
+    f.workbench.registerFrame({id:'other-document',kind:'html',label:'B'});
+    f.workbench.showHistory('native');
+    f.workbench.selectHistorySession('native',sessionId,{preset:'original',cwd:'/owned/workspace'});
+    target=f.workbench.takeHistoryTarget(sessionId);gate=f.deferSessionReady();
+    opening=f.restoreHistory(target.page,sessionId,target.signal,target.expected).then(()=>f.workbench.completeHistory(target));
+    opening.catch(()=>{});
+  });
+  try {
+    await act(async()=>f.workbench.open('other-document'));
+    assert.equal(target.signal.aborted,true,'the actual Document navigation must revoke old History');
+    assert.equal(f.currentSession(),sessionId,'document(undefined) keeps the current Core Session');
+    assert.equal(f.workbench.getSnapshot().selectedDocument.id,'other-document');
+    assert.equal(f.workbench.getSnapshot().selection,undefined,'B has no association');
+    await act(async()=>{gate.resolve();await assert.rejects(opening)});
+    assert.equal(f.currentSession(),sessionId);
+    assert.equal(f.workbench.getSnapshot().selectedDocument.id,'other-document','late History must not reopen A');
+    assert.equal(f.workbench.getSnapshot().selection,undefined,'late History must not overwrite B');
+  } finally { gate.resolve(); await opening.catch(()=>{}); }
+});
+
+test('successful deferred History navigation keeps its own owner and restores the existing Session', async t => {
+  const sessionId='session-00000000-0000-4000-8000-000000000147';
+  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
+  let target,gate,opening;
+  await act(async()=>{
+    f.workbench.showHistory('native');
+    f.workbench.selectHistorySession('native',sessionId,{preset:'original',cwd:'/owned/workspace'});
+    target=f.workbench.takeHistoryTarget(sessionId);gate=f.deferSessionReady();
+    opening=f.restoreHistory(target.page,sessionId,target.signal,target.expected).then(()=>f.workbench.completeHistory(target));
+  });
+  gate.resolve();
+  await act(async()=>{assert.equal(await opening,true)});
+  assert.equal(target.signal.aborted,false,'completion hands off ownership before ordinary navigation');
+  assert.equal(f.workbench.getSnapshot().selectedDocument.id,'native');
+  assert.equal(f.workbench.getSnapshot().selection.sessionId,sessionId);
+  assert.equal(f.dom.window.document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
+  await assert.rejects(f.workbench.completeHistory(target),/PAGE_HISTORY_CANCELLED/);
 });

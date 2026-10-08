@@ -156,6 +156,7 @@ export class WorkbenchController implements AgentWorkbench {
     if (this.disposed) return false;
     if (!this.pages.has(id) && !this.ports.hasPanel?.(id))
       throw Error(`Unknown workbench page: ${id}`);
+    this.cancelHistory();
     const document = this.documents.get(id);
     if (document) {
       this.selectedDocument = document;
@@ -280,6 +281,14 @@ export class WorkbenchController implements AgentWorkbench {
     this.changed();
     if (!page || !controller || controller.signal.aborted || (selection && selection.sessionId !== sessionId)) return undefined;
     return {page, signal: controller.signal, ...(selection ? {expected: selection.expected} : {})};
+  }
+  /** Finish the still-owned History navigation without revoking its own restore. */
+  async completeHistory(target: {page: MainPanelId; signal: AbortSignal}): Promise<boolean> {
+    target.signal.throwIfAborted();
+    if (this.historyController?.signal !== target.signal) throw Error('PAGE_HISTORY_CANCELLED');
+    // Hand the completed intent back to normal navigation before open cancels prior intents.
+    this.historyController = undefined;
+    return this.open(target.page);
   }
   cancelHistory(): void {
     const changed = this.historyPage !== undefined;

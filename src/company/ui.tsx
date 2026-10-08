@@ -800,7 +800,7 @@ export function mountCompanyUI(
       void restorePageSession(page, sessionId, signal, target?.expected)
         .then(() => {
           signal.throwIfAborted();
-          return workbench.open(page);
+          return workbench.completeHistory(target!);
         })
         .catch((error) => {
           if (!signal.aborted)
