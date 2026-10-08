@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-dealer' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-dealer' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal' | 'inventory-dms';
 type Rhythm = {
     id: string;
     type: string;
@@ -202,14 +202,15 @@ export type DealerViewState = {
 };
 export type QllViewState = {version:1;scope?:"company"|"all-channel";month?:string;tab?:string;sku?:string;risk?:string;structureFilters?:{category:string;org:string}};
 export type PersonalViewState = { version: 1; selected?: string; riskType?: string; page?: number; size?: number; feedbackNotes?: Record<string, string> };
+export type DmsViewState = { version: 1; type?: 'Y' | 'XN' | 'DC' | 'FC' | 'JD' | 'TM'; order?: 'M' | 'Z'; outcome?: 'success' | 'failure' | 'timeout-before' | 'lost-receipt' | 'partial' };
 export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | DealerViewState | PersonalViewState;
-const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal']);
+} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | DealerViewState | PersonalViewState | DmsViewState;
+const pages = new Set<string>(['workbench-html-table', 'gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal', 'inventory-dms']);
 export const isHtmlViewPage = (page: string): page is HtmlViewPage => pages.has(page);
-export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal'].includes(page);
+export const isBusinessViewPage = (page: string): boolean => ['gea-regional-plan', 'plan-region-category', 'plan-category-production', 'inventory-qll', 'inventory-fc', 'inventory-aqkc', 'inventory-dealer', 'inventory-customer', 'inventory-orderworkbench', 'inventory-orderfulfillment', 'inventory-personal', 'inventory-dms'].includes(page);
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown): v is string => typeof v === 'string' && v.length <= 10000;
 const number = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -245,6 +246,7 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
     if (!isHtmlViewPage(page) || !object(value) || value.version !== 1)
         return false;
     switch (page) {
+        case 'inventory-dms': return shape(value, {version, type: v => ['Y','XN','DC','FC','JD','TM'].includes(v as string), order: v => ['M','Z'].includes(v as string), outcome: v => ['success','failure','timeout-before','lost-receipt','partial'].includes(v as string)}, ['version']);
         case 'inventory-dealer': return shape(value, {version, customer: text, tab: text, page: positiveInteger, pageSize: positiveInteger, search: text, catalogSearch: text, catalogFilters: v => shape(v, {search: text, category: text, productTag: text}), stockCategory: text, stockAction: text, orderPanel: text, view: text, cart: record(v => shape(v, {key: text, customerCode: text, code: text, name: text, quantity: number, suggestedQuantity: nullable(number), reason: text, evidence: text, source: v => ['manual','suggestion'].includes(v as string), status: v => v === 'local-only', selectedAt: text, unitPrice: nullable(number), category: text, policyId: text}, ['key','customerCode','code','name','quantity','suggestedQuantity','reason','source','status','selectedAt'])), orderHeaders: record(v => shape(v, {car: text, pickup: text, receive: text}))}, ['version']);
         case 'inventory-personal': return shape(value, { version, selected: text, riskType: v => ['全部','缺货','低库存','货龄','大日期','滞库'].includes(v as string), page: positiveInteger, size: v => [10,20,50].includes(v as number), feedbackNotes: record(text) }, ['version']);
         case 'inventory-qll': return shape(value, {version,scope:v=>['company','all-channel'].includes(v as string),month:v=>text(v)&&/^20\d{2}-(0[1-9]|1[0-2])$/.test(v as string),tab:text,sku:text,risk:text,structureFilters:v=>shape(v,{category:text,org:text})},['version']);

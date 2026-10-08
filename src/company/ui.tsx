@@ -428,6 +428,7 @@ export function mountCompanyUI(
       plan: true,
       inventory: true,
       orders: true,
+      prototypes: true,
     });
     const [entries, setEntries] = useState(() => ctx.slots.entries('main'));
     useEffect(() => {

@@ -56,7 +56,8 @@
     },
     "./api-log": {
       "types": "./lib/types/workbench/api-log-contract.d.ts"
-    }
+    },
+    "./dms-mock": "./lib/prototypes/dms/model.js"
   },
   "dsh": {
     "client": {

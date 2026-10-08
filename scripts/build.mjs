@@ -117,3 +117,5 @@ if (values.target !== 'core') {
 }
 
 await import('./build-inventory-dealer.mjs');
+
+await import('./build-dms-prototype.mjs');
