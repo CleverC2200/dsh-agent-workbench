@@ -40,7 +40,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
             contents:
               a.path === "css"
                 ? "export default {};"
-                : 'export const currentSessionId=()=>"sandbox-public-fixture";export const call=(...args)=>window.fixtureWire(...args);export const ready=Promise.resolve();export const publish=async()=>{};export const action=()=>()=>{};export const reportElements=()=>()=>{};',
+                : 'export const currentSessionId=()=>"sandbox-public-fixture";export const call=(...args)=>window.fixtureWire(...args);export const ready=Promise.resolve();export const publish=async value=>{(window.fixturePublished??=[]).push(value);};export const action=()=>()=>{};export const reportElements=()=>()=>{};',
           }));
         },
       },
@@ -73,6 +73,18 @@ test("company query submits complete conditions inside the actual opaque-origin 
   await page.goto("http://127.0.0.1:19483/");
   const frame = page.frameLocator("iframe");
   const child = page.frames().find((x) => x !== page.mainFrame());
+  const waitReady = (sku) =>
+    expect
+      .poll(() =>
+        child.evaluate((sku) => {
+          const context = window.fixturePublished?.at(-1);
+          return (
+            context?.parts?.queryState?.state === "ready" &&
+            context?.parts?.pageFilters?.search === sku
+          );
+        }, sku),
+      )
+      .toBe(true);
   await expect(frame.getByRole("textbox", { name: "查询 SKU" })).toBeVisible();
   await frame.getByRole("textbox", { name: "查询 SKU" }).fill("MOCK-001");
   await frame.locator('[aria-label="读取时点"]').fill("2026-10-02");
@@ -85,6 +97,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
   await expect
     .poll(() => child.evaluate(() => sqlCalls.length))
     .toBeGreaterThan(0);
+  await waitReady("MOCK-001");
   let calls = await child.evaluate(() => sqlCalls);
   assert.ok(
     calls.every(
@@ -107,6 +120,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
   await expect
     .poll(() => child.evaluate(() => sqlCalls.length))
     .toBeGreaterThan(before);
+  await waitReady("MOCK-002");
   calls = (await child.evaluate(() => sqlCalls)).slice(before);
   assert.ok(
     calls.every(
@@ -115,8 +129,37 @@ test("company query submits complete conditions inside the actual opaque-origin 
         Object.values(x.parameters).includes("MOCK-002"),
     ),
   );
+  const structure = frame
+    .getByRole("textbox", { name: "SKU编码筛选" })
+    .locator("..")
+    .locator("..");
+  const beforeStructure = await child.evaluate(() => sqlCalls.length);
+  await frame.getByRole("textbox", { name: "SKU编码筛选" }).fill("MOCK-003");
+  assert.equal(await child.evaluate(() => sqlCalls.length), beforeStructure);
+  await structure.getByRole("button", { name: "查询", exact: true }).click();
+  await expect
+    .poll(() => child.evaluate(() => sqlCalls.length))
+    .toBeGreaterThan(beforeStructure);
+  assert.ok(
+    (await child.evaluate(() => sqlCalls))
+      .slice(beforeStructure)
+      .every((x) => Object.values(x.parameters).includes("MOCK-003")),
+  );
+  await waitReady("MOCK-003");
+  const beforeStructureEnter = await child.evaluate(() => sqlCalls.length);
+  await frame.getByRole("textbox", { name: "SKU编码筛选" }).fill("MOCK-004");
+  await frame.getByRole("textbox", { name: "SKU编码筛选" }).press("Enter");
+  await expect
+    .poll(() => child.evaluate(() => sqlCalls.length))
+    .toBeGreaterThan(beforeStructureEnter);
+  assert.ok(
+    (await child.evaluate(() => sqlCalls))
+      .slice(beforeStructureEnter)
+      .every((x) => Object.values(x.parameters).includes("MOCK-004")),
+  );
+  await waitReady("MOCK-004");
   const beforeEnter = await child.evaluate(() => sqlCalls.length);
-  await frame.getByRole("textbox", { name: "查询 SKU" }).fill("MOCK-003");
+  await frame.getByRole("textbox", { name: "查询 SKU" }).fill("MOCK-005");
   await frame.getByRole("textbox", { name: "查询 SKU" }).press("Enter");
   await expect
     .poll(() => child.evaluate(() => sqlCalls.length))
@@ -124,7 +167,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
   assert.ok(
     (await child.evaluate(() => sqlCalls))
       .slice(beforeEnter)
-      .every((x) => Object.values(x.parameters).includes("MOCK-003")),
+      .every((x) => Object.values(x.parameters).includes("MOCK-005")),
   );
   assert.equal(
     await page.locator("iframe").getAttribute("sandbox"),

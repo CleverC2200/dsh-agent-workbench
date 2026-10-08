@@ -23,7 +23,7 @@
     "source/qll/src/lib/app-path.ts": "c09c6fbc259119ce120e454426254e54c58866041990b6a740a62526cfbf3605",
     "source/qll/src/lib/workspace-stream.ts": "0da3b952995c6998a12fc2d0fd4ff4d7d202e5cad6f4bdc073cc05c6e908d6db",
     "source/inventory-light-plugins/src/pages/qll/components/use-tree-pages.tsx": "f989250e7a79bb48fd71348f8ca087b121e804fd76ce301239670156ff5eca5a",
-    "source/inventory-light-plugins/src/pages/qll/components/reference-structure.tsx": "143ec369ac601931cfdf10c9bba599184373b86798441665e5bd4bb88280fb8a",
+    "source/inventory-light-plugins/src/pages/qll/components/reference-structure.tsx": "ab20d15e720497fb6272fd0db2e3d3ff1372ac5358c630c6ae480b56dff0ff3c",
     "../dsh-agent-manage/src/inventory-compute/full-chain-customer-metrics.ts": "75db3c1eabc668dab387c2af2554a1c0146f34e19a1855fa02549eb291087acb",
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.module.css": "5d0d3a34ccc20bc6e81d6ebd3514d73d5f836abaadf178f3d4cf80b1c3d16c11",
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.tsx": "d94c28fcfdbf295b7c10957f7a086e32eddb2083f51f03b830cb1eb401af6899",

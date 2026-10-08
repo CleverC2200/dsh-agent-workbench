@@ -73,17 +73,18 @@ export function ReferenceStructure({workspace,mode,sku,onSku,status,onStatus,too
   {title:'目标周转（天）',width:125,align:'right',render:(_:unknown,n:Node)=>number(sameLayer(n)&&n.rows[0].layer!=='customer'?summary(n).targetTurnoverDays:null,1)},
   {title:'数据日期',width:120,render:(_:unknown,n:Node)=>{const dates=[...new Set(n.rows.map(r=>r.sourceDate))].sort();return dates.length>1?`${dates[0]} ～ ${dates.at(-1)}`:dates[0]||'-';}},
  ];
- const filterForm=<form className={styles.referenceFilters} onSubmit={e=>{e.preventDefault();onSku(search.trim());}}>
+ const submitSku=()=>onSku(search.trim());
+ const filterControls=<div className={styles.referenceFilters} role="group" aria-label="库存结构筛选">
    <label>品类<select aria-label="品类筛选" value={category} onChange={e=>setCategory(e.target.value)}><option value="">全部品类</option>{categories.map(c=><option key={c}>{c}</option>)}</select></label>
-   <label>SKU<input aria-label="SKU编码筛选" placeholder="输入完整SKU编码" value={search} onChange={e=>setSearch(e.target.value)}/></label>
-   <Button htmlType="submit">查询</Button>
+   <label>SKU<input aria-label="SKU编码筛选" placeholder="输入完整SKU编码" value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();submitSku();}}}/></label>
+   <Button onClick={submitSku}>查询</Button>
    <label>组织<select aria-label="组织筛选" value={org} onChange={e=>setOrg(e.target.value)}><option value="">全部组织</option>{(['base','branch','customer'] as const).filter(l=>l!=='customer'||workspace.scope==='all-channel').map(l=><optgroup key={l} label={layerName[l]}>{organizations.filter(r=>r.layer===l).map(r=><option key={orgKey(r)} value={orgKey(r)}>{r.objectName}</option>)}</optgroup>)}</select></label>
    <label>状态<select aria-label="状态筛选" value={status} onChange={e=>onStatus(e.target.value)}><option value="">全部状态</option>{['低库存','大日期','数据待复核','未命中风险'].map(s=><option key={s}>{s}</option>)}</select></label>
    <Button onClick={()=>{onFilters({category:'',org:''});onStatus('');setSearch('');onSku('');}}>重置</Button>
    <span className={styles.filteredCount}>{filtered.length} 个品类×组织</span>
-  </form>;
+  </div>;
  return <div className={styles.referenceStructure}>
-  {toolbar?createPortal(filterForm,toolbar):filterForm}
+  {toolbar?createPortal(filterControls,toolbar):filterControls}
   <Table rowKey="key" columns={columns} data={roots.map(attach)} scroll={{x:columns.reduce((s:number,c:any)=>s+c.width,0)}} pagination={false} expandedRowKeys={expanded} onExpandedRowsChange={setExpanded} onExpand={(n:Node,open:boolean)=>{if(open&&n.source)pages.activate(n.source);}} onRow={(n:Node)=>({onClick:()=>toggle(n)})} renderChildFooter={(n:Node)=>n.source?pages.footer(n.source):null}/>
   {references.coverage.omittedRows>0&&<div role="status">当前可引用 {references.coverage.referencedRows}/{references.coverage.visibleRows} 行；请收窄筛选以引用其余行。</div>}
   <div className={styles.referenceFoot}>品类 / 组织行点击展开；SKU 点击查看详情。公司实物库存与渠道观察分列；低于目标不代表已发生缺货。各层周转、货龄按各自口径展示。</div>
