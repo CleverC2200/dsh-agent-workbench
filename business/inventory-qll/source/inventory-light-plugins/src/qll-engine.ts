@@ -42,7 +42,7 @@ function validate(scope: string, filters: WorkspaceFilters, access: any) {
       value.length > 200
     )
       throw Error("筛选参数无效");
-  if (filters.month && !/^20\d{2}-(0[1-9]|1[0-2])$/.test(filters.month))
+  if (!filters.month || !/^20\d{2}-(0[1-9]|1[0-2])$/.test(filters.month))
     throw Error("月份无效");
   if (filters.customerId)
     throw Error("当前范围不可查看客户明细");
@@ -95,13 +95,17 @@ async function checkSnapshot(item: ReturnType<typeof snapshot>, signal?: AbortSi
   if (item.session !== currentSessionId() || JSON.stringify(access) !== item.accessKey) throw Error("当前会话或授权范围已变化");
 }
 export async function load(options: any = {}) {
+  options.signal?.throwIfAborted();
   if ((options.scope ?? "company") !== "company") throw Error("当前只开放公司库存读取");
+  if (typeof options.asOf !== "string" || !/^20\d{2}-\d{2}-\d{2}$/.test(options.asOf)) throw Error("请选择明确的读取时点");
+  const now = new Date(`${options.asOf}T00:00:00Z`);
+  if (!Number.isFinite(now.getTime()) || now.toISOString().slice(0, 10) !== options.asOf) throw Error("读取时点无效");
   const session = currentSessionId();
   if (!session) throw Error("需要当前工作台会话");
   const generation = epoch;
   const access = await call("access", undefined, {signal: options.signal});
   options.signal?.throwIfAborted();
-  const request = {access, scope: "company" as const, filters: options.filters ?? {}, now: new Date()};
+  const request = {access, scope: "company" as const, filters: options.filters ?? {}, now};
   validate(request.scope, request.filters, access);
   const accessKey = JSON.stringify(access);
   const data = await readCompanySource(request, "current", options.signal);

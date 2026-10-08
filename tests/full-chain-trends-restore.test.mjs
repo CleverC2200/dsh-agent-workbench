@@ -103,6 +103,7 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   });
   const intent = {
     version: 1,
+    asOf: "2026-10-02",
     scope: "company",
     month: "2026-09",
     tab: "category",

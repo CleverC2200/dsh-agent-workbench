@@ -34,7 +34,7 @@ const engine = await import(
 test("current distribution scope returns fixed historical quantities and literal original shortage calculation", async () => {
   globalThis.mockTrendSession = "A";
   globalThis.companyWire = createCompanyWire();
-  const current = await engine.load({
+  const current = await engine.load({asOf:'2026-10-02',
     scope: "company",
     filters: { month: "2026-09", sku: "MOCK-001" },
   });
@@ -74,8 +74,8 @@ test("current distribution scope returns fixed historical quantities and literal
 test("company scopes retain gaps and reject unenabled channels or broader filters", async () => {
   globalThis.mockTrendSession = "A";
   globalThis.companyWire = createCompanyWire();
-  await assert.rejects(engine.load({scope:"all-channel",filters:{month:"2026-09"}}),/只开放公司/);
-  const company=await engine.load({scope:"company",filters:{month:"2026-09"}});
+  await assert.rejects(engine.load({asOf:'2026-10-02',scope:"all-channel",filters:{month:"2026-09"}}),/只开放公司/);
+  const company=await engine.load({asOf:'2026-10-02',scope:"company",filters:{month:"2026-09"}});
   const branch=await engine.loadTrend({workspaceId:company.workspaceId,filters:{branch:"上海分仓"}});
   assert.deepEqual(branch.trends.inventory,[{snapshotDate:"2026-09-30",layer:"branch",qty:15}]);
   const missing=await engine.loadTrend({workspaceId:company.workspaceId,filters:{sku:"MOCK-002"}});
@@ -83,9 +83,9 @@ test("company scopes retain gaps and reject unenabled channels or broader filter
   await assert.rejects(engine.loadTrend({workspaceId:company.workspaceId,filters:{customerId:"C1"}}),/不可查看客户/);
   await assert.rejects(engine.loadTrend({workspaceId:company.workspaceId,filters:{month:"2026-10"}}),/不能改变/);
   await assert.rejects(engine.loadTrend({workspaceId:company.workspaceId,filters:{limit:99999}}),/不能改变/);
-  const narrowed=await engine.load({scope:"company",filters:{month:"2026-09",category:"饺子",sku:"MOCK-001"}});
+  const narrowed=await engine.load({asOf:'2026-10-02',scope:"company",filters:{month:"2026-09",category:"饺子",sku:"MOCK-001"}});
   await assert.rejects(engine.loadTrend({workspaceId:narrowed.workspaceId,filters:{category:"汤圆"}}),/不能改变/);
-  const later=await engine.load({scope:"company",filters:{month:"2026-10"}});
+  const later=await engine.load({asOf:'2026-10-02',scope:"company",filters:{month:"2026-10"}});
   assert.deepEqual((await engine.loadTrend({workspaceId:later.workspaceId})).trends.orders,[]);
   engine.clearFacts();delete globalThis.mockTrendSession;delete globalThis.companyWire;
 });
@@ -93,7 +93,7 @@ test("company scopes retain gaps and reject unenabled channels or broader filter
 test("query caps, expiry, cancellation, withdrawal and Session changes reject late historical facts", async () => {
   globalThis.mockTrendSession = "A";
   globalThis.companyWire = createCompanyWire();
-  const current = await engine.load({
+  const current = await engine.load({asOf:'2026-10-02',
     scope: "company",
     filters: { month: "2026-09" },
   });
@@ -107,7 +107,7 @@ test("query caps, expiry, cancellation, withdrawal and Session changes reject la
   const invalidated = engine.loadTrend({ workspaceId: current.workspaceId });
   engine.clearFacts();
   await assert.rejects(invalidated, /快照/);
-  const old = await engine.load({
+  const old = await engine.load({asOf:'2026-10-02',
     scope: "company",
     filters: { month: "2026-09" },
   });
@@ -117,12 +117,12 @@ test("query caps, expiry, cancellation, withdrawal and Session changes reject la
   globalThis.mockTrendSession = "A";
   globalThis.companyWire = createCompanyWire();
   for (let i = 0; i < 4; i++)
-    await engine.load({ scope: "company", filters: { month: "2026-09" } });
+    await engine.load({asOf:'2026-10-02', scope: "company", filters: { month: "2026-09" } });
   await assert.rejects(
     engine.loadTrend({ workspaceId: old.workspaceId }),
     /快照/,
   );
-  const expires = await engine.load({
+  const expires = await engine.load({asOf:'2026-10-02',
     scope: "company",
     filters: { month: "2026-09" },
   });

@@ -13,7 +13,7 @@ await mkdir('.runtime',{recursive:true});const bundle=resolve('.runtime/qll-mock
 const engine=await import(pathToFileURL(bundle));
 test('default fixed input preserves company/customer units, zero/null, complete pages and current Session',async()=>{
  globalThis.mockSession='session-A';globalThis.companyWire=createCompanyWire();
- const company=await engine.load({scope:'company',part:'current',filters:{month:'2026-09'}});
+ const company=await engine.load({asOf:'2026-10-02',scope:'company',part:'current',filters:{month:'2026-09'}});
  assert.equal(company.dataMode,'GEA_LIVE_READONLY');
  assert.equal(company.kpis.inventoryLevel.companyCurrent,5580);
  assert.equal(company.structure.some(row=>row.layer==='customer'),false);
@@ -28,14 +28,14 @@ test('default fixed input preserves company/customer units, zero/null, complete 
  }
  assert.equal(rows.length,105);assert.equal(new Set(rows.map(row=>row.sku)).size,105);
  assert.equal(rows.reduce((sum,row)=>sum+row.currentQty,0),5565);
- const filtered=await engine.load({scope:'company',part:'current',filters:{month:'2026-09',sku:'MOCK-001'}});
+ const filtered=await engine.load({asOf:'2026-10-02',scope:'company',part:'current',filters:{month:'2026-09',sku:'MOCK-001'}});
  assert.equal(filtered.kpis.inventoryLevel.companyCurrent,16);
  assert.equal(filtered.structure.filter(row=>row.layer==='branch')[0].availableQty,15);
- const zero=await engine.load({scope:'company',part:'current',filters:{month:'2026-09',sku:'MOCK-002'}});
+ const zero=await engine.load({asOf:'2026-10-02',scope:'company',part:'current',filters:{month:'2026-09',sku:'MOCK-002'}});
  assert.equal(zero.structure.find(row=>row.layer==='branch').availableQty,0);
  await assert.rejects(engine.loadDetails({workspaceId:filtered.workspaceId,kind:'structure',layer:'customer',pageNo:1,pageSize:10}),/范围/);
  const controller=new AbortController();controller.abort(Error('cancelled'));
- await assert.rejects(engine.load({signal:controller.signal}),/cancelled/);
+ await assert.rejects(engine.load({asOf:'2026-10-02',signal:controller.signal}),/cancelled/);
  globalThis.mockSession='session-B';
  await assert.rejects(engine.loadHistory(company.workspaceId),/会话|快照/);
  engine.clearFacts();delete globalThis.mockSession;delete globalThis.companyWire;

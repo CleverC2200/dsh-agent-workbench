@@ -453,6 +453,7 @@ function InventoryKpiDetail({
 
 export function FullChainWorkbench() {
   const [scope, setScope] = usePageViewField(React,view,"scope","company") as [WorkspaceScope,React.Dispatch<React.SetStateAction<WorkspaceScope>>];
+  const [asOf, setAsOf] = usePageViewField(React,view,"asOf","");
   const [month, setMonth] = usePageViewField(React,view,"month","2026-09");
   const [workspace, setWorkspace] = useState<(CompanyWorkspace & {channelUnavailable?: string}) | null>(null);
   const structurePages = useTreePages(workspace, 'structure');
@@ -532,7 +533,7 @@ export function FullChainWorkbench() {
       updateContext("queryState", {state:"loading",scope,month,sku:skuFilter});
       setError(null);
       try {
-        const params = new URLSearchParams({ scope, month, part: "current", ...(skuFilter ? {sku:skuFilter} : {}) });
+        const params = new URLSearchParams({ asOf, scope, month, part: "current", ...(skuFilter ? {sku:skuFilter} : {}) });
 
         const response = await fetch(appPath(`/api/workspace?${params}`), {
           signal: requestSignal,
@@ -791,8 +792,8 @@ export function FullChainWorkbench() {
   const selectedMetric =
     detailKpi && workspace ? workspace.kpis[detailKpi] : null;
   useEffect(() => {
-    const current = !loading && !error && workspace && workspace.filters.month === month && (workspace.filters.sku ?? "") === skuFilter;
-    updateContext("queryState", {state:loading || (!error && !current) ? "loading" : error ? "error" : "ready", message:error ?? undefined, requestedScope:scope, month, sku:skuFilter});
+    const current = !loading && !error && workspace && workspace.filters.month === month && (workspace.filters.sku ?? "") === skuFilter && workspace.generatedAt.slice(0,10) === asOf;
+    updateContext("queryState", {state:loading || (!error && !current) ? "loading" : error ? "error" : "ready", message:error ?? undefined, requestedScope:scope, asOf, month, sku:skuFilter});
     if (!current) { removeContextPart("fullChainWorkspace"); removeContextPart("structureView"); removeContextPart("detail"); removeContextPart("selectedStock"); return; }
       updateContext("fullChainWorkspace", {
         dataMode: workspace.dataMode,
@@ -818,18 +819,20 @@ export function FullChainWorkbench() {
         fullScopeStructureRowCount: workspace.structure.length,
         tab: activeTab,
       });
-  }, [workspace, activeTab, loading, error, scope, month, skuFilter, structureFilters, riskFilter]);
+  }, [workspace, activeTab, loading, error, scope, month, skuFilter, structureFilters, riskFilter, asOf]);
   usePageFilter(
     {
-      allowedFields: ["tab", "scope", "month", "search"],
+      allowedFields: ["tab", "scope", "asOf", "month", "search"],
       tabs: ["category", "structure", "aging", "shortage"],
       tab: activeTab,
       scope,
+      asOf,
       month,
       search:skuFilter,
     },
     (args) => {
       if (args.scope !== undefined) changeScope(args.scope);
+      if (args.asOf !== undefined) setAsOf(args.asOf);
       if (args.month !== undefined) setMonth(args.month);
       if (args.tab !== undefined) setActiveTab(args.tab);
       if (args.search !== undefined) setSkuFilter(args.search.trim());
@@ -845,6 +848,7 @@ export function FullChainWorkbench() {
               <label className={styles.channelSwitch}><input type="checkbox" aria-label="含渠道" checked={scope === "all-channel"} disabled={scope === "company"} onChange={()=>changeScope("company")} title="渠道读取未启用"/><span aria-hidden="true"/>含渠道</label>
               <span className={styles.objectCount}>{workspace ? `${new Set(workspace.structure.filter(r=>r.layer==='base').map(r=>r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter(r=>r.layer==='branch').map(r=>r.objectName)).size} 个分仓${workspace.scope==='all-channel'?` · ${workspace.coverage.coveredCustomers} 家已覆盖客户`:''}` : '正在读取库存范围'}</span>
               <div className={styles.headerActions}>
+                <DatePicker.DayPicker aria-label="读取时点" placeholder="读取时点" value={asOf} onChange={value=>setAsOf(value ?? "")} />
                 <DatePicker.MonthPicker
                   aria-label="库存查询月份"
                   size="small"

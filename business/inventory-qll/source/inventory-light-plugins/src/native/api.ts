@@ -10,10 +10,10 @@ async function dispatch(url: URL, method: string, body: any, signal: AbortSignal
   if (url.pathname === "/api/workspace/history" && method === "GET")
     return engine.loadHistory(p.get("workspaceId") ?? "", signal);
   if (url.pathname === "/api/workspace" && method === "GET") {
-    const { scope, part, reuseCurrent: _reuse, ...filters } = Object.fromEntries(p);
+    const { scope, part, asOf, reuseCurrent: _reuse, ...filters } = Object.fromEntries(p);
     if (part !== undefined && part !== "current") throw Error("查询阶段无效");
     if (part === "current") window.dispatchEvent(new Event("gea-query-start"));
-    return engine.load({ scope: scope ?? "company", part, filters, signal });
+    return engine.load({ asOf, scope: scope ?? "company", part, filters, signal });
   }
   throw Error("暂不支持此操作，业务数据未保存或提交。");
 }

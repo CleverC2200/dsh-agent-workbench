@@ -392,6 +392,9 @@ Radio.Group = ({ value, onChange, options, children }: any) => (
   </div>
 );
 export const DatePicker = {
+  DayPicker: ({ onChange, allowClear, ...p }: any) => (
+    <input {...p} type="date" className={css.input} onChange={(e) => onChange?.(e.target.value)} />
+  ),
   MonthPicker: ({ onChange, allowClear, ...p }: any) => (
     <input
       {...p}
