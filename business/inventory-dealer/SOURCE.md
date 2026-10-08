@@ -2,7 +2,7 @@
 
 固定源仓dsh-agent-dealer-plugin，提交67e1007aa400a8a9c65c132f144dabd5168a49df。保留该提交的经销商页面、健康/覆盖计算、库存建议与orderRecommendation、客户/商品/政策查询、本地补货草稿及导出。业务规则JSON原样静态导入，不增加模型公式。
 
-当前批次数据链路使用原完整分页接口与固定本地模拟输入，HTML v2 MessageChannel只发布范围、元素与引用上下文。移除直连数据库、旧v1 channel、共享跨业务API分支、构建期源码替换与未使用源码。SAP报价继续沿原能力缺口返回未知；前端恢复不代表正式订单提交或价格可用。
+当前数据链路使用原受控 SQL 与完整分页接口，经公共 HTML v2 MessageChannel 交给唯一 GEA Host 执行。固定模拟输入只由离线测试提供，不进入正式页面运行路径。身份或 Session 改变撤回读取与事实。SAP 报价继续沿原能力缺口返回未知；前端展示不代表正式订单提交或价格可用。
 
 Workbench只维护页面与确定性计算；Skill/persona/MCP/能力声明唯一维护于Manage business-resources/inventory-dealer，lib中的资源是构建装配副本。当前消费者、SKU建议口径、本地草稿限制及日期覆盖以保留的业务模块为准；没有真实补货写接口。
 

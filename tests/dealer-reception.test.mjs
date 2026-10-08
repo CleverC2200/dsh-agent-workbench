@@ -13,6 +13,8 @@ export async function engine() {
       api.onResolve({filter: /^server-only$/}, () => ({path: 'empty', namespace: 'empty'}));
       api.onLoad({filter: /.*/, namespace: 'empty'}, () => ({contents: 'export {};'}));
       api.onResolve({filter: /(gea-sql-client|dealer-direct-sql-client)$/}, () => ({path: resolve(source, 'inventory-light-plugins/src/data.ts')}));
+      api.onResolve({filter: /channel\.js$/}, () => ({path:'transport',namespace:'transport'}));
+      api.onLoad({filter: /.*/,namespace:'transport'}, () => ({contents: `import{readDealerMock}from '${source}/inventory-light-plugins/src/dealer-mock-sql.ts';export const call=(method,parameters,options)=>{if(method!=='sql')throw Error('UNEXPECTED_TEST_METHOD');return readDealerMock(parameters,options)};`,resolveDir:process.cwd()}));
       api.onResolve({filter: /^@\//}, args => api.resolve(resolve(source, 'dealer/web/src', args.path.slice(2)), {kind: args.kind, resolveDir: source}));
     }}],
   });

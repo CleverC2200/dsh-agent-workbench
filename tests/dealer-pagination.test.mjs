@@ -19,8 +19,8 @@ async function fixture(t, respond) {
     plugins: [{
       name: "in-memory-sql-transport",
       setup(api) {
-        api.onResolve({ filter: /dealer-mock-sql$/ }, () => ({ path: "transport", namespace: "fixture" }));
-        api.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: 'export const readDealerMock=(parameters,options)=>transport("sql",parameters,options);' }));
+        api.onResolve({ filter: /channel\.js$/ }, () => ({ path: "transport", namespace: "fixture" }));
+        api.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({ contents: 'export const call=(method,parameters,options)=>transport(method,parameters,options);' }));
       },
     }],
   });

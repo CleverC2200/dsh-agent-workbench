@@ -351,7 +351,7 @@ export default function Dealer() {
     return { querying: true };
   }
   useEffect(() => {
-    return action("filter", "按模拟客户、页签和页码读取；不修改业务数据", applyFilter);
+    return action("filter", "按授权客户、页签和页码读取；不修改业务数据", applyFilter);
   }, []);
   useEffect(
     () =>
@@ -735,7 +735,7 @@ export default function Dealer() {
     return <WorkbenchLoading title="客户库存" cards={8} compact />;
   return (
     <>
-    <p role="status">固定模拟输入，非真实业务数据。不查询真实库存、不创建模型任务、不提交补货。</p>
+    <p role="status">GEA 授权只读数据。建议采纳与订单校验仅保存本地草稿，不提交补货。</p>
     <section
       className={css.shell}
       data-page-reference-ready={
@@ -1332,7 +1332,7 @@ export default function Dealer() {
                 <Button
                   disabled={!Object.keys(cart).length || problems.length > 0}
                   onClick={() =>
-                    setError(draftProblems(Object.values(cart)).join("；") || "本地草稿校验通过，未查询真实库存、创建模型任务或提交订单")
+                    setError(draftProblems(Object.values(cart)).join("；") || "本地草稿校验通过，未创建模型任务或提交订单")
                   }
                 >
                   核对草稿

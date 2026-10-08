@@ -24,8 +24,9 @@ export function pageContext() {
   const state = parts.get("queryState") as
     { state: string; message?: string } | undefined;
   return {
-    source: "MOCK",
-    mock: true,
+    source: "GEA_GOVERNED_SQL",
+    mock: false,
+    realData: state?.state === "ready",
     capturedAt: new Date().toISOString(),
     parts: Object.fromEntries(parts),
     visibleText:

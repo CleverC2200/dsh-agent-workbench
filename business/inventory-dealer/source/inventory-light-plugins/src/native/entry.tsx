@@ -68,7 +68,7 @@ async function mount() {
   const root = createRoot(document.getElementById("app")!);
   root.render(<App />);
   window.addEventListener("gea-page-refresh", () => refreshPage());
-  action("refresh", "清除本页快照并重读模拟输入", () => {
+  action("refresh", "清除本页快照并重读授权数据", () => {
     refreshPage();
     return { refreshing: true };
   });

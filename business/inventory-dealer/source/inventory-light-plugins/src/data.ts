@@ -1,4 +1,4 @@
-import { readDealerMock } from "./dealer-mock-sql";
+import { call } from "./channel.js";
 import { sqlQueryError } from "./query-error.js";
 
 export type GeaSqlRow = Record<string, string | number | null | undefined>;
@@ -39,7 +39,7 @@ async function read(
   const key = JSON.stringify(parameters);
   let request = options.signal ? undefined : pending.get(key);
   if (!request) {
-    request = readDealerMock(parameters, { signal });
+    request = call("sql", parameters, { signal });
     if (!options.signal) pending.set(key, request);
   }
   try {
