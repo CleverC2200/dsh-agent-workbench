@@ -17,6 +17,7 @@ import {
   Button,
   Card,
   DatePicker,
+  Input,
   Modal,
   Message,
   Radio,
@@ -848,6 +849,7 @@ export function FullChainWorkbench() {
               <label className={styles.channelSwitch}><input type="checkbox" aria-label="含渠道" checked={scope === "all-channel"} disabled={scope === "company"} onChange={()=>changeScope("company")} title="渠道读取未启用"/><span aria-hidden="true"/>含渠道</label>
               <span className={styles.objectCount}>{workspace ? `${new Set(workspace.structure.filter(r=>r.layer==='base').map(r=>r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter(r=>r.layer==='branch').map(r=>r.objectName)).size} 个分仓${workspace.scope==='all-channel'?` · ${workspace.coverage.coveredCustomers} 家已覆盖客户`:''}` : '正在读取库存范围'}</span>
               <div className={styles.headerActions}>
+                <Input aria-label="查询 SKU" placeholder="SKU 编码，留空读全部" value={skuFilter} maxLength={100} onChange={value=>setSkuFilter(value.trim())} style={{width:180}} />
                 <DatePicker.DayPicker aria-label="读取时点" placeholder="读取时点" value={asOf} onChange={value=>setAsOf(value ?? "")} />
                 <DatePicker.MonthPicker
                   aria-label="库存查询月份"

@@ -95,8 +95,9 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   globalThis.restoreCatalog = new Map();
   const sourceWire = createCompanyWire();
   const sourceDates = [];
+  const sourceParameters = [];
   globalThis.companyWire = (...args) => {
-    if (args[0] === "sql") sourceDates.push(args[1].parameters.gea_p1);
+    if (args[0] === "sql") {sourceDates.push(args[1].parameters.gea_p1);sourceParameters.push(args[1].parameters);}
     return sourceWire(...args);
   };
   const api = await import(pathToFileURL(file));
@@ -109,11 +110,11 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   });
   const intent = {
     version: 1,
-    asOf: "2026-10-02",
+    asOf: "",
     scope: "company",
     month: "2026-09",
     tab: "category",
-    sku: "MOCK-001",
+    sku: "",
     risk: "",
     structureFilters: {
       category: "饺子",
@@ -153,6 +154,19 @@ test("actual distribution page restores scoped filters and re-queries trends aft
   try {
     await render();
     await React.act(async () => new Promise((r) => setTimeout(r, 5)));
+    assert.equal(sourceDates.length, 0, "missing date must issue no SQL");
+    const initialSku = document.querySelector('[aria-label="查询 SKU"]');
+    assert.ok(initialSku, "SKU query scope must be available before any result");
+    await React.act(async () => {
+      Simulate.change(initialSku, {target: {value: "MOCK-001"}});
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    assert.equal(sourceDates.length, 0, "SKU can be fixed while date is absent");
+    await React.act(async () => {
+      Simulate.change(document.querySelector('[aria-label="读取时点"]'), {target: {value: "2026-10-02"}});
+      await new Promise(resolve => setTimeout(resolve, 10));
+    });
+    assert.ok(sourceParameters.length > 0 && sourceParameters.every(values => Object.values(values).includes("MOCK-001")), JSON.stringify(sourceParameters));
     assert.equal(document.querySelector('[aria-label="含渠道"]').checked, false);
     assert.ok(
       document.querySelector('[aria-label="SKU编码筛选"]'),
