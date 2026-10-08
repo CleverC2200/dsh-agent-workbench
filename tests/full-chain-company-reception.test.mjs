@@ -134,6 +134,50 @@ test('a repeated business key across otherwise complete pages refuses the whole 
   await assert.rejects(engine.load({asOf:'2026-10-02',scope: 'company', filters: {month: '2026-10', base: '华东'}}), /DUPLICATE_SOURCE_KEY/);
 });
 
+test('order history keeps distinct source periods within the same displayed month', async t => {
+  globalThis.companySession = 'session-company';
+  globalThis.companyWire = async (method, payload) => {
+    if (method === 'access') return {trusted: true, principalId: 'fixture-company', gatewayScopeRef: 'fixture-grant', allowedBases: ['华东'], allowedBranches: [], allowedCustomerIds: []};
+    const rows = payload.sql.includes('full-chain:ORDER_TREND_SQL') ? [
+      {snapshot_date: '2026-10-08', month: '2026-10', source_order_period: '2026-10-01', pickup_type: 'factory', order_qty: 40, demand_qty: 40, shortage_qty: 0, shipped_qty: 40, affected_orders: 0},
+      {snapshot_date: '2026-10-08', month: '2026-10', source_order_period: '2026-10-02', pickup_type: 'factory', order_qty: 210, demand_qty: 210, shortage_qty: 0, shipped_qty: 210, affected_orders: 0},
+    ] : [];
+    if (rows.length) assert.match(payload.sql, /CAST\("f"\."fromorderno_month" AS TEXT\) AS "source_order_period"/);
+    return {rows, total: rows.length};
+  };
+  t.after(() => {engine.clearFacts(); delete globalThis.companySession; delete globalThis.companyWire;});
+  const value = await engine.load({asOf: '2026-10-08', scope: 'company', filters: {month: '2026-10', base: '华东'}});
+  const trend = await engine.loadTrend({workspaceId: value.workspaceId});
+  assert.equal(trend.trends.orders.length, 1);
+  assert.equal(trend.trends.orders[0].demandQty, 250);
+});
+
+test('order history still refuses repeated source periods with different quantities', async t => {
+  globalThis.companySession = 'session-company';
+  globalThis.companyWire = async (method, payload) => {
+    if (method === 'access') return {trusted: true, principalId: 'fixture-company', gatewayScopeRef: 'fixture-grant', allowedBases: ['华东'], allowedBranches: [], allowedCustomerIds: []};
+    const rows = payload.sql.includes('full-chain:ORDER_TREND_SQL') ? [40, 210].map(qty => ({
+      snapshot_date: '2026-10-08', month: '2026-10', source_order_period: '2026-10-01', pickup_type: 'factory', order_qty: qty, demand_qty: qty, shortage_qty: 0, shipped_qty: qty, affected_orders: 0,
+    })) : [];
+    return {rows, total: rows.length};
+  };
+  t.after(() => {engine.clearFacts(); delete globalThis.companySession; delete globalThis.companyWire;});
+  const value = await engine.load({asOf: '2026-10-08', scope: 'company', filters: {month: '2026-10', base: '华东'}});
+  await assert.rejects(engine.loadTrend({workspaceId: value.workspaceId}), /DUPLICATE_SOURCE_KEY/);
+});
+
+test('order history refuses a missing source period rather than weakening duplicate detection', async t => {
+  globalThis.companySession = 'session-company';
+  globalThis.companyWire = async (method, payload) => {
+    if (method === 'access') return {trusted: true, principalId: 'fixture-company', gatewayScopeRef: 'fixture-grant', allowedBases: ['华东'], allowedBranches: [], allowedCustomerIds: []};
+    const rows = payload.sql.includes('full-chain:ORDER_TREND_SQL') ? [{snapshot_date: '2026-10-08', month: '2026-10', pickup_type: 'factory', order_qty: 40, demand_qty: 40, shortage_qty: 0, shipped_qty: 40, affected_orders: 0}] : [];
+    return {rows, total: rows.length};
+  };
+  t.after(() => {engine.clearFacts(); delete globalThis.companySession; delete globalThis.companyWire;});
+  const value = await engine.load({asOf: '2026-10-08', scope: 'company', filters: {month: '2026-10', base: '华东'}});
+  await assert.rejects(engine.loadTrend({workspaceId: value.workspaceId}), /RESULT_INCOMPLETE/);
+});
+
 test('an explicitly frozen asOf is used in every governed company query', async t => {
   globalThis.companySession = 'session-company';
   const dates = [];

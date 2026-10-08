@@ -17,7 +17,7 @@ const identityFields: Record<keyof typeof companySqlTemplates, string[]> = {
   BRANCH_FULFILLMENT_SQL: ['snapshot_date', 'branch'],
   BASE_CURRENT_ORDER_SQL: ['snapshot_date', 'base_name'],
   COMPANY_TREND_SQL: ['snapshot_date', 'layer'],
-  ORDER_TREND_SQL: ['snapshot_date', 'month', 'pickup_type'],
+  ORDER_TREND_SQL: ['snapshot_date', 'source_order_period', 'pickup_type'],
   AGING_TREND_SQL: ['snapshot_date', 'layer'],
 };
 async function query(name: keyof typeof companySqlTemplates, values: unknown[], signal: AbortSignal): Promise<Row[]> {
@@ -36,6 +36,8 @@ async function query(name: keyof typeof companySqlTemplates, values: unknown[], 
     if (page.total !== first.total || JSON.stringify([page.returnedColumns ?? [], page.rejectedColumns ?? []]) !== metadata) throw Error('GEA_SQL_COLUMN_OR_TOTAL_CHANGED');
     if (!Array.isArray(page.rows) || page.rows.length !== Math.min(200, Math.max(0, first.total - (pageNo - 1) * 200))) throw Error('GEA_SQL_RESULT_INCOMPLETE');
     for (const row of page.rows) {
+      // The original query groups the raw order period; its displayed month can repeat.
+      if (name === 'ORDER_TREND_SQL' && (typeof row.source_order_period !== 'string' || !row.source_order_period)) throw Error('GEA_SQL_RESULT_INCOMPLETE');
       // Original branch zero-stock packets group distinct age bands under one empty batch ID.
       const key = JSON.stringify([...identityFields[name].map(field => row[field]),
         ...(name === 'BRANCH_AGE_SQL' && Number(row.qty) === 0 ? [row.age_days] : [])]);

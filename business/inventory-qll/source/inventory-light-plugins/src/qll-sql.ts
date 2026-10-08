@@ -2406,6 +2406,7 @@ const ORDER_TREND_SQL = `WITH "catalog_scopes" AS (
 SELECT
   "f"."snapshot_date" AS "snapshot_date",
   TO_CHAR("f"."fromorderno_month", 'YYYY-MM') AS "month",
+  CAST("f"."fromorderno_month" AS TEXT) AS "source_order_period",
   CASE WHEN "f"."pick_point_type2" = '工厂' THEN 'factory' ELSE 'branch' END AS "pickup_type",
   CASE
     WHEN BOOL_AND("f"."order_qty_origin" IS NOT NULL)

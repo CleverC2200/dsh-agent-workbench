@@ -49,7 +49,7 @@ export function createCompanyWire() {
     if (name === 'COMPANY_TREND_SQL') rows = history.filter(matchesHistory).map(({snapshot_date, layer, qty}) => ({snapshot_date, layer, qty}));
     if (name === 'AGING_TREND_SQL') rows = aging.filter(matchesHistory).map(({snapshot_date, layer, average_age}) => ({snapshot_date, layer, average_age}));
     if (name === 'ORDER_TREND_SQL' && p.gea_p2 === '2026-09-01' && (!p.gea_p4 || p.gea_p4 === '华东') && !p.gea_p5 && (!p.gea_p6 || p.gea_p6 === '饺子') && (!p.gea_p7 || p.gea_p7 === 'MOCK-001'))
-      rows = [{snapshot_date: snapshot, month: '2026-09', pickup_type: 'factory', demand_qty: 100, shortage_qty: 12, shipped_qty: 88, affected_orders: 1}];
+      rows = [{snapshot_date: snapshot, month: '2026-09', source_order_period: '2026-09-01', pickup_type: 'factory', demand_qty: 100, shortage_qty: 12, shipped_qty: 88, affected_orders: 1}];
     const start = (payload.pageNo - 1) * payload.pageSize;
     return {rows: structuredClone(rows.slice(start, start + payload.pageSize)), total: rows.length, returnedColumns: [], rejectedColumns: []};
   };
