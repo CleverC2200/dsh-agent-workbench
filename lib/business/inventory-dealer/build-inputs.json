@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "67e1007aa400a8a9c65c132f144dabd5168a49df",
+  "sourceCommit": "faa8e3bdda085c93de823eef57c1f09b3cd5405f",
   "computeOwner": "dsh-agent-manage",
   "computePublicExport": "./inventory-compute/*",
   "inputs": {
@@ -40,9 +40,9 @@
     "source/inventory-light-plugins/src/dealer-draft.ts": "5b60dc7a1678d14a0ae073e6450b2d73f7392c0172de08b88ca2d7bc44a648a8",
     "source/inventory-light-plugins/src/native/page-filter.tsx": "c02645406e124c6e473ec5126e3e5a87bfedd44be182680311aa1b670a92fbba",
     "../shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
-    "source/inventory-light-plugins/src/native/dealer.tsx": "9ddea0007e0b57e08a27d90899c945cd900184477a1721a8c657c9534b301597",
+    "source/inventory-light-plugins/src/native/dealer.tsx": "9facce33d3798618420e1dfc530553c18afacb1b3795d398d04f9dfbed1cba96",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
-    "source/inventory-light-plugins/src/native/entry.tsx": "9d22160a069d6c9b5fbbd111a48b28837766df92bcd4d38f2842b2c405832b22",
+    "source/inventory-light-plugins/src/native/entry.tsx": "7b4040c0b3cd5ef6795cff1e1c55a5b009fed46cd079b2fcf1ab9b901b9d90db",
     "../dsh-agent-manage/package.json": "43d26581c262db48b7dfd459796a593cd0c32d0f4f505de8b2a7b547623326b5"
   }
 }

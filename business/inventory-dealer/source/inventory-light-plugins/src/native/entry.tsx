@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import Page from "@business-page";
 import { clearReadCache } from "../data";
-import { action } from "../channel.js";
+import { action, ready } from "../channel.js";
 import { updateContext, clearContext } from "./context";
 import "@business-style";
 
@@ -22,11 +22,25 @@ class Boundary extends React.Component<any, { error: string }> {
 let refreshPage = () => {};
 function App() {
   const [revision, bump] = useState(0),
-    [warnings, setWarnings] = useState<string[]>([]);
+    [warnings, setWarnings] = useState<string[]>([]),
+    [reading, setReading] = useState(true);
   useEffect(() => {
-    const invalidate = () => { clearReadCache(); clearContext(); bump(n => n + 1); };
+    const invalidate = () => {
+      clearReadCache();
+      clearContext();
+      setReading(false);
+    };
+    const resume = () => {
+      setWarnings([]);
+      bump(n => n + 1);
+      setReading(true);
+    };
     window.addEventListener('gea-session-changing', invalidate);
-    return () => window.removeEventListener('gea-session-changing', invalidate);
+    window.addEventListener('gea-session-changed', resume);
+    return () => {
+      window.removeEventListener('gea-session-changing', invalidate);
+      window.removeEventListener('gea-session-changed', resume);
+    };
   }, []);
   useEffect(() => {
     const warn = (event: any) => {
@@ -58,13 +72,13 @@ function App() {
           ))}
         </div>
       )}
-      <Boundary key={revision}>
-        <Page />
-      </Boundary>
+      {reading ? <Boundary key={revision}><Page /></Boundary> :
+        <p role="status">会话切换中，等待授权通道就绪</p>}
     </>
   );
 }
 async function mount() {
+  await ready;
   const root = createRoot(document.getElementById("app")!);
   root.render(<App />);
   window.addEventListener("gea-page-refresh", () => refreshPage());

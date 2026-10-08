@@ -31,7 +31,7 @@ const status = (v: string) =>
   ({
     available: "已读取",
     empty: "无记录",
-    unavailable: "当前账号暂无数据权限",
+    unavailable: "数据暂不可用",
     select_customer: "请先选择单个客户",
     partial: "仅当前页",
   })[v] ?? v;
