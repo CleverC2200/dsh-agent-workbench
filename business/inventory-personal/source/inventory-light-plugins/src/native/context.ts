@@ -1,11 +1,11 @@
 import { publish, reportElements } from "../../../../../shared/channel.js";
-import { dataMode } from "../personal/mock-input";
+import { dataMode } from "../personal/live-input";
 let revision = 0;
 let state: any = empty();
 let sending: Promise<unknown> = Promise.resolve();
 function empty(requested?: unknown) {
   return {
-    source: "fixed-mock",
+    source: "GEA_GOVERNED_SQL",
     realData: false,
     parts: { personalWorkbench: { loading: true, requested } },
     coverage: "当前范围读取未完成，不能使用旧指标。",
@@ -49,8 +49,8 @@ export const pageContext = () => state;
 export function updateContext(_key: string, value: any) {
   const limited = bounded(value);
   state = {
-    source: "fixed-mock",
-    realData: false,
+    source: "GEA_GOVERNED_SQL",
+    realData: !value.loading && value.scope?.some((row: any) => row.snapshot && !row.error),
     dataMode,
     capturedAt: new Date().toISOString(),
     parts: { personalWorkbench: limited },

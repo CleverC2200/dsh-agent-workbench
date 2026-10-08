@@ -3,14 +3,12 @@ import {
   loadDailyReportInput,
   catalog,
   load,
-  clearFacts,
   clearReadCache,
-} from "./mock-input";
+} from "./live-input";
 
 import {type ObjectData} from "dsh-agent-manage/inventory-compute/personal";
 import {buildBasePersonalObject,buildBranchPersonalObject} from "dsh-agent-manage/inventory-compute/personal-sources";
 export function reset() {
-  clearFacts();
   clearReadCache();
 }
 export async function loadPersonal(
@@ -27,7 +25,7 @@ export async function loadPersonal(
   await Promise.allSettled([
     (async () => {
       try {
-        const input = await loadDailyReportInput();
+        const input = await loadDailyReportInput(signal);
         if (input.failedSources.length)
           errors.push(
             "基地部分数据源未返回：" + input.failedSources.join("、"),
@@ -52,7 +50,7 @@ export async function loadPersonal(
     })(),
     (async () => {
       try {
-        const directory = await catalog();
+        const directory = await catalog(signal);
         let cursor = 0;
         await Promise.all(
           [0, 1].map(async () => {
@@ -61,7 +59,7 @@ export async function loadPersonal(
               const warehouse = directory.warehouses[cursor++];
               const id = "branch:" + warehouse.id;
               try {
-                const snapshot = await load({ warehouseId: warehouse.id });
+                const snapshot = await load({ warehouseId: warehouse.id, signal });
                 push([
                   applySourcePermissions(
                     buildBranchPersonalObject(snapshot,warehouse),

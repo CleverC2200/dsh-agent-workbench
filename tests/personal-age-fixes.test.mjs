@@ -24,11 +24,11 @@ const bundle = await build({
       name: "governed-input-and-host-ack",
       setup(api) {
         api.onResolve(
-          { filter: /mock-input$|shared\/channel\.js$/ },
+          { filter: /(?:mock|live)-input$|shared\/channel\.js$/ },
           (args) => ({ path: args.path, namespace: "fixture" }),
         );
         api.onLoad({ filter: /.*/, namespace: "fixture" }, ({ path }) => ({
-          contents: path.endsWith("mock-input")
+          contents: /\/(?:mock|live)-input$/.test(path)
             ? 'export const dataMode="mock";export const loadDailyReportInput=async()=>structuredClone(globalThis.personalAgeFixture.daily);export const clearFacts=()=>{};export const catalog=async()=>({warehouses:[]});export const load=async()=>{throw Error("unexpected branch read")};export const clearReadCache=()=>{};export const readSignal=()=>new AbortController().signal;'
             : `export const publish=async(snapshot,options)=>{options?.signal?.throwIfAborted();globalThis.personalAgeFixture.published.push(structuredClone(snapshot));return {accepted:true}};
        export const reportElements=()=>()=>{};export const draft=async()=>{};

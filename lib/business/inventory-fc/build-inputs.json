@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "906b3b08947b71cecf627073c0b0e9a389b692bf",
+  "sourceCommit": "0f0c18396134e3b8337b1571a6adfdc17e515a8a",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
@@ -55,12 +55,13 @@
     "source/fc/src/lib/server/warehouse-scope.ts": "a34ba7fd0e6d8c16b84ee9b92e52c44db97a396a54461da0fc7afe3ecdc958fe",
     "source/fc/src/lib/server/plan-product-metadata.ts": "8ccb233b72519877ed7938df795ef6e30b110e7433f2cec1c2c5e66dbf00a2bd",
     "source/fc/src/lib/server/warehouse-snapshot.ts": "e58d8e84105249b7466be7463ceeb75709e16ed7ec6e2fb705876aab30442764",
+    "source/inventory-light-plugins/src/warehouse-input.ts": "82183a5b1ba33efd7d412c4810acd3fd3e378d255105f98ea8b634bc0030d033",
     "source/fc/src/lib/server/base-resources.ts": "f289112bfb8b392a0b36d7c930217df00ee1315a8c4cc7c18c246db37325be56",
     "source/inventory-light-plugins/src/local-planning.ts": "65dad87e96b8b126eb4ae7c5ac02091dde2988dd97dd41b96d96f175b4a7c0fd",
     "source/inventory-light-plugins/src/fc-transfer.ts": "d8660f1e83799ca22380ecdcb5fc815ffabe630b87d3a85ecf06e84fd56f50c5",
     "source/fc/src/lib/server/replenishment-detail.ts": "713d2e5be9207400e7b661ea0bc2c5ec1b1741d435973ff7023feeceacad52ea",
     "source/fc/src/lib/dms-export.ts": "ce6d20c11b4ca4187263d43d3cc820cdf1a2e9066c9d2f038a090c239fc75072",
-    "source/inventory-light-plugins/src/fc-engine.ts": "7fb4253c8603578416c79029f4bc5f4a94257ec61f8a618e24578d294d467e4e",
+    "source/inventory-light-plugins/src/fc-engine.ts": "11b6bac078a9d2c30027244ab04f21f0725444b970bbd4d00974675204c9fa6e",
     "source/inventory-light-plugins/src/native/api.ts": "6b35bb2c0e614aa3b565f39c5fc374f14450370cde9b8a604bdf365ddf00ce24",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e834b61874dc4b2dcbd671323fd6ff00ba3d7fc81d8d4270d4fa5b295fa939d2",
     "source/inventory-light-plugins/src/native/entry.tsx": "55f04b19adc101cd5027cb081a0df5bc23e075f521a11391e48624f1298160d7"

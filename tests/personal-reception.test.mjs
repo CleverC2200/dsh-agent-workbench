@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { JSDOM } from "jsdom";
+import {personalFixtureHtml} from "./fixtures/personal-page-html.mjs";
 const pause = () => new Promise((done) => setTimeout(done, 10));
 async function until(check) {
   for (let i = 0; i < 150; i++) {
@@ -10,11 +11,8 @@ async function until(check) {
   }
   assert.ok(check(), "personal mock reached the expected public state");
 }
-async function mount(t, restore = { version: 1 }) {
-  const html = await readFile(
-    "lib/business/inventory-personal/index.html",
-    "utf8",
-  );
+async function mount(t, restore = { version: 1 }, live = false) {
+  const html = live ? await readFile("lib/business/inventory-personal/index.html", "utf8") : await personalFixtureHtml();
   const dom = new JSDOM(html, {
     url: "https://host.example/personal",
     referrer: "https://host.example/workbench",
@@ -79,7 +77,7 @@ async function mount(t, restore = { version: 1 }) {
             type: "response",
             id: message.id,
             result:
-              message.method === "draft"
+              message.method === "sql" ? {rows:[],total:0,returnedColumns:[],rejectedColumns:[]} : message.method === "draft"
                 ? { drafted: true }
                 : { accepted: true },
           },
@@ -148,12 +146,12 @@ const button = (root, text) =>
   [...root.querySelectorAll("button")].find(
     (node) => node.textContent.trim() === text,
   );
-test("the delivered hidden personal mock keeps monitoring, age filters, unknown, zero and simulated denial with zero real reads", async (t) => {
+test("the offline personal input fixture keeps monitoring, age filters, unknown, zero and simulated denial", async (t) => {
   const page = await mount(t);
   const initial = page.context();
-  assert.equal(initial.realData, false);
-  assert.equal(initial.dataMode, "mock");
-  assert.match(page.root.textContent, /固定模拟数据/);
+  assert.equal(initial.realData, true);
+  assert.equal(initial.dataMode, "GEA_LIVE_READONLY");
+  assert.match(page.root.textContent, /GEA 授权只读数据/);
   assert.match(page.root.textContent, /今日优先处理事项/);
   const metric = page.root.querySelector(
     '[data-page-target="personal:metric:平均货龄"]',
@@ -332,7 +330,7 @@ test("personal source declarations retain their unique identities and default hi
     ),
   );
   assert.equal(page.visible, false);
-  assert.equal(manifest.mode, "mock");
+  assert.equal(manifest.mode, undefined);
   assert.equal(page.surface, "gea-html-inventory-personal");
   assert.equal(page.consumerCode, "inventory-personal-workbench");
   assert.equal(profile.consumerCode, page.consumerCode);
@@ -343,10 +341,13 @@ test("personal source declarations retain their unique identities and default hi
   ).inputs;
   assert.equal(
     Object.keys(inputs).some((path) =>
-      /(host-read|sql|fc-engine|aqkc-report|packed|legacy)/.test(path),
+      /(mock-input|host-read|fc-transfer|columnar|legacy)/.test(path),
     ),
     false,
   );
+  assert.ok(Object.keys(inputs).some(path=>path.endsWith('/sql-reader.ts')));
+  assert.ok(Object.keys(inputs).some(path=>path.endsWith('/aqkc-report.ts')));
+  assert.ok(Object.keys(inputs).some(path=>path.endsWith('/warehouse-input.ts')));
 });
 
 test('a released view scope clears feedback fields before another Session restore and rejects the old channel',async t=>{
@@ -360,3 +361,18 @@ test('a released view scope clears feedback fields before another Session restor
   assert.deepEqual(page.view().feedbackNotes,undefined);
   assert.equal(Object.hasOwn(saved.feedbackNotes,'base:郑州:AGE'),true,'previous Session record remains recoverable under its owner');
 });
+
+ test("the actual built personal reader sends governed SQL through its public channel, keeps empty facts unknown and performs no model request",async t=>{
+ const page=await mount(t,{version:1},true);
+ const sql=page.requests.filter(m=>m.method==="sql");
+ assert.ok(sql.length>=6);
+ assert.ok(sql.every(m=>m.parameters.pageSize===200&&m.parameters.pageNo===1));
+ assert.ok(sql.some(m=>m.parameters.sql.includes("agents_scm_safety_stock")));
+ assert.ok(sql.some(m=>m.parameters.sql.includes("warehouse_catalog")));
+ assert.equal(page.context().source,"GEA_GOVERNED_SQL");
+ assert.equal(page.context().realData,false);
+ assert.equal(page.context().dataMode,"GEA_LIVE_READONLY");
+ assert.equal(page.context().parts.personalWorkbench.scope.length,0);
+ assert.deepEqual(page.requests.filter(m=>m.method==="conversation"||m.method==="draft"),[]);
+ assert.deepEqual(page.errors,[]);
+ });

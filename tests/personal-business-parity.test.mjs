@@ -22,7 +22,7 @@ async function loader(entry) {
           api.onResolve(
             {
               filter:
-                /aqkc-report$|fc-engine$|mock-input$|(?:host-read|\.\.\/data)$|query-error\.js$/,
+                /aqkc-report$|fc-engine$|(?:mock|live)-input$|(?:host-read|\.\.\/data)$|query-error\.js$/,
             },
             (args) => ({ path: args.path, namespace: "fixture" }),
           );
@@ -33,7 +33,7 @@ async function loader(entry) {
           }));
           api.onLoad({ filter: /.*/, namespace: "fixture" }, ({ path }) => ({
             contents:
-              path.endsWith("aqkc-report") || path.endsWith("mock-input")
+              path.endsWith("aqkc-report") || /\/(?:mock|live)-input$/.test(path)
                 ? "export const loadDailyReportInput=async()=>structuredClone(globalThis.personalBusiness.daily);export const clearFacts=()=>{};export const clearReadCache=()=>{};export const catalog=async()=>({warehouses:globalThis.personalBusiness.warehouses});export const load=async({warehouseId})=>{const value=globalThis.personalBusiness.snapshots[warehouseId];if(value.error)throw Error(value.error);return structuredClone(value)};"
                 : path.endsWith("fc-engine")
                   ? "export const clearFacts=()=>{};export const catalog=async()=>({warehouses:globalThis.personalBusiness.warehouses});export const load=async({warehouseId})=>{const value=globalThis.personalBusiness.snapshots[warehouseId];if(value.error)throw Error(value.error);return structuredClone(value)};"

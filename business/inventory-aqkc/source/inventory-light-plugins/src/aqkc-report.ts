@@ -6,9 +6,10 @@ import { buildDailyReport, reportNumber, type DailySource, type DailyReportInput
 import type { WorkbenchSqlRow } from "../../aqkc/web/src/lib/workbench-sql-types";
 const text = (value: unknown) => typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
 const nonnegative = (value: unknown) => { const n = reportNumber(value); return n !== null && n >= 0 ? n : null; };
-export async function loadDailyReportInput(): Promise<DailyReportInput> {
+export async function loadDailyReportInput(signal?: AbortSignal, read = queryStock): Promise<DailyReportInput> {
   const sources = Object.keys(dailyReportSql) as DailySource[];
-  const results = await Promise.allSettled(sources.map(source => queryStock(dailyReportSql[source])));
+  const results = await Promise.allSettled(sources.map(source => read(dailyReportSql[source], signal)));
+  signal?.throwIfAborted();
   const rows = results.map(result => result.status === "fulfilled" ? result.value : []);
   const data = Object.fromEntries(sources.map((source,index) => [source,rows[index]])) as Record<DailySource,WorkbenchSqlRow[]>;
   const failedSources: DailySource[] = sources.filter((_,index) => results[index].status === "rejected");

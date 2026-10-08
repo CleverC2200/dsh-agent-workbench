@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { loadPersonal, reset } from "./data";
-import { readSignal, dataMode } from "./mock-input";
+import { readSignal, dataMode } from "./live-input";
 import {
   createPageViewState,
   usePageViewField,
@@ -527,7 +527,7 @@ export default function Personal({
       <header className={css.header}>
         <div className={css.titleRow}>
           <h1>库存管理工作台</h1>
-          <span role="status">固定模拟数据 · 未请求真实库存</span>
+          <span role="status">GEA 授权只读数据 · 反馈仅保存未发送文字</span>
           <Button
             disabled={loading}
             onClick={() => void refresh().catch(showError)}

@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "faa8e3bdda085c93de823eef57c1f09b3cd5405f",
+  "sourceCommit": "0f0c18396134e3b8337b1571a6adfdc17e515a8a",
   "computeOwner": "dsh-agent-manage",
   "computePublicExport": "./inventory-compute/*",
   "inputs": {
@@ -26,8 +26,8 @@
     "../dsh-agent-manage/src/inventory-compute/dealer-dashboard.ts": "2f72ec31cc67e8d1571c43572e6d69ec5b770266ed1b5cf1e56a3323d9916824",
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
-    "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
-    "source/inventory-light-plugins/src/data.ts": "c82341105fc9b2eac2cd93676ef1cf733e36410287d87ec61eea1a9c374bf133",
+    "../shared/sql-reader.ts": "13be6da5dd5c5b14d11772ed5e862fc69b4cd4ce57a97b954e5cda7baa8f798a",
+    "source/inventory-light-plugins/src/data.ts": "1afa767a935322b562660a2a38fe5c7d1d8256413e8d587abf4e0812f1ff8e4e",
     "source/dealer/web/src/lib/dealer-workbench-sql.ts": "10b534640287c75d2f99323d03b891f89d6dc9f0d7afec7b482cb21847a6cef4",
     "source/dealer/web/src/lib/dealer-dashboard.ts": "decdade8fede7d5728831d78bc59e87c7be50bd9348842e1fc48a724092dedf9",
     "../dsh-agent-manage/src/inventory-compute/dealer-recommendation.ts": "07e4351433a875c72b66557e3ec488acf2988125b4e01102c976e89e4ff6e790",
@@ -36,6 +36,7 @@
     "source/inventory-light-plugins/src/platform-pending.ts": "2d5fc2c98d7986b36ef948a37a2cc8baaeb24889439d833a8784e448431c0b3d",
     "source/dealer/web/src/lib/dealer-demo-live-data.ts": "32bb04a7380ac21afa90c252f5e466de66e5de8f00341f12cdbf3ee73cf67614",
     "source/inventory-light-plugins/src/dealer-engine.ts": "dcdd73a3c146a8ecc021583ba400164aea19efb63d2b8092cd49cef937ab9031",
+    "source/inventory-light-plugins/src/channel.js": "ad53758b40e2b49f0f82a13e53cf903a7aa7d2d6c3fece1d10fb9ce533091f1b",
     "source/inventory-light-plugins/src/native/context.ts": "ffee111a455b00c57af4d131ef20a4b2e287707703cf8f3b4d40036965c305b0",
     "source/inventory-light-plugins/src/dealer-draft.ts": "5b60dc7a1678d14a0ae073e6450b2d73f7392c0172de08b88ca2d7bc44a648a8",
     "source/inventory-light-plugins/src/native/page-filter.tsx": "c02645406e124c6e473ec5126e3e5a87bfedd44be182680311aa1b670a92fbba",

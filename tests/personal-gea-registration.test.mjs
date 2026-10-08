@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { registerHtmlPlugins } from "../../../../clean-core-rewrite-42/integration/dsh-gea-plugin/src/html-plugins.ts";
 
-test("the delivered personal package registers under the current GEA mock contract without a live Consumer", async (t) => {
+test("the delivered hidden personal package registers the real declaration and refuses a signed-out reference", async (t) => {
   const definitions = new Map(),
     pages = new Map(),
     cleanups = [],
@@ -60,29 +60,18 @@ test("the delivered personal package registers under the current GEA mock contra
   await registerHtmlPlugins(ctx, business, [
     { directory, htmlPath: resolve(directory, "index.html"), manifest },
   ]);
-  assert.equal(manifest.mode, "mock");
+  assert.equal(manifest.mode, undefined);
   assert.equal(Object.hasOwn(manifest, "mock"), false);
   assert.deepEqual(
     JSON.parse(await readFile(resolve(directory, "mcp.json"), "utf8"))
       .capabilities,
-    [],
+    ["governed-sql-read"],
   );
   assert.equal(definitions.has("gea-html-inventory-personal"), true);
   const authorize = pages.get("inventory-personal");
   assert.ok(authorize);
-  try {
-    const grant = await authorize(
-      "session-11111111-1111-4111-8111-111111111111",
-      "gea-html-inventory-personal",
-      new AbortController().signal,
-    );
-    assert.equal(grant.access.mode, "mock");
-    await assert.rejects(
-      grant.readSql({}, new AbortController().signal),
-      /MOCK_DATA_ONLY/,
-    );
-    grant.release();
-  } catch (error) {
-    assert.match(error.message, /HIDDEN|RETIRED|DISABLED/);
-  }
+  await assert.rejects(authorize(
+    "session-11111111-1111-4111-8111-111111111111",
+    "gea-html-inventory-personal", new AbortController().signal,
+  ),/HIDDEN|RETIRED|DISABLED|LOGIN_REQUIRED/);
 });

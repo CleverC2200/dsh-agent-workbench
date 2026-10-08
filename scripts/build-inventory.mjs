@@ -1,7 +1,7 @@
 /** Build the migrated page; Agent resources are assembled from their owning package. */
 import { build } from "esbuild";
 import { readFile, writeFile, mkdir, cp } from "node:fs/promises";
-import { resolve } from "node:path";
+import { resolve, relative } from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
 const root = resolve(import.meta.dirname, "..");
@@ -41,6 +41,9 @@ export async function buildInventory(id, sourceCommit) {
       {
         name: "inventory-browser",
         setup(api) {
+          if (id === "personal") api.onResolve({filter: /(^|\/)(data|database|business-database|gea-sql|planning-store|workbench-sql-client|workbench-sql-executor|gea-sql-client)(\.ts)?$/}, a => {
+            if (/inventory-(aqkc|fc)\/source\//.test(a.importer)) return {path:resolve(ui, "src/personal/sql-data.ts")};
+          });
           api.onResolve({filter:/^dsh-agent-manage\/inventory-compute\/[a-z-]+$/}, async a => {
             computeExport ??= JSON.parse(await readFile(resolve(computeRoot,"package.json"),"utf8")).exports["./inventory-compute/*"];
             if (computeExport?.source !== "./src/inventory-compute/*.ts") throw Error("MANAGE_COMPUTE_PUBLIC_EXPORT_MISMATCH");
@@ -48,7 +51,9 @@ export async function buildInventory(id, sourceCommit) {
           });
           api.onResolve(
             { filter: /^react(?:\/|$)|^react-dom(?:\/|$)|^clsx$|^zod(?:\/|$)/ },
-            (a) => ({ path: resolver.resolve(a.path) }),
+            (a) => ({ path: id === "personal" && /^zod(?:\/|$)/.test(a.path)
+              ? createRequire(resolve(root, "business/inventory-fc/source/inventory-light-plugins/package.json")).resolve(a.path)
+              : resolver.resolve(a.path) }),
           );
           api.onResolve({ filter: /^@business-page$/ }, () => ({
             path: resolve(ui, id === "dealer" ? "src/native/dealer.tsx" : `src/pages/${id}.tsx`),
@@ -83,6 +88,8 @@ export async function buildInventory(id, sourceCommit) {
             api.resolve(
               resolve(
                 source,
+                id === "personal" && a.importer.includes("/inventory-aqkc/") ? "../../inventory-aqkc/source/aqkc/web/src" :
+                id === "personal" && a.importer.includes("/inventory-fc/") ? "../../inventory-fc/source/fc/src" :
                 id === "fc" ? "fc/src" : id === "qll" ? "qll/src" : `${id}/web/src`,
                 a.path.slice(2),
               ),
@@ -139,15 +146,14 @@ export async function buildInventory(id, sourceCommit) {
     if (input.includes("node_modules/")) continue;
     const path = resolve(input);
     if (
-      !path.startsWith(resource + "/") &&
-      !path.startsWith(resolve(root, "business/shared") + "/") &&
+      !path.startsWith(resolve(root, "business") + "/") &&
       !path.startsWith(resolve(computeRoot,"src/inventory-compute") + "/")
     )
       continue;
     inputs[
       path.startsWith(resource + "/")
         ? path.slice(resource.length + 1)
-        : path.startsWith(computeRoot+"/") ? "../dsh-agent-manage/"+path.slice(computeRoot.length+1) : "../shared/" + path.split("/shared/")[1]
+        : path.startsWith(computeRoot+"/") ? "../dsh-agent-manage/"+path.slice(computeRoot.length+1) : relative(resource, path)
     ] = createHash("sha256")
       .update(await readFile(path))
       .digest("hex");

@@ -1,7 +1,7 @@
 import { forecastCoverage } from "./fc-feedback";
 import { database as sourceDatabase, EMPTY_PLANNING } from "./data.ts";
 import { loadWarehouseCatalog } from "../../fc/src/lib/server/warehouse-catalog.ts";
-import { loadWarehouseSnapshot } from "../../fc/src/lib/server/warehouse-snapshot.ts";
+import { readWarehouseFacts } from "./warehouse-input";
 import { loadBaseResourceSnapshot } from "../../fc/src/lib/server/base-resources.ts";
 import { projectWarehousePage } from "../../fc/src/lib/workbench-page.ts";
 import { summarizeSnapshot } from "../../fc/src/lib/domain.ts";
@@ -22,51 +22,7 @@ export function clearPreviews() {
   previews.clear();
 }
 export const catalog = () => loadWarehouseCatalog(database);
-const planning = {
-  query: async (sql: string) => {
-    if (sql.includes("to_regclass"))
-      return {
-        rows: [
-          { order_fulfillment: true, imported_plans: null, cycle_config: null },
-        ],
-      };
-    throw Error("此能力需要 GEA 持久化支持，可交给对话区继续处理");
-  },
-};
-const loadFacts = async (filters: any) => {
-  const now = new Date(),
-    calculationDate = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Asia/Shanghai",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-  const catalogPromise = catalog();
-  const shippedPromise = catalogPromise.then(async (directory) => {
-    const warehouse = directory.warehouses.find(row => row.id === filters.warehouseId);
-    if (!warehouse) throw Error("GEA 未返回该分仓映射");
-    const shipped = await database.query(
-      `SELECT material_code AS sku, CASE WHEN COUNT(*) FILTER (WHERE metric_value IS NULL)>0 THEN NULL ELSE SUM(metric_value) END AS shipped_qty FROM data_service.agents_scm_branch_operation_fact WHERE pickup_point=$1 AND metric_group='branch_activity' AND metric_name='actual_shipped_qty' AND period_month=$2::date GROUP BY material_code ORDER BY material_code`,
-      [warehouse.pickupPointCode, calculationDate.slice(0, 7) + "-01"],
-    );
-    return { warehouse, shipped };
-  });
-  const [base, {warehouse, shipped}] = await Promise.all([
-    loadWarehouseSnapshot(filters.warehouseId, database, now, planning),
-    shippedPromise,
-  ]);
-  return {
-    base,
-    warehouse,
-    calculationDate,
-    shipped: new Map(
-      shipped.rows.map((row: any) => [
-        String(row.sku),
-        row.shipped_qty == null ? null : Number(row.shipped_qty),
-      ]),
-    ),
-  };
-};
+const loadFacts = (filters: any) => readWarehouseFacts(database, filters.warehouseId);
 async function source(warehouseId: string) {
   let value = facts.get(warehouseId);
   if (!value) {
