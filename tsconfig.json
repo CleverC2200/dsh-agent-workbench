@@ -30,6 +30,9 @@
       ],
       "dsh-agent-manage/inventory-compute/*": [
         "../dsh-agent-manage/src/inventory-compute/*.ts"
+      ],
+      "dsh-agent-manage/aps-compute/*": [
+        "../dsh-agent-manage/src/aps-compute/*.ts"
       ]
     }
   },

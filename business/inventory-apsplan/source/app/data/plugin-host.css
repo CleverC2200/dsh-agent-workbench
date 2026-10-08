@@ -1,0 +1,137 @@
+/* The exported board expects its host to scroll. In the fixed-height plugin
+   iframe the document must own scrolling; the board's visual CSS is unchanged. */
+html.aps-plugin-host { height: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
+html.aps-plugin-host::-webkit-scrollbar { width: 0; height: 0; }
+html.aps-plugin-host body { height: auto; min-height: 100%; overflow: visible; }
+
+/* Embedded workspaces share the iframe document scroll, including wheel chaining. */
+html.aps-plugin-host .embed-mode .main-content > .workspace-page {
+  height: auto; min-height: 0; overflow: visible; overscroll-behavior: auto;
+}
+
+/* Keep the intelligent-workbench KPI cards on shared row baselines. */
+.intelligent-core-metric-group .period-kpi-card { display:flex; min-width:0; min-height:232px; padding:16px 16px 0; flex-direction:column; border-color:var(--v02-border); background:var(--v02-surface); }
+.intelligent-core-metric-group .period-kpi-card .kpi-name { min-height:24px; padding-right:0; gap:10px; color:var(--v02-text-strong); font-size:12px; line-height:1.4; }
+.intelligent-core-metric-group .period-kpi-card .kpi-name>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.intelligent-core-metric-group .period-kpi-card .achievement-status { flex:none; padding:3px 7px; border-radius:var(--v02-radius-pill); font-size:8px; line-height:1.25; white-space:nowrap; }
+.intelligent-core-metric-group .period-kpi-card .kpi-period-label { min-height:22px; margin-top:3px; gap:6px; font-size:9px; white-space:nowrap; }
+.intelligent-core-metric-group .period-kpi-card .kpi-value { display:flex; min-height:54px; margin:5px 0 4px; align-items:center; }
+.intelligent-core-metric-group .period-kpi-card .kpi-value strong { color:var(--v02-text-strong); font-size:30px; line-height:1.1; }
+.intelligent-core-metric-group .period-kpi-card .kpi-value span { color:var(--v02-text-muted); font-size:11px; }
+.intelligent-core-metric-group .period-kpi-card .kpi-comparison-head { grid-template-columns:minmax(0,1fr) minmax(96px,.8fr); margin-top:0; padding-top:7px; font-size:8px; }
+.intelligent-core-metric-group .kpi-comparison-rows { display:grid; min-height:48px; align-content:center; color:var(--v02-text-muted); font-size:9px; }
+.intelligent-core-metric-group .kpi-comparison-rows>div { display:grid; min-width:0; min-height:24px; grid-template-columns:minmax(0,1fr) minmax(96px,.8fr); align-items:center; gap:10px; }
+.intelligent-core-metric-group .kpi-comparison-rows span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.intelligent-core-metric-group .kpi-comparison-rows em { font-style:normal; color:var(--v02-text-muted); }
+.intelligent-core-metric-group .kpi-comparison-rows b { display:flex; min-width:0; align-items:center; justify-content:flex-end; gap:3px; font-size:9px; font-weight:700; white-space:nowrap; }
+.intelligent-core-metric-group .kpi-comparison-rows svg { width:11px; height:11px; flex:none; }
+.intelligent-core-metric-group .period-kpi-card .kpi-foot { min-height:42px; margin-top:auto; padding:9px 0; align-items:center; font-size:10px; }
+.intelligent-core-metric-group .period-kpi-card .kpi-foot span,.intelligent-core-metric-group .period-kpi-card .kpi-foot b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+@media(max-width:720px) {
+  .intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,.intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .intelligent-core-metric-group .scope-kpi-count-3 .period-kpi-card:nth-child(3n),.intelligent-core-metric-group .scope-kpi-count-4 .period-kpi-card:nth-child(4n) { border-right:1px solid var(--v02-border); }
+  .intelligent-core-metric-group .period-kpi-card:nth-child(2n) { border-right:0; }
+  .intelligent-core-metric-group .period-kpi-card:nth-child(n+3) { border-top:1px solid var(--v02-border); }
+}
+@media(max-width:520px) {
+  .intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,.intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 { grid-template-columns:1fr; }
+  .intelligent-core-metric-group .period-kpi-card:nth-child(n) { border-right:0; }
+  .intelligent-core-metric-group .period-kpi-card:nth-child(n+2) { border-top:1px solid var(--v02-border); }
+}
+
+/* Category cards fill the embedded content area in four equal columns. */
+html.aps-plugin-host #category-operations .category-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+html.aps-plugin-host #category-operations .category-health-card { min-width: 0; }
+html.aps-plugin-host #category-operations .category-card-title { gap: 4px; padding-inline: 8px; }
+html.aps-plugin-host #category-operations .category-card-metric {
+  min-width: 0; gap: 4px; padding-inline: 8px; flex-wrap: wrap;
+}
+html.aps-plugin-host #category-operations .category-card-label {
+  min-width: 0; flex: 1 1 76px; flex-direction: column; align-items: flex-start; gap: 2px;
+}
+html.aps-plugin-host #category-operations .category-card-label small { white-space: normal; overflow-wrap: anywhere; }
+html.aps-plugin-host #category-operations .category-card-result { min-width: 0; max-width: 100%; margin-left: auto; }
+html.aps-plugin-host #category-operations .category-card-result small { white-space: normal; overflow-wrap: anywhere; }
+
+/* Cross analysis adapts to the content pane, not the outer desktop width. */
+html.aps-plugin-host #cross-analysis .cross-heading {
+  display: flex; flex-flow: row wrap; align-items: flex-end; gap: 12px 20px;
+}
+html.aps-plugin-host #cross-analysis .cross-heading > div:first-child {
+  display: flex; flex: 1 1 380px; min-width: 0; flex-wrap: wrap; align-items: baseline; gap: 6px 12px;
+}
+html.aps-plugin-host #cross-analysis .cross-heading > div:first-child > span { white-space: nowrap; }
+html.aps-plugin-host #cross-analysis .cross-heading h2 { flex: 1 1 auto; min-width: 0; text-wrap: balance; }
+html.aps-plugin-host #cross-analysis .cross-heading > div:first-child > small {
+  flex-basis: 100%; margin-top: 0; white-space: normal;
+}
+html.aps-plugin-host #cross-analysis .cross-tabs {
+  display: flex; flex: 1 1 360px; min-width: 0; max-width: 100%; margin-left: 0; overflow-x: auto;
+}
+html.aps-plugin-host #cross-analysis .cross-tabs button {
+  flex: 1 0 auto; white-space: nowrap; padding-inline: 12px;
+}
+html.aps-plugin-host #cross-analysis .matrix { min-width: 0; max-width: 100%; overflow-x: auto; }
+html.aps-plugin-host #cross-analysis .matrix-row {
+  width: 100%; min-width: 560px; grid-template-columns: 64px repeat(7, minmax(0, 1fr));
+}
+
+/* APS board has a single left-aligned return action, without a duplicate title. */
+html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar { justify-content: flex-start; }
+html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .dashboard-module-label { display: none; }
+html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intelligent-tasks { margin-left: 0; margin-right: auto; }
+
+/* Embedded workbench starts at the host content edge, without the prototype inset. */
+html.aps-plugin-host .main-content:has(> .intelligent-workspace-page) {
+  height: 100%; margin-top: 0;
+}
+
+/* The embedded workbench header has no decorative top rule. */
+html.aps-plugin-host .intelligent-workspace-page { border-top: 0; }
+
+/* Give the first metric heading breathing room after removing the title bar. */
+html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading {
+  box-sizing: border-box;
+  min-height: 50px;
+  padding-top: 0;
+  padding-bottom: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > div > span,
+html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  line-height: 20px;
+}
+
+/* Shift the heading text without changing the section's layout height. */
+html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > div,
+html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > p {
+  position: relative;
+  top: 11px;
+}
+
+/* Compact return toolbar, matching the other business headers. */
+html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar {height:50px;min-height:50px;box-sizing:border-box;padding-top:0;padding-bottom:0;align-items:center;}
+html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intelligent-tasks {height:32px;min-height:32px;padding-top:0;padding-bottom:0;}
+
+/* Keep the board's view and period controls visible while its document scrolls. */
+html.aps-plugin-host .analysis-workspace > .scope-tabs {
+  position: sticky;
+  top: 50px;
+  z-index: 11;
+  background: #fff;
+}
+html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
+  position: sticky;
+  top: 98px;
+  z-index: 10;
+  background: #fff;
+}
