@@ -135,3 +135,74 @@ html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   z-index: 10;
   background: #fff;
 }
+
+/* The original board's fixed light paints need the same roles in dark mode.
+   Limit these bindings to dark presentation so the supplied light layout is exact. */
+html.aps-plugin-host body[data-ds-dark-theme] {
+  --card: var(--workbench-surface);
+  --card-foreground: var(--workbench-text);
+  --popover: var(--workbench-surface);
+  --popover-foreground: var(--workbench-text);
+  --secondary: var(--workbench-muted-surface);
+  --secondary-foreground: var(--workbench-text);
+  --muted: var(--workbench-muted-surface);
+  --muted-foreground: var(--workbench-muted);
+  --accent: var(--workbench-brand-soft);
+  --accent-foreground: var(--workbench-selected-text);
+  --border: var(--workbench-border);
+  --input: var(--workbench-control-border);
+  --ring: var(--workbench-brand);
+  --v02-hover-border: var(--workbench-brand);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .analysis-workspace > .dashboard-module-toolbar,
+html.aps-plugin-host body[data-ds-dark-theme] .scope-tabs button.selected,
+html.aps-plugin-host body[data-ds-dark-theme] .kpi-grid,
+html.aps-plugin-host body[data-ds-dark-theme] .month-menu,
+html.aps-plugin-host body[data-ds-dark-theme] .month-menu button,
+html.aps-plugin-host body[data-ds-dark-theme] .open-intelligent-tasks {
+  background: var(--workbench-surface);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .time-granularity-tabs {
+  background: var(--workbench-muted-surface);
+  border-color: var(--workbench-control-border);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .time-granularity-tabs.period-damped-switch::before {
+  background: var(--workbench-surface);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .time-granularity-tabs button,
+html.aps-plugin-host body[data-ds-dark-theme] .open-intelligent-tasks,
+html.aps-plugin-host body[data-ds-dark-theme] .period-filter-menu button {
+  color: var(--workbench-body);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .date-picker-button > span,
+html.aps-plugin-host body[data-ds-dark-theme] .week-button > span {
+  color: var(--workbench-text);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .week-button > small,
+html.aps-plugin-host body[data-ds-dark-theme] .active-period-range,
+html.aps-plugin-host body[data-ds-dark-theme] .period-filter-menu > small,
+html.aps-plugin-host body[data-ds-dark-theme] .date-picker-sections section > strong,
+html.aps-plugin-host body[data-ds-dark-theme] .period-kpi-card .kpi-foot {
+  color: var(--workbench-muted);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .open-intelligent-tasks,
+html.aps-plugin-host body[data-ds-dark-theme] .month-menu,
+html.aps-plugin-host body[data-ds-dark-theme] .kpi-grid {
+  border-color: var(--workbench-border);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .period-filter-menu button.selected {
+  color: var(--workbench-selected-text);
+  background: var(--workbench-brand-soft);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .time-granularity-tabs button.selected,
+html.aps-plugin-host body[data-ds-dark-theme] .time-granularity-tabs button:hover,
+html.aps-plugin-host body[data-ds-dark-theme] .open-intelligent-tasks:hover {
+  color: var(--workbench-selected-text);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .month-menu button:not(.selected):hover,
+html.aps-plugin-host body[data-ds-dark-theme] .open-intelligent-tasks:hover {
+  background: var(--workbench-hover);
+}
+html.aps-plugin-host body[data-ds-dark-theme] .embed-mode .main-content {
+  background: var(--workbench-page);
+}

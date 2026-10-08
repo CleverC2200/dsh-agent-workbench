@@ -1,0 +1,403 @@
+{
+  "sourceWorkbench": "5c2e4a4e4d5e291b46c4269ff757aa0aca69606d",
+  "sourceHtmlSha256": "276b7159ee4cb9280dd662f533857a18fac0e0d995a2886bae5e754cc21ea22e",
+  "platform": "macOS Chrome, PC iframe widths 550 and 850",
+  "snapshots": {
+    "550": {
+      "light": {
+        ".main-content": {
+          "background": "rgb(246, 247, 249)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(232, 233, 237)",
+          "width": 550,
+          "height": 3375.171875,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".dashboard-module-toolbar": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 548,
+          "height": 50,
+          "padding": "0px 10px",
+          "gap": "8px",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".open-intelligent-tasks": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(89, 97, 109)",
+          "borderColor": "rgb(225, 228, 232)",
+          "width": 92,
+          "height": 32,
+          "padding": "0px 9px",
+          "gap": "5px",
+          "fontSize": "8px",
+          "lineHeight": "12px",
+          "fontWeight": "700"
+        },
+        ".scope-tabs button.selected": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 176,
+          "height": 48,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        ".time-granularity-tabs": {
+          "background": "rgb(244, 245, 247)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(225, 228, 232)",
+          "width": 272,
+          "height": 38,
+          "padding": "3px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".time-granularity-tabs button:not(.selected)": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(103, 111, 122)",
+          "borderColor": "rgb(103, 111, 122)",
+          "width": 66,
+          "height": 30,
+          "padding": "0px 9px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "700"
+        },
+        ".time-granularity-tabs button.selected": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 66.989990234375,
+          "height": 30.45001220703125,
+          "padding": "0px 9px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "700"
+        },
+        ".date-picker-button>span": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(52, 59, 70)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 60,
+          "height": 18,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        },
+        ".week-button>span": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(52, 59, 70)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 25.84375,
+          "height": 18,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "800"
+        },
+        ".kpi-grid.overview-flat-kpi-grid": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 528,
+          "height": 430,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".period-kpi-card": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(32, 35, 42) rgb(227, 230, 234) rgb(32, 35, 42) rgb(32, 35, 42)",
+          "width": 263,
+          "height": 213.5,
+          "padding": "17px 14px 0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".period-kpi-card .kpi-name": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 234,
+          "height": 18,
+          "padding": "0px 28px 0px 0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        },
+        ".active-period-range": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(125, 132, 144)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 528,
+          "height": 15,
+          "padding": "0px 0px 0px 4px",
+          "gap": "normal",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        }
+      },
+      "lightMenu": {
+        ".month-menu": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 360,
+          "height": 163,
+          "padding": "12px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".date-picker-menu .date-picker-sections button:not(.selected):not(:disabled)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(85, 93, 104)",
+          "borderColor": "rgb(85, 93, 104)",
+          "width": 147,
+          "height": 32,
+          "padding": "7px 4px",
+          "gap": "7px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "400"
+        },
+        ".date-picker-menu .date-picker-sections button.selected": {
+          "background": "rgb(255, 241, 243)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 147,
+          "height": 32,
+          "padding": "7px 4px",
+          "gap": "7px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        }
+      }
+    },
+    "850": {
+      "light": {
+        ".main-content": {
+          "background": "rgb(246, 247, 249)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(232, 233, 237)",
+          "width": 850,
+          "height": 3070.875,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".dashboard-module-toolbar": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 848,
+          "height": 50,
+          "padding": "0px 18px",
+          "gap": "8px 16px",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".open-intelligent-tasks": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(89, 97, 109)",
+          "borderColor": "rgb(225, 228, 232)",
+          "width": 92,
+          "height": 32,
+          "padding": "0px 9px",
+          "gap": "5px",
+          "fontSize": "8px",
+          "lineHeight": "12px",
+          "fontWeight": "700"
+        },
+        ".scope-tabs button.selected": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 272,
+          "height": 48,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "800"
+        },
+        ".time-granularity-tabs": {
+          "background": "rgb(244, 245, 247)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(225, 228, 232)",
+          "width": 272,
+          "height": 38,
+          "padding": "3px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".time-granularity-tabs button:not(.selected)": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(103, 111, 122)",
+          "borderColor": "rgb(103, 111, 122)",
+          "width": 66,
+          "height": 30,
+          "padding": "0px 11px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "700"
+        },
+        ".time-granularity-tabs button.selected": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 66.989990234375,
+          "height": 30.45001220703125,
+          "padding": "0px 11px",
+          "gap": "normal",
+          "fontSize": "11px",
+          "lineHeight": "16.5px",
+          "fontWeight": "700"
+        },
+        ".date-picker-button>span": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(52, 59, 70)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 60,
+          "height": 18,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        },
+        ".week-button>span": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(52, 59, 70)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 25.84375,
+          "height": 18,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "800"
+        },
+        ".kpi-grid.overview-flat-kpi-grid": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 816,
+          "height": 215.5,
+          "padding": "0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".period-kpi-card": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(32, 35, 42) rgb(227, 230, 234) rgb(32, 35, 42) rgb(32, 35, 42)",
+          "width": 271.328125,
+          "height": 213.5,
+          "padding": "17px 14px 0px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".period-kpi-card .kpi-name": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 242.328125,
+          "height": 18,
+          "padding": "0px 28px 0px 0px",
+          "gap": "normal",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        },
+        ".active-period-range": {
+          "background": "rgba(0, 0, 0, 0)",
+          "color": "rgb(125, 132, 144)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 180.171875,
+          "height": 15,
+          "padding": "0px 0px 0px 4px",
+          "gap": "normal",
+          "fontSize": "10px",
+          "lineHeight": "15px",
+          "fontWeight": "400"
+        }
+      },
+      "lightMenu": {
+        ".month-menu": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(32, 35, 42)",
+          "borderColor": "rgb(227, 230, 234)",
+          "width": 360,
+          "height": 163,
+          "padding": "12px",
+          "gap": "normal",
+          "fontSize": "16px",
+          "lineHeight": "24px",
+          "fontWeight": "400"
+        },
+        ".date-picker-menu .date-picker-sections button:not(.selected):not(:disabled)": {
+          "background": "rgb(255, 255, 255)",
+          "color": "rgb(85, 93, 104)",
+          "borderColor": "rgb(85, 93, 104)",
+          "width": 147,
+          "height": 32,
+          "padding": "7px 4px",
+          "gap": "7px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "400"
+        },
+        ".date-picker-menu .date-picker-sections button.selected": {
+          "background": "rgb(255, 241, 243)",
+          "color": "rgb(223, 23, 50)",
+          "borderColor": "rgb(223, 23, 50)",
+          "width": 147,
+          "height": 32,
+          "padding": "7px 4px",
+          "gap": "7px",
+          "fontSize": "12px",
+          "lineHeight": "18px",
+          "fontWeight": "700"
+        }
+      }
+    }
+  }
+}
