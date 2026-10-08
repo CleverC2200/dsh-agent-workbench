@@ -10,7 +10,7 @@
     "../dsh-agent-manage/src/inventory-compute/personal.ts": "b9b63d2181dc020c61b3cf3a019c10f949606cde682a249a9af699645ad600d2",
     "../dsh-agent-manage/src/inventory-compute/personal-sources.ts": "a0ef2c16ee228ace5726985e2556b9ebacb97937f1eba09a5cc6d1e271f68567",
     "source/inventory-light-plugins/src/personal/data.ts": "24849693da68c3ab139ad6a510217c1cd955892d1e1e6f1abab64ba4baa0f7d0",
-    "../shared/view-state.js": "1cb6e6dacccbaac3d22f4b1342e50018b8215bdb0a0cb5dbc10bb8902c6fe6e1",
+    "../shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
     "source/inventory-light-plugins/src/dsh-ui/Button.module.css": "bd4e040fd382438378a7bee43b7630d0680e336dbd8fd9ac43515967625973d5",
     "source/inventory-light-plugins/src/dsh-ui/DshButton.tsx": "fa88ac2b8ed0bd72809b651e165a5ac45594539b90fd6d01f2408937f8fa623c",
     "source/inventory-light-plugins/src/dsh-ui/controls.module.css": "a6feaa59f034d91b7f0651565eb5b726804d2e5096e2b3c5734cc0565dcc2132",
@@ -27,6 +27,6 @@
     "source/inventory-light-plugins/src/personal/page.tsx": "4e287acb2d281a948e03b64f2af4214c0973668eee2e1c12f39f675ff3e557c9",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
     "source/inventory-light-plugins/src/personal/entry.tsx": "251ab8fa9976e1feb94907710b41b71e81f52a944af3159d7ad683c7171d52b4",
-    "../dsh-agent-manage/package.json": "2f123eecd8635bcbec41b602c4b46b80924379c6283ce88baf4ab6b85e425ba1"
+    "../dsh-agent-manage/package.json": "43d26581c262db48b7dfd459796a593cd0c32d0f4f505de8b2a7b547623326b5"
   }
 }

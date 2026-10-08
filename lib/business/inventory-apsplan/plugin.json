@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-apsplan",
+  "name": "产销协同工作台",
+  "version": "0.2.0-preview.9-split.17",
+  "html": "index.html",
+  "skills": [
+    "skills/aps/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "aps",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "replaces": [
+    "inventory-apsboard",
+    "inventory-apsdemand",
+    "inventory-apsdelivery"
+  ],
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  },
+  "mode": "mock"
+}

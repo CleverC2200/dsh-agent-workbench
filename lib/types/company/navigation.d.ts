@@ -37,7 +37,7 @@ export declare function businessMenuTitle(id: string, panels?: readonly Business
  * 产销协同 → 计划管理 → 库存管理 → 订单管理。
  * 原型中尚未接入的页面也保留为禁用占位，避免不同账号看到的目录结构跳动。
  */
-export type BusinessMenuSection = "supply" | "plan" | "inventory" | "orders";
+export type BusinessMenuSection = "supply" | "plan" | "inventory" | "orders" | "prototypes";
 export type BusinessMenuItem = {
     id: string;
     title: string;

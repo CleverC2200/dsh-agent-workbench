@@ -28,7 +28,7 @@
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.module.css": "5d0d3a34ccc20bc6e81d6ebd3514d73d5f836abaadf178f3d4cf80b1c3d16c11",
     "source/inventory-light-plugins/src/dsh-ui/workbench-loading.tsx": "d94c28fcfdbf295b7c10957f7a086e32eddb2083f51f03b830cb1eb401af6899",
     "source/inventory-light-plugins/src/native/page-filter.tsx": "7c472a75bad8d80784f68556c174e4ef61f0db77d8a7e876147dc2594bafe6b4",
-    "../shared/view-state.js": "1cb6e6dacccbaac3d22f4b1342e50018b8215bdb0a0cb5dbc10bb8902c6fe6e1",
+    "../shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
     "source/inventory-light-plugins/src/dsh-ui/icons.tsx": "9fb880a33c2d8c32f56657487d2761d7f0258437ab6c09edbb0b6fa115ea5fb7",
     "source/inventory-light-plugins/src/pages/qll/components/workspace-detail-tree.tsx": "ec076315bb3d918450f6a3cfb39978f4b46a071344621ba51c6bc0df13e1b2a6",
     "source/inventory-light-plugins/src/pages/qll.tsx": "cde330ee99f78b77b3311a0d1a7c27863b3eb1104a6773fa27fdc4f3c5e9a15c",
@@ -38,6 +38,6 @@
     "source/inventory-light-plugins/src/native/api.ts": "a5faee02fa42e23d2a1887b88e931275f5e006c4e274089289283227032af4b7",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e834b61874dc4b2dcbd671323fd6ff00ba3d7fc81d8d4270d4fa5b295fa939d2",
     "source/inventory-light-plugins/src/native/entry.tsx": "f8bf35c6d1c4eeaff0a2bc02b558ae4fd15d13c601eff1cb0ded7e6b69a0c564",
-    "../dsh-agent-manage/package.json": "2f123eecd8635bcbec41b602c4b46b80924379c6283ce88baf4ab6b85e425ba1"
+    "../dsh-agent-manage/package.json": "43d26581c262db48b7dfd459796a593cd0c32d0f4f505de8b2a7b547623326b5"
   }
 }

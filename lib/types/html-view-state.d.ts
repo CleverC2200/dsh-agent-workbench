@@ -1,5 +1,5 @@
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
-export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-dealer' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal';
+export type HtmlViewPage = 'workbench-html-table' | 'gea-regional-plan' | 'plan-region-category' | 'plan-category-production' | 'inventory-qll' | 'inventory-fc' | 'inventory-aqkc' | 'inventory-dealer' | 'inventory-customer' | 'inventory-orderworkbench' | 'inventory-orderfulfillment' | 'inventory-personal' | 'inventory-apsplan' | 'inventory-dms';
 type Rhythm = {
     id: string;
     type: string;
@@ -270,11 +270,41 @@ export type PersonalViewState = {
     size?: number;
     feedbackNotes?: Record<string, string>;
 };
+export type ApsViewState = {
+    version: 1;
+    matrixMode?: string;
+    selectedBase?: string;
+    baseTab?: string;
+    search?: string;
+    selectedYearKey?: string;
+    selectedMonthKey?: string;
+    selectedWeekKey?: string;
+    activeWorkspace?: string;
+    analysisScope?: string;
+    productionDimension?: string;
+    salesMetricTab?: string;
+    selectedSalesOrg?: string;
+    selectedMetric?: string | null;
+    categoryTab?: string;
+    selectedCategory?: string;
+    selectedCategoryRowKey?: string;
+    selectedBaseRowKey?: string;
+    selectedDay?: number;
+    timeGranularity?: 'year' | 'month' | 'week' | 'day';
+    sidebarCollapsed?: boolean;
+    chatWidth?: number;
+};
+export type DmsViewState = {
+    version: 1;
+    type?: 'Y' | 'XN' | 'DC' | 'FC' | 'JD' | 'TM';
+    order?: 'M' | 'Z';
+    outcome?: 'success' | 'failure' | 'timeout-before' | 'lost-receipt' | 'partial';
+};
 export type HtmlViewState = {
     version: 1;
     keyword: string;
     stage: string;
-} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | DealerViewState | PersonalViewState;
+} | QllViewState | RegionalViewState | CategoryViewState | MpsViewState | FcViewState | AqkcViewState | CustomerViewState | OrderWorkbenchViewState | FulfillmentViewState | DealerViewState | PersonalViewState | ApsViewState | DmsViewState;
 export declare const isHtmlViewPage: (page: string) => page is HtmlViewPage;
 export declare const isBusinessViewPage: (page: string) => boolean;
 /** Reject undeclared fields rather than turning a page snapshot into a generic state/authority store. */
