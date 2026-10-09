@@ -32,6 +32,7 @@ async function fixture(
   t,
   {
     authenticated = true,
+    noWorkspace = false,
     enabled = true,
     delayFirstSelection = false,
     delayList = false,
@@ -164,9 +165,10 @@ async function fixture(
     selectionRequests = 0;
   let secondInstalled = secondInterpreter;
   const host = {
+    pickDirectory: async () => { calls.push(['directory-picker']); return null; },
     fetch: async (path, options) => {
       calls.push([path, options]);
-      if (path.endsWith('/config')) return Response.json({ cwd: '/owned/workspace' });
+      if (path.endsWith('/config')) return Response.json(noWorkspace ? {} : { cwd: '/owned/workspace' });
       if (path.includes('/resources?')) {
         listRequests++;
         if (delayList)
@@ -1137,3 +1139,13 @@ test('successful deferred History navigation keeps its own owner and restores th
   assert.equal(f.dom.window.document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
   await assert.rejects(f.workbench.completeHistory(target),/PAGE_HISTORY_CANCELLED/);
 });
+
+ test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async t => {
+  const f = await fixture(t, {noWorkspace:true});
+  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 0);
+  assert.equal(f.counts().sessions, 0);
+  await f.newConversation();
+  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 1);
+  assert.equal(f.counts().sessions, 0);
+  assert.equal(f.currentSession(), undefined);
+ });

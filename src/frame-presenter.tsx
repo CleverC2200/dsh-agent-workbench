@@ -707,7 +707,7 @@ export function mountFramePresentation(
       const controller = new AbortController();
       preparation.current = controller;
       void (async () => {
-        const cwd = await resourceWorkspace(host.fetch, controller.signal, undefined, host.pickDirectory);
+        const cwd = await resourceWorkspace(host.fetch, controller.signal, selection?.cwd);
         const response = await host.fetch(
           '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
           { signal: controller.signal, cache: 'no-store' },
