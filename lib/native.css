@@ -27658,6 +27658,11 @@ p.arco-typography {
   right: 24px;
   bottom: 2px;
 }
+.RegionalApprovalWorkbench_skuCoverageError {
+  padding: 8px 12px;
+  color: rgb(var(--warning-7));
+  background: rgb(var(--warning-1));
+}
 .RegionalApprovalWorkbench_queueHeader {
   min-height: auto;
   padding: 8px 12px;
