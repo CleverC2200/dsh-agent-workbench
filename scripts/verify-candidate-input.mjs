@@ -2,6 +2,7 @@ import { readFileSync, accessSync, constants } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { verifyOfficialInput } from './verify-official-input.mjs';
+import { candidatePackageNames } from './candidate-input.mjs';
 import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({
@@ -69,6 +70,12 @@ for (const entry of repositories) {
     { encoding: 'utf8' },
   ).trim();
   if (dirty) throw Error(`CANDIDATE_DIRTY: ${entry.repo}\n${dirty}`);
+  if (
+    !Object.hasOwn(candidatePackageNames, entry.repo) ||
+    JSON.parse(readFileSync(resolve(entry.path, 'package.json'))).name !==
+      candidatePackageNames[entry.repo]
+  )
+    throw Error(`CANDIDATE_PEER_REQUIRED: ${entry.repo}: package identity`);
   const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
   try {
     const frozen = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`], {

@@ -16,6 +16,11 @@ import { tmpdir } from 'node:os';
 const root = resolve(import.meta.dirname, '..');
 const cli = resolve(root, 'scripts/verify-candidate-input.mjs');
 const repos = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'];
+const packageNames = {
+  'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
+  'dsh-agent-manage': 'dsh-agent-manage',
+  'dsh-gea-plugin': '@cleverc2200/gea-dsh-prototype',
+};
 function git(path, ...args) {
   const result = spawnSync('git', ['-C', path, ...args], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
@@ -36,7 +41,7 @@ function fixture(t) {
     writeFileSync(
       resolve(checkout, 'package.json'),
       JSON.stringify({
-        name: repo,
+        name: packageNames[repo],
         packageManager: repo === repos[0] ? 'npm@11.11.0' : 'pnpm@10.16.0',
       }),
     );
@@ -112,6 +117,39 @@ test('a peer at a different commit is refused and its files stay untouched', (t)
   peer.head = '0'.repeat(40);
   rejected(run(), /CANDIDATE_HEAD.*dsh-agent-manage/);
   assert.equal(git(peer.path, 'status', '--porcelain'), before);
+});
+
+test('clean Manage and GEA checkouts cannot exchange candidate roles', (t) => {
+  const { manifest, run } = fixture(t);
+  const manage = manifest.repositories[1];
+  const gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(), /CANDIDATE_PEER_REQUIRED.*dsh-agent-manage.*package identity/);
+  for (const entry of [manage, gea]) assert.equal(git(entry.path, 'status', '--porcelain'), '');
+});
+
+test('a clean committed peer with the wrong package name cannot claim its candidate role', (t) => {
+  const { manifest, run } = fixture(t);
+  const peer = manifest.repositories[2];
+  const file = resolve(peer.path, 'package.json');
+  const packageJson = JSON.parse(readFileSync(file, 'utf8'));
+  packageJson.name = '@cleverc2200/gea-dsh-prototype-wrong';
+  writeFileSync(file, JSON.stringify(packageJson));
+  git(peer.path, 'add', 'package.json');
+  git(
+    peer.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'wrong committed package identity',
+  );
+  peer.head = git(peer.path, 'rev-parse', 'HEAD');
+  assert.equal(git(peer.path, 'status', '--porcelain'), '');
+  rejected(run(), /CANDIDATE_PEER_REQUIRED.*dsh-gea-plugin.*package identity/);
 });
 
 test('tracked and untracked peer changes are refused without clearing either change', (t) => {

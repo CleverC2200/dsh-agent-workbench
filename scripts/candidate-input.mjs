@@ -5,11 +5,11 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
-const names = {
+export const candidatePackageNames = Object.freeze({
   'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
   'dsh-agent-manage': 'dsh-agent-manage',
   'dsh-gea-plugin': '@cleverc2200/gea-dsh-prototype',
-};
+});
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function refuse(code, detail) {
   throw Error(`${code}: ${detail}`);
@@ -49,7 +49,7 @@ export async function readFinalGroup({
     if (
       !entry ||
       typeof entry !== 'object' ||
-      !Object.hasOwn(names, entry.repo) ||
+      !Object.hasOwn(candidatePackageNames, entry.repo) ||
       seen.has(entry.repo)
     )
       refuse('CANDIDATE_PEER_REQUIRED', 'duplicate or unknown repository');
@@ -80,7 +80,10 @@ export async function readFinalGroup({
     const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
     for (const file of ['package.json', lock])
       if (!existsSync(resolve(entry.path, file))) refuse('CANDIDATE_MATERIAL_REQUIRED', file);
-    if (JSON.parse(readFileSync(resolve(entry.path, 'package.json'))).name !== names[entry.repo])
+    if (
+      JSON.parse(readFileSync(resolve(entry.path, 'package.json'))).name !==
+      candidatePackageNames[entry.repo]
+    )
       refuse('CANDIDATE_PEER_REQUIRED', `${entry.repo}: package identity`);
     const committed = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`]);
     if (!committed.equals(readFileSync(resolve(entry.path, lock))))
