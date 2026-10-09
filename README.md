@@ -109,4 +109,12 @@ DMS回写演示位于 `prototypes/dms`，通过原型演示菜单打开唯一页
 
 页面上下文标记 `DMS_MOCK`、`simulated=true` 和 `realWriteback=false`。M一笔、Z的ADD/CUT两笔、UNKNOWN先对账和原键补齐沿原模型。页面实例持有模拟回执和完成状态；刷新清空模拟状态，仅类型和场景选择通过当前官方Session范围恢复。模拟按钮没有Agent写动作，MCP能力列表为空。实际Native、引用授权及PC视觉接收在47同组材料中另记。
 
+### 页面回执与 History 撤销
+
+`startPageBridgeClient` 在宿主请求成功后移除本批回执。请求未到 Host，或 Host 已接受但响应丢失时，下一轮重发相同回执。客户端按工具调用 ID 防止重复执行，Host 忽略已完成调用的重复回执。离页或换 Session 时释放旧客户端，取消在途应用并停止旧回执重试；新客户端只向新 Session 交付自己的回执。
+
+WorkbenchController 持有 History intent 与对应页面登记的有效期。注销该页面会撤销已取走的恢复目标；即使同 ID 再登记，旧恢复也不能导航到新页面。显式取消、普通开页、新的 History intent 和 controller 释放同样撤销旧恢复。注销其他页面保留当前恢复。Core Session 的读取、确认与引用释放仍沿原公开接口。
+
+离线验收入口为 `node --test tests/page-bridge-client.test.mjs tests/workbench-recovery.test.mjs`。前者通过真实客户端和 Host 接口覆盖传输失败、重复回执、取消与 Session 换绑；后者通过 Controller 接口覆盖注销再登记、异步迟到和取消。它们证明源码行为，实际 Native 窗口、模型和业务操作需另存对应验收证据。
+
 历史对话侧栏补充显示当前页面可用的未发送会话。列表来自官方 `sessions.list`，只显示当前工作区、普通 blank 会话及 Manage 已启用的解读预设。缺少冷会话预设提示时，通过官方 `refreshProjections` 读取元数据，仍由同一个 Core 列表持有结果。选择仅调用 `uiWorkspace.openSession`，现有页面恢复在 `retain.ready` 后核对真实 preset/cwd。新对话、离开页面和取消会撤销旧恢复；不创建替代 Session，不改预设或草稿，不保存独立历史列表。

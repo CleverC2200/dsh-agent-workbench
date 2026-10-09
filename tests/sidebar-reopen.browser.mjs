@@ -46,8 +46,15 @@ const bundle=await build({stdin:{contents:`
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',platform:'browser',jsx:'automatic',define:{'process.env.DSH_CLIENT_TITLE':'"Sidebar regression"','process.env.NODE_ENV':'"test"'},alias:{react:resolve('node_modules/react'),'react-dom':resolve('node_modules/react-dom')},loader:{'.png':'dataurl','.css':'text'},plugins:[{name:'official-css-modules',setup(build){build.onLoad({filter:/\.module\.css$/},async args=>({contents:await readFile(args.path,'utf8'),loader:'local-css'}))}}]});
 
 async function fixture(t){
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
+ const browser=await chromium.launch({channel:'chrome',headless:true});
+ const proof=process.env.SIDEBAR_VERIFY_EVIDENCE;
+ const requests=[];
+ t.after(async()=>{
+  await browser.close();
+  if(proof)await writeFile(resolve(proof,'cleanup.json'),JSON.stringify({browserConnected:browser.isConnected(),contextRequests:requests,at:new Date().toISOString()},null,2));
+ });
  const page=await browser.newPage({viewport:{width:1280,height:720},reducedMotion:'reduce'});
+ if(proof)await page.context().route('**/*',route=>{requests.push({url:route.request().url(),method:route.request().method()});return route.abort('blockedbyclient');});
  page.on('pageerror',error=>console.error(error));
  const officialCss=bundle.outputFiles.find(file=>file.path.endsWith('.css'))?.text??'';
  const tokens=await readFile('theme/tokens.css','utf8');
@@ -91,9 +98,21 @@ for(const target of ['home','business'])test('Darwin '+target+' can reopen its s
  const content=page.getByRole('textbox',{name:target==='home'?'首页草稿':'业务筛选'});
  const preserved=target==='home'?'用户输入首页草稿\n第二行\n第三行':'用户输入库存筛选';
  await content.fill(preserved);
+ const proof=target==='home'?process.env.SIDEBAR_VERIFY_EVIDENCE:undefined;
+ const actions=[];
+ const capture=async(step)=>{
+  if(!proof)return;
+  const state={step,at:new Date().toISOString(),draft:await content.inputValue(),collapsed:await page.locator('[data-sidebar-collapsed]').count()===1};
+  actions.push(state);
+  await writeFile(resolve(proof,'actions.json'),JSON.stringify(actions,null,2));
+  await page.screenshot({path:resolve(proof,step+'.png')});
+  await writeFile(resolve(proof,step+'.aria.yml'),await page.locator('body').ariaSnapshot());
+ };
+ await capture('draft-filled');
  for(let cycle=0;cycle<3;cycle++){
   await page.getByRole('button',{name:'收起侧边栏',exact:true}).click();
   await expect(page.locator('[data-shell-leading]')).toHaveCount(1);
+  await capture('collapsed-'+cycle);
   const reopen=page.locator('[data-shell-leading]').getByRole('button',{name:'展开业务菜单',exact:true});
   try {
    await expect(reopen).toBeVisible({timeout:1000});
@@ -125,6 +144,7 @@ for(const target of ['home','business'])test('Darwin '+target+' can reopen its s
    throw error;
   }
   await expect(content).toHaveValue(preserved);
+  await capture('reopened-'+cycle);
  }
 });
 
