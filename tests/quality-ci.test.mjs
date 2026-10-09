@@ -68,7 +68,9 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
   assert.equal((workflow.match(/fetch-depth: 0/g) ?? []).length, 5);
   assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 5);
-  assert.match(workflow, /npm run quality:ci -- --prepare-sdk/);
+  assert.match(workflow, /npm run quality:ci -- --prepare-history --prepare-sdk/);
+  assert.match(workflow, /vars\.PLUGIN_SPLIT_DEALER_HISTORY_SOURCE/);
+  assert.match(workflow, /vars\.PLUGIN_SPLIT_PERSONAL_HISTORY_SOURCE/);
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /needs: \[candidate-scope, gates\]/);
   assert.match(workflow, /run: node scripts\/run-quality-ci.mjs --phase final/);

@@ -36,6 +36,8 @@ jobs:
     env:
       QUALITY_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
       QUALITY_CANDIDATE: ${{ github.workspace }}/candidate-input.json
+      PLUGIN_SPLIT_DEALER_HISTORY_SOURCE: ${{ vars.PLUGIN_SPLIT_DEALER_HISTORY_SOURCE }}
+      PLUGIN_SPLIT_PERSONAL_HISTORY_SOURCE: ${{ vars.PLUGIN_SPLIT_PERSONAL_HISTORY_SOURCE }}
     defaults:
       run:
         working-directory: candidate/dsh-agent-workbench
@@ -75,7 +77,7 @@ jobs:
       - name: Bind actual event and frozen peers
         run: node scripts/run-quality-ci.mjs --phase input --root "${{ github.workspace }}" --sha "${{ env.QUALITY_EXPECTED_SHA }}"
       - name: Prepare independent SDK and run public quality gates
-        run: npm run quality:ci -- --prepare-sdk --core-source https://github.com/deepseek-ai/deepseek-harness.git --browser --prepare-browser
+        run: npm run quality:ci -- --prepare-history --prepare-sdk --core-source https://github.com/deepseek-ai/deepseek-harness.git --browser --prepare-browser
 
   candidate-quality:
     if: always()

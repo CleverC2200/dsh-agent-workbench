@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { registerHtmlPlugins } from '../../../../clean-core-rewrite-42/integration/dsh-gea-plugin/src/html-plugins.ts';
+import { registerHtmlPlugins } from '../../dsh-gea-plugin/src/html-plugins.ts';
 
 test('the delivered hidden personal package registers the real declaration and refuses a signed-out reference', async (t) => {
   const definitions = new Map(),

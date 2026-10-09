@@ -19,6 +19,11 @@ const { values } = parseArgs({
     'prepare-sdk': { type: 'boolean' },
     browser: { type: 'boolean' },
     'prepare-browser': { type: 'boolean' },
+    'dealer-history': { type: 'string' },
+    'personal-history': { type: 'string' },
+    'dealer-source': { type: 'string' },
+    'personal-source': { type: 'string' },
+    'prepare-history': { type: 'boolean' },
   },
 });
 function refuse(code, detail) {
@@ -105,6 +110,29 @@ try {
       )
         refuse('CANDIDATE_LOCK', repo);
     }
+    for (const [name, ref] of Object.entries({
+      dealer: '67e1007aa400a8a9c65c132f144dabd5168a49df',
+      personal: '15def488134527647a819812a4b6657ecf9772fe',
+    })) {
+      const env = `WORKBENCH_${name.toUpperCase()}_HISTORY_ROOT`;
+      let history = values[`${name}-history`] ?? process.env[env];
+      if (values['prepare-history']) {
+        if (history) refuse('HISTORY_READONLY', 'cannot prepare a declared read-only history root');
+        const source =
+          values[`${name}-source`] ??
+          process.env[`PLUGIN_SPLIT_${name.toUpperCase()}_HISTORY_SOURCE`];
+        if (!source)
+          refuse(
+            'HISTORY_SOURCE_REQUIRED',
+            `${name}: explicit original Git URL or local Git source required`,
+          );
+        history = resolve(dirname(dirname(own.path)), 'history', name);
+        run('git', ['clone', '--no-checkout', '--no-hardlinks', source, history]);
+      }
+      if (!history) refuse('HISTORY_INPUT_REQUIRED', `${env}: fixed original Git source required`);
+      execFileSync('git', ['-C', resolve(history), 'cat-file', '-e', `${ref}:source`]);
+      process.env[env] = resolve(history);
+    }
     const manage = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-manage');
     const sdk = await import(
       pathToFileURL(resolve(manage.path, 'scripts/prepare-official-sdk.mjs'))
@@ -129,6 +157,11 @@ try {
     )
       refuse('QUALITY_TOOLCHAIN_REQUIRED', 'Node 24 / npm 11.11.0');
     run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund']);
+    run(
+      'corepack',
+      ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
+      manage.path,
+    );
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
     run(
       'corepack',

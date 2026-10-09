@@ -2,11 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const source = 'business/inventory-personal/source/inventory-light-plugins/src/personal/data.ts';
-const original = resolve(
-  '../../../../.scratch/plugin-split-migration/evidence/26/original-source-snapshot/inventory-light-plugins/src/personal/data.ts',
+const history = process.env.WORKBENCH_PERSONAL_HISTORY_ROOT;
+assert.ok(
+  history,
+  'WORKBENCH_PERSONAL_HISTORY_ROOT must declare the read-only original Personal Git source',
 );
+const originalRef = '15def488134527647a819812a4b6657ecf9772fe';
+const original = 'history:source/inventory-light-plugins/src/personal/data.ts';
 async function loader(entry) {
   const output = await build({
     entryPoints: [entry],
@@ -18,6 +23,25 @@ async function loader(entry) {
       {
         name: 'business-input-fixture',
         setup(api) {
+          api.onResolve({ filter: /^history:/ }, ({ path }) => ({
+            path: path.slice(8),
+            namespace: 'history',
+          }));
+          api.onResolve(
+            { filter: /^\.\/(?:model|permissions)$/, namespace: 'history' },
+            ({ path }) => ({
+              path: 'source/inventory-light-plugins/src/personal/' + path.slice(2) + '.ts',
+              namespace: 'history',
+            }),
+          );
+          api.onLoad({ filter: /.*/, namespace: 'history' }, ({ path }) => ({
+            contents: execFileSync(
+              'git',
+              ['-C', resolve(history), 'show', originalRef + ':' + path],
+              { encoding: 'utf8' },
+            ),
+            loader: 'ts',
+          }));
           api.onResolve(
             {
               filter:
@@ -25,10 +49,9 @@ async function loader(entry) {
             },
             (args) => ({ path: args.path, namespace: 'fixture' }),
           );
-          api.onResolve({ filter: /daily-report$/ }, () => ({
-            path: resolve(
-              '../../../../.scratch/plugin-split-migration/evidence/26/original-source-snapshot/aqkc/web/src/lib/daily-report.ts',
-            ),
+          api.onResolve({ filter: /daily-report$/, namespace: 'history' }, () => ({
+            path: 'source/aqkc/web/src/lib/daily-report.ts',
+            namespace: 'history',
           }));
           api.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({
             contents:

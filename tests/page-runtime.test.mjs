@@ -7,6 +7,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
+import { readDealerMock } from './fixtures/dealer-mock-sql.mjs';
+import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
 const core = resolve('../../official-latest-standard'),
   official = (path) => pathToFileURL(resolve(core, path)).href;
 const { Context } = await import(official('vendor/cordis/lib/index.js'));
@@ -201,7 +203,11 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   };
 }
 async function authorCatalog(t, id) {
-  const dom = new JSDOM(await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'), {
+  const html =
+    id === 'personal'
+      ? await personalFixtureHtml()
+      : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8');
+  const dom = new JSDOM(html, {
     url: 'https://host.example/' + id,
     referrer: 'https://host.example/',
     runScripts: 'outside-only',
@@ -233,14 +239,17 @@ async function authorCatalog(t, id) {
   const port = {
     start() {},
     close() {},
-    postMessage(message) {
+    async postMessage(message) {
       messages.push(message);
-      if (message.type === 'request')
+      if (message.type === 'request') {
+        const result =
+          message.method === 'sql' ? await readDealerMock(message.parameters) : { accepted: true };
         queueMicrotask(() =>
           port.onmessage?.({
-            data: { type: 'response', id: message.id, result: { accepted: true } },
+            data: { type: 'response', id: message.id, result },
           }),
         );
+      }
     },
   };
   for (const script of dom.window.document.querySelectorAll('script'))

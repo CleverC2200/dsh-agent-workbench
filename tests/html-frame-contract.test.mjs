@@ -48,10 +48,11 @@ window.publishTheme=next=>{snapshot=next;for(const listener of themeListeners)li
 window.themeListenerCount=()=>themeListeners.size;
 mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
 const root=createRoot(document.getElementById('app'));
+const inputActions={setDraft:text=>{document.querySelector('textarea').value=text;},persistDraft(){}};
 function Main(){
  const sessionId=useSyncExternalStore(listener=>{sessionListeners.add(listener);return()=>sessionListeners.delete(listener);},()=>mainSession);
  const state=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot);
- return <Document page={page} active={true} sessionId={sessionId} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} renderSlot={()=> <textarea aria-label="public draft fixture" defaultValue=""/>}/>;
+ return <Document page={page} active={true} sessionId={sessionId} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} inputActions={inputActions} renderSlot={()=> <textarea aria-label="public draft fixture" defaultValue=""/>}/>;
 }
 window.unmount=()=>{root.unmount();effects.reverse().forEach(off=>off());};
 root.render(<Main/>);window.bind('session-1');
