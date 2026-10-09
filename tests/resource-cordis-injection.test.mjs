@@ -125,6 +125,7 @@ test('actual Cordis client injection admits every native resource service and re
         input: { for: () => ({ state: { getSnapshot: () => ({ draft: '', draftRev: 0 }) } }) },
       });
       ctx.provide('uiWorkspace', {
+        pickDirectory: async () => '/picked/official-workspace',
         openSession: (id) => {
           assert.equal(
             released,
@@ -147,6 +148,7 @@ test('actual Cordis client injection admits every native resource service and re
         ? { cwd: '/isolated/workspace' }
         : { preset: 'original', skill: 'existing' },
     );
+  assert.equal(await native.pickDirectory(), '/picked/official-workspace');
   await selectResource(native, 'skill:existing', new AbortController().signal, undefined, () => {
     assert.equal(
       released,

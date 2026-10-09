@@ -37,7 +37,10 @@ test('Host initializes package resources in a Chinese path and serves the regist
     on:()=>()=>{},inject:()=>{},
     provide: (name, value) => {context[name] = value;},
   };
-  await apply(context, {cwd: root});
+  await apply(context, {});
+  await assert.rejects(apply(context, {cwd:'relative/project'}), /cwd must be absolute/);
+  const configuration = await (await routes.get('/api/agent-workbench/config').fetch()).json();
+  assert.deepEqual(configuration, {}, 'ordinary bundle startup does not manufacture a business directory from process.cwd');
   const metadata = await routes.get('/api/agent-workbench/pages').fetch(new Request('https://localhost/api/agent-workbench/pages'));
   const pages = await metadata.json();
   assert.equal(pages[0].name, '表格样板');

@@ -120,3 +120,7 @@ WorkbenchController 持有 History intent 与对应页面登记的有效期。�
 历史对话侧栏补充显示当前页面可用的未发送会话。列表来自官方 `sessions.list`，只显示当前工作区、普通 blank 会话及 Manage 已启用的解读预设。缺少冷会话预设提示时，通过官方 `refreshProjections` 读取元数据，仍由同一个 Core 列表持有结果。选择仅调用 `uiWorkspace.openSession`，现有页面恢复在 `retain.ready` 后核对真实 preset/cwd。新对话、离开页面和取消会撤销旧恢复；不创建替代 Session，不改预设或草稿，不保存独立历史列表。
 
 Manage 资源摘要中的 `description` 是资源目录的原说明。Workbench 在现有提示词与 Skill 列表显示它，不维护另一份说明目录。Skill 入口的 `agent-resource-skill` 由 Manage 复用当前官方标准组合；资源选择继续通过官方 Session、工作区与 InputHub 插入 Skill 草稿，已有草稿拒绝覆盖。
+
+## 普通安装的工作区
+
+普通 bundle 不把 App 的启动目录当作业务工作区。Host 的 `cwd` 配置可省略；显式配置仍须是绝对路径。资源动作优先复用 Core 传入的当前 Session 工作区，再使用显式配置。两者均缺失时，用户点击选择工作区或新建页面 Session 后调用官方 `uiWorkspace.pickDirectory()`；取消不会创建或切换 Session。资源列表初次加载不会自动弹出目录选择器。

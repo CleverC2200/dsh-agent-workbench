@@ -566,7 +566,7 @@ export function mountFramePresentation(
         ? AbortSignal.any([controller.signal, ownerSignal])
         : controller.signal;
       try {
-        const requested = await resourceWorkspace(host.fetch, signal, cwd);
+        const requested = await resourceWorkspace(host.fetch, signal, cwd, host.pickDirectory);
         const { path: directory } = await host.workspace(requested);
         signal.throwIfAborted();
         const associated = (selected: {
@@ -638,8 +638,8 @@ export function mountFramePresentation(
       setBusy(true);
       setError('');
       try {
-        // Deployment configuration is the legal default, never an old historical Session's external cwd.
-        const cwd = await resourceWorkspace(host.fetch, controller.signal);
+        // An explicit deployment directory or the official picker supplies the new Session Workspace.
+        const cwd = await resourceWorkspace(host.fetch, controller.signal, undefined, host.pickDirectory);
         const { workspaceId } = await host.workspace(cwd);
         controller.signal.throwIfAborted();
         const id = await host.create({ workspaceId });
@@ -707,7 +707,7 @@ export function mountFramePresentation(
       const controller = new AbortController();
       preparation.current = controller;
       void (async () => {
-        const cwd = await resourceWorkspace(host.fetch, controller.signal);
+        const cwd = await resourceWorkspace(host.fetch, controller.signal, undefined, host.pickDirectory);
         const response = await host.fetch(
           '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
           { signal: controller.signal, cache: 'no-store' },
