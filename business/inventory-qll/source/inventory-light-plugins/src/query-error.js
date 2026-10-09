@@ -1,1 +1,1 @@
-export * from "../../../../shared/query-error.js";
+export * from '../../../../shared/query-error.js';

@@ -87,8 +87,8 @@
   padding: 10px 14px;
   cursor: pointer;
 }
-.tabs button[aria-selected="true"],
-.tabs button[aria-checked="true"] {
+.tabs button[aria-selected='true'],
+.tabs button[aria-checked='true'] {
   color: var(--dsw-alias-button-primary-fill);
   border-bottom: 2px solid currentColor;
 }
@@ -208,8 +208,8 @@
   background: var(--ui-hover);
   color: var(--ui-accent);
 }
-.tabs button[aria-selected="true"],
-.tabs button[aria-checked="true"] {
+.tabs button[aria-selected='true'],
+.tabs button[aria-checked='true'] {
   background: var(--ui-surface);
   font-weight: 800;
 }

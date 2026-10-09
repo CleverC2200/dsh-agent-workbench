@@ -2,8 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
-const registry = JSON.parse(await readFile(new URL('../../app/data/gea-queries.json', import.meta.url), 'utf8'));
-const requirements = JSON.parse(await readFile(new URL('../fixtures/gea-resource-requirements.json', import.meta.url), 'utf8'));
+const registry = JSON.parse(
+  await readFile(new URL('../../app/data/gea-queries.json', import.meta.url), 'utf8'),
+);
+const requirements = JSON.parse(
+  await readFile(new URL('../fixtures/gea-resource-requirements.json', import.meta.url), 'utf8'),
+);
 const keys = ['orders', 'orders-month', 'orders-products', 'orders-month-products'];
 
 test('order fulfillment reads the synchronized shortage supply match snapshot', () => {

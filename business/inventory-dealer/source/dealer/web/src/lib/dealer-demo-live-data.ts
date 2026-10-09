@@ -1,7 +1,13 @@
-import {computeDealerSku,type LiveDemoSku} from 'dsh-agent-manage/inventory-compute/dealer-recommendation';
-import {skuExpiryFacts,inventoryStructureRisk} from 'dsh-agent-manage/inventory-compute/dealer-recommendation';
-import "server-only";
-import { dealerOverviewFacts } from "dsh-agent-manage/inventory-compute/dealer-overview-facts";
+import {
+  computeDealerSku,
+  type LiveDemoSku,
+} from 'dsh-agent-manage/inventory-compute/dealer-recommendation';
+import {
+  skuExpiryFacts,
+  inventoryStructureRisk,
+} from 'dsh-agent-manage/inventory-compute/dealer-recommendation';
+import 'server-only';
+import { dealerOverviewFacts } from 'dsh-agent-manage/inventory-compute/dealer-overview-facts';
 import {
   queryWorkbenchCustomerCars,
   queryWorkbenchCustomerReceives,
@@ -9,20 +15,17 @@ import {
   type CustomerPickupPoint,
   queryWorkbenchCompanyProductFacets,
   queryWorkbenchCompanyProductTotal,
-} from "@/lib/dealer-workbench-sql";
+} from '@/lib/dealer-workbench-sql';
 import {
   loadDealerPromotionPolicies,
   type DealerPromotionResult,
-} from "@/lib/dealer-promotion-policy";
+} from '@/lib/dealer-promotion-policy';
 import {
   loadDealerSapPrices,
   type SapPricingResult,
-} from "../../../../inventory-light-plugins/src/platform-pending";
+} from '../../../../inventory-light-plugins/src/platform-pending';
 
-import {
-  loadDealerDashboard,
-  type DealerDashboardLoadOptions,
-} from "@/lib/dealer-dashboard";
+import { loadDealerDashboard, type DealerDashboardLoadOptions } from '@/lib/dealer-dashboard';
 
 type Dashboard = Awaited<ReturnType<typeof loadDealerDashboard>>;
 
@@ -65,28 +68,26 @@ type LiveCustomerSummary = {
 
 type CompanyProduct = Pick<
   LiveDemoSku,
-  | "commerceFacts"
-  | "dealerCode"
-  | "code"
-  | "sku"
-  | "category"
-  | "productTag"
-  | "materialSize"
-  | "publishedSales30"
+  | 'commerceFacts'
+  | 'dealerCode'
+  | 'code'
+  | 'sku'
+  | 'category'
+  | 'productTag'
+  | 'materialSize'
+  | 'publishedSales30'
 >;
 
 type LiveDemoPayload = DealerPromotionResult & {
   pricing?: SapPricingResult;
-  loadedStockTab?: DealerDashboardLoadOptions["stockTab"];
+  loadedStockTab?: DealerDashboardLoadOptions['stockTab'];
   companyProducts: CompanyProduct[];
-  companyProductsSource?: "customer_saleable_material";
+  companyProductsSource?: 'customer_saleable_material';
   companyProductTotal?: number | null;
   companyProductFacets?: { categories: string[]; tags: string[] };
-  companyProductsStatus:
-    "available" | "partial" | "empty" | "select_customer" | "unavailable";
+  companyProductsStatus: 'available' | 'partial' | 'empty' | 'select_customer' | 'unavailable';
   customerPickupPoints?: CustomerPickupPoint[];
-  customerPickupPointsStatus?:
-    "available" | "empty" | "unavailable" | "select_customer";
+  customerPickupPointsStatus?: 'available' | 'empty' | 'unavailable' | 'select_customer';
   customerCars?: Array<{
     id: string;
     organization: string;
@@ -97,8 +98,7 @@ type LiveDemoPayload = DealerPromotionResult & {
     min: string | null;
     max: string | null;
   }>;
-  customerCarsStatus?:
-    "available" | "empty" | "unavailable" | "select_customer";
+  customerCarsStatus?: 'available' | 'empty' | 'unavailable' | 'select_customer';
   customerReceives?: Array<{
     id: string;
     code: string;
@@ -107,8 +107,7 @@ type LiveDemoPayload = DealerPromotionResult & {
     mainDriver: string;
     maxDriver: string;
   }>;
-  customerReceivesStatus?:
-    "available" | "empty" | "unavailable" | "select_customer";
+  customerReceivesStatus?: 'available' | 'empty' | 'unavailable' | 'select_customer';
   customerName: string;
   customerCode: string;
   customerOptions: Array<{ code: string; name: string }>;
@@ -118,7 +117,7 @@ type LiveDemoPayload = DealerPromotionResult & {
   customerSummaryTotal: number;
   customerPage: number;
   customerPageSize: number;
-  scope: "single" | "sales" | "all";
+  scope: 'single' | 'sales' | 'all';
   scopeCustomerCodes: string[];
   scopeLabel: string;
   snapshotDate: string | null;
@@ -151,7 +150,7 @@ type LiveDemoPayload = DealerPromotionResult & {
   nearExpirySkuCount: number | null;
   noSalesSkuCount: number | null;
   abnormalCategoryCount: number | null;
-  inventoryStructureRisks: ReturnType<typeof inventoryStructureRisk>["details"];
+  inventoryStructureRisks: ReturnType<typeof inventoryStructureRisk>['details'];
   shortageSkuCount: number;
   coveredSkuCount: number;
   loadedSkuCount: number;
@@ -183,24 +182,20 @@ export async function loadDealerDemoPayload(
   options: DealerDashboardLoadOptions & { orderSuggestionsOnly?: boolean } = {},
 ): Promise<LiveDemoPayload> {
   const reportDeliveryError = (resource: string, error: unknown) => {
-    const code =
-      error && typeof error === "object" && "code" in error ? error.code : null;
+    const code = error && typeof error === 'object' && 'code' in error ? error.code : null;
     console.warn(
       JSON.stringify({
-        event: "dealer_delivery_load_failed",
+        event: 'dealer_delivery_load_failed',
         resource,
         trace_id: options.actionId || crypto.randomUUID(),
         source_code:
-          typeof code === "string" && /^[A-Z][A-Z0-9_]{2,127}$/.test(code)
+          typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,127}$/.test(code)
             ? code
-            : "DATA_VALIDATION_FAILED",
+            : 'DATA_VALIDATION_FAILED',
       }),
     );
   };
-  const measure = async <T>(
-    stage: string,
-    task: () => Promise<T>,
-  ): Promise<T> => {
+  const measure = async <T>(stage: string, task: () => Promise<T>): Promise<T> => {
     const start = performance.now();
     try {
       return await task();
@@ -208,7 +203,7 @@ export async function loadDealerDemoPayload(
       options.onTiming?.(stage, performance.now() - start);
     }
   };
-  const dashboard = await measure("dashboard", () =>
+  const dashboard = await measure('dashboard', () =>
     loadDealerDashboard(customerCode, {
       ...options,
       autoSelectOnlyCustomer: true,
@@ -219,33 +214,28 @@ export async function loadDealerDemoPayload(
     (customer) => customer.code === dashboard.activeCustomerCode,
   );
   if (!activeCustomer || !dashboard.snapshotDate)
-    throw new Error("当前授权范围没有可展示的经销商库存数据");
+    throw new Error('当前授权范围没有可展示的经销商库存数据');
 
   const promotionPromise =
-    dashboard.scope === "single" &&
+    dashboard.scope === 'single' &&
     !options.companyProductsOnly &&
     !options.tabDataOnly &&
     !options.exportTab
-      ? measure("policies", () =>
-          loadDealerPromotionPolicies(activeCustomer.code, { ...options }),
-        )
+      ? measure('policies', () => loadDealerPromotionPolicies(activeCustomer.code, { ...options }))
       : Promise.resolve({
           policies: [],
-          policiesStatus: "select_customer" as const,
+          policiesStatus: 'select_customer' as const,
         });
 
   const catalogTotalPromise =
-    dashboard.scope === "single" &&
+    dashboard.scope === 'single' &&
     !options.companyProductsOnly &&
     !options.tabDataOnly &&
     !options.exportTab &&
     !options.orderSuggestionsOnly
-      ? measure("catalog_count", async () => {
+      ? measure('catalog_count', async () => {
           try {
-            return await queryWorkbenchCompanyProductTotal(
-              activeCustomer.code,
-              options,
-            );
+            return await queryWorkbenchCompanyProductTotal(activeCustomer.code, options);
           } catch (error) {
             if (options.signal?.aborted) throw error;
             return null;
@@ -253,43 +243,37 @@ export async function loadDealerDemoPayload(
         })
       : Promise.resolve(null);
 
-  const pickupsPromise = measure("pickups", async () => {
+  const pickupsPromise = measure('pickups', async () => {
     if (
-      dashboard.scope !== "single" ||
+      dashboard.scope !== 'single' ||
       options.companyProductsOnly ||
       options.tabDataOnly ||
       options.exportTab
     )
       return {
         customerPickupPoints: [] as CustomerPickupPoint[],
-        customerPickupPointsStatus: "select_customer" as const,
+        customerPickupPointsStatus: 'select_customer' as const,
       };
     try {
-      const points = await queryWorkbenchCustomerPickupPoints(
-        activeCustomer.code,
-        options,
-      );
+      const points = await queryWorkbenchCustomerPickupPoints(activeCustomer.code, options);
       return {
         customerPickupPoints: points,
-        customerPickupPointsStatus: points.length
-          ? ("available" as const)
-          : ("empty" as const),
+        customerPickupPointsStatus: points.length ? ('available' as const) : ('empty' as const),
       };
     } catch (error) {
       if (options.signal?.aborted) throw options.signal.reason;
-      reportDeliveryError("customer_pickup", error);
+      reportDeliveryError('customer_pickup', error);
       return {
         customerPickupPoints: [] as CustomerPickupPoint[],
-        customerPickupPointsStatus: "unavailable" as const,
+        customerPickupPointsStatus: 'unavailable' as const,
       };
     }
   });
-  const carsPromise = measure("cars", async () => {
-    let customerCars: NonNullable<LiveDemoPayload["customerCars"]> = [];
-    let customerCarsStatus: LiveDemoPayload["customerCarsStatus"] =
-      "select_customer";
+  const carsPromise = measure('cars', async () => {
+    let customerCars: NonNullable<LiveDemoPayload['customerCars']> = [];
+    let customerCarsStatus: LiveDemoPayload['customerCarsStatus'] = 'select_customer';
     if (
-      dashboard.scope === "single" &&
+      dashboard.scope === 'single' &&
       !options.companyProductsOnly &&
       !options.tabDataOnly &&
       !options.exportTab
@@ -302,40 +286,36 @@ export async function loadDealerDemoPayload(
           rows.some(
             (row) =>
               String(row.cust_code) !== activeCustomer.code ||
-              !String(row.source_record_id ?? "").trim() ||
-              !String(row.car_code ?? "").trim(),
+              !String(row.source_record_id ?? '').trim() ||
+              !String(row.car_code ?? '').trim(),
           ) ||
-          new Set(rows.map((row) => String(row.source_record_id))).size !==
-            rows.length
+          new Set(rows.map((row) => String(row.source_record_id))).size !== rows.length
         )
-          throw new Error("车型客户范围或标识不匹配");
+          throw new Error('车型客户范围或标识不匹配');
         customerCars = rows.map((row) => ({
           id: String(row.source_record_id),
-          organization: String(row.organization_id ?? ""),
-          warehouse: String(row.warehouse_group_id ?? ""),
-          type: String(row.car_type ?? ""),
-          code: String(row.car_code ?? ""),
-          name: String(row.car_name ?? ""),
-          min:
-            row.min_discount_num == null ? null : String(row.min_discount_num),
-          max:
-            row.max_discount_num == null ? null : String(row.max_discount_num),
+          organization: String(row.organization_id ?? ''),
+          warehouse: String(row.warehouse_group_id ?? ''),
+          type: String(row.car_type ?? ''),
+          code: String(row.car_code ?? ''),
+          name: String(row.car_name ?? ''),
+          min: row.min_discount_num == null ? null : String(row.min_discount_num),
+          max: row.max_discount_num == null ? null : String(row.max_discount_num),
         }));
-        customerCarsStatus = rows.length ? "available" : "empty";
+        customerCarsStatus = rows.length ? 'available' : 'empty';
       } catch (error) {
         if (options.signal?.aborted) throw options.signal.reason;
-        reportDeliveryError("customer_car", error);
-        customerCarsStatus = "unavailable";
+        reportDeliveryError('customer_car', error);
+        customerCarsStatus = 'unavailable';
       }
     }
     return { customerCars, customerCarsStatus };
   });
-  const receivesPromise = measure("receives", async () => {
-    let customerReceives: NonNullable<LiveDemoPayload["customerReceives"]> = [];
-    let customerReceivesStatus: LiveDemoPayload["customerReceivesStatus"] =
-      "select_customer";
+  const receivesPromise = measure('receives', async () => {
+    let customerReceives: NonNullable<LiveDemoPayload['customerReceives']> = [];
+    let customerReceivesStatus: LiveDemoPayload['customerReceivesStatus'] = 'select_customer';
     if (
-      dashboard.scope === "single" &&
+      dashboard.scope === 'single' &&
       !options.companyProductsOnly &&
       !options.tabDataOnly &&
       !options.exportTab
@@ -348,51 +328,46 @@ export async function loadDealerDemoPayload(
           rows.some(
             (row) =>
               String(row.cust_code) !== activeCustomer.code ||
-              !String(row.source_record_id ?? "").trim() ||
-              !String(row.receive_cust_code ?? "").trim(),
+              !String(row.source_record_id ?? '').trim() ||
+              !String(row.receive_cust_code ?? '').trim(),
           ) ||
-          new Set(rows.map((row) => String(row.source_record_id))).size !==
-            rows.length
+          new Set(rows.map((row) => String(row.source_record_id))).size !== rows.length
         )
-          throw new Error("收货地数据范围或标识异常");
+          throw new Error('收货地数据范围或标识异常');
         customerReceives = rows.map((row) => ({
           id: String(row.source_record_id),
           code: String(row.receive_cust_code),
-          name: String(row.receive_cust_name ?? ""),
-          address: String(row.goods_address ?? ""),
-          mainDriver: String(row.main_drivertype ?? ""),
-          maxDriver: String(row.max_drivertype ?? ""),
+          name: String(row.receive_cust_name ?? ''),
+          address: String(row.goods_address ?? ''),
+          mainDriver: String(row.main_drivertype ?? ''),
+          maxDriver: String(row.max_drivertype ?? ''),
         }));
-        customerReceivesStatus = rows.length ? "available" : "empty";
+        customerReceivesStatus = rows.length ? 'available' : 'empty';
       } catch (error) {
         if (options.signal?.aborted) throw options.signal.reason;
-        reportDeliveryError("customer_receive", error);
-        customerReceivesStatus = "unavailable";
+        reportDeliveryError('customer_receive', error);
+        customerReceivesStatus = 'unavailable';
       }
     }
     return { customerReceives, customerReceivesStatus };
   });
   let sapPrices = new Map<string, number>();
-  const orderPrice = (record: Dashboard["records"][number]) =>
+  const orderPrice = (record: Dashboard['records'][number]) =>
     record.customerCode === activeCustomer.code
       ? (sapPrices.get(record.materialCode) ?? null)
       : null;
   const inventoryDailySummary = dashboard.inventoryDailySummary;
-  const overviewFacts = dealerOverviewFacts(
-    dashboard.summary,
-    inventoryDailySummary,
-  );
+  const overviewFacts = dealerOverviewFacts(dashboard.summary, inventoryDailySummary);
   const hasInventoryValue = Boolean(inventoryDailySummary?.stockAmountCoverage);
-  const hasNormalInventory = Boolean(
-    inventoryDailySummary?.normalStockCoverage,
-  );
-  const liveSkuFor=(record:Dashboard["records"][number],useDailyInventory=true)=>computeDealerSku(record,orderPrice(record),useDailyInventory);
+  const hasNormalInventory = Boolean(inventoryDailySummary?.normalStockCoverage);
+  const liveSkuFor = (record: Dashboard['records'][number], useDailyInventory = true) =>
+    computeDealerSku(record, orderPrice(record), useDailyInventory);
   // Reuse the final recommendation builder; non-suggested SKUs cannot consume the SAP budget.
   const pricingRecords = options.orderSuggestionsOnly
     ? dashboard.records.filter(
         (record) =>
           (record.plannedQty ?? 0) > 0 &&
-          record.materialCode !== "10005290" &&
+          record.materialCode !== '10005290' &&
           (liveSkuFor(record).orderRecommendation?.quantity ?? 0) > 0,
       )
     : [
@@ -401,14 +376,10 @@ export async function loadDealerDemoPayload(
         ...(dashboard.companyProductRecords || []),
       ];
   const pricingPromise =
-    dashboard.scope === "single"
-      ? measure("sap_pricing", async () => {
-          if (
-            pricingRecords.some(
-              (record) => record.customerCode !== activeCustomer.code,
-            )
-          )
-            throw new Error("定价商品客户范围不匹配");
+    dashboard.scope === 'single'
+      ? measure('sap_pricing', async () => {
+          if (pricingRecords.some((record) => record.customerCode !== activeCustomer.code))
+            throw new Error('定价商品客户范围不匹配');
           return loadDealerSapPrices(
             activeCustomer.code,
             pricingRecords.map((record) => record.materialCode),
@@ -432,22 +403,18 @@ export async function loadDealerDemoPayload(
     catalogTotalPromise,
     pickupsPromise,
   ]);
-  sapPrices = new Map(
-    pricing?.data?.prices.map((item) => [item.materialCode, item.price]) ?? [],
-  );
+  sapPrices = new Map(pricing?.data?.prices.map((item) => [item.materialCode, item.price]) ?? []);
 
   const skus = dashboard.records.map((record) => liveSkuFor(record));
-  const shortageSkus = dashboard.shortageRecords.map((record) =>
-    liveSkuFor(record, false),
-  );
+  const shortageSkus = dashboard.shortageRecords.map((record) => liveSkuFor(record, false));
 
   return {
     ...promotionResult,
     pricing,
     loadedStockTab: options.stockTab,
     companyProductFacets:
-      options.companyProductFacets && dashboard.scope === "single"
-        ? await measure("catalog_facets", () =>
+      options.companyProductFacets && dashboard.scope === 'single'
+        ? await measure('catalog_facets', () =>
             queryWorkbenchCompanyProductFacets(
               dashboard.snapshotDate!,
               dashboard.planMonth!,
@@ -456,49 +423,47 @@ export async function loadDealerDemoPayload(
             ),
           )
         : undefined,
-    companyProductsSource: "customer_saleable_material",
+    companyProductsSource: 'customer_saleable_material',
     companyProductTotal,
-    companyProducts: (options.companyProductsOnly
-      ? dashboard.companyProductRecords || []
-      : []
-    ).map((record) => ({
-      dealerCode: record.customerCode,
-      code: record.materialCode,
-      sku: record.materialName || record.materialCode,
-      category: record.productCategory || "-",
-      productTag: record.productTag,
-      materialSize: record.materialSize,
-      publishedSales30: record.sales30,
-      commerceFacts: {
-        stock: record.actualInventory ?? record.inventory,
-        transit: record.actualInTransit ?? record.publishedInTransit ?? 0,
-        recommendedQty:
-          record.orderException || record.dataIssues.length
-            ? null
-            : (record.publishedSuggestedQuantity ?? null),
-        nearExpiryStock: skuExpiryFacts(
-          record.averageAge,
-          record.actualInventory ?? record.inventory,
-        ).near,
-        price: orderPrice(record),
-        warehouse: null,
-      },
-    })),
+    companyProducts: (options.companyProductsOnly ? dashboard.companyProductRecords || [] : []).map(
+      (record) => ({
+        dealerCode: record.customerCode,
+        code: record.materialCode,
+        sku: record.materialName || record.materialCode,
+        category: record.productCategory || '-',
+        productTag: record.productTag,
+        materialSize: record.materialSize,
+        publishedSales30: record.sales30,
+        commerceFacts: {
+          stock: record.actualInventory ?? record.inventory,
+          transit: record.actualInTransit ?? record.publishedInTransit ?? 0,
+          recommendedQty:
+            record.orderException || record.dataIssues.length
+              ? null
+              : (record.publishedSuggestedQuantity ?? null),
+          nearExpiryStock: skuExpiryFacts(
+            record.averageAge,
+            record.actualInventory ?? record.inventory,
+          ).near,
+          price: orderPrice(record),
+          warehouse: null,
+        },
+      }),
+    ),
     companyProductsStatus:
-      dashboard.scope !== "single"
-        ? "select_customer"
+      dashboard.scope !== 'single'
+        ? 'select_customer'
         : !options.companyProductsOnly
           ? companyProductTotal == null
-            ? "unavailable"
+            ? 'unavailable'
             : companyProductTotal === 0
-              ? "empty"
-              : "partial"
-          : dashboard.recordTotal >
-              (dashboard.companyProductRecords?.length ?? 0)
-            ? "partial"
+              ? 'empty'
+              : 'partial'
+          : dashboard.recordTotal > (dashboard.companyProductRecords?.length ?? 0)
+            ? 'partial'
             : dashboard.companyProductRecords?.length
-              ? "available"
-              : "empty",
+              ? 'available'
+              : 'empty',
     customerPickupPoints,
     customerPickupPointsStatus,
     customerCars,
@@ -543,10 +508,10 @@ export async function loadDealerDemoPayload(
     scope: dashboard.scope,
     scopeCustomerCodes: dashboard.scopeCustomerCodes,
     scopeLabel:
-      dashboard.scope === "sales"
-        ? "全部负责客户"
-        : dashboard.scope === "all"
-          ? "全部授权客户"
+      dashboard.scope === 'sales'
+        ? '全部负责客户'
+        : dashboard.scope === 'all'
+          ? '全部授权客户'
           : activeCustomer.name,
     snapshotDate: dashboard.snapshotDate,
     planMonth: dashboard.planMonth,
@@ -558,20 +523,14 @@ export async function loadDealerDemoPayload(
     totalNormalInventory: hasNormalInventory
       ? (inventoryDailySummary?.normalInventory ?? null)
       : null,
-    totalInventoryValue: hasInventoryValue
-      ? (inventoryDailySummary?.stockAmount ?? null)
-      : null,
+    totalInventoryValue: hasInventoryValue ? (inventoryDailySummary?.stockAmount ?? null) : null,
     inventoryDailyCustomerCount: inventoryDailySummary?.customerCount ?? 0,
     inventoryDailyExpectedCustomerCount:
       dashboard.scopeCustomerCodes.length || dashboard.customerTotal,
     normalStockCoverage: inventoryDailySummary?.normalStockCoverage ?? null,
     stockAmountCoverage: inventoryDailySummary?.stockAmountCoverage ?? null,
-    totalSales7: inventoryDailySummary?.sales7Coverage
-      ? inventoryDailySummary.sales7
-      : null,
-    totalSales30: inventoryDailySummary?.sales30Coverage
-      ? inventoryDailySummary.sales30
-      : null,
+    totalSales7: inventoryDailySummary?.sales7Coverage ? inventoryDailySummary.sales7 : null,
+    totalSales30: inventoryDailySummary?.sales30Coverage ? inventoryDailySummary.sales30 : null,
     totalSalesAmount30: inventoryDailySummary?.salesAmount30Coverage
       ? inventoryDailySummary.salesAmount30
       : null,
@@ -580,28 +539,20 @@ export async function loadDealerDemoPayload(
     salesAmount30Coverage: inventoryDailySummary?.salesAmount30Coverage ?? null,
     forecastSales: overviewFacts.forecastSales ?? 0,
     inventoryDailyStatDate: inventoryDailySummary?.statDate ?? null,
-    inventoryDateLabel: inventoryDailySummary?.inventoryDateLabel ?? "未提供",
-    skuCount:
-      dashboard.summary?.skuCount ??
-      dashboard.recordTotal ??
-      dashboard.records.length,
+    inventoryDateLabel: inventoryDailySummary?.inventoryDateLabel ?? '未提供',
+    skuCount: dashboard.summary?.skuCount ?? dashboard.recordTotal ?? dashboard.records.length,
     reasonableSkuCount: dashboard.summary?.reasonableSkuCount ?? 0,
     unreasonableSkuCount: dashboard.summary?.unreasonableSkuCount ?? 0,
     nearExpirySkuCount: dashboard.summary?.nearExpirySkuCount ?? 0,
     noSalesSkuCount: inventoryDailySummary?.noSalesSkuCount ?? null,
-    abnormalCategoryCount: inventoryStructureRisk(dashboard.categorySummaries)
-      .count,
-    inventoryStructureRisks: inventoryStructureRisk(dashboard.categorySummaries)
-      .details,
+    abnormalCategoryCount: inventoryStructureRisk(dashboard.categorySummaries).count,
+    inventoryStructureRisks: inventoryStructureRisk(dashboard.categorySummaries).details,
     shortageSkuCount: dashboard.summary?.shortageSkuCount ?? 0,
     coveredSkuCount: dashboard.summary?.coveredSkuCount ?? 0,
     loadedSkuCount: dashboard.records.length,
     recordTotal: dashboard.recordTotal,
     page: Math.max(0, Math.floor(options.detailPage ?? 0)),
-    pageSize: Math.max(
-      1,
-      Math.min(200, Math.floor(options.detailPageSize ?? 10)),
-    ),
+    pageSize: Math.max(1, Math.min(200, Math.floor(options.detailPageSize ?? 10))),
     averageAge: dashboard.summary?.averageAge ?? null,
     storeCount: null,
     skus,

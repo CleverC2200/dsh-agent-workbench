@@ -1,4 +1,4 @@
-import {PageUnsentHistory} from './unsent-history.tsx';
+import { PageUnsentHistory } from './unsent-history.tsx';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
@@ -665,10 +665,23 @@ export function mountCompanyUI(
             </div>
           )}
           <div className="gea-workspace-owned" hidden={drawer !== 'workspace'}>
-            {documentState.historyPage && documentState.selectedDocument?.id === documentState.historyPage && documentState.selectedDocument.resourceId && documentState.selection?.cwd && <PageUnsentHistory
-              page={documentState.selectedDocument} cwd={documentState.selection.cwd} sessions={ctx.sessions} selectedSessionId={documentState.selection.sessionId} request={fetch} language={ctx.locale.getSnapshot().active}
-              onChoose={(id,preset,cwd)=>{workbench.selectHistorySession(documentState.historyPage!,id,{preset,cwd});ctx.uiWorkspace.openSession(id)}}
-            />}
+            {documentState.historyPage &&
+              documentState.selectedDocument?.id === documentState.historyPage &&
+              documentState.selectedDocument.resourceId &&
+              documentState.selection?.cwd && (
+                <PageUnsentHistory
+                  page={documentState.selectedDocument}
+                  cwd={documentState.selection.cwd}
+                  sessions={ctx.sessions}
+                  selectedSessionId={documentState.selection.sessionId}
+                  request={fetch}
+                  language={ctx.locale.getSnapshot().active}
+                  onChoose={(id, preset, cwd) => {
+                    workbench.selectHistorySession(documentState.historyPage!, id, { preset, cwd });
+                    ctx.uiWorkspace.openSession(id);
+                  }}
+                />
+              )}
             {renderSlot('sidebar.workspaces', { wide: !collapsed, expandSidebar })}
           </div>
         </div>

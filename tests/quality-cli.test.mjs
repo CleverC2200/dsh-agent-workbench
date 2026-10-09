@@ -102,6 +102,12 @@ test('public quality CLI enforces fixed debt and refuses new violations and weak
     );
     expect('format', debt, 2, /QUALITY_BASELINE/);
     writeFileSync(join(fixture, 'scripts/quality.mjs'), script);
+    writeFileSync(
+      join(fixture, 'scripts/quality.mjs'),
+      script.replace('const scope =', "fixed.add('src/quality-new.mjs');\nconst scope ="),
+    );
+    expect('format', debt, 2, /QUALITY_POLICY_SCOPE/);
+    writeFileSync(join(fixture, 'scripts/quality.mjs'), script);
     const tool = join(fixture, 'node_modules/oxlint/package.json');
     const toolManifest = readFileSync(tool);
     writeFileSync(tool, JSON.stringify({ ...JSON.parse(toolManifest), version: '0.0.0' }));

@@ -1,8 +1,5 @@
 {
-  "entries": [
-    "AGENTS.md",
-    "README.md"
-  ],
+  "entries": ["AGENTS.md", "README.md"],
   "paths": [
     "src/workbench.ts",
     "src/frame-presenter.tsx",
@@ -13,18 +10,8 @@
     "scripts/check-agent-knowledge.mjs",
     "scripts/verify-official-input.mjs"
   ],
-  "scripts": [
-    "check:knowledge",
-    "candidate:verify",
-    "typecheck:official",
-    "build:core",
-    "test"
-  ],
+  "scripts": ["check:knowledge", "candidate:verify", "typecheck:official", "build:core", "test"],
   "exports": true,
   "peers": [],
-  "history": [
-    "docs/history",
-    "UPSTREAM.md",
-    "src/workbench/original/SOURCE.md"
-  ]
+  "history": ["docs/history", "UPSTREAM.md", "src/workbench/original/SOURCE.md"]
 }

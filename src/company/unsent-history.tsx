@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-  useRef,
-} from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore, useRef } from 'react';
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
@@ -43,10 +37,10 @@ export function PageUnsentHistory({
   const [projectionError, setProjectionError] = useState<string>();
   useEffect(() => {
     const controller = new AbortController();
-    void request(
-      '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
-      { signal: controller.signal, cache: 'no-store' },
-    )
+    void request('/api/agent-manage/resources?' + new URLSearchParams({ cwd }), {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
       .then(async (response) => {
         if (!response.ok) throw Error('RESOURCE_LIST_UNAVAILABLE');
         const rows = (await response.json()) as ResourceSummary[];
@@ -54,42 +48,28 @@ export function PageUnsentHistory({
         setResources({ owner, rows });
       })
       .catch((error) => {
-        if (!controller.signal.aborted)
-          setResources({ owner, rows: [], error: String(error) });
+        if (!controller.signal.aborted) setResources({ owner, rows: [], error: String(error) });
       });
     return () => controller.abort();
   }, [owner, request, retry]);
   const available = resources?.owner === owner ? resources : undefined;
   const allowed = useMemo(() => {
     const resource = available?.rows.find(
-      (row) =>
-        row.id === page.resourceId &&
-        row.installed &&
-        row.enabled &&
-        row.kind === 'prompt',
+      (row) => row.id === page.resourceId && row.installed && row.enabled && row.kind === 'prompt',
     );
     return new Set(
       resource
         ? (resource.interpreters ?? [resource.id]).filter((id) =>
             available!.rows.some(
-              (row) =>
-                row.id === id &&
-                row.installed &&
-                row.enabled &&
-                row.kind === 'prompt',
+              (row) => row.id === id && row.installed && row.enabled && row.kind === 'prompt',
             ),
           )
         : [],
     );
   }, [available, page.resourceId]);
-  const presetOf = (
-    state: ReturnType<ISessions['list']['getSnapshot']>,
-    id: SessionId,
-  ) => {
+  const presetOf = (state: ReturnType<ISessions['list']['getSnapshot']>, id: SessionId) => {
     const value = state.projectionsBySession[id]?.values.agentPreset;
-    return value === undefined
-      ? state.byId[id]?.projectionValues?.agentPreset
-      : value;
+    return value === undefined ? state.byId[id]?.projectionValues?.agentPreset : value;
   };
   // Cold list rows may lack cached preset hints. The official metadata read
   // updates the same Core list store without opening an Agent or reading a draft.
@@ -113,9 +93,7 @@ export function PageUnsentHistory({
       )
         continue;
       inspected.current.add(id);
-      void sessions
-        .refreshProjections(id)
-        .catch(() => setProjectionError(owner));
+      void sessions.refreshProjections(id).catch(() => setProjectionError(owner));
     }
   }, [list, owner, sessions, cwd, retry]);
   const candidates = () => {
@@ -180,9 +158,7 @@ export function PageUnsentHistory({
             {english ? 'Retry' : '重试读取'}
           </button>
         </p>
-      ) : !available ||
-        list.phase !== 'ready' ||
-        (metadataLoading && rows.length === 0) ? (
+      ) : !available || list.phase !== 'ready' || (metadataLoading && rows.length === 0) ? (
         <p role="status">{english ? 'Loading sessions…' : '正在读取会话…'}</p>
       ) : rows.length === 0 ? (
         <p>{english ? 'No matching unsent session' : '没有匹配的未发送会话'}</p>
@@ -196,8 +172,7 @@ export function PageUnsentHistory({
             disabled={selectedSessionId === session.id}
             onClick={() => {
               const current = candidates().find(
-                (value) =>
-                  value.session.id === session.id && value.preset === preset,
+                (value) => value.session.id === session.id && value.preset === preset,
               );
               if (current) onChoose(current.session.id, current.preset, cwd);
             }}
@@ -211,9 +186,7 @@ export function PageUnsentHistory({
                 : ''}
             </span>
             <time dateTime={new Date(session.updatedAt).toISOString()}>
-              {new Date(session.updatedAt).toLocaleString(
-                english ? 'en-US' : 'zh-CN',
-              )}
+              {new Date(session.updatedAt).toLocaleString(english ? 'en-US' : 'zh-CN')}
             </time>
           </button>
         ))

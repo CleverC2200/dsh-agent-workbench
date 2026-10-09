@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
 const peers = {
-  'dsh-agent-manage': 'fee2a9408112f22f9e43d982f1290a9883250fba',
+  'dsh-agent-manage': 'cd2e4a06403b638ad3d3ee3982544d5790f7f5b2',
   'dsh-gea-plugin': 'b05ca162e1bf5ffb8443962a0b8b7e8ff8a61e96',
 };
 const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';

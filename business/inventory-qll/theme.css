@@ -84,8 +84,7 @@ body {
 .agent-root :is(.panel-primary, .primary-button) {
   color: var(--dsw-alias-label-primary-foreground);
 }
-.agent-root
-  :is(.secondary-button, .warehouse-cycle-context, .draft-quantity input) {
+.agent-root :is(.secondary-button, .warehouse-cycle-context, .draft-quantity input) {
   background: var(--ui-surface);
   color: var(--ui-secondary);
   border-color: var(--ui-border-strong);

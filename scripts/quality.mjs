@@ -83,6 +83,19 @@ const generated = new Set(
 );
 // Runtime prompt bytes are governed resources, not authored code formatting targets.
 const runtimeResources = new Set(['static/regional/prompt.json']);
+const scope = {
+  directories,
+  fixed: [...fixed].sort(),
+  generated: [...generated].sort(),
+  runtimeResources: [...runtimeResources].sort(),
+};
+if (
+  createHash('sha256').update(JSON.stringify(scope)).digest('hex') !==
+  'a07d9685c9335387dd28f40b15ef401578227741d6b22f949c0889d341b6e802'
+)
+  refuse(
+    'QUALITY_POLICY_SCOPE_REQUIRED: maintained paths and exclusions must match the reviewed policy',
+  );
 const files = [];
 function collect(directory) {
   for (const entry of readdirSync(resolve(root, directory), { withFileTypes: true })) {

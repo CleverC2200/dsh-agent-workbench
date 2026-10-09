@@ -4,37 +4,74 @@ import { execFileSync } from 'node:child_process';
 import { verifyOfficialInput } from './verify-official-input.mjs';
 import { parseArgs } from 'node:util';
 
-const { values } = parseArgs({ options: { input: { type: 'string' }, checkout: { type: 'string' } } });
-if (!values.input || !values.checkout) throw Error('CANDIDATE_INPUT_REQUIRED: --input and --checkout');
+const { values } = parseArgs({
+  options: { input: { type: 'string' }, checkout: { type: 'string' } },
+});
+if (!values.input || !values.checkout)
+  throw Error('CANDIDATE_INPUT_REQUIRED: --input and --checkout');
 const manifest = JSON.parse(readFileSync(resolve(values.input), 'utf8'));
 for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin']) {
-  const entries = manifest.repositories?.filter(entry => entry.repo === repo);
-  if (entries?.length !== 1 || !entries[0].path || !entries[0].head) throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
+  const entries = manifest.repositories?.filter((entry) => entry.repo === repo);
+  if (entries?.length !== 1 || !entries[0].path || !entries[0].head)
+    throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
 }
-if (!manifest.repositories?.some(entry => resolve(entry.path) === resolve(values.checkout))) {
+if (!manifest.repositories?.some((entry) => resolve(entry.path) === resolve(values.checkout))) {
   throw Error('CANDIDATE_CHECKOUT: use a checkout registered in the input set');
 }
 
-const repositories = manifest.repositories.map(entry => {
+const repositories = manifest.repositories.map((entry) => {
   let head;
-  try { head = execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
-  catch { throw Error(`CANDIDATE_PEER_REQUIRED: ${entry.repo} checkout ${entry.path}`); }
+  try {
+    head = execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+  } catch {
+    throw Error(`CANDIDATE_PEER_REQUIRED: ${entry.repo} checkout ${entry.path}`);
+  }
   return { repo: entry.repo, path: entry.path, head };
 });
 for (const entry of repositories) {
-  for (const file of ['package.json', entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml']) {
-    try { accessSync(resolve(entry.path, file), constants.R_OK); }
-    catch { throw Error(`CANDIDATE_MATERIAL_REQUIRED: ${entry.repo}/${file}`); }
+  for (const file of [
+    'package.json',
+    entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml',
+  ]) {
+    try {
+      accessSync(resolve(entry.path, file), constants.R_OK);
+    } catch {
+      throw Error(`CANDIDATE_MATERIAL_REQUIRED: ${entry.repo}/${file}`);
+    }
   }
-  const dirty = execFileSync('git', ['-C', entry.path, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }).trim();
+  const dirty = execFileSync(
+    'git',
+    ['-C', entry.path, 'status', '--porcelain', '--untracked-files=all'],
+    { encoding: 'utf8' },
+  ).trim();
   if (dirty) throw Error(`CANDIDATE_DIRTY: ${entry.repo}\n${dirty}`);
   const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
   try {
-    const frozen = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const frozen = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     if (!frozen.equals(readFileSync(resolve(entry.path, lock)))) throw Error('changed lock');
-  } catch { throw Error(`CANDIDATE_LOCK: ${entry.repo}/${lock} must match its commit`); }
-  if (entry.head !== manifest.repositories.find(expected => expected.repo === entry.repo).head) throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
+  } catch {
+    throw Error(`CANDIDATE_LOCK: ${entry.repo}/${lock} must match its commit`);
+  }
+  if (entry.head !== manifest.repositories.find((expected) => expected.repo === entry.repo).head)
+    throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
 }
-const core = verifyOfficialInput(manifest.repositories.find(entry => entry.repo === 'dsh-agent-workbench').path);
-if (manifest.core !== core) throw Error('CANDIDATE_CORE: binding must match the fixed official input');
-console.log(JSON.stringify({ observedAt: new Date().toISOString(), stage: 'candidate-input', status: 'passed', runtime: 'not-observed', core, repositories }));
+const core = verifyOfficialInput(
+  manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
+);
+if (manifest.core !== core)
+  throw Error('CANDIDATE_CORE: binding must match the fixed official input');
+console.log(
+  JSON.stringify({
+    observedAt: new Date().toISOString(),
+    stage: 'candidate-input',
+    status: 'passed',
+    runtime: 'not-observed',
+    core,
+    repositories,
+  }),
+);

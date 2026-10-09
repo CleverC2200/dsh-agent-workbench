@@ -1887,13 +1887,48 @@
 }
 
 /* Unsent Session navigation reads Core metadata; it owns no Conversation draft. */
-.gea-unsent-history { padding: 8px 10px; color: var(--workbench-body); }
-.gea-unsent-history header { font-size: 11px; font-weight: 600; margin-bottom: 4px; }
-.gea-unsent-history p { font-size: 11px; color: var(--workbench-muted); }
-.gea-unsent-history button { display: flex; flex-direction: column; width: 100%; gap: 2px; padding: 8px; border: 0; border-radius: 6px; background: transparent; color: var(--workbench-body); text-align: left; cursor: pointer; }
-.gea-unsent-history button:hover { background: var(--workbench-hover); }
-.gea-unsent-history button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
-.gea-unsent-history button span { font-size: 11px; overflow-wrap: anywhere; }
-.gea-unsent-history time { font-size: 10px; color: var(--workbench-muted); }
+.gea-unsent-history {
+  padding: 8px 10px;
+  color: var(--workbench-body);
+}
+.gea-unsent-history header {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.gea-unsent-history p {
+  font-size: 11px;
+  color: var(--workbench-muted);
+}
+.gea-unsent-history button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 2px;
+  padding: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-body);
+  text-align: left;
+  cursor: pointer;
+}
+.gea-unsent-history button:hover {
+  background: var(--workbench-hover);
+}
+.gea-unsent-history button:focus-visible {
+  outline: 2px solid var(--workbench-brand);
+  outline-offset: 2px;
+}
+.gea-unsent-history button span {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.gea-unsent-history time {
+  font-size: 10px;
+  color: var(--workbench-muted);
+}
 
-.gea-unsent-history button:disabled { cursor: default; }
+.gea-unsent-history button:disabled {
+  cursor: default;
+}

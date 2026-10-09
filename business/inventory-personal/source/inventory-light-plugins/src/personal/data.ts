@@ -1,20 +1,15 @@
-import { applySourcePermissions } from "./permissions";
-import {
-  loadDailyReportInput,
-  catalog,
-  load,
-  clearReadCache,
-} from "./live-input";
+import { applySourcePermissions } from './permissions';
+import { loadDailyReportInput, catalog, load, clearReadCache } from './live-input';
 
-import {type ObjectData} from "dsh-agent-manage/inventory-compute/personal";
-import {buildBasePersonalObject,buildBranchPersonalObject} from "dsh-agent-manage/inventory-compute/personal-sources";
+import { type ObjectData } from 'dsh-agent-manage/inventory-compute/personal';
+import {
+  buildBasePersonalObject,
+  buildBranchPersonalObject,
+} from 'dsh-agent-manage/inventory-compute/personal-sources';
 export function reset() {
   clearReadCache();
 }
-export async function loadPersonal(
-  onObjects: (o: ObjectData[]) => void,
-  signal?: AbortSignal,
-) {
+export async function loadPersonal(onObjects: (o: ObjectData[]) => void, signal?: AbortSignal) {
   const objects: ObjectData[] = [];
   const errors: string[] = [];
   const push = (items: ObjectData[]) => {
@@ -27,26 +22,27 @@ export async function loadPersonal(
       try {
         const input = await loadDailyReportInput(signal);
         if (input.failedSources.length)
-          errors.push("基地部分数据源未返回：" + input.failedSources.map(source => {
-            const failure = input.sourceErrors?.[source];
-            return failure ? `${source}：${failure.message}（${failure.code}）` : source;
-          }).join("；"));
+          errors.push(
+            '基地部分数据源未返回：' +
+              input.failedSources
+                .map((source) => {
+                  const failure = input.sourceErrors?.[source];
+                  return failure ? `${source}：${failure.message}（${failure.code}）` : source;
+                })
+                .join('；'),
+          );
         const names = [
-          ...new Set(
-            [...input.stock, ...input.age].map((r) => r.base).filter(Boolean),
-          ),
+          ...new Set([...input.stock, ...input.age].map((r) => r.base).filter(Boolean)),
         ];
         push(
           names
             .map((name) => {
-              return buildBasePersonalObject(input,name);
+              return buildBasePersonalObject(input, name);
             })
-            .map((object) =>
-              applySourcePermissions(object, (input as any).permissionGaps),
-            ),
+            .map((object) => applySourcePermissions(object, (input as any).permissionGaps)),
         );
       } catch (e) {
-        errors.push("基地日监控：" + (e as Error).message);
+        errors.push('基地日监控：' + (e as Error).message);
       }
     })(),
     (async () => {
@@ -58,12 +54,12 @@ export async function loadPersonal(
             while (cursor < directory.warehouses.length) {
               signal?.throwIfAborted();
               const warehouse = directory.warehouses[cursor++];
-              const id = "branch:" + warehouse.id;
+              const id = 'branch:' + warehouse.id;
               try {
                 const snapshot = await load({ warehouseId: warehouse.id, signal });
                 push([
                   applySourcePermissions(
-                    buildBranchPersonalObject(snapshot,warehouse),
+                    buildBranchPersonalObject(snapshot, warehouse),
                     (snapshot as any).permissionGaps,
                   ),
                 ]);
@@ -72,14 +68,14 @@ export async function loadPersonal(
                   {
                     id,
                     name: warehouse.name,
-                    kind: "branch",
+                    kind: 'branch',
                     inventory: null,
                     target: null,
                     age: null,
                     ageWeight: null,
                     shortage: null,
                     stagnant: null,
-                    snapshot: "",
+                    snapshot: '',
                     risks: [],
                     error: (e as Error).message,
                   },
@@ -89,7 +85,7 @@ export async function loadPersonal(
           }),
         );
       } catch (e) {
-        errors.push("分仓日监控：" + (e as Error).message);
+        errors.push('分仓日监控：' + (e as Error).message);
       }
     })(),
   ]);

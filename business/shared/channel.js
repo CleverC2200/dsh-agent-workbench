@@ -202,7 +202,8 @@ window.addEventListener('message', (event) => {
     }
     if (message.type === 'invoke' && message.session === context?.session) {
       const handler = handlers.get(message.name);
-      const session = context.session, ownerChannel = channel;
+      const session = context.session,
+        ownerChannel = channel;
       const controller = new AbortController();
       invoking.set(message.id, { controller, handler });
       Promise.resolve()
@@ -215,10 +216,19 @@ window.addEventListener('message', (event) => {
           return result;
         })
         .then(
-          result => ownerChannel.postMessage({ type: 'invoked', id: message.id, session, result }),
-          error => ownerChannel.postMessage({ type: 'invoked', id: message.id, session, error: error.message }),
+          (result) =>
+            ownerChannel.postMessage({ type: 'invoked', id: message.id, session, result }),
+          (error) =>
+            ownerChannel.postMessage({
+              type: 'invoked',
+              id: message.id,
+              session,
+              error: error.message,
+            }),
         )
-        .finally(() => { if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id); });
+        .finally(() => {
+          if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id);
+        });
     }
     if (message.type === 'identity-changed') {
       cancelActions();
@@ -273,13 +283,17 @@ export async function call(method, parameters = {}, options = {}) {
 }
 export function action(name, description, handler) {
   handlers.set(name, handler);
-  const release = name === 'refresh' ? reportElements(
-    'refresh', [{ id: 'control:refresh', role: 'control', label: description, actions: ['invoke'] }],
-    (args, signal) => {
-      if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
-      return handler({}, { signal });
-    },
-  ) : undefined;
+  const release =
+    name === 'refresh'
+      ? reportElements(
+          'refresh',
+          [{ id: 'control:refresh', role: 'control', label: description, actions: ['invoke'] }],
+          (args, signal) => {
+            if (args.kind !== 'invoke') throw Error('ACTION_NOT_ALLOWED');
+            return handler({}, { signal });
+          },
+        )
+      : undefined;
   void ready.then(() => {
     if (handlers.get(name) === handler && context?.session)
       channel.postMessage({ type: 'register', name, description, session: context.session });
@@ -298,4 +312,6 @@ export function publish(context, options) {
 }
 
 /** Insert unsent text through the current owned Core input. No model or business write. */
-export function draft(text, options) { return call('draft', { text }, options); }
+export function draft(text, options) {
+  return call('draft', { text }, options);
+}

@@ -1,1 +1,1 @@
-export * from "../../../../shared/channel.js";
+export * from '../../../../shared/channel.js';
