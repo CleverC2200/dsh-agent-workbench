@@ -50,7 +50,7 @@ while (pending.length) {
   const commandText = [...text.matchAll(/(`+|~{3,})([\s\S]*?)\1/g)].map(match => match[2]).join('\n');
   const commands = [...text.matchAll(/\b(?:npm|pnpm)\s+run\s+([\w:.-]+)/g), ...commandText.matchAll(/\b(?:npm|pnpm)\s+(?:run\s+)?([\w:.-]+)/g)];
   for (const match of commands) {
-    if (['ci', 'install', 'add', 'remove', 'update', 'exec', 'dlx', 'store', 'pack', 'publish', 'config', 'version', 'audit', 'list', 'why', 'rebuild'].includes(match[1])) continue;
+    if (['ci', 'install', 'add', 'remove', 'update', 'exec', 'dlx', 'store', 'pack', 'publish', 'deprecate', 'config', 'version', 'audit', 'list', 'why', 'rebuild'].includes(match[1])) continue;
     if (!commandPackages.some(owner => owner.scripts?.[match[1]])) throw Error(`AGENT_COMMAND_MISSING: ${file} -> ${match[1]}`);
   }
   const prose = text.replace(/(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/g, '').replace(/`+[^`]*`+/g, '');

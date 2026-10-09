@@ -190,3 +190,10 @@ test('ordinary package-manager prose is not mistaken for a compact script comman
   const result = run();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('documented npm deprecate is recognized as a package-manager action and never executed', t => {
+  const { root, run } = fixture(t);
+  writeFileSync(resolve(root, 'README.md'), 'Historical policy uses `npm deprecate package@version "reason"`.\n');
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+});
