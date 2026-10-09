@@ -12,7 +12,7 @@ npm run test:quality
 
 `quality:fast` 串行运行 lint、format:check、typecheck:official 和公开 CLI 反例，可检查未提交修改。原 Node、浏览器、类型和构建命令保留。全量 audit 包含旧债，返回真实非零；增量通过不表示全仓没有债务。
 
-旧债仅在文件字节匹配固定 Git 提交 `9814b3bcf1ae015a63fac9af864c165617791fc3` 的 blob 时豁免。Q1 原始 policy 对象 `b42c62e72310d31a088b7394a964492efc1f217a:scripts/quality.mjs` 的 SHA-256、原配置 hash 和已安装工具版本必须一致；缺对象、改基线、弱化配置、工具错误都拒绝。没有更新基线的命令。新文件或修改后的旧债必须通过真实工具。
+旧债仅在文件字节匹配固定 Git 提交 `9814b3bcf1ae015a63fac9af864c165617791fc3` 的 blob 时豁免。Q1 原始 policy `b42c62e72310d31a088b7394a964492efc1f217a:scripts/quality.mjs` 以固定原字节 fixture 读取；其 SHA-256、原配置 hash 和已安装工具版本必须一致。缺固定输入、改基线、弱化配置、工具错误都拒绝。没有更新基线的命令。新文件或修改后的旧债必须通过真实工具。
 
 维护范围是 src、scripts、tests、business、static、samples、theme 与 workflow。JS/TS 由 Oxlint correctness 检查；Oxfmt 另检查 CSS、HTML、JSON/JSONC/YAML。根配置参与格式检查，根 npm 锁由 npm 验证。显式参数只接受维护范围内存在的支持文件，目录、失效路径和排除资源拒绝。根/嵌套 ignore 与嵌套工具配置不能弱化规则。
 
