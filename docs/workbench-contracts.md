@@ -65,7 +65,7 @@ GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter �
 
 模型载荷的 focus 过滤只筛记录数组；标识/标量列表保留状态并遵守条目上限。省略计数是不同数组条目的合计，不是业务行数或未展开行数。FC 页面正文明确超龄、滞库和订单字段的名称，缺失订单量不以库存风险量替代。
 
-页面请求取消消息携带该请求原先绑定的Session，abort和timeout都撤销对应Host请求。URL HTML frame保持不允许same-origin的sandbox；内容引用按该frame的opaque origin判定，同时保留window/channel、Host generation、owned lease和输入revision校验。页面会话准备的 busy 属于当前请求 controller；身份变化立即释放它，旧请求完成不能清除新请求的busy。
+页面请求取消消息携带该请求原先绑定的Session，abort和timeout都撤销对应Host请求。URL HTML frame保持不允许same-origin的sandbox；内容引用按该frame的opaque origin判定，同时保留window/channel、Host generation、owned lease和输入revision校验。页面会话准备的 busy 属于当前请求 controller；离页或身份变化立即释放它，旧请求完成不能清除新请求的busy。
 
 ### 页面实现与执行归属（规格42）
 

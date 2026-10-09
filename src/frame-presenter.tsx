@@ -344,8 +344,14 @@ export function mountFramePresentation(
     }, []);
     useEffect(
       () => () => {
-        pending.current?.controller.abort();
-        pending.current = undefined;
+        const flight = pending.current;
+        if (flight) {
+          flight.controller.abort();
+          if (pending.current === flight) {
+            pending.current = undefined;
+            setBusy(false);
+          }
+        }
         preparation.current?.abort();
       },
       [active],
