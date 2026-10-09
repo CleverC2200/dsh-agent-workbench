@@ -204,3 +204,49 @@ test('package-manager version options are not interpreted as script names', t =>
   const result = run();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('npm metadata actions pass but their explicit run forms still require project scripts', t => {
+  const { root, run } = fixture(t);
+  for (const command of ['shrinkwrap', 'unpublish', 'publish']) {
+    writeFileSync(resolve(root, 'README.md'), `Use \`npm ${command}\`.\n`);
+    const metadata = run();
+    assert.equal(metadata.status, 0, metadata.stderr);
+    writeFileSync(resolve(root, 'README.md'), `Use \`npm run ${command}\`.\n`);
+    const script = run();
+    assert.notEqual(script.status, 0);
+    assert.match(script.stderr, new RegExp(`AGENT_COMMAND_MISSING.*${command}`));
+  }
+});
+
+test('compact metadata commands follow their own package manager and explicit run never borrows them', t => {
+  const { root, run } = fixture(t);
+  writeFileSync(resolve(root, 'README.md'), 'Use `pnpm store path` and `pnpm dlx do-not-run`.\n');
+  assert.equal(run().status, 0);
+  for (const command of ['npm store', 'npm dlx', 'pnpm shrinkwrap', 'pnpm run store']) {
+    writeFileSync(resolve(root, 'README.md'), `Use \`${command}\`.\n`);
+    const result = run();
+    assert.notEqual(result.status, 0, command);
+    assert.match(result.stderr, /AGENT_COMMAND_MISSING/);
+  }
+});
+
+test('lifecycle commands require declared project scripts instead of passing as metadata commands', t => {
+  const { root, run } = fixture(t);
+  writeFileSync(resolve(root, 'package.json'), JSON.stringify({ scripts: {} }));
+  for (const manager of ['npm', 'pnpm']) for (const command of ['start', 'test', 'stop', 'restart']) {
+    writeFileSync(resolve(root, 'README.md'), `Use \`${manager} ${command}\`.\n`);
+    const missing = run();
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, new RegExp(`AGENT_COMMAND_MISSING.*${command}`));
+  }
+  writeFileSync(resolve(root, 'package.json'), JSON.stringify({ scripts: { start: 'node never-execute.mjs' } }));
+  writeFileSync(resolve(root, 'README.md'), 'Use `npm start` and `pnpm start`.\n');
+  assert.equal(run().status, 0);
+});
+
+test('separate code spans naming npm and pip sources cannot be joined into a command', t => {
+  const { root, run } = fixture(t);
+  writeFileSync(resolve(root, 'README.md'), '`npm`/`pip` sources are documented as metadata.\n');
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+});

@@ -4,6 +4,13 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { parseArgs } from 'node:util';
 
+// Command metadata audited read-only with npm11.11.0 --help/cmd-list and pnpm11.17.0/11.27.0 help -a.
+// Explicit run and lifecycle commands always resolve project scripts; compact metadata actions do not.
+const npmCommands = new Set(["access", "adduser", "audit", "bugs", "cache", "ci", "completion", "config", "dedupe", "deprecate", "diff", "dist-tag", "docs", "doctor", "edit", "exec", "explain", "explore", "find-dupes", "fund", "get", "help", "help-search", "init", "install", "install-ci-test", "install-test", "link", "ll", "login", "logout", "ls", "org", "outdated", "owner", "pack", "ping", "pkg", "prefix", "profile", "prune", "publish", "query", "rebuild", "repo", "root", "sbom", "search", "set", "shrinkwrap", "star", "stars", "team", "token", "trust", "undeprecate", "uninstall", "unpublish", "unstar", "update", "version", "view", "whoami"]);
+const npmAliases = {"author": "owner", "home": "docs", "issues": "bugs", "info": "view", "show": "view", "find": "search", "add": "install", "unlink": "uninstall", "remove": "uninstall", "rm": "uninstall", "r": "uninstall", "un": "uninstall", "rb": "rebuild", "list": "ls", "ln": "link", "create": "init", "i": "install", "it": "install-test", "cit": "install-ci-test", "up": "update", "c": "config", "s": "search", "se": "search", "tst": "test", "t": "test", "ddp": "dedupe", "v": "view", "run-script": "run", "clean-install": "ci", "clean-install-test": "install-ci-test", "x": "exec", "why": "explain", "la": "ll", "verison": "version", "ic": "ci", "innit": "init", "in": "install", "ins": "install", "inst": "install", "insta": "install", "instal": "install", "isnt": "install", "isnta": "install", "isntal": "install", "isntall": "install", "install-clean": "ci", "isntall-clean": "ci", "hlep": "help", "dist-tags": "dist-tag", "upgrade": "update", "udpate": "update", "rum": "run", "sit": "install-ci-test", "urn": "run", "ogr": "org", "add-user": "adduser"};
+const pnpmCommands = new Set(["add", "approve-builds", "audit", "bin", "c", "cache", "cat-file", "cat-index", "clean", "config", "create", "dedupe", "deploy", "dlx", "env", "exec", "fetch", "find-hash", "i", "ignored-builds", "import", "init", "install", "install-test", "it", "licenses", "link", "list", "ln", "ls", "outdated", "pack", "patch", "patch-commit", "patch-remove", "prune", "publish", "rb", "rebuild", "remove", "rm", "root", "rt", "runtime", "self-update", "stage", "store", "t", "unlink", "up", "update", "why"]);
+const pnpmAliases = { t: 'test', tst: 'test', 'run-script': 'run' };
+
 const { values } = parseArgs({ options: { root: { type: 'string' }, config: { type: 'string' }, 'compare-ref': { type: 'string' } } });
 if (!values.root || !values.config) throw Error('AGENT_INPUT_REQUIRED: --root and --config');
 const root = resolve(values.root);
@@ -47,11 +54,15 @@ while (pending.length) {
     if (!allowedRoots.some(allowed => under(directory, allowed))) throw Error(`AGENT_PEER_REQUIRED: command root ${directory}`);
     commandPackages.push(JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8')));
   }
-  const commandText = [...text.matchAll(/(`+|~{3,})([\s\S]*?)\1/g)].map(match => match[2]).join('\n');
-  const commands = [...text.matchAll(/\b(?:npm|pnpm)\s+run\s+([\w:.-]+)/g), ...commandText.matchAll(/\b(?:npm|pnpm)\s+(?:run\s+)?([a-zA-Z0-9_][\w:.-]*)/g)];
-  for (const match of commands) {
-    if (['ci', 'install', 'add', 'remove', 'update', 'exec', 'dlx', 'store', 'pack', 'publish', 'deprecate', 'config', 'version', 'audit', 'list', 'why', 'rebuild'].includes(match[1])) continue;
-    if (!commandPackages.some(owner => owner.scripts?.[match[1]])) throw Error(`AGENT_COMMAND_MISSING: ${file} -> ${match[1]}`);
+  const codeSpans = [...text.matchAll(/(`+|~{3,})([\s\S]*?)\1/g)].map(match => match[2]);
+  const commands = [
+    ...[...text.matchAll(/\b(npm|pnpm)\s+run\s+([\w:.-]+)/g)].map(match => ({ manager: match[1], name: match[2], explicitRun: true })),
+    ...codeSpans.flatMap(span => [...span.matchAll(/\b(npm|pnpm)\s+(?:(run)\s+)?([a-zA-Z0-9_][\w:.-]*)/g)].map(match => ({ manager: match[1], name: match[3], explicitRun: !!match[2] }))),
+  ];
+  for (const command of commands) {
+    const name = command.explicitRun ? command.name : (command.manager === 'npm' ? npmAliases[command.name] : pnpmAliases[command.name]) ?? command.name;
+    if (!command.explicitRun && (command.manager === 'npm' ? npmCommands : pnpmCommands).has(name)) continue;
+    if (!commandPackages.some(owner => owner.scripts?.[name])) throw Error(`AGENT_COMMAND_MISSING: ${file} -> ${name}`);
   }
   const prose = text.replace(/(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/g, '').replace(/`+[^`]*`+/g, '');
   for (const match of prose.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) {
