@@ -22,6 +22,7 @@ export interface NativeResourceSelection {
 export interface ResourceSummary {
   id: string;
   label: string;
+  description?: string;
   kind: 'prompt' | 'skill';
   installed: boolean;
   enabled: boolean;

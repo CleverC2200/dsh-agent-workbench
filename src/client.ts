@@ -256,6 +256,7 @@ export function apply(ctx: Context): void {
                     ? t('useSkill')
                     : t('start')),
           ),
+          row.description ? React.createElement('p', null, row.description) : null,
           row.missingSkills?.length
             ? React.createElement('p', null, t('missing') + ': ' + row.missingSkills.join(', '))
             : null,

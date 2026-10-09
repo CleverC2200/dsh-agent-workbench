@@ -118,3 +118,5 @@ WorkbenchController 持有 History intent 与对应页面登记的有效期。�
 离线验收入口为 `node --test tests/page-bridge-client.test.mjs tests/workbench-recovery.test.mjs`。前者通过真实客户端和 Host 接口覆盖传输失败、重复回执、取消与 Session 换绑；后者通过 Controller 接口覆盖注销再登记、异步迟到和取消。它们证明源码行为，实际 Native 窗口、模型和业务操作需另存对应验收证据。
 
 历史对话侧栏补充显示当前页面可用的未发送会话。列表来自官方 `sessions.list`，只显示当前工作区、普通 blank 会话及 Manage 已启用的解读预设。缺少冷会话预设提示时，通过官方 `refreshProjections` 读取元数据，仍由同一个 Core 列表持有结果。选择仅调用 `uiWorkspace.openSession`，现有页面恢复在 `retain.ready` 后核对真实 preset/cwd。新对话、离开页面和取消会撤销旧恢复；不创建替代 Session，不改预设或草稿，不保存独立历史列表。
+
+Manage 资源摘要中的 `description` 是资源目录的原说明。Workbench 在现有提示词与 Skill 列表显示它，不维护另一份说明目录。Skill 入口的 `agent-resource-skill` 由 Manage 复用当前官方标准组合；资源选择继续通过官方 Session、工作区与 InputHub 插入 Skill 草稿，已有草稿拒绝覆盖。
