@@ -52,6 +52,8 @@ const zh = {
   start: '开始新聊天',
   useSkill: '在新聊天中使用',
   unavailable: '不可选用',
+  workspaceSelect: '选择工作区',
+  workspaceRequired: '请先选择工作区，再加载或使用资源。',
   missing: '当前不可用 Skill',
   resourcesFailed: '资源清单读取失败，请刷新。',
   selectionFailed: '资源选用失败，请重试。',
@@ -81,6 +83,8 @@ const en = {
   start: 'Start a new chat',
   useSkill: 'Use in a new chat',
   unavailable: 'Unavailable',
+  workspaceSelect: 'Choose Workspace',
+  workspaceRequired: 'Choose a Workspace to load or use resources.',
   missing: 'Unavailable Skills',
   resourcesFailed: 'Resource list unavailable. Please refresh.',
   selectionFailed: 'Unable to select this resource. Please retry.',
@@ -150,7 +154,9 @@ export function apply(ctx: Context): void {
     workbench,
   );
 
-  function Resources({ cwd }: { cwd?: string }) {
+  function Resources({ cwd: currentCwd }: { cwd?: string }) {
+    const [chosenCwd, setChosenCwd] = useState<string>();
+    const cwd = currentCwd ?? chosenCwd;
     const [rows, setRows] = useState<ResourceSummary[]>([]);
     const [resourceRevision, refreshResources] = useState(0);
     const [error, setError] = useState('');
@@ -227,11 +233,20 @@ export function apply(ctx: Context): void {
         },
         t('resourcesRefresh'),
       ),
+      React.createElement('button', {
+        type: 'button', disabled: Boolean(busy),
+        onClick: async () => {
+          try {
+            const directory = await nativeResources?.pickDirectory?.();
+            if (directory) setChosenCwd(directory);
+          } catch (failure) { setError(String(failure)); }
+        },
+      }, t('workspaceSelect')),
       error
         ? React.createElement(
             'p',
             { role: 'alert' },
-            selectionError ? t('selectionFailed') : t('resourcesFailed'),
+            error.includes('WORKBENCH_WORKSPACE_REQUIRED') ? t('workspaceRequired') : selectionError ? t('selectionFailed') : t('resourcesFailed'),
           )
         : null,
       ...rows.map((row) =>
@@ -256,6 +271,7 @@ export function apply(ctx: Context): void {
                     ? t('useSkill')
                     : t('start')),
           ),
+          row.description ? React.createElement('p', null, row.description) : null,
           row.missingSkills?.length
             ? React.createElement('p', null, t('missing') + ': ' + row.missingSkills.join(', '))
             : null,

@@ -9,6 +9,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client';
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
   fetch: typeof fetch;
+  pickDirectory?(): Promise<string | null>;
   workspace(path: string): Promise<{ workspaceId: string; path: string }>;
   create(options: { workspaceId: string }): Promise<string>;
   select(sessionId: string, preset: string): Promise<void>;
@@ -22,6 +23,7 @@ export interface NativeResourceSelection {
 export interface ResourceSummary {
   id: string;
   label: string;
+  description?: string;
   kind: 'prompt' | 'skill';
   installed: boolean;
   enabled: boolean;
@@ -35,6 +37,7 @@ export async function resourceWorkspace(
   request: typeof fetch,
   signal: AbortSignal,
   cwd?: string,
+  pickDirectory?: () => Promise<string | null>,
 ): Promise<string> {
   if (cwd?.trim()) return cwd;
   const configResponse = await request('/api/agent-workbench/config', {
@@ -43,9 +46,11 @@ export async function resourceWorkspace(
   });
   if (!configResponse.ok) throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
   const config = (await configResponse.json()) as { cwd?: unknown };
-  if (typeof config.cwd !== 'string' || !config.cwd.trim())
-    throw Error('WORKBENCH_WORKSPACE_REQUIRED');
-  return config.cwd;
+  if (typeof config.cwd === 'string' && config.cwd.trim()) return config.cwd;
+  const selected = await pickDirectory?.();
+  signal.throwIfAborted();
+  if (!selected) throw Error('WORKBENCH_WORKSPACE_REQUIRED');
+  return selected;
 }
 export async function selectResource(
   host: NativeResourceSelection,
@@ -59,7 +64,7 @@ export async function selectResource(
     interpreters?: readonly string[];
   }) => void,
 ): Promise<{ sessionId: string; preset: string }> {
-  const cwd = await resourceWorkspace(host.fetch, signal, currentCwd);
+  const cwd = await resourceWorkspace(host.fetch, signal, currentCwd, host.pickDirectory);
   const response = await host.fetch('/api/agent-manage/resources/select', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -110,6 +115,7 @@ export function mountNativeResourceSelection(
     (scope) => {
       const host: NativeResourceSelection = {
         fetch: (...args) => fetch(...args),
+        pickDirectory: () => scope.uiWorkspace.pickDirectory(),
         workspace: (path) => scope.workspaces.create({ path }),
         create: (options) =>
           scope.sessions.create({ workspaceId: options.workspaceId as WorkspaceId }),

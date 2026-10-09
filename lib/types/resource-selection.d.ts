@@ -3,6 +3,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types';
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
     fetch: typeof fetch;
+    pickDirectory?(): Promise<string | null>;
     workspace(path: string): Promise<{
         workspaceId: string;
         path: string;
@@ -20,6 +21,7 @@ export interface NativeResourceSelection {
 export interface ResourceSummary {
     id: string;
     label: string;
+    description?: string;
     kind: 'prompt' | 'skill';
     installed: boolean;
     enabled: boolean;
@@ -29,7 +31,7 @@ export interface ResourceSummary {
     error?: string;
     interpreters?: readonly string[];
 }
-export declare function resourceWorkspace(request: typeof fetch, signal: AbortSignal, cwd?: string): Promise<string>;
+export declare function resourceWorkspace(request: typeof fetch, signal: AbortSignal, cwd?: string, pickDirectory?: () => Promise<string | null>): Promise<string>;
 export declare function selectResource(host: NativeResourceSelection, id: string, signal: AbortSignal, currentCwd?: string, beforeOpen?: (selection: {
     sessionId: SessionId;
     preset: string;

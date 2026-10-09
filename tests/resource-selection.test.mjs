@@ -166,3 +166,18 @@ test('a changed Core preset cannot be associated using the selected resource met
   );
   assert.equal(associated, false);
 });
+
+ test('resource action uses the official directory picker when neither a current Workspace nor explicit cwd exists', async () => {
+  const calls = [];
+  const host = {
+    fetch: async path => Response.json(path.endsWith('/config') ? {} : {preset:'standard'}),
+    pickDirectory: async () => { calls.push('pick'); return '/selected/project'; },
+    workspace: async path => { calls.push(path); return {workspaceId:'selected',path}; },
+    create: async () => 'new', select: async () => {}, open: async () => {},
+  };
+  await selectResource(host,'standard',new AbortController().signal);
+  assert.deepEqual(calls,['pick','/selected/project']);
+  host.pickDirectory = async () => null;
+  await assert.rejects(selectResource(host,'standard',new AbortController().signal), /WORKBENCH_WORKSPACE_REQUIRED/);
+  assert.deepEqual(calls,['pick','/selected/project']);
+ });

@@ -565,7 +565,7 @@ const RegionalApprovalWorkbench: React.FC<{
     return () => observer.disconnect();
   }, []);
 
-  // 登记 51：进入销售计划审批默认不展开筛选，需要时点漏斗图标再展开。
+  // 销售计划审批默认收起筛选，用户通过漏斗图标展开。
   const [narrowFiltersExpanded, setNarrowFiltersExpanded] = useState(false);
   const filterPanelId = React.useId();
   const [exportFeedback, setExportFeedback] = useState<ExportFeedback>();
@@ -998,8 +998,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const authorizedStages = roleStages;
   // 收起态的节点口径跟展开态高亮一致：用户选了哪个节点就显示哪个，切到「全部节点」就显示全部节点。
   const stageIndicatorStage = displayStage;
-  // 默认节点：权限码给出的已在上面的 effect 设好；这里补“没有权限码、但服务端给了同版本可处理任务”的账号，
-  // 且只自动设一次，之后用户自己切到「全部节点」或别的节点都不再覆盖。
+  // 首次未选择节点时使用账号角色允许的第一个节点；只自动设一次，不覆盖后续用户选择。
   const defaultStageApplied = useRef(false);
   useEffect(() => {
     if (!liveQuery.enabled || defaultStageApplied.current) return;

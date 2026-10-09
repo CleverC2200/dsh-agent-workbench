@@ -101,6 +101,8 @@
   ],
   "license": "MIT",
   "scripts": {
+    "check:knowledge": "node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json",
+    "candidate:verify": "node scripts/verify-candidate-input.mjs",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit --emitDeclarationOnly false",
     "test": "node --test tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",

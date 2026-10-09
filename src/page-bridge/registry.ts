@@ -157,7 +157,7 @@ export function createPageToolRegistry(
 
   /**
    * 只在该 agent 作用域禁用指定全局工具。
-   * 限制是"锦上添花"：任何失败都只记日志，绝不影响工作台工具本身注册。
+   * 禁用全局工具失败时只记日志，页面工具仍可注册；业务授权继续由 GEA 执行侧检查。
    */
   const restrictWorkbenchTools = (
     agent: { ctx: { tools: { restrict: (f: { deny: string[] }) => () => void } } },
@@ -203,7 +203,7 @@ export function createPageToolRegistry(
     options.signal.throwIfAborted();
     const kind = typeof args.kind === "string" ? args.kind : null;
     // 只要目录、不做事：目录本身不再写进工具说明（那会让每次请求都付一次 token）。
-    // 线上实测模型会把"要目录"写成 kind=directory（不在动词枚举里），两种写法都认。
+    // kind=directory 与 directory=true 都只请求元素目录，不执行页面动作。
     if (args.directory === true || kind === "directory")
       return JSON.stringify({
         source: "PAGE_BRIDGE",

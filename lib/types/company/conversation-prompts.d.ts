@@ -1,7 +1,6 @@
 /**
- * 右侧 AI 会话区文案与固定功能。
- * 来源：《销售计划 · 右侧 AI 会话区原型说明 V1》＋配套原型
- * docs/prototypes/sales-plan-conversation-prototype-v1.html（五段结构：头像与名称 / 简介 / 固定功能 4 项 / 推荐问题 4 条 / 指令输入区）。
+ * 各业务页面的欢迎文案、固定功能与推荐问题。
+ * Workbench 只贡献呈现；输入、草稿和模型任务沿当前 Core 接口。
  */
 export type ConversationActionIcon = "chart" | "alert" | "info" | "check" | "versions" | "opinion" | "box" | "users";
 export type ConversationActionTone = "brand" | "info" | "success";

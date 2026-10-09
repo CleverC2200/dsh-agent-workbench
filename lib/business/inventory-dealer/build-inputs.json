@@ -44,6 +44,6 @@
     "source/inventory-light-plugins/src/native/dealer.tsx": "9facce33d3798618420e1dfc530553c18afacb1b3795d398d04f9dfbed1cba96",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
     "source/inventory-light-plugins/src/native/entry.tsx": "7b4040c0b3cd5ef6795cff1e1c55a5b009fed46cd079b2fcf1ab9b901b9d90db",
-    "../dsh-agent-manage/package.json": "43d26581c262db48b7dfd459796a593cd0c32d0f4f505de8b2a7b547623326b5"
+    "../dsh-agent-manage/package.json": "4d18eea54075bf72412d59a8706cf55085cd4389c0544c7f8a0c28a246a7138b"
   }
 }

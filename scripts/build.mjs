@@ -4,8 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const { values } = parseArgs({ options: { target: { type: 'string' } } });
 if (values.target && values.target !== 'core') throw Error('Unsupported build target');
-if (process.env.DSH_TYPECHECK_PROJECT === 'tsconfig.official.json')
-  await import('./verify-official-input.mjs');
+(await import('./verify-official-input.mjs')).verifyOfficialInput();
 await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
 await mkdir('lib/theme', { recursive: true });
@@ -96,7 +95,7 @@ execFileSync(
   [
     'node_modules/typescript/bin/tsc',
     '-p',
-    process.env.DSH_TYPECHECK_PROJECT ?? 'tsconfig.json',
+    'tsconfig.official.json',
     '--noEmit',
     'false',
     '--emitDeclarationOnly',

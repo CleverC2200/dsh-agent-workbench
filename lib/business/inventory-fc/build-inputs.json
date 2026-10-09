@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "9bbab8c2809af7ce15fdfd27efddcf7d80dcb511",
+  "sourceCommit": "906b3b08947b71cecf627073c0b0e9a389b692bf",
   "inputs": {
     "../shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
     "../shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
