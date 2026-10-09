@@ -4,10 +4,16 @@ import { execFileSync } from 'node:child_process';
 import { verifyOfficialInput } from './verify-official-input.mjs';
 import { parseArgs } from 'node:util';
 
+const repositoryPackages = {
+  'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
+  'dsh-agent-manage': 'dsh-agent-manage',
+  'dsh-gea-plugin': '@cleverc2200/gea-dsh-prototype',
+};
+
 const { values } = parseArgs({ options: { input: { type: 'string' }, checkout: { type: 'string' } } });
 if (!values.input || !values.checkout) throw Error('CANDIDATE_INPUT_REQUIRED: --input and --checkout');
 const manifest = JSON.parse(readFileSync(resolve(values.input), 'utf8'));
-for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin']) {
+for (const repo of Object.keys(repositoryPackages)) {
   const entries = manifest.repositories?.filter(entry => entry.repo === repo);
   if (entries?.length !== 1 || !entries[0].path || !entries[0].head) throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
 }
@@ -34,6 +40,11 @@ for (const entry of repositories) {
     if (!frozen.equals(readFileSync(resolve(entry.path, lock)))) throw Error('changed lock');
   } catch { throw Error(`CANDIDATE_LOCK: ${entry.repo}/${lock} must match its commit`); }
   if (entry.head !== manifest.repositories.find(expected => expected.repo === entry.repo).head) throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
+  const packageName = JSON.parse(readFileSync(resolve(entry.path, 'package.json'), 'utf8')).name;
+  const expectedPackageName = repositoryPackages[entry.repo];
+  if (packageName !== expectedPackageName) {
+    throw Error(`CANDIDATE_PACKAGE_IDENTITY: ${entry.repo} expects package.json.name=${expectedPackageName}; observed ${JSON.stringify(packageName)}`);
+  }
 }
 const core = verifyOfficialInput(manifest.repositories.find(entry => entry.repo === 'dsh-agent-workbench').path);
 if (manifest.core !== core) throw Error('CANDIDATE_CORE: binding must match the fixed official input');

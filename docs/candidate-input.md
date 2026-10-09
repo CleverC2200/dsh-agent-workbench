@@ -1,12 +1,14 @@
 # 候选输入检查
 
-Workbench 持有三仓候选检查 CLI。它读取调用者指定的冻结输入，检查登记目标、三仓提交、dirty、提交内的锁和固定官方 Core SDK。它不安装依赖、不构建、不更新登记、不启动进程或访问业务。
+Workbench 持有三仓候选检查 CLI。它读取调用者指定的冻结输入，检查登记目标、实际包身份、三仓提交、dirty、提交内的锁和固定官方 Core SDK。它不安装依赖、不构建、不更新登记、不启动进程或访问业务。
 
 ```sh
 npm run candidate:verify -- --input /absolute/path/integration-set.json --checkout "$PWD"
 ```
 
 输入沿用项目 `integration-set.json` 的 `core` 与 `repositories`。每个 repository 含 `repo`、绝对 `path`、完整 `head`；必须登记 Workbench、Manage、GEA 各一个。命令拒绝未登记的历史 checkout。实现者独立 checkout 需由该票冻结输入明确登记其路径和提交，不得改共享输入来掩盖失败，也不能把其他任务的集成目录当自己的可写工作树。
+
+冻结核对同时读取各 `path` 下的 `package.json.name`，按现有三仓身份约定核对：`dsh-agent-workbench` 对应 `@cleverc2200/dsh-agent-workbench`，`dsh-agent-manage` 对应 `dsh-agent-manage`，`dsh-gea-plugin` 对应 `@cleverc2200/gea-dsh-prototype`。实际名称不符时返回 `CANDIDATE_PACKAGE_IDENTITY`，列出声明角色、预期包名和观察包名。互换 Manage/GEA 的路径及 HEAD 不能通过该检查。
 
 结果只有 `stage=candidate-input`、`status=passed` 与 `runtime=not-observed`。输出提供观察时间、Core 和各仓实际路径/HEAD。它不证明工具链已安装、类型/质量/测试通过、产物装配、当前选择、Native 装载或发布。
 
