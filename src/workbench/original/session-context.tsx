@@ -1,4 +1,4 @@
-/** 向中心文档提供 DSH Session 身份，但不导入 AionUi 聊天能力。 */
+/** 向 Native 业务页面传递真实 Core Session 地址，不创建或管理 Session。 */
 import React, { createContext, useContext } from 'react';
 
 export interface WorkbenchSession {
@@ -14,7 +14,7 @@ export function WorkbenchSessionProvider({ value, children }: React.PropsWithChi
   return <WorkbenchSessionContext.Provider value={value}>{children}</WorkbenchSessionContext.Provider>;
 }
 
-/** 供原工作台上下文发布器兼容使用的 Hook。 */
+/** 当前业务页面通过此 Hook 读取已绑定的 Core Session 地址。 */
 export function useBusinessSurfaceSession(): WorkbenchSession {
   return useContext(WorkbenchSessionContext);
 }

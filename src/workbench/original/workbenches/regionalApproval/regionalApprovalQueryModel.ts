@@ -62,8 +62,7 @@ export const salesPlanStageTalliesForWorkflow = (period: {
       tally.total = period.total;
       tally.completed = SALES_PLAN_PROGRESS_STATUSES.reduce<number>((sum, status) => {
         // 退回目标保留其确认结果；发起退回的节点必须再次审批。
-        // 状态 5（审批完成·待回写）代表全部审批节点都已经签过字，品类也不例外——
-        // 之前把品类排除在外，导致"品类已审批（待回写）"一条都不计入品类进度，永远是 0%。
+        // 状态 5（审批完成·待回写）表示全部审批节点已完成，品类同样计入进度。
         const active = workflow.actor(status);
         const activePending = active && workflow.pending(active);
         const done =

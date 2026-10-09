@@ -94,7 +94,7 @@ export function mountFramePresentation(
     document.head.append(style);
     return () => style.remove();
   });
-  // Formal Workbench remembered this value for the plugin instance, across pages and modes.
+  // Width preference survives page and mode changes within this Workbench instance.
   let rememberedConversationWidth: number | undefined;
   let execution: WorkbenchPageExecution | undefined;
   const backendListeners = new Set<() => void>();

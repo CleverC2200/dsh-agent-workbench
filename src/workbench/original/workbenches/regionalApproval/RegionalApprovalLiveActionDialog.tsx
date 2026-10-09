@@ -440,10 +440,8 @@ const RegionalApprovalLiveActionDialog: React.FC<{
   if (directApproval) return null;
 
   /*
-   * 「放弃未保存的调整」确认框必须两个分支都能渲染：退回弹窗和通过/保存弹窗共用
-   * requestClose，一旦这里有未保存的调整，关闭动作会先走这道确认。之前它只挂在
-   * 通过/保存分支上，退回弹窗点 X / 取消只会把状态设成"要确认"，界面上却什么都不出现，
-   * 表现成"报错了就关不掉"。
+   * 退回与通过/保存共用 requestClose。两条渲染分支都必须包含未保存调整确认框，
+   * 否则关闭请求会进入确认状态却没有可见的确认操作。
    */
   const discardConfirmModal = (
     <Modal

@@ -1,4 +1,4 @@
-/** 独立认证文档中的 GEA 原审批工作台。 */
+/** Workbench Native 业务文档中的审批页面；GEA 保留认证与业务授权。 */
 import { RegionalApprovalResubmitDialog } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import type { GeaSalesPlanPeriod } from './original/contracts.ts';
 import { createWorkflowLoader } from "./workflow-loader.ts";
@@ -327,7 +327,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       scope: quotedContext.current ? `月份 ${quotedContext.current.scope.month} · 计划类型 ${quotedContext.current.scope.planType} · 审批阶段 ${quotedContext.current.scope.approvalStage} · 维度 ${quotedContext.current.scope.dimension ?? "当前页"}` : "",
     }) });
   }, [status?.authenticated, apiLogOpen]);
-  // 桥把一次调用交给我们后，等组件执行完再回填结果。
+  // 组件执行完成后才向页面桥回填本次调用结果。
   const pendingToolResult = useRef<{
     toolCallId: string;
     resolve: (result: PageBridgeApplyResult) => void;
