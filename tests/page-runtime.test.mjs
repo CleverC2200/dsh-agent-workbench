@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
+import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
 const core = resolve('../../official-latest-standard'),
   official = (path) => pathToFileURL(resolve(core, path)).href;
 const { Context } = await import(official('vendor/cordis/lib/index.js'));
@@ -159,8 +160,14 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     generation: async () => (await (await routes.get('/api/page-interaction/binding').fetch()).json()).generation,
     changeReferenceScope: value => { referenceScope = value; } };
 }
+const bundle=await build({entryPoints:['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'offline-query-registry',setup(api){
+ api.onResolve({filter:/^server-only$|^@\/lib\/gea-sql-client$/},args=>({path:args.path,namespace:'fixture'}));
+ api.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='server-only'?'export{};':'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};'}));
+}}]});
+const {readDealerMock}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+
 async function authorCatalog(t,id){
-  const dom=new JSDOM(await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
+  const dom=new JSDOM(id==='personal'?await personalFixtureHtml():await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
   t.after(()=>dom.window.close());
   Object.assign(dom.window,{AbortController,AbortSignal,TextEncoder,TextDecoder,structuredClone});
   dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
@@ -168,7 +175,7 @@ async function authorCatalog(t,id){
   dom.window.fetch=()=>{throw Error('Unexpected real I/O');};
   const messages=[];
   dom.window.parent.postMessage=message=>messages.push(message);
-  const port={start(){},close(){},postMessage(message){messages.push(message);if(message.type==='request')queueMicrotask(()=>port.onmessage?.({data:{type:'response',id:message.id,result:{accepted:true}}}));}};
+  const port={start(){},close(){},async postMessage(message){messages.push(message);if(message.type==='request'){const result=id==='dealer'&&message.method==='sql'?await readDealerMock(message.parameters):{accepted:true};queueMicrotask(()=>port.onmessage?.({data:{type:'response',id:message.id,result}}));}}};
   for(const script of dom.window.document.querySelectorAll('script'))dom.window.eval(script.textContent);
   dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',ports:[port],data:{protocol:'gea-html-v2',type:'connect',context:{session:'catalog-fixture',plugin:'inventory-'+id}}}));
   if(id==='personal'){
