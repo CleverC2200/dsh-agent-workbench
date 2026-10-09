@@ -250,6 +250,7 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       leaf,
     );
+    if (finalGroup) run('npm', ['run', 'test:final-group']);
     run('npm', ['run', 'quality:fast']);
     run(
       'npm',

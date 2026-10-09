@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -23,7 +22,7 @@ const command = (cwd, executable, args) => {
 };
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-test('public final-group admission binds real source only and rejects invalid inputs before preparation', async () => {
+test('public final-group admission binds real source only and rejects invalid inputs before preparation', async (t) => {
   const fixture = mkdtempSync(join(tmpdir(), 'workbench-final-group-'));
   try {
     const roots = Object.fromEntries(
@@ -56,47 +55,10 @@ test('public final-group admission binds real source only and rejects invalid in
     command(coldCore, 'git', ['checkout', '--quiet', '5badb15009ae1756c3afe0ae0cef1faafc290ccc']);
     assert.equal(existsSync(join(coldCore, 'vendor/cordis/lib/types/index.d.ts')), false);
     for (const [name, root] of Object.entries(roots)) {
-      mkdirSync(join(root, 'scripts'), { recursive: true });
-      if (name === 'dsh-gea-plugin') {
-        writeFileSync(
-          join(root, 'package.json'),
-          JSON.stringify({ name: '@cleverc2200/gea-dsh-prototype' }),
-        );
-        writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
-      } else {
-        const source =
-          name === 'dsh-agent-workbench' ? process.cwd() : resolve('../dsh-agent-manage');
-        for (const file of [
-          'package.json',
-          name === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml',
-        ])
-          cpSync(join(source, file), join(root, file));
-        const scripts =
-          name === 'dsh-agent-workbench'
-            ? [
-                'run-quality-ci.mjs',
-                'candidate-input.mjs',
-                'verify-candidate-input.mjs',
-                'verify-official-input.mjs',
-              ]
-            : ['run-quality-ci.mjs', 'prepare-official-sdk.mjs'];
-        for (const file of scripts)
-          cpSync(join(source, 'scripts', file), join(root, 'scripts', file));
-        if (name === 'dsh-agent-workbench')
-          cpSync('tsconfig.official.json', join(root, 'tsconfig.official.json'));
-      }
-      command(root, 'git', ['init', '--quiet']);
-      command(root, 'git', ['add', '.']);
-      command(root, 'git', [
-        '-c',
-        'user.name=Fixture',
-        '-c',
-        'user.email=fixture@example.invalid',
-        'commit',
-        '--quiet',
-        '-m',
-        'fixed source fixture',
-      ]);
+      const source = name === 'dsh-agent-workbench' ? process.cwd() : resolve('..', name);
+      mkdirSync(dirname(root), { recursive: true });
+      // Clone each actual peer's complete Git input; no package stubs, dependencies or borrowed outputs.
+      command(fixture, 'git', ['clone', '--quiet', '--no-hardlinks', source, root]);
     }
     const manifest = {
       core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
@@ -106,6 +68,21 @@ test('public final-group admission binds real source only and rejects invalid in
         head: command(path, 'git', ['rev-parse', 'HEAD']),
       })),
     };
+    t.diagnostic(
+      JSON.stringify({
+        stage: 'cold-full-git-input',
+        repositories: manifest.repositories.map((entry) => ({
+          ...entry,
+          source: realpathSync(
+            entry.repo === 'dsh-agent-workbench' ? process.cwd() : resolve('..', entry.repo),
+          ),
+          package: JSON.parse(readFileSync(join(entry.path, 'package.json'))).name,
+          fullHistory:
+            command(entry.path, 'git', ['rev-parse', '--is-shallow-repository']) === 'false',
+        })),
+        core: { source: realpathSync(coreSource), head: manifest.core, sdkPrepared: false },
+      }),
+    );
     const file = join(fixture, 'group.json');
     const bytes = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
     writeFileSync(file, bytes);

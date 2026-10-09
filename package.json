@@ -114,7 +114,8 @@
     "lint:audit": "node scripts/quality.mjs lint-audit",
     "format:check": "node scripts/quality.mjs format",
     "format:audit": "node scripts/quality.mjs format-audit",
-    "test:quality": "node --test tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/quality-knowledge.test.mjs tests/final-group-input.test.mjs",
+    "test:quality": "node --test tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/quality-knowledge.test.mjs",
+    "test:final-group": "node --test tests/final-group-input.test.mjs",
     "quality:fast": "npm run check:knowledge && npm run lint && npm run format:check && npm run typecheck:official && npm run test:quality",
     "quality:ci": "node scripts/run-quality-ci.mjs"
   },

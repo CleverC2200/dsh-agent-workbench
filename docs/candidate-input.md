@@ -29,3 +29,5 @@ npm run quality:ci -- --phase verify-input --input /absolute/frozen-group.json -
 真正完整门禁仍用同一 quality:ci，省略 --phase verify-input，保留 --input 和 --final-group-sha256；适用的 --prepare-sdk/--prepare-history 等原参数按原用途提供。原文件在每次准备/命令效果前须保持原字节，变更即失败；不能用已验 hash继续处理新内容。准备后完整 candidate:verify 仍核 SDK，显式最终组还核实际 Workbench exports/活跃引用，随后运行原质量/构建/测试。直接完整候选检查可给 candidate:verify 同样的 --final-group-sha256；缺 SDK 仍拒绝，不以 source-only通过替代它。
 
 Workbench 持有共享源码 reader，Manage 显式模式从相邻 Workbench 当前接口加载；默认固定旧 peer 不要求此新 export。SDK source核验复用 Manage 唯一 owner 的 verifyOfficialSource。文件 hash只绑定本次字节，不证明这些源码已兼容、构建、装载或业务授权；这些阶段各需实际回执。
+
+`npm run test:final-group` 用当前相邻三仓的完整 Git 冷克隆验证此可选接口，不复制依赖或已准备 SDK。显式 quality 模式执行该合同；默认 compat 的 test:quality 不要求旧固定 Manage 提供新 export。
