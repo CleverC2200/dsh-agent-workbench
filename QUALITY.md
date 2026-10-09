@@ -36,4 +36,8 @@ hosted workflow 使用实际 PR head/push SHA、full history、contents:read 和
 
 Node 全测并发2，浏览器全测并发1，原测试 scope 和超时预算保持。fixture 只在原公开边界提供 Core inputActions、离线固定业务输入与查询响应；实际 Core JSONL writer 锁断言仍须真实平台 flock addon，不能以 mock 或正常退出代替。
 
+CI 通过同一 Manage SDK 接口显式 `withFlock:true` 准备或验证官方 host-addon-only。Workbench 的原 `build:core` 在自己的树生成产物，APS leaf 使用自身原 npm 锁；Manage/GEA 依赖分别用各自原 pnpm 锁。冻结 admission 先证明三仓源码 clean；构建后仅允许 Workbench 的派生 lib 和原 generated `static/{category,mps,regional}/index.html` 差异并逐项 hash，源文件/锁/HEAD 和 peers 必须保持，回执为 job-root/quality-prepared.json。prepared 树不称为 clean 源码树。
+
+开发 `build:core` / `build` 需要完整 Git 历史。静态作者固定数据仍保留 SOURCE.json 原 hash，读取固定 `9b4863692cb29a3edc8a2358e98feb7846526d1b` 原 initializer 核原字节，再对当前 AST 的节点、literal、运算符与顺序作严格对照；唯一审查过的固定数据别名是 category 的 w8→_w8。数字、键、顺序、字符串或运算符变化、原 metadata 漂移、缺历史均拒绝。这是开发构建校验，Git 历史不会执行为旧 adapter；npm 包原 files 范围只交付产物，普通包消费者不运行此开发脚本，也不需要 Git。
+
 本地 workflow/CLI 验证不证明远端提交可达、token/runner 可用或远端 required-check 已生效；这些由后续远端票验收。SDK、Node、浏览器离线检查不证明 Native、模型、业务或发行验收。Manage 的真实 dependency audit 红结果和 CodeQL 服务配置缺口仍独立保留。

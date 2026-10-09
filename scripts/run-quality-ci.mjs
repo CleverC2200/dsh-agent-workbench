@@ -1,11 +1,12 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
 const peers = {
-  'dsh-agent-manage': 'cd2e4a06403b638ad3d3ee3982544d5790f7f5b2',
+  'dsh-agent-manage': '9e9aba86d12a2d743604e63a6000e7abb7da1ddd',
   'dsh-gea-plugin': 'b05ca162e1bf5ffb8443962a0b8b7e8ff8a61e96',
 };
 const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
@@ -141,6 +142,7 @@ try {
       core: resolve(dirname(dirname(process.cwd())), 'official-latest-standard'),
       consumer: process.cwd(),
       source: values['core-source'],
+      withFlock: true,
     };
     if (values['prepare-sdk']) sdk.prepareOfficialSDK(options);
     else sdk.verifyOfficialSDK(options);
@@ -162,6 +164,11 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       manage.path,
     );
+    run(
+      'corepack',
+      ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
+      manifest.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
+    );
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
     run(
       'corepack',
@@ -169,6 +176,19 @@ try {
       leaf,
     );
     run('npm', ['run', 'quality:fast']);
+    run(
+      'npm',
+      ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
+      resolve('business/inventory-apsplan/source'),
+    );
+    const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
+    process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
+    try {
+      run('npm', ['run', 'build:core']);
+    } finally {
+      if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
+      else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
+    }
     run('npm', ['test']);
     if (values['prepare-browser'] && !values.browser)
       refuse('QUALITY_BROWSER_REQUIRED', '--prepare-browser requires --browser');
@@ -177,6 +197,74 @@ try {
         run('npm', ['exec', '--', 'playwright', 'install', '--with-deps', 'chromium']);
       run('npm', ['run', 'test:browser']);
     }
+    const changed = [
+      ...execFileSync('git', ['diff', 'HEAD', '--name-only', '-z'], { encoding: 'utf8' }).split(
+        '\0',
+      ),
+      ...execFileSync('git', ['ls-files', '--others', '--exclude-standard', '-z'], {
+        encoding: 'utf8',
+      }).split('\0'),
+    ].filter(Boolean);
+    const generated = [
+      'static/category/index.html',
+      'static/mps/index.html',
+      'static/regional/index.html',
+    ];
+    const derived = (path) => path.startsWith('lib/') || generated.includes(path);
+    if (changed.some((path) => !derived(path)))
+      refuse('QUALITY_SOURCE_CHANGED', changed.filter((path) => !derived(path)).join(', '));
+    for (const entry of manifest.repositories) {
+      if (
+        execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD'], {
+          encoding: 'utf8',
+        }).trim() !== entry.head
+      )
+        refuse('QUALITY_SOURCE_HEAD_CHANGED', entry.repo);
+      if (
+        entry.repo !== own.repo &&
+        execFileSync('git', ['-C', entry.path, 'status', '--porcelain', '--untracked-files=all'], {
+          encoding: 'utf8',
+        }).trim()
+      )
+        refuse('QUALITY_PEER_SOURCE_CHANGED', entry.repo);
+    }
+    sdk.verifyOfficialSDK(options);
+    const artifacts = {};
+    function collect(directory) {
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        const path = resolve(directory, entry.name);
+        if (entry.isDirectory()) collect(path);
+        else if (entry.isFile())
+          artifacts[path.slice(process.cwd().length + 1)] = createHash('sha256')
+            .update(readFileSync(path))
+            .digest('hex');
+        else refuse('QUALITY_ARTIFACT_TYPE', path);
+      }
+    }
+    collect(resolve('lib'));
+    for (const file of generated)
+      artifacts[file] = createHash('sha256').update(readFileSync(file)).digest('hex');
+    writeFileSync(
+      resolve(dirname(resolve(input)), 'quality-prepared.json'),
+      JSON.stringify(
+        {
+          source: {
+            head: own.head,
+            admittedCleanBeforePreparation: true,
+            unchangedAfterPreparation: true,
+          },
+          prepared: {
+            root: process.cwd(),
+            derivedPaths: ['lib/', ...generated],
+            changedTrackedPaths: changed,
+            hashes: artifacts,
+          },
+          runtime: 'not-observed',
+        },
+        null,
+        2,
+      ) + '\n',
+    );
   }
   console.log(JSON.stringify({ status: 'passed', phase: values.phase, runtime: 'not-observed' }));
 } catch (error) {
