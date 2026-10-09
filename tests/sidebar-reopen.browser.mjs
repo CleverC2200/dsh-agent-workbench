@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from './helpers/prepared-assets.mjs';
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -74,7 +74,7 @@ const bundle = await build({
 });
 
 async function fixture(t) {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
   const requests = [];
   t.after(async () => {

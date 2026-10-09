@@ -192,6 +192,14 @@ try {
     )
       refuse('QUALITY_TOOLCHAIN_REQUIRED', 'Node 24 / npm 11.11.0');
     run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund']);
+    if (values['prepare-browser'] && !values.browser)
+      refuse('QUALITY_BROWSER_REQUIRED', '--prepare-browser requires --browser');
+    process.env.PLAYWRIGHT_BROWSERS_PATH ??= resolve(
+      dirname(dirname(own.path)),
+      'playwright-browsers',
+    );
+    if (values['prepare-browser'])
+      run('npm', ['exec', '--', 'playwright', 'install', '--with-deps', 'chromium']);
     run(
       'corepack',
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
@@ -223,13 +231,7 @@ try {
       else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
     }
     run('npm', ['test']);
-    if (values['prepare-browser'] && !values.browser)
-      refuse('QUALITY_BROWSER_REQUIRED', '--prepare-browser requires --browser');
-    if (values.browser) {
-      if (values['prepare-browser'])
-        run('npm', ['exec', '--', 'playwright', 'install', '--with-deps', 'chromium']);
-      run('npm', ['run', 'test:browser']);
-    }
+    if (values.browser) run('npm', ['run', 'test:browser']);
     const changed = [
       ...execFileSync('git', ['diff', 'HEAD', '--name-only', '-z'], { encoding: 'utf8' }).split(
         '\0',

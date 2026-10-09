@@ -82,7 +82,7 @@ window.request=(id,method,parameters={},session=context.session)=>port.postMessa
 </script>`;
 
 async function fixture(t) {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);
@@ -258,7 +258,7 @@ test('theme subscription uses the current owned port and releases listeners with
 });
 
 test('the shipped standalone sample renders its four rows without an invented business lease or Session', async (t) => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   const errors = [];

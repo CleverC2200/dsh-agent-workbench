@@ -11,19 +11,20 @@ function refuse(message) {
   console.error(message);
   process.exit(2);
 }
-// The original policy is a Git object, not a movable HEAD or caller supplied baseline.
-const anchor = spawnSync(
-  'git',
-  ['show', 'b42c62e72310d31a088b7394a964492efc1f217a:scripts/quality.mjs'],
-  { cwd: root, encoding: 'utf8' },
-);
+// Exact original b42c62e:scripts/quality.mjs bytes are data, never executed.
+// The .raw fixture keeps cold checkouts independent of an unreachable historical ref.
+let anchor;
+try {
+  anchor = readFileSync(resolve(root, 'scripts/fixtures/quality-policy-b42.raw'));
+} catch {
+  refuse('QUALITY_BASELINE_REQUIRED: fixed original policy fixture missing');
+}
 if (
-  anchor.status !== 0 ||
-  createHash('sha256').update(anchor.stdout).digest('hex') !==
+  createHash('sha256').update(anchor).digest('hex') !==
     '4410fd6709c89064e955446665890fadc0df1e60f1f9932f7387830c29fdbfab' ||
-  !anchor.stdout.includes(`const baseline = '${baseline}';`)
+  !anchor.toString('utf8').includes(`const baseline = '${baseline}';`)
 )
-  refuse('QUALITY_BASELINE_REQUIRED: fixed original policy object and baseline');
+  refuse('QUALITY_BASELINE_REQUIRED: fixed original policy bytes and baseline');
 for (const [file, hash] of [
   ['.oxlintrc.json', '28a80c5f3a4937d1f1f21bcc1cd3e0a32fe636cc81fbacbbec3c894dba7fd10e'],
   ['.oxfmtrc.json', '7b0d2af50974c5bef809cad63da8bef413c5bbd7fc477a9206b47628c47b09fc'],

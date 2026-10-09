@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile } from './helpers/prepared-assets.mjs';
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
 import { chromium, expect } from '@playwright/test';
@@ -59,7 +59,7 @@ const bundle = await build({
 });
 
 async function fixture(t) {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 460 } });
   page.on('pageerror', (error) => console.error(error));

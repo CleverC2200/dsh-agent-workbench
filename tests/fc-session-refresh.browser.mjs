@@ -75,7 +75,7 @@ const child = (
 ).outputFiles.find((file) => !file.path.endsWith('.css')).text;
 
 test('FC waits for its actual Host Session and initializes once when the page port connects without remounting', async (t) => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.route('http://127.0.0.1:19483/**', (route) =>
@@ -142,7 +142,7 @@ test('FC waits for its actual Host Session and initializes once when the page po
 });
 
 test('the actual FC component retains its search across remounts in one Host Session', async (t) => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.route('http://127.0.0.1:19483/**', (route) =>

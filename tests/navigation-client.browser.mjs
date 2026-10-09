@@ -70,7 +70,7 @@ test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍�
     server.closeAllConnections();
     server.close();
   });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.goto('http://127.0.0.1:' + server.address().port);
@@ -193,7 +193,7 @@ test(
       server.closeAllConnections();
       server.close();
     });
-    const browser = await chromium.launch({ channel: 'chrome', headless: true });
+    const browser = await chromium.launch({ headless: true });
     t.after(() => browser.close());
     const page = await browser.newPage();
     await page.goto('http://127.0.0.1:' + server.address().port);

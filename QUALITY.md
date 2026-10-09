@@ -41,3 +41,9 @@ CI 通过同一 Manage SDK 接口显式 `withFlock:true` 准备或验证官方 h
 开发 `build:core` / `build` 需要完整 Git 历史。静态作者固定数据仍保留 SOURCE.json 原 hash，读取固定 `9b4863692cb29a3edc8a2358e98feb7846526d1b` 原 initializer 核原字节，再对当前 AST 的节点、literal、运算符与顺序作严格对照；唯一审查过的固定数据别名是 category 的 w8→_w8。数字、键、顺序、字符串或运算符变化、原 metadata 漂移、缺历史均拒绝。这是开发构建校验，Git 历史不会执行为旧 adapter；npm 包原 files 范围只交付产物，普通包消费者不运行此开发脚本，也不需要 Git。
 
 本地 workflow/CLI 验证不证明远端提交可达、token/runner 可用或远端 required-check 已生效；这些由后续远端票验收。SDK、Node、浏览器离线检查不证明 Native、模型、业务或发行验收。Manage 的真实 dependency audit 红结果和 CodeQL 服务配置缺口仍独立保留。
+
+Browser 检查使用本仓锁定的 Playwright Chromium。`quality:ci --browser --prepare-browser` 在 Node/browser 测试之前下载 Chromium；默认目录是 job root 的 `playwright-browsers`，同一进程通过 `PLAYWRIGHT_BROWSERS_PATH` 消费该目录。可显式指定独立目录，不能把系统 Chrome 当作已准备输入。直接运行 Node 中的 HTML harness 或 `test:browser` 前，先在同一环境执行 `npm exec -- playwright install chromium`。
+
+固定质量 policy 来自 b42c62e72310d31a088b7394a964492efc1f217a 的 scripts/quality.mjs，原始 SHA256 为 4410fd6709c89064e955446665890fadc0df1e60f1f9932f7387830c29fdbfab。原字节保存在 scripts/fixtures/quality-policy-b42.raw，仅作为开发期只读数据核验，不执行、不进入插件包。缺失或修改会失败；旧债仍固定到 9814b3bcf1ae015a63fac9af864c165617791fc3，不随当前 HEAD 更新。
+
+本地 source/assets 分开的 browser fixture 可用 `WORKBENCH_BROWSER_ASSET_ROOT` 指向同任务已核源码对应的真实构建树；它只读取 lib 和三个既有生成的 static index。源码与资产 SHA、构建输入及只读范围须分别记录。CI 在本仓实际构建后检查，不设置此覆盖项。

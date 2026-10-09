@@ -15,7 +15,7 @@ npm run typecheck:official
 
 候选冻结后按 [candidate:verify](candidate-input.md) 核干净三仓。普通增量引用或行为测试不要求干净工作树；不要为通过候选输入检查清除自己的在途改动。
 
-定向行为测试可使用 Node 直接执行：
+运行含 HTML/浏览器的 Node harness 前，在本仓原锁安装下准备 Chromium（`npm exec -- playwright install chromium`），并让准备与测试共用 `PLAYWRIGHT_BROWSERS_PATH`。普通纯 Node 定向行为测试可直接执行：
 
 ```sh
 node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs tests/workbench-original.test.mjs tests/payload-focus-metadata.test.mjs

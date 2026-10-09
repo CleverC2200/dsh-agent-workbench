@@ -18,7 +18,19 @@ test('public quality CLI enforces fixed debt and refuses new violations and weak
   mkdirSync(join(root, '.scratch'), { recursive: true });
   const fixture = mkdtempSync(join(root, '.scratch/quality-'));
   try {
-    command(root, 'git', ['clone', '--shared', '--quiet', root, fixture]);
+    command(root, 'git', ['clone', '--no-local', '--single-branch', '--quiet', root, fixture]);
+    assert.notEqual(
+      spawnSync('git', ['cat-file', '-e', 'b42c62e72310d31a088b7394a964492efc1f217a'], {
+        cwd: fixture,
+      }).status,
+      0,
+      'cold source has no unreachable Q1 object',
+    );
+    mkdirSync(join(fixture, 'scripts/fixtures'), { recursive: true });
+    cpSync(
+      join(root, 'scripts/fixtures/quality-policy-b42.raw'),
+      join(fixture, 'scripts/fixtures/quality-policy-b42.raw'),
+    );
     mkdirSync(join(fixture, '.github'), { recursive: true });
     for (const file of ['scripts/quality.mjs', '.oxlintrc.json', '.oxfmtrc.json'])
       cpSync(join(root, file), join(fixture, file));
@@ -53,6 +65,13 @@ test('public quality CLI enforces fixed debt and refuses new violations and weak
     };
     writeFileSync(join(fixture, 'src/quality-new.mjs'), 'export const answer = 42;\n');
     expect('lint', 'src/quality-new.mjs', 0);
+    const policy = join(fixture, 'scripts/fixtures/quality-policy-b42.raw');
+    const originalPolicy = readFileSync(policy);
+    writeFileSync(policy, Buffer.concat([originalPolicy, Buffer.from('tamper')]));
+    expect('lint', 'src/quality-new.mjs', 2, /QUALITY_BASELINE/);
+    rmSync(policy);
+    expect('lint', 'src/quality-new.mjs', 2, /QUALITY_BASELINE/);
+    writeFileSync(policy, originalPolicy);
     expect('format', 'src/quality-new.mjs', 0);
     writeFileSync(join(fixture, 'src/quality-new.mjs'), 'const forgotten = 42;\n');
     expect('lint', 'src/quality-new.mjs', 1, /no-unused-vars/);

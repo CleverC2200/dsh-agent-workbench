@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { readFile } from 'node:fs/promises';
+import { readFile } from '../helpers/prepared-assets.mjs';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
 const source = resolve('business/inventory-personal/source/inventory-light-plugins');
