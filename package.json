@@ -109,7 +109,14 @@
     "build:core": "node scripts/build.mjs --target core",
     "typecheck:official": "node scripts/verify-official-input.mjs && tsc -p tsconfig.official.json --noEmit --emitDeclarationOnly false",
     "test:browser": "node --test tests/*.browser.mjs",
-    "test:aps": "node --test business/inventory-apsplan/source/tests/data/*.test.mjs tests/aps-*.test.mjs"
+    "test:aps": "node --test business/inventory-apsplan/source/tests/data/*.test.mjs tests/aps-*.test.mjs",
+    "lint": "node scripts/quality.mjs lint",
+    "lint:audit": "node scripts/quality.mjs lint-audit",
+    "format:check": "node scripts/quality.mjs format",
+    "format:audit": "node scripts/quality.mjs format-audit",
+    "test:quality": "node --test tests/quality-cli.test.mjs tests/quality-ci.test.mjs",
+    "quality:fast": "npm run lint && npm run format:check && npm run typecheck:official && npm run test:quality",
+    "quality:ci": "node scripts/run-quality-ci.mjs"
   },
   "repository": {
     "type": "git",
@@ -157,7 +164,9 @@
     "@deepseek-ai/dsh-client-ui-workspace": "file:../../official-latest-standard/packages/client/ui-workspace",
     "@deepseek-ai/dsh-client-ui-primitives": "file:../../official-latest-standard/packages/client/ui-primitives",
     "@deepseek-ai/dsh-client-ui-chat": "file:../../official-latest-standard/packages/client/ui-chat",
-    "@deepseek-ai/dsh-client-ui-sidebar-right": "file:../../official-latest-standard/packages/client/ui-sidebar-right"
+    "@deepseek-ai/dsh-client-ui-sidebar-right": "file:../../official-latest-standard/packages/client/ui-sidebar-right",
+    "oxlint": "1.87.0",
+    "oxfmt": "0.72.0"
   },
   "packageManager": "npm@11.11.0"
 }

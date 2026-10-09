@@ -2,6 +2,8 @@
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树冻结安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。
 
+普通开发使用 [质量门禁](../QUALITY.md) 的 `npm run quality:fast`，允许未提交修改；全量 audit 保留旧债的真实红结果。`npm run quality:ci` 只用于冻结候选和 CI，接票01输入检查与 Manage 的公共 SDK 准备入口。
+
 ```sh
 npm ci --ignore-scripts --prefer-offline
 npm run check:knowledge
