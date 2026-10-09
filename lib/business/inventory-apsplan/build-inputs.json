@@ -35,6 +35,6 @@
     "manage/business-resources/inventory-apsplan/skills/aps/SKILL.md": "555d6e3698cbdff78f795500ae1ce28ecd1218c33960dff82abb9ac1ccd9f6dc",
     "workbench/scripts/build-aps-metrics.mjs": "7746013438d3b34dac7b93bf2cd34f370b05eeddad9ba1f4e9b51ff98f03cab5",
     "workbench/business/inventory-apsplan/source/package-lock.json": "2598af6283b4ed4f94d5a06b41c2144d1f4c152588f08afde7dcb96071cf423b",
-    "manage/package.json": "43d26581c262db48b7dfd459796a593cd0c32d0f4f505de8b2a7b547623326b5"
+    "manage/package.json": "4d18eea54075bf72412d59a8706cf55085cd4389c0544c7f8a0c28a246a7138b"
   }
 }

@@ -56,7 +56,7 @@ export type PageCatalog = {
      * 只读元素照样列出来（能读），但不允许被改。
      */
     elements?: PageElement[];
-    /** 兼容写法：页面自定义动作名（旧形状，逐步迁移到 elements）。 */
+    /** 页面自定义动作目录；不能与 elements 同时声明。 */
     actions?: PageAction[];
 };
 /** 通用动词：与页面无关，模型只会这四种操作。 */
@@ -123,8 +123,8 @@ export declare function compilePageCatalog(catalog: PageCatalog): {
 /**
  * 元素目录：只读、按需、可收窄。
  *
- * 线上实测这份目录曾经有 19.8KB 被写进工具说明，每次请求都付一次；现在它只在
- * `directory=true` 时返回，并且可以按 focus 收窄、有硬上限。
+ * 目录只在 `directory=true` 时返回，可按 focus 收窄并受预算上限约束，
+ * 避免每次模型请求都重复携带整页元素。
  */
 export declare function elementDirectory(catalog: PageCatalog, options?: {
     focus?: string;
