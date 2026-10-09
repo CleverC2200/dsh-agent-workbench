@@ -92,3 +92,43 @@ test('disposing while a receipt request fails stops delivery without resurrectin
   assert.equal(bridge.take('owned', call), undefined);
   assert.deepEqual(bridge.pull('owned', []), []);
 });
+
+test('rebinding a page to another Session revokes its pending receipt and keeps the new Session independent', { timeout: 2000 }, async t => {
+  const bridge = createPageBridge();
+  const oldCall = bridge.enqueue('old', { toolCallName: 'apply', args: { row: 'old' } });
+  const sending = Promise.withResolvers();
+  const oldResponse = Promise.withResolvers();
+  const newDelivered = Promise.withResolvers();
+  const payloads = [];
+  const actions = [];
+  const request = async (_endpoint, payload) => {
+    payloads.push(payload);
+    if (payload.sessionId === 'old' && payload.toolMessages.length) {
+      sending.resolve();
+      await oldResponse.promise;
+    }
+    const events = bridge.pull(payload.sessionId, payload.toolMessages);
+    if (payload.sessionId === 'new' && payload.toolMessages.length) newDelivered.resolve();
+    return { events };
+  };
+  const options = { endpoint: 'page', initialDelayMs: 0, pollMs: 1, closeOnDispose: false, request,
+    apply: args => { actions.push(args.row); return { applied: true }; },
+  };
+  const stopOld = startPageBridgeClient({ ...options, sessionId: 'old' });
+  t.after(stopOld);
+  await sending.promise;
+  bridge.cancel('old', oldCall);
+  stopOld();
+  const newCall = bridge.enqueue('new', { toolCallName: 'apply', args: { row: 'new' } });
+  const stopNew = startPageBridgeClient({ ...options, sessionId: 'new' });
+  t.after(stopNew);
+  oldResponse.resolve();
+  await newDelivered.promise;
+  stopNew();
+  assert.deepEqual(actions, ['old', 'new']);
+  assert.equal(bridge.take('old', oldCall), undefined);
+  assert.equal(JSON.parse(bridge.take('new', newCall).content).applied, true);
+  assert.equal(payloads.filter(payload => payload.sessionId === 'old').length, 2);
+  assert.ok(payloads.filter(payload => payload.sessionId === 'new').every(payload =>
+    payload.toolMessages.every(message => message.toolCallId === newCall)));
+});

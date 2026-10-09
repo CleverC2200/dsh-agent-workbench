@@ -76,6 +76,48 @@ test('removing another page does not revoke the current History restore', async 
   assert.deepEqual(navigated, [first.sessionId]);
 });
 
+test('a late History completion cannot navigate a replacement registration and a fresh intent still works', async t => {
+  const navigated = [];
+  const owner = new WorkbenchController({ panel: () => {}, document: id => navigated.push(id) });
+  t.after(() => owner.dispose());
+  const remove = owner.registerFrame(fc);
+  owner.showHistory(fc.id);
+  owner.selectHistorySession(fc.id, first.sessionId, first);
+  const stale = owner.takeHistoryTarget(first.sessionId);
+  const ready = Promise.withResolvers();
+  const completion = ready.promise.then(() => owner.completeHistory(stale));
+  remove();
+  owner.registerFrame({ ...fc, src: '/replacement' });
+  owner.showHistory(fc.id);
+  owner.selectHistorySession(fc.id, second.sessionId, second);
+  const current = owner.takeHistoryTarget(second.sessionId);
+  owner.associateSession(fc.id, second);
+  ready.resolve();
+  await assert.rejects(completion, error => error.name === 'AbortError');
+  assert.deepEqual(navigated, []);
+  assert.equal(current.signal.aborted, false);
+  assert.equal(await owner.completeHistory(current), true);
+  assert.deepEqual(navigated, [second.sessionId]);
+});
+
+for (const cancel of ['cancelHistory', 'open', 'dispose']) test(`a late History completion cannot navigate after ${cancel}`, async t => {
+  const { owner, navigated } = controller();
+  t.after(() => owner.dispose());
+  owner.showHistory(fc.id);
+  owner.selectHistorySession(fc.id, first.sessionId, first);
+  const target = owner.takeHistoryTarget(first.sessionId);
+  const ready = Promise.withResolvers();
+  const completion = ready.promise.then(() => owner.completeHistory(target));
+  if (cancel === 'open') {
+    owner.register({ id: 'another-panel' });
+    await owner.open('another-panel');
+  } else owner[cancel]();
+  ready.resolve();
+  await assert.rejects(completion, error => error.name === 'AbortError');
+  assert.deepEqual(navigated, []);
+  assert.equal(owner.getSnapshot().selectedDocument, undefined);
+});
+
 test('a fresh presentation restores the same Core Session hint without opening or creating a Session', async () => {
   const store = memory();
   const { owner } = controller(store);
