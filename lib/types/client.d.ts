@@ -13,6 +13,8 @@ declare const zh: {
     useSkill: string;
     unavailable: string;
     workspaceSelect: string;
+    workspaceCurrent: string;
+    workspaceChosen: string;
     workspaceRequired: string;
     missing: string;
     resourcesFailed: string;
