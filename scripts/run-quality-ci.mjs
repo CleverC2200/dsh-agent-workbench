@@ -111,6 +111,39 @@ try {
       )
         refuse('CANDIDATE_LOCK', repo);
     }
+    const sourceSnapshot = manifest.repositories.map((entry) => ({
+      repo: entry.repo,
+      root: entry.path,
+      head: entry.head,
+      tree: execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD^{tree}'], {
+        encoding: 'utf8',
+      }).trim(),
+      lock: createHash('sha256')
+        .update(
+          readFileSync(
+            resolve(
+              entry.path,
+              entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml',
+            ),
+          ),
+        )
+        .digest('hex'),
+      cleanAtAdmission: true,
+    }));
+    const sourceReceipt = resolve(dirname(resolve(input)), `quality-source-${own.head}.json`);
+    writeFileSync(
+      sourceReceipt,
+      JSON.stringify(
+        {
+          capturedAt: new Date().toISOString(),
+          phase: 'source-before-preparation',
+          sourceSnapshot,
+        },
+        null,
+        2,
+      ) + '\n',
+      { flag: 'wx' },
+    );
     for (const [name, ref] of Object.entries({
       dealer: '67e1007aa400a8a9c65c132f144dabd5168a49df',
       personal: '15def488134527647a819812a4b6657ecf9772fe',
@@ -252,6 +285,8 @@ try {
             head: own.head,
             admittedCleanBeforePreparation: true,
             unchangedAfterPreparation: true,
+            receipt: sourceReceipt,
+            receiptSha256: createHash('sha256').update(readFileSync(sourceReceipt)).digest('hex'),
           },
           prepared: {
             root: process.cwd(),
