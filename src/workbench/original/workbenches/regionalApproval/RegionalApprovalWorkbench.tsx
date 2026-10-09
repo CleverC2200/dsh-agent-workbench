@@ -514,6 +514,7 @@ const RegionalApprovalWorkbench: React.FC<{
     Record<string, RegionalApprovalLiveCategorySummary[]>
   >({});
   const [liveCategoriesLoading, setLiveCategoriesLoading] = useState(false);
+  const [liveCategoriesError, setLiveCategoriesError] = useState(false);
   // 只有最后一次品类汇总请求可以复位加载态，避免被中断的那次把遮罩留在页面上。
   const liveCategoriesRequest = useRef(0);
   const [versionMetrics, setVersionMetrics] = useState<Record<string, {versionId?:string; qty:string; amount:string; baseQty:string; baseAmount:string; targetQty:string; targetAmount:string; compareQty?:string; compareAmount?:string; compareTargetQty?:string; compareTargetAmount?:string}>>({});
@@ -931,8 +932,14 @@ const RegionalApprovalWorkbench: React.FC<{
     ? liveCompareVersionId
     : undefined;
   useEffect(() => {
-    if (!detailClient || !liveQuery.enabled || !liveRows.length) {setVersionMetrics({});setLiveCategorySummaries({});return;}
     const requestId = ++liveCategoriesRequest.current;
+    setLiveCategoriesError(false);
+    setLiveCategorySummaries({});
+    if (!detailClient || !liveQuery.enabled || !liveRows.length) {
+      setVersionMetrics({});
+      setLiveCategoriesLoading(false);
+      return;
+    }
     const controller = new AbortController();
     const reference = liveVersions.find(v => v.id === focusedLiveRow?.versionId);
     const primary = liveVersions.find(v => v.id === scopedPrimaryVersionId);
@@ -968,7 +975,10 @@ const RegionalApprovalWorkbench: React.FC<{
         }
       }
       if (!controller.signal.aborted) {setVersionMetrics(metrics);setLiveCategorySummaries(categories);}
-    })().catch(()=>{}).finally(()=>{if(liveCategoriesRequest.current===requestId)setLiveCategoriesLoading(false);});
+    })().catch(() => {
+      if (!controller.signal.aborted && liveCategoriesRequest.current === requestId)
+        setLiveCategoriesError(true);
+    }).finally(()=>{if(liveCategoriesRequest.current===requestId)setLiveCategoriesLoading(false);});
     return ()=>controller.abort();
   },[detailClient,liveRows,scopedPrimaryVersionId,scopedCompareVersionId]);
   const historicalSummaryUnavailable = Boolean(
@@ -3014,6 +3024,11 @@ const RegionalApprovalWorkbench: React.FC<{
               ) : null}
             </div>
           </header>
+          {liveQuery.enabled && liveCategoriesError ? (
+            <div role='alert' data-testid='regional-approval-sku-coverage-error' className={styles.skuCoverageError}>
+              {t('common.assistantSurface.regionalApproval.skuCoverageIncomplete')}
+            </div>
+          ) : null}
           <div className={styles.queueHeader}>
             <div className={styles.controlToolbar}>
               <div className={styles.dimensionControls}>

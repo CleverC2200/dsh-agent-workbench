@@ -289,6 +289,7 @@
       "readOnlyBrowse": "只读浏览全部节点数据",
       "readOnlyBrowseHint": "只读浏览；请选择有权限的审批节点以处理计划。",
       "rolesUnavailable": "审批权限尚未取得，当前仅可只读浏览。",
+      "skuCoverageIncomplete": "月计划明细未完整读取，缺失值保持未知，品类汇总暂不可用。",
       "scopeTotals": {
         "pageTitle": "当前页明细汇总",
         "historicalUnavailable": "历史版本汇总暂不可用",

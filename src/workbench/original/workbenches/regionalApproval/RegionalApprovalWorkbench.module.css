@@ -1511,6 +1511,12 @@
   bottom: 2px;
 }
 
+.skuCoverageError {
+  padding: 8px 12px;
+  color: rgb(var(--warning-7));
+  background: rgb(var(--warning-1));
+}
+
 .queueHeader {
   min-height: auto;
   padding: 8px 12px;

@@ -286,6 +286,7 @@
       }
     },
     "regionalApproval": {
+      "skuCoverageIncomplete": "Monthly plan details could not be fully read. Missing values remain unknown and category totals are unavailable.",
       "readOnlyBrowse": "Browse all node data read-only",
       "readOnlyBrowseHint": "Read-only view. Select an authorized approval node to process plans.",
       "rolesUnavailable": "Approval permissions are not available. Only read-only browsing is enabled.",
