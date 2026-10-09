@@ -123,4 +123,4 @@ Manage 资源摘要中的 `description` 是资源目录的原说明。Workbench 
 
 ## 普通安装的工作区
 
-普通 bundle 不把 App 的启动目录当作业务工作区。Host 的 `cwd` 配置可省略；显式配置仍须是绝对路径。资源动作优先复用 Core 传入的当前 Session 工作区，再使用显式配置。两者均缺失时，用户点击选择工作区或新建页面 Session 后调用官方 `uiWorkspace.pickDirectory()`；取消不会创建或切换 Session。资源列表初次加载不会自动弹出目录选择器。
+普通 bundle 不把 App 的启动目录当作业务工作区。Host 的 `cwd` 配置可省略；显式配置仍须是绝对路径。资源动作优先复用 Core 传入的当前 Session 工作区，再使用显式配置。资源面板有当前 Session 工作区时，显示该目录并禁用“选择工作区”，资源清单和新聊天沿用该目录。没有当前工作区时，用户可选择目录，资源清单和新聊天使用所选目录。当前工作区和显式配置均缺失时，用户点击选择工作区或新建页面 Session 后调用官方 `uiWorkspace.pickDirectory()`；取消不会创建或切换 Session。资源列表初次加载不会自动弹出目录选择器。

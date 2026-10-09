@@ -53,6 +53,8 @@ const zh = {
   useSkill: '在新聊天中使用',
   unavailable: '不可选用',
   workspaceSelect: '选择工作区',
+  workspaceCurrent: '当前对话工作区',
+  workspaceChosen: '已选择工作区',
   workspaceRequired: '请先选择工作区，再加载或使用资源。',
   missing: '当前不可用 Skill',
   resourcesFailed: '资源清单读取失败，请刷新。',
@@ -84,6 +86,8 @@ const en = {
   useSkill: 'Use in a new chat',
   unavailable: 'Unavailable',
   workspaceSelect: 'Choose Workspace',
+  workspaceCurrent: 'Current Conversation Workspace',
+  workspaceChosen: 'Selected Workspace',
   workspaceRequired: 'Choose a Workspace to load or use resources.',
   missing: 'Unavailable Skills',
   resourcesFailed: 'Resource list unavailable. Please refresh.',
@@ -234,7 +238,7 @@ export function apply(ctx: Context): void {
         t('resourcesRefresh'),
       ),
       React.createElement('button', {
-        type: 'button', disabled: Boolean(busy),
+        type: 'button', disabled: Boolean(busy) || Boolean(currentCwd?.trim()),
         onClick: async () => {
           try {
             const directory = await nativeResources?.pickDirectory?.();
@@ -242,6 +246,9 @@ export function apply(ctx: Context): void {
           } catch (failure) { setError(String(failure)); }
         },
       }, t('workspaceSelect')),
+      cwd
+        ? React.createElement('p', null, t(currentCwd ? 'workspaceCurrent' : 'workspaceChosen') + ': ' + cwd)
+        : null,
       error
         ? React.createElement(
             'p',
