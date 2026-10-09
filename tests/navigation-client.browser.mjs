@@ -5,6 +5,45 @@ import {build} from 'esbuild';
 import {createServer} from 'node:http';
 import {chromium,expect} from '@playwright/test';
 
+test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍提示', {timeout:60000}, async t=>{
+  const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{zh}from'./src/client/locales.ts';
+    const open=async()=>{window.opens=(window.opens||0)+1};
+    createRoot(document.getElementById('root')).render(<DesktopNavigation t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser'});
+  let mode='readonly',polls=0,finished=0,retried=0,releaseRetry;
+  const denied={ok:false,error:{code:'GEA_SALES_READONLY_OPERATION'}};
+  const server=createServer((req,res)=>{
+    if(req.url==='/app.js'){res.setHeader('Content-Type','text/javascript');res.end(output.outputFiles[0].text);return;}
+    if(req.url?.includes('/navigation/')){
+      res.setHeader('Content-Type','application/json');
+      if(req.url.endsWith('/poll')){
+        polls++;
+        if(mode==='http'){res.statusCode=500;res.end(JSON.stringify(denied));return;}
+        res.end(JSON.stringify(mode==='readonly'?denied:mode==='other'?{ok:false,error:{code:'OTHER_ERROR'}}:
+          {ok:true,value:{state:'ready',receipt:'receipt-readonly',panel:'gea-inbox'}}));return;
+      }
+      if(req.url.endsWith('/finish'))finished++;
+      if(req.url.endsWith('/retry')){retried++;releaseRetry=()=>res.end(JSON.stringify(denied));return;}
+      res.end(JSON.stringify(denied));return;
+    }
+    res.setHeader('Content-Type','text/html');res.end('<div id="root"></div><script src="/app.js"></script>');
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();server.close();});
+  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();
+  await page.goto('http://127.0.0.1:'+server.address().port);
+  await expect.poll(()=>polls).toBeGreaterThanOrEqual(2);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  assert.equal(await page.evaluate(()=>window.opens||0),0);assert.equal(finished,0);assert.equal(retried,0);
+  mode='other';await expect(page.getByRole('alert')).toBeVisible();
+  mode='readonly';await expect(page.getByRole('alert')).toHaveCount(0);
+  mode='http';await expect(page.getByRole('alert')).toBeVisible();
+  mode='readonly';await expect(page.getByRole('alert')).toHaveCount(0);
+  mode='ready';await expect.poll(()=>finished).toBe(1);await expect(page.getByRole('alert')).toBeVisible();
+  assert.equal(await page.evaluate(()=>window.opens),1);assert.equal(retried,0);
+  await page.getByRole('alert').getByRole('button').first().click();await expect.poll(()=>retried).toBe(1);
+  mode='readonly';await expect(page.getByRole('alert')).toHaveCount(0);releaseRetry();
+  await expect(page.getByRole('alert')).toBeVisible();
+});
+
 test('页面登录后续跳，详情真正可见才发送 ACK，重复轮询不重新打开', {timeout:30000}, async t=>{
   assert.ok(existsSync(new URL('../src/client/desktop-navigation.tsx',import.meta.url)),'缺少导航页面消费组件');
   const output=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{Inbox}from'./src/client/inbox.tsx';import{zh}from'./src/client/locales.ts';

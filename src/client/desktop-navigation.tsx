@@ -20,6 +20,9 @@ async function request(action: string, body: object = {}, signal?: AbortSignal):
     headers:{'Content-Type':'application/json'},body:JSON.stringify(body),signal});
   if (!response.ok) throw Error('NAVIGATION_REQUEST_FAILED');
   const result = await response.json();
+  if (action === 'poll' && result.ok === false && result.error?.code === 'GEA_SALES_READONLY_OPERATION') {
+    return {state:'unavailable'};
+  }
   if (result.ok !== true) throw Error('NAVIGATION_REQUEST_FAILED');
   return result.value;
 }
