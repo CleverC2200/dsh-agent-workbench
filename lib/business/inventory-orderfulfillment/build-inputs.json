@@ -1,0 +1,14 @@
+{
+  "repository": "dsh-agent-orderfulfillment-plugin",
+  "commit": "2b3300bceccfa3c117901d965e5829390833b2f0",
+  "sourceHtmlSha256": "f05b62dabb3f3451020e4aed97fb75bc3cd6c9aeed4c581073083eb4ee1c598c",
+  "id": "inventory-orderfulfillment",
+  "consumerCode": "orderfulfillment-preview",
+  "runtimeProtocol": "gea-html-v2",
+  "sourceRole": "build input only; no legacy manifest or decoder",
+  "sharedThemeSha256": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66",
+  "stateSha256": "a818ee722045210cde8a79e633dd9c9d4b9d26d60b68a2336035a40368bddee8",
+  "themeBindingSha256": "6d3bf47bd3d09c794f3f9670ceefb4eedce07c420389a003ea67d053ef9fe54d",
+  "channelBundleSha256": "72ebd4c7a5ba8b30c878840d57ff2aa353f303281674b89aecfc8314f0ebb68a",
+  "htmlSha256": "38e1de80460f44c7ae5f20fee6776e902cd3f50de329d37ceeb9ec726cbe5f59"
+}

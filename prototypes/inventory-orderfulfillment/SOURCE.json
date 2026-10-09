@@ -1,0 +1,9 @@
+{
+  "repository": "dsh-agent-orderfulfillment-plugin",
+  "commit": "2b3300bceccfa3c117901d965e5829390833b2f0",
+  "sourceHtmlSha256": "f05b62dabb3f3451020e4aed97fb75bc3cd6c9aeed4c581073083eb4ee1c598c",
+  "id": "inventory-orderfulfillment",
+  "consumerCode": "orderfulfillment-preview",
+  "runtimeProtocol": "gea-html-v2",
+  "sourceRole": "build input only; no legacy manifest or decoder"
+}

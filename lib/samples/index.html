@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>项目交付清单 · 样板</title>
+    <style data-workbench-resource="1.1.1">
+      /* Shared workbench resource 1.1.1. State belongs to DSH ui-theme.
+ * html + body specificity keeps the adapter stable when base sheets reload.
+ * Inline user token overrides retain priority. Status palettes stay upstream. */
+html body {
+  --workbench-theme-version: "1.1.1";
+  --workbench-font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --workbench-font-size: var(--dsh-content-font-size, 14px);
+  --workbench-page: #f7f8fa;
+  --workbench-surface: #ffffff;
+  --workbench-subtle: #fafafa;
+  --workbench-muted-surface: #f5f6f8;
+  --workbench-text: #20232a;
+  --workbench-body: #555d68;
+  --workbench-muted: #626b78;
+  --workbench-border: #e3e6ea;
+  --workbench-control-border: #d9dde3;
+  --workbench-brand: #df1732;
+  --workbench-selected-text: #d0132c;
+  --workbench-brand-hover: #c91029;
+  --workbench-brand-soft: #fff0f2;
+  --workbench-hover: #fffafb;
+}
+
+html body[data-ds-dark-theme] {
+  --workbench-page: #1b1d21;
+  --workbench-surface: #24262b;
+  --workbench-subtle: #282b31;
+  --workbench-muted-surface: #30343b;
+  --workbench-text: #edf0f5;
+  --workbench-body: #c7cdd6;
+  --workbench-muted: #aab3bf;
+  --workbench-border: #414751;
+  --workbench-control-border: #59616e;
+  --workbench-brand: #ff8092;
+  --workbench-selected-text: #ff9aa8;
+  --workbench-brand-hover: #ff9aa8;
+  --workbench-brand-soft: #442630;
+  --workbench-hover: #35272e;
+}
+
+.agent-workbench-ui {
+  background: var(--workbench-page);
+  color: var(--workbench-text);
+  font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
+}
+.agent-workbench-ui button { padding: 10px 14px; border: 1px solid var(--workbench-border); border-radius: 8px; background: var(--workbench-surface); color: var(--workbench-text); font: inherit; cursor: pointer; }
+.agent-workbench-ui button:not(:disabled):hover { background: var(--workbench-hover); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+
+.agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }
+
+    </style>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: var(--workbench-font-size, 14px)/1.7 var(--workbench-font-family, sans-serif);
+      }
+      main {
+        padding: 24px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.35em;
+        line-height: 1.35;
+      }
+      p {
+        margin: 0;
+      }
+      .description,
+      .summary,
+      label {
+        color: var(--workbench-muted);
+      }
+      .description {
+        max-width: 70ch;
+      }
+      #filters {
+        margin: 24px 0 16px;
+      }
+      fieldset {
+        display: flex;
+        align-items: end;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding: 0;
+        margin: 0;
+        border: 0;
+        min-width: 0;
+      }
+      label {
+        display: grid;
+        gap: 4px;
+        font-size: 0.9em;
+      }
+      input,
+      select,
+      button {
+        min-height: 36px;
+        max-width: 100%;
+        padding: 6px 12px;
+        border: 1px solid var(--workbench-control-border);
+        border-radius: 8px;
+        font: inherit;
+        color: var(--workbench-body);
+        background: var(--workbench-surface);
+      }
+      input {
+        width: 240px;
+        caret-color: var(--workbench-brand);
+      }
+      input::placeholder {
+        color: var(--workbench-muted);
+        opacity: 1;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:hover:not(:disabled) {
+        background: var(--workbench-hover);
+        border-color: var(--workbench-brand);
+        color: var(--workbench-selected-text);
+      }
+      .primary {
+        background: var(--workbench-brand);
+        border-color: var(--workbench-brand);
+        color: var(--workbench-surface);
+      }
+      .primary:hover:not(:disabled) {
+        background: var(--workbench-brand-hover);
+        color: var(--workbench-surface);
+      }
+      :disabled {
+        cursor: default;
+        opacity: 0.6;
+      }
+      :focus-visible {
+        outline: 2px solid var(--workbench-brand);
+        outline-offset: 2px;
+      }
+      ::selection {
+        color: var(--workbench-text);
+        background: var(--workbench-brand-soft);
+      }
+      .summary {
+        margin-bottom: 8px;
+      }
+      .table-scroll {
+        overflow-x: auto;
+        border: 1px solid var(--workbench-border);
+        border-radius: 10px;
+        background: var(--workbench-surface);
+        scrollbar-color: var(--workbench-control-border) var(--workbench-subtle);
+      }
+      table {
+        width: 100%;
+        min-width: 580px;
+        border-collapse: collapse;
+        white-space: nowrap;
+      }
+      caption {
+        text-align: left;
+        padding: 12px 16px;
+        font-weight: 600;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--workbench-border);
+      }
+      th {
+        background: var(--workbench-muted-surface);
+        color: var(--workbench-muted);
+        font-size: 0.9em;
+      }
+      td {
+        color: var(--workbench-body);
+        height: 44px;
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      tbody tr:hover {
+        background: var(--workbench-hover);
+      }
+      .number {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .state {
+        padding: 24px 16px;
+        background: var(--workbench-surface);
+        border: 1px solid var(--workbench-border);
+        border-radius: 10px;
+      }
+      .state strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .state button {
+        margin-top: 12px;
+      }
+      .diagnostic {
+        padding: 12px 16px;
+        margin: 16px 0;
+        border: 1px solid var(--workbench-control-border);
+      }
+      [hidden] {
+        display: none !important;
+      }
+      details {
+        margin-top: 24px;
+        color: var(--workbench-muted);
+      }
+      summary {
+        cursor: pointer;
+        width: fit-content;
+      }
+      .simulations {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      @media (max-width: 520px) {
+        main {
+          padding: 16px;
+        }
+        label {
+          width: 100%;
+        }
+        input,
+        select {
+          width: 100%;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        button {
+          transition:
+            background-color 160ms ease,
+            border-color 160ms ease;
+        }
+      }
+    </style>
+  </head>
+  <body class="agent-workbench-ui">
+    <main>
+      <h1>项目交付清单</h1>
+      <p class="description">HTML 表格样板 · 以下均为本地演示数据，可按名称和进度筛选。</p>
+      <p class="diagnostic" role="alert" id="diagnostic">正在连接工作台主题…</p>
+      <section id="filters" role="search" aria-label="筛选项目">
+        <fieldset disabled id="controls">
+          <label
+            >项目名称<input
+              id="query"
+              type="search"
+              placeholder="输入名称或编号"
+              autocomplete="off"
+          /></label>
+          <label
+            >交付进度<select id="stage">
+              <option value="">全部进度</option>
+              <option>进行中</option>
+              <option>已完成</option>
+              <option>待开始</option>
+            </select></label
+          >
+          <button class="primary" type="button" id="search">查询</button>
+          <button type="button" id="reset">重置</button>
+        </fieldset>
+      </section>
+      <p class="summary" id="summary" role="status" aria-live="polite"></p>
+      <section id="results" aria-busy="false" aria-label="查询结果">
+        <div
+          class="table-scroll"
+          id="table-region"
+          role="region"
+          aria-label="可横向滚动的交付清单"
+          tabindex="0"
+          hidden
+        >
+          <table>
+            <caption>
+              项目明细
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">项目编号</th>
+                <th scope="col">项目名称</th>
+                <th scope="col">负责人</th>
+                <th scope="col">交付进度</th>
+                <th scope="col" class="number">任务数</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+        <div class="state" id="state" hidden>
+          <strong id="state-title"></strong>
+          <p id="state-description"></p>
+          <button type="button" id="retry" hidden>重新查询</button>
+        </div>
+      </section>
+      <details>
+        <summary>演示状态</summary>
+        <p>用于验收加载、空态与错误提示，不连接业务服务。</p>
+        <div class="simulations">
+          <button type="button" data-state="empty" disabled>演示空结果</button
+          ><button type="button" data-state="error" disabled>演示查询失败</button>
+        </div>
+      </details>
+    </main>
+    <script>(() => {
+  // business/shared/view-state.js
+  var PROTOCOL = "dsh-workbench-view-v1";
+  function createPageViewState(page) {
+    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-qll", "inventory-fc", "inventory-aqkc", "inventory-dealer", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment", "inventory-personal", "inventory-apsplan", "inventory-dms"].includes(page);
+    let state = { version: 1 };
+    let binding, dirty = false;
+    const listeners = /* @__PURE__ */ new Set();
+    const releasedChannels = /* @__PURE__ */ new Set();
+    const send = () => {
+      if (binding)
+        window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
+    };
+    const ready = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
+    const receive = (event) => {
+      const value = event.data;
+      if (event.source !== window.parent || value?.protocol !== PROTOCOL || value.page !== page || value.version !== 1)
+        return;
+      if (value.type === "request-ready") {
+        ready();
+        return;
+      }
+      if (value.type === "released") {
+        releasedChannels.add(value.channel);
+        if (binding?.channel === value.channel) {
+          binding = void 0;
+          if (sessionPage) {
+            dirty = false;
+            state = { version: 1 };
+            for (const listener of listeners) listener(state, "released");
+          }
+        }
+        return;
+      }
+      if (value.type !== "restore" || typeof value.channel !== "string" || !Number.isSafeInteger(value.generation) || value.generation < 0 || releasedChannels.has(value.channel) || binding?.channel === value.channel && value.generation < binding.generation)
+        return;
+      binding = { channel: value.channel, generation: value.generation };
+      state = dirty ? { ...value.state, ...state } : { ...value.state ?? {}, version: 1 };
+      dirty = false;
+      for (const listener of listeners)
+        listener(state, "restore");
+      send();
+    };
+    window.addEventListener("message", receive);
+    window.addEventListener("pagehide", () => {
+      binding = void 0;
+      window.removeEventListener("message", receive);
+      listeners.clear();
+    }, { once: true });
+    ready();
+    return { get: () => state, subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }, update: (changes) => {
+      state = { ...state, ...changes, version: 1 };
+      if (binding || !sessionPage)
+        dirty = true;
+      send();
+    } };
+  }
+
+  // samples/page-author.js
+  var sampleView = createPageViewState("workbench-html-table");
+  (() => {
+    const expectedVersion = "1.1.1";
+    const $ = (id) => document.getElementById(id);
+    const diagnostic = $("diagnostic");
+    const resource = document.querySelector("style[data-workbench-resource]");
+    const localVersion = resource?.getAttribute("data-workbench-resource");
+    const rows = [
+      ["DEMO-001", "\u5DE5\u4F5C\u53F0\u9875\u9762\u8054\u8C03", "\u6797\u6653", "\u8FDB\u884C\u4E2D", 8],
+      ["DEMO-002", "\u6708\u5EA6\u8D44\u6599\u5F52\u6863", "\u9648\u5B81", "\u5DF2\u5B8C\u6210", 12],
+      ["DEMO-003", "\u5E2E\u52A9\u5185\u5BB9\u6574\u7406", "\u5468\u6674", "\u5F85\u5F00\u59CB", 6],
+      ["DEMO-004", "\u4EA4\u4ED8\u6E05\u5355\u6838\u5BF9", "\u6797\u6653", "\u8FDB\u884C\u4E2D", 5]
+    ];
+    let timer, themeReady = false;
+    const controls = (enabled) => {
+      $("controls").disabled = !enabled;
+      document.querySelectorAll("[data-state], #retry").forEach((button) => button.disabled = !enabled);
+    };
+    const stop = (message) => {
+      clearTimeout(timer);
+      $("results").setAttribute("aria-busy", "false");
+      themeReady = false;
+      controls(false);
+      diagnostic.hidden = false;
+      diagnostic.textContent = message;
+    };
+    if (!resource || localVersion !== expectedVersion) {
+      stop("\u5171\u4EAB\u6837\u5F0F\u8D44\u6E90\u7F3A\u5931\u6216\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u91CD\u65B0\u6784\u5EFA\u5E76\u91CD\u65B0\u6253\u5F00\u6837\u677F\u3002");
+      return;
+    }
+    const showState = (title, description, retry = false) => {
+      $("table-region").hidden = true;
+      $("state").hidden = false;
+      $("state-title").textContent = title;
+      $("state-description").textContent = description;
+      $("retry").hidden = !retry;
+    };
+    const query = (simulation = "") => {
+      if (!themeReady) return;
+      clearTimeout(timer);
+      $("results").setAttribute("aria-busy", "true");
+      $("summary").textContent = "\u6B63\u5728\u67E5\u8BE2\u2026";
+      showState("\u6B63\u5728\u52A0\u8F7D\u9879\u76EE", "\u6B63\u5728\u8BFB\u53D6\u672C\u5730\u6F14\u793A\u6570\u636E\u3002");
+      timer = setTimeout(() => {
+        $("results").setAttribute("aria-busy", "false");
+        if (simulation === "error") {
+          $("summary").textContent = "\u67E5\u8BE2\u672A\u5B8C\u6210";
+          showState("\u6682\u65F6\u65E0\u6CD5\u8BFB\u53D6\u9879\u76EE", "\u8FD9\u662F\u6F14\u793A\u9519\u8BEF\uFF1B\u70B9\u51FB\u201C\u91CD\u65B0\u67E5\u8BE2\u201D\u6062\u590D\u672C\u5730\u6570\u636E\u3002", true);
+          return;
+        }
+        const keyword = $("query").value.trim().toLowerCase();
+        const stage = $("stage").value;
+        const result = simulation === "empty" ? [] : rows.filter(
+          (row) => (row[0] + row[1]).toLowerCase().includes(keyword) && (!stage || row[3] === stage)
+        );
+        $("summary").textContent = "\u5171 " + result.length + " \u4E2A\u9879\u76EE";
+        $("rows").replaceChildren(
+          ...result.map((row) => {
+            const tr = document.createElement("tr");
+            row.forEach((value, index) => {
+              const td = document.createElement("td");
+              td.textContent = value;
+              if (index === 4) td.className = "number";
+              tr.append(td);
+            });
+            return tr;
+          })
+        );
+        $("table-region").hidden = !result.length;
+        $("state").hidden = !!result.length;
+        if (!result.length) showState("\u6CA1\u6709\u5339\u914D\u7684\u9879\u76EE", "\u8BD5\u8BD5\u5176\u4ED6\u540D\u79F0\u6216\u8FDB\u5EA6\uFF0C\u4E5F\u53EF\u4EE5\u91CD\u7F6E\u7B5B\u9009\u3002");
+      }, 350);
+    };
+    const saveView = () => sampleView.update({ keyword: $("query").value, stage: $("stage").value });
+    sampleView.subscribe((value) => {
+      if (typeof value.keyword === "string") $("query").value = value.keyword;
+      if (["", "\u8FDB\u884C\u4E2D", "\u5DF2\u5B8C\u6210", "\u5F85\u5F00\u59CB"].includes(value.stage))
+        $("stage").value = value.stage;
+      query();
+    });
+    $("query").addEventListener("input", saveView);
+    $("stage").addEventListener("change", saveView);
+    $("search").onclick = () => {
+      saveView();
+      query();
+    };
+    $("query").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        query();
+      }
+    });
+    $("reset").onclick = () => {
+      $("query").value = "";
+      $("stage").value = "";
+      saveView();
+      query();
+    };
+    $("retry").onclick = () => query();
+    document.querySelectorAll("[data-state]").forEach((button) => button.onclick = () => query(button.dataset.state));
+    const projectTheme = (event) => {
+      if (event.source !== parent || event.data?.protocol !== "agent-workbench-theme") return;
+      const value = event.data;
+      if (!Number.isFinite(value.fontSize)) return;
+      document.body.style.setProperty("--dsh-content-font-size", `${value.fontSize}px`);
+      document.documentElement.style.colorScheme = value.dark ? "dark" : "light";
+      document.body.toggleAttribute("data-ds-dark-theme", value.dark === true);
+    };
+    addEventListener("message", projectTheme);
+    addEventListener(
+      "pagehide",
+      () => {
+        clearTimeout(timer);
+        removeEventListener("message", projectTheme);
+      },
+      { once: true }
+    );
+    themeReady = true;
+    diagnostic.hidden = true;
+    controls(true);
+    query();
+  })();
+})();
+</script>
+  </body>
+</html>

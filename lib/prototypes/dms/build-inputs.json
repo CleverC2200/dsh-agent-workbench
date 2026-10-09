@@ -1,0 +1,36 @@
+{
+  "originalSourceCommit": "b71fbe049809385c2af82f135b2ef2c10a8b6a39",
+  "restoredCandidate": {
+    "commit": null,
+    "manifestSha256": "cc7b1f7c59409afa4baaea276fcf9e5477b57826c846c4d161da1701cd2c41ed",
+    "zipSha256": "0eee3931626f3da5f1c22ca9a8c4ecf4ad7419566d8525248e32b88b17bcd9b1"
+  },
+  "inputs": {
+    "../dsh-agent-manage/src/inventory-compute/dms-mock-packets.ts": "c10bb7c7b244f4dcb18a26ccde0d1dcbb9db500e2be0dbbd92f2ba69da771109",
+    "src/workbench/original/salesPlanWorkflow.ts": "85b2fc4df1f30dc3bce46ca85bcec36468e904212c31b69325e1e14aeed2745e",
+    "prototypes/dms/model.ts": "5bd1275fd2edb5f96960bc024e5f612b7952a6da43f41892ac302df11ec4f61e",
+    "business/shared/query-error.js": "8ee8d56ecd598445bf619ca351f070ba39eb4c807c3c9cff149eae27ff1596cc",
+    "business/shared/channel.js": "1a2e493da1914a62c9842d554ad45d5765b4b7878ce53214c35743e71e2463b5",
+    "business/shared/view-state.js": "fe21c9e788ffbc1a8ab685ccd04c3cf671d50abcd4ad0d136408aa16882ec12f",
+    "prototypes/dms/main.ts": "ec8d5a5c6296488e4614319c0ad1731e63e5179d8ecea8594f329072fc6d4cf8",
+    "prototypes/dms/index.html": "ac454f4111b326560e527ff4e04134516627b7bfea767387c48f03da77468136",
+    "prototypes/dms/style.css": "77413a3c8bed4a64de9ea6bda8ef73988c0cd6d6e9edb5c3d7baabaf61a2a8fa",
+    "theme/tokens.css": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66",
+    "prototypes/dms/plugin.json": "43a8d414f5fe9780bfb0569c4413fa7ed738bd094b99c17a28a49e3715872b71",
+    "prototypes/dms/page.json": "d7affeffa591c9410c23f381b914911557a97426f6c85d5eb79c58fc1fb9cc54",
+    "prototypes/dms/SOURCE.json": "859c49c7dc9f715c52581a0865e5a59025d17f283ec69a9dcb13933147b18a95",
+    "scripts/build-dms-prototype.mjs": "765dd0b3746d8dfe622074618f37efeee991065a15c09ee10d26cc7cae79fc04",
+    "../dsh-agent-manage/business-resources/inventory-dms/capability.json": "172574377f76536799f37a2ee2c92b4fefe9fea7e0cfd3577316ba7ffe99a2a6",
+    "../dsh-agent-manage/business-resources/inventory-dms/prompt.json": "872d0d4e03d498427695de5eba6922d7024907ad406c0e75292a838b6f93b591",
+    "../dsh-agent-manage/business-resources/inventory-dms/mcp.json": "3f6dd4cf887bd5b2f4683174c85b61d6e3b251f06a02750d140876456212a47f",
+    "../dsh-agent-manage/business-resources/inventory-dms/skills/dms/SKILL.md": "d6aa3fd296ab969639bbb733e000cbc8e0598b6a1df675c931ad7bab93197857"
+  },
+  "dependencies": {
+    "esbuild": "0.25.9",
+    "decimal.js": "10.6.0"
+  },
+  "outputs": {
+    "index.html": "72c82dc889e2c983bfd9e303f131b3c64e740d3a47ac395aad656ce2c708e424",
+    "model.js": "1361fb93a9be094ad627bd193a5831a261f2ba36e825edb8754f6e6ce80bb0c7"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "lib": [
+      "ESNext",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "paths": {
+      "dsh-agent-manage/inventory-compute/*": [
+        "../../../dsh-agent-manage/src/inventory-compute/*.ts"
+      ]
+    }
+  },
+  "include": [
+    "*.ts",
+    "../../business/shared/channel.js",
+    "../../business/shared/query-error.js"
+  ]
+}

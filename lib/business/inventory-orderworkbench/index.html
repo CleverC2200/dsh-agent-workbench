@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>订单工作台</title>
+  <style>
+    :root { --bg:#f6f7f9; --surface:#fff; --line:#e8ebf0; --text:#20242c; --muted:#6b7280; --faint:#9aa2af; --brand:#f5222d; --brand-soft:#fff1f0; font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; color:var(--text); background:var(--bg); font-size:14px; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid rgba(245,34,45,.38); outline-offset:2px; }
+    [hidden] { display:none !important; }
+    .shell { height:100vh; min-height:650px; }
+    .sidebar { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:#fff; }
+    .brand { display:flex; align-items:center; gap:10px; height:56px; padding:0 18px; border-bottom:1px solid var(--line); color:var(--brand); font-weight:800; }
+    .brand-mark { display:grid; place-items:center; width:28px; height:28px; border-radius:7px; color:#fff; background:var(--brand); box-shadow:0 7px 18px rgba(245,34,45,.22); font-size:11px; }
+    .brand-ai { margin-left:auto; color:#3a404b; font-size:11px; }
+    .nav { flex:1; padding:15px 10px; }
+    .nav-head, .nav-item { display:flex; align-items:center; width:100%; min-height:35px; border:0; border-radius:7px; background:transparent; color:#3a404b; text-align:left; font-size:13px; }
+    .nav-head { gap:8px; padding:0 10px; font-weight:700; }
+    .nav-head svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .nav-head .chevron { margin-left:auto; font-size:15px; color:#8b94a2; }
+    .nav-head:hover, .nav-item:hover { background:#fff7f7; }
+    .nav-item { padding:0 10px 0 37px; color:#565e6c; }
+    .nav-item.active { color:var(--brand); background:#fff7f7; font-weight:700; }
+    .nav.is-collapsed .nav-item { display:none; }
+    .nav.is-collapsed .chevron { transform:rotate(-90deg); }
+    .account { display:flex; align-items:center; gap:10px; min-height:70px; padding:12px 16px; border-top:1px solid var(--line); }
+    .avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; color:#fff; background:#8d97a7; font-weight:700; }
+    .account div { display:grid; gap:2px; }
+    .account strong { font-size:12px; }.account small { color:var(--muted); font-size:11px; }
+    .main { display:grid; grid-template-rows:minmax(0,1fr); height:100%; min-width:0; min-height:0; }
+    .topbar { display:flex; align-items:center; justify-content:center; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
+    .page-tabs { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .page-tab { min-width:104px; height:32px; padding:0 16px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .page-tab.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .period-label { color:#5c6573; font-size:12px; font-weight:700; }
+    .period-switch { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .period-switch button { min-width:58px; height:29px; padding:0 11px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .period-switch button.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-control { display:flex; align-items:center; gap:7px; color:#667080; font-size:12px; }
+    .period-control[hidden] { display:none; }
+    .period-control input,.period-control select { min-height:32px; padding:4px 9px; border:1px solid #dce2eb; border-radius:6px; color:#343b47; background:#fff; font-size:12px; }
+    .period-control select { max-width:245px; }
+    .period-meta { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .layout { min-height:0; overflow:hidden; }
+    .workspace { height:100%; min-width:0; min-height:0; overflow:auto; background:#fff; }
+    .content { max-width:1500px; margin:0 auto; padding:24px 28px 36px; background:#fff; }
+    .card { margin-bottom:16px; padding:18px 20px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .card h2 { margin:0 0 14px; font-size:15px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { padding:15px 17px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .metric span { display:block; color:var(--muted); font-size:12px; }.metric strong { display:block; margin:7px 0 3px; font-size:24px; }.metric small { color:var(--faint); }
+    .table-wrap { overflow-x:auto; }
+    .orders { width:100%; min-width:1000px; border-collapse:collapse; font-size:12px; }
+    .orders th { padding:11px 12px; border-bottom:1px solid var(--line); color:#66707e; background:#fafbfc; text-align:left; font-weight:600; }
+    .orders td { padding:13px 12px; border-bottom:1px solid #f0f2f5; vertical-align:top; }
+    .orders tbody tr:last-child td { border-bottom:0; }.orders strong { display:block; font-size:12px; }.orders small { display:block; margin-top:3px; color:var(--faint); }
+    .orders-card-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .orders-card-head h2 { margin:0; }
+    .orders-count { color:#8b96a5; font-size:11px; white-space:nowrap; }
+    .order-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+    .order-filters > input,.warehouse-picker input,.order-filters > select { height:34px; padding:0 10px; border:1px solid #dce2eb; border-radius:6px; color:#364050; background:#fff; font-size:11px; }
+    .order-filters > input::placeholder,.warehouse-picker input::placeholder { color:#9aa4b1; }
+    .order-filters > input:focus,.warehouse-picker input:focus,.order-filters > select:focus { border-color:#f2aab0; outline:2px solid #fff0f1; }
+    #orderNumberSearch { width:150px; } #customerSearch { width:192px; }
+    .warehouse-picker { position:relative; width:148px; }
+    #omsStatusFilter { width:142px; cursor:pointer; }
+    .warehouse-picker input { width:100%; padding-right:30px; }
+    .warehouse-picker > button { position:absolute; top:1px; right:1px; width:30px; height:32px; border:0; border-radius:0 6px 6px 0; color:#8490a0; background:transparent; font-size:14px; }
+    .warehouse-options { position:absolute; top:calc(100% + 4px); left:0; z-index:5; width:100%; padding:4px; border:1px solid #e0e5ed; border-radius:7px; background:#fff; box-shadow:0 8px 24px rgba(32,44,62,.12); }
+    .warehouse-options button { display:block; width:100%; min-height:30px; padding:5px 8px; border:0; border-radius:4px; color:#4b5666; background:#fff; text-align:left; font-size:11px; }
+    .warehouse-options button:hover,.warehouse-options button[aria-selected="true"] { color:var(--brand); background:#fff5f5; }
+    .warehouse-options .no-option { padding:8px; color:#9aa4b1; font-size:11px; }
+    .orders-empty td { padding:24px 12px; color:#8d98a6; text-align:center; }
+    .order-pagination { display:flex; justify-content:flex-end; align-items:center; gap:17px; padding:17px 4px 0; border-top:1px solid #f0f2f5; color:#5f6978; font-size:12px; }
+    .order-page-size select { padding:3px 18px 3px 3px; border:0; color:#5f6978; background:#fff; font:inherit; cursor:pointer; }
+    .order-page-size select:focus { border-radius:4px; outline:2px solid #fff0f1; }
+    .order-page-button { width:26px; height:26px; padding:0; border:0; border-radius:5px; color:#8a95a4; background:transparent; font-size:20px; line-height:1; }
+    .order-page-button:hover:not(:disabled) { color:var(--brand); background:#fff5f5; }
+    .order-page-button:disabled { color:#cbd1d9; cursor:not-allowed; }
+    .order-page-status { display:inline-flex; align-items:center; gap:7px; min-width:44px; justify-content:center; }
+    .order-page-status strong { color:#273140; font-size:13px; }
+    @media(max-width:1050px) { .order-filters { width:100%; margin-left:0; }.order-filters > input { flex:1 1 150px; }.warehouse-picker { flex:1 1 148px; } #omsStatusFilter { flex:1 1 142px; } }
+    .period-empty { margin:0 0 16px; padding:18px 20px; border:1px dashed #d9e0ea; border-radius:8px; color:#637084; background:#fff; font-size:12px; line-height:1.7; }
+    .status { display:inline-block; padding:3px 8px; border-radius:4px; color:#13854a; background:#e8f7ee; white-space:nowrap; }
+    .status.issue { color:#c83239; background:#fff0ef; }.status.progress { color:#2266d8; background:#eaf4ff; }.status.pending { color:#a96900; background:#fff5e5; }
+    .wb-hero { display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; }
+    .wb-hero > .wb-link { margin-left:auto; }
+    .wb-hero .wb-context { margin:0; }
+    .wb-hero-main { min-width:0; }
+    .wb-title-line { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+    .wb-title-line .period-bar { padding:0; border:0; background:none; }
+    .wb-title-line .period-control input { width:126px; }
+    .wb-title-line .period-control select { max-width:190px; }
+    .wb-hero h1 { margin:8px 0; font-size:26px; }.wb-hero p,.wb-section p { margin:0; color:#7a8290; font-size:12px; line-height:1.6; }
+    .wb-eyebrow { color:#bf2330; font-size:12px; font-weight:700; }.wb-eyebrow::before { content:""; display:inline-block; width:7px; height:7px; margin-right:9px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 4px #ffe5e7; }
+    .wb-link,.wb-priority button { padding:3px 0; border:0; color:var(--brand); background:none; font-size:11px; white-space:nowrap; }.wb-link:hover,.wb-priority button:hover { text-decoration:underline; }
+    .wb-note { padding:10px 13px; margin-bottom:14px; border:1px solid #dce8fa; border-radius:7px; color:#617590; background:#f4f8ff; font-size:11px; line-height:1.6; }
+    .wb-section { margin-bottom:14px; }.wb-section-head,.wb-card-title,.wb-task-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:10px; }
+    .wb-section h2,.wb-card h2 { margin:0 0 4px; font-size:16px; }.wb-section-head > span,.wb-card-title > span,.wb-task-head > span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .wb-kicker { color:#8b93a0; font-size:11px; }.wb-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .wb-kpi { min-height:126px; padding:15px 17px; border:1px solid var(--line); border-radius:10px; background:#fff; text-align:left; }.wb-kpi:hover { border-color:#f1b5bb; box-shadow:0 5px 16px rgba(190,70,80,.07); }.wb-kpi span { display:block; color:#68717e; font-size:12px; }.wb-kpi strong { display:block; margin:10px 0 3px; font-size:28px; }.wb-kpi small { display:block; color:#9aa2af; font-size:11px; }.wb-kpi em { display:block; margin-top:8px; color:#c24f5b; font-size:10px; font-style:normal; }
+    .wb-kpi.urgent strong { color:#e33740; }.wb-kpi.warning strong { color:#df7c29; }
+    .wb-card { min-width:0; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }.wb-card p { margin:0; color:#7a8290; font-size:11px; line-height:1.6; }
+    .wb-analysis { border-color:#f0d8dc; background:linear-gradient(105deg,#fffafa,#fff 56%,#fffdfd); }.wb-analysis-head,.wb-analysis-body,.wb-analysis-foot { padding:15px 20px; }.wb-analysis-head,.wb-analysis-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; }.wb-analysis-head { padding-bottom:0; }.wb-analysis-head h2 { margin:0; font-size:14px; }.wb-analysis-head span,.wb-analysis-foot span { color:#9fa8b5; font-size:11px; }.wb-analysis-body h3 { margin:0 0 8px; font-size:17px; }.wb-analysis-body p { margin:0; color:#707a89; font-size:12px; line-height:1.7; }.wb-analysis-foot { padding-top:0; }
+    .wb-spark { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:8px; border-radius:7px; color:#ed5268; background:#fff0f2; }.wb-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }.wb-tags span { padding:4px 9px; border:1px solid #f1dadd; border-radius:5px; color:#9a7180; background:#fffafb; font-size:11px; }.wb-tags b { color:#df5161; }
+    .wb-panels { display:grid; grid-template-columns:minmax(0,1.12fr) minmax(300px,.88fr); gap:14px; }.wb-card-title { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-priority { display:flex; align-items:center; gap:10px; min-height:62px; padding:10px 17px; border-top:1px solid #f0f1f4; }.wb-priority > div { min-width:0; flex:1; }.wb-priority strong,.wb-priority small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-priority strong { font-size:12px; }.wb-priority small { margin-top:5px; color:#8b93a0; font-size:11px; }
+    .wb-status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:5px; color:#4a86d8; background:#edf5ff; font-size:11px; white-space:nowrap; }.wb-status::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }.wb-status.issue { color:#d94d58; background:#fff0f1; }.wb-status.pending { color:#ba7928; background:#fff5e8; }.wb-status.ready { color:#39a078; background:#eaf8f1; }
+    .wb-flow { padding:4px 18px 12px; }.wb-flow-item { display:flex; gap:12px; padding:13px 0; border-top:1px solid #f0f1f4; }.wb-flow-item:first-child { border-top:0; }.wb-flow-item b { display:grid; place-items:center; width:25px; height:25px; flex:0 0 auto; border-radius:7px; color:#d84b57; background:#fff0f2; font-size:11px; }.wb-flow-item strong { font-size:12px; }.wb-flow-item p { margin:4px 0 0; color:#7a8290; font-size:11px; line-height:1.5; }
+    .wb-task-head { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-filters { display:flex; gap:16px; overflow-x:auto; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-filters button { position:relative; flex:0 0 auto; height:34px; border:0; color:#8b93a0; background:none; font-size:11px; }.wb-filters button.active { color:var(--brand); font-weight:700; }.wb-filters button.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; background:var(--brand); }
+    .wb-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 15px; color:#788391; font-size:11px; }.wb-context strong { color:#425066; font-size:12px; }.wb-context span { padding:6px 10px; border:1px solid #e3e8f0; border-radius:6px; background:#fff; }.wb-context small { margin-left:auto; color:#a0a8b5; font-size:10px; }
+    .wb-report-date { margin:0 0 15px; color:#a0a8b5; font-size:10px; text-align:right; }
+    .wb-kpi { position:relative; }.wb-kpi .wb-kpi-goal { margin-top:5px; color:#8d98a8; }.wb-kpi .wb-kpi-state { display:inline-flex; align-items:center; width:auto; margin-top:8px; padding:3px 7px; border-radius:4px; color:#278565; background:#eaf8f1; font-size:10px; }.wb-kpi .wb-kpi-state.bad { color:#cb4751; background:#fff0f1; }.wb-kpi .wb-kpi-state.unknown { color:#7d8898; background:#f0f3f7; }.wb-kpi .wb-kpi-trend { position:absolute; right:15px; bottom:17px; color:#9aa4b2; font-size:10px; }
+    .wb-analysis { position:relative; }.wb-analysis::before { content:""; position:absolute; top:17px; bottom:17px; left:0; width:3px; border-radius:0 3px 3px 0; background:#ef6b80; }.wb-analysis-evidence { display:flex; gap:7px; flex-wrap:wrap; margin-top:13px; }.wb-analysis-evidence span { padding:4px 8px; border:1px solid #e9edf4; border-radius:5px; color:#8390a2; background:#fff; font-size:10px; }
+    .wb-panels { align-items:stretch; }.wb-panels > .wb-card { display:flex; flex-direction:column; }.wb-events-tabs { display:flex; gap:16px; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-events-tabs button { position:relative; height:32px; padding:0; border:0; color:#8b93a0; background:transparent; font-size:11px; }.wb-events-tabs button.active { color:var(--brand); font-weight:700; }.wb-events-tabs button.active::after { content:""; position:absolute; bottom:-1px; right:0; left:0; height:2px; background:var(--brand); }
+    .wb-event { padding:13px 17px; border-bottom:1px solid #eef0f3; }.wb-event:last-child { border-bottom:0; }.wb-event-top { display:flex; align-items:center; gap:7px; }.wb-event-top strong { min-width:0; flex:1; color:#343c49; font-size:12px; }.wb-event-top time { color:#a0a8b5; font-size:10px; }.wb-event p { margin:6px 0 5px 21px; color:#7d8796; font-size:11px; line-height:1.55; }.wb-event-foot { display:flex; align-items:center; gap:9px; margin-left:21px; }.wb-event-foot button { padding:0; border:0; color:#818b9a; background:none; font-size:10px; }.wb-event-foot button:hover { color:var(--brand); }.wb-event-foot button:last-child { color:#cf5765; }.wb-event-kind { flex:0 0 auto; padding:2px 5px; border-radius:4px; color:#d45462; background:#fff0f2; font-size:10px; }.wb-event-kind.focus { color:#c28636; background:#fff6e7; }
+    .wb-action { padding:14px 17px; border-bottom:1px solid #eef0f3; }.wb-action:last-child { border-bottom:0; }.wb-action-main { display:flex; gap:9px; }.wb-action-icon { display:grid; place-items:center; width:23px; height:23px; flex:0 0 auto; border-radius:7px; color:#e28a43; background:#fff2e4; }.wb-action strong { display:block; color:#343c49; font-size:12px; }.wb-action small { display:block; margin-top:4px; color:#9aa3af; font-size:10px; }.wb-action p { margin:7px 0 0 32px; color:#7d8796; font-size:11px; line-height:1.6; }.wb-action-links { display:flex; gap:8px; margin:10px 0 0 32px; }.wb-action-links button { padding:5px 8px; border:1px solid #dfe5ee; border-radius:5px; color:#7b8797; background:#fff; font-size:10px; }.wb-action-links button.primary { color:#fff; border-color:#d84959; background:#d84959; }.wb-panel-foot { margin-top:auto; padding:10px 17px; border-top:1px solid #eef0f3; color:#a0a8b5; font-size:10px; }
+    .wb-task-summary { display:flex; align-items:center; gap:12px; color:#9aa3af; font-size:10px; }.wb-task-summary button { padding:0; border:0; color:#8c96a4; background:none; font-size:10px; }.wb-task-summary button:hover { color:var(--brand); }.wb-task-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; font-size:11px; }.wb-task-table th { padding:10px 16px; border-bottom:1px solid #eef0f3; color:#9ca6b3; background:#fbfcfd; font-weight:500; }.wb-task-table td { padding:11px 16px; border-bottom:1px solid #eef0f3; color:#6d7787; }.wb-task-table tr:last-child td { border-bottom:0; }.wb-task-table th:first-child { width:38%; }.wb-task-table th:nth-child(2) { width:20%; }.wb-task-table th:nth-child(3) { width:16%; }.wb-task-table th:nth-child(4) { width:15%; }.wb-task-table th:nth-child(5) { width:11%; }.wb-task-table strong { display:block; color:#3c4552; font-size:11px; }.wb-task-table small { display:block; margin-top:3px; color:#9ca6b2; font-size:10px; }.wb-task-status { display:inline-block; padding:4px 7px; border-radius:5px; color:#bb842f; background:#fff6e9; font-size:10px; }.wb-task-status.done { color:#3c9b78; background:#eaf8f1; }.wb-task-link { padding:0; border:0; color:#7d8b9c; background:none; font-size:10px; }.wb-task-link:hover { color:var(--brand); }.wb-task-table-wrap { overflow-x:auto; }.wb-task-table { min-width:650px; }
+    .wb-detail-overlay { position:fixed; inset:0; z-index:12; display:grid; place-items:center; padding:20px; background:rgba(30,38,54,.32); }.wb-detail-dialog { width:min(580px,100%); max-height:80vh; overflow:auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(30,38,54,.18); }.wb-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.wb-detail-head h2 { margin:0; font-size:17px; }.wb-detail-head button { border:0; color:#7d8796; background:none; font-size:21px; }.wb-detail-dialog p { color:#687486; font-size:12px; line-height:1.7; }.wb-detail-dialog h3 { margin:16px 0 5px; font-size:12px; }
+    .wb-adopt-overlay { position:fixed; inset:0; z-index:14; display:grid; place-items:center; padding:20px; background:rgba(34,39,52,.34); }
+    .wb-adopt-dialog { width:min(850px,100%); max-height:min(90vh,760px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #e7eaf0; border-radius:16px; background:#fff; box-shadow:0 20px 55px rgba(27,35,50,.18); }
+    .wb-adopt-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:25px 28px 21px; border-bottom:1px solid #edf0f4; }
+    .wb-adopt-head h2 { margin:0; color:#2f3744; font-size:19px; }.wb-adopt-head p { margin:7px 0 0; color:#9aa4b2; font-size:12px; }
+    .wb-adopt-close { width:38px; height:38px; flex:0 0 auto; border:1px solid #e2e7ef; border-radius:11px; color:#8793a3; background:#fff; font-size:21px; line-height:1; }
+    .wb-adopt-close:hover { border-color:#e6a4ae; color:#cb4051; }
+    .wb-adopt-form { display:flex; flex-direction:column; min-height:0; }
+    .wb-adopt-body { overflow:auto; padding:36px 28px 52px; }
+    .wb-adopt-notice { padding:15px 16px; border:1px solid #f4dce2; border-radius:9px; color:#ad8790; background:#fff8fa; font-size:12px; line-height:1.6; }
+    .wb-adopt-content { margin-top:15px; padding:16px; border:1px solid #dfe7f5; border-radius:9px; }
+    .wb-adopt-content strong { display:block; margin-bottom:9px; color:#657183; font-size:12px; }.wb-adopt-content p { margin:0; color:#8793a3; font-size:12px; line-height:1.8; white-space:pre-line; }
+    .wb-adopt-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px; }
+    .wb-adopt-field { display:grid; gap:8px; color:#919baa; font-size:12px; }.wb-adopt-field input,.wb-adopt-field textarea { width:100%; padding:10px 11px; border:1px solid #dce4f2; border-radius:7px; color:#596779; background:#fff; font-size:13px; }.wb-adopt-field input { height:40px; }.wb-adopt-field textarea { min-height:102px; resize:vertical; }.wb-adopt-field.note { margin-top:18px; }
+    .wb-adopt-foot { display:flex; align-items:center; gap:8px; padding:17px 28px; border-top:1px solid #edf0f4; }.wb-adopt-foot p { flex:1; margin:0; color:#a0aabb; font-size:11px; line-height:1.5; }.wb-adopt-foot button { min-height:36px; padding:0 15px; border:1px solid #dce4f0; border-radius:7px; color:#778397; background:#fff; font-size:12px; white-space:nowrap; }.wb-adopt-foot button.primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .wb-definitions { padding:17px 18px 18px; }.wb-definitions > p { margin:0 0 13px; color:#7a8290; font-size:11px; line-height:1.6; }.wb-definition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.wb-definition { padding:12px 13px; border:1px solid #e8ebf0; border-radius:7px; background:#fbfcfd; }.wb-definition strong { display:block; margin-bottom:6px; color:#384252; font-size:12px; }.wb-definition span,.wb-definition small { display:block; color:#687486; font-size:11px; line-height:1.65; }.wb-definition small { margin-top:6px; color:#9aa2af; }
+    .wb-table-wrap { overflow-x:auto; }.wb-table { width:100%; min-width:800px; border-collapse:collapse; text-align:left; font-size:11px; }.wb-table th { padding:10px 14px; border-bottom:1px solid #eef0f3; color:#9aa3af; background:#fbfcfd; font-weight:500; }.wb-table td { padding:11px 14px; border-bottom:1px solid #f0f1f4; color:#626d7b; vertical-align:middle; }.wb-table tr:last-child td { border-bottom:0; }.wb-table td strong,.wb-table td small { display:block; }.wb-table td strong { color:#3c4552; }.wb-table td small { margin-top:4px; color:#9ca5b2; font-size:10px; }.wb-foot { padding:12px 18px; border-top:1px solid #f0f1f4; color:#9aa2af; font-size:11px; }.wb-boundary { display:flex; justify-content:space-between; gap:12px; padding:17px 18px; }.wb-boundary strong { font-size:13px; }.wb-boundary p { margin:5px 0 0; color:#7a8290; font-size:11px; }.wb-boundary span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .orders tr.is-linked, .wb-task-table tr.is-linked { background:#fff8ea; }
+    .assistant { display:grid; grid-template-rows:42px minmax(0,1fr) auto; min-width:0; min-height:0; margin:8px 10px 8px 0; overflow:hidden; border:1px solid #e6e2ec; border-radius:18px; background:linear-gradient(155deg,#fff5f6 0%,#fff9fb 27%,#f7faff 62%,#f3f8ff 100%); }
+    .assistant-head { display:flex; align-items:center; gap:5px; padding:0 16px; color:#828c9c; font-size:12px; }
+    .assistant-head strong { margin-right:auto; font-weight:700; }
+    .assistant-head button { width:28px; height:28px; border:0; border-radius:6px; color:#718095; background:transparent; font-size:17px; }
+    .assistant-head button:hover { color:var(--brand); background:rgba(255,255,255,.72); }
+    .assistant-body { min-height:0; overflow:auto; padding:0 19px 14px; }
+    .hero { display:grid; justify-items:center; padding:17px 4px 26px; text-align:center; }
+    .robot { position:relative; display:grid; place-items:center; width:82px; height:68px; margin:8px 0 22px; border:6px solid #fff; border-radius:31px; background:linear-gradient(150deg,#fff,#ffe3e8); box-shadow:0 12px 24px rgba(205,89,110,.19),inset 0 -4px 9px rgba(236,120,144,.14); }
+    .robot::before,.robot::after { content:""; position:absolute; top:22px; width:10px; height:23px; border:2px solid #fff; border-radius:9px; background:#ff859b; }
+    .robot::before { left:-14px; }.robot::after { right:-14px; }
+    .robot i { position:absolute; top:-15px; left:34px; width:5px; height:13px; border-radius:5px; background:#ffd5dd; }
+    .robot i::after { content:""; position:absolute; left:-3px; top:-5px; width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:#ffa3b3; }
+    .robot span { display:flex; align-items:center; justify-content:center; gap:16px; width:59px; height:36px; border-radius:18px; background:radial-gradient(circle at 50% 0%,#ff7280,#9f0d27 65%,#650b1f); box-shadow:inset 0 2px 5px rgba(255,255,255,.7),0 3px 8px rgba(142,10,36,.27); }
+    .robot span::before,.robot span::after { content:""; width:4px; height:10px; border-radius:50%; background:#fff; box-shadow:0 0 7px #fff; }
+    .hero h2 { margin:0 0 8px; font-size:19px; }.hero p { margin:0; color:#77849a; font-size:13px; line-height:1.8; }
+    .quick-actions,.prompts { display:grid; gap:8px; }
+    .quick-actions button,.prompts button { width:100%; min-height:49px; padding:8px 14px; border:1px solid #dce4f5; border-radius:11px; color:#25303f; background:#fff; text-align:left; font-size:13px; font-weight:600; box-shadow:0 2px 4px rgba(63,90,136,.025); }
+    .quick-actions button:hover,.prompts button:hover { border-color:#f2a9af; color:var(--brand); background:#fffafa; }
+    .quick-actions button span { display:inline-grid; place-items:center; width:27px; margin-right:7px; color:#ef3153; vertical-align:middle; }
+    .quick-actions button:nth-child(2) span,.quick-actions button:nth-child(3) span { color:#3979ff; }.quick-actions button:nth-child(4) span { color:#ff7528; }
+    .quick-actions svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .prompt-section { margin-top:23px; }.prompt-section h3 { margin:0 0 12px; font-size:14px; }
+    .prompts button { min-height:40px; padding:7px 19px; border-radius:22px; color:#7c8a9f; font-size:12px; font-weight:400; }
+    .assistant-foot { padding:10px 12px 12px; }
+    .composer { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; align-items:center; height:58px; padding:0 10px; border:1px solid #dbe3f5; border-radius:17px; background:#fff; box-shadow:0 4px 14px rgba(77,105,155,.05); }
+    .composer button { display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:50%; color:#8290a4; background:#f0f3f8; font-size:22px; }
+    .composer .send { color:#73a3fc; background:#eef4ff; font-size:19px; }.composer .send:disabled { opacity:.7; cursor:default; }
+    .composer input { width:100%; min-width:0; border:0; outline:0; color:var(--text); background:transparent; font-size:11px; }
+    .composer input::placeholder { color:#9ba5b5; }
+    .disclaimer { margin:7px 0 0; color:#abb1ba; font-size:10px; text-align:center; }
+    .chat { display:grid; gap:12px; padding-top:12px; }.chat .question { justify-self:end; max-width:92%; padding:9px 12px; border-radius:10px; background:#f0f3f8; color:#455064; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .answer { padding:14px; border:1px solid #e2e8f3; border-radius:10px; background:rgba(255,255,255,.94); font-size:12px; line-height:1.65; }
+    .answer h3 { margin:0 0 8px; font-size:14px; }.answer p { margin:7px 0; }.answer ul { margin:8px 0; padding-left:18px; }.answer li { margin:5px 0; }
+    .answer small { display:block; margin-top:12px; color:var(--faint); }.back-home { margin:4px 0 10px; padding:0; border:0; color:#657a9b; background:none; font-size:11px; }
+    .history-overlay { position:fixed; inset:0; z-index:10; display:grid; place-items:center; background:rgba(26,35,50,.28); }
+    .history-dialog { width:min(420px,calc(100vw - 32px)); max-height:70vh; overflow:auto; padding:18px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(25,31,45,.16); }
+    .history-dialog header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }.history-dialog h2 { margin:0; font-size:16px; }
+    .history-dialog header button { border:0; background:none; font-size:20px; }.history-dialog .empty { color:var(--muted); font-size:12px; }
+    .history-row { display:block; width:100%; padding:10px; border:1px solid var(--line); border-radius:7px; margin:7px 0; background:#fff; text-align:left; font-size:12px; }.history-row small { display:block; margin-top:4px; color:var(--faint); }
+    .toast { position:fixed; right:20px; bottom:18px; z-index:20; padding:10px 14px; border:1px solid var(--line); border-radius:7px; background:#fff; box-shadow:0 8px 25px rgba(25,31,45,.1); font-size:12px; }
+    @media(max-width:1200px) { .content { padding:20px; }.wb-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }.wb-panels { grid-template-columns:1fr; } }
+    @media(max-width:800px) { .summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media(max-width:560px) { .topbar { height:48px; padding:0 12px; }.page-tabs { width:100%; }.page-tab { min-width:0; flex:1; }.period-control select { max-width:200px; }.content { padding:16px 12px; }.wb-definition-grid { grid-template-columns:1fr; }.wb-hero { align-items:flex-start; flex-direction:column; }.wb-title-line { gap:8px; }.wb-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.wb-boundary { flex-direction:column; }.wb-context small { width:100%; margin-left:0; }.wb-adopt-overlay { padding:10px; }.wb-adopt-head,.wb-adopt-body,.wb-adopt-foot { padding-left:17px; padding-right:17px; }.wb-adopt-body { padding-top:20px; padding-bottom:24px; }.wb-adopt-fields { grid-template-columns:1fr; }.wb-adopt-foot { flex-wrap:wrap; }.wb-adopt-foot p { flex-basis:100%; } }
+  </style>
+<style id="gea-compact-page-header">
+/* Embedded business pages share compact inventory-page top spacing. */
+.workspace > .content { width:100%; max-width:none; padding-top:8px; }
+.wb-hero h1 { display:none; }
+</style>
+<style>/* Shared workbench resource 1.1.1. State belongs to DSH ui-theme.
+ * html + body specificity keeps the adapter stable when base sheets reload.
+ * Inline user token overrides retain priority. Status palettes stay upstream. */
+html body {
+  --workbench-theme-version: "1.1.1";
+  --workbench-font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --workbench-font-size: var(--dsh-content-font-size, 14px);
+  --workbench-page: #f7f8fa;
+  --workbench-surface: #ffffff;
+  --workbench-subtle: #fafafa;
+  --workbench-muted-surface: #f5f6f8;
+  --workbench-text: #20232a;
+  --workbench-body: #555d68;
+  --workbench-muted: #626b78;
+  --workbench-border: #e3e6ea;
+  --workbench-control-border: #d9dde3;
+  --workbench-brand: #df1732;
+  --workbench-selected-text: #d0132c;
+  --workbench-brand-hover: #c91029;
+  --workbench-brand-soft: #fff0f2;
+  --workbench-hover: #fffafb;
+}
+
+html body[data-ds-dark-theme] {
+  --workbench-page: #1b1d21;
+  --workbench-surface: #24262b;
+  --workbench-subtle: #282b31;
+  --workbench-muted-surface: #30343b;
+  --workbench-text: #edf0f5;
+  --workbench-body: #c7cdd6;
+  --workbench-muted: #aab3bf;
+  --workbench-border: #414751;
+  --workbench-control-border: #59616e;
+  --workbench-brand: #ff8092;
+  --workbench-selected-text: #ff9aa8;
+  --workbench-brand-hover: #ff9aa8;
+  --workbench-brand-soft: #442630;
+  --workbench-hover: #35272e;
+}
+
+.agent-workbench-ui {
+  background: var(--workbench-page);
+  color: var(--workbench-text);
+  font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
+}
+.agent-workbench-ui button { padding: 10px 14px; border: 1px solid var(--workbench-border); border-radius: 8px; background: var(--workbench-surface); color: var(--workbench-text); font: inherit; cursor: pointer; }
+.agent-workbench-ui button:not(:disabled):hover { background: var(--workbench-hover); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+
+.agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
+.agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }
+
+html body {
+  --bg: var(--workbench-page); --surface: var(--workbench-surface);
+  --line: var(--workbench-border); --text: var(--workbench-text);
+  --muted: var(--workbench-muted); --brand: var(--workbench-brand);
+  --brand-soft: var(--workbench-brand-soft);
+  font-family: var(--workbench-font-family); font-size: var(--workbench-font-size);
+  display: flex; flex-direction: column; height: 100vh;
+}
+.prototype-notice, #pageSyncStatus { margin: 0; padding: 8px 16px; background: var(--workbench-subtle); color: var(--workbench-body); font-size: 11px; }
+#pageSyncStatus { position: fixed; top: 8px; right: 16px; z-index: 10; max-width: calc(100% - 32px); border-radius: 8px; color: #956900; background: #fff4d9; pointer-events: none; }
+.shell { flex: 1; height: auto; min-height: 0; }
+.workspace, .content, .wb-card, .wb-kpi, .wb-adopt-dialog, .wb-detail-dialog { background: var(--surface); color: var(--text); }
+.content { padding: 16px; }
+.wb-kpi, .wb-card { border-color: var(--line); border-radius: 10px; }
+.wb-kpi strong { font-size: 23px; }
+.period-switch, .wb-events-tabs, .wb-filters { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); overflow-x: auto; scrollbar-width: none; }
+.period-switch { padding: 0; }
+.period-switch button, .wb-events-tabs button, .wb-filters button { min-height: 31px; border-radius: 0; border-bottom: 2px solid transparent; background: var(--surface); color: var(--workbench-body); font-size: 11px; box-shadow: none; }
+.period-switch button.active, .wb-events-tabs button.active, .wb-filters button.active { color: var(--brand); border-bottom-color: var(--brand); background: var(--surface); box-shadow: none; font-weight: 800; }
+.wb-events-tabs button.active::after, .wb-filters button.active::after { display: none; }
+button:hover { background: var(--workbench-hover); color: var(--brand); }
+.primary, .wb-action-links button.primary, .wb-adopt-foot button.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+.primary:hover, .wb-action-links button.primary:hover, .wb-adopt-foot button.primary:hover { background: var(--workbench-brand-hover); color: #fff; border-color: var(--workbench-brand-hover); }
+button, input, select, textarea { border-radius: 8px; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.wb-kpi .wb-kpi-state.bad { color: #c8112a; background: #ffe9ec; }
+.wb-kpi .wb-kpi-state.unknown { color: #956900; background: #fff4d9; }
+.wb-task-status.done { color: #168e58; background: #eaf7ef; }
+.wb-task-table, .wb-table { min-width: 800px; }
+.wb-task-table th { background: var(--workbench-muted-surface); color: var(--muted); border-color: var(--line); }
+.wb-task-table td { color: var(--workbench-body); border-color: var(--line); }
+.wb-task-table strong { color: var(--text); }
+.wb-task-table tr.is-linked { background: var(--workbench-brand-soft); }
+.wb-table-wrap { overflow-x: auto; }
+body[data-ds-dark-theme] .wb-context span, body[data-ds-dark-theme] .wb-definition, body[data-ds-dark-theme] .period-empty, body[data-ds-dark-theme] .toast, body[data-ds-dark-theme] .wb-adopt-content { background: var(--workbench-subtle); color: var(--text); border-color: var(--line); }
+body[data-ds-dark-theme] .wb-table th { background: var(--workbench-muted-surface); }
+body[data-ds-dark-theme] .wb-adopt-head, body[data-ds-dark-theme] .wb-adopt-foot { background: var(--surface); border-color: var(--line); }
+body[data-ds-dark-theme] .wb-card p, body[data-ds-dark-theme] .wb-event-top strong, body[data-ds-dark-theme] .wb-action strong, body[data-ds-dark-theme] .wb-definition strong, body[data-ds-dark-theme] .wb-definition span, body[data-ds-dark-theme] .wb-definition small, body[data-ds-dark-theme] .wb-context strong, body[data-ds-dark-theme] .period-label, body[data-ds-dark-theme] .wb-table td, body[data-ds-dark-theme] .wb-table td strong, body[data-ds-dark-theme] .wb-adopt-field, body[data-ds-dark-theme] .wb-adopt-head h2, body[data-ds-dark-theme] .wb-detail-dialog h2, body[data-ds-dark-theme] .wb-detail-dialog h3 { color: var(--workbench-body); }
+body[data-ds-dark-theme] .wb-action, body[data-ds-dark-theme] .wb-event, body[data-ds-dark-theme] .wb-boundary, body[data-ds-dark-theme] input, body[data-ds-dark-theme] select, body[data-ds-dark-theme] textarea { background: var(--workbench-subtle); color: var(--text); border-color: var(--line); }
+@media (max-width: 900px) { .wb-panels { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .wb-kpis, .wb-actions, .wb-adopt-fields { grid-template-columns: 1fr; } .content { padding: 12px; } }
+</style></head>
+<body><div class="prototype-notice">开发中 · 报告摘录与本地模拟；未连接真实订单或任务系统。</div><p id="pageSyncStatus" role="status" hidden></p>
+  <div class="shell">
+    <main class="main" id="mainPage">
+      <div class="layout" id="layout">
+        <div class="workspace">
+          <section class="content" id="workbenchView" aria-label="订单工作台">
+            <div class="wb-hero"><div class="period-bar" role="group" aria-label="订单数据统计周期"><span class="period-label">统计周期</span><div class="period-switch" role="group" aria-label="月度或周度"><button id="monthMode" class="active" type="button" aria-pressed="true">月度</button><button id="weekMode" type="button" aria-pressed="false">周度</button></div><label class="period-control">选择月份 <input id="periodMonth" type="month" value="2026-09" aria-label="选择月份"></label><label class="period-control" id="weekControl" hidden>选择周次 <select id="periodWeek" aria-label="选择周次"></select></label><span class="period-meta" id="periodMeta" aria-live="polite"></span></div><div class="wb-context"><strong>当前场景</strong><span>订单质量与交付协同</span><span>全部基地 · 全部品类</span></div><button class="wb-link" type="button" data-order-workbench-page>查看订单履约 →</button></div>
+            <div class="period-empty" id="wbPeriodEmpty" role="status" hidden></div>
+            <div class="wb-report-date">月度报告截至 2026-09-13</div>
+            <section class="wb-section" aria-label="订单核心指标"><div class="wb-kpis" id="wbKpis"></div></section>
+            <div class="wb-panels"><section class="wb-card" aria-labelledby="wbEventsTitle"><div class="wb-card-title"><div><h2 id="wbEventsTitle">事件预警</h2><p>从报告中的未达标项与重点异常提炼</p></div><span id="wbEventCount"></span></div><div class="wb-events-tabs" role="group" aria-label="筛选预警事项"><button class="active" type="button" data-wb-event-filter="focus">重点关注</button><button type="button" data-wb-event-filter="all">全部事项</button></div><div id="wbEvents"></div><div class="wb-panel-foot">仅为报告异常事项，不等同于去重后的预警订单数。</div></section><section class="wb-card" aria-labelledby="wbActionsTitle"><div class="wb-card-title"><div><h2 id="wbActionsTitle">行动建议</h2><p>从根因到可复核的处理动作</p></div><span>待业务确认 ›</span></div><div id="wbActions"></div><div class="wb-panel-foot">AI 提出建议，人员复核后推进；不会自动改变订单或任务状态。</div></section></div>
+            <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle"><div class="wb-task-head"><div><h2 id="wbTasksTitle">任务追踪</h2><p>采纳建议后在本页创建本地跟进任务；不连接真实任务系统</p></div><div class="wb-task-summary"><span id="wbTaskSummary"></span><button type="button" data-wb-export>⇩ 导出清单</button></div></div><div class="wb-filters" role="group" aria-label="筛选任务"><button class="active" type="button" data-wb-task-filter="all">全部 <span id="wbTaskAllCount"></span></button><button type="button" data-wb-task-filter="pending">待跟进 <span id="wbTaskPendingCount"></span></button><button type="button" data-wb-task-filter="done">已完成 <span id="wbTaskDoneCount"></span></button></div><div class="wb-task-table-wrap"><table class="wb-task-table"><thead><tr><th>任务 / 关联事项</th><th>责任角色</th><th>预计截止日期</th><th>本地状态</th><th>操作</th></tr></thead><tbody id="wbTaskRows"></tbody></table></div><div class="wb-foot">任务仅保存在本次打开的页面中，不代表实际派发、执行或验收。</div></section>
+            <section class="wb-card wb-boundary"><div><strong>数据边界</strong><p>9 月报告指标与异常事项 → 人工核实 → 改善建议 → 演示任务；订单明细仍在“订单履约”页</p></div><span>报告摘录 · 非实时</span></section>
+          </section>
+
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="wb-detail-overlay" id="wbDetailOverlay" hidden><div class="wb-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="wbDetailTitle"><div class="wb-detail-head"><h2 id="wbDetailTitle"></h2><button type="button" id="wbDetailClose" aria-label="关闭详情">×</button></div><div id="wbDetailBody"></div></div></div>
+  <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden><div class="wb-adopt-dialog" role="dialog" aria-modal="true" aria-labelledby="wbAdoptTitle" aria-describedby="wbAdoptSubtitle"><div class="wb-adopt-head"><div><h2 id="wbAdoptTitle">采纳行动建议 · 人工确认</h2><p id="wbAdoptSubtitle"></p></div><button class="wb-adopt-close" id="wbAdoptClose" type="button" aria-label="关闭">×</button></div><form class="wb-adopt-form" id="wbAdoptForm"><div class="wb-adopt-body"><div class="wb-adopt-notice">◎　确认后将在任务追踪区创建本地跟进任务，不创建真实业务单据，也不会自动联系系统责任人。</div><div class="wb-adopt-content"><strong>任务内容</strong><p id="wbAdoptContent"></p></div><div class="wb-adopt-fields"><label class="wb-adopt-field">责任角色<input id="wbAdoptRole" type="text" maxlength="40" required></label><label class="wb-adopt-field">预计截止日期<input id="wbAdoptDue" type="date" required></label></div><label class="wb-adopt-field note">确认说明（可选）<textarea id="wbAdoptNote" maxlength="500" placeholder="补充需要核验的事项、业务限制或交付物"></textarea></label></div><div class="wb-adopt-foot"><p>同一统计周期内的同一建议只创建一次；创建后可继续查看任务。</p><button id="wbAdoptCancel" type="button">暂不采纳</button><button id="wbAdoptConfirm" class="primary" type="button">确认并创建任务</button></div></form></div></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+<script>"use strict";
+(() => {
+  // business/shared/view-state.js
+  var PROTOCOL = "dsh-workbench-view-v1";
+  function createPageViewState(page) {
+    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-qll", "inventory-fc", "inventory-aqkc", "inventory-dealer", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment", "inventory-personal", "inventory-apsplan", "inventory-dms"].includes(page);
+    let state = { version: 1 };
+    let binding, dirty = false;
+    const listeners = /* @__PURE__ */ new Set();
+    const releasedChannels = /* @__PURE__ */ new Set();
+    const send = () => {
+      if (binding)
+        window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
+    };
+    const ready2 = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
+    const receive = (event) => {
+      const value = event.data;
+      if (event.source !== window.parent || value?.protocol !== PROTOCOL || value.page !== page || value.version !== 1)
+        return;
+      if (value.type === "request-ready") {
+        ready2();
+        return;
+      }
+      if (value.type === "released") {
+        releasedChannels.add(value.channel);
+        if (binding?.channel === value.channel) {
+          binding = void 0;
+          if (sessionPage) {
+            dirty = false;
+            state = { version: 1 };
+            for (const listener of listeners) listener(state, "released");
+          }
+        }
+        return;
+      }
+      if (value.type !== "restore" || typeof value.channel !== "string" || !Number.isSafeInteger(value.generation) || value.generation < 0 || releasedChannels.has(value.channel) || binding?.channel === value.channel && value.generation < binding.generation)
+        return;
+      binding = { channel: value.channel, generation: value.generation };
+      state = dirty ? { ...value.state, ...state } : { ...value.state ?? {}, version: 1 };
+      dirty = false;
+      for (const listener of listeners)
+        listener(state, "restore");
+      send();
+    };
+    window.addEventListener("message", receive);
+    window.addEventListener("pagehide", () => {
+      binding = void 0;
+      window.removeEventListener("message", receive);
+      listeners.clear();
+    }, { once: true });
+    ready2();
+    return { get: () => state, subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }, update: (changes) => {
+      state = { ...state, ...changes, version: 1 };
+      if (binding || !sessionPage)
+        dirty = true;
+      send();
+    } };
+  }
+
+  // business/shared/query-error.js
+  var DATA_PERMISSION_MESSAGE = "\u5F53\u524D\u8D26\u53F7\u6682\u65E0\u6570\u636E\u6743\u9650";
+  function sqlQueryError(cause) {
+    if (cause?.name === "AbortError") return cause;
+    if (cause?.code === "GEA_SQL_DISPLAY_ERROR") return cause;
+    const code = String(cause?.code ?? "");
+    const message = String(cause?.message ?? "");
+    const denied = /(?:DATA_PERMISSION_DENIED|RETURN_PERMISSION_DENIED|NO_RETURN_COLUMN_ALLOWED|ACCESS_DENIED)/.test(
+      code + " " + message
+    );
+    const expired = /(?:SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)|会话已失效)/.test(
+      code + " " + message
+    );
+    const error = new Error(
+      denied ? DATA_PERMISSION_MESSAGE : expired ? "\u6570\u636E\u4F1A\u8BDD\u5DF2\u5931\u6548\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u91CD\u8BD5" : "\u6570\u636E\u8BFB\u53D6\u5931\u8D25\uFF0C\u8BF7\u5237\u65B0\u91CD\u8BD5\uFF1B\u82E5\u4ECD\u5931\u8D25\uFF0C\u8BF7\u67E5\u770B\u63A5\u53E3\u9519\u8BEF\u8BE6\u60C5",
+      { cause }
+    );
+    error.code = "GEA_SQL_DISPLAY_ERROR";
+    return error;
+  }
+
+  // business/shared/channel.js
+  var context;
+  var channel;
+  var sequence = 0;
+  var pending = /* @__PURE__ */ new Map();
+  var handlers = /* @__PURE__ */ new Map();
+  var appliedThemeTokens = [];
+  var pageGroups = /* @__PURE__ */ new Map();
+  var applying = /* @__PURE__ */ new Map();
+  var invoking = /* @__PURE__ */ new Map();
+  function cancelActions() {
+    for (const task of applying.values()) task.abort();
+    for (const task of invoking.values()) task.controller.abort();
+  }
+  function reportCatalog() {
+    if (!channel || !context?.session) return;
+    channel.postMessage({
+      type: "catalog",
+      session: context.session,
+      elements: [...pageGroups.values()].flatMap((group) => group.elements)
+    });
+  }
+  function reportElements(key, elements, apply) {
+    const group = { elements, apply };
+    pageGroups.set(key, group);
+    reportCatalog();
+    return () => {
+      if (pageGroups.get(key) !== group) return;
+      pageGroups.delete(key);
+      reportCatalog();
+    };
+  }
+  var readyResolve;
+  var ready = new Promise((resolve) => {
+    readyResolve = resolve;
+  });
+  function parentOrigin() {
+    try {
+      const url = new URL(document.referrer || window.location.href);
+      if (!url.host) return void 0;
+      if (url.origin !== "null") return url.origin;
+      return url.protocol === "dsh-app:" && url.host === "app" ? "dsh-app://app" : void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  window.addEventListener("message", (event) => {
+    if (event.source === window.parent && event.data?.protocol === "gea-html-v2" && event.data.type === "request-ready") {
+      window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+      return;
+    }
+    if (event.source !== window.parent || event.origin !== parentOrigin() || typeof event.data?.context?.session !== "string" || typeof event.data?.context?.plugin !== "string" || event.data?.protocol !== "gea-html-v2" || event.data?.type !== "connect" || !event.ports[0] || channel && context?.session === event.data.context.session)
+      return;
+    if (channel) {
+      window.dispatchEvent(new Event("gea-session-changing"));
+      channel.close();
+      cancelActions();
+      for (const item of pending.values()) {
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+      }
+      pending.clear();
+    }
+    context = event.data.context;
+    channel = event.ports[0];
+    channel.onmessage = (event2) => {
+      const message = event2.data;
+      if (message.type === "context") {
+        const previousSession = context?.session;
+        if (previousSession && previousSession !== message.context?.session) {
+          window.dispatchEvent(new Event("gea-session-changing"));
+          for (const [id, item] of pending) {
+            clearTimeout(item.timer);
+            item.cleanup?.();
+            item.reject(Error("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5207\u6362\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C"));
+            channel.postMessage({ type: "cancel", id, session: previousSession });
+          }
+          pending.clear();
+        }
+        cancelActions();
+        context = message.context;
+        reportCatalog();
+        if (context?.session)
+          channel.postMessage({
+            type: "theme:subscribe",
+            session: context.session
+          });
+        if (context?.session && previousSession !== context.session)
+          window.dispatchEvent(new Event("gea-session-changed"));
+      }
+      if (message.type === "theme" && context && message.context?.session === context.session && message.context?.plugin === context.plugin) {
+        if (message.version !== "1.1.1" || !["light", "dark"].includes(message.colorScheme) || !message.tokens || !Number.isInteger(message.fontSize) || message.fontSize < 12 || message.fontSize > 17 || Object.entries(message.tokens).some(
+          ([name, value]) => !/^--dsw-[a-z0-9-]+$/.test(name) || typeof value !== "string" || value.length > 500
+        )) {
+          document.getElementById("app").textContent = "\u5171\u4EAB\u6837\u5F0F\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9875\u9762";
+          return;
+        }
+        for (const name of appliedThemeTokens) document.body.style.removeProperty(name);
+        appliedThemeTokens = Object.keys(message.tokens);
+        for (const [name, value] of Object.entries(message.tokens))
+          document.body.style.setProperty(name, value);
+        document.body.style.setProperty("--workbench-font-size", `${message.fontSize}px`);
+        document.body.style.setProperty("--dsh-content-font-size", `${message.fontSize}px`);
+        document.documentElement.style.colorScheme = message.colorScheme;
+        document.body.toggleAttribute("data-ds-dark-theme", message.colorScheme === "dark");
+      }
+      if (message.type === "response") {
+        const item = pending.get(message.id);
+        if (!item) return;
+        pending.delete(message.id);
+        clearTimeout(item.timer);
+        item.cleanup?.();
+        if (message.error) {
+          const error = item.method === "sql" ? sqlQueryError(Error(message.error)) : Error(message.error);
+          if (item.method === "sql" || item.method === "workspace")
+            window.dispatchEvent(
+              new CustomEvent("gea-query-warning", {
+                detail: { message: error.message.slice(0, 600) }
+              })
+            );
+          item.reject(error);
+        } else item.resolve(message.result);
+      }
+      if (message.type === "cancel" && message.session === context?.session) {
+        applying.get(message.toolCallId)?.abort();
+        invoking.get(message.id)?.controller.abort();
+      }
+      if (message.type === "apply" && message.session === context?.session) {
+        const session = context.session;
+        const task = new AbortController();
+        applying.set(message.toolCallId, task);
+        Promise.resolve().then(async () => {
+          const args = message.args;
+          const targets = args?.targets ?? [args?.target];
+          if (!Array.isArray(targets) || !targets.length) throw Error("MISSING_TARGET");
+          for (const target of targets) {
+            task.signal.throwIfAborted();
+            if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+            const group = [...pageGroups.values()].find(
+              (group2) => group2.elements.some((element2) => element2.id === target)
+            );
+            const element = group?.elements.find((element2) => element2.id === target);
+            if (!element || !group.apply) throw Error("ELEMENT_GONE");
+            if (args.kind === "setValue" && !element.editable) throw Error("ELEMENT_READ_ONLY");
+            if (args.kind === "invoke" && !element.actions?.includes(args.action ?? "invoke"))
+              throw Error("ACTION_NOT_ALLOWED");
+            if (!["setValue", "invoke", "select", "clear"].includes(args.kind))
+              throw Error("INVALID_PAGE_ACTION");
+            await group.apply({ ...args, target }, task.signal);
+          }
+          task.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          return { applied: true };
+        }).catch((error) => ({ applied: false, error: error.message })).then((result) => {
+          applying.delete(message.toolCallId);
+          channel.postMessage({
+            type: "applied",
+            toolCallId: message.toolCallId,
+            session,
+            ...result
+          });
+          reportCatalog();
+        });
+      }
+      if (message.type === "invoke" && message.session === context?.session) {
+        const handler = handlers.get(message.name);
+        const session = context.session, ownerChannel = channel;
+        const controller = new AbortController();
+        invoking.set(message.id, { controller, handler });
+        Promise.resolve().then(async () => {
+          if (!handler) throw Error("\u9875\u9762\u672A\u6CE8\u518C\u8BE5\u64CD\u4F5C");
+          controller.signal.throwIfAborted();
+          const result = await handler(message.arguments, { signal: controller.signal });
+          controller.signal.throwIfAborted();
+          if (context?.session !== session) throw Error("PAGE_SESSION_CHANGED");
+          return result;
+        }).then(
+          (result) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, result }),
+          (error) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, error: error.message })
+        ).finally(() => {
+          if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id);
+        });
+      }
+      if (message.type === "identity-changed") {
+        cancelActions();
+        context = null;
+        for (const item of pending.values()) {
+          clearTimeout(item.timer);
+          item.cleanup?.();
+          item.reject(Error("\u767B\u5F55\u8EAB\u4EFD\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u52A0\u8F7D"));
+        }
+        pending.clear();
+        window.dispatchEvent(new Event("gea-identity-changed"));
+      }
+    };
+    channel.start();
+    reportCatalog();
+    channel.postMessage({ type: "theme:subscribe", session: context.session });
+    readyResolve(event.data.context);
+    window.dispatchEvent(new Event("gea-session-changed"));
+  });
+  window.parent.postMessage({ protocol: "gea-html-v2", type: "ready" }, "*");
+  async function call(method, parameters = {}, options = {}) {
+    options.signal?.throwIfAborted();
+    if (!channel || !context?.session) throw Error("\u9875\u9762\u5DF2\u663E\u793A\uFF0C\u8BF7\u5148\u767B\u5F55\u5E76\u8FDE\u63A5\u9875\u9762\u80FD\u529B\u3002");
+    const session = context.session;
+    const id = String(++sequence);
+    return new Promise((resolve, reject) => {
+      const cleanup = () => options.signal?.removeEventListener("abort", abort);
+      const abort = () => {
+        if (!pending.delete(id)) return;
+        clearTimeout(timer);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        reject(options.signal.reason ?? Error("\u8BF7\u6C42\u5DF2\u53D6\u6D88"));
+      };
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        cleanup();
+        channel.postMessage({ type: "cancel", id, session });
+        const error = Error("\u4E1A\u52A1\u8BF7\u6C42\u8D85\u65F6");
+        reject(method === "sql" ? sqlQueryError(error) : error);
+      }, 12e4);
+      pending.set(id, { resolve, reject, timer, method, cleanup });
+      options.signal?.addEventListener("abort", abort, { once: true });
+      channel.postMessage({
+        type: "request",
+        id,
+        method,
+        parameters,
+        session
+      });
+    });
+  }
+
+  // prototypes/inventory-orderworkbench/publication.js
+  function publishReport(snapshot, disposePage) {
+    let active = true, connected = false, revision = 0, epoch = 0;
+    let latest, running = false;
+    let withdraw = () => {
+    };
+    let lifetime = new AbortController();
+    const status = document.getElementById("pageSyncStatus");
+    function showStatus(message) {
+      status.textContent = message;
+      status.hidden = !message;
+    }
+    async function flush() {
+      if (running || !active || !connected) return;
+      running = true;
+      while (latest && active && connected) {
+        const next = latest;
+        latest = void 0;
+        const version = revision, identity = epoch;
+        try {
+          await call("context", next, { signal: lifetime.signal });
+          if (!active || !connected || identity !== epoch) continue;
+          if (version !== revision) continue;
+          showStatus("");
+          withdraw = reportElements("order-report", [
+            { id: "report:period", role: "field", label: "\u5F53\u524D\u7EDF\u8BA1\u5468\u671F", value: next.period.label },
+            ...next.metrics.map((metric, index) => ({ id: `report:metric:${index}`, role: "field", label: metric.key, value: `${metric.value} \xB7 ${metric.status} \xB7 \u76EE\u6807${metric.target}` })),
+            ...next.events.map((event) => ({ id: `report:event:${event.id}`, role: "row", label: event.title, value: event.summary })),
+            ...next.tasks.map((task) => ({ id: `report:task:${task.id}`, role: "row", label: task.title, value: `${task.status} \xB7 ${task.role} \xB7 ${task.due}` }))
+          ]);
+        } catch (error) {
+          if (active && connected && identity === epoch && version === revision)
+            showStatus(`\u9875\u9762\u4E0A\u4E0B\u6587\u540C\u6B65\u5931\u8D25\uFF1A${error.message}\uFF1B\u5F53\u524D\u9875\u4ECD\u53EF\u672C\u5730\u67E5\u770B\uFF0C\u8BF7\u91CD\u65B0\u64CD\u4F5C\u6216\u6253\u5F00\u9875\u9762\u3002`);
+        }
+      }
+      running = false;
+    }
+    function update() {
+      if (!active) return;
+      revision++;
+      withdraw();
+      withdraw = () => {
+      };
+      latest = snapshot();
+      if (connected) showStatus("\u6B63\u5728\u540C\u6B65\u5F53\u524D\u62A5\u544A\u4E0A\u4E0B\u6587\u2026");
+      void flush();
+    }
+    const changed = () => {
+      epoch++;
+      lifetime.abort();
+      lifetime = new AbortController();
+      connected = true;
+      update();
+    };
+    const invalidated = () => {
+      epoch++;
+      lifetime.abort();
+      connected = false;
+      latest = void 0;
+      withdraw();
+      withdraw = () => {
+      };
+      showStatus("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9875\u9762\u3002");
+    };
+    function dispose() {
+      if (!active) return;
+      active = false;
+      epoch++;
+      lifetime.abort();
+      latest = void 0;
+      withdraw();
+      clearTimeout(window.toastTimer);
+      disposePage();
+      window.removeEventListener("gea-session-changed", changed);
+      window.removeEventListener("gea-identity-changed", invalidated);
+      window.removeEventListener("pagehide", dispose);
+      document.removeEventListener("click", update);
+      document.removeEventListener("change", update);
+      document.removeEventListener("submit", update);
+    }
+    document.addEventListener("click", update);
+    document.addEventListener("change", update);
+    document.addEventListener("submit", update);
+    window.addEventListener("gea-session-changed", changed);
+    window.addEventListener("gea-identity-changed", invalidated);
+    window.addEventListener("pagehide", dispose);
+    void ready.then(() => {
+      if (active) {
+        connected = true;
+        update();
+      }
+    });
+    return update;
+  }
+
+  // prototypes/inventory-orderworkbench/entry.js
+  var view = createPageViewState("inventory-orderworkbench");
+  var restoringView = false;
+  var workbenchView = document.getElementById("workbenchView");
+  var activePage = "workbench";
+  var periodMode = "month";
+  var selectedMonth = "2026-09";
+  var selectedWeek = "2026-09-14";
+  var weekInitialized = false;
+  var eventFilter = "focus";
+  var taskFilter = "all";
+  var createdWorkbenchTasks = /* @__PURE__ */ new Map();
+  var pageTimeouts = /* @__PURE__ */ new Set();
+  var downloadUrls = /* @__PURE__ */ new Set();
+  function schedule(callback, delay) {
+    const handle = setTimeout(() => {
+      pageTimeouts.delete(handle);
+      callback();
+    }, delay);
+    pageTimeouts.add(handle);
+    return handle;
+  }
+  var pendingAdoption = null;
+  var adoptReturnFocus = null;
+  var metricDefinitions = [
+    { key: "\u4F5C\u5E9F\u7387", value: "2.05%", target: "\u22646%", trend: "\u8F83\u4E0A\u671F -3.55pp", status: "\u8FBE\u6807", tone: "", formula: "\u5468\u671F\u5185\u4F5C\u5E9F\u8BA2\u5355\u6570 \xF7 \u540C\u671F\u63A5\u6536\u8BA2\u5355\u603B\u6570 \xD7 100%", note: "\u62A5\u544A\u672C\u671F 2.05%\u3001\u4E0A\u671F 5.60%\uFF1B\u5F53\u524D\u503C\u8FBE\u6807\u3002" },
+    { key: "\u6539\u5355\u7387", value: "2.20%", target: "\u22642%", trend: "\u8F83\u4E0A\u671F -0.85pp", status: "\u672A\u8FBE\u6807", tone: "urgent", formula: "\u5468\u671F\u5185\u6539\u5355\u91CF \xF7 \u6709\u6548\u6295\u5355\u91CF \xD7 100%", note: "\u62A5\u544A\u672C\u671F 2.20%\u3001\u4E0A\u671F 3.05%\uFF1B\u867D\u6709\u6539\u5584\uFF0C\u4ECD\u9AD8\u4E8E\u76EE\u6807 0.20pp\u3002" },
+    { key: "\u51C6\u4EA4\u7387", value: "95.82%", target: ">98.5%", trend: "\u8F83\u4E0A\u671F +0.93pp", status: "\u672A\u8FBE\u6807", tone: "urgent", formula: "\u5468\u671F\u5185\u6309\u7EA6\u5B9A\u65F6\u95F4\u4EA4\u4ED8\u7684\u8BA2\u5355\u6570 \xF7 \u5F53\u671F\u5E94\u4EA4\u4ED8\u8BA2\u5355\u6570 \xD7 100%", note: "\u62A5\u544A\u672C\u671F 95.82%\u3001\u4E0A\u671F 94.89%\uFF1B\u8DDD 98.5% \u76EE\u6807\u5DEE 2.68pp\u3002" },
+    { key: "\u8D85\u65F6\u8BA2\u5355\u6570", value: "\u2014", target: "\u5F85\u6838\u7B97", trend: "\u62A5\u544A\u672A\u7ED9\u603B\u5F20\u6570", status: "\u5F85\u6838\u7B97", tone: "", formula: "\u5468\u671F\u5185\u672A\u5728\u89C4\u5B9A\u8BA2\u5355\u5904\u7406\u6216\u5C65\u7EA6\u65F6\u6548\u5185\u5B8C\u6210\u76F8\u5E94\u8282\u70B9\u7684\u8BA2\u5355\u7D2F\u8BA1\u6570", note: "\u62A5\u544A\u4EC5\u5217\u51FA\u9762\u70B9\u8BA2\u5355\u8FDB\u5EA6\u8D85\u65F6 17% \u7B49\u95EE\u9898\uFF0C\u4E0D\u80FD\u6362\u7B97\u6210\u5168\u5C40\u8D85\u65F6\u8BA2\u5355\u5F20\u6570\u3002" },
+    { key: "\u9884\u8B66\u8BA2\u5355\u6570", value: "\u2014", target: "\u5F85\u6838\u7B97", trend: "\u9700\u8BA2\u5355\u7EA7\u53BB\u91CD", status: "\u5F85\u6838\u7B97", tone: "", formula: "\u5468\u671F\u5185\u547D\u4E2D\u9884\u8BBE\u5F02\u5E38\u89C4\u5219\u3001\u9700\u8981\u91CD\u70B9\u5173\u6CE8\u4E0E\u6838\u5B9E\u7684\u8BA2\u5355\u6570", note: "\u62A5\u544A\u63D0\u4F9B\u5F02\u5E38\u4E8B\u9879\u4E0E\u6307\u6807\u98CE\u9669\uFF0C\u4F46\u672A\u63D0\u4F9B\u53BB\u91CD\u540E\u7684\u9884\u8B66\u8BA2\u5355\u660E\u7EC6\u3002" }
+  ];
+  var reportEvents = [
+    { id: "west", focus: true, kind: "\u91CD\u70B9", title: "\u897F\u5357\u57FA\u5730\u5C65\u7EA6\u4E0E\u6EE1\u8DB3\u7387\u53CC\u4F4E", summary: "\u6EE1\u8DB3\u7387 92.24%\uFF0C\u51C6\u4EA4\u7387 89.38%\uFF0C\u53EF\u53D1\u8D27 8.9 \u5929\uFF1B\u4E3A 9 \u6708\u6700\u5927\u77ED\u677F\u3002", evidence: "\u57FA\u5730\u7EF4\u5EA6\u62A5\u544A\uFF1A\u897F\u5357\u6EE1\u8DB3\u7387 92.24%\u3001\u51C6\u4EA4\u7387 89.38%\u3001\u53EF\u53D1\u8D27\u5929\u6570 8.9 \u5929\u3002\u62A5\u544A\u5C06\u51B7\u5E93\u80FD\u529B\u4E0E\u8C03\u62E8\u5EF6\u8FDF\u5217\u4E3A\u91CD\u8981\u7EA6\u675F\u3002", action: "\u6838\u5B9E\u5916\u79DF\u4ED3\u4E0E\u8C03\u62E8\u5206\u6D41\u3001\u751F\u4EA7\u8282\u62CD\uFF1B\u63A8\u8FDB 9.25 \u51B7\u5E93\u7ACB\u5E93\u6280\u6539\u53EF\u884C\u6027\u8BC4\u4F30\u3002" },
+    { id: "prepared", focus: true, kind: "\u91CD\u70B9", title: "\u9884\u5236\u98DF\u6750\u6EE1\u8DB3\u7387\u4E3A\u54C1\u7C7B\u6700\u4F4E", summary: "\u672C\u671F 87.27%\uFF0C\u4F4E\u4E8E 95% \u76EE\u6807\uFF1B\u9AA8\u8089\u76F8\u8FDE\u3001\u7096\u998D\u7B49\u4EA7\u80FD\u7EA6\u675F\u9700\u8DDF\u8FDB\u3002", evidence: "\u54C1\u7C7B\u62A5\u544A\uFF1A\u9884\u5236\u98DF\u6750\u6EE1\u8DB3\u7387 87.27%\uFF0C\u4E3A 8 \u4E2A\u54C1\u7C7B\u6700\u4F4E\uFF1B\u539F\u56E0\u5305\u62EC\u9AA8\u8089\u76F8\u8FDE\u4E0E\u7096\u998D\u4EA7\u80FD\u7F3A\u53E3\u3001ODM \u8D44\u6E90\u8C03\u62E8\u3002", action: "\u590D\u6838 9.15 \u7096\u998D\u53CC\u73ED\u542F\u52A8\u4E0E\u7B2C\u4E8C\u5BB6\u4EE3\u5DE5\u5382\u4EA7\u80FD\u9A8C\u8BC1\uFF0C\u660E\u786E\u53EF\u4EA4\u4ED8\u91CF\u3002" },
+    { id: "noodle", focus: true, kind: "\u91CD\u70B9", title: "\u9762\u70B9\u6EE1\u8DB3\u7387\u672A\u8FBE\u6807", summary: "\u672C\u671F 94.80%\uFF0C\u62A5\u544A\u5217\u51FA\u7F3A\u8D27 2,600 \u4EF6\u3001\u8BA2\u5355\u8FDB\u5EA6\u8D85\u65F6 17%\u3002", evidence: "\u54C1\u7C7B\u62A5\u544A\uFF1A\u9762\u70B9\u6EE1\u8DB3\u7387 94.80%\uFF0C\u7F3A\u8D27 2,600 \u4EF6\uFF1B\u8BA2\u5355\u8FDB\u5EA6\u8D85\u65F6 17% \u662F\u62A5\u544A\u4E2D\u7684\u54C1\u7C7B\u95EE\u9898\u6BD4\u4F8B\uFF0C\u5E76\u975E\u5168\u5C40\u8D85\u65F6\u8BA2\u5355\u6570\u3002", action: "\u6838\u5BF9\u4F9B\u5E94\u4E0E\u5F00\u5355\u3001\u6D3E\u8F66\u3001\u88C5\u8F66\u8282\u70B9\uFF1B\u660E\u786E\u5EF6\u671F\u539F\u56E0\u53CA\u6708\u5185\u6062\u590D\u8282\u594F\u3002" },
+    { id: "change", focus: true, kind: "\u5173\u6CE8", title: "\u6539\u5355\u7387\u4ECD\u9AD8\u4E8E\u76EE\u6807", summary: "\u6574\u4F53 2.20%\uFF0C\u76EE\u6807 \u22642%\uFF1B\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E\u6539\u5355\u7387 27.55% \u5C5E\u660E\u663E\u5F02\u5E38\u3002", evidence: "\u6838\u5FC3 KPI \u62A5\u544A\uFF1A\u6539\u5355\u7387\u7531 3.05% \u964D\u81F3 2.20%\uFF0C\u4F46\u672A\u8FBE \u22642% \u76EE\u6807\uFF1B\u5927\u533A/\u7701\u533A\u62A5\u544A\u5217\u51FA\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E 27.55%\u3002", action: "\u5148\u6838\u5BF9\u6E20\u9053\u53E3\u5F84\u53CA\u6539\u5355\u539F\u56E0\uFF0C\u518D\u5206\u6E20\u9053\u590D\u76D8\u9501\u5355\u4E0E\u9700\u6C42\u53D8\u66F4\u6D41\u7A0B\u3002" },
+    { id: "cover", focus: false, kind: "\u5173\u6CE8", title: "\u706B\u9505\u6599\u4E0E\u6C64\u5706\u53EF\u53D1\u8D27\u5929\u6570\u504F\u9AD8", summary: "\u706B\u9505\u6599 19.3 \u5929\u3001\u6C64\u5706 13.4 \u5929\uFF0C\u5747\u9AD8\u4E8E <12 \u5929\u76EE\u6807\u3002", evidence: "\u54C1\u7C7B\u53EF\u53D1\u8D27\u5929\u6570\u62A5\u544A\uFF1A\u706B\u9505\u6599 19.3 \u5929\uFF0C\u4E3A\u4E25\u91CD\u8D85\u6807\uFF1B\u6C64\u5706 13.4 \u5929\uFF0C\u7565\u8D85\u76EE\u6807\u3002", action: "\u590D\u6838\u524D\u7F6E\u5907\u8D27\u3001\u52A8\u9500\u8282\u594F\u4E0E\u5E93\u5B58\u7ED3\u6784\uFF0C\u907F\u514D\u5355\u7EAF\u589E\u52A0\u5907\u8D27\u3002" }
+  ];
+  var reportActions = [
+    { id: "prepared", icon: "\u26A1", title: "\u590D\u6838\u9884\u5236\u98DF\u6750\u4EA7\u80FD\u8865\u4F4D", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u8BA1\u5212\u4E0E\u4F9B\u5E94\u534F\u540C \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u8DDF\u8FDB\u7096\u998D 9.15 \u53CC\u73ED\u542F\u52A8\u3001\u7B2C\u4E8C\u5BB6\u4EE3\u5DE5\u5382\u5B9E\u9645\u6708\u4EA7\u80FD\u53CA ODM \u4EA4\u4ED8\u6392\u671F\u3002", taskId: "capacity" },
+    { id: "west", icon: "\u2197", title: "\u63A8\u8FDB\u897F\u5357\u4ED3\u914D\u80FD\u529B\u6539\u5584", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u4ED3\u914D\u534F\u540C \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u5916\u79DF\u4ED3\u4E0E\u8C03\u62E8\u5206\u6D41\u540C\u6B65\u8BC4\u4F30\uFF0C\u6309\u62A5\u544A\u8282\u70B9\u63A8\u8FDB 9.25 \u7ACB\u5E93\u6280\u6539\u53EF\u884C\u6027\u3002", taskId: "warehouse" },
+    { id: "noodle", icon: "\u25F7", title: "\u62C6\u89E3\u8BA2\u5355\u8282\u70B9\u65F6\u6548", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u8BA2\u5355\u8FD0\u8425 \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u4ECE\u5F00\u5355\u3001\u6D3E\u8F66\u3001\u88C5\u8F66\u4E09\u9636\u6BB5\u6838\u5B9E\u5EF6\u671F\u4E0E\u7F3A\u8D27\uFF0C\u5173\u8054\u9762\u70B9\u548C\u90D1\u5DDE/\u9042\u5E73\u51C6\u4EA4\u95EE\u9898\u3002", taskId: "timing" },
+    { id: "cover", icon: "\u25C8", title: "\u590D\u6838\u8FC7\u91CF\u5907\u8D27\u4E0E\u52A8\u9500", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u5546\u54C1\u8BA1\u5212 \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u4F18\u5148\u590D\u6838\u706B\u9505\u6599 19.3 \u5929\u4E0E\u6C64\u5706 13.4 \u5929\u7684\u53EF\u53D1\u8D27\u5929\u6570\uFF0C\u660E\u786E\u6D88\u5316\u8282\u594F\u3002", taskId: "inventory" }
+  ];
+  var reportTasks = [
+    { id: "capacity", title: "\u9A8C\u8BC1\u9884\u5236\u98DF\u6750\u4EA7\u80FD\u8865\u4F4D", issue: "\u9884\u5236\u98DF\u6750 \xB7 \u6EE1\u8DB3\u7387 87.27%", role: "\u8BA1\u5212 / \u4F9B\u5E94\u534F\u540C", due: "09.15\uFF08\u62A5\u544A\u8282\u70B9\uFF09", status: "\u5F85\u8DDF\u8FDB", detail: "\u6838\u5B9E\u7096\u998D\u53CC\u73ED\u542F\u52A8\u3001\u7B2C\u4E8C\u5BB6\u4EE3\u5DE5\u5382\u5B9E\u9645\u4EA7\u80FD\u53CA ODM \u6392\u671F\u3002\u62A5\u544A\u53EA\u63D0\u51FA\u63AA\u65BD\uFF0C\u6267\u884C\u8FDB\u5EA6\u5F85\u786E\u8BA4\u3002" },
+    { id: "warehouse", title: "\u8BC4\u4F30\u897F\u5357\u7ACB\u5E93\u6280\u6539\u4E0E\u8C03\u62E8\u5206\u6D41", issue: "\u897F\u5357\u57FA\u5730 \xB7 \u51C6\u4EA4\u7387 89.38%", role: "\u4ED3\u914D\u534F\u540C", due: "09.25\uFF08\u62A5\u544A\u8282\u70B9\uFF09", status: "\u5F85\u8DDF\u8FDB", detail: "\u5B8C\u6210\u51B7\u5E93\u7ACB\u5E93\u6280\u6539\u53EF\u884C\u6027\u8BC4\u4F30\uFF0C\u5E76\u6838\u5B9E\u5916\u79DF\u4ED3\u3001\u8C03\u62E8\u5206\u6D41\u65B9\u6848\u3002" },
+    { id: "timing", title: "\u590D\u6838\u5F00\u5355 / \u6D3E\u8F66 / \u88C5\u8F66\u65F6\u6548", issue: "\u9762\u70B9\u7F3A\u8D27 \xB7 \u90D1\u5DDE / \u9042\u5E73\u51C6\u4EA4", role: "\u8BA2\u5355\u8FD0\u8425", due: "9 \u6708\u5185\uFF08\u62A5\u544A\u76EE\u6807\uFF09", status: "\u5F85\u8DDF\u8FDB", detail: "\u9010\u8282\u70B9\u8BC6\u522B\u8D85\u65F6\u539F\u56E0\u3001\u8D23\u4EFB\u73AF\u8282\u548C\u6539\u8FDB\u7A7A\u95F4\uFF1B\u62A5\u544A\u4E2D\u7684 17% \u4E3A\u9762\u70B9\u95EE\u9898\u6BD4\u4F8B\u3002" },
+    { id: "inventory", title: "\u590D\u6838\u706B\u9505\u6599\u4E0E\u6C64\u5706\u5907\u8D27\u8282\u594F", issue: "\u53EF\u53D1\u8D27\u5929\u6570 19.3 / 13.4 \u5929", role: "\u5546\u54C1\u8BA1\u5212", due: "\u5F85\u4E1A\u52A1\u786E\u8BA4", status: "\u5F85\u8DDF\u8FDB", detail: "\u533A\u5206\u524D\u7F6E\u5907\u8D27\u4E0E\u5B9E\u9645\u52A8\u9500\uFF0C\u63D0\u51FA\u5E93\u5B58\u7ED3\u6784\u548C\u53BB\u5316\u5EFA\u8BAE\u3002" }
+  ];
+  var weeklyMetricDefinitions = [
+    { key: "\u4F5C\u5E9F\u7387", value: "1.61%", target: "\u22646%", trend: "\u5468\u73AF\u6BD4 -1.69pp", status: "\u8FBE\u6807", tone: "", formula: "\u5468\u5185\u4F5C\u5E9F\u8BA2\u5355\u6570 \xF7 \u540C\u5468\u63A5\u6536\u8BA2\u5355\u603B\u6570 \xD7 100%", note: "9.6 \u5468\u62A5\u201C\u5468\u5EA6\u5BF9\u6BD4\u201D\u672C\u5468 1.61%\uFF0C\u4E0A\u5468 3.29%\uFF0C\u540C\u5468 8.80%\u3002\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u503C\u53E6\u4E3A 1.53%\u3002" },
+    { key: "\u6539\u5355\u7387", value: "2.00%", target: "\u22642%", trend: "\u5468\u73AF\u6BD4 +0.02pp", status: "\u8FBE\u6807", tone: "", formula: "\u5468\u5185\u6539\u5355\u91CF \xF7 \u540C\u5468\u6709\u6548\u6295\u5355\u91CF \xD7 100%", note: "\u672C\u5468 2.00%\uFF0C\u6070\u5728\u76EE\u6807\u4E0A\u9650\uFF1B\u4E0A\u5468 1.97%\u3002\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u503C 2.02%\uFF0C\u72B6\u6001\u4E3A\u57FA\u672C\u8FBE\u6807\uFF0C\u4E24\u4E2A\u53E3\u5F84\u4E0D\u53EF\u6DF7\u7528\u3002" },
+    { key: "\u6EE1\u8DB3\u7387", value: "94.24%", target: ">95%", trend: "\u5468\u73AF\u6BD4 +3.43pp", status: "\u672A\u8FBE\u6807", tone: "urgent", formula: "\u5468\u5185\u6EE1\u8DB3\u8BA2\u5355\u91CF \xF7 \u540C\u5468\u8BA2\u5355\u9700\u6C42\u91CF \xD7 100%", note: "\u672C\u5468 94.24%\uFF0C\u4E0A\u5468 90.81%\uFF1B\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u6EE1\u8DB3\u7387 95.13%\uFF0C\u5728\u62A5\u544A\u6838\u5FC3 KPI \u8868\u4E2D\u4E3A\u8FBE\u6807\u3002" },
+    { key: "\u51C6\u4EA4\u7387", value: "93.14%", target: ">98.5%", trend: "\u5468\u73AF\u6BD4 +3.62pp", status: "\u672A\u8FBE\u6807", tone: "urgent", formula: "\u5468\u5185\u6309\u7EA6\u5B9A\u65F6\u95F4\u4EA4\u4ED8\u7684\u8BA2\u5355\u6570 \xF7 \u540C\u5468\u5E94\u4EA4\u4ED8\u8BA2\u5355\u6570 \xD7 100%", note: "\u672C\u5468 93.14%\uFF0C\u4E0A\u5468 89.52%\uFF1B\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u51C6\u4EA4\u7387 93.82%\uFF0C\u4EA6\u672A\u8FBE\u76EE\u6807\u3002" },
+    { key: "\u53EF\u53D1\u8D27\u5929\u6570", value: "10.83 \u5929", target: "<12 \u5929", trend: "\u5468\u73AF\u6BD4 +0.59 \u5929", status: "\u8FBE\u6807", tone: "", formula: "\u5468\u62A5\u6240\u793A\u6574\u4F53\u53EF\u53D1\u8D27\u5929\u6570\uFF1B\u8BA1\u7B97\u660E\u7EC6\u672A\u63D0\u4F9B", note: "\u672C\u5468 10.83 \u5929\uFF0C\u4E0A\u5468 10.23 \u5929\uFF1B\u6574\u4F53\u4F4E\u4E8E 12 \u5929\u76EE\u6807\uFF0C\u4F46\u706B\u9505\u6599\u7B49\u54C1\u7C7B\u5C40\u90E8\u8D85\u6807\u3002" }
+  ];
+  var weeklyReportEvents = [
+    { id: "west-week", focus: true, kind: "\u91CD\u70B9", title: "\u897F\u5357\u57FA\u5730\u6EE1\u8DB3\u7387\u548C\u51C6\u4EA4\u7387\u53CC\u4F4E", summary: "\u6EE1\u8DB3\u7387 92.10%\u3001\u51C6\u4EA4\u7387 82.90%\uFF1B5 \u4E2A\u54C1\u7C7B\u6EE1\u8DB3\u7387\u4F4E\u4E8E 90%\u3002", evidence: "\u5468\u62A5\u57FA\u5730\u8868\uFF1A\u897F\u5357\u6EE1\u8DB3\u7387 92.10%\u3001\u51C6\u4EA4\u7387 82.90%\u3002\u4EA4\u53C9\u8868\u4E2D\u9884\u5236\u98DF\u6750 79.06%\u3001\u9984\u9968 82.36%\u3001\u706B\u9505\u6599 83.29%\u3001\u9762\u70B9 86.84%\u3001\u6C34\u997A 89.30%\u3002", action: "\u6838\u5B9E\u4EA7\u80FD\u3001\u5916\u6CE8\u8C03\u62E8\u4E0E\u8BA2\u5355\u8282\u70B9\u5EF6\u8FDF\uFF1B\u4F18\u5148\u590D\u76D8\u4F4E\u4E8E 90% \u7684\u57FA\u5730\xD7\u54C1\u7C7B\u7EC4\u5408\u3002" },
+    { id: "zhengzhou-week", focus: true, kind: "\u91CD\u70B9", title: "\u90D1\u5DDE\u57FA\u5730\u5C65\u7EA6\u65F6\u6548\u672A\u8FBE\u6807", summary: "\u6EE1\u8DB3\u7387 94.88%\u3001\u51C6\u4EA4\u7387 94.65%\uFF1B\u5F00\u5355\u3001\u6D3E\u8F66\u548C\u88C5\u8F66\u8282\u70B9\u9700\u590D\u6838\u3002", evidence: "\u5468\u62A5\u57FA\u5730\u8868\uFF1A\u90D1\u5DDE\u6EE1\u8DB3\u7387 94.88%\u3001\u51C6\u4EA4\u7387 94.65%\uFF1B\u62A5\u544A\u6307\u51FA\u4F11\u95F2\u3001\u6C34\u997A\u3001\u9884\u5236\u98DF\u6750\u7B49\u6EE1\u8DB3\u7387\u7F3A\u53E3\uFF0C\u4EE5\u53CA\u5F00\u5355\u3001\u6D3E\u8F66\u3001\u88C5\u8F66\u8D85\u65F6\u95EE\u9898\u3002", action: "\u6309\u8BA2\u5355\u8282\u70B9\u8BC6\u522B\u7F3A\u8D27\u4E0E\u5EF6\u8FDF\uFF0C\u6838\u5B9E\u6392\u5355\u3001\u6D3E\u8F66\u548C\u88C5\u8F66\u65F6\u6548\uFF0C\u660E\u786E\u4EBA\u5DE5\u590D\u6838\u8D23\u4EFB\u3002" },
+    { id: "prepared-week", focus: true, kind: "\u91CD\u70B9", title: "\u9884\u5236\u98DF\u6750\u6EE1\u8DB3\u7387\u504F\u4F4E", summary: "\u672C\u671F\u6EE1\u8DB3\u7387 91.71%\uFF0C\u7F3A\u8D27 0.97 \u4E07\u4EF6\uFF1B\u9AA8\u8089\u76F8\u8FDE\u548C\u7096\u998D\u4EA7\u80FD\u5F85\u8DDF\u8FDB\u3002", evidence: "\u5468\u62A5\u54C1\u7C7B\u8868\uFF1A\u9884\u5236\u98DF\u6750\u6EE1\u8DB3\u7387 91.71%\uFF1B\u95EE\u9898\u5206\u6790\u6307\u51FA\u9AA8\u8089\u76F8\u8FDE\u9700\u8865\u4EA7\u80FD\uFF0C\u7096\u998D\u4ECD\u6709\u4EA7\u80FD\u7F3A\u53E3\u3002\u897F\u5357\xD7\u9884\u5236\u98DF\u6750\u4EC5 79.06%\u3002", action: "\u590D\u6838\u7B2C\u4E8C\u5BB6\u4EE3\u5DE5\u5382\u5B9E\u9645\u4EA7\u80FD\u3001\u7096\u998D\u53CC\u73ED\u542F\u52A8\u4E0E ODM \u4EA4\u4ED8\u6392\u671F\u3002" },
+    { id: "dumpling-week", focus: true, kind: "\u91CD\u70B9", title: "\u6C34\u997A\u6EE1\u8DB3\u7387\u672A\u8FBE\u6807", summary: "\u672C\u671F\u6EE1\u8DB3\u7387 93.46%\uFF0C\u7F3A\u8D27 3.13 \u4E07\u4EF6\uFF1B\u540C\u6BD4\u4E0B\u964D 2.04pp\u3002", evidence: "\u5468\u62A5\u54C1\u7C7B\u8868\uFF1A\u6C34\u997A\u6EE1\u8DB3\u7387 93.46%\uFF0C\u540C\u6BD4 -2.04pp\u3002\u62A5\u544A\u6307\u51FA\u51B7\u9C9C\u8089\u8D28\u91CF\u95EE\u9898\u3001\u8BA2\u5355\u79EF\u538B\u4E0E 9 \u6708\u521D\u5916\u534F\u4EA7\u80FD\u672A\u53CA\u65F6\u8865\u4F4D\u3002", action: "\u6838\u5B9E\u914D\u65B9\u8D28\u91CF\u3001\u5916\u534F\u4EA7\u80FD\u542F\u52A8\u548C\u8C03\u62E8\u652F\u63F4\uFF0C\u6309\u57FA\u5730\u8DDF\u8FDB\u7F3A\u8D27\u6062\u590D\u3002" },
+    { id: "hotpot-week", focus: true, kind: "\u5173\u6CE8", title: "\u706B\u9505\u6599\u53EF\u53D1\u8D27\u5929\u6570\u4E25\u91CD\u8D85\u6807", summary: "\u672C\u671F 16.60 \u5929\uFF0C\u9AD8\u4E8E 12 \u5929\u76EE\u6807\uFF1B\u90D1\u5DDE\u3001\u534E\u4E1C\u5C40\u90E8\u66F4\u9AD8\u3002", evidence: "\u5468\u62A5\u54C1\u7C7B\u8868\uFF1A\u706B\u9505\u6599\u53EF\u53D1\u8D27\u5929\u6570 16.60 \u5929\uFF1B\u57FA\u5730\xD7\u54C1\u7C7B\u8868\u4E2D\u90D1\u5DDE 15.58 \u5929\u3001\u534E\u4E1C 13.07 \u5929\u3002\u62A5\u544A\u8BA4\u4E3A 9 \u6708\u4EA7\u80FD\u7F3A\u5931\u4E0E\u524D\u7F6E\u5907\u8D27\u6709\u5173\u3002", action: "\u8DDF\u8FDB 9 \u6708\u4E2D\u65EC\u9500\u552E\u53D1\u8D27\u8FDB\u5EA6\uFF0C\u8C03\u6574\u4EA7\u80FD\u548C\u4EA4\u4ED8\u8282\u594F\uFF0C\u9632\u6B62\u8FC7\u91CF\u5907\u8D27\u3002" },
+    { id: "leisure-week", focus: false, kind: "\u5173\u6CE8", title: "\u4F11\u95F2\u54C1\u7C7B\u6EE1\u8DB3\u7387\u4E0D\u8DB3", summary: "\u672C\u671F 94.21%\uFF0C\u7F3A\u8D27 2.16 \u4E07\u4EF6\uFF1B\u7EB8\u76AE\u70E7\u9EA6\u548C\u9165\u76AE\u9985\u997C\u662F\u91CD\u70B9\u3002", evidence: "\u5468\u62A5\u54C1\u7C7B\u8868\uFF1A\u4F11\u95F2\u6EE1\u8DB3\u7387 94.21%\u3002\u95EE\u9898\u5206\u6790\u5217\u51FA\u7EB8\u76AE\u70E7\u9EA6 9,905 \u4EF6\u3001\u9165\u76AE\u9985\u997C 4,691 \u4EF6\u7B49\u7F3A\u8D27\u4E8B\u9879\u3002", action: "\u590D\u6838\u8BA2\u5355\u663E\u793A\u4E0E\u5B9E\u9645\u5E93\u5B58\u5DEE\u5F02\uFF0C\u6309\u62A5\u544A\u63AA\u65BD\u5B89\u6392\u6392\u4EA7\u548C\u8C03\u62E8\u3002" }
+  ];
+  var weeklyReportActions = [
+    { id: "west-week", icon: "\u2197", title: "\u590D\u76D8\u897F\u5357\u57FA\u5730\u4F4E\u6EE1\u8DB3\u7EC4\u5408", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u8BA2\u5355 / \u4F9B\u5E94\u534F\u540C \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u4F18\u5148\u6838\u5B9E\u897F\u5357\xD7\u9884\u5236\u98DF\u6750\u3001\u6C34\u997A\u3001\u9762\u70B9\u3001\u9984\u9968\u548C\u706B\u9505\u6599\u7684\u7F3A\u8D27\u4E0E\u4EA4\u4ED8\u7EA6\u675F\u3002", taskId: "west-week-task" },
+    { id: "zhengzhou-week", icon: "\u25F7", title: "\u62C6\u89E3\u90D1\u5DDE\u8BA2\u5355\u8282\u70B9\u65F6\u6548", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u8BA2\u5355\u8FD0\u8425 / \u4ED3\u914D \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u6309\u5F00\u5355\u3001\u6D3E\u8F66\u3001\u88C5\u8F66\u8282\u70B9\u6838\u5BF9\u8D85\u65F6\u539F\u56E0\uFF0C\u7ED3\u5408\u7F3A\u8D27\u4E0E\u62FC\u8F66\u60C5\u51B5\u590D\u6838\u3002", taskId: "zhengzhou-week-task" },
+    { id: "dumpling-week", icon: "\u26A1", title: "\u6838\u5B9E\u6C34\u997A\u4EA7\u80FD\u8865\u4F4D", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u751F\u4EA7 / \u4F9B\u5E94\u534F\u540C \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u8DDF\u8FDB\u914D\u65B9\u8D28\u91CF\u3001\u5916\u534F\u4EA7\u80FD\u548C\u8C03\u62E8\u652F\u63F4\uFF0C\u4F18\u5148\u5904\u7406 3.13 \u4E07\u4EF6\u7F3A\u53E3\u3002", taskId: "dumpling-week-task" },
+    { id: "hotpot-week", icon: "\u25C8", title: "\u8C03\u6574\u706B\u9505\u6599\u5907\u8D27\u8282\u594F", subtitle: "\u5EFA\u8BAE\u89D2\u8272\uFF1A\u5546\u54C1\u8BA1\u5212 \xB7 \u5F85\u4E1A\u52A1\u786E\u8BA4", detail: "\u5728\u4FDD\u8BC1\u4EA4\u4ED8\u7684\u540C\u65F6\u8DDF\u8E2A\u706B\u9505\u6599 16.60 \u5929\u53EF\u53D1\u8D27\u5929\u6570\u7684\u6D88\u5316\u60C5\u51B5\u3002", taskId: "hotpot-week-task" }
+  ];
+  var weeklyReportTasks = [
+    { id: "west-week-task", title: "\u590D\u6838\u897F\u5357\u57FA\u5730\u4F4E\u6EE1\u8DB3\u7EC4\u5408", issue: "\u897F\u5357\u57FA\u5730 \xB7 \u6EE1\u8DB3\u7387 92.10% / \u51C6\u4EA4\u7387 82.90%", role: "\u8BA2\u5355 / \u4F9B\u5E94\u534F\u540C", due: "\u5F85\u4E1A\u52A1\u786E\u8BA4", status: "\u5F85\u8DDF\u8FDB", detail: "\u6309\u57FA\u5730\xD7\u54C1\u7C7B\u660E\u7EC6\u6838\u5B9E\u4E94\u4E2A\u4F4E\u4E8E 90% \u7684\u7EC4\u5408\u53CA\u5BF9\u5E94\u7F3A\u8D27\u539F\u56E0\uFF1B\u4E0D\u8868\u793A\u5DF2\u4E0B\u53D1\u6B63\u5F0F\u4EFB\u52A1\u3002" },
+    { id: "zhengzhou-week-task", title: "\u590D\u6838\u90D1\u5DDE\u5F00\u5355 / \u6D3E\u8F66 / \u88C5\u8F66\u65F6\u6548", issue: "\u90D1\u5DDE\u57FA\u5730 \xB7 \u51C6\u4EA4\u7387 94.65%", role: "\u8BA2\u5355\u8FD0\u8425 / \u4ED3\u914D", due: "\u5F85\u4E1A\u52A1\u786E\u8BA4", status: "\u5F85\u8DDF\u8FDB", detail: "\u6309\u62A5\u544A\u5217\u51FA\u7684\u65F6\u6548\u73AF\u8282\u68C0\u67E5\u8BA2\u5355\u8282\u70B9\u548C\u7F3A\u8D27\u539F\u56E0\u3002" },
+    { id: "dumpling-week-task", title: "\u8DDF\u8FDB\u6C34\u997A\u5916\u534F\u4E0E\u8C03\u62E8\u4EA7\u80FD", issue: "\u6C34\u997A \xB7 \u6EE1\u8DB3\u7387 93.46% / \u7F3A\u8D27 3.13 \u4E07\u4EF6", role: "\u751F\u4EA7 / \u4F9B\u5E94\u534F\u540C", due: "\u5F85\u4E1A\u52A1\u786E\u8BA4", status: "\u5F85\u8DDF\u8FDB", detail: "\u786E\u8BA4\u8D28\u91CF\u590D\u6838\u3001\u5916\u534F\u4EA7\u80FD\u542F\u52A8\u548C\u8C03\u62E8\u652F\u63F4\u8FDB\u5EA6\u3002" },
+    { id: "hotpot-week-task", title: "\u590D\u6838\u706B\u9505\u6599\u524D\u7F6E\u5907\u8D27", issue: "\u706B\u9505\u6599 \xB7 \u53EF\u53D1\u8D27\u5929\u6570 16.60 \u5929", role: "\u5546\u54C1\u8BA1\u5212", due: "\u5F85\u4E1A\u52A1\u786E\u8BA4", status: "\u5F85\u8DDF\u8FDB", detail: "\u8DDF\u8E2A 9 \u6708\u4E2D\u65EC\u53D1\u8D27\u548C\u5E93\u5B58\u6D88\u5316\u8282\u594F\uFF0C\u907F\u514D\u8FC7\u91CF\u5907\u8D27\u3002" }
+  ];
+  function activeReport() {
+    if (periodMode === "month" && selectedMonth === "2026-09") return { kind: "month", metrics: metricDefinitions, events: reportEvents, actions: reportActions, tasks: reportTasks };
+    if (periodMode === "week" && selectedWeek === "2026-08-31") return { kind: "week", metrics: weeklyMetricDefinitions, events: weeklyReportEvents, actions: weeklyReportActions, tasks: weeklyReportTasks };
+    return null;
+  }
+  function workbenchTaskKey(id) {
+    return `${periodMode}:${periodMode === "week" ? selectedWeek : selectedMonth}:${id}`;
+  }
+  function currentCreatedTasks() {
+    return (activeReport()?.tasks || []).map((task) => createdWorkbenchTasks.get(workbenchTaskKey(task.id))).filter(Boolean);
+  }
+  function parseIsoDate(iso) {
+    const [year, month, day] = iso.split("-").map(Number);
+    return new Date(year, month - 1, day);
+  }
+  function toIsoDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  function addDays(iso, count) {
+    const date = parseIsoDate(iso);
+    date.setDate(date.getDate() + count);
+    return toIsoDate(date);
+  }
+  function mondayOf(iso) {
+    const date = parseIsoDate(iso);
+    date.setDate(date.getDate() - (date.getDay() + 6) % 7);
+    return toIsoDate(date);
+  }
+  function weeksInMonth(month) {
+    const [year, number] = month.split("-").map(Number);
+    const last = toIsoDate(new Date(year, number, 0));
+    const weeks = [];
+    for (let start = mondayOf(`${month}-01`); start <= last; start = addDays(start, 7)) weeks.push({ start, end: addDays(start, 6) });
+    return weeks;
+  }
+  function syncWeekOptions() {
+    const select = document.getElementById("periodWeek");
+    const weeks = weeksInMonth(selectedMonth);
+    if (!weeks.some((week) => week.start === selectedWeek)) selectedWeek = weeks[0].start;
+    select.replaceChildren(...weeks.map((week, index) => {
+      const option = document.createElement("option");
+      option.value = week.start;
+      option.textContent = `\u7B2C ${index + 1} \u5468 \xB7 ${week.start} \u81F3 ${week.end}`;
+      return option;
+    }));
+    select.value = selectedWeek;
+  }
+  function selectedPeriodLabel() {
+    if (periodMode === "month") {
+      const [year, month] = selectedMonth.split("-");
+      return `${year} \u5E74 ${Number(month)} \u6708`;
+    }
+    return `${selectedWeek} \u81F3 ${addDays(selectedWeek, 6)}`;
+  }
+  function hasWorkbenchReport() {
+    return activeReport() !== null;
+  }
+  function renderSelectedPeriod() {
+    document.getElementById("monthMode").classList.toggle("active", periodMode === "month");
+    document.getElementById("weekMode").classList.toggle("active", periodMode === "week");
+    document.getElementById("monthMode").setAttribute("aria-pressed", String(periodMode === "month"));
+    document.getElementById("weekMode").setAttribute("aria-pressed", String(periodMode === "week"));
+    document.getElementById("periodMonth").value = selectedMonth;
+    document.getElementById("weekControl").hidden = periodMode !== "week";
+    syncWeekOptions();
+    const reportAvailable = hasWorkbenchReport();
+    workbenchView.querySelectorAll(".wb-context, .wb-report-date, .wb-note, .wb-section, .wb-analysis, .wb-panels, #wbTaskSection, .wb-boundary").forEach((node) => {
+      node.hidden = !reportAvailable;
+    });
+    const empty = document.getElementById("wbPeriodEmpty");
+    empty.hidden = reportAvailable;
+    empty.textContent = periodMode === "week" ? `${selectedPeriodLabel()} \u6682\u65E0\u5BF9\u5E94\u5468\u62A5\u6570\u636E\u3002\u76EE\u524D\u5DF2\u6536\u5F55\u622A\u81F3 2026-09-06 \u7684\u5468\u62A5\uFF0C\u4E0D\u80FD\u5C06\u5176\u4ED6\u5468\u6B21\u6216\u6708\u5EA6\u62A5\u544A\u6570\u503C\u79FB\u7528\u81F3\u672C\u5468\u3002` : `${selectedPeriodLabel()} \u6682\u65E0\u6708\u5EA6\u62A5\u544A\u6570\u636E\uFF1B\u76EE\u524D\u4EC5\u6536\u5F55\u622A\u81F3 2026-09-13 \u7684 9 \u6708\u62A5\u544A\u3002`;
+    if (reportAvailable && activePage === "workbench") renderWorkbench();
+    document.getElementById("periodMeta").textContent = reportAvailable ? activeReport().kind === "week" ? "\u5468\u62A5 \xB7 \u622A\u81F3 09-06" : "\u6708\u62A5 \xB7 \u622A\u81F3 09-13" : "\u6682\u65E0\u5BF9\u5E94\u62A5\u544A";
+  }
+  document.getElementById("monthMode").addEventListener("click", () => {
+    if (periodMode !== "month") {
+      periodMode = "month";
+      renderSelectedPeriod();
+    }
+  });
+  document.getElementById("weekMode").addEventListener("click", () => {
+    if (periodMode !== "week") {
+      periodMode = "week";
+      if (!weekInitialized && selectedMonth === "2026-09") selectedWeek = "2026-08-31";
+      weekInitialized = true;
+      renderSelectedPeriod();
+    }
+  });
+  document.getElementById("periodMonth").addEventListener("change", (event) => {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
+      event.target.value = selectedMonth;
+      return;
+    }
+    selectedMonth = event.target.value;
+    selectedWeek = "";
+    renderSelectedPeriod();
+  });
+  document.getElementById("periodWeek").addEventListener("change", (event) => {
+    selectedWeek = event.target.value;
+    renderSelectedPeriod();
+  });
+  function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
+  }
+  function renderWorkbench() {
+    const report = activeReport();
+    if (!report) return;
+    const weekly = report.kind === "week";
+    workbenchView.querySelector(".wb-report-date").textContent = weekly ? "\u5468\u5EA6\u62A5\u544A\u622A\u81F3 2026-09-06" : "\u6708\u5EA6\u62A5\u544A\u622A\u81F3 2026-09-13";
+    document.getElementById("wbKpis").innerHTML = report.metrics.map((metric) => `<article class="wb-kpi ${metric.tone}"><span>${metric.key}</span><strong>${metric.value}</strong><small class="wb-kpi-goal">\u76EE\u6807 ${metric.target}</small><span class="wb-kpi-state ${metric.status === "\u672A\u8FBE\u6807" ? "bad" : metric.status === "\u5F85\u6838\u7B97" ? "unknown" : ""}">${metric.status}</span><i class="wb-kpi-trend">${metric.trend}</i></article>`).join("");
+    document.getElementById("wbActions").innerHTML = report.actions.map((action) => {
+      const created = createdWorkbenchTasks.has(workbenchTaskKey(action.taskId));
+      return `<article class="wb-action"><div class="wb-action-main"><span class="wb-action-icon" aria-hidden="true">${action.icon}</span><div><strong>${escapeHtml(action.title)}</strong><small>${escapeHtml(action.subtitle)}</small></div></div><p>${escapeHtml(action.detail)}</p><div class="wb-action-links"><button type="button" data-wb-event-detail="${action.id}">\u67E5\u770B\u4F9D\u636E</button><button class="primary" type="button" ${created ? `data-wb-action-task="${action.taskId}"` : `data-wb-adopt="${action.taskId}"`}>${created ? "\u67E5\u770B\u5DF2\u5EFA\u4EFB\u52A1" : "\u91C7\u7EB3\u5E76\u5EFA\u4EFB\u52A1"}</button></div></article>`;
+    }).join("");
+    workbenchView.querySelector(".wb-boundary p").textContent = weekly ? "9.6 \u5468\u62A5\u672C\u5468\u6307\u6807\u4E0E\u54C1\u7C7B/\u57FA\u5730\u5F02\u5E38 \u2192 \u4EBA\u5DE5\u6838\u5B9E \u2192 \u6539\u5584\u5EFA\u8BAE \u2192 \u91C7\u7EB3\u540E\u5EFA\u4EFB\u52A1\uFF1B\u8BA2\u5355\u660E\u7EC6\u4ECD\u5728\u201C\u8BA2\u5355\u5C65\u7EA6\u201D\u9875" : "9 \u6708\u62A5\u544A\u6307\u6807\u4E0E\u5F02\u5E38\u4E8B\u9879 \u2192 \u4EBA\u5DE5\u6838\u5B9E \u2192 \u6539\u5584\u5EFA\u8BAE \u2192 \u91C7\u7EB3\u540E\u5EFA\u4EFB\u52A1\uFF1B\u8BA2\u5355\u660E\u7EC6\u4ECD\u5728\u201C\u8BA2\u5355\u5C65\u7EA6\u201D\u9875";
+    workbenchView.querySelector(".wb-boundary > span").textContent = weekly ? "\u5468\u62A5\u6458\u5F55 \xB7 \u975E\u5B9E\u65F6" : "\u62A5\u544A\u6458\u5F55 \xB7 \u975E\u5B9E\u65F6";
+    renderWorkbenchEvents();
+    renderWorkbenchTasks();
+  }
+  function renderWorkbenchEvents() {
+    workbenchView.querySelectorAll("[data-wb-event-filter]").forEach((button) => button.classList.toggle("active", button.dataset.wbEventFilter === eventFilter));
+    const events = activeReport()?.events || [];
+    const shown = eventFilter === "focus" ? events.filter((event) => event.focus) : events;
+    document.getElementById("wbEventCount").textContent = `${shown.length} \u9879\u4E8B\u9879`;
+    document.getElementById("wbEvents").innerHTML = shown.map((event) => `<article class="wb-event"><div class="wb-event-top"><span class="wb-event-kind ${event.kind === "\u5173\u6CE8" ? "focus" : ""}">${event.kind}</span><strong>${escapeHtml(event.title)}</strong><time>${activeReport()?.kind === "week" ? "9.6" : "9.13"}</time></div><p>${escapeHtml(event.summary)}</p><div class="wb-event-foot"><button type="button" data-wb-event-detail="${event.id}">\u67E5\u770B\u4F9D\u636E</button></div></article>`).join("");
+  }
+  function renderWorkbenchTasks() {
+    workbenchView.querySelectorAll("[data-wb-task-filter]").forEach((button) => button.classList.toggle("active", button.dataset.wbTaskFilter === taskFilter));
+    const tasks = currentCreatedTasks();
+    const pending2 = tasks.filter((task) => task.status !== "\u5DF2\u5B8C\u6210").length;
+    const done = tasks.length - pending2;
+    document.getElementById("wbTaskSummary").textContent = `${pending2} \u9879\u5F85\u8DDF\u8FDB \xB7 ${done} \u9879\u5DF2\u5B8C\u6210`;
+    document.getElementById("wbTaskAllCount").textContent = tasks.length;
+    document.getElementById("wbTaskPendingCount").textContent = pending2;
+    document.getElementById("wbTaskDoneCount").textContent = done;
+    const shown = taskFilter === "all" ? tasks : tasks.filter((task) => taskFilter === "done" ? task.status === "\u5DF2\u5B8C\u6210" : task.status !== "\u5DF2\u5B8C\u6210");
+    document.getElementById("wbTaskRows").innerHTML = shown.length ? shown.map((task) => `<tr data-wb-task-row="${task.id}"><td><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.issue)}</small></td><td>${escapeHtml(task.role)}</td><td>${escapeHtml(task.due)}</td><td><span class="wb-task-status ${task.status === "\u5DF2\u5B8C\u6210" ? "done" : ""}">${escapeHtml(task.status)}</span></td><td><button class="wb-task-link" type="button" data-wb-task-detail="${task.id}">\u67E5\u770B \u203A</button></td></tr>`).join("") : `<tr><td colspan="5">${tasks.length ? "\u5F53\u524D\u7B5B\u9009\u4E0B\u6CA1\u6709\u4EFB\u52A1\u3002" : "\u5C1A\u672A\u5EFA\u7ACB\u4EFB\u52A1\uFF1B\u53EF\u5728\u4E0A\u65B9\u884C\u52A8\u5EFA\u8BAE\u4E2D\u70B9\u51FB\u201C\u91C7\u7EB3\u5E76\u5EFA\u4EFB\u52A1\u201D\u3002"}</td></tr>`;
+  }
+  workbenchView.addEventListener("click", (event) => {
+    const eventTab = event.target.closest("[data-wb-event-filter]");
+    if (eventTab) {
+      eventFilter = eventTab.dataset.wbEventFilter;
+      renderWorkbenchEvents();
+      return;
+    }
+    const taskTab = event.target.closest("[data-wb-task-filter]");
+    if (taskTab) {
+      taskFilter = taskTab.dataset.wbTaskFilter;
+      renderWorkbenchTasks();
+      return;
+    }
+    const eventDetail = event.target.closest("[data-wb-event-detail]");
+    if (eventDetail) {
+      openWorkbenchDetail("event", eventDetail.dataset.wbEventDetail);
+      return;
+    }
+    const taskDetail = event.target.closest("[data-wb-task-detail]");
+    if (taskDetail) {
+      openWorkbenchDetail("task", taskDetail.dataset.wbTaskDetail);
+      return;
+    }
+    const adopt = event.target.closest("[data-wb-adopt]");
+    if (adopt) {
+      openAdoptDialog(adopt.dataset.wbAdopt, adopt);
+      return;
+    }
+    const actionTask = event.target.closest("[data-wb-action-task]");
+    if (actionTask) {
+      focusCreatedTask(actionTask.dataset.wbActionTask);
+      return;
+    }
+    if (event.target.closest("[data-wb-export]")) {
+      exportWorkbenchTasks();
+      return;
+    }
+    if (event.target.closest("[data-order-workbench-page]")) openFulfillmentPlugin();
+  });
+  function focusCreatedTask(id) {
+    taskFilter = "all";
+    renderWorkbenchTasks();
+    const row = [...workbenchView.querySelectorAll("[data-wb-task-row]")].find((item) => item.dataset.wbTaskRow === id);
+    if (row) {
+      row.classList.add("is-linked");
+      row.scrollIntoView({ block: "center", behavior: "smooth" });
+      schedule(() => row.classList.remove("is-linked"), 2800);
+    }
+  }
+  var wbAdoptOverlay = document.getElementById("wbAdoptOverlay");
+  var wbAdoptForm = document.getElementById("wbAdoptForm");
+  function openAdoptDialog(taskId, trigger) {
+    const report = activeReport();
+    const action = report?.actions.find((item) => item.taskId === taskId);
+    const template = report?.tasks.find((item) => item.id === taskId);
+    if (!action || !template) return;
+    const key = workbenchTaskKey(taskId);
+    if (createdWorkbenchTasks.has(key)) {
+      focusCreatedTask(taskId);
+      return;
+    }
+    pendingAdoption = { key, action, template };
+    adoptReturnFocus = trigger;
+    document.getElementById("wbAdoptSubtitle").textContent = action.title;
+    document.getElementById("wbAdoptContent").textContent = action.detail;
+    document.getElementById("wbAdoptRole").value = template.role;
+    document.getElementById("wbAdoptDue").value = toIsoDate(/* @__PURE__ */ new Date());
+    document.getElementById("wbAdoptNote").value = "";
+    wbAdoptOverlay.hidden = false;
+    document.getElementById("wbAdoptClose").focus();
+  }
+  function closeAdoptDialog() {
+    wbAdoptOverlay.hidden = true;
+    pendingAdoption = null;
+    if (adoptReturnFocus?.isConnected) adoptReturnFocus.focus();
+    adoptReturnFocus = null;
+  }
+  document.getElementById("wbAdoptClose").addEventListener("click", closeAdoptDialog);
+  document.getElementById("wbAdoptCancel").addEventListener("click", closeAdoptDialog);
+  wbAdoptOverlay.addEventListener("click", (event) => {
+    if (event.target === wbAdoptOverlay) closeAdoptDialog();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !wbAdoptOverlay.hidden) closeAdoptDialog();
+  });
+  document.getElementById("wbAdoptConfirm").addEventListener("click", (event) => {
+    event.preventDefault();
+    if (!pendingAdoption || !wbAdoptForm.reportValidity()) return;
+    const role = document.getElementById("wbAdoptRole").value.trim();
+    const due = document.getElementById("wbAdoptDue").value;
+    const note = document.getElementById("wbAdoptNote").value.trim();
+    if (!role || !due) return;
+    const { key, action, template } = pendingAdoption;
+    if (createdWorkbenchTasks.has(key)) {
+      closeAdoptDialog();
+      focusCreatedTask(template.id);
+      return;
+    }
+    createdWorkbenchTasks.set(key, { ...template, role, due, note, detail: action.detail, status: "\u5F85\u8DDF\u8FDB" });
+    closeAdoptDialog();
+    renderWorkbench();
+    focusCreatedTask(template.id);
+    const toast = document.getElementById("toast");
+    toast.textContent = "\u5DF2\u5728\u672C\u9875\u521B\u5EFA\u8DDF\u8FDB\u4EFB\u52A1\uFF1B\u672A\u540C\u6B65\u5230\u771F\u5B9E\u4EFB\u52A1\u7CFB\u7EDF\u3002";
+    toast.hidden = false;
+    clearTimeout(window.toastTimer);
+    window.toastTimer = schedule(() => {
+      toast.hidden = true;
+    }, 3e3);
+  });
+  wbAdoptForm.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.tagName === "INPUT") {
+      event.preventDefault();
+      document.getElementById("wbAdoptConfirm").click();
+    }
+  });
+  var wbDetailOverlay = document.getElementById("wbDetailOverlay");
+  function openWorkbenchDetail(type, id) {
+    const report = activeReport();
+    const item = type === "event" ? report?.events.find((entry) => entry.id === id) : createdWorkbenchTasks.get(workbenchTaskKey(id));
+    if (!item) return;
+    document.getElementById("wbDetailTitle").textContent = item.title;
+    document.getElementById("wbDetailBody").innerHTML = type === "event" ? `<p>${escapeHtml(item.summary)}</p><h3>\u62A5\u544A\u4F9D\u636E</h3><p>${escapeHtml(item.evidence)}</p><h3>\u5EFA\u8BAE\u8DDF\u8FDB</h3><p>${escapeHtml(item.action)}</p><p>\u6B64\u5904\u4E3A\u62A5\u544A\u6458\u5F55\u4E0E\u9875\u9762\u5F52\u7EB3\uFF0C\u4E0D\u8868\u793A\u5DF2\u751F\u6210\u6B63\u5F0F\u8BA2\u5355\u9884\u8B66\u3002</p>` : `<p>${escapeHtml(item.issue)}</p><h3>\u8D23\u4EFB\u89D2\u8272\u4E0E\u622A\u6B62\u65E5\u671F</h3><p>${escapeHtml(item.role)} \xB7 ${escapeHtml(item.due)}</p><h3>\u4EFB\u52A1\u8BF4\u660E</h3><p>${escapeHtml(item.detail)}</p>${item.note ? `<h3>\u786E\u8BA4\u8BF4\u660E</h3><p>${escapeHtml(item.note)}</p>` : ""}<p>\u672C\u5730\u72B6\u6001\uFF1A${escapeHtml(item.status)}\uFF1B\u672A\u8FDE\u63A5\u771F\u5B9E\u4EFB\u52A1\u7CFB\u7EDF\u3002</p>`;
+    wbDetailOverlay.hidden = false;
+    document.getElementById("wbDetailClose").focus();
+  }
+  function closeWorkbenchDetail() {
+    wbDetailOverlay.hidden = true;
+  }
+  document.getElementById("wbDetailClose").addEventListener("click", closeWorkbenchDetail);
+  wbDetailOverlay.addEventListener("click", (event) => {
+    if (event.target === wbDetailOverlay) closeWorkbenchDetail();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !wbDetailOverlay.hidden) closeWorkbenchDetail();
+  });
+  function exportWorkbenchTasks() {
+    const lines = [["\u4EFB\u52A1", "\u5173\u8054\u4E8B\u9879", "\u8D23\u4EFB\u89D2\u8272", "\u9884\u8BA1\u622A\u6B62\u65E5\u671F", "\u672C\u5730\u72B6\u6001"], ...currentCreatedTasks().map((task) => [task.title, task.issue, task.role, task.due, task.status])];
+    const csv = "\uFEFF" + lines.map((line) => line.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    downloadUrls.add(url);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `\u8BA2\u5355\u5DE5\u4F5C\u53F0-${activeReport()?.kind === "week" ? "\u5468\u5EA6" : "\u6708\u5EA6"}\u6F14\u793A\u4EFB\u52A1.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    schedule(() => {
+      URL.revokeObjectURL(url);
+      downloadUrls.delete(url);
+    }, 1e3);
+  }
+  function openFulfillmentPlugin() {
+    window.parent.postMessage({ protocol: "gea-html-v2", type: "navigate", panel: "inventory-orderfulfillment" }, new URL(document.referrer).origin);
+  }
+  renderSelectedPeriod();
+  view.subscribe((state) => {
+    restoringView = true;
+    if (state.mode !== void 0) periodMode = state.mode;
+    if (state.month !== void 0) selectedMonth = state.month;
+    if (state.week !== void 0) selectedWeek = state.week;
+    if (state.weekInitialized !== void 0) weekInitialized = state.weekInitialized;
+    if (state.event !== void 0) eventFilter = state.event;
+    if (state.task !== void 0) taskFilter = state.task;
+    renderSelectedPeriod();
+    restoringView = false;
+    updateReport();
+  });
+  var updateReport = publishReport(() => {
+    const report = activeReport();
+    const tasks = currentCreatedTasks();
+    if (!restoringView) view.update({ mode: periodMode, month: selectedMonth, week: selectedWeek, weekInitialized, event: eventFilter, task: taskFilter });
+    return {
+      source: "\u8BA2\u5355\u5DE5\u4F5C\u53F0\u62A5\u544A\u6458\u5F55\u4E0E\u672C\u5730\u6A21\u62DF",
+      mock: true,
+      pageId: "inventory-orderworkbench",
+      instance: "default",
+      period: { mode: periodMode, month: selectedMonth, week: selectedWeek, label: selectedPeriodLabel(), available: Boolean(report) },
+      reportDate: report ? report.kind === "week" ? "2026-09-06" : "2026-09-13" : null,
+      filters: { event: eventFilter, task: taskFilter },
+      metrics: report?.metrics ?? [],
+      events: (report?.events ?? []).filter((event) => eventFilter !== "focus" || event.focus),
+      actions: report?.actions ?? [],
+      tasks: tasks.filter((task) => taskFilter === "all" || (taskFilter === "done" ? task.status === "\u5DF2\u5B8C\u6210" : task.status !== "\u5DF2\u5B8C\u6210")),
+      coverage: "\u62A5\u544A\u6458\u5F55\u975E\u5B9E\u65F6\uFF1B\u65E0\u5355\u7B14\u8BA2\u5355\u660E\u7EC6\u3001\u771F\u5B9E\u4EFB\u52A1\u6D3E\u53D1\u6216\u4E1A\u52A1\u5199\u5165\u3002\u51B7\u5237\u65B0/\u91CD\u65B0\u8FDB\u5165\u4E0D\u4FDD\u5B58\u672C\u5730\u6F14\u793A\u4EFB\u52A1\u3002"
+    };
+  }, () => {
+    for (const handle of pageTimeouts) clearTimeout(handle);
+    for (const url of downloadUrls) URL.revokeObjectURL(url);
+    pageTimeouts.clear();
+    downloadUrls.clear();
+  });
+})();
+</script></body>
+</html>

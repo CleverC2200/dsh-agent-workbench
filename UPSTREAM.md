@@ -1,5 +1,5 @@
-# Layout source provenance
+# Source provenance
 
-The initial layout adapter was extracted from `deepseek-ai/deepseek-harness`, `packages/client/ui-layout/src/client`, local commit `7ef3457e9d` on `codex/dsh-chat-surface`. The MIT license is retained in LICENSE.
+The former layout adapter originated from `deepseek-ai/deepseek-harness`, `packages/client/ui-layout/src/client`, local commit `7ef3457e9d` on `codex/dsh-chat-surface`. That copied shell, layout service, stores, column geometry and document-title implementation have exited this plugin's source and generated output.
 
-AppFrame, column geometry, store, layout service, document title, and theme presenter preserve the existing shell behavior. This package owns subsequent changes and the new workbench registry. It uses the published DSH type declarations and runtime services; builds and launches do not read the source checkout. The native Conversation, composer, sidebar, and session implementation are supplied by unmodified DSH packages.
+The current adapter targets unmodified official commit `5badb15009ae1756c3afe0ae0cef1faafc290ccc`. Official DSH owns AppFrame, sidebar, Conversation, workspace navigation and theme presentation. Workbench uses their public extension slots and provides its own page directory and package HTML presentation. The MIT license is retained in LICENSE. Business resource provenance remains in each resource directory.

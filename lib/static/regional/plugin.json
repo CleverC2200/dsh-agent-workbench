@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "plan-regional",
+  "name": "区域计划",
+  "version": "0.0.1-split.23",
+  "mode": "mock",
+  "html": "index.html",
+  "pages": [
+    {
+      "id": "gea-regional-plan",
+      "name": "区域计划",
+      "view": "",
+      "order": 20
+    }
+  ],
+  "skills": [
+    "skills/regional/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "regional-plan-prototype",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

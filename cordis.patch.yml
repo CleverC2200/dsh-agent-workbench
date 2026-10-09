@@ -1,4 +1,4 @@
-- id: ui-layout
+- id: ui-sidebar
   disabled: true
 - insert:
     - id: agent-workbench

@@ -1,0 +1,45 @@
+.dialog:global(.dsh-modal) {
+  max-height: calc(100dvh - 48px);
+  display: inline-flex;
+  flex-direction: column;
+}
+.dialog > div {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+.dialog :global(.dsh-modal-header) {
+  flex: none;
+}
+.dialog :global(.dsh-modal-content) {
+  min-height: 0;
+  max-height: calc(100dvh - 112px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--ui-canvas);
+}
+@media (max-width: 720px) {
+  .dialog:global(.dsh-modal) {
+    max-height: calc(100dvh - 24px);
+  }
+  .dialog :global(.dsh-modal-content) {
+    max-height: calc(100dvh - 88px);
+    padding: 12px;
+  }
+}
+
+.closeButton {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.closeButton:focus-visible {
+  outline: 2px solid #d9363e;
+  outline-offset: 2px;
+}

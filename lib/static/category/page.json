@@ -1,0 +1,9 @@
+{
+  "surface": "gea-html-category-plan",
+  "protocol": "self-report",
+  "pageIds": [
+    "plan-region-category"
+  ],
+  "consumerCode": "category-plan-prototype",
+  "maxEffect": "view"
+}

@@ -1,0 +1,469 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>订单工作台</title>
+  <style>
+    :root { --bg:#f6f7f9; --surface:#fff; --line:#e8ebf0; --text:#20242c; --muted:#6b7280; --faint:#9aa2af; --brand:#f5222d; --brand-soft:#fff1f0; font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; color:var(--text); background:var(--bg); font-size:14px; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid rgba(245,34,45,.38); outline-offset:2px; }
+    [hidden] { display:none !important; }
+    .shell { height:100vh; min-height:650px; }
+    .sidebar { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:#fff; }
+    .brand { display:flex; align-items:center; gap:10px; height:56px; padding:0 18px; border-bottom:1px solid var(--line); color:var(--brand); font-weight:800; }
+    .brand-mark { display:grid; place-items:center; width:28px; height:28px; border-radius:7px; color:#fff; background:var(--brand); box-shadow:0 7px 18px rgba(245,34,45,.22); font-size:11px; }
+    .brand-ai { margin-left:auto; color:#3a404b; font-size:11px; }
+    .nav { flex:1; padding:15px 10px; }
+    .nav-head, .nav-item { display:flex; align-items:center; width:100%; min-height:35px; border:0; border-radius:7px; background:transparent; color:#3a404b; text-align:left; font-size:13px; }
+    .nav-head { gap:8px; padding:0 10px; font-weight:700; }
+    .nav-head svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .nav-head .chevron { margin-left:auto; font-size:15px; color:#8b94a2; }
+    .nav-head:hover, .nav-item:hover { background:#fff7f7; }
+    .nav-item { padding:0 10px 0 37px; color:#565e6c; }
+    .nav-item.active { color:var(--brand); background:#fff7f7; font-weight:700; }
+    .nav.is-collapsed .nav-item { display:none; }
+    .nav.is-collapsed .chevron { transform:rotate(-90deg); }
+    .account { display:flex; align-items:center; gap:10px; min-height:70px; padding:12px 16px; border-top:1px solid var(--line); }
+    .avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; color:#fff; background:#8d97a7; font-weight:700; }
+    .account div { display:grid; gap:2px; }
+    .account strong { font-size:12px; }.account small { color:var(--muted); font-size:11px; }
+    .main { display:grid; grid-template-rows:minmax(0,1fr); height:100%; min-width:0; min-height:0; }
+    .topbar { display:flex; align-items:center; justify-content:center; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
+    .page-tabs { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .page-tab { min-width:104px; height:32px; padding:0 16px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .page-tab.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .period-label { color:#5c6573; font-size:12px; font-weight:700; }
+    .period-switch { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .period-switch button { min-width:58px; height:29px; padding:0 11px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .period-switch button.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-control { display:flex; align-items:center; gap:7px; color:#667080; font-size:12px; }
+    .period-control[hidden] { display:none; }
+    .period-control input,.period-control select { min-height:32px; padding:4px 9px; border:1px solid #dce2eb; border-radius:6px; color:#343b47; background:#fff; font-size:12px; }
+    .period-control select { max-width:245px; }
+    .period-meta { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .layout { min-height:0; overflow:hidden; }
+    .workspace { height:100%; min-width:0; min-height:0; overflow:auto; background:#fff; }
+    .content { max-width:1500px; margin:0 auto; padding:24px 28px 36px; background:#fff; }
+    .card { margin-bottom:16px; padding:18px 20px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .card h2 { margin:0 0 14px; font-size:15px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { padding:15px 17px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .metric span { display:block; color:var(--muted); font-size:12px; }.metric strong { display:block; margin:7px 0 3px; font-size:24px; }.metric small { color:var(--faint); }
+    .table-wrap { overflow-x:auto; }
+    .orders { width:100%; min-width:1000px; border-collapse:collapse; font-size:12px; }
+    .orders th { padding:11px 12px; border-bottom:1px solid var(--line); color:#66707e; background:#fafbfc; text-align:left; font-weight:600; }
+    .orders td { padding:13px 12px; border-bottom:1px solid #f0f2f5; vertical-align:top; }
+    .orders tbody tr:last-child td { border-bottom:0; }.orders strong { display:block; font-size:12px; }.orders small { display:block; margin-top:3px; color:var(--faint); }
+    .orders-card-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .orders-card-head h2 { margin:0; }
+    .orders-count { color:#8b96a5; font-size:11px; white-space:nowrap; }
+    .order-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+    .order-filters > input,.warehouse-picker input,.order-filters > select { height:34px; padding:0 10px; border:1px solid #dce2eb; border-radius:6px; color:#364050; background:#fff; font-size:11px; }
+    .order-filters > input::placeholder,.warehouse-picker input::placeholder { color:#9aa4b1; }
+    .order-filters > input:focus,.warehouse-picker input:focus,.order-filters > select:focus { border-color:#f2aab0; outline:2px solid #fff0f1; }
+    #orderNumberSearch { width:150px; } #customerSearch { width:192px; }
+    .warehouse-picker { position:relative; width:148px; }
+    #omsStatusFilter { width:142px; cursor:pointer; }
+    .warehouse-picker input { width:100%; padding-right:30px; }
+    .warehouse-picker > button { position:absolute; top:1px; right:1px; width:30px; height:32px; border:0; border-radius:0 6px 6px 0; color:#8490a0; background:transparent; font-size:14px; }
+    .warehouse-options { position:absolute; top:calc(100% + 4px); left:0; z-index:5; width:100%; padding:4px; border:1px solid #e0e5ed; border-radius:7px; background:#fff; box-shadow:0 8px 24px rgba(32,44,62,.12); }
+    .warehouse-options button { display:block; width:100%; min-height:30px; padding:5px 8px; border:0; border-radius:4px; color:#4b5666; background:#fff; text-align:left; font-size:11px; }
+    .warehouse-options button:hover,.warehouse-options button[aria-selected="true"] { color:var(--brand); background:#fff5f5; }
+    .warehouse-options .no-option { padding:8px; color:#9aa4b1; font-size:11px; }
+    .orders-empty td { padding:24px 12px; color:#8d98a6; text-align:center; }
+    .order-pagination { display:flex; justify-content:flex-end; align-items:center; gap:17px; padding:17px 4px 0; border-top:1px solid #f0f2f5; color:#5f6978; font-size:12px; }
+    .order-page-size select { padding:3px 18px 3px 3px; border:0; color:#5f6978; background:#fff; font:inherit; cursor:pointer; }
+    .order-page-size select:focus { border-radius:4px; outline:2px solid #fff0f1; }
+    .order-page-button { width:26px; height:26px; padding:0; border:0; border-radius:5px; color:#8a95a4; background:transparent; font-size:20px; line-height:1; }
+    .order-page-button:hover:not(:disabled) { color:var(--brand); background:#fff5f5; }
+    .order-page-button:disabled { color:#cbd1d9; cursor:not-allowed; }
+    .order-page-status { display:inline-flex; align-items:center; gap:7px; min-width:44px; justify-content:center; }
+    .order-page-status strong { color:#273140; font-size:13px; }
+    @media(max-width:1050px) { .order-filters { width:100%; margin-left:0; }.order-filters > input { flex:1 1 150px; }.warehouse-picker { flex:1 1 148px; } #omsStatusFilter { flex:1 1 142px; } }
+    .period-empty { margin:0 0 16px; padding:18px 20px; border:1px dashed #d9e0ea; border-radius:8px; color:#637084; background:#fff; font-size:12px; line-height:1.7; }
+    .status { display:inline-block; padding:3px 8px; border-radius:4px; color:#13854a; background:#e8f7ee; white-space:nowrap; }
+    .status.issue { color:#c83239; background:#fff0ef; }.status.progress { color:#2266d8; background:#eaf4ff; }.status.pending { color:#a96900; background:#fff5e5; }
+    .wb-hero { display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; }
+    .wb-hero > .wb-link { margin-left:auto; }
+    .wb-hero .wb-context { margin:0; }
+    .wb-hero-main { min-width:0; }
+    .wb-title-line { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+    .wb-title-line .period-bar { padding:0; border:0; background:none; }
+    .wb-title-line .period-control input { width:126px; }
+    .wb-title-line .period-control select { max-width:190px; }
+    .wb-hero h1 { margin:8px 0; font-size:26px; }.wb-hero p,.wb-section p { margin:0; color:#7a8290; font-size:12px; line-height:1.6; }
+    .wb-eyebrow { color:#bf2330; font-size:12px; font-weight:700; }.wb-eyebrow::before { content:""; display:inline-block; width:7px; height:7px; margin-right:9px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 4px #ffe5e7; }
+    .wb-link,.wb-priority button { padding:3px 0; border:0; color:var(--brand); background:none; font-size:11px; white-space:nowrap; }.wb-link:hover,.wb-priority button:hover { text-decoration:underline; }
+    .wb-note { padding:10px 13px; margin-bottom:14px; border:1px solid #dce8fa; border-radius:7px; color:#617590; background:#f4f8ff; font-size:11px; line-height:1.6; }
+    .wb-section { margin-bottom:14px; }.wb-section-head,.wb-card-title,.wb-task-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:10px; }
+    .wb-section h2,.wb-card h2 { margin:0 0 4px; font-size:16px; }.wb-section-head > span,.wb-card-title > span,.wb-task-head > span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .wb-kicker { color:#8b93a0; font-size:11px; }.wb-kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
+    .wb-kpi { min-height:126px; padding:15px 17px; border:1px solid var(--line); border-radius:10px; background:#fff; text-align:left; }.wb-kpi:hover { border-color:#f1b5bb; box-shadow:0 5px 16px rgba(190,70,80,.07); }.wb-kpi span { display:block; color:#68717e; font-size:12px; }.wb-kpi strong { display:block; margin:10px 0 3px; font-size:28px; }.wb-kpi small { display:block; color:#9aa2af; font-size:11px; }.wb-kpi em { display:block; margin-top:8px; color:#c24f5b; font-size:10px; font-style:normal; }
+    .wb-kpi.urgent strong { color:#e33740; }.wb-kpi.warning strong { color:#df7c29; }
+    .wb-card { min-width:0; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }.wb-card p { margin:0; color:#7a8290; font-size:11px; line-height:1.6; }
+    .wb-analysis { border-color:#f0d8dc; background:linear-gradient(105deg,#fffafa,#fff 56%,#fffdfd); }.wb-analysis-head,.wb-analysis-body,.wb-analysis-foot { padding:15px 20px; }.wb-analysis-head,.wb-analysis-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; }.wb-analysis-head { padding-bottom:0; }.wb-analysis-head h2 { margin:0; font-size:14px; }.wb-analysis-head span,.wb-analysis-foot span { color:#9fa8b5; font-size:11px; }.wb-analysis-body h3 { margin:0 0 8px; font-size:17px; }.wb-analysis-body p { margin:0; color:#707a89; font-size:12px; line-height:1.7; }.wb-analysis-foot { padding-top:0; }
+    .wb-spark { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:8px; border-radius:7px; color:#ed5268; background:#fff0f2; }.wb-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }.wb-tags span { padding:4px 9px; border:1px solid #f1dadd; border-radius:5px; color:#9a7180; background:#fffafb; font-size:11px; }.wb-tags b { color:#df5161; }
+    .wb-panels { display:grid; grid-template-columns:minmax(0,1.12fr) minmax(300px,.88fr); gap:14px; }.wb-card-title { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-priority { display:flex; align-items:center; gap:10px; min-height:62px; padding:10px 17px; border-top:1px solid #f0f1f4; }.wb-priority > div { min-width:0; flex:1; }.wb-priority strong,.wb-priority small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-priority strong { font-size:12px; }.wb-priority small { margin-top:5px; color:#8b93a0; font-size:11px; }
+    .wb-status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:5px; color:#4a86d8; background:#edf5ff; font-size:11px; white-space:nowrap; }.wb-status::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }.wb-status.issue { color:#d94d58; background:#fff0f1; }.wb-status.pending { color:#ba7928; background:#fff5e8; }.wb-status.ready { color:#39a078; background:#eaf8f1; }
+    .wb-flow { padding:4px 18px 12px; }.wb-flow-item { display:flex; gap:12px; padding:13px 0; border-top:1px solid #f0f1f4; }.wb-flow-item:first-child { border-top:0; }.wb-flow-item b { display:grid; place-items:center; width:25px; height:25px; flex:0 0 auto; border-radius:7px; color:#d84b57; background:#fff0f2; font-size:11px; }.wb-flow-item strong { font-size:12px; }.wb-flow-item p { margin:4px 0 0; color:#7a8290; font-size:11px; line-height:1.5; }
+    .wb-task-head { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-filters { display:flex; gap:16px; overflow-x:auto; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-filters button { position:relative; flex:0 0 auto; height:34px; border:0; color:#8b93a0; background:none; font-size:11px; }.wb-filters button.active { color:var(--brand); font-weight:700; }.wb-filters button.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; background:var(--brand); }
+    .wb-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 15px; color:#788391; font-size:11px; }.wb-context strong { color:#425066; font-size:12px; }.wb-context span { padding:6px 10px; border:1px solid #e3e8f0; border-radius:6px; background:#fff; }.wb-context small { margin-left:auto; color:#a0a8b5; font-size:10px; }
+    .wb-report-date { margin:0 0 15px; color:#a0a8b5; font-size:10px; text-align:right; }
+    .wb-kpi { position:relative; }.wb-kpi .wb-kpi-goal { margin-top:5px; color:#8d98a8; }.wb-kpi .wb-kpi-state { display:inline-flex; align-items:center; width:auto; margin-top:8px; padding:3px 7px; border-radius:4px; color:#278565; background:#eaf8f1; font-size:10px; }.wb-kpi .wb-kpi-state.bad { color:#cb4751; background:#fff0f1; }.wb-kpi .wb-kpi-state.unknown { color:#7d8898; background:#f0f3f7; }.wb-kpi .wb-kpi-trend { position:absolute; right:15px; bottom:17px; color:#9aa4b2; font-size:10px; }
+    .wb-analysis { position:relative; }.wb-analysis::before { content:""; position:absolute; top:17px; bottom:17px; left:0; width:3px; border-radius:0 3px 3px 0; background:#ef6b80; }.wb-analysis-evidence { display:flex; gap:7px; flex-wrap:wrap; margin-top:13px; }.wb-analysis-evidence span { padding:4px 8px; border:1px solid #e9edf4; border-radius:5px; color:#8390a2; background:#fff; font-size:10px; }
+    .wb-panels { align-items:stretch; }.wb-panels > .wb-card { display:flex; flex-direction:column; }.wb-events-tabs { display:flex; gap:16px; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-events-tabs button { position:relative; height:32px; padding:0; border:0; color:#8b93a0; background:transparent; font-size:11px; }.wb-events-tabs button.active { color:var(--brand); font-weight:700; }.wb-events-tabs button.active::after { content:""; position:absolute; bottom:-1px; right:0; left:0; height:2px; background:var(--brand); }
+    .wb-event { padding:13px 17px; border-bottom:1px solid #eef0f3; }.wb-event:last-child { border-bottom:0; }.wb-event-top { display:flex; align-items:center; gap:7px; }.wb-event-top strong { min-width:0; flex:1; color:#343c49; font-size:12px; }.wb-event-top time { color:#a0a8b5; font-size:10px; }.wb-event p { margin:6px 0 5px 21px; color:#7d8796; font-size:11px; line-height:1.55; }.wb-event-foot { display:flex; align-items:center; gap:9px; margin-left:21px; }.wb-event-foot button { padding:0; border:0; color:#818b9a; background:none; font-size:10px; }.wb-event-foot button:hover { color:var(--brand); }.wb-event-foot button:last-child { color:#cf5765; }.wb-event-kind { flex:0 0 auto; padding:2px 5px; border-radius:4px; color:#d45462; background:#fff0f2; font-size:10px; }.wb-event-kind.focus { color:#c28636; background:#fff6e7; }
+    .wb-action { padding:14px 17px; border-bottom:1px solid #eef0f3; }.wb-action:last-child { border-bottom:0; }.wb-action-main { display:flex; gap:9px; }.wb-action-icon { display:grid; place-items:center; width:23px; height:23px; flex:0 0 auto; border-radius:7px; color:#e28a43; background:#fff2e4; }.wb-action strong { display:block; color:#343c49; font-size:12px; }.wb-action small { display:block; margin-top:4px; color:#9aa3af; font-size:10px; }.wb-action p { margin:7px 0 0 32px; color:#7d8796; font-size:11px; line-height:1.6; }.wb-action-links { display:flex; gap:8px; margin:10px 0 0 32px; }.wb-action-links button { padding:5px 8px; border:1px solid #dfe5ee; border-radius:5px; color:#7b8797; background:#fff; font-size:10px; }.wb-action-links button.primary { color:#fff; border-color:#d84959; background:#d84959; }.wb-panel-foot { margin-top:auto; padding:10px 17px; border-top:1px solid #eef0f3; color:#a0a8b5; font-size:10px; }
+    .wb-task-summary { display:flex; align-items:center; gap:12px; color:#9aa3af; font-size:10px; }.wb-task-summary button { padding:0; border:0; color:#8c96a4; background:none; font-size:10px; }.wb-task-summary button:hover { color:var(--brand); }.wb-task-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; font-size:11px; }.wb-task-table th { padding:10px 16px; border-bottom:1px solid #eef0f3; color:#9ca6b3; background:#fbfcfd; font-weight:500; }.wb-task-table td { padding:11px 16px; border-bottom:1px solid #eef0f3; color:#6d7787; }.wb-task-table tr:last-child td { border-bottom:0; }.wb-task-table th:first-child { width:38%; }.wb-task-table th:nth-child(2) { width:20%; }.wb-task-table th:nth-child(3) { width:16%; }.wb-task-table th:nth-child(4) { width:15%; }.wb-task-table th:nth-child(5) { width:11%; }.wb-task-table strong { display:block; color:#3c4552; font-size:11px; }.wb-task-table small { display:block; margin-top:3px; color:#9ca6b2; font-size:10px; }.wb-task-status { display:inline-block; padding:4px 7px; border-radius:5px; color:#bb842f; background:#fff6e9; font-size:10px; }.wb-task-status.done { color:#3c9b78; background:#eaf8f1; }.wb-task-link { padding:0; border:0; color:#7d8b9c; background:none; font-size:10px; }.wb-task-link:hover { color:var(--brand); }.wb-task-table-wrap { overflow-x:auto; }.wb-task-table { min-width:650px; }
+    .wb-detail-overlay { position:fixed; inset:0; z-index:12; display:grid; place-items:center; padding:20px; background:rgba(30,38,54,.32); }.wb-detail-dialog { width:min(580px,100%); max-height:80vh; overflow:auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(30,38,54,.18); }.wb-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.wb-detail-head h2 { margin:0; font-size:17px; }.wb-detail-head button { border:0; color:#7d8796; background:none; font-size:21px; }.wb-detail-dialog p { color:#687486; font-size:12px; line-height:1.7; }.wb-detail-dialog h3 { margin:16px 0 5px; font-size:12px; }
+    .wb-adopt-overlay { position:fixed; inset:0; z-index:14; display:grid; place-items:center; padding:20px; background:rgba(34,39,52,.34); }
+    .wb-adopt-dialog { width:min(850px,100%); max-height:min(90vh,760px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #e7eaf0; border-radius:16px; background:#fff; box-shadow:0 20px 55px rgba(27,35,50,.18); }
+    .wb-adopt-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:25px 28px 21px; border-bottom:1px solid #edf0f4; }
+    .wb-adopt-head h2 { margin:0; color:#2f3744; font-size:19px; }.wb-adopt-head p { margin:7px 0 0; color:#9aa4b2; font-size:12px; }
+    .wb-adopt-close { width:38px; height:38px; flex:0 0 auto; border:1px solid #e2e7ef; border-radius:11px; color:#8793a3; background:#fff; font-size:21px; line-height:1; }
+    .wb-adopt-close:hover { border-color:#e6a4ae; color:#cb4051; }
+    .wb-adopt-form { display:flex; flex-direction:column; min-height:0; }
+    .wb-adopt-body { overflow:auto; padding:36px 28px 52px; }
+    .wb-adopt-notice { padding:15px 16px; border:1px solid #f4dce2; border-radius:9px; color:#ad8790; background:#fff8fa; font-size:12px; line-height:1.6; }
+    .wb-adopt-content { margin-top:15px; padding:16px; border:1px solid #dfe7f5; border-radius:9px; }
+    .wb-adopt-content strong { display:block; margin-bottom:9px; color:#657183; font-size:12px; }.wb-adopt-content p { margin:0; color:#8793a3; font-size:12px; line-height:1.8; white-space:pre-line; }
+    .wb-adopt-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px; }
+    .wb-adopt-field { display:grid; gap:8px; color:#919baa; font-size:12px; }.wb-adopt-field input,.wb-adopt-field textarea { width:100%; padding:10px 11px; border:1px solid #dce4f2; border-radius:7px; color:#596779; background:#fff; font-size:13px; }.wb-adopt-field input { height:40px; }.wb-adopt-field textarea { min-height:102px; resize:vertical; }.wb-adopt-field.note { margin-top:18px; }
+    .wb-adopt-foot { display:flex; align-items:center; gap:8px; padding:17px 28px; border-top:1px solid #edf0f4; }.wb-adopt-foot p { flex:1; margin:0; color:#a0aabb; font-size:11px; line-height:1.5; }.wb-adopt-foot button { min-height:36px; padding:0 15px; border:1px solid #dce4f0; border-radius:7px; color:#778397; background:#fff; font-size:12px; white-space:nowrap; }.wb-adopt-foot button.primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .wb-definitions { padding:17px 18px 18px; }.wb-definitions > p { margin:0 0 13px; color:#7a8290; font-size:11px; line-height:1.6; }.wb-definition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.wb-definition { padding:12px 13px; border:1px solid #e8ebf0; border-radius:7px; background:#fbfcfd; }.wb-definition strong { display:block; margin-bottom:6px; color:#384252; font-size:12px; }.wb-definition span,.wb-definition small { display:block; color:#687486; font-size:11px; line-height:1.65; }.wb-definition small { margin-top:6px; color:#9aa2af; }
+    .wb-table-wrap { overflow-x:auto; }.wb-table { width:100%; min-width:800px; border-collapse:collapse; text-align:left; font-size:11px; }.wb-table th { padding:10px 14px; border-bottom:1px solid #eef0f3; color:#9aa3af; background:#fbfcfd; font-weight:500; }.wb-table td { padding:11px 14px; border-bottom:1px solid #f0f1f4; color:#626d7b; vertical-align:middle; }.wb-table tr:last-child td { border-bottom:0; }.wb-table td strong,.wb-table td small { display:block; }.wb-table td strong { color:#3c4552; }.wb-table td small { margin-top:4px; color:#9ca5b2; font-size:10px; }.wb-foot { padding:12px 18px; border-top:1px solid #f0f1f4; color:#9aa2af; font-size:11px; }.wb-boundary { display:flex; justify-content:space-between; gap:12px; padding:17px 18px; }.wb-boundary strong { font-size:13px; }.wb-boundary p { margin:5px 0 0; color:#7a8290; font-size:11px; }.wb-boundary span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .orders tr.is-linked, .wb-task-table tr.is-linked { background:#fff8ea; }
+    .assistant { display:grid; grid-template-rows:42px minmax(0,1fr) auto; min-width:0; min-height:0; margin:8px 10px 8px 0; overflow:hidden; border:1px solid #e6e2ec; border-radius:18px; background:linear-gradient(155deg,#fff5f6 0%,#fff9fb 27%,#f7faff 62%,#f3f8ff 100%); }
+    .assistant-head { display:flex; align-items:center; gap:5px; padding:0 16px; color:#828c9c; font-size:12px; }
+    .assistant-head strong { margin-right:auto; font-weight:700; }
+    .assistant-head button { width:28px; height:28px; border:0; border-radius:6px; color:#718095; background:transparent; font-size:17px; }
+    .assistant-head button:hover { color:var(--brand); background:rgba(255,255,255,.72); }
+    .assistant-body { min-height:0; overflow:auto; padding:0 19px 14px; }
+    .hero { display:grid; justify-items:center; padding:17px 4px 26px; text-align:center; }
+    .robot { position:relative; display:grid; place-items:center; width:82px; height:68px; margin:8px 0 22px; border:6px solid #fff; border-radius:31px; background:linear-gradient(150deg,#fff,#ffe3e8); box-shadow:0 12px 24px rgba(205,89,110,.19),inset 0 -4px 9px rgba(236,120,144,.14); }
+    .robot::before,.robot::after { content:""; position:absolute; top:22px; width:10px; height:23px; border:2px solid #fff; border-radius:9px; background:#ff859b; }
+    .robot::before { left:-14px; }.robot::after { right:-14px; }
+    .robot i { position:absolute; top:-15px; left:34px; width:5px; height:13px; border-radius:5px; background:#ffd5dd; }
+    .robot i::after { content:""; position:absolute; left:-3px; top:-5px; width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:#ffa3b3; }
+    .robot span { display:flex; align-items:center; justify-content:center; gap:16px; width:59px; height:36px; border-radius:18px; background:radial-gradient(circle at 50% 0%,#ff7280,#9f0d27 65%,#650b1f); box-shadow:inset 0 2px 5px rgba(255,255,255,.7),0 3px 8px rgba(142,10,36,.27); }
+    .robot span::before,.robot span::after { content:""; width:4px; height:10px; border-radius:50%; background:#fff; box-shadow:0 0 7px #fff; }
+    .hero h2 { margin:0 0 8px; font-size:19px; }.hero p { margin:0; color:#77849a; font-size:13px; line-height:1.8; }
+    .quick-actions,.prompts { display:grid; gap:8px; }
+    .quick-actions button,.prompts button { width:100%; min-height:49px; padding:8px 14px; border:1px solid #dce4f5; border-radius:11px; color:#25303f; background:#fff; text-align:left; font-size:13px; font-weight:600; box-shadow:0 2px 4px rgba(63,90,136,.025); }
+    .quick-actions button:hover,.prompts button:hover { border-color:#f2a9af; color:var(--brand); background:#fffafa; }
+    .quick-actions button span { display:inline-grid; place-items:center; width:27px; margin-right:7px; color:#ef3153; vertical-align:middle; }
+    .quick-actions button:nth-child(2) span,.quick-actions button:nth-child(3) span { color:#3979ff; }.quick-actions button:nth-child(4) span { color:#ff7528; }
+    .quick-actions svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .prompt-section { margin-top:23px; }.prompt-section h3 { margin:0 0 12px; font-size:14px; }
+    .prompts button { min-height:40px; padding:7px 19px; border-radius:22px; color:#7c8a9f; font-size:12px; font-weight:400; }
+    .assistant-foot { padding:10px 12px 12px; }
+    .composer { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; align-items:center; height:58px; padding:0 10px; border:1px solid #dbe3f5; border-radius:17px; background:#fff; box-shadow:0 4px 14px rgba(77,105,155,.05); }
+    .composer button { display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:50%; color:#8290a4; background:#f0f3f8; font-size:22px; }
+    .composer .send { color:#73a3fc; background:#eef4ff; font-size:19px; }.composer .send:disabled { opacity:.7; cursor:default; }
+    .composer input { width:100%; min-width:0; border:0; outline:0; color:var(--text); background:transparent; font-size:11px; }
+    .composer input::placeholder { color:#9ba5b5; }
+    .disclaimer { margin:7px 0 0; color:#abb1ba; font-size:10px; text-align:center; }
+    .chat { display:grid; gap:12px; padding-top:12px; }.chat .question { justify-self:end; max-width:92%; padding:9px 12px; border-radius:10px; background:#f0f3f8; color:#455064; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .answer { padding:14px; border:1px solid #e2e8f3; border-radius:10px; background:rgba(255,255,255,.94); font-size:12px; line-height:1.65; }
+    .answer h3 { margin:0 0 8px; font-size:14px; }.answer p { margin:7px 0; }.answer ul { margin:8px 0; padding-left:18px; }.answer li { margin:5px 0; }
+    .answer small { display:block; margin-top:12px; color:var(--faint); }.back-home { margin:4px 0 10px; padding:0; border:0; color:#657a9b; background:none; font-size:11px; }
+    .history-overlay { position:fixed; inset:0; z-index:10; display:grid; place-items:center; background:rgba(26,35,50,.28); }
+    .history-dialog { width:min(420px,calc(100vw - 32px)); max-height:70vh; overflow:auto; padding:18px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(25,31,45,.16); }
+    .history-dialog header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }.history-dialog h2 { margin:0; font-size:16px; }
+    .history-dialog header button { border:0; background:none; font-size:20px; }.history-dialog .empty { color:var(--muted); font-size:12px; }
+    .history-row { display:block; width:100%; padding:10px; border:1px solid var(--line); border-radius:7px; margin:7px 0; background:#fff; text-align:left; font-size:12px; }.history-row small { display:block; margin-top:4px; color:var(--faint); }
+    .toast { position:fixed; right:20px; bottom:18px; z-index:20; padding:10px 14px; border:1px solid var(--line); border-radius:7px; background:#fff; box-shadow:0 8px 25px rgba(25,31,45,.1); font-size:12px; }
+    @media(max-width:1200px) { .content { padding:20px; }.wb-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); }.wb-panels { grid-template-columns:1fr; } }
+    @media(max-width:800px) { .summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media(max-width:560px) { .topbar { height:48px; padding:0 12px; }.page-tabs { width:100%; }.page-tab { min-width:0; flex:1; }.period-control select { max-width:200px; }.content { padding:16px 12px; }.wb-definition-grid { grid-template-columns:1fr; }.wb-hero { align-items:flex-start; flex-direction:column; }.wb-title-line { gap:8px; }.wb-kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }.wb-boundary { flex-direction:column; }.wb-context small { width:100%; margin-left:0; }.wb-adopt-overlay { padding:10px; }.wb-adopt-head,.wb-adopt-body,.wb-adopt-foot { padding-left:17px; padding-right:17px; }.wb-adopt-body { padding-top:20px; padding-bottom:24px; }.wb-adopt-fields { grid-template-columns:1fr; }.wb-adopt-foot { flex-wrap:wrap; }.wb-adopt-foot p { flex-basis:100%; } }
+  </style>
+<style id="gea-compact-page-header">
+/* Embedded business pages share compact inventory-page top spacing. */
+.workspace > .content { width:100%; max-width:none; padding-top:8px; }
+.wb-hero h1 { display:none; }
+</style>
+</head>
+<body>
+  <div class="shell">
+    <main class="main" id="mainPage">
+      <div class="layout" id="layout">
+        <div class="workspace">
+          <section class="content" id="workbenchView" aria-label="订单工作台">
+            <div class="wb-hero"><div class="period-bar" role="group" aria-label="订单数据统计周期"><span class="period-label">统计周期</span><div class="period-switch" role="group" aria-label="月度或周度"><button id="monthMode" class="active" type="button" aria-pressed="true">月度</button><button id="weekMode" type="button" aria-pressed="false">周度</button></div><label class="period-control">选择月份 <input id="periodMonth" type="month" value="2026-09" aria-label="选择月份"></label><label class="period-control" id="weekControl" hidden>选择周次 <select id="periodWeek" aria-label="选择周次"></select></label><span class="period-meta" id="periodMeta" aria-live="polite"></span></div><div class="wb-context"><strong>当前场景</strong><span>订单质量与交付协同</span><span>全部基地 · 全部品类</span></div><button class="wb-link" type="button" data-order-workbench-page>查看订单履约 →</button></div>
+            <div class="period-empty" id="wbPeriodEmpty" role="status" hidden></div>
+            <div class="wb-report-date">月度报告截至 2026-09-13</div>
+            <section class="wb-section" aria-label="订单核心指标"><div class="wb-kpis" id="wbKpis"></div></section>
+            <div class="wb-panels"><section class="wb-card" aria-labelledby="wbEventsTitle"><div class="wb-card-title"><div><h2 id="wbEventsTitle">事件预警</h2><p>从报告中的未达标项与重点异常提炼</p></div><span id="wbEventCount"></span></div><div class="wb-events-tabs" role="group" aria-label="筛选预警事项"><button class="active" type="button" data-wb-event-filter="focus">重点关注</button><button type="button" data-wb-event-filter="all">全部事项</button></div><div id="wbEvents"></div><div class="wb-panel-foot">仅为报告异常事项，不等同于去重后的预警订单数。</div></section><section class="wb-card" aria-labelledby="wbActionsTitle"><div class="wb-card-title"><div><h2 id="wbActionsTitle">行动建议</h2><p>从根因到可复核的处理动作</p></div><span>待业务确认 ›</span></div><div id="wbActions"></div><div class="wb-panel-foot">AI 提出建议，人员复核后推进；不会自动改变订单或任务状态。</div></section></div>
+            <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle"><div class="wb-task-head"><div><h2 id="wbTasksTitle">任务追踪</h2><p>采纳建议后在本页创建本地跟进任务；不连接真实任务系统</p></div><div class="wb-task-summary"><span id="wbTaskSummary"></span><button type="button" data-wb-export>⇩ 导出清单</button></div></div><div class="wb-filters" role="group" aria-label="筛选任务"><button class="active" type="button" data-wb-task-filter="all">全部 <span id="wbTaskAllCount"></span></button><button type="button" data-wb-task-filter="pending">待跟进 <span id="wbTaskPendingCount"></span></button><button type="button" data-wb-task-filter="done">已完成 <span id="wbTaskDoneCount"></span></button></div><div class="wb-task-table-wrap"><table class="wb-task-table"><thead><tr><th>任务 / 关联事项</th><th>责任角色</th><th>预计截止日期</th><th>本地状态</th><th>操作</th></tr></thead><tbody id="wbTaskRows"></tbody></table></div><div class="wb-foot">任务仅保存在本次打开的页面中，不代表实际派发、执行或验收。</div></section>
+            <section class="wb-card wb-boundary"><div><strong>数据边界</strong><p>9 月报告指标与异常事项 → 人工核实 → 改善建议 → 演示任务；订单明细仍在“订单履约”页</p></div><span>报告摘录 · 非实时</span></section>
+          </section>
+
+        </div>
+      </div>
+    </main>
+  </div>
+  <div class="wb-detail-overlay" id="wbDetailOverlay" hidden><div class="wb-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="wbDetailTitle"><div class="wb-detail-head"><h2 id="wbDetailTitle"></h2><button type="button" id="wbDetailClose" aria-label="关闭详情">×</button></div><div id="wbDetailBody"></div></div></div>
+  <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden><div class="wb-adopt-dialog" role="dialog" aria-modal="true" aria-labelledby="wbAdoptTitle" aria-describedby="wbAdoptSubtitle"><div class="wb-adopt-head"><div><h2 id="wbAdoptTitle">采纳行动建议 · 人工确认</h2><p id="wbAdoptSubtitle"></p></div><button class="wb-adopt-close" id="wbAdoptClose" type="button" aria-label="关闭">×</button></div><form class="wb-adopt-form" id="wbAdoptForm"><div class="wb-adopt-body"><div class="wb-adopt-notice">◎　确认后将在任务追踪区创建本地跟进任务，不创建真实业务单据，也不会自动联系系统责任人。</div><div class="wb-adopt-content"><strong>任务内容</strong><p id="wbAdoptContent"></p></div><div class="wb-adopt-fields"><label class="wb-adopt-field">责任角色<input id="wbAdoptRole" type="text" maxlength="40" required></label><label class="wb-adopt-field">预计截止日期<input id="wbAdoptDue" type="date" required></label></div><label class="wb-adopt-field note">确认说明（可选）<textarea id="wbAdoptNote" maxlength="500" placeholder="补充需要核验的事项、业务限制或交付物"></textarea></label></div><div class="wb-adopt-foot"><p>同一统计周期内的同一建议只创建一次；创建后可继续查看任务。</p><button id="wbAdoptCancel" type="button">暂不采纳</button><button class="primary" type="submit">确认并创建任务</button></div></form></div></div>
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script>
+    const workbenchView = document.getElementById('workbenchView');
+    const activePage = 'workbench';
+    let periodMode = 'month';
+    let selectedMonth = '2026-09';
+    let selectedWeek = '2026-09-14';
+    let weekInitialized = false;
+    let eventFilter = 'focus';
+    let taskFilter = 'all';
+    const createdWorkbenchTasks = new Map();
+    let pendingAdoption = null;
+    let adoptReturnFocus = null;
+    const metricDefinitions = [
+      { key:'作废率', value:'2.05%', target:'≤6%', trend:'较上期 -3.55pp', status:'达标', tone:'', formula:'周期内作废订单数 ÷ 同期接收订单总数 × 100%', note:'报告本期 2.05%、上期 5.60%；当前值达标。' },
+      { key:'改单率', value:'2.20%', target:'≤2%', trend:'较上期 -0.85pp', status:'未达标', tone:'urgent', formula:'周期内改单量 ÷ 有效投单量 × 100%', note:'报告本期 2.20%、上期 3.05%；虽有改善，仍高于目标 0.20pp。' },
+      { key:'准交率', value:'95.82%', target:'>98.5%', trend:'较上期 +0.93pp', status:'未达标', tone:'urgent', formula:'周期内按约定时间交付的订单数 ÷ 当期应交付订单数 × 100%', note:'报告本期 95.82%、上期 94.89%；距 98.5% 目标差 2.68pp。' },
+      { key:'超时订单数', value:'—', target:'待核算', trend:'报告未给总张数', status:'待核算', tone:'', formula:'周期内未在规定订单处理或履约时效内完成相应节点的订单累计数', note:'报告仅列出面点订单进度超时 17% 等问题，不能换算成全局超时订单张数。' },
+      { key:'预警订单数', value:'—', target:'待核算', trend:'需订单级去重', status:'待核算', tone:'', formula:'周期内命中预设异常规则、需要重点关注与核实的订单数', note:'报告提供异常事项与指标风险，但未提供去重后的预警订单明细。' }
+    ];
+    const reportEvents = [
+      { id:'west', focus:true, kind:'重点', title:'西南基地履约与满足率双低', summary:'满足率 92.24%，准交率 89.38%，可发货 8.9 天；为 9 月最大短板。', evidence:'基地维度报告：西南满足率 92.24%、准交率 89.38%、可发货天数 8.9 天。报告将冷库能力与调拨延迟列为重要约束。', action:'核实外租仓与调拨分流、生产节拍；推进 9.25 冷库立库技改可行性评估。' },
+      { id:'prepared', focus:true, kind:'重点', title:'预制食材满足率为品类最低', summary:'本期 87.27%，低于 95% 目标；骨肉相连、炖馍等产能约束需跟进。', evidence:'品类报告：预制食材满足率 87.27%，为 8 个品类最低；原因包括骨肉相连与炖馍产能缺口、ODM 资源调拨。', action:'复核 9.15 炖馍双班启动与第二家代工厂产能验证，明确可交付量。' },
+      { id:'noodle', focus:true, kind:'重点', title:'面点满足率未达标', summary:'本期 94.80%，报告列出缺货 2,600 件、订单进度超时 17%。', evidence:'品类报告：面点满足率 94.80%，缺货 2,600 件；订单进度超时 17% 是报告中的品类问题比例，并非全局超时订单数。', action:'核对供应与开单、派车、装车节点；明确延期原因及月内恢复节奏。' },
+      { id:'change', focus:true, kind:'关注', title:'改单率仍高于目标', summary:'整体 2.20%，目标 ≤2%；高势能渠道销售改单率 27.55% 属明显异常。', evidence:'核心 KPI 报告：改单率由 3.05% 降至 2.20%，但未达 ≤2% 目标；大区/省区报告列出高势能渠道销售 27.55%。', action:'先核对渠道口径及改单原因，再分渠道复盘锁单与需求变更流程。' },
+      { id:'cover', focus:false, kind:'关注', title:'火锅料与汤圆可发货天数偏高', summary:'火锅料 19.3 天、汤圆 13.4 天，均高于 <12 天目标。', evidence:'品类可发货天数报告：火锅料 19.3 天，为严重超标；汤圆 13.4 天，略超目标。', action:'复核前置备货、动销节奏与库存结构，避免单纯增加备货。' }
+    ];
+    const reportActions = [
+      { id:'prepared', icon:'⚡', title:'复核预制食材产能补位', subtitle:'建议角色：计划与供应协同 · 待业务确认', detail:'跟进炖馍 9.15 双班启动、第二家代工厂实际月产能及 ODM 交付排期。', taskId:'capacity' },
+      { id:'west', icon:'↗', title:'推进西南仓配能力改善', subtitle:'建议角色：仓配协同 · 待业务确认', detail:'外租仓与调拨分流同步评估，按报告节点推进 9.25 立库技改可行性。', taskId:'warehouse' },
+      { id:'noodle', icon:'◷', title:'拆解订单节点时效', subtitle:'建议角色：订单运营 · 待业务确认', detail:'从开单、派车、装车三阶段核实延期与缺货，关联面点和郑州/遂平准交问题。', taskId:'timing' },
+      { id:'cover', icon:'◈', title:'复核过量备货与动销', subtitle:'建议角色：商品计划 · 待业务确认', detail:'优先复核火锅料 19.3 天与汤圆 13.4 天的可发货天数，明确消化节奏。', taskId:'inventory' }
+    ];
+    const reportTasks = [
+      { id:'capacity', title:'验证预制食材产能补位', issue:'预制食材 · 满足率 87.27%', role:'计划 / 供应协同', due:'09.15（报告节点）', status:'待跟进', detail:'核实炖馍双班启动、第二家代工厂实际产能及 ODM 排期。报告只提出措施，执行进度待确认。' },
+      { id:'warehouse', title:'评估西南立库技改与调拨分流', issue:'西南基地 · 准交率 89.38%', role:'仓配协同', due:'09.25（报告节点）', status:'待跟进', detail:'完成冷库立库技改可行性评估，并核实外租仓、调拨分流方案。' },
+      { id:'timing', title:'复核开单 / 派车 / 装车时效', issue:'面点缺货 · 郑州 / 遂平准交', role:'订单运营', due:'9 月内（报告目标）', status:'待跟进', detail:'逐节点识别超时原因、责任环节和改进空间；报告中的 17% 为面点问题比例。' },
+      { id:'inventory', title:'复核火锅料与汤圆备货节奏', issue:'可发货天数 19.3 / 13.4 天', role:'商品计划', due:'待业务确认', status:'待跟进', detail:'区分前置备货与实际动销，提出库存结构和去化建议。' }
+    ];
+    // 周报的“本周”列独立展示；不将“本期（9.1–9.6）”累计值误作周度值。
+    const weeklyMetricDefinitions = [
+      { key:'作废率', value:'1.61%', target:'≤6%', trend:'周环比 -1.69pp', status:'达标', tone:'', formula:'周内作废订单数 ÷ 同周接收订单总数 × 100%', note:'9.6 周报“周度对比”本周 1.61%，上周 3.29%，同周 8.80%。周报本期累计值另为 1.53%。' },
+      { key:'改单率', value:'2.00%', target:'≤2%', trend:'周环比 +0.02pp', status:'达标', tone:'', formula:'周内改单量 ÷ 同周有效投单量 × 100%', note:'本周 2.00%，恰在目标上限；上周 1.97%。周报本期累计值 2.02%，状态为基本达标，两个口径不可混用。' },
+      { key:'满足率', value:'94.24%', target:'>95%', trend:'周环比 +3.43pp', status:'未达标', tone:'urgent', formula:'周内满足订单量 ÷ 同周订单需求量 × 100%', note:'本周 94.24%，上周 90.81%；周报本期累计满足率 95.13%，在报告核心 KPI 表中为达标。' },
+      { key:'准交率', value:'93.14%', target:'>98.5%', trend:'周环比 +3.62pp', status:'未达标', tone:'urgent', formula:'周内按约定时间交付的订单数 ÷ 同周应交付订单数 × 100%', note:'本周 93.14%，上周 89.52%；周报本期累计准交率 93.82%，亦未达目标。' },
+      { key:'可发货天数', value:'10.83 天', target:'<12 天', trend:'周环比 +0.59 天', status:'达标', tone:'', formula:'周报所示整体可发货天数；计算明细未提供', note:'本周 10.83 天，上周 10.23 天；整体低于 12 天目标，但火锅料等品类局部超标。' }
+    ];
+    const weeklyReportEvents = [
+      { id:'west-week', focus:true, kind:'重点', title:'西南基地满足率和准交率双低', summary:'满足率 92.10%、准交率 82.90%；5 个品类满足率低于 90%。', evidence:'周报基地表：西南满足率 92.10%、准交率 82.90%。交叉表中预制食材 79.06%、馄饨 82.36%、火锅料 83.29%、面点 86.84%、水饺 89.30%。', action:'核实产能、外注调拨与订单节点延迟；优先复盘低于 90% 的基地×品类组合。' },
+      { id:'zhengzhou-week', focus:true, kind:'重点', title:'郑州基地履约时效未达标', summary:'满足率 94.88%、准交率 94.65%；开单、派车和装车节点需复核。', evidence:'周报基地表：郑州满足率 94.88%、准交率 94.65%；报告指出休闲、水饺、预制食材等满足率缺口，以及开单、派车、装车超时问题。', action:'按订单节点识别缺货与延迟，核实排单、派车和装车时效，明确人工复核责任。' },
+      { id:'prepared-week', focus:true, kind:'重点', title:'预制食材满足率偏低', summary:'本期满足率 91.71%，缺货 0.97 万件；骨肉相连和炖馍产能待跟进。', evidence:'周报品类表：预制食材满足率 91.71%；问题分析指出骨肉相连需补产能，炖馍仍有产能缺口。西南×预制食材仅 79.06%。', action:'复核第二家代工厂实际产能、炖馍双班启动与 ODM 交付排期。' },
+      { id:'dumpling-week', focus:true, kind:'重点', title:'水饺满足率未达标', summary:'本期满足率 93.46%，缺货 3.13 万件；同比下降 2.04pp。', evidence:'周报品类表：水饺满足率 93.46%，同比 -2.04pp。报告指出冷鲜肉质量问题、订单积压与 9 月初外协产能未及时补位。', action:'核实配方质量、外协产能启动和调拨支援，按基地跟进缺货恢复。' },
+      { id:'hotpot-week', focus:true, kind:'关注', title:'火锅料可发货天数严重超标', summary:'本期 16.60 天，高于 12 天目标；郑州、华东局部更高。', evidence:'周报品类表：火锅料可发货天数 16.60 天；基地×品类表中郑州 15.58 天、华东 13.07 天。报告认为 9 月产能缺失与前置备货有关。', action:'跟进 9 月中旬销售发货进度，调整产能和交付节奏，防止过量备货。' },
+      { id:'leisure-week', focus:false, kind:'关注', title:'休闲品类满足率不足', summary:'本期 94.21%，缺货 2.16 万件；纸皮烧麦和酥皮馅饼是重点。', evidence:'周报品类表：休闲满足率 94.21%。问题分析列出纸皮烧麦 9,905 件、酥皮馅饼 4,691 件等缺货事项。', action:'复核订单显示与实际库存差异，按报告措施安排排产和调拨。' }
+    ];
+    const weeklyReportActions = [
+      { id:'west-week', icon:'↗', title:'复盘西南基地低满足组合', subtitle:'建议角色：订单 / 供应协同 · 待业务确认', detail:'优先核实西南×预制食材、水饺、面点、馄饨和火锅料的缺货与交付约束。', taskId:'west-week-task' },
+      { id:'zhengzhou-week', icon:'◷', title:'拆解郑州订单节点时效', subtitle:'建议角色：订单运营 / 仓配 · 待业务确认', detail:'按开单、派车、装车节点核对超时原因，结合缺货与拼车情况复核。', taskId:'zhengzhou-week-task' },
+      { id:'dumpling-week', icon:'⚡', title:'核实水饺产能补位', subtitle:'建议角色：生产 / 供应协同 · 待业务确认', detail:'跟进配方质量、外协产能和调拨支援，优先处理 3.13 万件缺口。', taskId:'dumpling-week-task' },
+      { id:'hotpot-week', icon:'◈', title:'调整火锅料备货节奏', subtitle:'建议角色：商品计划 · 待业务确认', detail:'在保证交付的同时跟踪火锅料 16.60 天可发货天数的消化情况。', taskId:'hotpot-week-task' }
+    ];
+    const weeklyReportTasks = [
+      { id:'west-week-task', title:'复核西南基地低满足组合', issue:'西南基地 · 满足率 92.10% / 准交率 82.90%', role:'订单 / 供应协同', due:'待业务确认', status:'待跟进', detail:'按基地×品类明细核实五个低于 90% 的组合及对应缺货原因；不表示已下发正式任务。' },
+      { id:'zhengzhou-week-task', title:'复核郑州开单 / 派车 / 装车时效', issue:'郑州基地 · 准交率 94.65%', role:'订单运营 / 仓配', due:'待业务确认', status:'待跟进', detail:'按报告列出的时效环节检查订单节点和缺货原因。' },
+      { id:'dumpling-week-task', title:'跟进水饺外协与调拨产能', issue:'水饺 · 满足率 93.46% / 缺货 3.13 万件', role:'生产 / 供应协同', due:'待业务确认', status:'待跟进', detail:'确认质量复核、外协产能启动和调拨支援进度。' },
+      { id:'hotpot-week-task', title:'复核火锅料前置备货', issue:'火锅料 · 可发货天数 16.60 天', role:'商品计划', due:'待业务确认', status:'待跟进', detail:'跟踪 9 月中旬发货和库存消化节奏，避免过量备货。' }
+    ];
+    function activeReport() {
+      if (periodMode === 'month' && selectedMonth === '2026-09') return { kind:'month', metrics:metricDefinitions, events:reportEvents, actions:reportActions, tasks:reportTasks };
+      if (periodMode === 'week' && selectedWeek === '2026-08-31') return { kind:'week', metrics:weeklyMetricDefinitions, events:weeklyReportEvents, actions:weeklyReportActions, tasks:weeklyReportTasks };
+      return null;
+    }
+    function workbenchTaskKey(id) { return `${periodMode}:${periodMode === 'week' ? selectedWeek : selectedMonth}:${id}`; }
+    function currentCreatedTasks() { return (activeReport()?.tasks || []).map(task => createdWorkbenchTasks.get(workbenchTaskKey(task.id))).filter(Boolean); }
+
+    function parseIsoDate(iso) { const [year, month, day] = iso.split('-').map(Number); return new Date(year, month - 1, day); }
+    function toIsoDate(date) { return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`; }
+    function addDays(iso, count) { const date = parseIsoDate(iso); date.setDate(date.getDate() + count); return toIsoDate(date); }
+    function mondayOf(iso) { const date = parseIsoDate(iso); date.setDate(date.getDate() - (date.getDay() + 6) % 7); return toIsoDate(date); }
+    function weeksInMonth(month) {
+      const [year, number] = month.split('-').map(Number);
+      const last = toIsoDate(new Date(year, number, 0));
+      const weeks = [];
+      for (let start = mondayOf(`${month}-01`); start <= last; start = addDays(start, 7)) weeks.push({ start, end:addDays(start, 6) });
+      return weeks;
+    }
+    function syncWeekOptions() {
+      const select = document.getElementById('periodWeek');
+      const weeks = weeksInMonth(selectedMonth);
+      if (!weeks.some(week => week.start === selectedWeek)) selectedWeek = weeks[0].start;
+      select.replaceChildren(...weeks.map((week, index) => {
+        const option = document.createElement('option');
+        option.value = week.start;
+        option.textContent = `第 ${index + 1} 周 · ${week.start} 至 ${week.end}`;
+        return option;
+      }));
+      select.value = selectedWeek;
+    }
+    function selectedPeriodLabel() {
+      if (periodMode === 'month') { const [year, month] = selectedMonth.split('-'); return `${year} 年 ${Number(month)} 月`; }
+      return `${selectedWeek} 至 ${addDays(selectedWeek, 6)}`;
+    }
+    function hasWorkbenchReport() { return activeReport() !== null; }
+    function renderSelectedPeriod() {
+      document.getElementById('monthMode').classList.toggle('active', periodMode === 'month');
+      document.getElementById('weekMode').classList.toggle('active', periodMode === 'week');
+      document.getElementById('monthMode').setAttribute('aria-pressed', String(periodMode === 'month'));
+      document.getElementById('weekMode').setAttribute('aria-pressed', String(periodMode === 'week'));
+      document.getElementById('periodMonth').value = selectedMonth;
+      document.getElementById('weekControl').hidden = periodMode !== 'week';
+      syncWeekOptions();
+      const reportAvailable = hasWorkbenchReport();
+      workbenchView.querySelectorAll('.wb-context, .wb-report-date, .wb-note, .wb-section, .wb-analysis, .wb-panels, #wbTaskSection, .wb-boundary').forEach(node => { node.hidden = !reportAvailable; });
+      const empty = document.getElementById('wbPeriodEmpty');
+      empty.hidden = reportAvailable;
+      empty.textContent = periodMode === 'week' ? `${selectedPeriodLabel()} 暂无对应周报数据。目前已收录截至 2026-09-06 的周报，不能将其他周次或月度报告数值移用至本周。` : `${selectedPeriodLabel()} 暂无月度报告数据；目前仅收录截至 2026-09-13 的 9 月报告。`;
+      if (reportAvailable && activePage === 'workbench') renderWorkbench();
+      document.getElementById('periodMeta').textContent = reportAvailable ? activeReport().kind === 'week' ? '周报 · 截至 09-06' : '月报 · 截至 09-13' : '暂无对应报告';
+    }
+    document.getElementById('monthMode').addEventListener('click', () => { if (periodMode !== 'month') { periodMode = 'month'; renderSelectedPeriod(); } });
+    document.getElementById('weekMode').addEventListener('click', () => { if (periodMode !== 'week') { periodMode = 'week'; if (!weekInitialized && selectedMonth === '2026-09') selectedWeek = '2026-08-31'; weekInitialized = true; renderSelectedPeriod(); } });
+    document.getElementById('periodMonth').addEventListener('change', event => { if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) { event.target.value = selectedMonth; return; } selectedMonth = event.target.value; selectedWeek = ''; renderSelectedPeriod(); });
+    document.getElementById('periodWeek').addEventListener('change', event => { selectedWeek = event.target.value; renderSelectedPeriod(); });
+
+    function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char])); }
+    function renderWorkbench() {
+      const report = activeReport();
+      if (!report) return;
+      const weekly = report.kind === 'week';
+      workbenchView.querySelector('.wb-report-date').textContent = weekly ? '周度报告截至 2026-09-06' : '月度报告截至 2026-09-13';
+      document.getElementById('wbKpis').innerHTML = report.metrics.map(metric => `<article class="wb-kpi ${metric.tone}"><span>${metric.key}</span><strong>${metric.value}</strong><small class="wb-kpi-goal">目标 ${metric.target}</small><span class="wb-kpi-state ${metric.status === '未达标' ? 'bad' : metric.status === '待核算' ? 'unknown' : ''}">${metric.status}</span><i class="wb-kpi-trend">${metric.trend}</i></article>`).join('');
+      document.getElementById('wbActions').innerHTML = report.actions.map(action => { const created = createdWorkbenchTasks.has(workbenchTaskKey(action.taskId)); return `<article class="wb-action"><div class="wb-action-main"><span class="wb-action-icon" aria-hidden="true">${action.icon}</span><div><strong>${escapeHtml(action.title)}</strong><small>${escapeHtml(action.subtitle)}</small></div></div><p>${escapeHtml(action.detail)}</p><div class="wb-action-links"><button type="button" data-wb-event-detail="${action.id}">查看依据</button><button class="primary" type="button" ${created ? `data-wb-action-task="${action.taskId}"` : `data-wb-adopt="${action.taskId}"`}>${created ? '查看已建任务' : '采纳并建任务'}</button></div></article>`; }).join('');
+      workbenchView.querySelector('.wb-boundary p').textContent = weekly ? '9.6 周报本周指标与品类/基地异常 → 人工核实 → 改善建议 → 采纳后建任务；订单明细仍在“订单履约”页' : '9 月报告指标与异常事项 → 人工核实 → 改善建议 → 采纳后建任务；订单明细仍在“订单履约”页';
+      workbenchView.querySelector('.wb-boundary > span').textContent = weekly ? '周报摘录 · 非实时' : '报告摘录 · 非实时';
+      renderWorkbenchEvents();
+      renderWorkbenchTasks();
+    }
+    function renderWorkbenchEvents() {
+      const events = activeReport()?.events || [];
+      const shown = eventFilter === 'focus' ? events.filter(event => event.focus) : events;
+      document.getElementById('wbEventCount').textContent = `${shown.length} 项事项`;
+      document.getElementById('wbEvents').innerHTML = shown.map(event => `<article class="wb-event"><div class="wb-event-top"><span class="wb-event-kind ${event.kind === '关注' ? 'focus' : ''}">${event.kind}</span><strong>${escapeHtml(event.title)}</strong><time>${activeReport()?.kind === 'week' ? '9.6' : '9.13'}</time></div><p>${escapeHtml(event.summary)}</p><div class="wb-event-foot"><button type="button" data-wb-event-detail="${event.id}">查看依据</button></div></article>`).join('');
+    }
+    function renderWorkbenchTasks() {
+      const tasks = currentCreatedTasks();
+      const pending = tasks.filter(task => task.status !== '已完成').length;
+      const done = tasks.length - pending;
+      document.getElementById('wbTaskSummary').textContent = `${pending} 项待跟进 · ${done} 项已完成`;
+      document.getElementById('wbTaskAllCount').textContent = tasks.length;
+      document.getElementById('wbTaskPendingCount').textContent = pending;
+      document.getElementById('wbTaskDoneCount').textContent = done;
+      const shown = taskFilter === 'all' ? tasks : tasks.filter(task => taskFilter === 'done' ? task.status === '已完成' : task.status !== '已完成');
+      document.getElementById('wbTaskRows').innerHTML = shown.length ? shown.map(task => `<tr data-wb-task-row="${task.id}"><td><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.issue)}</small></td><td>${escapeHtml(task.role)}</td><td>${escapeHtml(task.due)}</td><td><span class="wb-task-status ${task.status === '已完成' ? 'done' : ''}">${escapeHtml(task.status)}</span></td><td><button class="wb-task-link" type="button" data-wb-task-detail="${task.id}">查看 ›</button></td></tr>`).join('') : `<tr><td colspan="5">${tasks.length ? '当前筛选下没有任务。' : '尚未建立任务；可在上方行动建议中点击“采纳并建任务”。'}</td></tr>`;
+    }
+    workbenchView.addEventListener('click', event => {
+      const eventTab = event.target.closest('[data-wb-event-filter]');
+      if (eventTab) { eventFilter = eventTab.dataset.wbEventFilter; workbenchView.querySelectorAll('[data-wb-event-filter]').forEach(button => button.classList.toggle('active', button === eventTab)); renderWorkbenchEvents(); return; }
+      const taskTab = event.target.closest('[data-wb-task-filter]');
+      if (taskTab) { taskFilter = taskTab.dataset.wbTaskFilter; workbenchView.querySelectorAll('[data-wb-task-filter]').forEach(button => button.classList.toggle('active', button === taskTab)); renderWorkbenchTasks(); return; }
+      const eventDetail = event.target.closest('[data-wb-event-detail]');
+      if (eventDetail) { openWorkbenchDetail('event', eventDetail.dataset.wbEventDetail); return; }
+      const taskDetail = event.target.closest('[data-wb-task-detail]');
+      if (taskDetail) { openWorkbenchDetail('task', taskDetail.dataset.wbTaskDetail); return; }
+      const adopt = event.target.closest('[data-wb-adopt]');
+      if (adopt) { openAdoptDialog(adopt.dataset.wbAdopt, adopt); return; }
+      const actionTask = event.target.closest('[data-wb-action-task]');
+      if (actionTask) { focusCreatedTask(actionTask.dataset.wbActionTask); return; }
+      if (event.target.closest('[data-wb-export]')) { exportWorkbenchTasks(); return; }
+      if (event.target.closest('[data-order-workbench-page]')) openFulfillmentPlugin();
+    });
+    function focusCreatedTask(id) {
+      taskFilter = 'all';
+      workbenchView.querySelectorAll('[data-wb-task-filter]').forEach(button => button.classList.toggle('active', button.dataset.wbTaskFilter === 'all'));
+      renderWorkbenchTasks();
+      const row = [...workbenchView.querySelectorAll('[data-wb-task-row]')].find(item => item.dataset.wbTaskRow === id);
+      if (row) { row.classList.add('is-linked'); row.scrollIntoView({ block:'center', behavior:'smooth' }); setTimeout(() => row.classList.remove('is-linked'), 2800); }
+    }
+    const wbAdoptOverlay = document.getElementById('wbAdoptOverlay');
+    const wbAdoptForm = document.getElementById('wbAdoptForm');
+    function openAdoptDialog(taskId, trigger) {
+      const report = activeReport();
+      const action = report?.actions.find(item => item.taskId === taskId);
+      const template = report?.tasks.find(item => item.id === taskId);
+      if (!action || !template) return;
+      const key = workbenchTaskKey(taskId);
+      if (createdWorkbenchTasks.has(key)) { focusCreatedTask(taskId); return; }
+      pendingAdoption = { key, action, template };
+      adoptReturnFocus = trigger;
+      document.getElementById('wbAdoptSubtitle').textContent = action.title;
+      document.getElementById('wbAdoptContent').textContent = action.detail;
+      document.getElementById('wbAdoptRole').value = template.role;
+      document.getElementById('wbAdoptDue').value = toIsoDate(new Date());
+      document.getElementById('wbAdoptNote').value = '';
+      wbAdoptOverlay.hidden = false;
+      document.getElementById('wbAdoptClose').focus();
+    }
+    function closeAdoptDialog() {
+      wbAdoptOverlay.hidden = true;
+      pendingAdoption = null;
+      if (adoptReturnFocus?.isConnected) adoptReturnFocus.focus();
+      adoptReturnFocus = null;
+    }
+    document.getElementById('wbAdoptClose').addEventListener('click', closeAdoptDialog);
+    document.getElementById('wbAdoptCancel').addEventListener('click', closeAdoptDialog);
+    wbAdoptOverlay.addEventListener('click', event => { if (event.target === wbAdoptOverlay) closeAdoptDialog(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !wbAdoptOverlay.hidden) closeAdoptDialog(); });
+    wbAdoptForm.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!pendingAdoption || !wbAdoptForm.reportValidity()) return;
+      const role = document.getElementById('wbAdoptRole').value.trim();
+      const due = document.getElementById('wbAdoptDue').value;
+      const note = document.getElementById('wbAdoptNote').value.trim();
+      if (!role || !due) return;
+      const { key, action, template } = pendingAdoption;
+      if (createdWorkbenchTasks.has(key)) { closeAdoptDialog(); focusCreatedTask(template.id); return; }
+      createdWorkbenchTasks.set(key, { ...template, role, due, note, detail:action.detail, status:'待跟进' });
+      closeAdoptDialog();
+      renderWorkbench();
+      focusCreatedTask(template.id);
+      const toast = document.getElementById('toast');
+      toast.textContent = '已在本页创建跟进任务；未同步到真实任务系统。';
+      toast.hidden = false;
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
+    });
+    const wbDetailOverlay = document.getElementById('wbDetailOverlay');
+    function openWorkbenchDetail(type, id) {
+      const report = activeReport();
+      const item = type === 'event' ? report?.events.find(entry => entry.id === id) : createdWorkbenchTasks.get(workbenchTaskKey(id));
+      if (!item) return;
+      document.getElementById('wbDetailTitle').textContent = item.title;
+      document.getElementById('wbDetailBody').innerHTML = type === 'event' ? `<p>${escapeHtml(item.summary)}</p><h3>报告依据</h3><p>${escapeHtml(item.evidence)}</p><h3>建议跟进</h3><p>${escapeHtml(item.action)}</p><p>此处为报告摘录与页面归纳，不表示已生成正式订单预警。</p>` : `<p>${escapeHtml(item.issue)}</p><h3>责任角色与截止日期</h3><p>${escapeHtml(item.role)} · ${escapeHtml(item.due)}</p><h3>任务说明</h3><p>${escapeHtml(item.detail)}</p>${item.note ? `<h3>确认说明</h3><p>${escapeHtml(item.note)}</p>` : ''}<p>本地状态：${escapeHtml(item.status)}；未连接真实任务系统。</p>`;
+      wbDetailOverlay.hidden = false;
+      document.getElementById('wbDetailClose').focus();
+    }
+    function closeWorkbenchDetail() { wbDetailOverlay.hidden = true; }
+    document.getElementById('wbDetailClose').addEventListener('click', closeWorkbenchDetail);
+    wbDetailOverlay.addEventListener('click', event => { if (event.target === wbDetailOverlay) closeWorkbenchDetail(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !wbDetailOverlay.hidden) closeWorkbenchDetail(); });
+    function exportWorkbenchTasks() {
+      const lines = [['任务','关联事项','责任角色','预计截止日期','本地状态'], ...currentCreatedTasks().map(task => [task.title,task.issue,task.role,task.due,task.status])];
+      const csv = '\uFEFF' + lines.map(line => line.map(value => `"${String(value).replaceAll('"','""')}"`).join(',')).join('\r\n');
+      const url = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `订单工作台-${activeReport()?.kind === 'week' ? '周度' : '月度'}演示任务.csv`; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function openFulfillmentPlugin() {
+      if (window.parent !== window) {
+        window.parent.postMessage({ protocol: 'gea-html-v1', type: 'navigate', panel: 'inventory-orderfulfillment' }, window.location.origin);
+      } else {
+        window.location.href = '../inventory-orderfulfillment/index.html';
+      }
+    }
+    renderSelectedPeriod();
+</script>
+</body>
+</html>

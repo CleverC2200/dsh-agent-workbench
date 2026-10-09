@@ -1,0 +1,20 @@
+import type { TFunction } from 'i18next';
+import React from 'react';
+import { type RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
+import { type SalesPlanDetailClient } from '../hooks/useSalesPlanDetail.ts';
+export type RegionalApprovalLivePlanDetailTab = 'skus' | 'versions' | 'logs' | 'compare';
+declare const RegionalApprovalLivePlanDetail: React.FC<{
+    visible: boolean;
+    rows: readonly RegionalApprovalLiveRow[];
+    row: RegionalApprovalLiveRow;
+    t: TFunction;
+    client?: SalesPlanDetailClient;
+    initialTab?: RegionalApprovalLivePlanDetailTab;
+    initialFromVersionId?: string;
+    initialToVersionId?: string;
+    onClose: () => void;
+    onRowChange: (planId: string) => void;
+    onCompareFromVersionChange?: (versionId: string) => void;
+    onCompareToVersionChange?: (versionId: string) => void;
+}>;
+export default RegionalApprovalLivePlanDetail;

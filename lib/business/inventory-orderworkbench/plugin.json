@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-orderworkbench",
+  "name": "订单工作台",
+  "version": "0.1.0-preview.2-split.21",
+  "html": "index.html",
+  "skills": [
+    "skills/orderworkbench/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "mode": "mock",
+  "gea": {
+    "consumerCode": "orderworkbench-preview",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-fc",
+  "name": "分仓库存",
+  "version": "0.2.6-preview.9-split.6",
+  "html": "index.html",
+  "skills": ["skills/fc/SKILL.md"],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "branch-inventory",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

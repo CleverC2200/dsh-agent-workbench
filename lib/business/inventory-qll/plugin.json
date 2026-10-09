@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-qll",
+  "name": "全链库存分布",
+  "version": "0.2.6-preview.14-split.48",
+  "html": "index.html",
+  "skills": [
+    "skills/qll/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "full-chain-inventory",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "company-readonly",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

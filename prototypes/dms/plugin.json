@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-dms",
+  "name": "DMS 回写演示（模拟）",
+  "version": "0.0.1-split.36",
+  "html": "index.html",
+  "mode": "mock",
+  "status": "prototype",
+  "pages": [
+    {
+      "id": "inventory-dms",
+      "name": "DMS 回写演示（模拟）",
+      "view": "",
+      "order": 90
+    }
+  ],
+  "skills": [
+    "skills/dms/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "dms-writeback-preview",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

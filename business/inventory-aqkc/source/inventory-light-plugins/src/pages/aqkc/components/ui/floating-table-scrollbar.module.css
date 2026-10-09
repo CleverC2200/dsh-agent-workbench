@@ -1,0 +1,78 @@
+.scrollbar {
+  position: fixed;
+  z-index: 40;
+  height: 8px;
+  background: #f1f1f1;
+}
+.scrollbar input {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.scrollbar input::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #f1f1f1;
+}
+.scrollbar input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--thumb-width);
+  height: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #c1c1c1;
+  cursor: ew-resize;
+}
+.scrollbar input::-moz-range-track {
+  height: 8px;
+  background: #f1f1f1;
+}
+.scrollbar input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb-width);
+  height: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #c1c1c1;
+  cursor: ew-resize;
+}
+.scrollbar input:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
+
+/* Same track and thumb at the table bottom and at the viewport bottom. */
+.nativeScrollbar {
+  scrollbar-width: auto;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .nativeScrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+  }
+}
+.nativeScrollbar::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.nativeScrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.nativeScrollbar::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 6px;
+}
+.nativeScrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+.scrollbar input:hover::-webkit-slider-thumb {
+  background: #a8a8a8;
+}
+.scrollbar input:hover::-moz-range-thumb {
+  background: #a8a8a8;
+}

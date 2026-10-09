@@ -1,0 +1,9 @@
+{
+  "surface": "gea-html-inventory-qll",
+  "protocol": "self-report",
+  "pageIds": [
+    "inventory-qll"
+  ],
+  "consumerCode": "full-chain-inventory",
+  "maxEffect": "view"
+}

@@ -1,0 +1,32 @@
+html, body, #app, #root {height:100%;min-height:0;}
+body {margin:0;font-family:var(--workbench-font-family);font-size:var(--workbench-font-size);background:var(--workbench-page);color:var(--workbench-text);}
+html body {
+  --color-bg-popup:var(--workbench-surface);
+  --color-bg-1:var(--workbench-surface);--color-bg-2:var(--workbench-surface);--color-bg-3:var(--workbench-subtle);--color-bg-4:var(--workbench-muted-surface);--color-bg-5:var(--workbench-surface);
+  --color-fill-1:var(--workbench-subtle);--color-fill-2:var(--workbench-muted-surface);--color-fill-3:var(--workbench-border);--color-fill-4:var(--workbench-control-border);
+  --color-text-1:var(--workbench-text);--color-text-2:var(--workbench-body);--color-text-3:var(--workbench-muted);--color-text-4:var(--workbench-muted);--color-border:var(--workbench-border);--color-border-1:var(--workbench-border);--color-border-2:var(--workbench-border);
+}
+#app {display:flex;flex-direction:column;overflow:hidden;}
+.prototype-notice {flex:none;padding:10px 16px;border-bottom:1px solid var(--workbench-border);background:var(--workbench-subtle);color:var(--workbench-body);font-size:var(--workbench-font-size);}
+#root {flex:1;overflow:auto;}
+.app-shell, .app-main, .page-content {background:var(--workbench-page)!important;color:var(--workbench-text);}
+.dealer-table-card, .metric-card, .arco-modal, .arco-drawer, .agent-panel {background:var(--workbench-surface)!important;color:var(--workbench-text);}
+.arco-table-th, .arco-table-td, .arco-input, .arco-select-view, .arco-cascader-view {background:var(--workbench-surface)!important;color:var(--workbench-text)!important;border-color:var(--workbench-border)!important;}
+.arco-table-th {background:var(--workbench-subtle)!important;}
+body .arco-btn-primary, body .arco-modal .arco-modal-footer .arco-btn-primary, body .drawer-buttons .arco-btn-primary {background:var(--workbench-brand)!important;border-color:var(--workbench-brand)!important;color:var(--workbench-surface)!important;}
+.page-heading, .metric-card, .dealer-table-card, .arco-modal, .arco-drawer {font-family:var(--workbench-font-family);}
+.metric-card-head, .metric-benchmark, .arco-table, .arco-input {font-size:var(--workbench-font-size);}
+body .dealer-table-card .arco-tabs-header-title {color:var(--workbench-body)!important;}
+body .dealer-table-card .arco-tabs-header-title.arco-tabs-header-title-active, body .dealer-table-card .arco-tabs-header-title.arco-tabs-header-title-active .arco-tabs-header-title-text {color:var(--workbench-selected-text)!important;background:var(--workbench-surface);}
+body .dealer-table-card .arco-tabs-header .arco-tabs-header-ink {background:var(--workbench-brand)!important;}
+.metric-card:hover, .metric-card.active, .dealer-table-card .arco-table-tbody .arco-table-tr:hover .arco-table-td {background:var(--workbench-hover)!important;border-color:var(--workbench-brand-soft);}
+body .dealer-table-card .table-filters .arco-select-view-value, body .dealer-table-card .table-filters .arco-select-suffix, body .dealer-table-card .table-filters .arco-input, body .dealer-table-card .table-filters .download-btn {color:var(--workbench-body)!important;}
+.page-heading h1, .metric-card strong, .arco-typography, .formula-content {color:var(--workbench-text);}
+:focus-visible {outline:2px solid var(--workbench-brand);outline-offset:2px;}
+body .metric-card-head .arco-typography, body .metric-card .arco-statistic-value, body .dealer-table-card .dealer-name, body .dealer-table-card .metric-cell strong {color:var(--workbench-text)!important;}
+body .inventory-context .arco-select-view, body .inventory-context .arco-cascader-view {background:var(--workbench-surface)!important;border-color:var(--workbench-control-border);}
+body .inventory-context .arco-select-view-value, body .inventory-context .arco-select-suffix, body .inventory-context .arco-cascader-view-value {color:var(--workbench-body)!important;}
+body[data-ds-dark-theme] .dealer-table-card .dealer-name strong {color:var(--workbench-text);}
+body[data-ds-dark-theme] .metric-card .metric-benchmark {background:var(--workbench-surface);color:var(--workbench-muted);}
+body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span,small) {color:var(--workbench-muted);}
+@media(max-width:760px){.prototype-notice{padding:8px 12px;}}

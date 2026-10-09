@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-personal",
+  "name": "库存管理工作台",
+  "version": "0.2.7-preview.7-split.46",
+  "html": "index.html",
+  "skills": [
+    "skills/personal/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "inventory-personal-workbench",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}

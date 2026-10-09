@@ -1,0 +1,83 @@
+{
+  "resourcesBySection": {
+    "age": [
+      "agents_scm_inventory_age"
+    ],
+    "branch": [
+      "agents_scm_branch_inventory_snapshot"
+    ],
+    "branchplans": [
+      "agents_scm_branch_plan"
+    ],
+    "budget": [
+      "agents_scm_branch_budget_monthly"
+    ],
+    "delivery-daily": [
+      "agents_scm_cust_deliv_daily"
+    ],
+    "demand-accuracy": [
+      "agents_scm_demand_accuracy"
+    ],
+    "execution": [
+      "agents_scm_cust_plan_exe"
+    ],
+    "finance": [
+      "agents_aps_finance"
+    ],
+    "forecast-products": [
+      "agents_sales_forecast_detail_mi"
+    ],
+    "forecast": [
+      "agents_sales_forecast_detail_mi"
+    ],
+    "material-dim": [
+      "agents_scm_order_fulfillment"
+    ],
+    "operations": [
+      "agents_scm_branch_operation_fact"
+    ],
+    "orders-month-products": [
+      "agents_scm_shortage_supply_match"
+    ],
+    "orders-month": [
+      "agents_scm_shortage_supply_match"
+    ],
+    "orders-products": [
+      "agents_scm_shortage_supply_match"
+    ],
+    "orders": [
+      "agents_scm_shortage_supply_match"
+    ],
+    "pending": [
+      "agents_scm_branch_pending_order"
+    ],
+    "plans-source-year": [
+      "agents_aps_plans_source"
+    ],
+    "plans-source": [
+      "agents_aps_plans_source"
+    ],
+    "plans": [
+      "agents_sales_plan_detail_mi"
+    ],
+    "production": [
+      "agents_scm_branch_production_plan"
+    ],
+    "sales-accuracy": [
+      "agents_scm_sales_accuracy"
+    ],
+    "sales-budget": [
+      "agents_aps_sales_budget"
+    ],
+    "sales-org": [
+      "agents_aps_sales_org"
+    ],
+    "shippable": [
+      "agents_scm_branch_operation_fact",
+      "agents_scm_safety_stock"
+    ],
+    "stock": [
+      "agents_scm_safety_stock"
+    ]
+  }
+}

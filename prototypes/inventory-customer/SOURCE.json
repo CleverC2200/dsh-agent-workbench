@@ -1,0 +1,17 @@
+{
+  "repository": "dsh-agent-customer-plugin",
+  "commit": "e5ba6db343dd31e0b362516db712e72aeae0e611",
+  "htmlSha256": "5bb5f16c3aad69691fc6d8be88f2b10d36e3ae1ce63c6306ca15418c6bc9d122",
+  "applicationScriptOriginalSha256": "8c740712967a6fd07968963ab6be2738f2f44b9764c6454402c0b810f90e865a",
+  "cssOriginalSha256": [
+    "104a0e80c656ca1e82393b3d35ccb036a48c8b437ca4ca51df14ffe14a556aeb",
+    "584761a8069b099beb90295eebb7af3faf6ae4fc7e2c28729c1d1df09bcb085b",
+    "7a231b29641f20445109be285110e5f99b3f728cc3601528d7f018fc0d28bbdd"
+  ],
+  "changes": [
+    "module mount instead of immediate IIFE",
+    "application-owned state publication",
+    "six-row pagination reported by application state"
+  ],
+  "simulation": "retained original fixed dataset/calculations/local assistant"
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "inventory-dealer",
+  "name": "经销商库存",
+  "version": "0.2.6-preview.6-split.16",
+  "html": "index.html",
+  "skills": [
+    "skills/dealer/SKILL.md"
+  ],
+  "mcp": "mcp.json",
+  "gea": {
+    "consumerCode": "dealer-inventory-replenishment",
+    "readonly": true,
+    "contract": "gea-html-v2"
+  },
+  "status": "integration-preview",
+  "declarations": {
+    "page": "page.json",
+    "capability": "capability.json"
+  },
+  "agentResources": {
+    "provider": "dsh-agent-manage",
+    "prompt": "prompt.json"
+  }
+}
