@@ -230,6 +230,8 @@ try {
       if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
       else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
     }
+    // Recheck concrete exports after preparation, before the full Node behavior gate.
+    run('npm', ['run', 'check:knowledge']);
     run('npm', ['test']);
     if (values.browser) run('npm', ['run', 'test:browser']);
     const changed = [
