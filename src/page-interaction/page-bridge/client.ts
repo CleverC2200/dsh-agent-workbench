@@ -128,7 +128,7 @@ export function startPageBridgeClient(
   };
 
   const poll = async (): Promise<void> => {
-    const pending = outbox.splice(0, outbox.length);
+    const pending = outbox.slice();
     try {
       const result = await options.request<{ events: AgUiEvent[] }>(
         options.endpoint,
@@ -140,6 +140,9 @@ export function startPageBridgeClient(
         },
       );
       if (stopped) return;
+      // A failed response can follow an accepted receipt. Retry the same messages;
+      // the Host ignores completed calls, while settled prevents repeating actions.
+      outbox.splice(0, pending.length);
       for (const event of result.events ?? []) {
         if (event.type === AGUI_EVENT_TOOL_CALL_START) {
           buffers.set(event.toolCallId, "");

@@ -46,6 +46,36 @@ function controller(store) {
   return { owner, navigated };
 }
 
+test('unregistering the History page revokes a pending restore before the same id is registered again', async t => {
+  const navigated = [];
+  const owner = new WorkbenchController({ panel: () => {}, document: id => navigated.push(id) });
+  t.after(() => owner.dispose());
+  const remove = owner.registerFrame(fc);
+  owner.showHistory(fc.id);
+  owner.selectHistorySession(fc.id, first.sessionId, first);
+  const target = owner.takeHistoryTarget(first.sessionId);
+  remove();
+  owner.registerFrame({ ...fc, src: '/replacement' });
+  assert.equal(target.signal.aborted, true);
+  await assert.rejects(owner.completeHistory(target), error => error.name === 'AbortError');
+  assert.deepEqual(navigated, []);
+  assert.equal(owner.getSnapshot().selection, undefined);
+});
+
+test('removing another page does not revoke the current History restore', async t => {
+  const { owner, navigated } = controller();
+  t.after(() => owner.dispose());
+  const removeOther = owner.registerFrame({ id: 'other-page', kind: 'html', src: '/other' });
+  owner.showHistory(fc.id);
+  owner.selectHistorySession(fc.id, first.sessionId, first);
+  const target = owner.takeHistoryTarget(first.sessionId);
+  removeOther();
+  assert.equal(target.signal.aborted, false);
+  owner.associateSession(fc.id, first);
+  assert.equal(await owner.completeHistory(target), true);
+  assert.deepEqual(navigated, [first.sessionId]);
+});
+
 test('a fresh presentation restores the same Core Session hint without opening or creating a Session', async () => {
   const store = memory();
   const { owner } = controller(store);
