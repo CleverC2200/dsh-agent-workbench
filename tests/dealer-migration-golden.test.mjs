@@ -62,9 +62,13 @@ async function engine(source) {
 }
 test('migration retains fixed-source metrics, SQL scope, recommendation and local-draft rules', async (t) => {
   await mkdir('.runtime', { recursive: true });
-  const temporary = await mkdtemp(resolve('.runtime/dealer-golden-')),
-    oldRepo = resolve('../../../../dsh-agent-dealer-plugin');
+  const temporary = await mkdtemp(resolve('.runtime/dealer-golden-'));
   t.after(() => rm(temporary, { recursive: true, force: true }));
+  assert.ok(
+    process.env.WORKBENCH_DEALER_HISTORY_ROOT,
+    'DEALER_HISTORY_REQUIRED: explicit read-only original Git source',
+  );
+  const oldRepo = resolve(process.env.WORKBENCH_DEALER_HISTORY_ROOT);
   const files = execFileSync('git', ['ls-tree', '-r', '--name-only', fixed, 'source'], {
     cwd: oldRepo,
     encoding: 'utf8',
