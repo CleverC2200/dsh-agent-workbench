@@ -5,17 +5,38 @@ import { verifyOfficialInput } from './verify-official-input.mjs';
 import { parseArgs } from 'node:util';
 
 const { values } = parseArgs({
-  options: { input: { type: 'string' }, checkout: { type: 'string' } },
+  options: {
+    input: { type: 'string' },
+    checkout: { type: 'string' },
+    'final-group-sha256': { type: 'string' },
+    'core-source': { type: 'string' },
+  },
 });
 if (!values.input || !values.checkout)
   throw Error('CANDIDATE_INPUT_REQUIRED: --input and --checkout');
-const manifest = JSON.parse(readFileSync(resolve(values.input), 'utf8'));
+let finalGroup;
+if (values['final-group-sha256'] !== undefined) {
+  const { readFinalGroup } = await import('./candidate-input.mjs');
+  finalGroup = await readFinalGroup({
+    input: values.input,
+    sha256: values['final-group-sha256'],
+    checkout: values.checkout,
+
+    coreSource: values['core-source'],
+    expectedSha: process.env.QUALITY_EXPECTED_SHA,
+    ci: process.env.CI,
+  });
+}
+const manifest = finalGroup?.manifest ?? JSON.parse(readFileSync(resolve(values.input), 'utf8'));
 for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin']) {
   const entries = manifest.repositories?.filter((entry) => entry.repo === repo);
   if (entries?.length !== 1 || !entries[0].path || !entries[0].head)
     throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
 }
-if (!manifest.repositories?.some((entry) => resolve(entry.path) === resolve(values.checkout))) {
+if (
+  !finalGroup &&
+  !manifest.repositories?.some((entry) => resolve(entry.path) === resolve(values.checkout))
+) {
   throw Error('CANDIDATE_CHECKOUT: use a checkout registered in the input set');
 }
 
@@ -63,6 +84,25 @@ for (const entry of repositories) {
 const core = verifyOfficialInput(
   manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
 );
+finalGroup?.verifyUnchanged();
+if (finalGroup)
+  execFileSync(
+    process.execPath,
+    [
+      resolve(
+        manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
+        'scripts/check-agent-knowledge.mjs',
+      ),
+      '--root',
+      manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
+      '--config',
+      resolve(
+        manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
+        'agent-knowledge.json',
+      ),
+    ],
+    { stdio: 'inherit' },
+  );
 if (manifest.core !== core)
   throw Error('CANDIDATE_CORE: binding must match the fixed official input');
 console.log(

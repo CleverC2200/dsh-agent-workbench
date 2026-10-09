@@ -8,7 +8,8 @@
     "src/page-interaction/reference-store.ts",
     "src/workbench-entry.tsx",
     "scripts/check-agent-knowledge.mjs",
-    "scripts/verify-official-input.mjs"
+    "scripts/verify-official-input.mjs",
+    "scripts/candidate-input.mjs"
   ],
   "scripts": ["check:knowledge", "candidate:verify", "typecheck:official", "build:core", "test"],
   "exports": true,

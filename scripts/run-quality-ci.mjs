@@ -25,12 +25,15 @@ const { values } = parseArgs({
     'dealer-source': { type: 'string' },
     'personal-source': { type: 'string' },
     'prepare-history': { type: 'boolean' },
+    'final-group-sha256': { type: 'string' },
   },
 });
+let finalGroup;
 function refuse(code, detail) {
   throw Error(`${code}: ${detail}`);
 }
 function run(command, args, cwd = process.cwd()) {
+  finalGroup?.verifyUnchanged();
   const windows = process.platform === 'win32' && ['npm', 'corepack'].includes(command);
   const result = spawnSync(windows ? `${command}.cmd` : command, args, {
     cwd,
@@ -44,6 +47,12 @@ function run(command, args, cwd = process.cwd()) {
     );
 }
 try {
+  if (values['final-group-sha256'] !== undefined) {
+    if (!/^[a-f0-9]{64}$/.test(values['final-group-sha256']))
+      refuse('CANDIDATE_FINAL_GROUP_REQUIRED', 'original bytes SHA256 required');
+    if (!['quality', 'verify-input'].includes(values.phase))
+      refuse('CANDIDATE_FINAL_GROUP_PHASE', values.phase);
+  }
   if (values.phase === 'scope') {
     if (process.env.QUALITY_SCOPE_ALLOWED !== 'true')
       refuse('CANDIDATE_SCOPE_REQUIRED', 'same-repository read-only event required');
@@ -78,10 +87,29 @@ try {
       ) + '\n',
     );
   } else {
-    if (values.phase !== 'quality') refuse('QUALITY_PHASE_REQUIRED', values.phase);
+    if (!['quality', 'verify-input'].includes(values.phase))
+      refuse('QUALITY_PHASE_REQUIRED', values.phase);
+    if (values.phase === 'verify-input' && !values['final-group-sha256'])
+      refuse('CANDIDATE_FINAL_GROUP_REQUIRED', 'verify-input requires explicit final-group hash');
     const input = values.input ?? process.env.QUALITY_CANDIDATE;
     if (!input) refuse('CANDIDATE_INPUT_REQUIRED', '--input <frozen group JSON>');
-    const manifest = JSON.parse(readFileSync(resolve(input), 'utf8'));
+    if (values['final-group-sha256']) {
+      const { readFinalGroup } = await import('./candidate-input.mjs');
+      finalGroup = await readFinalGroup({
+        input,
+        sha256: values['final-group-sha256'],
+        checkout: process.cwd(),
+        repo: 'dsh-agent-workbench',
+        coreSource: values['core-source'],
+        expectedSha: process.env.QUALITY_EXPECTED_SHA,
+        ci: process.env.CI,
+      });
+      if (values.phase === 'verify-input') {
+        console.log(JSON.stringify(finalGroup.receipt));
+        process.exit(0);
+      }
+    }
+    const manifest = finalGroup?.manifest ?? JSON.parse(readFileSync(resolve(input), 'utf8'));
     if (manifest.core !== coreCommit || manifest.repositories?.length !== 3)
       refuse('CANDIDATE_PEER_REQUIRED', 'fixed Core and exactly three repositories');
     const own = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
@@ -98,7 +126,10 @@ try {
       const entry = entries[0];
       const git = (...args) =>
         execFileSync('git', ['-C', entry.path, ...args], { encoding: 'utf8' }).trim();
-      if (git('rev-parse', 'HEAD') !== entry.head || (peers[repo] && entry.head !== peers[repo]))
+      if (
+        git('rev-parse', 'HEAD') !== entry.head ||
+        (!finalGroup && peers[repo] && entry.head !== peers[repo])
+      )
         refuse('CANDIDATE_HEAD', repo);
       if (git('rev-parse', '--is-shallow-repository') !== 'false')
         refuse('CANDIDATE_HISTORY_REQUIRED', repo);
@@ -131,6 +162,7 @@ try {
       cleanAtAdmission: true,
     }));
     const sourceReceipt = resolve(dirname(resolve(input)), `quality-source-${own.head}.json`);
+    finalGroup?.verifyUnchanged();
     writeFileSync(
       sourceReceipt,
       JSON.stringify(
@@ -177,6 +209,7 @@ try {
       source: values['core-source'],
       withFlock: true,
     };
+    finalGroup?.verifyUnchanged();
     if (values['prepare-sdk']) sdk.prepareOfficialSDK(options);
     else sdk.verifyOfficialSDK(options);
     run(process.execPath, [
@@ -185,6 +218,7 @@ try {
       resolve(input),
       '--checkout',
       process.cwd(),
+      ...(finalGroup ? ['--final-group-sha256', values['final-group-sha256']] : []),
     ]);
     if (
       Number(process.versions.node.split('.')[0]) !== 24 ||
@@ -281,6 +315,7 @@ try {
     collect(resolve('lib'));
     for (const file of generated)
       artifacts[file] = createHash('sha256').update(readFileSync(file)).digest('hex');
+    finalGroup?.verifyUnchanged();
     writeFileSync(
       resolve(dirname(resolve(input)), 'quality-prepared.json'),
       JSON.stringify(
