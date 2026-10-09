@@ -197,3 +197,10 @@ test('documented npm deprecate is recognized as a package-manager action and nev
   const result = run();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('package-manager version options are not interpreted as script names', t => {
+  const { root, run } = fixture(t);
+  writeFileSync(resolve(root, 'README.md'), '```sh\ncorepack pnpm --version\n```\n');
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+});
