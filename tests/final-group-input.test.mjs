@@ -58,7 +58,10 @@ test('public final-group admission binds real source only and rejects invalid in
     for (const [name, root] of Object.entries(roots)) {
       mkdirSync(join(root, 'scripts'), { recursive: true });
       if (name === 'dsh-gea-plugin') {
-        writeFileSync(join(root, 'package.json'), JSON.stringify({ name }));
+        writeFileSync(
+          join(root, 'package.json'),
+          JSON.stringify({ name: '@cleverc2200/gea-dsh-prototype' }),
+        );
         writeFileSync(join(root, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n');
       } else {
         const source =

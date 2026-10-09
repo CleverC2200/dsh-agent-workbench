@@ -8,7 +8,7 @@ const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
 const names = {
   'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
   'dsh-agent-manage': 'dsh-agent-manage',
-  'dsh-gea-plugin': 'dsh-gea-plugin',
+  'dsh-gea-plugin': '@cleverc2200/gea-dsh-prototype',
 };
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function refuse(code, detail) {
