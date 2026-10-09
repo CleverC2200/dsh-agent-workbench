@@ -35,6 +35,7 @@ async function fixture(
     noWorkspace = false,
     enabled = true,
     delayFirstSelection = false,
+    delaySelectionRequests = [],
     delayList = false,
     selectionFails = false,
     localBody = false,
@@ -185,7 +186,7 @@ async function fixture(
         ]);
       }
       selectionRequests++;
-      if (delayFirstSelection && selectionRequests === 1)
+      if ((delayFirstSelection && selectionRequests === 1) || delaySelectionRequests.includes(selectionRequests))
         return new Promise((resolve) =>
           waiting.push({ kind: 'select', resolve, signal: options.signal }),
         );
@@ -465,6 +466,12 @@ async function fixture(
       }),
     newConversation: async () =>
       act(async () => dom.window.document.querySelector('[aria-label="新建对话"]').click()),
+    selectInterpreter: async (id) =>
+      act(async () => {
+        const chooser = dom.window.document.querySelector('[aria-label="pageInterpreter"]');
+        chooser.value = id;
+        chooser.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      }),
     selectHistory: async id => act(async () => {
       await restorePageSession(page.id, id, new AbortController().signal);
       await workbench.open(page.id);
@@ -1025,6 +1032,72 @@ test('validated Interpreter choices survive leaving and reactivating the same Do
   await f.show();
   assert.deepEqual(choices(), ['original', 'other']);
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
+});
+
+test('a cached Document releases cancelled selection busy state and a late old completion cannot unlock the next selection', async (t) => {
+  const sessionId = 'session-00000000-0000-4000-8000-000000000147';
+  const f = await fixture(t, {
+    nativeResourceSdk: true,
+    secondInterpreter: true,
+    initialSession: sessionId,
+    initialPreset: 'original',
+    restoredSelection: { sessionId, preset: 'original', ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    delaySelectionRequests: [1, 2],
+  });
+  const document = f.dom.window.document;
+  const chooser = () => document.querySelector('[aria-label="pageInterpreter"]');
+  const association = f.association();
+  assert.equal(chooser().disabled, false);
+  await f.selectInterpreter('other');
+  const oldRequest = f.waiting[0];
+  assert.equal(chooser().disabled, true);
+  await f.hide();
+  assert.equal(oldRequest.signal.aborted, true);
+  await f.show();
+  assert.equal(chooser().disabled, false, 'returning to the cached Document restores its selector');
+  assert.deepEqual(f.association(), association, 'cancellation preserves the real Session association');
+  assert.deepEqual([...chooser().options].map(option => option.value), ['original', 'other']);
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 1 });
+
+  await f.selectInterpreter('other');
+  assert.equal(chooser().disabled, true);
+  await f.resolve(oldRequest, { preset: 'other', interpreters: ['original', 'other'] });
+  assert.equal(chooser().disabled, true, 'the old finally cannot release the current request busy state');
+  assert.deepEqual(f.association(), association);
+  assert.equal(f.currentSession(), sessionId);
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 2 });
+
+  await f.resolve(f.waiting[1], { preset: 'other', interpreters: ['original', 'other'] });
+  assert.equal(chooser().disabled, false);
+  assert.equal(f.association().preset, 'other');
+  assert.equal(f.currentSession(), 'session-1');
+  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [['core-release', 'session-1']]);
+  await f.selectInterpreter('original');
+  assert.equal(f.currentSession(), sessionId);
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.equal(chooser().disabled, false);
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 2 });
+  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [
+    ['core-release', 'session-1'], ['core-release', sessionId],
+  ]);
+});
+
+test('a failed Interpreter selection restores the cached Document selector and retains its existing Session', async (t) => {
+  const f = await fixture(t, { secondInterpreter: true, delaySelectionRequests: [2] });
+  const chooser = () => f.dom.window.document.querySelector('[aria-label="pageInterpreter"]');
+  const association = f.association();
+  await f.selectInterpreter('other');
+  assert.equal(chooser().disabled, true);
+  await f.resolve(f.waiting[0], { error: 'INTERPRETER_SELECTION_FAILED' });
+  assert.equal(chooser().disabled, false);
+  assert.deepEqual(f.association(), association);
+  assert.equal(f.dom.window.document.querySelector('[role="alert"]').title, 'INTERPRETER_SELECTION_FAILED');
+  await act(async () => f.render());
+  await f.hide();
+  await f.show();
+  assert.equal(chooser().disabled, false);
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 2 });
 });
 
 test('a confirmed new identity scope reads fresh choices and cannot borrow the previous validated Interpreter metadata', async (t) => {
