@@ -26,3 +26,7 @@ node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs test
 共享开发 CLI 位于 [check-agent-knowledge.mjs](../scripts/check-agent-knowledge.mjs)。Manage/GEA 传自己的 `--root` 和 `--config`，不会复制一份同义规则。配置字段是 entries、paths、scripts、exports、peers、history 与可选 commandRoots。peers 为允许引用的外部 checkout 根；其链接只核存在，不递归把 peer 命令当本仓命令。history 为本仓历史文件或目录。commandRoots 按本仓文档相对路径登记允许使用的外部命令根，并读取其真实 package.json scripts；未登记命令拒绝。npm/pnpm 的 run 与紧凑脚本写法均检查，install/exec 等包管理器内置动作保留自身语义。此检查不运行文档中的命令、不安装依赖、不访问业务，也不判断全部自然语言真伪。
 
 浏览器、Native、真实业务/模型和发布验证按原票范围及有效窗口办理。离线检查不证明这些阶段已完成。
+
+## 固定 rc.2 测试输入
+
+`tests/candidate-input.test.mjs` 的 rc.2 检查默认读取同组 `../../official-0.2.0-rc.2`；checkout 布局不同则用 `DSH_RC2_CORE_CHECKOUT` 显式指定已登记的官方源码绝对路径。检查要求冻结提交 `639ed015397290b3745d163aafe02ffee4aa3f84`，不会把 alpha 作为 rc.2 通过。

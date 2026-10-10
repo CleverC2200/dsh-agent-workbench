@@ -62,7 +62,9 @@ test('a clean registered combination reports candidate scope and exact observed 
 });
 
 test('a clean rc.2 candidate binds its own registered official declaration source', t => {
-  const { manifest, run } = fixture(t, resolve(root, '../../official-0.2.0-rc.2'));
+  const official = process.env.DSH_RC2_CORE_CHECKOUT ?? resolve(root, '../../official-0.2.0-rc.2');
+  const { manifest, run } = fixture(t, official);
+  assert.equal(manifest.core, '639ed015397290b3745d163aafe02ffee4aa3f84');
   const result = run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).core, manifest.core);
