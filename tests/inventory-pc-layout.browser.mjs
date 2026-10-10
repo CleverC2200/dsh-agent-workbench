@@ -4,6 +4,13 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
+import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
+import { createCompanyWire } from './fixtures/full-chain-company-wire.mjs';
+const dealerBundle=await build({entryPoints:['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'offline-query-registry',setup(api){
+ api.onResolve({filter:/^server-only$|^@\/lib\/gea-sql-client$/},args=>({path:args.path,namespace:'fixture'}));
+ api.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='server-only'?'export{};':'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};'}));
+}}]});
+const {readDealerMock}=await import('data:text/javascript;base64,'+Buffer.from(dealerBundle.outputFiles[0].text).toString('base64'));
 const presentation=process.env.INVENTORY_LAYOUT_BASELINE==='1'?execFileSync('git',['show','1078d8d1a2a8002d0fae18f994531d89f5970877:src/html-document.ts'],{encoding:'utf8'}):await readFile('src/html-document.ts','utf8');
 const moduleText = (await build({stdin:{contents:presentation,loader:'ts'},bundle:true,write:false,format:'esm',platform:'node'})).outputFiles[0].text;
 const {presentHtml} = await import('data:text/javascript;base64,'+Buffer.from(moduleText).toString('base64'));
@@ -17,7 +24,9 @@ async function fixture(t,id,width=559,theme='light',authorDocument,fontSize=14) 
   const browser=await chromium.launch({headless:true});
   t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:width+721,height:820},deviceScaleFactor:1});
-  const authored=authorDocument??await readFile(`lib/business/inventory-${id}/index.html`,'utf8');
+  const authored=authorDocument??(id==='personal'?await personalFixtureHtml():await readFile(`lib/business/inventory-${id}/index.html`,'utf8'));
+  const companyWire=createCompanyWire();
+  await page.exposeFunction('readFixtureRequest',async message=>id==='qll'&&['access','sql'].includes(message.method)?companyWire(message.method,message.parameters):id==='dealer'&&message.method==='sql'?readDealerMock(message.parameters):{accepted:true});
   const pluginId=['regional','category','mps'].includes(id)?JSON.parse(await readFile(`lib/static/${id}/plugin.json`,'utf8')).id:`inventory-${id}`;
   const htmlStyles=(await Promise.all(['tokens.css','html-defaults.css'].map(name=>readFile('theme/'+name,'utf8')))).join('\n');
   const html=process.env.INVENTORY_LAYOUT_AUTHORED==='1'?authored:presentHtml(injectPicker(authored,picker),htmlStyles);
@@ -34,8 +43,8 @@ async function fixture(t,id,width=559,theme='light',authorDocument,fontSize=14) 
       if(event.source!==frame.contentWindow)return;
       const data=event.data;
       if(data?.protocol==='agent-workbench-theme'&&data.type==='ready'){window.themeReady=true;frame.contentWindow.postMessage({protocol:'agent-workbench-theme',dark:${theme==='dark'},fontSize:${fontSize}},'*');}
-      if(data?.protocol==='gea-html-v2'&&data.type==='ready'&&!connected){connected=true;const pair=new MessageChannel();pair.port1.onmessage=event=>{const message=event.data;window.requests.push(message);if(message.type==='catalog'){try{window.acceptCurrentCatalog(message.elements,'${pluginId}');window.catalogs.push(message.elements);}catch(error){const invalid=message.elements.filter(element=>{try{window.acceptCurrentCatalog([element],'${pluginId}');return false;}catch{return true;}});console.error('CATALOG_PARSE_FAILED '+JSON.stringify({error:error.message,invalid}));}}if(message.type==='request')pair.port1.postMessage({type:'response',id:message.id,result:{accepted:true}});if(message.type==='theme:subscribe'){const style=getComputedStyle(document.body);const tokens=${process.env.INVENTORY_LAYOUT_CORE_TOKENS==='1'?"Object.fromEntries([...style].filter(name=>name.startsWith('--dsw-')).map(name=>[name,style.getPropertyValue(name)]))":"{}"};pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'${pluginId}'},colorScheme:'${theme}',fontSize:${fontSize},tokens});}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'${pluginId}'}},'*',[pair.port2]);}
-      if(data?.protocol==='dsh-workbench-view-v1'&&data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:data.page,version:1,channel:'layout-view',generation:1,state:{version:1}},'*');
+      if(data?.protocol==='gea-html-v2'&&data.type==='ready'&&!connected){connected=true;const pair=new MessageChannel();pair.port1.onmessage=async event=>{const message=event.data;window.requests.push(message);if(message.type==='catalog'){try{window.acceptCurrentCatalog(message.elements,'${pluginId}');window.catalogs.push(message.elements);}catch(error){const invalid=message.elements.filter(element=>{try{window.acceptCurrentCatalog([element],'${pluginId}');return false;}catch{return true;}});console.error('CATALOG_PARSE_FAILED '+JSON.stringify({error:error.message,invalid}));}}if(message.type==='request'){try{pair.port1.postMessage({type:'response',id:message.id,result:await window.readFixtureRequest(message)});}catch(error){pair.port1.postMessage({type:'response',id:message.id,error:error.message});}}if(message.type==='theme:subscribe'){const style=getComputedStyle(document.body);const tokens=${process.env.INVENTORY_LAYOUT_CORE_TOKENS==='1'?"Object.fromEntries([...style].filter(name=>name.startsWith('--dsw-')).map(name=>[name,style.getPropertyValue(name)]))":"{}"};pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'${pluginId}'},colorScheme:'${theme}',fontSize:${fontSize},tokens});}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'${pluginId}'}},'*',[pair.port2]);}
+      if(data?.protocol==='dsh-workbench-view-v1'&&data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:data.page,version:1,channel:'layout-view',generation:1,state:${JSON.stringify(id==='qll'?{version:1,asOf:'2026-10-02',scope:'company',month:'2026-09'}:{version:1})}},'*');
     });</script>`});
   });
   await page.goto('http://inventory-layout.test/');
@@ -44,7 +53,13 @@ async function fixture(t,id,width=559,theme='light',authorDocument,fontSize=14) 
   return {page,frame};
 }
 async function readablePaint(locator) {
-  const paint=await locator.evaluate(el=>{const style=getComputedStyle(el);let node=el,background='';while(node){const value=getComputedStyle(node).backgroundColor;if(value!=='rgba(0, 0, 0, 0)'){background=value;break;}node=node.parentElement;}return{text:el.textContent.trim().slice(0,100),color:style.color,background};});
+  await expect(locator).toBeVisible();
+  let paint;
+  await expect.poll(async()=>{
+    paint=await locator.evaluateAll(([el])=>{if(!el?.isConnected)return null;const style=getComputedStyle(el);let node=el,background='';while(node){const value=getComputedStyle(node).backgroundColor;if(value!=='rgba(0, 0, 0, 0)'){background=value;break;}node=node.parentElement;}return{text:el.textContent.trim().slice(0,100),color:style.color,background};});
+    return paint?.color??'';
+  }).not.toBe('');
+  assert.match(paint.background,/^rgba?\(/,`${paint.text}: no opaque paint background ${JSON.stringify(paint)}`);
   const luminance=value=>{const rgb=value.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;});return .2126*rgb[0]+.7152*rgb[1]+.0722*rgb[2];};
   const a=luminance(paint.color),b=luminance(paint.background);return{...paint,contrast:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};
 }
@@ -54,8 +69,8 @@ for(const id of ['qll','dealer'])test(`${id} actual PC dark content has readable
   await expect(frame.locator('#app')).toContainText(id==='qll'?'5,580':'12,060');
   const targets=id==='qll'?
     [frame.locator('strong').filter({hasText:'5,580'}).first(),frame.getByText(/核心判断/).first(),frame.getByText('数据取值说明与各层日期',{exact:true}),frame.locator('label').filter({hasText:'含渠道'}),frame.getByRole('button',{name:'查询趋势',exact:true})]:
-    [frame.locator('[role="status"]').filter({hasText:'固定模拟输入'}).first()];
-  if(id==='dealer'){await frame.getByRole('tab',{name:'SKU库存',exact:true}).press('Enter');await expect(frame.getByRole('heading',{name:'SKU库存',exact:true})).toBeVisible();targets.push(frame.locator('[role="status"]').filter({hasText:'SAP 定价'}).first(),frame.getByRole('button',{name:'下载',exact:true}));}
+    [frame.locator('[role="status"]').filter({hasText:'GEA 授权只读数据'}).first()];
+  if(id==='dealer'){await frame.getByRole('tab',{name:'SKU库存',exact:true}).press('Enter');await expect(frame.getByRole('heading',{name:'SKU库存',exact:true})).toBeVisible();await expect(frame.getByRole('button',{name:'下载',exact:true})).toBeEnabled();targets.push(frame.locator('[role="status"]').filter({hasText:'SAP 定价'}).first(),frame.getByRole('button',{name:'下载',exact:true}));}
   const paints=[];for(const target of targets)paints.push(await readablePaint(target));
   if(evidence){await mkdir(evidence,{recursive:true});await writeFile(evidence+'/'+id+'-dark-paint.json',JSON.stringify(paints,null,2));await page.screenshot({path:evidence+'/'+id+'-max-dark.png'});}
   for(const paint of paints)assert.ok(paint.contrast>=4.5,`${id} ${paint.text}: ${paint.color} on ${paint.background}, contrast ${paint.contrast.toFixed(2)}`);

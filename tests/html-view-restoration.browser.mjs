@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
+import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
 const { outputFiles } = await build({ stdin: { contents: `import{WorkbenchController}from'./src/workbench.ts';import{connectHtmlViewState}from'./src/html-view-channel.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{isBusinessViewPage}from'./src/html-view-state.ts';window.mockSession='session-11111111-1111-4111-8111-111111111111';let viewSession='mock-session';window.setViewSession=scope=>{viewSession=scope;};const viewScope=id=>isBusinessViewPage(id)?id==='plan-category-production'?viewSession:window.mockSession:undefined;window.mockContexts={};window.mockCatalogs={};window.mockChannels={};window.mockReplies={};window.mockErrors=[];window.contextMessages=[];const owner=new WorkbenchController({panel:()=>{},document:()=>{}});for(const[id,name]of[['workbench-html-table','sample'],['gea-regional-plan','regional'],['plan-region-category','category'],['plan-category-production','mps'],['inventory-customer','customer'],['inventory-orderworkbench','orderworkbench'],['inventory-orderfulfillment','fulfillment']])owner.registerFrame({id,kind:'html',src:'/'+name});let stop=()=>{},frame;window.openPage=async(id,name)=>{stop();frame?.remove();delete window.mockContexts[id];delete window.mockCatalogs[id];await owner.open(id);frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-scripts');frame.style='width:1480px;height:920px;border:0';document.body.append(frame);stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);frame.src='/'+name;};window.hidePage=()=>{owner.leaveDocument();stop();frame?.remove();};window.rebindSession=async session=>{const id=owner.getSnapshot().selectedDocument.id;stop();window.mockSession=session;delete window.mockContexts[id];stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockChannels[id].postMessage({type:'context',context:{session,plugin:id}});};window.readState=id=>owner.readHtmlViewState(id,viewScope(id));window.seedState=(id,state)=>owner.saveHtmlViewState(id,viewScope(id),state);window.addEventListener('message',event=>{if(event.source!==frame?.contentWindow||event.data?.protocol!=='gea-html-v2'||event.data.type!=='ready')return;const id=owner.getSnapshot().selectedDocument.id;const channel=new MessageChannel();window.mockChannels[id]=channel.port1;window.switchViewSession=scope=>{viewSession=scope;stop();stop=connectHtmlViewState(frame,id,viewScope(id),owner,new AbortController().signal);window.mockSession=scope;channel.port1.postMessage({type:'context',context:{session:scope,plugin:id}});};let applied;window.applyMock=args=>new Promise(resolve=>{applied=resolve;channel.port1.postMessage({type:'apply',toolCallId:'fixture-apply',session:window.mockSession,args});});channel.port1.onmessage=({data})=>{if(data.type==='cancel')window.cancelContextTransport?.(data.id);if(data.type==='applied'){window.mockReplies[data.toolCallId]=data;applied?.(data);}if(data.type==='request'){if(data.method!=='context')window.mockErrors.push(data.method);window.mockContexts[id]=data.parameters;window.contextMessages.push({session:data.session,context:data.parameters});if(window.hostContextTransport){void window.hostContextTransport(data).then(result=>channel.port1.postMessage({type:'response',id:data.id,result}),error=>channel.port1.postMessage({type:'response',id:data.id,error:error.message}));}else channel.port1.postMessage({type:'response',id:data.id,result:{ok:true}});}if(data.type==='catalog'){try{const catalog=htmlPageCatalog({surface:'gea-html-'+id,tool:'gea_plugin_page_apply',label:'Mock reception',elements:data.elements});if(catalog)validatePageCatalog(catalog);window.mockCatalogs[id]=data.elements;}catch(error){window.mockErrors.push(error.message);}}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:window.mockSession,plugin:id}},'*',[channel.port2]);});`, resolveDir: process.cwd() }, bundle: true, write: false, format: 'iife', platform: 'browser' });
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 async function fixture(t, includedAssets) {
@@ -348,14 +349,24 @@ async function publicMpsContext(t, page) {
   const {default:SystemPrompt} = await import(official('packages/core/system-prompt/lib/index.js'));
   const {default:Agents} = await import(official('packages/core/agent/lib/index.js'));
   const {createScope} = await import(official('packages/core/scope/lib/index.js'));
-  const {Session,SessionId} = await import(official('packages/core/session/lib/index.js'));
+  const {default:Sessions,Session,SessionId} = await import(official('packages/core/session/lib/index.js'));
+  const {default:Projections} = await import(official('packages/session/session-projection/lib/index.js'));
+  const {default:Query} = await import(official('packages/session-query/session-query/lib/index.js'));
+  const {default:Typert} = await import(official('packages/typert/registry/lib/index.js'));
+  const {default:SessionController} = await import(official('packages/api/session-controller/lib/index.js'));
   const compiled = await build({entryPoints:['src/html-pages.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'official-tools',setup(builder){builder.onResolve({filter:/^@deepseek-ai\/dsh-tools$/},()=>({path:official('packages/core/tools/lib/index.js'),external:true}));}}]});
   await mkdir('.scratch',{recursive:true});
   await writeFile('.scratch/mps-public-runtime.mjs',compiled.outputFiles[0].text);
   const {HtmlPages} = await import(pathToFileURL(resolve('.scratch/mps-public-runtime.mjs')).href);
   const ctx = new Context(), routes = new Map(), owners = new Map(), agents = new Map();
+  await temporaryReferenceStorage(t,ctx);
   ctx.provide('connection',{fetch:{register(route){routes.set(route.path,route);return()=>routes.delete(route.path);}}});
-  await ctx.plugin(SystemPrompt,{});await ctx.plugin(Tools);await ctx.plugin(Agents);
+  await ctx.plugin(SystemPrompt,{});await ctx.plugin(Typert);await ctx.plugin(Sessions);await ctx.plugin(Projections);
+  new Query(ctx);
+  ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-model'}),saveSelection:async()=>{}});
+  ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{},resolve:()=>undefined,bindPrompt:()=>({commit(){},[Symbol.dispose](){}}),retirePrompt(){}});
+  new SessionController(ctx,{nativeOpen:false});
+  await ctx.plugin(Tools);await ctx.plugin(Agents);
   for(const value of ['session-11111111-1111-4111-8111-111111111111','session-22222222-2222-4222-8222-222222222222']) {
     const id = SessionId(value), agent = {id,session:Session.create(id)};
     await ctx.plugin(Object.assign(inner=>{agent.ctx=createScope(inner,agent).ctx;},{inject:['tools','systemPrompt']}));
@@ -364,7 +375,6 @@ async function publicMpsContext(t, page) {
   let pages;
   await ctx.plugin(Object.assign(inner=>{pages=new HtmlPages(inner,'',async()=>'<picker-fixture>');},{inject:['connection','tools','agents']}));
   pages.registerBusinessPage({id:'plan-category-production',pluginId:'inventory-mps',label:'MPS mock',kind:'html',resourceId:'gea-html-inventory-mps',catalog:{surface:'gea-html-inventory-mps',tool:'gea_plugin_page_apply'}},async()=>({signal:new AbortController().signal,access:{mode:'mock'},allowsEffect:effect=>effect==='view',release(){}}));
-  t.after(()=>ctx.fiber.dispose());
   const call = async input => {
     const response = await routes.get('/api/agent-workbench/page').fetch(new Request('https://local/api/agent-workbench/page',{method:'POST',body:JSON.stringify(input)}));
     if(!response.ok)throw Error(JSON.stringify(await response.json()));
