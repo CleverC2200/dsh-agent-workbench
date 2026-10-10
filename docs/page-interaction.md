@@ -32,7 +32,7 @@ GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter �
 
 页面快捷问题和保留未发文字使用页侧 `quotePage({label,text}, signal)`。picker 提供 `window.dshPageInteraction.quote()/available()`，沿当前 quote 的 channel、pending、cancel 和 reference parser 接线。
 
-插入仅使用当前 Main 公开 InputActions 的 captureInsertion/insertText/persistDraft。明确问题将捕获 selection 复制为插入点，保 draftRev 和原选中文字，不 setDraft、自动 prompt 或创建 Session。未关联、取消、切换或 CAS 冲突均保留页面文字；成功回执后只清仍相同的保留文本。
+插入使用当前 Main 公开 InputActions 的 captureInsertion/insertText，草稿持久生命周期仍由 Core 持有。alpha.1 提供 persistDraft 时显式发布；rc.2 由官方编辑器将文本发布给已绑定的 Core 草稿 writer。Workbench 不另存草稿。明确问题将捕获 selection 复制为插入点，保 draftRev 和原选中文字，不 setDraft、自动 prompt 或创建 Session。未关联、取消、切换或 CAS 冲突均保留页面文字；成功回执后只清仍相同的保留文本。
 
 显式转入预算为 6000 个 UTF-16 代码单元，即 JS 字符串长度，不是字节或模型 token。仅用 trim 判断非空，预算检查完整 raw 字符串；正文不 trim 或 slice，保首行缩进与边界换行。超预算拒绝，普通选取 reference 仍沿用原截断语义。
 
