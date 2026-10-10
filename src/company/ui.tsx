@@ -1,11 +1,10 @@
 import {PageUnsentHistory} from './unsent-history.tsx';
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
   IconPanelLeftOutlineRegular,
   IconNewChatOutlineRegular,
-  IconPluginPinwheelOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
@@ -20,6 +19,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type { WorkbenchController, DocumentSession } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
+import { LoginDialog } from './login-dialog.tsx';
+import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 import { zh, en, type CopyKey } from './locales.ts';
 import { BUSINESS_MENU_PRESET, resolveBusinessMenu } from './navigation.ts';
 import { AgentWelcome, GeaHomeHero, NavIcon, Chevron } from './formal-components.tsx';
@@ -201,6 +202,11 @@ export function mountCompanyUI(
     const menu = useRef<HTMLDivElement>(null),
       trigger = useRef<HTMLButtonElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
+    const [loginOpen, setLoginOpen] = useState(false);
+    const closeLogin = useCallback(() => { setLoginOpen(false); trigger.current?.focus(); }, []);
+    useEffect(() => {
+      if (loginOpen && (identity.status?.authenticated || !authority)) closeLogin();
+    }, [loginOpen, identity.status?.authenticated, authority, closeLogin]);
     const pending = useRef<AbortController>();
     const [busy, setBusy] = useState(false),
       [failed, setFailed] = useState(false);
@@ -342,6 +348,11 @@ export function mountCompanyUI(
                 <span aria-hidden="true">⚙</span>
                 <span>{t('settings')}</span>
               </button>
+              {!identity.status?.authenticated && <button type="button" role="menuitem"
+                className="gea-logout-button" disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
+                onClick={() => { close(); setLoginOpen(true); }}>
+                {t('signInGea')}
+              </button>}
               {name && (
                 <div className="gea-logout-control">
                   <button
@@ -372,6 +383,9 @@ export function mountCompanyUI(
             </div>,
             document.body,
           )}
+        {loginOpen && authority && !identity.status?.authenticated && createPortal(
+          <LoginDialog account={authority} t={t} onClose={closeLogin} />, document.body,
+        )}
       </>
     );
   }
@@ -384,6 +398,7 @@ export function mountCompanyUI(
     PropsRenderSlots<
       | 'sidebar.brand.mark'
       | 'sidebar.brand.name'
+      | 'sidebar.toggle.badge'
       | 'sidebar.panellist'
       | 'sidebar.workspaces'
       | 'sidebar.settings'
@@ -400,10 +415,11 @@ export function mountCompanyUI(
       <button
         type="button"
         className="gea-inbox-quick-action gea-owned-sidebar-toggle"
-        aria-label="收起侧边栏"
+        aria-label={t(collapsed ? 'openBusinessNavigation' : 'collapseSidebar')}
         onClick={() => ctx.layout.toggleSidebar()}
       >
         <IconPanelLeftOutlineRegular size={16} />
+        {renderSlot('sidebar.toggle.badge', {})}
       </button>
     );
     const documentState = useSyncExternalStore(
@@ -470,9 +486,8 @@ export function mountCompanyUI(
     };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
-    const pluginLabel = ctx.slots
-      .entries('sidebar.panellist')
-      .find((entry) => entry.options.id === PLUGINS)?.options.label;
+    const panels = ctx.slots.entries('sidebar.panellist')
+      .slice().sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
     const modules = [{ id: DIRECTORY, label: '工作台' }];
     return (
       <aside
@@ -504,9 +519,9 @@ export function mountCompanyUI(
                 >
                   <NavIcon kind="bell" />
                 </button>
-                {!darwin && sidebarToggle}
               </>
             )}
+            {!darwin && sidebarToggle}
           </div>
         </SidebarGeometry.Provider>
         {!collapsed && (
@@ -520,21 +535,23 @@ export function mountCompanyUI(
             <span className="gea-formal-new-session-label">AI工作台</span>
           </button>
         )}
-        {!collapsed && available.has(PLUGINS) && (
-          <button
+        {panels.map(({ options }) => {
+          const id = options.id as MainPanelId;
+          const label = resolveSlotLabel(options.label) ?? id;
+          const active = activePanel === id;
+          return <button
+            key={id}
             type="button"
-            className={
-              'gea-sidebar-tab gea-plugin-entry' + (activePanel === PLUGINS ? ' is-active' : '')
-            }
-            aria-current={activePanel === PLUGINS ? 'page' : undefined}
-            onClick={() => void workbench.open(PLUGINS)}
+            className={'gea-sidebar-tab gea-plugin-entry' + (active ? ' is-active' : '')}
+            aria-label={label}
+            title={collapsed ? label : undefined}
+            aria-current={active ? 'page' : undefined}
+            onClick={() => { workbench.leaveDocument(); ctx.layout.selectPanel(id); }}
           >
-            <IconPluginPinwheelOutlineRegular size={16} />
-            <span>
-              {typeof pluginLabel === 'function' ? pluginLabel() : (pluginLabel ?? PLUGINS)}
-            </span>
-          </button>
-        )}
+            {renderSlot('sidebar.panellist', { size: collapsed ? 18 : 16, active }, { only: id })}
+            {!collapsed && <span>{label}</span>}
+          </button>;
+        })}
         <div className="gea-sidebar-region" data-gea-drawer={drawer}>
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
             {(
@@ -1036,6 +1053,7 @@ export function mountCompanyUI(
         children: {
           'sidebar.brand.mark': { kind: 'single', scope: 'root' },
           'sidebar.brand.name': { kind: 'single', scope: 'root' },
+          'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
           'sidebar.panellist': { kind: 'list', scope: 'root' },
           'sidebar.workspaces': { kind: 'single', scope: 'root' },
           'sidebar.settings': { kind: 'single', scope: 'root' },

@@ -29,9 +29,10 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
   require,
 );
 const { mountCompanyUI, WorkbenchController } = module.exports;
-function fixture(account) {
+function fixture(account, panels = [{ options: { id: 'plugins', label: () => '插件管理' } }]) {
   const entries = [],
     calls = [];
+  const panelEntries = () => Array.isArray(panels) ? panels : panels.entriesOfSlot('sidebar.panellist');
   const ctx = {
     layout: {
       selectPanel: (id) => calls.push(['panel', id]),
@@ -46,14 +47,14 @@ function fixture(account) {
     slots: {
       entries: (name) =>
         name === 'sidebar.panellist'
-          ? [{ options: { id: 'plugins', label: () => '插件管理' } }]
+          ? panelEntries()
           : [
               { options: { key: 'gea-proof' } },
               { options: { key: 'inventory-fc' } },
               { options: { key: 'plugins' } },
               ...entries.filter((entry) => entry.options.name === 'main'),
             ],
-      subscribe: () => () => {},
+      subscribe: (name, listener) => Array.isArray(panels) ? () => {} : panels.subscribe(name, listener),
       inject: (_name, fn) => fn(),
       register: (options, component) => {
         entries.push({ options, component });
@@ -73,7 +74,17 @@ function fixture(account) {
   mountCompanyUI(ctx, workbench, () =>
     React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
   );
-  const renderSlot = (name, props = {}) => {
+  const renderSlot = (name, props = {}, options = {}) => {
+    if (name === 'sidebar.panellist') {
+      const entry = panelEntries().find(row => row.options.id === options.only);
+      return entry?.component ? React.createElement(entry.component, props) : React.createElement('svg', {
+        'data-public-panel-icon': options.only, 'data-active': props.active,
+      });
+    }
+    if (name === 'sidebar.toggle.badge' && !Array.isArray(panels)) {
+      const entry = panels.entriesOfSlot(name)[0];
+      return entry ? React.createElement(entry.component, props) : null;
+    }
     const entry = entries.find((entry) => entry.options.name === name);
     return React.createElement(
       'div',
@@ -192,7 +203,7 @@ test('actual owned anchors constrain the bell and put the browser after both dra
     siblings.indexOf(document.querySelector('.gea-drawer-workspace')) < siblings.indexOf(browser),
   );
 });
-test('only the two authorized extra modules enter formal navigation and Plugins consumes its registered localized label', () => {
+test('formal business navigation retains Workbench and the registered public Plugins label', () => {
   const { entries, renderSlot } = fixture();
   const entry = entries.find((row) => row.options.name === 'sidebar');
   const markup = renderToStaticMarkup(
@@ -664,4 +675,157 @@ test('opening real history from a static Document returns to native Conversation
     'the changed real main Session belongs to the native history view',
   );
   assert.ok(document.querySelector('.gea-company-main'));
+});
+
+
+async function mountedDom(t) {
+  const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true, url: 'http://localhost' });
+  const values = { window: dom.window, document: dom.window.document, Node: dom.window.Node,
+    navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true,
+    fetch: () => { throw Error('Account presentation must not fetch business/model routes'); } };
+  const saved = Object.keys(values).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
+  for (const [key, value] of Object.entries(values))
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  t.after(async () => {
+    await React.act(async () => root.unmount());
+    dom.window.close();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  });
+  return { root, dom };
+}
+
+test('public official and third-party panel rows keep order, icons, activation, live removal and the collapsed badge', async t => {
+  const { root } = await mountedDom(t);
+  const core = new SlotCore();
+  core.register({ name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } }, () => null);
+  core.register({ name: 'sidebar', children: {
+    'sidebar.panellist': { kind: 'list', scope: 'root' },
+    'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
+  } }, () => null);
+  const icon = props => React.createElement('svg', { 'data-actual-icon': true, 'data-active': props.active, 'data-size': props.size });
+  core.register({ name: 'sidebar.panellist', id: 'plugins', order: 20, label: () => '插件管理' }, icon);
+  const removeSchedule = core.register({ name: 'sidebar.panellist', id: 'schedules', order: 10, label: '定时任务' }, icon);
+  core.register({ name: 'sidebar.toggle.badge' }, () => React.createElement('span', { 'data-actual-badge': true }, '3'));
+  const { entries, calls, renderSlot, workbench } = fixture(undefined, core);
+  workbench.registerFrame({ id: 'fixture-document', kind: 'html', src: '/fixture.html' });
+  await workbench.open('fixture-document');
+  const sidebar = entries.find(entry => entry.options.name === 'sidebar');
+  const render = collapsed => React.act(async () => root.render(React.createElement(sidebar.component, {
+    collapsed, width: collapsed ? 56 : 280,
+    usePanelInfo: selector => selector({ activePanelId: 'schedules' }), renderSlot,
+  })));
+  await render(false);
+  assert.deepEqual([...document.querySelectorAll('.gea-plugin-entry')].map(button => button.getAttribute('aria-label')), ['定时任务', '插件管理']);
+  assert.equal(document.querySelector('[aria-label="定时任务"]').getAttribute('aria-current'), 'page');
+  assert.equal(document.querySelector('[aria-label="定时任务"] svg').dataset.active, 'true');
+  await React.act(async () => document.querySelector('[aria-label="定时任务"]').click());
+  assert.deepEqual(calls.at(-1), ['panel', 'schedules']);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  const removeThird = await React.act(async () => core.register({ name: 'sidebar.panellist', id: 'third-party', order: -1, label: '第三方面板' }, icon));
+  assert.equal(document.querySelector('.gea-plugin-entry').getAttribute('aria-label'), '第三方面板');
+  await render(true);
+  assert.equal(document.querySelector('[aria-label="第三方面板"] svg').dataset.size, '18');
+  assert.ok(document.querySelector('.gea-owned-sidebar-toggle [data-actual-badge]'));
+  await React.act(async () => document.querySelector('.gea-owned-sidebar-toggle').click());
+  assert.deepEqual(calls.at(-1), ['toggle']);
+  await React.act(async () => { removeSchedule(); removeThird(); });
+  assert.equal(document.querySelector('[aria-label="定时任务"]'), null);
+  assert.equal(document.querySelector('[aria-label="第三方面板"]'), null);
+});
+
+test('account QR login uses only GEA authority, refresh cancels the old challenge and Host subscription owns success', async t => {
+  const { root, dom } = await mountedDom(t);
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  let snapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  const listeners = new Set(), starts = [], polls = [];
+  const delayedPoll = Promise.withResolvers();
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
+    startLogin: async signal => { starts.push(signal); return { loginId: 'challenge-' + starts.length, image: 'data:image/png;base64,AA==', expiresIn: 120 }; },
+    pollLogin: (id, signal) => { polls.push({ id, signal }); return delayedPoll.promise; },
+  };
+  const { entries, calls } = fixture(authority);
+  const account = entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const trigger = document.querySelector('[aria-label="账户菜单"]');
+  await React.act(async () => trigger.click());
+  assert.equal(starts.length, 0);
+  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  assert.equal(starts.length, 1);
+  assert.ok(document.querySelector('[role="dialog"] img'));
+  assert.deepEqual(calls, []);
+  await React.act(async () => t.mock.timers.tick(500));
+  assert.equal(polls[0].id, 'challenge-1');
+  await React.act(async () => [...document.querySelectorAll('[role="dialog"] button')].find(button => button.textContent === '刷新二维码').click());
+  assert.equal(starts[0].aborted, true);
+  assert.equal(polls[0].signal.aborted, true);
+  assert.equal(starts.length, 2);
+  await React.act(async () => delayedPoll.resolve(true));
+  assert.ok(document.querySelector('[role="dialog"]'), 'old poll cannot close a refreshed challenge');
+  await React.act(async () => {
+    snapshot = { state: 'confirmed', scope: 'host-authenticated', status: { authenticated: true, user: { name: 'Host User' } } };
+    for (const changed of listeners) changed();
+  });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(starts[1].aborted, true);
+  assert.ok(trigger.textContent.includes('Host User'));
+  assert.equal(dom.window.localStorage.length, 0);
+});
+
+test('closing and unmounting account QR login abort actual requests and ignore late start responses', async t => {
+  const { root, dom } = await mountedDom(t);
+  const delayed = Promise.withResolvers(), starts = [];
+  const authority = {
+    getSnapshot: () => signedOutSnapshot,
+    subscribe: () => () => {},
+    startLogin: signal => { starts.push(signal); return delayed.promise; },
+    pollLogin: () => { throw Error('A cancelled QR must never start polling'); },
+  };
+  const signedOutSnapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  const { entries } = fixture(authority);
+  const account = entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const open = async () => {
+    await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+    await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  };
+  await open();
+  await React.act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  assert.equal(starts[0].aborted, true);
+  await React.act(async () => delayed.resolve({ loginId: 'late', image: 'data:image/png;base64,AA==', expiresIn: 120 }));
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await open();
+  await React.act(async () => root.render(null));
+  assert.equal(starts[1].aborted, true);
+});
+
+
+test('account QR expiration stops polling and an unavailable GEA authority cannot initiate login', async t => {
+  const { root } = await mountedDom(t);
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  const unavailable = fixture().entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(unavailable.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  assert.equal([...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').disabled, true);
+  const signedOut = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  let polls = 0;
+  const authority = {
+    getSnapshot: () => signedOut, subscribe: () => () => {},
+    startLogin: async () => ({ loginId: 'expiring', image: 'data:image/png;base64,AA==', expiresIn: 120 }),
+    pollLogin: async () => { polls++; return false; },
+  };
+  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  await React.act(async () => t.mock.timers.tick(120000));
+  assert.ok(document.querySelector('[role="dialog"]').textContent.includes('二维码已过期'));
+  assert.equal(document.querySelector('[role="dialog"] img'), null);
+  assert.equal(polls, 0);
 });

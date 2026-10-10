@@ -121,6 +121,8 @@ const copy = {
   loginFooter: ['GEA 业务工作台', 'GEA business workspace'],
   changeEnvironment: ['切换环境 / 重新登录', 'Change environment / sign in again'],
   login: ['飞书扫码登录', 'Sign in with Lark QR'],
+  signInGea: ['登录 GEA', 'Sign in to GEA'],
+  collapseSidebar: ['收起侧边栏', 'Collapse sidebar'],
   dshConversation: ['DSH 对话', 'DSH conversation'],
   modelDiscovering: ['正在获取 GEA 模型…', 'Discovering GEA models…'],
   modelDiscovered: ['已获取模型（尚未验证推理）：', 'Model discovered (inference not verified): '],
