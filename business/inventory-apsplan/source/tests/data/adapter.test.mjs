@@ -153,6 +153,9 @@ test('品类卡片绑定与品类明细使用同一入口', async () => {
     source.indexOf('<section id="category-operations"'),
     source.indexOf('<section id="base-dashboard"'),
   );
-  assert.match(card, /const values=categoryDrillMetrics\(item.name\)/);
-  assert.doesNotMatch(card, /scopedLiveValues\(\{\.\.\.liveScope,item:item.name\}\)/);
+  assert.match(card, /const\s+values\s*=\s*categoryDrillMetrics\(\s*item\.name\s*\)/);
+  assert.doesNotMatch(
+    card,
+    /scopedLiveValues\(\s*\{\s*\.\.\.liveScope\s*,\s*item\s*:\s*item\.name\s*\}\s*\)/,
+  );
 });
