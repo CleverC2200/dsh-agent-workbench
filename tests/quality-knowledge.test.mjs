@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 
@@ -15,7 +15,9 @@ const run = (cwd, ...args) => {
 };
 
 test('public fast quality checks its active documentation, declarations and actual export targets', () => {
-  const fixture = mkdtempSync(join(tmpdir(), 'workbench-active-knowledge-'));
+  const directory = mkdtempSync(join(tmpdir(), 'workbench-active-knowledge-'));
+  const fixture = join(directory, 'candidate/dsh-agent-workbench');
+  mkdirSync(join(directory, 'candidate'));
   try {
     const cloned = spawnSync(
       'git',
@@ -25,6 +27,18 @@ test('public fast quality checks its active documentation, declarations and actu
       },
     );
     assert.equal(cloned.status, 0, cloned.stderr);
+    const peer = spawnSync(
+      'git',
+      [
+        'clone',
+        '--quiet',
+        '--no-hardlinks',
+        resolve('../dsh-gea-plugin'),
+        join(directory, 'candidate/dsh-gea-plugin'),
+      ],
+      { encoding: 'utf8' },
+    );
+    assert.equal(peer.status, 0, peer.stderr);
     // Source only; the gate must diagnose missing references before requiring dependency installation.
     cpSync('package.json', join(fixture, 'package.json'));
     const good = run(fixture, 'check:knowledge');
@@ -59,6 +73,6 @@ test('public fast quality checks its active documentation, declarations and actu
       /AGENT_REFERENCE_MISSING: export.*quality-export-missing/,
     );
   } finally {
-    rmSync(fixture, { recursive: true, force: true });
+    rmSync(directory, { recursive: true, force: true });
   }
 });
