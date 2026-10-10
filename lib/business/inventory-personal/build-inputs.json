@@ -52,6 +52,6 @@
     "source/inventory-light-plugins/src/personal/page.tsx": "aa37c746a636f07dd2c825064ca0119f839e3dc6f77aa9fefc0de09e1cfbee29",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e9696e1186ba7f6848d996cb07ea0cd311287e24cf55ff1bf5dc519a5df67dea",
     "source/inventory-light-plugins/src/personal/entry.tsx": "251ab8fa9976e1feb94907710b41b71e81f52a944af3159d7ad683c7171d52b4",
-    "../dsh-agent-manage/package.json": "4d18eea54075bf72412d59a8706cf55085cd4389c0544c7f8a0c28a246a7138b"
+    "../dsh-agent-manage/package.json": "818350575f3049d1cec572373e1c48244760fb77b08cebd27242ddc82fda7a7f"
   }
 }

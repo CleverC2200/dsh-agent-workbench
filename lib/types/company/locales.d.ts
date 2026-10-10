@@ -76,6 +76,8 @@ declare const copy: {
     readonly loginFooter: readonly ["GEA 业务工作台", "GEA business workspace"];
     readonly changeEnvironment: readonly ["切换环境 / 重新登录", "Change environment / sign in again"];
     readonly login: readonly ["飞书扫码登录", "Sign in with Lark QR"];
+    readonly signInGea: readonly ["登录 GEA", "Sign in to GEA"];
+    readonly collapseSidebar: readonly ["收起侧边栏", "Collapse sidebar"];
     readonly dshConversation: readonly ["DSH 对话", "DSH conversation"];
     readonly modelDiscovering: readonly ["正在获取 GEA 模型…", "Discovering GEA models…"];
     readonly modelDiscovered: readonly ["已获取模型（尚未验证推理）：", "Model discovered (inference not verified): "];

@@ -8,22 +8,24 @@ import { tmpdir } from 'node:os';
 const root = resolve(import.meta.dirname, '..');
 const cli = resolve(root, 'scripts/verify-candidate-input.mjs');
 const repos = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'];
+const packageNames = ['@cleverc2200/dsh-agent-workbench', 'dsh-agent-manage', '@cleverc2200/gea-dsh-prototype'];
 function git(path, ...args) {
   const result = spawnSync('git', ['-C', path, ...args], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t) {
+function fixture(t, officialPath) {
   const directory = mkdtempSync(resolve(tmpdir(), 'agent-input-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const config = JSON.parse(readFileSync(resolve(root, 'tsconfig.official.json'), 'utf8'));
   const cordis = realpathSync(resolve(root, config.compilerOptions.paths['@deepseek-ai/cordis'][0]));
-  symlinkSync(resolve(cordis, '../../../../..'), resolve(directory, 'official-latest-standard'));
-  const manifest = { core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc', repositories: [] };
+  const official = officialPath ?? resolve(cordis, '../../../../..');
+  symlinkSync(official, resolve(directory, 'official-latest-standard'));
+  const manifest = { core: git(official, 'rev-parse', 'HEAD'), repositories: [] };
   for (const repo of repos) {
     const checkout = resolve(directory, 'candidate', repo);
     mkdirSync(checkout, { recursive: true });
-    writeFileSync(resolve(checkout, 'package.json'), JSON.stringify({ name: repo, packageManager: repo === repos[0] ? 'npm@11.11.0' : 'pnpm@10.16.0' }));
+    writeFileSync(resolve(checkout, 'package.json'), JSON.stringify({ name: packageNames[repos.indexOf(repo)], packageManager: repo === repos[0] ? 'npm@11.11.0' : 'pnpm@10.16.0' }));
     writeFileSync(resolve(checkout, repo === repos[0] ? 'package-lock.json' : 'pnpm-lock.yaml'), 'fixture lock\n');
     if (repo === repos[0]) writeFileSync(resolve(checkout, 'tsconfig.official.json'), JSON.stringify({ compilerOptions: { paths: { '@deepseek-ai/cordis': ['../../official-latest-standard/vendor/cordis/lib/types/index.d.ts'] } } }));
     git(checkout, 'init', '-q');
@@ -58,6 +60,43 @@ test('a clean registered combination reports candidate scope and exact observed 
   assert.equal(receipt.runtime, 'not-observed');
   assert.deepEqual(receipt.repositories.map(({ repo, head }) => ({ repo, head })), manifest.repositories.map(({ repo, head }) => ({ repo, head })));
 });
+
+test('a clean rc.2 candidate binds its own registered official declaration source', t => {
+  const official = process.env.DSH_RC2_CORE_CHECKOUT ?? resolve(root, '../../official-0.2.0-rc.2');
+  const { manifest, run } = fixture(t, official);
+  assert.equal(manifest.core, '639ed015397290b3745d163aafe02ffee4aa3f84');
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).core, manifest.core);
+});
+
+test('swapped Manage and GEA checkouts are refused even when each declared head matches', t => {
+  const { manifest, run } = fixture(t);
+  const manage = manifest.repositories[1];
+  const gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-agent-manage.*dsh-agent-manage.*@cleverc2200\/gea-dsh-prototype/);
+});
+
+for (const [index, repo] of repos.entries()) {
+  test(`${repo} is refused when its committed package name identifies another plugin`, t => {
+    const { manifest, run } = fixture(t);
+    const peer = manifest.repositories[index];
+    const file = resolve(peer.path, 'package.json');
+    const pkg = JSON.parse(readFileSync(file, 'utf8'));
+    pkg.name = 'unrelated-plugin';
+    writeFileSync(file, JSON.stringify(pkg));
+    git(peer.path, 'add', 'package.json');
+    git(peer.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'incorrect package identity');
+    peer.head = git(peer.path, 'rev-parse', 'HEAD');
+    const result = run();
+    rejected(result, /CANDIDATE_PACKAGE_IDENTITY/);
+    assert.ok(result.stderr.includes(`${repo} expects package.json.name=${packageNames[index]}; observed "unrelated-plugin"`), result.stderr);
+    assert.equal(readFileSync(file, 'utf8'), JSON.stringify(pkg));
+    assert.equal(git(peer.path, 'status', '--porcelain'), '');
+  });
+}
 
 test('a peer at a different commit is refused and its files stay untouched', t => {
   const { manifest, run } = fixture(t);

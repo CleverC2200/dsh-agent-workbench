@@ -21,7 +21,9 @@
     "test"
   ],
   "exports": true,
-  "peers": [],
+  "peers": [
+    "../dsh-gea-plugin"
+  ],
   "history": [
     "docs/history",
     "UPSTREAM.md",

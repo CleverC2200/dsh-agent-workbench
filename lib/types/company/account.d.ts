@@ -1,3 +1,4 @@
+export type BusinessEnvironment = 'production' | 'test';
 /** A read-only view of GEA's sole Host identity and its explicit login actions. */
 export interface BusinessAccount {
     getSnapshot(): Readonly<{
@@ -5,6 +6,8 @@ export interface BusinessAccount {
         scope: string | null;
         subject?: string | null;
         status: Readonly<{
+            environment: BusinessEnvironment;
+            environments: readonly string[];
             authenticated: boolean;
             user: {
                 name?: string;
@@ -14,7 +17,7 @@ export interface BusinessAccount {
         error?: string;
     }>;
     subscribe(listener: () => void): () => void;
-    startLogin(signal: AbortSignal): Promise<{
+    startLogin(signal: AbortSignal, environment: BusinessEnvironment): Promise<{
         loginId: string;
         image: string;
         expiresIn: number;
