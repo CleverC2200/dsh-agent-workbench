@@ -18,7 +18,7 @@ export function LoginDialog({ account, t, onClose }: {
   const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
   const [revision, setRevision] = useState(0);
   const close = useRef<HTMLButtonElement>(null);
-  useEffect(() => { close.current?.focus(); }, []);
+  useEffect(() => { if (presentation.state === 'preparing') close.current?.focus(); }, [presentation.state]);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
