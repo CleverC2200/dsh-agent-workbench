@@ -46,14 +46,15 @@ function fixture(account, panels = [{ options: { id: 'plugins', label: () => '�
     },
     slots: {
       entries: (name) =>
-        name === 'sidebar.panellist'
-          ? panelEntries()
+        !Array.isArray(panels) ? panels.entries(name) : name === 'sidebar.panellist'
+          ? panels
           : [
               { options: { key: 'gea-proof' } },
               { options: { key: 'inventory-fc' } },
               { options: { key: 'plugins' } },
               ...entries.filter((entry) => entry.options.name === 'main'),
             ],
+      entriesOfSlot: name => !Array.isArray(panels) ? panels.entriesOfSlot(name) : ctx.slots.entries(name),
       subscribe: (name, listener) => Array.isArray(panels) ? () => {} : panels.subscribe(name, listener),
       inject: (_name, fn) => fn(),
       register: (options, component) => {
@@ -828,4 +829,68 @@ test('account QR expiration stops polling and an unavailable GEA authority canno
   assert.ok(document.querySelector('[role="dialog"]').textContent.includes('二维码已过期'));
   assert.equal(document.querySelector('[role="dialog"] img'), null);
   assert.equal(polls, 0);
+});
+
+
+test('a current successful QR poll waits for the latest confirmed Host identity before closing', async t => {
+  const { root } = await mountedDom(t);
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  let snapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  const listeners = new Set();
+  let polls = 0;
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
+    startLogin: async () => ({ loginId: 'current', image: 'data:image/png;base64,AA==', expiresIn: 120 }),
+    pollLogin: async () => { polls++; return true; },
+  };
+  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  await React.act(async () => t.mock.timers.tick(500));
+  assert.equal(polls, 1);
+  assert.ok(document.querySelector('[role="dialog"]'), 'poll=true is not the current Host authentication projection');
+  assert.equal(document.querySelector('.gea-account-login-qr').getAttribute('aria-busy'), 'false');
+  await React.act(async () => t.mock.timers.tick(1000));
+  assert.equal(polls, 1, 'a completed challenge does not busy-poll while awaiting Host identity');
+  const publish = next => React.act(async () => { snapshot = next; for (const changed of listeners) changed(); });
+  await publish({ state: 'unknown', scope: null, status: { authenticated: true, user: { name: 'Unconfirmed' } } });
+  assert.ok(document.querySelector('[role="dialog"]'), 'an unconfirmed identity cannot close the dialog');
+  await publish({ state: 'confirmed', error: 'IDENTITY_READ_FAILED', scope: 'stale-host', status: { authenticated: true, user: { name: 'Stale Host User' } } });
+  assert.ok(document.querySelector('[role="dialog"]'), 'an observation error cannot turn a cached identity into current login confirmation');
+  await publish({ state: 'confirmed', scope: 'current-host', status: { authenticated: true, user: { name: 'Confirmed Host User' } } });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.ok(document.querySelector('[aria-label="账户菜单"]').textContent.includes('Confirmed Host User'));
+});
+
+test('sidebar metadata and icons use the same winning slot projection with shadowed and abdicated owners', async t => {
+  const { root } = await mountedDom(t);
+  const core = new SlotCore();
+  core.register({ name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } }, () => null);
+  core.register({ name: 'sidebar', children: { 'sidebar.panellist': { kind: 'list', scope: 'root' } } }, () => null);
+  const icon = owner => () => React.createElement('svg', { 'data-panel-owner': owner });
+  core.register({ name: 'sidebar.panellist', id: 'schedules', priority: 10, order: 20, label: '原定时任务' }, icon('original'));
+  core.register({ name: 'sidebar.panellist', id: 'plugins', order: 10, label: '插件管理' }, icon('plugins'));
+  const removeWinner = core.register({ name: 'sidebar.panellist', id: 'schedules', priority: -10, order: -5, label: '新定时任务' }, icon('winner'));
+  core.register({ name: 'sidebar.panellist', id: 'schedules', priority: -20, order: -20, label: '退位定时任务' }, icon('abdicated'));
+  const abdicated = core.entries('sidebar.panellist').find(row => row.options.label === '退位定时任务');
+  core.reportEntryError('sidebar.panellist', abdicated, Error('fixture owner failed'), { abdicate: true });
+  const { ctx, entries, renderSlot } = fixture(undefined, core);
+  assert.equal(ctx.slots.entries('sidebar.panellist').length, 4, 'raw ledger retains shadowed and abdicated registrations');
+  assert.equal(ctx.slots.entriesOfSlot('sidebar.panellist').length, 2, 'rendered projection elects one non-abdicated owner per id');
+  const sidebar = entries.find(row => row.options.name === 'sidebar');
+  await React.act(async () => root.render(React.createElement(sidebar.component, {
+    collapsed: false, width: 280, usePanelInfo: selector => selector({ activePanelId: 'schedules' }), renderSlot,
+  })));
+  const rows = () => [...document.querySelectorAll('.gea-plugin-entry')];
+  assert.deepEqual(rows().map(row => row.getAttribute('aria-label')), ['新定时任务', '插件管理']);
+  assert.equal(rows()[0].querySelector('svg').dataset.panelOwner, 'winner');
+  assert.equal(document.querySelectorAll('[aria-label="新定时任务"]').length, 1);
+  assert.equal(document.querySelector('[aria-label="原定时任务"]'), null);
+  assert.equal(document.querySelector('[aria-label="退位定时任务"]'), null);
+  await React.act(async () => removeWinner());
+  assert.deepEqual(rows().map(row => row.getAttribute('aria-label')), ['插件管理', '原定时任务']);
+  assert.equal(rows()[1].querySelector('svg').dataset.panelOwner, 'original');
+  assert.equal(rows()[1].getAttribute('aria-current'), 'page');
 });

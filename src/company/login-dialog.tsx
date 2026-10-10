@@ -34,7 +34,13 @@ export function LoginDialog({ account, t, onClose }: {
           try {
             const authenticated = await account.pollLogin(challenge.loginId, controller.signal);
             if (controller.signal.aborted) return;
-            if (authenticated) { onClose(); return; }
+            if (authenticated) {
+              // Only the subscribed Host identity can close the dialog as authenticated.
+              timer = setTimeout(() => {
+                if (!controller.signal.aborted) setPresentation({ state: 'expired' });
+              }, Math.max(0, expiresAt - Date.now()));
+              return;
+            }
             timer = setTimeout(poll, 1000);
           } catch (failure) {
             if (!controller.signal.aborted)

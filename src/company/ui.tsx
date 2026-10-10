@@ -192,7 +192,8 @@ export function mountCompanyUI(
       authority?.getSnapshot ?? (() => unavailableAccount),
       authority?.getSnapshot ?? (() => unavailableAccount),
     );
-    const user = identity.status?.authenticated ? identity.status.user : null;
+    const authenticated = identity.state === 'confirmed' && identity.error === undefined && identity.status?.authenticated === true;
+    const user = authenticated ? identity.status?.user : null;
     const name = user?.name ?? '',
       avatarUrl = user?.avatar ?? '';
     const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
@@ -205,8 +206,8 @@ export function mountCompanyUI(
     const [loginOpen, setLoginOpen] = useState(false);
     const closeLogin = useCallback(() => { setLoginOpen(false); trigger.current?.focus(); }, []);
     useEffect(() => {
-      if (loginOpen && (identity.status?.authenticated || !authority)) closeLogin();
-    }, [loginOpen, identity.status?.authenticated, authority, closeLogin]);
+      if (loginOpen && (authenticated || !authority)) closeLogin();
+    }, [loginOpen, authenticated, authority, closeLogin]);
     const pending = useRef<AbortController>();
     const [busy, setBusy] = useState(false),
       [failed, setFailed] = useState(false);
@@ -348,7 +349,7 @@ export function mountCompanyUI(
                 <span aria-hidden="true">⚙</span>
                 <span>{t('settings')}</span>
               </button>
-              {!identity.status?.authenticated && <button type="button" role="menuitem"
+              {!authenticated && <button type="button" role="menuitem"
                 className="gea-logout-button" disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
                 onClick={() => { close(); setLoginOpen(true); }}>
                 {t('signInGea')}
@@ -383,7 +384,7 @@ export function mountCompanyUI(
             </div>,
             document.body,
           )}
-        {loginOpen && authority && !identity.status?.authenticated && createPortal(
+        {loginOpen && authority && !authenticated && createPortal(
           <LoginDialog account={authority} t={t} onClose={closeLogin} />, document.body,
         )}
       </>
@@ -486,7 +487,7 @@ export function mountCompanyUI(
     };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
-    const panels = ctx.slots.entries('sidebar.panellist')
+    const panels = ctx.slots.entriesOfSlot('sidebar.panellist')
       .slice().sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
     const modules = [{ id: DIRECTORY, label: '工作台' }];
     return (
