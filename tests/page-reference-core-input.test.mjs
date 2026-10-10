@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
+import { resolve } from 'node:path';
+import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 
 const require = createRequire(import.meta.url);
+const core = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
+verifyOfficialCore(core);
 const built = await build({
   stdin: {
     contents: `export {installPageInteraction} from './src/page-interaction/client.ts';
-      export {SessionInputShell} from '../../official-latest-standard/packages/client/ui-conversation/src/client/input/facade.ts';`,
+      export {SessionInputShell} from ${JSON.stringify(resolve(core, 'packages/client/ui-conversation/src/client/input/facade.ts'))};`,
     resolveDir: process.cwd(),
   },
   bundle: true, write: false, platform: 'browser', conditions: ['browser'], format: 'cjs', jsx: 'automatic',
@@ -16,7 +20,7 @@ const built = await build({
   external: ['react'],
 });
 
-function fixture(t, save) {
+function fixture(t, save, { quote = false } = {}) {
   const dom = new JSDOM('<!doctype html><main><iframe></iframe><div id="trigger"></div></main>', {
     url: 'https://host.example/workbench', pretendToBeVisual: true,
   });
@@ -43,6 +47,15 @@ function fixture(t, save) {
   shell.setDraft('保留未发送文字 ');
   assert.equal(shell.insertReference(original, { start: 8, end: 8, draftRev: shell.snapshot.draftRev }), true);
   const before = shell.snapshot.draft;
+  const persistence = [], timeline = [];
+  const write = draft => { persistence.push(draft); timeline.push('writer'); };
+  const offPersistence = typeof shell.bindDraftPersistence === 'function'
+    ? shell.bindDraftPersistence(write)
+    : shell.bindMirror(write);
+  if (typeof shell.actions.persistDraft === 'function') {
+    const flush = shell.actions.persistDraft;
+    shell.actions.persistDraft = () => { timeline.push('flush'); flush(); };
+  }
   const reference = { sessionId: 'owned', binding: { ctx: {} } };
   const effects = [];
   const ctx = {
@@ -59,12 +72,14 @@ function fixture(t, save) {
   };
   const frame = dom.window.document.querySelector('iframe');
   const posted = [];
-  frame.contentWindow.postMessage = value => posted.push(value);
+  frame.contentWindow.postMessage = value => { posted.push(value); if (value.type === 'result') timeline.push('ack'); };
   const api = installPageInteraction(ctx);
   const offTrigger = api.mountTrigger(dom.window.document.querySelector('#trigger'), 'owned');
-  const dispose = api.bindFrame({ mode: 'business', frame, reference, page: '原页面', surface: 'gea-workbench', owner: 'owned-lease', inputActions: shell.actions });
+  const dispose = api.bindFrame(quote
+    ? { mode: 'quote', frame, reference, page: '原页面', inputActions: shell.actions, isCurrentSession: () => true }
+    : { mode: 'business', frame, reference, page: '原页面', surface: 'gea-workbench', owner: 'owned-lease', inputActions: shell.actions });
   t.after(() => {
-    dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); shell.dispose(); dom.window.close();
+    dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); offPersistence(); shell.dispose(); dom.window.close();
     for (const [key, descriptor] of saved)
       if (descriptor) Object.defineProperty(globalThis, key, descriptor); else delete globalThis[key];
   });
@@ -82,7 +97,7 @@ function fixture(t, save) {
       await new Promise(resolve => setImmediate(resolve));
     return posted.find(x => x.type === 'result');
   }
-  return { shell, before, ready, result, submissions: () => submissions };
+  return { shell, before, ready, result, persistence, timeline, submissions: () => submissions };
 }
 
 test('actual Core editor preserves existing chip and text while Workbench inserts a second selected reference', async t => {
@@ -109,4 +124,26 @@ test('actual Core editor keeps text edited during save and inserts using the cur
   assert.equal(f.shell.snapshot.occurrences.length, 2);
   assert.ok(f.shell.snapshot.draft.startsWith(edited));
   assert.equal(f.submissions(), 0);
+});
+
+test('static quote reaches the actual Core draft writer before success while preserving resident text and chips', async t => {
+  const f = fixture(t, () => { throw Error('Static quotes must not call business transport'); }, { quote: true });
+  const message = await f.ready();
+  message('quote', { requestId: 'plain-quote', reference: { text: '未发送的问题', label: '分析问题', targets: [] } });
+  assert.equal((await f.result())?.ok, true);
+  assert.equal(f.shell.snapshot.occurrences.length, 1);
+  assert.ok(f.shell.snapshot.draft.includes(f.before));
+  assert.ok(f.shell.snapshot.draft.includes('未发送的问题'));
+  assert.ok(f.persistence.length > 0);
+  const saved = f.persistence.at(-1);
+  assert.equal(typeof saved === 'string' ? saved : saved.text, f.shell.snapshot.draft);
+  assert.ok(f.timeline.indexOf('writer') < f.timeline.indexOf('ack'), f.timeline.join(','));
+  if (typeof f.shell.actions.persistDraft === 'function') {
+    assert.ok(f.timeline.indexOf('flush') < f.timeline.indexOf('ack'), 'alpha retains its explicit flush before acknowledgment');
+    assert.equal(saved.references.length, 1, 'alpha persists semantic references');
+  } else {
+    assert.equal(f.timeline.includes('flush'), false, 'rc.2 uses its official automatic draft writer');
+  }
+  assert.equal(f.submissions(), 0);
+  t.diagnostic(JSON.stringify({ core, persistence: typeof saved === 'string' ? 'clipboard-text' : 'semantic-document', timeline: f.timeline }));
 });

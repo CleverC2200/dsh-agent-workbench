@@ -19,6 +19,8 @@ npm run typecheck:official
 node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs tests/workbench-original.test.mjs tests/payload-focus-metadata.test.mjs
 ```
 
+官方输入只接受 GEA [支持清单](../../dsh-gea-plugin/scripts/supported-cores.json) 登记的 0.2.0-rc.2 和 0.2.1-alpha.1，均要求固定提交与 tracked source clean。本组构建默认使用 `tsconfig.official.json` 指向的 alpha.1；两版类型和运行接收分别保留本轮证据。静态页面引用在 alpha.1 继续使用公开 `persistDraft` 显式持久化；rc.2 由官方编辑器向已绑定的 Core 草稿 writer 发布文本。Workbench 不另存草稿。
+
 构建调用 package.json 的 `build:core` 或 `build`。前者生成 Host/Client、声明、Native 和包内页面，仍需要本票登记的相邻 Manage 资源；完整 build 还需要原库存包工具链。构建写本仓 lib，应由当前工作树单独串行执行。构建先显式核固定官方 Core，声明编译统一使用 `tsconfig.official.json`，避免本地 file 依赖复制出的 SDK 类型和宿主公开声明分离。
 
 共享开发 CLI 位于 [check-agent-knowledge.mjs](../scripts/check-agent-knowledge.mjs)。Manage/GEA 传自己的 `--root` 和 `--config`，不会复制一份同义规则。配置字段是 entries、paths、scripts、exports、peers、history 与可选 commandRoots。peers 为允许引用的外部 checkout 根；其链接只核存在，不递归把 peer 命令当本仓命令。history 为本仓历史文件或目录。commandRoots 按本仓文档相对路径登记允许使用的外部命令根，并读取其真实 package.json scripts；未登记命令拒绝。npm/pnpm 的 run 与紧凑脚本写法均检查，install/exec 等包管理器内置动作保留自身语义。此检查不运行文档中的命令、不安装依赖、不访问业务，也不判断全部自然语言真伪。

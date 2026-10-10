@@ -41,6 +41,6 @@
     "source/inventory-light-plugins/src/native/api.ts": "2bedad1d37fa2c0ed77ef5c74e036d1ca6ac7443b01e105485de7d1e48949ab7",
     "source/inventory-light-plugins/src/dsh-ui/base.css": "e834b61874dc4b2dcbd671323fd6ff00ba3d7fc81d8d4270d4fa5b295fa939d2",
     "source/inventory-light-plugins/src/native/entry.tsx": "f8bf35c6d1c4eeaff0a2bc02b558ae4fd15d13c601eff1cb0ded7e6b69a0c564",
-    "../dsh-agent-manage/package.json": "4d18eea54075bf72412d59a8706cf55085cd4389c0544c7f8a0c28a246a7138b"
+    "../dsh-agent-manage/package.json": "818350575f3049d1cec572373e1c48244760fb77b08cebd27242ddc82fda7a7f"
   }
 }

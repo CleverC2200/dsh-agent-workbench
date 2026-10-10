@@ -14,13 +14,14 @@ function git(path, ...args) {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t) {
+function fixture(t, officialPath) {
   const directory = mkdtempSync(resolve(tmpdir(), 'agent-input-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const config = JSON.parse(readFileSync(resolve(root, 'tsconfig.official.json'), 'utf8'));
   const cordis = realpathSync(resolve(root, config.compilerOptions.paths['@deepseek-ai/cordis'][0]));
-  symlinkSync(resolve(cordis, '../../../../..'), resolve(directory, 'official-latest-standard'));
-  const manifest = { core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc', repositories: [] };
+  const official = officialPath ?? resolve(cordis, '../../../../..');
+  symlinkSync(official, resolve(directory, 'official-latest-standard'));
+  const manifest = { core: git(official, 'rev-parse', 'HEAD'), repositories: [] };
   for (const repo of repos) {
     const checkout = resolve(directory, 'candidate', repo);
     mkdirSync(checkout, { recursive: true });
@@ -58,6 +59,13 @@ test('a clean registered combination reports candidate scope and exact observed 
   assert.equal(receipt.status, 'passed');
   assert.equal(receipt.runtime, 'not-observed');
   assert.deepEqual(receipt.repositories.map(({ repo, head }) => ({ repo, head })), manifest.repositories.map(({ repo, head }) => ({ repo, head })));
+});
+
+test('a clean rc.2 candidate binds its own registered official declaration source', t => {
+  const { manifest, run } = fixture(t, resolve(root, '../../official-0.2.0-rc.2'));
+  const result = run();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).core, manifest.core);
 });
 
 test('swapped Manage and GEA checkouts are refused even when each declared head matches', t => {

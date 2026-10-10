@@ -12,6 +12,6 @@ npm run candidate:verify -- --input /absolute/path/integration-set.json --checko
 
 结果只有 `stage=candidate-input`、`status=passed` 与 `runtime=not-observed`。输出提供观察时间、Core 和各仓实际路径/HEAD。它不证明工具链已安装、类型/质量/测试通过、产物装配、当前选择、Native 装载或发布。
 
-最低输入是 Node、Git、冻结输入文件、三个干净 Git checkout、各仓已提交的 package.json 和锁、Workbench 的 tsconfig.official.json，以及该配置声明的官方 SDK。官方 Core 固定在原输入检查的基线，调用者不能覆盖。SDK 可只读引用；node_modules 和 lib 不能跨工作树共享。
+最低输入是 Node、Git、冻结输入文件、三个干净 Git checkout、各仓已提交的 package.json 和锁、Workbench 的 tsconfig.official.json，以及该配置声明的官方 SDK。官方 Core 只接受 GEA [支持清单](../../dsh-gea-plugin/scripts/supported-cores.json) 登记的两个固定提交，调用者不能提供其他 Core；输入的 `core` 仍须与实际 SDK 同源。SDK 可只读引用；node_modules 和 lib 不能跨工作树共享。
 
 检查从 Q5 的 `098229a139e98f3fb44ae3b642ead9df3fec67f6` 中接收三仓 HEAD/dirty/锁与 `verifyOfficialInput` 行为。原 Q5 的质量 runner、上游原资产回执和 CI 门禁不属于本命令的通过范围，历史绿结果不会升级为本轮通过。原日志由项目 Q5 evidence 保留。
