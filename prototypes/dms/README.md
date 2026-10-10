@@ -1,6 +1,6 @@
 # DMS 回写演示（模拟）
 
-唯一来源见 SOURCE.json：登记 GEA b71fbe049809385c2af82f135b2ef2c10a8b6a39 的 demos/dms、mock-dms.ts 与工作流投影。47从原36固定dirty ZIP选择性恢复。Workbench保留原按钮、字段与内存模拟器，报文纯计算迁到Manage；工作流复用当前Workbench已有实现，消费共享主题1.1.1与现有business/shared/channel.js。
+唯一来源见 SOURCE.json：登记 GEA b71fbe049809385c2af82f135b2ef2c10a8b6a39 的 demos/dms、mock-dms.ts 与工作流投影。47从原36固定dirty ZIP选择性恢复。Workbench保留原按钮、字段与内存模拟器，报文纯计算迁到Manage；工作流复用当前Workbench已有实现，消费[共享主题](../../theme/README.md)与现有business/shared/channel.js。
 
 构建入口为 node scripts/build-dms-prototype.mjs；产物 lib/prototypes/dms 由现有 v2 装配加载，页面 ID inventory-dms。旧 demos/dms 是独立静态页，没有已登记页面 ID 或持久 Session；SOURCE.json 提供一次性入口映射，不增加旧运行时入口。原始字节保存在项目 evidence/36/original。
 
