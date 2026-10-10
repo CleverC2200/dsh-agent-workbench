@@ -171,7 +171,11 @@ async function startCompanyQuery(frame) {
   await expect(frame.locator('#app')).toContainText('5,580');
 }
 async function readablePaint(locator) {
-  const paint = await locator.evaluate((el) => {
+  const paint = await locator.evaluateAll((elements) => {
+    if (elements.length !== 1)
+      throw Error(`Readable paint requires one current element, received ${elements.length}`);
+    const [el] = elements;
+    if (!el.isConnected) throw Error('Readable paint requires a connected element');
     const style = getComputedStyle(el);
     let node = el,
       background = '';
@@ -183,11 +187,19 @@ async function readablePaint(locator) {
       }
       node = node.parentElement;
     }
-    return { text: el.textContent.trim().slice(0, 100), color: style.color, background };
+    return {
+      text: el.textContent.trim().slice(0, 100),
+      color: style.color,
+      background,
+      pageReferenceReady: el.ownerDocument
+        .querySelector('[data-page-reference-ready]')
+        ?.getAttribute('data-page-reference-ready'),
+    };
   });
   const luminance = (value) => {
-    const rgb = value
-      .match(/[\d.]+/g)
+    const components = value.match(/[\d.]+/g);
+    assert.ok(components?.length >= 3, `Readable paint requires a resolved RGB color: ${value}`);
+    const rgb = components
       .slice(0, 3)
       .map(Number)
       .map((v) => {
@@ -219,13 +231,26 @@ for (const id of ['qll', 'dealer'])
     if (id === 'dealer') {
       await frame.getByRole('tab', { name: 'SKU库存', exact: true }).press('Enter');
       await expect(frame.getByRole('heading', { name: 'SKU库存', exact: true })).toBeVisible();
+      await expect(frame.locator('section[data-page-reference-ready]')).toHaveAttribute(
+        'data-page-reference-ready',
+        'true',
+      );
       targets.push(
         frame.locator('[role="status"]').filter({ hasText: 'SAP 定价' }).first(),
         frame.getByRole('button', { name: '下载', exact: true }),
       );
     }
     const paints = [];
-    for (const target of targets) paints.push(await readablePaint(target));
+    for (const target of targets) {
+      const paint = await readablePaint(target);
+      if (id === 'dealer')
+        assert.equal(
+          paint.pageReferenceReady,
+          'true',
+          'Dealer paint belongs to the loaded current scope',
+        );
+      paints.push(paint);
+    }
     if (evidence) {
       await mkdir(evidence, { recursive: true });
       await writeFile(evidence + '/' + id + '-dark-paint.json', JSON.stringify(paints, null, 2));
