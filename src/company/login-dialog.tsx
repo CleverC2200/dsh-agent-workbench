@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import type { BusinessAccount } from './account.ts';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { BusinessAccount, BusinessEnvironment } from './account.ts';
 import type { CopyKey } from './locales.ts';
 import logo from '../workbench/gea-logo.png';
 
@@ -17,15 +17,23 @@ export function LoginDialog({ account, t, onClose }: {
 }) {
   const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
   const [revision, setRevision] = useState(0);
+  const identity = useSyncExternalStore(account.subscribe, account.getSnapshot, account.getSnapshot);
+  // This is the user's requested QR environment, not a client-owned authentication state.
+  const [requestedEnvironment, setRequestedEnvironment] = useState<BusinessEnvironment>();
+  const environment = requestedEnvironment ?? identity.status?.environment;
+  const environments = identity.status?.environments.filter(
+    (value): value is BusinessEnvironment => value === 'production' || value === 'test',
+  ) ?? [];
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (presentation.state === 'preparing') close.current?.focus(); }, [presentation.state]);
   useEffect(() => {
+    if (!environment) return;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
     setPresentation({ state: 'preparing' });
     const start = async () => {
       try {
-        const challenge = await account.startLogin(controller.signal);
+        const challenge = await account.startLogin(controller.signal, environment);
         if (controller.signal.aborted) return;
         const expiresAt = Date.now() + challenge.expiresIn * 1000;
         setPresentation({ state: 'waiting', image: challenge.image });
@@ -56,7 +64,7 @@ export function LoginDialog({ account, t, onClose }: {
     };
     void start();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [account, revision, onClose, t]);
+  }, [account, environment, revision, onClose, t]);
   const image = presentation.state === 'waiting' || presentation.state === 'expired' ? presentation.image : undefined;
   return <div className="gea-account-login-backdrop gea-login-page" onClick={event => {
     if (event.target === event.currentTarget) onClose();
@@ -65,8 +73,9 @@ export function LoginDialog({ account, t, onClose }: {
       className="gea-account-login-dialog gea-login-card" onKeyDown={event => {
         if (event.key === 'Escape') { event.preventDefault(); onClose(); }
         if (event.key === 'Tab') {
-          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
-          const next = buttons[(buttons.indexOf(document.activeElement as HTMLButtonElement) + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length];
+          const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'))
+            .filter(control => !control.matches('input') || (control.matches(':checked') && !control.closest('fieldset')?.disabled));
+          const next = controls[(controls.indexOf(document.activeElement as HTMLElement) + (event.shiftKey ? -1 : 1) + controls.length) % controls.length];
           event.preventDefault(); next?.focus();
         }
       }}>
@@ -88,6 +97,14 @@ export function LoginDialog({ account, t, onClose }: {
         {presentation.state === 'waiting' && <span className="gea-ready-dot" aria-hidden="true" />}
         {presentation.state === 'waiting' ? t('qrWaiting') : presentation.state === 'expired' ? t('qrExpiredHint') : null}
       </p>
+      <fieldset disabled={presentation.state === 'preparing'} className="gea-environments">
+        <legend>{t('environment')}</legend>
+        {environments.map(value => <label key={value}>
+          <input type="radio" name="gea-login-environment" value={value} checked={environment === value}
+            onChange={() => setRequestedEnvironment(value)} />
+          <span>{t(value === 'production' ? 'production' : 'test')}</span>
+        </label>)}
+      </fieldset>
       <button type="button" className="gea-login-submit" disabled={presentation.state === 'preparing'} onClick={() => setRevision(value => value + 1)}>
         {t(presentation.state === 'preparing' ? 'qrPreparing' : 'refreshQr')}
       </button>

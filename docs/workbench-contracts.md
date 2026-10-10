@@ -61,6 +61,8 @@ node --test tests/official-entry.test.mjs tests/html-pages.test.mjs tests/html-s
 
 GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter 经 `workbenchPages.registerBusinessPage(page, authorize)` 提供实际业务 grant，凭据与权限仍由 GEA 管控。Workbench 的 PageRuntime 持有受控 open/call/close、HTML MessageChannel、owned lease 的使用/关闭、self-report/catalog/apply/cancel、主题及页面引用，提示词提交沿官方 Session API。端口、引用代际和请求都在页面释放/身份变化时撤旧，旧结果不恢复。Native 审批文档保留原呈现与规则，不强制使用 HTML lease。
 
+账户登录页从同一 Host 投影读取当前环境与已配置环境列表。正式/测试控件只保存本次扫码的目标选择，`startLogin(signal, environment)` 由 GEA Host 切换环境、撤销旧身份与二维码并生成新挑战。切换、刷新和关闭取消原请求，迟到二维码不得覆盖新选择；登录成功仍等待无错误的 confirmed Host 身份，Workbench 不保存凭据或独立登录标志。
+
 公共页面选择/引用实现从 GEA 退出，source 在 src/page-interaction，公开 client/picker/bridge/reference/protocol/payload-budget。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。
 
 模型载荷的 focus 过滤只筛记录数组；标识/标量列表保留状态并遵守条目上限。省略计数是不同数组条目的合计，不是业务行数或未展开行数。FC 页面正文明确超龄、滞库和订单字段的名称，缺失订单量不以库存风险量替代。

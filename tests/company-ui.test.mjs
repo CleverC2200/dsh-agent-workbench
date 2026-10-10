@@ -441,7 +441,7 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
   const snapshot = {
     state: 'confirmed',
     scope: 'host-fixture',
-    status: { authenticated: true, user: { name: 'Fixture User' } },
+    status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Fixture User' } },
   };
   const delayed = Promise.withResolvers();
   let logoutSignal;
@@ -742,7 +742,7 @@ test('public official and third-party panel rows keep order, icons, activation, 
 test('account QR login uses only GEA authority, refresh cancels the old challenge and Host subscription owns success', async t => {
   const { root, dom } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  let snapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  let snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
   const listeners = new Set(), starts = [], polls = [];
   const delayedPoll = Promise.withResolvers();
   const authority = {
@@ -770,7 +770,7 @@ test('account QR login uses only GEA authority, refresh cancels the old challeng
   await React.act(async () => delayedPoll.resolve(true));
   assert.ok(document.querySelector('[role="dialog"]'), 'old poll cannot close a refreshed challenge');
   await React.act(async () => {
-    snapshot = { state: 'confirmed', scope: 'host-authenticated', status: { authenticated: true, user: { name: 'Host User' } } };
+    snapshot = { state: 'confirmed', scope: 'host-authenticated', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Host User' } } };
     for (const changed of listeners) changed();
   });
   assert.equal(document.querySelector('[role="dialog"]'), null);
@@ -788,7 +788,7 @@ test('closing and unmounting account QR login abort actual requests and ignore l
     startLogin: signal => { starts.push(signal); return delayed.promise; },
     pollLogin: () => { throw Error('A cancelled QR must never start polling'); },
   };
-  const signedOutSnapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  const signedOutSnapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
   const { entries } = fixture(authority);
   const account = entries.find(row => row.options.name === 'settings.launcher');
   await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
@@ -814,7 +814,7 @@ test('account QR expiration stops polling and an unavailable GEA authority canno
   await React.act(async () => root.render(React.createElement(unavailable.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
   assert.equal([...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').disabled, true);
-  const signedOut = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  const signedOut = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
   let polls = 0;
   const authority = {
     getSnapshot: () => signedOut, subscribe: () => () => {},
@@ -835,7 +835,7 @@ test('account QR expiration stops polling and an unavailable GEA authority canno
 test('a current successful QR poll waits for the latest confirmed Host identity before closing', async t => {
   const { root } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  let snapshot = { state: 'confirmed', scope: null, status: { authenticated: false, user: null } };
+  let snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
   const listeners = new Set();
   let polls = 0;
   const authority = {
@@ -855,11 +855,11 @@ test('a current successful QR poll waits for the latest confirmed Host identity 
   await React.act(async () => t.mock.timers.tick(1000));
   assert.equal(polls, 1, 'a completed challenge does not busy-poll while awaiting Host identity');
   const publish = next => React.act(async () => { snapshot = next; for (const changed of listeners) changed(); });
-  await publish({ state: 'unknown', scope: null, status: { authenticated: true, user: { name: 'Unconfirmed' } } });
+  await publish({ state: 'unknown', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Unconfirmed' } } });
   assert.ok(document.querySelector('[role="dialog"]'), 'an unconfirmed identity cannot close the dialog');
-  await publish({ state: 'confirmed', error: 'IDENTITY_READ_FAILED', scope: 'stale-host', status: { authenticated: true, user: { name: 'Stale Host User' } } });
+  await publish({ state: 'confirmed', error: 'IDENTITY_READ_FAILED', scope: 'stale-host', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Stale Host User' } } });
   assert.ok(document.querySelector('[role="dialog"]'), 'an observation error cannot turn a cached identity into current login confirmation');
-  await publish({ state: 'confirmed', scope: 'current-host', status: { authenticated: true, user: { name: 'Confirmed Host User' } } });
+  await publish({ state: 'confirmed', scope: 'current-host', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Confirmed Host User' } } });
   assert.equal(document.querySelector('[role="dialog"]'), null);
   assert.ok(document.querySelector('[aria-label="账户菜单"]').textContent.includes('Confirmed Host User'));
 });
@@ -893,4 +893,65 @@ test('sidebar metadata and icons use the same winning slot projection with shado
   assert.deepEqual(rows().map(row => row.getAttribute('aria-label')), ['插件管理', '原定时任务']);
   assert.equal(rows()[1].querySelector('svg').dataset.panelOwner, 'original');
   assert.equal(rows()[1].getAttribute('aria-current'), 'page');
+});
+
+
+test('login environment controls follow Host choices, replace QR and reject late responses from the previous environment', async t => {
+  const { root } = await mountedDom(t);
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  const snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
+  const starts = [], polls = [];
+  const oldPoll = Promise.withResolvers();
+  const oldProduction = Promise.withResolvers();
+  const authority = {
+    getSnapshot: () => snapshot, subscribe: () => () => {},
+    startLogin: (signal, environment) => {
+      starts.push({ signal, environment });
+      if (environment === 'production') return oldProduction.promise;
+      return Promise.resolve({ loginId: 'test-' + starts.length, image: 'data:image/png;base64,VEVTVA==', expiresIn: 120 });
+    },
+    pollLogin: (id, signal) => { polls.push({ id, signal }); return oldPoll.promise; },
+  };
+  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  const radio = value => document.querySelector('input[type="radio"][value="' + value + '"]');
+  assert.deepEqual([...document.querySelectorAll('fieldset label')].map(label => label.textContent), ['正式', '测试']);
+  assert.equal(radio('test').checked, true, 'initial choice is the current Host environment');
+  assert.equal(starts[0].environment, 'test');
+  await React.act(async () => t.mock.timers.tick(500));
+  await React.act(async () => radio('production').click());
+  assert.equal(starts[0].signal.aborted, true);
+  assert.equal(polls[0].signal.aborted, true);
+  assert.equal(starts[1].environment, 'production');
+  await React.act(async () => oldPoll.resolve(true));
+  assert.ok(document.querySelector('[role="dialog"]'), 'old successful poll cannot authenticate or close the new environment');
+  await React.act(async () => oldProduction.resolve({ loginId: 'production-current', image: 'data:image/png;base64,UFJPRA==', expiresIn: 120 }));
+  assert.equal(radio('production').checked, true);
+  await React.act(async () => radio('test').click());
+  assert.equal(starts[1].signal.aborted, true);
+  assert.equal(starts[2].environment, 'test');
+  assert.equal(document.querySelector('.gea-account-login-qr img').src, 'data:image/png;base64,VEVTVA==');
+  await React.act(async () => [...document.querySelectorAll('[role="dialog"] button')].find(button => button.textContent === '刷新二维码').click());
+  assert.equal(starts[2].signal.aborted, true);
+  assert.equal(starts[3].environment, 'test', 'refresh keeps the requested environment');
+  assert.equal(snapshot.status.authenticated, false, 'presentation does not create authentication');
+});
+
+test('login displays only configured Host environments', async t => {
+  const { root } = await mountedDom(t);
+  const snapshot = { state: 'confirmed', scope: null, status: { environment: 'production', environments: ['production'], authenticated: false, user: null } };
+  const targets = [];
+  const authority = {
+    getSnapshot: () => snapshot, subscribe: () => () => {},
+    startLogin: async (_signal, environment) => { targets.push(environment); return { loginId: 'formal', image: 'data:image/png;base64,AA==', expiresIn: 120 }; },
+    pollLogin: async () => false,
+  };
+  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
+  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
+  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  assert.deepEqual([...document.querySelectorAll('input[type="radio"]')].map(input => input.value), ['production']);
+  assert.deepEqual(targets, ['production']);
 });
