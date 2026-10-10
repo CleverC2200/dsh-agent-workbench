@@ -27,7 +27,7 @@ function git(path, ...args) {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t, officialPath) {
+function fixture(t, officialPath, hostEnvironment = process.env) {
   const directory = mkdtempSync(resolve(tmpdir(), 'agent-input-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const config = JSON.parse(readFileSync(resolve(root, 'tsconfig.official.json'), 'utf8'));
@@ -79,7 +79,11 @@ function fixture(t, officialPath) {
     manifest.repositories.push({ repo, path: checkout, head: git(checkout, 'rev-parse', 'HEAD') });
   }
   const input = resolve(directory, 'integration-set.json');
-  const run = (checkout = manifest.repositories[0].path, finalGroup = false) => {
+  const run = (
+    checkout = manifest.repositories[0].path,
+    finalGroup = false,
+    eventEnvironment = {},
+  ) => {
     writeFileSync(input, JSON.stringify(manifest));
     return spawnSync(
       process.execPath,
@@ -96,6 +100,12 @@ function fixture(t, officialPath) {
       {
         cwd: directory,
         encoding: 'utf8',
+        env: {
+          ...hostEnvironment,
+          CI: 'true',
+          QUALITY_EXPECTED_SHA: manifest.repositories[0].head,
+          ...eventEnvironment,
+        },
       },
     );
   };
@@ -371,3 +381,22 @@ for (const wrongName of [false, true])
     }
     rejected(run(undefined, true), /CANDIDATE_PACKAGE_IDENTITY/);
   });
+
+test('synthetic final-group fixtures bind their own CI event and preserve missing or mismatched event rejection', (t) => {
+  const { manifest, run } = fixture(t, undefined, {
+    ...process.env,
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    QUALITY_EXPECTED_SHA: 'f'.repeat(40),
+  });
+  const manage = manifest.repositories[1],
+    gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(undefined, true), /CANDIDATE_PACKAGE_IDENTITY/);
+  rejected(
+    run(undefined, true, { QUALITY_EXPECTED_SHA: '0'.repeat(40) }),
+    /CANDIDATE_EVENT_MISMATCH/,
+  );
+  rejected(run(undefined, true, { QUALITY_EXPECTED_SHA: '' }), /CANDIDATE_EVENT_REQUIRED/);
+});
