@@ -66,8 +66,10 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
     /QUALITY_EXPECTED_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/,
   );
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
-  assert.equal((workflow.match(/fetch-depth: 0/g) ?? []).length, 5);
-  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 5);
+  assert.equal((workflow.match(/fetch-depth: 0/g) ?? []).length, 6);
+  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 6);
+  assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/supported-cores\.json/);
+  assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
   assert.match(workflow, /npm run quality:ci -- --prepare-sdk/);
   assert.doesNotMatch(workflow, /PLUGIN_SPLIT_.*_HISTORY_SOURCE/);
   assert.match(workflow, /if: always\(\)/);

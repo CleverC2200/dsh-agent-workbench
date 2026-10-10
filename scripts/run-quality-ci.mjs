@@ -7,8 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { verifyRegisteredCore } from './candidate-input.mjs';
 
 const peers = {
-  'dsh-agent-manage': '848d08605f865ded2ba30bd75c4af3314feae5ba',
-  'dsh-gea-plugin': '88e027ede8accd31ecaa32ac246a8fd1c147bdc7',
+  'dsh-agent-manage': '399bf00728e7408519286e8cd7ad359367eda323',
+  'dsh-gea-plugin': '0a7663db00657541bbda297a3fa702d6ed285b26',
 };
 const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
 const { values } = parseArgs({
