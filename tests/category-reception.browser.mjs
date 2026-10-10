@@ -183,6 +183,7 @@ test('the original category event detail opens and restores its current simulate
   await expect(page.frameLocator('iframe').locator('.arco-modal-title')).toHaveText(
     '粽子产能缺口将拉低品类订单满足率',
   );
+  await expect.poll(() => page.evaluate(() => window.state()?.eventId)).toBe('ev-zongzi-cap');
   await page.evaluate(() => window.openCategory('session-A'));
   await expect(page.frameLocator('iframe').locator('.arco-modal-title')).toHaveText(
     '粽子产能缺口将拉低品类订单满足率',
