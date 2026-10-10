@@ -140,25 +140,4 @@ html[data-fullscreen] .gea-sidebar-window-row {
   flex: none;
   margin-bottom: 8px;
 }
-.gea-account-login-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 11000;
-  background: #0006;
-  display: grid;
-  place-items: center;
-}
-.gea-account-login-dialog {
-  width: min(380px, calc(100vw - 32px));
-  max-height: calc(100vh - 32px);
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 24px;
-  border-radius: 16px;
-  background: var(--background, #fff);
-  color: var(--foreground, #182230);
-  text-align: center;
-}
-.gea-account-login-close { float: right; }
-.gea-account-login-qr { min-height: 220px; display: grid; place-items: center; }
 .gea-sidebar-owned[data-sidebar-collapsed] .gea-sidebar-brand-row { flex-direction: column; }

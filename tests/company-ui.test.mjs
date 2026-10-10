@@ -827,7 +827,7 @@ test('account QR expiration stops polling and an unavailable GEA authority canno
   await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
   await React.act(async () => t.mock.timers.tick(120000));
   assert.ok(document.querySelector('[role="dialog"]').textContent.includes('二维码已过期'));
-  assert.equal(document.querySelector('[role="dialog"] img'), null);
+  assert.ok(document.querySelector('.gea-account-login-qr').classList.contains('is-expired'));
   assert.equal(polls, 0);
 });
 

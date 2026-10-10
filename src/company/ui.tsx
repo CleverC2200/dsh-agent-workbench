@@ -28,6 +28,7 @@ import * as prompts from './conversation-prompts.ts';
 import brandLogo from './brand-logo.png';
 import css from './shell.css';
 import layoutCss from './layout.css';
+import loginCss from './login.css';
 import staticControlsCss from './formal-static-controls.css';
 import {
   IconNewChatOutline16,
@@ -117,7 +118,7 @@ export function mountCompanyUI(
   ctx.effect(() => {
     const style = document.createElement('style');
     style.dataset.companyWorkbench = 'formal-508feea';
-    style.textContent = staticControlsCss + '\n' + css + '\n' + layoutCss;
+    style.textContent = staticControlsCss + '\n' + css + '\n' + layoutCss + '\n' + loginCss;
     document.head.append(style);
     return () => style.remove();
   });
