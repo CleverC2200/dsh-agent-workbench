@@ -15,7 +15,10 @@ export interface BusinessAccount {
     error?: string;
   }>;
   subscribe(listener: () => void): () => void;
-  startLogin(signal: AbortSignal, environment: BusinessEnvironment): Promise<{ loginId: string; image: string; expiresIn: number }>;
+  startLogin(
+    signal: AbortSignal,
+    environment: BusinessEnvironment,
+  ): Promise<{ loginId: string; image: string; expiresIn: number }>;
   pollLogin(loginId: string, signal: AbortSignal): Promise<boolean>;
   logout(signal: AbortSignal): Promise<void>;
 }

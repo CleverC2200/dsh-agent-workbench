@@ -346,7 +346,10 @@ export function installPageInteraction(ctx: Context): PageInteraction {
             if (!options.inputActions.insertText(quote, span))
               throw Error('草稿已变化或正在发送，请重新选择内容。');
             // Alpha exposes an explicit flush; rc.2 publishes edits to its Core-owned writer.
-            if ('persistDraft' in options.inputActions && typeof options.inputActions.persistDraft === 'function')
+            if (
+              'persistDraft' in options.inputActions &&
+              typeof options.inputActions.persistDraft === 'function'
+            )
               options.inputActions.persistDraft();
             send({ type: 'result', requestId, ok: true });
             return;

@@ -76,5 +76,10 @@
   justify-content: center;
 }
 
-.md { border-radius: 8px; font-weight: 600; }
-.outline:hover:not(:disabled) { border-color: var(--ui-accent-line); }
+.md {
+  border-radius: 8px;
+  font-weight: 600;
+}
+.outline:hover:not(:disabled) {
+  border-color: var(--ui-accent-line);
+}

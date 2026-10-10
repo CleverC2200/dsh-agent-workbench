@@ -18,16 +18,24 @@ const bundle = await build({
   loader: { '.css': 'text', '.module.css': 'text', '.png': 'dataurl' },
 });
 const module = { exports: {} };
-new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(module, module.exports, require);
+new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
+  module,
+  module.exports,
+  require,
+);
 const { apply } = module.exports;
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 async function fixture(t, { cwd, language = 'zh', picked = '/workspace/B' } = {}) {
   const dom = new JSDOM('<main id="root"></main>', { url: 'https://host.example/workbench' });
   const saved = ['window', 'document', 'fetch', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
-    key, Object.getOwnPropertyDescriptor(globalThis, key),
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
   ]);
-  const lists = [], selections = [], sessions = [], opened = [];
+  const lists = [],
+    selections = [],
+    sessions = [],
+    opened = [];
   let pickerCalls = 0;
   const request = async (url, options) => {
     const path = new URL(url, 'https://host.example');
@@ -35,7 +43,9 @@ async function fixture(t, { cwd, language = 'zh', picked = '/workspace/B' } = {}
     if (path.pathname === '/api/agent-workbench/config') return Response.json({});
     if (path.pathname === '/api/agent-manage/resources') {
       lists.push(path.searchParams.get('cwd'));
-      return Response.json([{ id: 'prompt:fixture', label: 'Fixture', kind: 'prompt', enabled: true }]);
+      return Response.json([
+        { id: 'prompt:fixture', label: 'Fixture', kind: 'prompt', enabled: true },
+      ]);
     }
     if (path.pathname === '/api/agent-manage/resources/select') {
       selections.push(JSON.parse(options.body));
@@ -44,26 +54,51 @@ async function fixture(t, { cwd, language = 'zh', picked = '/workspace/B' } = {}
     throw Error('Unexpected resource request: ' + url);
   };
   Object.assign(globalThis, {
-    window: dom.window, document: dom.window.document, fetch: request, IS_REACT_ACT_ENVIRONMENT: true,
+    window: dom.window,
+    document: dom.window.document,
+    fetch: request,
+    IS_REACT_ACT_ENVIRONMENT: true,
   });
-  const cleanups = [], slots = new Map(), locales = new Map(), workspacePaths = new Map();
-  const sessionCatalogue = { byId: { ...(cwd ? { current: { cwd } } : {}) } };
+  const cleanups = [],
+    slots = new Map(),
+    locales = new Map(),
+    workspacePaths = new Map();
+  const sessionCatalogue = { byId: cwd ? { current: { cwd } } : {} };
   const ctx = {
     locale: {
-      register: (name, copy) => { locales.set(name, copy); return () => {}; },
+      register: (name, copy) => {
+        locales.set(name, copy);
+        return () => {};
+      },
       bind: (name) => (key) => locales.get(name)?.[language]?.[key] ?? key,
-      getSnapshot: () => ({ active: language }), subscribe: () => () => {},
+      getSnapshot: () => ({ active: language }),
+      subscribe: () => () => {},
     },
-    effect: (fn) => { const off = fn(); if (typeof off === 'function') cleanups.push(off); },
-    provide: (name, value) => { ctx[name] = value; },
+    effect: (fn) => {
+      const off = fn();
+      if (typeof off === 'function') cleanups.push(off);
+    },
+    provide: (name, value) => {
+      ctx[name] = value;
+    },
     get: () => undefined,
-    inject: (names, fn) => { if (names.every((name) => ctx[name])) fn(ctx); },
+    inject: (names, fn) => {
+      if (names.every((name) => ctx[name])) fn(ctx);
+    },
     on: () => () => {},
     layout: { selectPanel() {} },
     slots: {
-      entries: () => [], subscribe: () => () => {}, registerFactory: () => () => {},
-      register: (options, component) => { slots.set(options.id ?? options.key ?? options.name, component); return () => {}; },
-      inject: (_name, fn) => { const off = fn(); if (typeof off === 'function') cleanups.push(off); },
+      entries: () => [],
+      subscribe: () => () => {},
+      registerFactory: () => () => {},
+      register: (options, component) => {
+        slots.set(options.id ?? options.key ?? options.name, component);
+        return () => {};
+      },
+      inject: (_name, fn) => {
+        const off = fn();
+        if (typeof off === 'function') cleanups.push(off);
+      },
     },
     remote: {},
     'remote.agentPresets': {},
@@ -84,26 +119,36 @@ async function fixture(t, { cwd, language = 'zh', picked = '/workspace/B' } = {}
         return id;
       },
       retain: (sessionId) => ({
-        sessionId, ready: Promise.resolve(), release() {},
-        binding: { session: { projections: { faceOf: () => ({ getSnapshot: () => 'fixture-preset' }) } } },
+        sessionId,
+        ready: Promise.resolve(),
+        release() {},
+        binding: {
+          session: { projections: { faceOf: () => ({ getSnapshot: () => 'fixture-preset' }) } },
+        },
       }),
     },
     conversation: {},
     uiWorkspace: {
-      pickDirectory: async () => { pickerCalls++; return picked; },
+      pickDirectory: async () => {
+        pickerCalls++;
+        return picked;
+      },
       openSession: (id) => opened.push(id),
     },
   };
   ctx.remote.agentPresets = { select: async () => ({ ok: true }) };
-  const errors = [], originalError = console.error;
+  const errors = [],
+    originalError = console.error;
   console.error = (...args) => errors.push(args);
   apply(ctx);
   const root = createRoot(dom.window.document.getElementById('root'));
   await act(async () => {
-    root.render(React.createElement(slots.get('agent-workbench.directory'), {
-      sessionId: cwd ? 'current' : undefined,
-      useSessions: (select) => select(sessionCatalogue),
-    }));
+    root.render(
+      React.createElement(slots.get('agent-workbench.directory'), {
+        sessionId: cwd ? 'current' : undefined,
+        useSessions: (select) => select(sessionCatalogue),
+      }),
+    );
     await settle();
   });
   t.after(async () => {
@@ -116,13 +161,27 @@ async function fixture(t, { cwd, language = 'zh', picked = '/workspace/B' } = {}
       else delete globalThis[key];
     }
   });
-  const click = async (button) => act(async () => { button.click(); await settle(); });
+  const click = async (button) =>
+    act(async () => {
+      button.click();
+      await settle();
+    });
   return {
-    lists, selections, sessions, opened, errors, pickerCalls: () => pickerCalls,
+    lists,
+    selections,
+    sessions,
+    opened,
+    errors,
+    pickerCalls: () => pickerCalls,
     text: () => dom.window.document.body.textContent,
-    workspaceButton: () => [...dom.window.document.querySelectorAll('button')].find((button) =>
-      button.textContent === (language === 'en' ? 'Choose Workspace' : '选择工作区')),
-    resourceButton: () => [...dom.window.document.querySelectorAll('button')].find((button) => button.textContent.startsWith('Fixture')),
+    workspaceButton: () =>
+      [...dom.window.document.querySelectorAll('button')].find(
+        (button) => button.textContent === (language === 'en' ? 'Choose Workspace' : '选择工作区'),
+      ),
+    resourceButton: () =>
+      [...dom.window.document.querySelectorAll('button')].find((button) =>
+        button.textContent.startsWith('Fixture'),
+      ),
     click,
   };
 }

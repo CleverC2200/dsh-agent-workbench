@@ -1,5 +1,12 @@
-import {PageUnsentHistory} from './unsent-history.tsx';
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { PageUnsentHistory } from './unsent-history.tsx';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
@@ -193,7 +200,10 @@ export function mountCompanyUI(
       authority?.getSnapshot ?? (() => unavailableAccount),
       authority?.getSnapshot ?? (() => unavailableAccount),
     );
-    const authenticated = identity.state === 'confirmed' && identity.error === undefined && identity.status?.authenticated === true;
+    const authenticated =
+      identity.state === 'confirmed' &&
+      identity.error === undefined &&
+      identity.status?.authenticated === true;
     const user = authenticated ? identity.status?.user : null;
     const name = user?.name ?? '',
       avatarUrl = user?.avatar ?? '';
@@ -205,7 +215,10 @@ export function mountCompanyUI(
       trigger = useRef<HTMLButtonElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
     const [loginOpen, setLoginOpen] = useState(false);
-    const closeLogin = useCallback(() => { setLoginOpen(false); trigger.current?.focus(); }, []);
+    const closeLogin = useCallback(() => {
+      setLoginOpen(false);
+      trigger.current?.focus();
+    }, []);
     useEffect(() => {
       if (loginOpen && (authenticated || !authority)) closeLogin();
     }, [loginOpen, authenticated, authority, closeLogin]);
@@ -350,11 +363,20 @@ export function mountCompanyUI(
                 <span aria-hidden="true">⚙</span>
                 <span>{t('settings')}</span>
               </button>
-              {!authenticated && <button type="button" role="menuitem"
-                className="gea-logout-button" disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
-                onClick={() => { close(); setLoginOpen(true); }}>
-                {t('signInGea')}
-              </button>}
+              {!authenticated && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="gea-logout-button"
+                  disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
+                  onClick={() => {
+                    close();
+                    setLoginOpen(true);
+                  }}
+                >
+                  {t('signInGea')}
+                </button>
+              )}
               {name && (
                 <div className="gea-logout-control">
                   <button
@@ -385,9 +407,13 @@ export function mountCompanyUI(
             </div>,
             document.body,
           )}
-        {loginOpen && authority && !authenticated && createPortal(
-          <LoginDialog account={authority} t={t} onClose={closeLogin} />, document.body,
-        )}
+        {loginOpen &&
+          authority &&
+          !authenticated &&
+          createPortal(
+            <LoginDialog account={authority} t={t} onClose={closeLogin} />,
+            document.body,
+          )}
       </>
     );
   }
@@ -488,8 +514,10 @@ export function mountCompanyUI(
     };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
-    const panels = ctx.slots.entriesOfSlot('sidebar.panellist')
-      .slice().sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
+    const panels = ctx.slots
+      .entriesOfSlot('sidebar.panellist')
+      .slice()
+      .sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
     const modules = [{ id: DIRECTORY, label: '工作台' }];
     return (
       <aside
@@ -541,18 +569,23 @@ export function mountCompanyUI(
           const id = options.id as MainPanelId;
           const label = resolveSlotLabel(options.label) ?? id;
           const active = activePanel === id;
-          return <button
-            key={id}
-            type="button"
-            className={'gea-sidebar-tab gea-plugin-entry' + (active ? ' is-active' : '')}
-            aria-label={label}
-            title={collapsed ? label : undefined}
-            aria-current={active ? 'page' : undefined}
-            onClick={() => { workbench.leaveDocument(); ctx.layout.selectPanel(id); }}
-          >
-            {renderSlot('sidebar.panellist', { size: collapsed ? 18 : 16, active }, { only: id })}
-            {!collapsed && <span>{label}</span>}
-          </button>;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={'gea-sidebar-tab gea-plugin-entry' + (active ? ' is-active' : '')}
+              aria-label={label}
+              title={collapsed ? label : undefined}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => {
+                workbench.leaveDocument();
+                ctx.layout.selectPanel(id);
+              }}
+            >
+              {renderSlot('sidebar.panellist', { size: collapsed ? 18 : 16, active }, { only: id })}
+              {!collapsed && <span>{label}</span>}
+            </button>
+          );
         })}
         <div className="gea-sidebar-region" data-gea-drawer={drawer}>
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
@@ -684,10 +717,23 @@ export function mountCompanyUI(
             </div>
           )}
           <div className="gea-workspace-owned" hidden={drawer !== 'workspace'}>
-            {documentState.historyPage && documentState.selectedDocument?.id === documentState.historyPage && documentState.selectedDocument.resourceId && documentState.selection?.cwd && <PageUnsentHistory
-              page={documentState.selectedDocument} cwd={documentState.selection.cwd} sessions={ctx.sessions} selectedSessionId={documentState.selection.sessionId} request={fetch} language={ctx.locale.getSnapshot().active}
-              onChoose={(id,preset,cwd)=>{workbench.selectHistorySession(documentState.historyPage!,id,{preset,cwd});ctx.uiWorkspace.openSession(id)}}
-            />}
+            {documentState.historyPage &&
+              documentState.selectedDocument?.id === documentState.historyPage &&
+              documentState.selectedDocument.resourceId &&
+              documentState.selection?.cwd && (
+                <PageUnsentHistory
+                  page={documentState.selectedDocument}
+                  cwd={documentState.selection.cwd}
+                  sessions={ctx.sessions}
+                  selectedSessionId={documentState.selection.sessionId}
+                  request={fetch}
+                  language={ctx.locale.getSnapshot().active}
+                  onChoose={(id, preset, cwd) => {
+                    workbench.selectHistorySession(documentState.historyPage!, id, { preset, cwd });
+                    ctx.uiWorkspace.openSession(id);
+                  }}
+                />
+              )}
             {renderSlot('sidebar.workspaces', { wide: !collapsed, expandSidebar })}
           </div>
         </div>

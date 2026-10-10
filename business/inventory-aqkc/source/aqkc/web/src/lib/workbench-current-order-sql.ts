@@ -1,4 +1,4 @@
-import type { WorkbenchSqlQuery } from "./workbench-sql-types";
+import type { WorkbenchSqlQuery } from './workbench-sql-types';
 
 // Keep the shortage's usable inventory in the same base-warehouse scope as
 // the inventory and age cards. This source has both base_name and warehouseid.
@@ -65,7 +65,7 @@ const currentOrderCtes = `WITH ${branchWarehouses}, bases(pickup_point, base) AS
 )`;
 
 export const currentOrdersQuery: WorkbenchSqlQuery = {
-  name: "workbench-current-orders",
+  name: 'workbench-current-orders',
   maxRows: 5,
   sql: `${currentOrderCtes}
 SELECT b.base AS "workbench.base",
@@ -84,7 +84,7 @@ ORDER BY b.base`,
 
 /** Base markers distinguish a healthy snapshot with no SKU orders from a failed source. */
 export const currentOrderSkuQuery: WorkbenchSqlQuery = {
-  name: "workbench-current-order-skus",
+  name: 'workbench-current-order-skus',
   maxRows: 25_000,
   sql: `${currentOrderCtes}, orders_by_sku AS (
   SELECT base, material, SUM(CASE WHEN preparing THEN order_qty ELSE allocated_qty END) AS quantity, SUM(allocated_qty) AS allocated,

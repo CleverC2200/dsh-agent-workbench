@@ -15,8 +15,13 @@ export type SalesPlanActionState =
   | { status: 'success'; receipt: GeaSalesPlanActionReceipt }
   | { status: 'error'; error: SalesPlanActionError };
 
-export const useSalesPlanAction = ({ client: suppliedClient }: { client?: SalesPlanActionClient }) => {
-  const host=useWorkbenchHost(); const client=suppliedClient ?? host.salesPlan;
+export const useSalesPlanAction = ({
+  client: suppliedClient,
+}: {
+  client?: SalesPlanActionClient;
+}) => {
+  const host = useWorkbenchHost();
+  const client = suppliedClient ?? host.salesPlan;
   // attempt 固定一次用户意图和幂等键；retry 只能重放可安全重试的未知结果。
   const attempt = useRef(new SalesPlanActionAttempt(client));
   const operation = useRef(0);

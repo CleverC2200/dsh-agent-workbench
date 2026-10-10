@@ -1,41 +1,37 @@
-import { useEffect, useRef } from "react";
-import { action, reportElements, publish } from "../channel.js";
-import { updateContext, clearContext, pageContext } from "./context";
+import { useEffect, useRef } from 'react';
+import { action, reportElements, publish } from '../channel.js';
+import { updateContext, clearContext, pageContext } from './context';
 export function usePageFilter(current: any, apply: (input: any) => void) {
   const ref = useRef({ current, apply });
   ref.current = { current, apply };
   const filter = async (input: any) => {
     const { current: scope, apply } = ref.current;
-    if (!input || typeof input !== "object" || Array.isArray(input))
-      throw Error("筛选参数必须为对象");
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      throw Error('筛选参数必须为对象');
     if (Object.keys(input).some((key) => !scope.allowedFields.includes(key)))
-      throw Error("不支持的筛选字段");
+      throw Error('不支持的筛选字段');
     if (
       input.bases !== undefined &&
       (!Array.isArray(input.bases) ||
         input.bases.some((base: string) => !scope.bases.includes(base)))
     )
-      throw Error("基地不在当前可见范围");
-    if (input.tab !== undefined && !scope.tabs.includes(input.tab))
-      throw Error("页签无效");
+      throw Error('基地不在当前可见范围');
+    if (input.tab !== undefined && !scope.tabs.includes(input.tab)) throw Error('页签无效');
     const bases = input.bases ?? scope.selectedBases;
     const tab = input.tab ?? scope.tab;
-    if (
-      JSON.stringify(bases) === JSON.stringify(scope.selectedBases) &&
-      tab === scope.tab
-    )
-      return { unchanged: true, notice: "筛选条件未变化，请读取当前查询状态" };
+    if (JSON.stringify(bases) === JSON.stringify(scope.selectedBases) && tab === scope.tab)
+      return { unchanged: true, notice: '筛选条件未变化，请读取当前查询状态' };
     clearContext();
-    updateContext("pageFilters", {
+    updateContext('pageFilters', {
       ...scope,
       selectedBases: bases,
       tab,
       loading: true,
     });
-    updateContext("queryState", {
-      state: "loading",
-      scope: bases.join(","),
-      message: "正在查询所选基地范围，请等待完成",
+    updateContext('queryState', {
+      state: 'loading',
+      scope: bases.join(','),
+      message: '正在查询所选基地范围，请等待完成',
     });
     const pending = pageContext();
     apply(input);
@@ -43,44 +39,40 @@ export function usePageFilter(current: any, apply: (input: any) => void) {
     return {
       querying: true,
       requested: input,
-      notice: "等待页面查询完成后再读取上下文",
+      notice: '等待页面查询完成后再读取上下文',
     };
   };
   useEffect(() => {
-    updateContext("pageFilters", current);
+    updateContext('pageFilters', current);
     return reportElements(
-      "filters",
+      'filters',
       [
         {
-          id: "filter:bases",
-          role: "control",
-          label: "基地",
-          ...(current.selectedBases.length
-            ? { value: current.selectedBases.join("、") }
-            : {}),
+          id: 'filter:bases',
+          role: 'control',
+          label: '基地',
+          ...(current.selectedBases.length ? { value: current.selectedBases.join('、') } : {}),
           options: current.bases,
           editable: !current.loading,
         },
         {
-          id: "filter:tab",
-          role: "control",
-          label: "库存页签",
+          id: 'filter:tab',
+          role: 'control',
+          label: '库存页签',
           value: current.tab,
           options: current.tabs,
           editable: !current.loading,
         },
       ],
       (args: any) => {
-        if (args.kind !== "setValue") throw Error("ACTION_NOT_ALLOWED");
+        if (args.kind !== 'setValue') throw Error('ACTION_NOT_ALLOWED');
         return filter(
-          args.target === "filter:bases"
-            ? { bases: [args.value] }
-            : { tab: args.value },
+          args.target === 'filter:bases' ? { bases: [args.value] } : { tab: args.value },
         );
       },
     );
   }, [JSON.stringify(current)]);
   useEffect(() => {
-    action("filter", "调整当前基地和页签筛选；不修改业务数据", filter);
+    action('filter', '调整当前基地和页签筛选；不修改业务数据', filter);
   }, []);
 }

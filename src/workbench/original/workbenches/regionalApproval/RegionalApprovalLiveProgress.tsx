@@ -4,7 +4,10 @@ import { Alert, Button, Checkbox, Empty, Progress, Spin, Tag, Tree } from '@arco
 import type { TreeProps } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useMemo, useState } from 'react';
-import { buildSalesPlanProgressTree, type SalesPlanProgressNode } from './models/salesPlanProgressModel.ts';
+import {
+  buildSalesPlanProgressTree,
+  type SalesPlanProgressNode,
+} from './models/salesPlanProgressModel.ts';
 import styles from './RegionalApprovalWorkbench.module.css';
 import type { RegionalApprovalQueryError } from './useRegionalApprovalQuery.ts';
 
@@ -33,19 +36,25 @@ const RegionalApprovalLiveProgress: React.FC<{
                 {node.name ??
                   (node.code
                     ? t('common.assistantSurface.regionalApproval.progressDialog.codedNode', {
-                        level: t(`common.assistantSurface.regionalApproval.progressDialog.levels.${node.level}`),
+                        level: t(
+                          `common.assistantSurface.regionalApproval.progressDialog.levels.${node.level}`,
+                        ),
                         code: node.code,
                       })
                     : t('common.assistantSurface.regionalApproval.progressDialog.missingNode', {
-                        level: t(`common.assistantSurface.regionalApproval.progressDialog.levels.${node.level}`),
+                        level: t(
+                          `common.assistantSurface.regionalApproval.progressDialog.levels.${node.level}`,
+                        ),
                       }))}
               </span>
-              {node.level === 'customer' && node.name && node.code ? <small>{node.code}</small> : null}
+              {node.level === 'customer' && node.name && node.code ? (
+                <small>{node.code}</small>
+              ) : null}
             </span>
             <span className={styles.progressTreeCompletion}>
               <Progress
                 percent={Math.round((node.completed / node.total) * 100)}
-                size='small'
+                size="small"
                 showText={false}
                 color={node.pending ? 'rgb(var(--warning-6))' : 'rgb(var(--success-6))'}
               />
@@ -56,7 +65,7 @@ const RegionalApprovalLiveProgress: React.FC<{
             <span className={styles.progressTreePending}>{node.pending}</span>
             <Tag className={styles.progressTreeStatus} color={node.pending ? 'orange' : 'green'}>
               {t(
-                `common.assistantSurface.regionalApproval.progressDialog.${node.pending ? (node.completed ? 'inProgress' : 'awaitingReview') : 'completed'}`
+                `common.assistantSurface.regionalApproval.progressDialog.${node.pending ? (node.completed ? 'inProgress' : 'awaitingReview') : 'completed'}`,
               )}
             </Tag>
           </span>
@@ -77,8 +86,10 @@ const RegionalApprovalLiveProgress: React.FC<{
       ) : status === 'error' ? (
         <>
           <Alert
-            type='error'
-            content={t(`common.assistantSurface.regionalApproval.query.errors.${error ?? 'failed'}`)}
+            type="error"
+            content={t(
+              `common.assistantSurface.regionalApproval.query.errors.${error ?? 'failed'}`,
+            )}
           />
           <Button onClick={onRetry}>{t('common.retry')}</Button>
         </>
@@ -91,24 +102,32 @@ const RegionalApprovalLiveProgress: React.FC<{
           </div>
           {data.length ? (
             <div className={styles.progressTreeTable}>
-              <div className={styles.progressTreeHeader} aria-hidden='true'>
-                <span>{t('common.assistantSurface.regionalApproval.progressDialog.organization')}</span>
-                <span>{t('common.assistantSurface.regionalApproval.progressDialog.completion')}</span>
-                <span>{t('common.assistantSurface.regionalApproval.progressDialog.pendingCount')}</span>
+              <div className={styles.progressTreeHeader} aria-hidden="true">
+                <span>
+                  {t('common.assistantSurface.regionalApproval.progressDialog.organization')}
+                </span>
+                <span>
+                  {t('common.assistantSurface.regionalApproval.progressDialog.completion')}
+                </span>
+                <span>
+                  {t('common.assistantSurface.regionalApproval.progressDialog.pendingCount')}
+                </span>
                 <span>{t('common.assistantSurface.regionalApproval.progressDialog.status')}</span>
               </div>
               <Tree
                 className={styles.progressTree}
                 blockNode
                 selectable={false}
-                actionOnClick='expand'
+                actionOnClick="expand"
                 expandedKeys={expandedKeys}
                 onExpand={setExpandedKeys}
                 treeData={data}
               />
             </div>
           ) : (
-            <Empty description={t('common.assistantSurface.regionalApproval.progressDialog.empty')} />
+            <Empty
+              description={t('common.assistantSurface.regionalApproval.progressDialog.empty')}
+            />
           )}
         </>
       )}

@@ -1,4 +1,4 @@
-import { queryErrorText } from "../../../../../shared/query-error.js";
+import { queryErrorText } from '../../../../../shared/query-error.js';
 import React, {
   Children,
   cloneElement,
@@ -8,14 +8,14 @@ import React, {
   useId,
   useRef,
   useState,
-} from "react";
-import { createPortal } from "react-dom";
-import { Button as DshButton } from "./DshButton";
-import css from "./controls.module.css";
+} from 'react';
+import { createPortal } from 'react-dom';
+import { Button as DshButton } from './DshButton';
+import css from './controls.module.css';
 // Business controls use the same React + native HTML + CSS Modules boundary as DSH.
 export function Button({
   type,
-  htmlType = "button",
+  htmlType = 'button',
   size,
   loading,
   icon,
@@ -27,37 +27,34 @@ export function Button({
     <DshButton
       {...props}
       type={htmlType}
-      variant={
-        variant ??
-        (type === "primary" ? "primary" : type === "text" ? "ghost" : "outline")
-      }
-      size={size === "small" || size === "mini" ? "sm" : "md"}
+      variant={variant ?? (type === 'primary' ? 'primary' : type === 'text' ? 'ghost' : 'outline')}
+      size={size === 'small' || size === 'mini' ? 'sm' : 'md'}
       disabled={props.disabled || loading}
       icon={icon}
     >
-      {loading ? "处理中…" : children}
+      {loading ? '处理中…' : children}
     </DshButton>
   );
 }
 export function Input({
   onChange,
-  allowClear,
-  prefix,
-  suffix,
-  autoSize,
-  showWordLimit,
-  children,
+  allowClear: _allowClear,
+  prefix: _prefix,
+  suffix: _suffix,
+  autoSize: _autoSize,
+  showWordLimit: _showWordLimit,
+  children: _children,
   ...p
 }: any) {
   return (
     <input
       {...p}
-      className={`${css.input} ${p.className ?? ""}`}
+      className={`${css.input} ${p.className ?? ''}`}
       onChange={(e) => onChange?.(e.target.value, e)}
     />
   );
 }
-Input.TextArea = ({ onChange, autoSize, showWordLimit, ...p }: any) => (
+Input.TextArea = ({ onChange, autoSize, showWordLimit: _showWordLimit, ...p }: any) => (
   <textarea
     {...p}
     rows={autoSize?.minRows ?? 4}
@@ -65,15 +62,13 @@ Input.TextArea = ({ onChange, autoSize, showWordLimit, ...p }: any) => (
     onChange={(e) => onChange?.(e.target.value, e)}
   />
 );
-export function InputNumber({ onChange, precision, ...p }: any) {
+export function InputNumber({ onChange, precision: _precision, ...p }: any) {
   return (
     <input
       {...p}
       type="number"
       className={css.input}
-      onChange={(e) =>
-        onChange?.(e.target.value === "" ? undefined : Number(e.target.value))
-      }
+      onChange={(e) => onChange?.(e.target.value === '' ? undefined : Number(e.target.value))}
     />
   );
 }
@@ -84,16 +79,16 @@ export function Select({
   showSearch,
   allowSearch,
   onSearch,
-  filterOption,
+  filterOption: _filterOption,
   allowClear,
   placeholder,
   value,
   mode,
-  size,
+  size: _size,
   style,
   ...p
 }: any) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const optionsAll =
     options ??
     Children.toArray(children).map((c: any) => ({
@@ -108,12 +103,12 @@ export function Select({
             .toLowerCase()
             .includes(search.toLowerCase()),
         );
-  const label = p["aria-label"] ?? placeholder ?? "选项";
+  const label = p['aria-label'] ?? placeholder ?? '选项';
   return (
     <span
       style={{
-        display: "inline-flex",
-        flexDirection: "column",
+        display: 'inline-flex',
+        flexDirection: 'column',
         gap: 4,
         ...style,
       }}
@@ -121,7 +116,7 @@ export function Select({
       {(showSearch || allowSearch) && (
         <input
           className={css.input}
-          aria-label={label + "搜索"}
+          aria-label={label + '搜索'}
           type="search"
           value={search}
           placeholder="输入名称搜索"
@@ -135,29 +130,24 @@ export function Select({
       <select
         {...p}
         aria-label={label}
-        className={`${css.input} ${p.className ?? ""}`}
-        multiple={mode === "multiple"}
-        value={value ?? ""}
+        className={`${css.input} ${p.className ?? ''}`}
+        multiple={mode === 'multiple'}
+        value={value ?? ''}
         onChange={(e) => {
           onChange?.(
-            mode === "multiple"
+            mode === 'multiple'
               ? Array.from(e.target.selectedOptions).map((o) => o.value)
-              : (optionsAll.find(
-                  (o: any) => String(o.value ?? o) === e.target.value,
-                )?.value ?? e.target.value),
+              : (optionsAll.find((o: any) => String(o.value ?? o) === e.target.value)?.value ??
+                  e.target.value),
           );
         }}
       >
-        {(allowClear || placeholder) && (
-          <option value="">{placeholder ?? "全部"}</option>
-        )}
+        {(allowClear || placeholder) && <option value="">{placeholder ?? '全部'}</option>}
         {value &&
-          mode !== "multiple" &&
+          mode !== 'multiple' &&
           !opts.some((o: any) => String(o.value ?? o) === String(value)) && (
             <option value={value}>
-              {optionsAll.find(
-                (o: any) => String(o.value ?? o) === String(value),
-              )?.label ?? value}
+              {optionsAll.find((o: any) => String(o.value ?? o) === String(value))?.label ?? value}
             </option>
           )}
         {opts.map((o: any) => (
@@ -170,25 +160,21 @@ export function Select({
   );
 }
 Select.Option = ({ children }: any) => <>{children}</>;
-export function Checkbox({ onChange, children, indeterminate, ...p }: any) {
+export function Checkbox({ onChange, children, indeterminate: _indeterminate, ...p }: any) {
   return (
     <label className={css.inline}>
-      <input
-        {...p}
-        type="checkbox"
-        onChange={(e) => onChange?.(e.target.checked, e)}
-      />
+      <input {...p} type="checkbox" onChange={(e) => onChange?.(e.target.checked, e)} />
       {children}
     </label>
   );
 }
-export function Space({ children, direction, size, style, ...p }: any) {
+export function Space({ children, direction, size, style, ..._p }: any) {
   return (
     <div
       className={css.space}
       style={{
-        flexDirection: direction === "vertical" ? "column" : "row",
-        gap: typeof size === "number" ? size : 8,
+        flexDirection: direction === 'vertical' ? 'column' : 'row',
+        gap: typeof size === 'number' ? size : 8,
         ...style,
       }}
     >
@@ -198,7 +184,7 @@ export function Space({ children, direction, size, style, ...p }: any) {
 }
 export function Card({ children, title, extra, style, className }: any) {
   return (
-    <section className={`${css.card} ${className ?? ""}`} style={style}>
+    <section className={`${css.card} ${className ?? ''}`} style={style}>
       {(title || extra) && (
         <header className={css.heading}>
           <strong>{title}</strong>
@@ -209,17 +195,11 @@ export function Card({ children, title, extra, style, className }: any) {
     </section>
   );
 }
-export function Alert({
-  type = "info",
-  content,
-  title,
-  action,
-  children,
-}: any) {
+export function Alert({ type = 'info', content, title, action, children }: any) {
   return (
     <div
-      className={`${css.alert} ${type === "error" ? css.error : ""}`}
-      role={type === "error" ? "alert" : "status"}
+      className={`${css.alert} ${type === 'error' ? css.error : ''}`}
+      role={type === 'error' ? 'alert' : 'status'}
     >
       {title && <strong>{title}</strong>}
       {queryErrorText(content)}
@@ -232,11 +212,7 @@ export function Tag({ children }: any) {
   return <span className={css.tag}>{children}</span>;
 }
 export function Tooltip({ children, content }: any) {
-  return (
-    <span title={typeof content === "string" ? content : undefined}>
-      {children}
-    </span>
-  );
+  return <span title={typeof content === 'string' ? content : undefined}>{children}</span>;
 }
 export function Spin({ children, loading = true }: any) {
   return (
@@ -255,9 +231,7 @@ export function Skeleton({ loading = true, children }: any) {
   );
 }
 export const Typography = {
-  Text: ({ children, type, ellipsis, ...p }: any) => (
-    <span {...p}>{children}</span>
-  ),
+  Text: ({ children, type: _type, ellipsis: _ellipsis, ...p }: any) => <span {...p}>{children}</span>,
 };
 export function Modal({
   visible,
@@ -266,8 +240,8 @@ export function Modal({
   onCancel,
   onOk,
   footer,
-  okText = "确定",
-  cancelText = "取消",
+  okText = '确定',
+  cancelText = '取消',
   okButtonProps,
   confirmLoading,
   closable = true,
@@ -312,12 +286,7 @@ export function Modal({
           {footer ?? (
             <>
               <Button onClick={onCancel}>{cancelText}</Button>
-              <Button
-                type="primary"
-                {...okButtonProps}
-                loading={confirmLoading}
-                onClick={onOk}
-              >
+              <Button type="primary" {...okButtonProps} loading={confirmLoading} onClick={onOk}>
                 {okText}
               </Button>
             </>
@@ -332,14 +301,14 @@ export const Drawer = Modal;
 export function Tabs({ activeTab, defaultActiveTab, onChange, children }: any) {
   const items = Children.toArray(children) as any[],
     [local, setLocal] = useState(
-      defaultActiveTab ?? String(items[0]?.key ?? "").replace(/^\.\$/, ""),
+      defaultActiveTab ?? String(items[0]?.key ?? '').replace(/^\.\$/, ''),
     );
   const key = activeTab ?? local;
   return (
     <>
       <div className={css.tabs} role="tablist">
         {items.map((c) => {
-          const id = String(c.key).replace(/^\.\$/, "");
+          const id = String(c.key).replace(/^\.\$/, '');
           return (
             <button
               type="button"
@@ -357,7 +326,7 @@ export function Tabs({ activeTab, defaultActiveTab, onChange, children }: any) {
         })}
       </div>
       {items
-        .filter((c) => String(c.key).replace(/^\.\$/, "") === key)
+        .filter((c) => String(c.key).replace(/^\.\$/, '') === key)
         .map((c) => (
           <div key={c.key} role="tabpanel">
             {c.props.children}
@@ -392,13 +361,8 @@ Radio.Group = ({ value, onChange, options, children }: any) => (
   </div>
 );
 export const DatePicker = {
-  MonthPicker: ({ onChange, allowClear, ...p }: any) => (
-    <input
-      {...p}
-      type="month"
-      className={css.input}
-      onChange={(e) => onChange?.(e.target.value)}
-    />
+  MonthPicker: ({ onChange, allowClear: _allowClear, ...p }: any) => (
+    <input {...p} type="month" className={css.input} onChange={(e) => onChange?.(e.target.value)} />
   ),
 };
 const MenuContext = createContext<any>(null);
@@ -406,9 +370,7 @@ export function Menu({ children, onClickMenuItem, selectedKeys, ...p }: any) {
   return (
     <MenuContext.Provider value={{ onClickMenuItem, selectedKeys }}>
       <div role="menu" {...p}>
-        {Children.map(children, (c: any) =>
-          cloneElement(c, { itemKey: c.key }),
-        )}
+        {Children.map(children, (c: any) => cloneElement(c, { itemKey: c.key }))}
       </div>
     </MenuContext.Provider>
   );
@@ -433,30 +395,30 @@ export function Dropdown({ children, droplist }: any) {
     const close = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
   }, []);
   return (
     <div
       className={css.dropdown}
       ref={ref}
       onKeyDown={(e) => {
-        if (e.key === "Escape") setOpen(false);
+        if (e.key === 'Escape') setOpen(false);
       }}
     >
       {cloneElement(children, {
-        "aria-expanded": open,
+        'aria-expanded': open,
         onClick: () => setOpen(!open),
       })}
       {open && <div className={css.menu}>{droplist}</div>}
     </div>
   );
 }
-export type TableProps<T = any> = { columns?: any[]; [key: string]: any };
-export function Table<T = any>({
+export type TableProps<_T = any> = { columns?: any[]; [key: string]: any };
+export function Table<_T = any>({
   columns = [],
   data = [],
-  rowKey = "key",
+  rowKey = 'key',
   pagination = false,
   loading,
   onRow,
@@ -467,7 +429,7 @@ export function Table<T = any>({
   onExpand,
   renderChildFooter,
   scroll,
-}: TableProps<T>) {
+}: TableProps<_T>) {
   const [page, setPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
     [sort, setSort] = useState<any>(null),
@@ -492,7 +454,7 @@ export function Table<T = any>({
       ? records.slice((current - 1) * count, current * count)
       : records;
   const render = (r: any, i: number, depth = 0): React.ReactNode => {
-    const k = typeof rowKey === "function" ? rowKey(r) : (r[rowKey] ?? i);
+    const k = typeof rowKey === 'function' ? rowKey(r) : (r[rowKey] ?? i);
     const open = expandedKeys.includes(k),
       has = Array.isArray(r.children);
     const childFooter = open ? renderChildFooter?.(r) : null;
@@ -511,29 +473,24 @@ export function Table<T = any>({
               {j === 0 && has && (
                 <button
                   type="button"
-                  aria-label={`${open ? "收起" : "展开"} ${r.objectName ?? r.label ?? k}`}
+                  aria-label={`${open ? '收起' : '展开'} ${r.objectName ?? r.label ?? k}`}
                   aria-expanded={open}
                   onClick={(e) => {
                     e.stopPropagation();
                     changeExpanded(
-                      open
-                        ? expandedKeys.filter((x: any) => x !== k)
-                        : [...expandedKeys, k],
+                      open ? expandedKeys.filter((x: any) => x !== k) : [...expandedKeys, k],
                     );
                     onExpand?.(r, !open);
                   }}
                 >
-                  {open ? "▾" : "▸"}
+                  {open ? '▾' : '▸'}
                 </button>
               )}
-              {c.render
-                ? c.render(r[c.dataIndex], r, i)
-                : (r[c.dataIndex] ?? "—")}
+              {c.render ? c.render(r[c.dataIndex], r, i) : (r[c.dataIndex] ?? '—')}
             </td>
           ))}
         </tr>
-        {open &&
-          r.children?.map((ch: any, n: number) => render(ch, n, depth + 1))}
+        {open && r.children?.map((ch: any, n: number) => render(ch, n, depth + 1))}
         {childFooter && (
           <tr>
             <td colSpan={columns.length}>{childFooter}</td>
@@ -550,10 +507,7 @@ export function Table<T = any>({
             正在读取…
           </div>
         )}
-        <div
-          className={`${css.tableScroll} dsh-table-body`}
-          style={{ maxHeight: scroll?.y }}
-        >
+        <div className={`${css.tableScroll} dsh-table-body`} style={{ maxHeight: scroll?.y }}>
           <table className={css.table} style={{ minWidth: scroll?.x }}>
             <thead>
               <tr>
@@ -562,7 +516,7 @@ export function Table<T = any>({
                     key={c.key ?? c.dataIndex ?? i}
                     style={{ textAlign: c.align, width: c.width }}
                   >
-                    {typeof c.sorter === "function" ? (
+                    {typeof c.sorter === 'function' ? (
                       <button
                         onClick={() =>
                           setSort({
@@ -615,7 +569,7 @@ export function DataPagination({
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
   disabled,
-  ariaLabel = "数据分页",
+  ariaLabel = '数据分页',
 }: any) {
   const max = Math.max(1, Math.ceil(totalCount / pageSize));
   return (
@@ -633,19 +587,13 @@ export function DataPagination({
           </option>
         ))}
       </select>
-      <Button
-        disabled={disabled || pageNumber <= 1}
-        onClick={() => onPageChange(pageNumber - 1)}
-      >
+      <Button disabled={disabled || pageNumber <= 1} onClick={() => onPageChange(pageNumber - 1)}>
         上一页
       </Button>
       <span>
         {pageNumber} / {max}
       </span>
-      <Button
-        disabled={disabled || pageNumber >= max}
-        onClick={() => onPageChange(pageNumber + 1)}
-      >
+      <Button disabled={disabled || pageNumber >= max} onClick={() => onPageChange(pageNumber + 1)}>
         下一页
       </Button>
     </nav>
@@ -653,11 +601,7 @@ export function DataPagination({
 }
 export const Message = {
   warning: (text: string) =>
-    window.dispatchEvent(
-      new CustomEvent("gea-query-warning", { detail: { message: text } }),
-    ),
+    window.dispatchEvent(new CustomEvent('gea-query-warning', { detail: { message: text } })),
   error: (text: string) =>
-    window.dispatchEvent(
-      new CustomEvent("gea-query-warning", { detail: { message: text } }),
-    ),
+    window.dispatchEvent(new CustomEvent('gea-query-warning', { detail: { message: text } })),
 };

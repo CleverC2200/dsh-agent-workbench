@@ -2,8 +2,9 @@
  * html + body specificity keeps the adapter stable when base sheets reload.
  * Inline user token overrides retain priority. Status palettes stay upstream. */
 html body {
-  --workbench-theme-version: "1.1.1";
-  --workbench-font-family: "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --workbench-theme-version: '1.1.1';
+  --workbench-font-family:
+    'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   --workbench-font-size: var(--dsh-content-font-size, 14px);
   --workbench-page: #f7f8fa;
   --workbench-surface: #ffffff;
@@ -43,9 +44,31 @@ html body[data-ds-dark-theme] {
   color: var(--workbench-text);
   font: var(--workbench-font-size)/1.5 var(--workbench-font-family);
 }
-.agent-workbench-ui button { padding: 10px 14px; border: 1px solid var(--workbench-border); border-radius: 8px; background: var(--workbench-surface); color: var(--workbench-text); font: inherit; cursor: pointer; }
-.agent-workbench-ui button:not(:disabled):hover { background: var(--workbench-hover); border-color: var(--workbench-brand); }
-.agent-workbench-ui button:focus-visible { outline: 2px solid var(--workbench-brand); outline-offset: 2px; }
+.agent-workbench-ui button {
+  padding: 10px 14px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 8px;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  font: inherit;
+  cursor: pointer;
+}
+.agent-workbench-ui button:not(:disabled):hover {
+  background: var(--workbench-hover);
+  border-color: var(--workbench-brand);
+}
+.agent-workbench-ui button:focus-visible {
+  outline: 2px solid var(--workbench-brand);
+  outline-offset: 2px;
+}
 
-.agent-workbench-ui button[aria-current="page"] { color: var(--workbench-selected-text); background: var(--workbench-brand-soft); border-color: var(--workbench-brand); }
-.agent-workbench-ui button:disabled { color: var(--workbench-muted); background: var(--workbench-muted-surface); cursor: default; }
+.agent-workbench-ui button[aria-current='page'] {
+  color: var(--workbench-selected-text);
+  background: var(--workbench-brand-soft);
+  border-color: var(--workbench-brand);
+}
+.agent-workbench-ui button:disabled {
+  color: var(--workbench-muted);
+  background: var(--workbench-muted-surface);
+  cursor: default;
+}

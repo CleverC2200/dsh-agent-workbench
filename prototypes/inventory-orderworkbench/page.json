@@ -1,9 +1,7 @@
 {
   "surface": "gea-html-inventory-orderworkbench",
   "protocol": "self-report",
-  "pageIds": [
-    "inventory-orderworkbench"
-  ],
+  "pageIds": ["inventory-orderworkbench"],
   "consumerCode": "orderworkbench-preview",
   "maxEffect": "view"
 }

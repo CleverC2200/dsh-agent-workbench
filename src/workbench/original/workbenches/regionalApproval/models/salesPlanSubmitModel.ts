@@ -1,4 +1,8 @@
-import { correctionDecision, correctionLine, correctionDecimal } from './salesPlanCorrectionModel.ts';
+import {
+  correctionDecision,
+  correctionLine,
+  correctionDecimal,
+} from './salesPlanCorrectionModel.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { salesPlanWorkflow, type SalesPlanWorkflowRow } from '../../../salesPlanWorkflow.ts';
 import { isBackendHttpError } from '../../../http-error.ts';
@@ -15,7 +19,9 @@ import type {
 export type SalesPlanCurrentUser = { id: string; username: string };
 
 export type SalesPlanSubmitClient = {
-  detail: { invoke: (query: { planId: string; signal?: AbortSignal }) => Promise<GeaSalesPlanDetail> };
+  detail: {
+    invoke: (query: { planId: string; signal?: AbortSignal }) => Promise<GeaSalesPlanDetail>;
+  };
   versionSkus: {
     invoke: (query: { versionId: string; signal?: AbortSignal }) => Promise<GeaSalesPlanSku[]>;
   };
@@ -65,7 +71,7 @@ export class SalesPlanSubmitError extends Error {
     readonly kind: SalesPlanSubmitErrorKind,
     readonly retrySameIntent: boolean,
     readonly retryAfterMs?: number,
-    options?: ErrorOptions
+    options?: ErrorOptions,
   ) {
     super(kind, options);
     this.name = 'SalesPlanSubmitError';
@@ -88,7 +94,10 @@ const validateText = (value: string, max: number): string => {
   return normalized;
 };
 
-const validateOptionalText = (value: string | null | undefined, max: number): string | undefined => {
+const validateOptionalText = (
+  value: string | null | undefined,
+  max: number,
+): string | undefined => {
   if (value === null || value === undefined || value === '') return undefined;
   if (Array.from(value).length > max) return fail();
   return value;
@@ -103,7 +112,7 @@ const parseUnsignedDecimal = (
   value: string,
   maxInteger: number,
   maxFraction: number,
-  targetScale: number
+  targetScale: number,
 ): { scaled: bigint; canonical: string } => {
   const match = value.trim().match(/^(\d+)(?:\.(\d+))?$/);
   if (!match) return fail();
@@ -124,7 +133,10 @@ const fixedDecimal = (scaled: bigint, scale: number): string => {
   return scale === 0 ? raw : `${raw.slice(0, -scale)}.${raw.slice(-scale)}`;
 };
 
-export const salesPlanChannelCodeForPlanId = (planId: string, periodMonth: string): string | undefined => {
+export const salesPlanChannelCodeForPlanId = (
+  planId: string,
+  periodMonth: string,
+): string | undefined => {
   const match = planId.trim().match(BUSINESS_PLAN_ID_PATTERN);
   return match?.[2] === periodMonth ? match[1] : undefined;
 };
@@ -146,12 +158,20 @@ const validateSku = (sku: GeaSalesPlanSku) => {
 };
 
 /** 重提请求必须由当前 GEA 来源重建，并用精确整数刻度校验数量、金额和边界。 */
-export const prepareSalesPlanResubmit = (source: SalesPlanResubmitSource, rows?: readonly SalesPlanWorkflowRow[]): SalesPlanSubmitInput => {
+export const prepareSalesPlanResubmit = (
+  source: SalesPlanResubmitSource,
+  rows?: readonly SalesPlanWorkflowRow[],
+): SalesPlanSubmitInput => {
   // source 中的身份、价格、周期和路由字段均来自已重新读取的 GEA；调用方只能提供数量调整。
   const version: GeaSalesPlanVersion = source.detail.currentVersion;
   const nextStatus = salesPlanWorkflow(version.planTypeCode, rows).resubmit(version.status);
-  const correction=version.orderType === 'Z';
-  if(correction && (source.detail.correctionContext?.contract !== 'absolute-net-v1' || source.detail.correctionContext.monthlyApproved !== true))return fail('sourceMismatch');
+  const correction = version.orderType === 'Z';
+  if (
+    correction &&
+    (source.detail.correctionContext?.contract !== 'absolute-net-v1' ||
+      source.detail.correctionContext.monthlyApproved !== true)
+  )
+    return fail('sourceMismatch');
   if (
     !nextStatus ||
     !version.effective ||
@@ -169,7 +189,10 @@ export const prepareSalesPlanResubmit = (source: SalesPlanResubmitSource, rows?:
   }
 
   if (!MONTH_PATTERN.test(source.period.periodMonth)) return fail();
-  const derivedChannelCode = salesPlanChannelCodeForPlanId(version.planId, source.period.periodMonth);
+  const derivedChannelCode = salesPlanChannelCodeForPlanId(
+    version.planId,
+    source.period.periodMonth,
+  );
   const suppliedChannelCode = source.channelCode?.trim();
   if (
     !derivedChannelCode ||
@@ -192,11 +215,14 @@ export const prepareSalesPlanResubmit = (source: SalesPlanResubmitSource, rows?:
     if (sku.versionId !== version.id || skuCodes.has(sku.skuCode)) return fail('sourceMismatch');
     skuCodes.add(sku.skuCode);
     const validated = validateSku(sku);
-    if(correction){
-      const line=correctionLine(sku,correctionDecision(sku,0,version.planTypeCode,true,rows));
-      totalQty += parseUnsignedDecimal(line.qty,15,3,3).scaled;
-      totalAmount += parseUnsignedDecimal(line.amount,16,2,2).scaled;
-      return {...validated.item,adjAddQty:line.addQty,adjCutQty:line.cutQty};
+    if (correction) {
+      const line = correctionLine(
+        sku,
+        correctionDecision(sku, 0, version.planTypeCode, true, rows),
+      );
+      totalQty += parseUnsignedDecimal(line.qty, 15, 3, 3).scaled;
+      totalAmount += parseUnsignedDecimal(line.amount, 16, 2, 2).scaled;
+      return { ...validated.item, adjAddQty: line.addQty, adjCutQty: line.cutQty };
     }
     totalQty += validated.qty;
     totalAmount += validated.roundedAmount;
@@ -208,7 +234,7 @@ export const prepareSalesPlanResubmit = (source: SalesPlanResubmitSource, rows?:
 
   return {
     request: {
-      ...(correction ? {adjustmentMode:'ABSOLUTE_NET' as const} : {}),
+      ...(correction ? { adjustmentMode: 'ABSOLUTE_NET' as const } : {}),
       orderType: version.orderType as 'M' | 'Z',
       status: nextStatus,
       periodId: source.period.periodId,
@@ -249,25 +275,43 @@ const retryAfterMsFromDetails = (details: unknown): number | undefined => {
 export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitError => {
   if (error instanceof SalesPlanSubmitError) return error;
   if (isBackendHttpError(error)) {
-    if (error.status === 400) return new SalesPlanSubmitError('validation', false, undefined, { cause: error });
-    if (error.status === 401) return new SalesPlanSubmitError('authentication', false, undefined, { cause: error });
-    if (error.status === 403) return new SalesPlanSubmitError('permission', false, undefined, { cause: error });
-    if (error.status === 409) return new SalesPlanSubmitError('conflict', false, undefined, { cause: error });
+    if (error.status === 400)
+      return new SalesPlanSubmitError('validation', false, undefined, { cause: error });
+    if (error.status === 401)
+      return new SalesPlanSubmitError('authentication', false, undefined, { cause: error });
+    if (error.status === 403)
+      return new SalesPlanSubmitError('permission', false, undefined, { cause: error });
+    if (error.status === 409)
+      return new SalesPlanSubmitError('conflict', false, undefined, { cause: error });
     if (error.status === 429) {
-      return new SalesPlanSubmitError('rateLimited', false, retryAfterMsFromDetails(error.details), { cause: error });
+      return new SalesPlanSubmitError(
+        'rateLimited',
+        false,
+        retryAfterMsFromDetails(error.details),
+        { cause: error },
+      );
     }
-    if (error.status >= 500 && error.details && typeof error.details === 'object' && 'retrySameIntent' in error.details && error.details.retrySameIntent === true) return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
-    if (error.status >= 500) return new SalesPlanSubmitError('serviceUnavailable', false, undefined, { cause: error });
+    if (
+      error.status >= 500 &&
+      error.details &&
+      typeof error.details === 'object' &&
+      'retrySameIntent' in error.details &&
+      error.details.retrySameIntent === true
+    )
+      return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
+    if (error.status >= 500)
+      return new SalesPlanSubmitError('serviceUnavailable', false, undefined, { cause: error });
     return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
   }
-  if (error instanceof TypeError) return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
+  if (error instanceof TypeError)
+    return new SalesPlanSubmitError('unavailable', true, undefined, { cause: error });
   return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
 };
 
 export const salesPlanSubmitReceiptMatches = (
   input: SalesPlanSubmitInput,
   requestId: string,
-  receipt: GeaSalesPlanSubmitReceipt
+  receipt: GeaSalesPlanSubmitReceipt,
 ): boolean =>
   receipt.planId === input.expected.planId &&
   receipt.versionId !== input.expected.previousVersionId &&
@@ -289,13 +333,14 @@ export class SalesPlanSubmitAttempt {
 
   constructor(
     private readonly client: Pick<SalesPlanSubmitClient, 'submit'>,
-    private readonly createId: () => string = () => crypto.randomUUID()
+    private readonly createId: () => string = () => crypto.randomUUID(),
   ) {}
 
   submit(input: SalesPlanSubmitInput): Promise<GeaSalesPlanSubmitReceipt> {
     if (this.receipt) return Promise.resolve(this.receipt);
     if (this.inFlight) return this.inFlight;
-    if (this.command) return Promise.reject(this.failure ?? new SalesPlanSubmitError('failed', false));
+    if (this.command)
+      return Promise.reject(this.failure ?? new SalesPlanSubmitError('failed', false));
 
     this.input = input;
     this.command = {
@@ -361,25 +406,56 @@ export const salesPlanResubmitReadbackMatches = (
   previousVersionId: string,
   receipt: GeaSalesPlanSubmitReceipt,
   detail: GeaSalesPlanDetail,
-  request?: GeaSalesPlanSubmitRequest
+  request?: GeaSalesPlanSubmitRequest,
 ): boolean => {
   const current = detail.currentVersion;
-  if(request?.orderType === 'Z') {
-    if(current.orderType !== 'Z' || detail.skus.length !== request.items.length || new Set(detail.skus.map(s=>s.skuCode)).size !== detail.skus.length)return false;
-    const matches=request.items.every(item=>{
-      const sku=detail.skus.find(s=>s.skuCode === item.skuCode && s.versionId === receipt.versionId);
-      if(!sku)return false;
-      try{
-        if(!['qty','price','baseQty','adjAddQty','adjCutQty'].every(field=>correctionDecimal(sku[field as keyof GeaSalesPlanSku]).eq(correctionDecimal(item[field as keyof typeof item]))))return false;
-      }catch{return false;}
-      return ['region','province','area','category'].every(role=>['AdjAddQty','AdjCutQty','ConfirmedQty','ConfirmedAmount'].every(suffix=>sku[(role+suffix) as keyof GeaSalesPlanSku]==null));
+  if (request?.orderType === 'Z') {
+    if (
+      current.orderType !== 'Z' ||
+      detail.skus.length !== request.items.length ||
+      new Set(detail.skus.map((s) => s.skuCode)).size !== detail.skus.length
+    )
+      return false;
+    const matches = request.items.every((item) => {
+      const sku = detail.skus.find(
+        (s) => s.skuCode === item.skuCode && s.versionId === receipt.versionId,
+      );
+      if (!sku) return false;
+      try {
+        if (
+          !['qty', 'price', 'baseQty', 'adjAddQty', 'adjCutQty'].every((field) =>
+            correctionDecimal(sku[field as keyof GeaSalesPlanSku]).eq(
+              correctionDecimal(item[field as keyof typeof item]),
+            ),
+          )
+        )
+          return false;
+      } catch {
+        return false;
+      }
+      return ['region', 'province', 'area', 'category'].every((role) =>
+        ['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'].every(
+          (suffix) => sku[(role + suffix) as keyof GeaSalesPlanSku] == null,
+        ),
+      );
     });
-    if(!matches)return false;
+    if (!matches) return false;
   }
-  const old = detail.versions.find(row => row.id === previousVersionId);
-  return current.planId === receipt.planId && current.id === receipt.versionId &&
-    current.seq === receipt.seq && current.status === receipt.status && current.effective === true &&
-    old?.effective === false && old.planId === receipt.planId &&
-    detail.logs.some(log => log.requestId === receipt.requestId && log.planId === receipt.planId &&
-      log.versionId === receipt.versionId && log.actionCode === 'RESUBMIT');
+  const old = detail.versions.find((row) => row.id === previousVersionId);
+  return (
+    current.planId === receipt.planId &&
+    current.id === receipt.versionId &&
+    current.seq === receipt.seq &&
+    current.status === receipt.status &&
+    current.effective === true &&
+    old?.effective === false &&
+    old.planId === receipt.planId &&
+    detail.logs.some(
+      (log) =>
+        log.requestId === receipt.requestId &&
+        log.planId === receipt.planId &&
+        log.versionId === receipt.versionId &&
+        log.actionCode === 'RESUBMIT',
+    )
+  );
 };

@@ -10,8 +10,8 @@ export {
   type AgUiToolCallEndEvent,
   type AgUiToolCallStartEvent,
   type AgUiToolMessage,
-} from "../page-interaction/page-bridge/protocol.ts";
-export { createPageBridge, type PageBridge, type PageBridgeOptions } from "./host.ts";
+} from '../page-interaction/page-bridge/protocol.ts';
+export { createPageBridge, type PageBridge, type PageBridgeOptions } from './host.ts';
 export {
   compilePageCatalog,
   validatePageCatalog,
@@ -19,9 +19,9 @@ export {
   type PageAction,
   type PageActionParam,
   type PageCatalog,
-} from "./catalog.ts";
+} from './catalog.ts';
 export {
   createPageToolRegistry,
   type PageToolConsumer,
   type PageToolRegistry,
-} from "./registry.ts";
+} from './registry.ts';

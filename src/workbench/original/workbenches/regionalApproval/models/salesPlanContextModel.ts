@@ -4,7 +4,10 @@ import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
 
 export type SalesPlanContextApprovalStage = ApprovalStageId | 'all';
 
-export type SalesPlanContextSource = 'fixture' | 'gea-user-session-query' | 'gea-user-session-action';
+export type SalesPlanContextSource =
+  | 'fixture'
+  | 'gea-user-session-query'
+  | 'gea-user-session-action';
 
 export type SalesPlanContextFilterSummary = {
   periodMonth?: string;
@@ -29,7 +32,8 @@ const OPAQUE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,128}$/;
 const PLAN_TYPE_PATTERN = /^[A-Za-z0-9._:-]{1,32}$/;
 const PERIOD_MONTH_PATTERN = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-const safeOpaqueId = (value: unknown): value is string => typeof value === 'string' && OPAQUE_ID_PATTERN.test(value);
+const safeOpaqueId = (value: unknown): value is string =>
+  typeof value === 'string' && OPAQUE_ID_PATTERN.test(value);
 
 const safePlanState = (row: SalesPlanAuthorityRow): boolean =>
   safeOpaqueId(row.planId) &&
@@ -58,12 +62,12 @@ export const buildSalesPlanFilterSummary = ({
   approvalStage,
   queueMode,
   organizationFilterCount: Object.values(appliedFilters).filter(
-    (value) => typeof value === 'string' && value.length > 0 && value !== 'all'
+    (value) => typeof value === 'string' && value.length > 0 && value !== 'all',
   ).length,
 });
 
 export const projectFixtureSalesPlanContext = (
-  filterSummary: SalesPlanContextFilterSummary
+  filterSummary: SalesPlanContextFilterSummary,
 ): SalesPlanAuthorityContext => ({
   source: 'fixture',
   filterSummary,
@@ -71,7 +75,7 @@ export const projectFixtureSalesPlanContext = (
 
 export const projectSalesPlanQueryContext = (
   row: SalesPlanAuthorityRow | undefined,
-  filterSummary: SalesPlanContextFilterSummary
+  filterSummary: SalesPlanContextFilterSummary,
 ): SalesPlanAuthorityContext | undefined => {
   if (!row) {
     return {
@@ -93,7 +97,7 @@ export const projectSalesPlanQueryContext = (
 export const projectSalesPlanActionContext = (
   row: SalesPlanAuthorityRow,
   receipt: GeaSalesPlanActionReceipt,
-  filterSummary: SalesPlanContextFilterSummary
+  filterSummary: SalesPlanContextFilterSummary,
 ): SalesPlanAuthorityContext | undefined => {
   if (
     !safePlanState(row) ||

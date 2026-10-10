@@ -1,4 +1,4 @@
-import "server-only";
+import 'server-only';
 
 import {
   executeAllGeaSqlPages,
@@ -7,7 +7,7 @@ import {
   type GeaSqlParameters,
   type GeaSqlRequestOptions,
   type GeaSqlRow,
-} from "@/lib/gea-sql-client";
+} from '@/lib/gea-sql-client';
 
 // GEA 的 SQL 重写器只接受已发布资源名。生产数据源需将 currentSchema
 // 配为 data_service，因此目录内不携带 PostgreSQL schema 前缀。
@@ -21,22 +21,20 @@ function configuredResourceName(name: string, fallback: string) {
 
 function saleableMaterialTable() {
   return configuredResourceName(
-    "DEALER_WORKBENCH_SQL_SALEABLE_MATERIAL_TABLE",
-    "agents_scm_customer_saleable_material",
+    'DEALER_WORKBENCH_SQL_SALEABLE_MATERIAL_TABLE',
+    'agents_scm_customer_saleable_material',
   );
 }
 
 function promotionScopeView() {
   return configuredResourceName(
-    "DEALER_WORKBENCH_SQL_PROMOTION_SCOPE_VIEW",
-    "agents_scm_promotion_policy_scope_view",
+    'DEALER_WORKBENCH_SQL_PROMOTION_SCOPE_VIEW',
+    'agents_scm_promotion_policy_scope_view',
   );
 }
 
 /** 展示仅约束客户、政策状态和周期，提货点在使用优惠时独立核验。 */
-function promotionScopeConditions(
-  dateParameter: "businessDate" | "catalogToday",
-) {
+function promotionScopeConditions(dateParameter: 'businessDate' | 'catalogToday') {
   return `s.scope_status = 1 AND s.scope_delete_status = 1 AND s.policy_status = 1 AND s.policy_delete_status = 1
        AND (s.promotion_start_date IS NULL OR s.promotion_start_date <= CAST(:${dateParameter} AS DATE))
        AND (s.promotion_end_date IS NULL OR s.promotion_end_date >= CAST(:${dateParameter} AS DATE))`;
@@ -45,20 +43,20 @@ function promotionScopeConditions(
 // 默认沿用已发布的受控资源；若 GEA 管理端使用其它资源名，只改部署配置，
 // 不需要重新修改或构建工作台代码。
 const MAIN_TABLE = configuredResourceName(
-  "DEALER_WORKBENCH_SQL_MAIN_TABLE",
-  "agents_scm_cust_plan_order_analysis_governed",
+  'DEALER_WORKBENCH_SQL_MAIN_TABLE',
+  'agents_scm_cust_plan_order_analysis_governed',
 );
 const WL_AGE_TABLE = configuredResourceName(
-  "DEALER_WORKBENCH_SQL_WL_AGE_TABLE",
-  "agents_scm_wl_cust_stock_age_governed",
+  'DEALER_WORKBENCH_SQL_WL_AGE_TABLE',
+  'agents_scm_wl_cust_stock_age_governed',
 );
 const SIMULATED_AGE_TABLE = configuredResourceName(
-  "DEALER_WORKBENCH_SQL_SIMULATED_AGE_TABLE",
-  "agents_scm_cust_stock_age_governed",
+  'DEALER_WORKBENCH_SQL_SIMULATED_AGE_TABLE',
+  'agents_scm_cust_stock_age_governed',
 );
 const INVENTORY_DAILY_TABLE = configuredResourceName(
-  "DEALER_WORKBENCH_SQL_INVENTORY_DAILY_TABLE",
-  "agents_scm_cust_inventory_daily",
+  'DEALER_WORKBENCH_SQL_INVENTORY_DAILY_TABLE',
+  'agents_scm_cust_inventory_daily',
 );
 
 type WorkbenchRow = Record<string, string | number | null | undefined>;
@@ -79,69 +77,69 @@ export type WorkbenchResultSqlScope = {
   planMonth?: string;
   customerCodes: string[];
   materialCode: string;
-  mode: "detail" | "aggregate";
+  mode: 'detail' | 'aggregate';
   groupBy: string;
   orderColumn: string;
 };
 
 const mainColumnToCubeMember: Record<string, string> = {
-  record_count: "dealer_plan_order.record_count",
-  snapshot_date: "dealer_plan_order.snapshot_date",
-  plan_month: "dealer_plan_order.plan_month",
-  cust_code: "dealer_plan_order.cust_code",
-  cust_name: "dealer_plan_order.cust_name",
-  material_code: "dealer_plan_order.material_code",
-  material_name: "dealer_plan_order.material_name",
-  product_categ_name: "dealer_plan_order.product_categ_name",
-  inventory_source: "dealer_plan_order.inventory_source",
-  stock_age_turnover_status: "dealer_plan_order.stock_age_turnover_status",
-  source_load_time: "dealer_plan_order.source_load_time",
-  updated_time: "dealer_plan_order.updated_time",
-  budget_amount: "dealer_plan_order.budget_amount",
-  shipped_qty: "dealer_plan_order.shipped_qty",
-  ship_amount: "dealer_plan_order.ship_amount",
-  unship_qty: "dealer_plan_order.unship_qty",
-  unship_amount: "dealer_plan_order.unship_amount",
-  total_qty: "dealer_plan_order.total_qty",
-  total_amount: "dealer_plan_order.total_amount",
-  planned_qty: "dealer_plan_order.planned_qty",
-  daily_sales: "dealer_plan_order.daily_sales",
-  in_transit_qty: "dealer_plan_order.in_transit_qty",
-  stock_qty: "dealer_plan_order.stock_qty",
-  target_inventory: "dealer_plan_order.target_inventory",
-  pre_order_qty: "dealer_plan_order.pre_order_qty",
-  average_turnover_days: "dealer_plan_order.average_turnover_days",
-  label_turnover_days: "dealer_plan_order.label_turnover_days",
-  average_stock_age: "dealer_plan_order.average_stock_age",
-  average_budget_rate: "dealer_plan_order.average_budget_rate",
-  average_planned_qty_rate: "dealer_plan_order.average_planned_qty_rate",
+  record_count: 'dealer_plan_order.record_count',
+  snapshot_date: 'dealer_plan_order.snapshot_date',
+  plan_month: 'dealer_plan_order.plan_month',
+  cust_code: 'dealer_plan_order.cust_code',
+  cust_name: 'dealer_plan_order.cust_name',
+  material_code: 'dealer_plan_order.material_code',
+  material_name: 'dealer_plan_order.material_name',
+  product_categ_name: 'dealer_plan_order.product_categ_name',
+  inventory_source: 'dealer_plan_order.inventory_source',
+  stock_age_turnover_status: 'dealer_plan_order.stock_age_turnover_status',
+  source_load_time: 'dealer_plan_order.source_load_time',
+  updated_time: 'dealer_plan_order.updated_time',
+  budget_amount: 'dealer_plan_order.budget_amount',
+  shipped_qty: 'dealer_plan_order.shipped_qty',
+  ship_amount: 'dealer_plan_order.ship_amount',
+  unship_qty: 'dealer_plan_order.unship_qty',
+  unship_amount: 'dealer_plan_order.unship_amount',
+  total_qty: 'dealer_plan_order.total_qty',
+  total_amount: 'dealer_plan_order.total_amount',
+  planned_qty: 'dealer_plan_order.planned_qty',
+  daily_sales: 'dealer_plan_order.daily_sales',
+  in_transit_qty: 'dealer_plan_order.in_transit_qty',
+  stock_qty: 'dealer_plan_order.stock_qty',
+  target_inventory: 'dealer_plan_order.target_inventory',
+  pre_order_qty: 'dealer_plan_order.pre_order_qty',
+  average_turnover_days: 'dealer_plan_order.average_turnover_days',
+  label_turnover_days: 'dealer_plan_order.label_turnover_days',
+  average_stock_age: 'dealer_plan_order.average_stock_age',
+  average_budget_rate: 'dealer_plan_order.average_budget_rate',
+  average_planned_qty_rate: 'dealer_plan_order.average_planned_qty_rate',
 };
 
 const inventoryDailyColumnToCubeMember: Record<string, string> = {
-  stat_date: "dealer_inventory_daily.stat_date",
-  inventory_snapshot_date: "dealer_inventory_daily.inventory_snapshot_date",
-  cust_code: "dealer_inventory_daily.cust_code",
-  cust_name: "dealer_inventory_daily.cust_name",
-  material_code: "dealer_inventory_daily.material_code",
-  material_name: "dealer_inventory_daily.material_name",
-  product_range_name: "dealer_inventory_daily.product_range_name",
-  product_tag: "dealer_inventory_daily.product_tag",
-  material_size: "dealer_inventory_daily.material_size",
-  measure_unit: "dealer_inventory_daily.measure_unit",
-  cif_price: "dealer_inventory_daily.cif_price",
-  stock_qty: "dealer_inventory_daily.stock_qty",
-  in_transit_qty: "dealer_inventory_daily.in_transit_qty",
-  normal_stock_qty: "dealer_inventory_daily.normal_stock_qty",
-  stock_amount: "dealer_inventory_daily.stock_amount",
-  sales_qty_7days_avg: "dealer_inventory_daily.sales_qty_7days_avg",
-  sales_qty_7days: "dealer_inventory_daily.sales_qty_7days",
-  sales_qty_30days_avg: "dealer_inventory_daily.sales_qty_30days_avg",
-  sales_qty_30days: "dealer_inventory_daily.sales_qty_30days",
-  sales_amount_30days: "dealer_inventory_daily.sales_amount_30days",
-  sales_amount_30days_avg: "dealer_inventory_daily.sales_amount_30days_avg",
-  source_load_time: "dealer_inventory_daily.source_load_time",
-  inventory_source: "dealer_inventory_daily.inventory_source",
-  updated_time: "dealer_inventory_daily.updated_time",
+  stat_date: 'dealer_inventory_daily.stat_date',
+  inventory_snapshot_date: 'dealer_inventory_daily.inventory_snapshot_date',
+  cust_code: 'dealer_inventory_daily.cust_code',
+  cust_name: 'dealer_inventory_daily.cust_name',
+  material_code: 'dealer_inventory_daily.material_code',
+  material_name: 'dealer_inventory_daily.material_name',
+  product_range_name: 'dealer_inventory_daily.product_range_name',
+  product_tag: 'dealer_inventory_daily.product_tag',
+  material_size: 'dealer_inventory_daily.material_size',
+  measure_unit: 'dealer_inventory_daily.measure_unit',
+  cif_price: 'dealer_inventory_daily.cif_price',
+  stock_qty: 'dealer_inventory_daily.stock_qty',
+  in_transit_qty: 'dealer_inventory_daily.in_transit_qty',
+  normal_stock_qty: 'dealer_inventory_daily.normal_stock_qty',
+  stock_amount: 'dealer_inventory_daily.stock_amount',
+  sales_qty_7days_avg: 'dealer_inventory_daily.sales_qty_7days_avg',
+  sales_qty_7days: 'dealer_inventory_daily.sales_qty_7days',
+  sales_qty_30days_avg: 'dealer_inventory_daily.sales_qty_30days_avg',
+  sales_qty_30days: 'dealer_inventory_daily.sales_qty_30days',
+  sales_amount_30days: 'dealer_inventory_daily.sales_amount_30days',
+  sales_amount_30days_avg: 'dealer_inventory_daily.sales_amount_30days_avg',
+  source_load_time: 'dealer_inventory_daily.source_load_time',
+  inventory_source: 'dealer_inventory_daily.inventory_source',
+  updated_time: 'dealer_inventory_daily.updated_time',
 };
 
 const MAIN_SELECT = `
@@ -178,8 +176,7 @@ const MAIN_SELECT = `
 
 function assertIdentifier(value: string, label: string) {
   const normalized = value.trim();
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(normalized))
-    throw new Error(`${label}格式无效`);
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(normalized)) throw new Error(`${label}格式无效`);
   return normalized;
 }
 
@@ -192,54 +189,50 @@ function assertDate(value: string, label: string, pattern: RegExp) {
 function customerPredicate(
   customerCodes: string[],
   parameters: GeaSqlParameters,
-  column = "cust_code",
+  column = 'cust_code',
 ) {
-  if (!customerCodes.length) return "";
+  if (!customerCodes.length) return '';
   const placeholders = customerCodes.map((code, index) => {
     const name = `customerCode${index}`;
-    parameters[name] = assertIdentifier(code, "客户编码");
+    parameters[name] = assertIdentifier(code, '客户编码');
     return `:${name}`;
   });
-  return ` AND ${column} IN (${placeholders.join(", ")})`;
+  return ` AND ${column} IN (${placeholders.join(', ')})`;
 }
 
-function inventoryDailyKeyPredicate(
-  keys: InventoryDailyKey[],
-  parameters: GeaSqlParameters,
-) {
-  if (!keys.length) return " AND 1 = 0";
-  if (keys.length > 200)
-    throw new Error("库存日快照单次最多查询200个客户-SKU键");
+function inventoryDailyKeyPredicate(keys: InventoryDailyKey[], parameters: GeaSqlParameters) {
+  if (!keys.length) return ' AND 1 = 0';
+  if (keys.length > 200) throw new Error('库存日快照单次最多查询200个客户-SKU键');
   return ` AND (${keys
     .map((key, index) => {
       const customerName = `dailyCustomerCode${index}`;
       const materialName = `dailyMaterialCode${index}`;
-      parameters[customerName] = assertIdentifier(key.customerCode, "客户编码");
-      parameters[materialName] = assertIdentifier(key.materialCode, "SKU编码");
+      parameters[customerName] = assertIdentifier(key.customerCode, '客户编码');
+      parameters[materialName] = assertIdentifier(key.materialCode, 'SKU编码');
       return `(cust_code = :${customerName} AND material_code = :${materialName})`;
     })
-    .join(" OR ")})`;
+    .join(' OR ')})`;
 }
 
 function scopedWhere(
   snapshotDate: string,
   planMonth: string | undefined,
   customerCodes: string[],
-  materialCode = "",
+  materialCode = '',
 ) {
   const parameters: GeaSqlParameters = {
-    snapshotDate: assertDate(snapshotDate, "快照日期", /^20\d{2}-\d{2}-\d{2}$/),
+    snapshotDate: assertDate(snapshotDate, '快照日期', /^20\d{2}-\d{2}-\d{2}$/),
   };
   // GEA/JDBC binds JSON dates as VARCHAR; cast parameters, keeping date columns indexable.
-  let where = "snapshot_date = CAST(:snapshotDate AS DATE)";
+  let where = 'snapshot_date = CAST(:snapshotDate AS DATE)';
   if (planMonth) {
-    parameters.planMonth = `${assertDate(planMonth, "计划月份", /^20\d{2}-\d{2}$/)}-01`;
-    where += " AND plan_month = CAST(:planMonth AS DATE)";
+    parameters.planMonth = `${assertDate(planMonth, '计划月份', /^20\d{2}-\d{2}$/)}-01`;
+    where += ' AND plan_month = CAST(:planMonth AS DATE)';
   }
   where += customerPredicate(customerCodes, parameters);
   if (materialCode) {
-    parameters.materialCode = assertIdentifier(materialCode, "SKU编码");
-    where += " AND material_code = :materialCode";
+    parameters.materialCode = assertIdentifier(materialCode, 'SKU编码');
+    where += ' AND material_code = :materialCode';
   }
   return { where, parameters };
 }
@@ -247,10 +240,7 @@ function scopedWhere(
 function toCubeRows(rows: GeaSqlRow[]): WorkbenchRow[] {
   return rows.map((row) =>
     Object.fromEntries(
-      Object.entries(row).map(([key, value]) => [
-        mainColumnToCubeMember[key] ?? key,
-        value,
-      ]),
+      Object.entries(row).map(([key, value]) => [mainColumnToCubeMember[key] ?? key, value]),
     ),
   );
 }
@@ -293,7 +283,7 @@ WHERE 1 = 1${customerPredicate(customerCodes, parameters)}`,
     exportCustomerCodes?: string[],
   ): SqlQuery {
     const parameters: GeaSqlParameters = {
-      statDate: assertDate(statDate, "库存统计日期", /^20\d{2}-\d{2}-\d{2}$/),
+      statDate: assertDate(statDate, '库存统计日期', /^20\d{2}-\d{2}-\d{2}$/),
     };
     const keyFilter =
       exportCustomerCodes === undefined
@@ -334,7 +324,7 @@ ORDER BY cust_code ASC, material_code ASC`,
 
   inventoryDailySummary(statDate: string, customerCodes: string[]): SqlQuery {
     const parameters: GeaSqlParameters = {
-      statDate: assertDate(statDate, "库存统计日期", /^20\d{2}-\d{2}-\d{2}$/),
+      statDate: assertDate(statDate, '库存统计日期', /^20\d{2}-\d{2}-\d{2}$/),
     };
     return {
       sql: `SELECT
@@ -371,12 +361,9 @@ WHERE stat_date = CAST(:statDate AS DATE)${customerPredicate(customerCodes, para
     };
   },
 
-  inventoryDailyCustomerSummaries(
-    statDate: string,
-    customerCodes: string[],
-  ): SqlQuery {
+  inventoryDailyCustomerSummaries(statDate: string, customerCodes: string[]): SqlQuery {
     const parameters: GeaSqlParameters = {
-      statDate: assertDate(statDate, "库存统计日期", /^20\d{2}-\d{2}-\d{2}$/),
+      statDate: assertDate(statDate, '库存统计日期', /^20\d{2}-\d{2}-\d{2}$/),
     };
     return {
       sql: `SELECT
@@ -417,23 +404,19 @@ ORDER BY snapshot_date DESC, plan_month DESC`,
     };
   },
 
-  customers(snapshotDate: string, search = "", exactCode = ""): SqlQuery {
+  customers(snapshotDate: string, search = '', exactCode = ''): SqlQuery {
     const parameters: GeaSqlParameters = {
-      snapshotDate: assertDate(
-        snapshotDate,
-        "快照日期",
-        /^20\d{2}-\d{2}-\d{2}$/,
-      ),
+      snapshotDate: assertDate(snapshotDate, '快照日期', /^20\d{2}-\d{2}-\d{2}$/),
     };
-    let filters = "";
+    let filters = '';
     if (exactCode) {
-      parameters.exactCustomerCode = assertIdentifier(exactCode, "客户编码");
-      filters += " AND cust_code = :exactCustomerCode";
+      parameters.exactCustomerCode = assertIdentifier(exactCode, '客户编码');
+      filters += ' AND cust_code = :exactCustomerCode';
     }
     if (search.trim()) {
-      parameters.customerSearch = `%${search.trim().slice(0, 100).toLocaleLowerCase("zh-CN")}%`;
+      parameters.customerSearch = `%${search.trim().slice(0, 100).toLocaleLowerCase('zh-CN')}%`;
       filters +=
-        " AND (LOWER(cust_code) LIKE :customerSearch OR LOWER(cust_name) LIKE :customerSearch)";
+        ' AND (LOWER(cust_code) LIKE :customerSearch OR LOWER(cust_name) LIKE :customerSearch)';
     }
     return {
       sql: `SELECT cust_code, COALESCE(NULLIF(MAX(cust_name), ''), cust_code) AS cust_name
@@ -446,11 +429,7 @@ ORDER BY cust_code ASC`,
   },
 
   planMonths(snapshotDate: string, customerCodes: string[]): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      undefined,
-      customerCodes,
-    );
+    const { where, parameters } = scopedWhere(snapshotDate, undefined, customerCodes);
     return {
       sql: `SELECT plan_month
 FROM ${MAIN_TABLE}
@@ -467,24 +446,20 @@ ORDER BY plan_month DESC`,
     customerCodes: string[],
     inventoryStatDate?: string,
   ): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      planMonth,
-      customerCodes,
-    );
+    const { where, parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     if (inventoryStatDate)
       parameters.inventoryStatDate = assertDate(
         inventoryStatDate,
-        "库存统计日期",
+        '库存统计日期',
         /^20\d{2}-\d{2}-\d{2}$/,
       );
     return {
       sql: inventoryStatDate
-        ? `SELECT ${MAIN_SELECT.replace(/\n  ([a-z_]+)/g, "\n  plan.$1")}
+        ? `SELECT ${MAIN_SELECT.replace(/\n  ([a-z_]+)/g, '\n  plan.$1')}
 FROM ${MAIN_TABLE} plan
 LEFT JOIN agents_scm_cust_inventory_daily_keys daily
   ON daily.stat_date = CAST(:inventoryStatDate AS DATE) AND daily.cust_code = plan.cust_code AND daily.material_code = plan.material_code
-WHERE ${where.replace(/\b(snapshot_date|plan_month|cust_code)\b/g, "plan.$1")}
+WHERE ${where.replace(/\b(snapshot_date|plan_month|cust_code)\b/g, 'plan.$1')}
 ORDER BY CASE WHEN daily.cust_code IS NULL THEN 1 ELSE 0 END, plan.pre_order_qty DESC NULLS LAST, plan.cust_code ASC, plan.material_code ASC, plan.plan_month ASC`
         : `SELECT ${MAIN_SELECT}
 FROM ${MAIN_TABLE}
@@ -502,19 +477,18 @@ ORDER BY pre_order_qty DESC NULLS LAST, cust_code ASC, material_code ASC, plan_m
     filters: CompanyProductFilters = {},
     facets = false,
   ): SqlQuery {
-    if (customerCodes.length !== 1)
-      throw new Error("公司商品必须限定单个授权客户");
+    if (customerCodes.length !== 1) throw new Error('公司商品必须限定单个授权客户');
     const { parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     if (inventoryStatDate)
       parameters.inventoryStatDate = assertDate(
         inventoryStatDate,
-        "库存统计日期",
+        '库存统计日期',
         /^20\d{2}-\d{2}-\d{2}$/,
       );
-    const tagExpression = "catalog.material_sales_status";
+    const tagExpression = 'catalog.material_sales_status';
     const conditions = [
-      "catalog.cust_code = :customerCode0",
-      "catalog.material_code IS NOT NULL",
+      'catalog.cust_code = :customerCode0',
+      'catalog.material_code IS NOT NULL',
       "TRIM(catalog.material_code) <> ''",
     ];
     // Business-confirmed delisting; historical customer stock remains visible.
@@ -526,81 +500,74 @@ ORDER BY pre_order_qty DESC NULLS LAST, cust_code ASC, material_code ASC, plan_m
       parameters.catalogSearch = `%${filters.search
         .trim()
         .toLowerCase()
-        .replace(/[\\%_]/g, "\\$&")}%`;
+        .replace(/[\\%_]/g, '\\$&')}%`;
       conditions.push(
-        "(LOWER(catalog.material_name) LIKE :catalogSearch OR LOWER(catalog.material_code) LIKE :catalogSearch)",
+        '(LOWER(catalog.material_name) LIKE :catalogSearch OR LOWER(catalog.material_code) LIKE :catalogSearch)',
       );
     }
     if (filters.category) {
       parameters.catalogCategory = filters.category;
-      conditions.push(
-        "COALESCE(NULLIF(plan.product_categ_name, ''), '-') = :catalogCategory",
-      );
+      conditions.push("COALESCE(NULLIF(plan.product_categ_name, ''), '-') = :catalogCategory");
     }
     if (filters.productTag) {
       parameters.catalogTag = filters.productTag;
-      conditions.push(
-        `COALESCE(NULLIF(${tagExpression}, ''), '-') = :catalogTag`,
-      );
+      conditions.push(`COALESCE(NULLIF(${tagExpression}, ''), '-') = :catalogTag`);
     }
     if (filters.materialCodes) {
       if (!filters.materialCodes.length || filters.materialCodes.length > 100)
-        throw new Error("商品核验每次需提供 1 至 100 个 SKU");
+        throw new Error('商品核验每次需提供 1 至 100 个 SKU');
       const names = [...new Set(filters.materialCodes)].map((code, index) => {
         const name = `catalogCode${index}`;
-        parameters[name] = assertIdentifier(code, "商品编码");
+        parameters[name] = assertIdentifier(code, '商品编码');
         return `:${name}`;
       });
-      conditions.push(`catalog.material_code IN (${names.join(", ")})`);
+      conditions.push(`catalog.material_code IN (${names.join(', ')})`);
     }
     if (filters.policyCode || filters.policySearch?.trim()) {
       if (filters.policyCode) {
         parameters.catalogPolicy = filters.policyCode;
-        conditions.push("s.promotion_code = :catalogPolicy");
+        conditions.push('s.promotion_code = :catalogPolicy');
       }
       if (filters.policySearch?.trim()) {
         parameters.catalogPolicySearch = `%${filters.policySearch
           .trim()
           .toLowerCase()
-          .replace(/[\\%_]/g, "\\$&")}%`;
+          .replace(/[\\%_]/g, '\\$&')}%`;
         conditions.push(
-          "(LOWER(s.promotion_name) LIKE :catalogPolicySearch OR LOWER(s.promotion_code) LIKE :catalogPolicySearch)",
+          '(LOWER(s.promotion_name) LIKE :catalogPolicySearch OR LOWER(s.promotion_code) LIKE :catalogPolicySearch)',
         );
       }
-      parameters.catalogToday = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Asia/Shanghai",
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
+      parameters.catalogToday = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Shanghai',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
       }).format(new Date());
       const scope = promotionScopeView();
       joins.push(
         `JOIN ${scope} s ON s.customer_code = catalog.cust_code AND s.product_code = catalog.material_code`,
       );
-      conditions.push(
-        "s.data_type = 'cust'",
-        promotionScopeConditions("catalogToday"),
-      );
+      conditions.push("s.data_type = 'cust'", promotionScopeConditions('catalogToday'));
     }
     const catalogValues: Record<string, string> = {
-      snapshot_date: "CAST(:snapshotDate AS DATE)",
-      plan_month: "CAST(:planMonth AS DATE)",
-      cust_code: "catalog.cust_code",
-      cust_name: "MAX(catalog.cust_name)",
-      material_code: "catalog.material_code",
-      material_name: "MAX(catalog.material_name)",
+      snapshot_date: 'CAST(:snapshotDate AS DATE)',
+      plan_month: 'CAST(:planMonth AS DATE)',
+      cust_code: 'catalog.cust_code',
+      cust_name: 'MAX(catalog.cust_name)',
+      material_code: 'catalog.material_code',
+      material_name: 'MAX(catalog.material_name)',
     };
     // Aggregate duplicate cooperation/policy rows without multiplying stock or quantities.
-    const columns = MAIN_SELECT.split(",")
+    const columns = MAIN_SELECT.split(',')
       .slice(1)
       .map((column) => {
         const [name, , alias] = column.trim().split(/\s+/);
-        return `${catalogValues[name] || "MAX(plan." + name + ")"} AS ${alias || name}`;
+        return `${catalogValues[name] || 'MAX(plan.' + name + ')'} AS ${alias || name}`;
       })
-      .join(", ");
+      .join(', ');
     const from = `FROM ${saleableMaterialTable()} catalog
-${joins.join("\n")}
-WHERE ${conditions.join(" AND ")}`;
+${joins.join('\n')}
+WHERE ${conditions.join(' AND ')}`;
     return {
       sql: facets
         ? `SELECT plan.product_categ_name, ${tagExpression} AS product_tag
@@ -617,16 +584,8 @@ ORDER BY catalog_new_rank, pre_order_qty DESC NULLS LAST, material_code ASC`,
     };
   },
 
-  summary(
-    snapshotDate: string,
-    planMonth: string,
-    customerCodes: string[],
-  ): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      planMonth,
-      customerCodes,
-    );
+  summary(snapshotDate: string, planMonth: string, customerCodes: string[]): SqlQuery {
+    const { where, parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     return {
       sql: `SELECT
   COUNT(*) AS sku_count,
@@ -652,16 +611,8 @@ WHERE ${where}`,
     };
   },
 
-  customerSummaries(
-    snapshotDate: string,
-    planMonth: string,
-    customerCodes: string[],
-  ): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      planMonth,
-      customerCodes,
-    );
+  customerSummaries(snapshotDate: string, planMonth: string, customerCodes: string[]): SqlQuery {
+    const { where, parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     return {
       sql: `SELECT
   cust_code,
@@ -685,20 +636,16 @@ ORDER BY cust_code ASC`,
     inventoryDailyStatDate: string,
     customerCodes: string[],
   ): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      planMonth,
-      customerCodes,
-    );
+    const { where, parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     parameters.inventoryDailyStatDate = assertDate(
       inventoryDailyStatDate,
-      "库存统计日期",
+      '库存统计日期',
       /^20\d{2}-\d{2}-\d{2}$/,
     );
     const qualifiedWhere = where
-      .replace(/\bsnapshot_date\b/g, "plan.snapshot_date")
-      .replace(/\bplan_month\b/g, "plan.plan_month")
-      .replace(/\bcust_code\b/g, "plan.cust_code");
+      .replace(/\bsnapshot_date\b/g, 'plan.snapshot_date')
+      .replace(/\bplan_month\b/g, 'plan.plan_month')
+      .replace(/\bcust_code\b/g, 'plan.cust_code');
     return {
       sql: `SELECT
   COALESCE(NULLIF(plan.product_categ_name, ''), '未分类') AS product_categ_name,
@@ -725,16 +672,8 @@ ORDER BY SUM(COALESCE(plan.stock_qty, 0) + COALESCE(plan.in_transit_qty, 0)) DES
     };
   },
 
-  shortageDetails(
-    snapshotDate: string,
-    planMonth: string,
-    customerCodes: string[],
-  ): SqlQuery {
-    const { where, parameters } = scopedWhere(
-      snapshotDate,
-      planMonth,
-      customerCodes,
-    );
+  shortageDetails(snapshotDate: string, planMonth: string, customerCodes: string[]): SqlQuery {
+    const { where, parameters } = scopedWhere(snapshotDate, planMonth, customerCodes);
     return {
       sql: `SELECT ${MAIN_SELECT}
 FROM ${MAIN_TABLE}
@@ -753,20 +692,19 @@ ORDER BY (COALESCE(stock_qty, 0) + COALESCE(in_transit_qty, 0)) / daily_sales AS
       scope.materialCode,
     );
     const allowedOrderColumns = new Set([
-      "pre_order_qty",
-      "avg_stock_age",
-      "simulation_need_amount",
-      "budget_rate",
-      "planned_qty_rate",
-      "ship_qty",
-      "in_transit_qty",
-      "stock_qty",
-      "target_inventory",
-      "turnover_days",
+      'pre_order_qty',
+      'avg_stock_age',
+      'simulation_need_amount',
+      'budget_rate',
+      'planned_qty_rate',
+      'ship_qty',
+      'in_transit_qty',
+      'stock_qty',
+      'target_inventory',
+      'turnover_days',
     ]);
-    if (!allowedOrderColumns.has(scope.orderColumn))
-      throw new Error("结果排序字段无效");
-    if (scope.mode === "detail") {
+    if (!allowedOrderColumns.has(scope.orderColumn)) throw new Error('结果排序字段无效');
+    if (scope.mode === 'detail') {
       return {
         sql: `SELECT ${MAIN_SELECT}
 FROM ${MAIN_TABLE}
@@ -776,18 +714,18 @@ ORDER BY ${scope.orderColumn} DESC, cust_code ASC, material_code ASC`,
       };
     }
 
-    const byCustomer = scope.groupBy === "客户";
+    const byCustomer = scope.groupBy === '客户';
     const groupColumns = byCustomer
-      ? "snapshot_date, cust_code, cust_name"
-      : "snapshot_date, material_code, material_name";
+      ? 'snapshot_date, cust_code, cust_name'
+      : 'snapshot_date, material_code, material_name';
     const identityColumns = byCustomer
       ? "cust_code, cust_name, '' AS material_code, '' AS material_name"
       : "'' AS cust_code, '' AS cust_name, material_code, material_name";
     const aggregateOrder = [
-      "avg_stock_age",
-      "turnover_days",
-      "budget_rate",
-      "planned_qty_rate",
+      'avg_stock_age',
+      'turnover_days',
+      'budget_rate',
+      'planned_qty_rate',
     ].includes(scope.orderColumn)
       ? `AVG(${scope.orderColumn})`
       : `SUM(${scope.orderColumn})`;
@@ -839,17 +777,14 @@ FROM ${table}
 WHERE cust_code = :customerCode AND material_code = :materialCode
 ORDER BY produce_date ASC, batch_no ASC`,
       parameters: {
-        customerCode: assertIdentifier(customerCode, "客户编码"),
-        materialCode: assertIdentifier(materialCode, "SKU编码"),
+        customerCode: assertIdentifier(customerCode, '客户编码'),
+        materialCode: assertIdentifier(materialCode, 'SKU编码'),
       },
     };
   },
 };
 
-function queryOptions(
-  options: GeaSqlRequestOptions,
-  query: SqlQuery,
-): GeaSqlRequestOptions {
+function queryOptions(options: GeaSqlRequestOptions, query: SqlQuery): GeaSqlRequestOptions {
   return { ...options, parameters: query.parameters };
 }
 
@@ -858,9 +793,7 @@ export async function queryWorkbenchLatestSnapshot(
   options: GeaSqlRequestOptions = {},
 ) {
   const query = dealerWorkbenchSql.latestSnapshot(customerCodes);
-  return toCubeRows(
-    await executeGeaSql(query.sql, queryOptions(options, query)),
-  );
+  return toCubeRows(await executeGeaSql(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchSnapshotMonths(
@@ -868,9 +801,7 @@ export async function queryWorkbenchSnapshotMonths(
   options: GeaSqlRequestOptions = {},
 ) {
   const query = dealerWorkbenchSql.snapshotMonths(customerCodes);
-  return toCubeRows(
-    await executeGeaSql(query.sql, queryOptions(options, query)),
-  );
+  return toCubeRows(await executeGeaSql(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchLatestInventoryDailySnapshot(
@@ -878,9 +809,7 @@ export async function queryWorkbenchLatestInventoryDailySnapshot(
   options: GeaSqlRequestOptions = {},
 ) {
   const query = dealerWorkbenchSql.latestInventoryDailySnapshot(customerCodes);
-  return toInventoryDailyCubeRows(
-    await executeGeaSql(query.sql, queryOptions(options, query)),
-  );
+  return toInventoryDailyCubeRows(await executeGeaSql(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchInventoryDailyDetails(
@@ -889,15 +818,8 @@ export async function queryWorkbenchInventoryDailyDetails(
   options: GeaSqlRequestOptions = {},
   exportCustomerCodes?: string[],
 ) {
-  const query = dealerWorkbenchSql.inventoryDailyDetails(
-    statDate,
-    keys,
-    exportCustomerCodes,
-  );
-  const rows = await executeAllGeaSqlPages(
-    query.sql,
-    queryOptions(options, query),
-  );
+  const query = dealerWorkbenchSql.inventoryDailyDetails(statDate, keys, exportCustomerCodes);
+  const rows = await executeAllGeaSqlPages(query.sql, queryOptions(options, query));
   return toInventoryDailyCubeRows(rows);
 }
 
@@ -906,13 +828,8 @@ export async function queryWorkbenchInventoryDailySummary(
   customerCodes: string[],
   options: GeaSqlRequestOptions = {},
 ) {
-  const query = dealerWorkbenchSql.inventoryDailySummary(
-    statDate,
-    customerCodes,
-  );
-  return (
-    (await executeGeaSql(query.sql, queryOptions(options, query)))[0] ?? {}
-  );
+  const query = dealerWorkbenchSql.inventoryDailySummary(statDate, customerCodes);
+  return (await executeGeaSql(query.sql, queryOptions(options, query)))[0] ?? {};
 }
 
 export async function queryWorkbenchInventoryDailyCustomerSummaries(
@@ -920,13 +837,8 @@ export async function queryWorkbenchInventoryDailyCustomerSummaries(
   customerCodes: string[],
   options: GeaSqlRequestOptions = {},
 ) {
-  const query = dealerWorkbenchSql.inventoryDailyCustomerSummaries(
-    statDate,
-    customerCodes,
-  );
-  return toInventoryDailyCubeRows(
-    await executeGeaSql(query.sql, queryOptions(options, query)),
-  );
+  const query = dealerWorkbenchSql.inventoryDailyCustomerSummaries(statDate, customerCodes);
+  return toInventoryDailyCubeRows(await executeGeaSql(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchCustomers(
@@ -953,9 +865,7 @@ export async function queryWorkbenchPlanMonths(
   options: GeaSqlRequestOptions = {},
 ) {
   const query = dealerWorkbenchSql.planMonths(snapshotDate, customerCodes);
-  return toCubeRows(
-    await executeGeaSql(query.sql, queryOptions(options, query)),
-  );
+  return toCubeRows(await executeGeaSql(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchDashboard(
@@ -970,12 +880,9 @@ export async function queryWorkbenchDashboard(
 ) {
   const dailyDate =
     inventoryDailySnapshotDate === undefined
-      ? (
-          await queryWorkbenchLatestInventoryDailySnapshot(
-            customerCodes,
-            options,
-          )
-        )[0]?.["dealer_inventory_daily.stat_date"]
+      ? (await queryWorkbenchLatestInventoryDailySnapshot(customerCodes, options))[0]?.[
+          'dealer_inventory_daily.stat_date'
+        ]
       : inventoryDailySnapshotDate;
   const date = dailyDate ? String(dailyDate).slice(0, 10) : undefined;
   const query = companyFilters
@@ -986,17 +893,8 @@ export async function queryWorkbenchDashboard(
         date,
         companyFilters,
       )
-    : dealerWorkbenchSql.dashboard(
-        snapshotDate,
-        planMonth,
-        customerCodes,
-        date,
-      );
-  if (
-    options.exportTab === "sku" ||
-    options.exportTab === "expiry" ||
-    companyFilters?.download
-  ) {
+    : dealerWorkbenchSql.dashboard(snapshotDate, planMonth, customerCodes, date);
+  if (options.exportTab === 'sku' || options.exportTab === 'expiry' || companyFilters?.download) {
     const records = toCubeRows(
       await executeAllGeaSqlPages(query.sql, queryOptions(options, query)),
     );
@@ -1017,14 +915,8 @@ export async function queryWorkbenchSummary(
   customerCodes: string[],
   options: GeaSqlRequestOptions = {},
 ) {
-  const query = dealerWorkbenchSql.summary(
-    snapshotDate,
-    planMonth,
-    customerCodes,
-  );
-  return (
-    (await executeGeaSql(query.sql, queryOptions(options, query)))[0] ?? {}
-  );
+  const query = dealerWorkbenchSql.summary(snapshotDate, planMonth, customerCodes);
+  return (await executeGeaSql(query.sql, queryOptions(options, query)))[0] ?? {};
 }
 
 export async function queryWorkbenchCustomerSummaries(
@@ -1035,12 +927,8 @@ export async function queryWorkbenchCustomerSummaries(
   pageSize: number,
   options: GeaSqlRequestOptions = {},
 ) {
-  const query = dealerWorkbenchSql.customerSummaries(
-    snapshotDate,
-    planMonth,
-    customerCodes,
-  );
-  if (options.exportTab === "customer") {
+  const query = dealerWorkbenchSql.customerSummaries(snapshotDate, planMonth, customerCodes);
+  if (options.exportTab === 'customer') {
     const records = toCubeRows(
       await executeAllGeaSqlPages(query.sql, queryOptions(options, query)),
     );
@@ -1068,9 +956,7 @@ export async function queryWorkbenchCategorySummaries(
     inventoryDailyStatDate,
     customerCodes,
   );
-  return toCubeRows(
-    await executeAllGeaSqlPages(query.sql, queryOptions(options, query)),
-  );
+  return toCubeRows(await executeAllGeaSqlPages(query.sql, queryOptions(options, query)));
 }
 
 export async function queryWorkbenchShortageDetails(
@@ -1081,12 +967,8 @@ export async function queryWorkbenchShortageDetails(
   pageSize: number,
   options: GeaSqlRequestOptions = {},
 ) {
-  const query = dealerWorkbenchSql.shortageDetails(
-    snapshotDate,
-    planMonth,
-    customerCodes,
-  );
-  if (options.exportTab === "shortage") {
+  const query = dealerWorkbenchSql.shortageDetails(snapshotDate, planMonth, customerCodes);
+  if (options.exportTab === 'shortage') {
     const records = toCubeRows(
       await executeAllGeaSqlPages(query.sql, queryOptions(options, query)),
     );
@@ -1102,23 +984,17 @@ export async function queryWorkbenchShortageDetails(
 }
 
 export async function queryWorkbenchAging(
-  source: "wl" | "simulated",
+  source: 'wl' | 'simulated',
   customerCode: string,
   materialCode: string,
   options: GeaSqlRequestOptions = {},
 ) {
-  const table = source === "wl" ? WL_AGE_TABLE : SIMULATED_AGE_TABLE;
-  const prefix =
-    source === "wl" ? "dealer_wl_stock_age" : "dealer_simulated_stock_age";
+  const table = source === 'wl' ? WL_AGE_TABLE : SIMULATED_AGE_TABLE;
+  const prefix = source === 'wl' ? 'dealer_wl_stock_age' : 'dealer_simulated_stock_age';
   const query = dealerWorkbenchSql.aging(table, customerCode, materialCode);
-  const rows = await executeAllGeaSqlPages(
-    query.sql,
-    queryOptions(options, query),
-  );
+  const rows = await executeAllGeaSqlPages(query.sql, queryOptions(options, query));
   return rows.map((row) =>
-    Object.fromEntries(
-      Object.entries(row).map(([key, value]) => [`${prefix}.${key}`, value]),
-    ),
+    Object.fromEntries(Object.entries(row).map(([key, value]) => [`${prefix}.${key}`, value])),
   );
 }
 
@@ -1141,9 +1017,7 @@ export async function queryAllWorkbenchSqlRows(
   query: SqlQuery,
   options: GeaSqlRequestOptions = {},
 ) {
-  return toCubeRows(
-    await executeAllGeaSqlPages(query.sql, queryOptions(options, query)),
-  );
+  return toCubeRows(await executeAllGeaSqlPages(query.sql, queryOptions(options, query)));
 }
 
 // 客户编码必须来自已经完成权限校验的工作台范围。
@@ -1153,8 +1027,8 @@ export async function queryWorkbenchCustomerCars(
 ) {
   if (!customerCode.trim()) return [];
   const table = configuredResourceName(
-    "DEALER_WORKBENCH_SQL_CUSTOMER_CAR_TABLE",
-    "agents_scm_customer_car_current",
+    'DEALER_WORKBENCH_SQL_CUSTOMER_CAR_TABLE',
+    'agents_scm_customer_car_current',
   );
   return executeAllGeaSqlPages(
     `SELECT source_record_id, organization_id, cust_code, warehouse_group_id,
@@ -1173,8 +1047,8 @@ export async function queryWorkbenchCustomerReceives(
 ) {
   if (!customerCode.trim()) return [];
   const table = configuredResourceName(
-    "DEALER_WORKBENCH_SQL_CUSTOMER_RECEIVE_TABLE",
-    "agents_scm_customer_receive",
+    'DEALER_WORKBENCH_SQL_CUSTOMER_RECEIVE_TABLE',
+    'agents_scm_customer_receive',
   );
   return executeAllGeaSqlPages(
     `SELECT source_record_id, cust_code, receive_cust_code, receive_cust_name,
@@ -1191,18 +1065,17 @@ export async function queryWorkbenchFulfillmentMaterials(
   materialCodes: string[],
   options: GeaSqlRequestOptions = {},
 ) {
-  if (!materialCodes.length || materialCodes.length > 500)
-    throw new Error("商品范围无效");
+  if (!materialCodes.length || materialCodes.length > 500) throw new Error('商品范围无效');
   const parameters: GeaSqlParameters = {
-    customerCode: assertIdentifier(customerCode, "客户编码"),
+    customerCode: assertIdentifier(customerCode, '客户编码'),
   };
   const names = materialCodes.map((code, i) => {
-    parameters[`material${i}`] = assertIdentifier(code, "商品编码");
+    parameters[`material${i}`] = assertIdentifier(code, '商品编码');
     return `:material${i}`;
   });
   return executeAllGeaSqlPages(
     `SELECT DISTINCT cust_code, material_code FROM ${saleableMaterialTable()}
-    WHERE cust_code = :customerCode AND material_code IN (${names.join(",")}) AND material_code <> '10005290'`,
+    WHERE cust_code = :customerCode AND material_code IN (${names.join(',')}) AND material_code <> '10005290'`,
     { ...options, parameters },
   );
 }
@@ -1228,8 +1101,8 @@ export async function queryWorkbenchCustomerPickupPoints(
 ): Promise<CustomerPickupPoint[]> {
   if (!customerCode.trim()) return [];
   const table = configuredResourceName(
-    "DEALER_WORKBENCH_SQL_CUSTOMER_PICKUP_TABLE",
-    "agents_scm_cust_pickup_point",
+    'DEALER_WORKBENCH_SQL_CUSTOMER_PICKUP_TABLE',
+    'agents_scm_cust_pickup_point',
   );
   const rows = await executeAllGeaSqlPages(
     `SELECT cust_code, warehouse_group_id, warehousegroup_name, CAST(is_default_shipping AS TEXT) AS is_default_shipping,
@@ -1241,26 +1114,23 @@ export async function queryWorkbenchCustomerPickupPoints(
   );
   const seen = new Set<string>();
   return rows.map((row) => {
-    const text = (value: unknown) =>
-      value == null ? "" : String(value).trim();
+    const text = (value: unknown) => (value == null ? '' : String(value).trim());
     const code = text(row.warehouse_group_id);
     const flag = (value: unknown) =>
-      value === true || value === "true"
+      value === true || value === 'true'
         ? true
-        : value === false || value === "false"
+        : value === false || value === 'false'
           ? false
           : null;
     if (
       text(row.cust_code) !== customerCode ||
       !code ||
       seen.has(code) ||
-      [
-        row.is_default_shipping,
-        row.is_secondary_shipping,
-        row.is_pickup_point_matched,
-      ].some((value) => flag(value) === null)
+      [row.is_default_shipping, row.is_secondary_shipping, row.is_pickup_point_matched].some(
+        (value) => flag(value) === null,
+      )
     ) {
-      throw new Error("提货点客户范围、编码或状态异常");
+      throw new Error('提货点客户范围、编码或状态异常');
     }
     seen.add(code);
     const matched = flag(row.is_pickup_point_matched) === true,
@@ -1272,7 +1142,7 @@ export async function queryWorkbenchCustomerPickupPoints(
       isSecondary: flag(row.is_secondary_shipping) === true,
       matched,
       activeFlag,
-      available: matched && activeFlag === "Y",
+      available: matched && activeFlag === 'Y',
       factoryCode: text(row.factory_code),
       companyCode: text(row.company_code),
       type: text(row.warehouse_group_type),
@@ -1286,10 +1156,7 @@ export async function queryWorkbenchDefaultPickup(
   customerCode: string,
   options: GeaSqlRequestOptions = {},
 ) {
-  const points = await queryWorkbenchCustomerPickupPoints(
-    customerCode,
-    options,
-  );
+  const points = await queryWorkbenchCustomerPickupPoints(customerCode, options);
   return points
     .filter((point) => point.available && point.isDefault)
     .map((point) => ({
@@ -1305,10 +1172,7 @@ export async function queryWorkbenchSapSalesArea(
   options: GeaSqlRequestOptions = {},
 ) {
   if (!customerCode.trim() || !docType.trim()) return [];
-  const points = await queryWorkbenchCustomerPickupPoints(
-    customerCode,
-    options,
-  );
+  const points = await queryWorkbenchCustomerPickupPoints(customerCode, options);
   return points
     .filter((point) => point.available)
     .map((point) => ({
@@ -1316,8 +1180,8 @@ export async function queryWorkbenchSapSalesArea(
       vsbed: point.code,
       werks: point.factoryCode,
       vkorg: point.companyCode,
-      vtweg: "",
-      spart: "",
+      vtweg: '',
+      spart: '',
       doc_type: docType,
     }));
 }
@@ -1342,25 +1206,25 @@ export async function queryWorkbenchPromotionPolicies(
             CAST(s.gift_batch_start_date AS TEXT) AS policy_gift_start_date,
             CAST(s.gift_batch_end_date AS TEXT) AS policy_gift_end_date,
             s.gift_batch_remarks AS policy_gift_remarks,
-            s.policy_remarks AS remarks, s.goods_age_range, s.goods_dimension${process.env.DEALER_WORKBENCH_POLICY_EXCLUSIVE_ENABLED === "true" ? ", s.is_customer_exclusive" : ""}
+            s.policy_remarks AS remarks, s.goods_age_range, s.goods_dimension${process.env.DEALER_WORKBENCH_POLICY_EXCLUSIVE_ENABLED === 'true' ? ', s.is_customer_exclusive' : ''}
      FROM ${scope} s
      WHERE s.customer_code = :customerCode AND s.data_type = :scopeType
-       AND ${promotionScopeConditions("businessDate")}
+       AND ${promotionScopeConditions('businessDate')}
      ORDER BY s.promotion_code, s.range_record_id`,
     {
       ...options,
-      parameters: { customerCode, businessDate, scopeType: "cust" },
+      parameters: { customerCode, businessDate, scopeType: 'cust' },
     },
   );
 }
 
 /** Resolve the chat allowlist using the same GEA row permissions. */
 export async function queryAuthorizedDealerChatCustomers(
-  exactCode = "",
+  exactCode = '',
   options: GeaSqlRequestOptions = {},
 ): Promise<string[]> {
   const parameters: GeaSqlParameters = {};
-  const predicate = exactCode ? customerPredicate([exactCode], parameters) : "";
+  const predicate = exactCode ? customerPredicate([exactCode], parameters) : '';
   const rows = await executeAllGeaSqlPages(
     `SELECT DISTINCT cust_code FROM ${MAIN_TABLE} WHERE cust_code IS NOT NULL${predicate} ORDER BY cust_code ASC`,
     { ...options, parameters, pageConcurrency: 3 },
@@ -1368,8 +1232,8 @@ export async function queryAuthorizedDealerChatCustomers(
   // GEA owns the business identifiers, including virtual dealers. Validate the
   // response shape only; never infer account permissions from an identifier's format.
   const codes = rows.map((row) => {
-    if (typeof row.cust_code !== "string" || !row.cust_code.trim()) {
-      throw new Error("GEA 返回的客户编码字段缺失或为空，无法确认对话权限范围");
+    if (typeof row.cust_code !== 'string' || !row.cust_code.trim()) {
+      throw new Error('GEA 返回的客户编码字段缺失或为空，无法确认对话权限范围');
     }
     return row.cust_code;
   });
@@ -1384,7 +1248,7 @@ export async function queryWorkbenchCompanyProductFacets(
 ) {
   const dailyDate = (
     await queryWorkbenchLatestInventoryDailySnapshot([customerCode], options)
-  )[0]?.["dealer_inventory_daily.stat_date"];
+  )[0]?.['dealer_inventory_daily.stat_date'];
   const query = dealerWorkbenchSql.companyProducts(
     snapshotDate,
     planMonth,
@@ -1393,15 +1257,10 @@ export async function queryWorkbenchCompanyProductFacets(
     {},
     true,
   );
-  const rows = await executeAllGeaSqlPages(
-    query.sql,
-    queryOptions(options, query),
-  );
+  const rows = await executeAllGeaSqlPages(query.sql, queryOptions(options, query));
   return {
-    categories: [
-      ...new Set(rows.map((row) => String(row.product_categ_name || "-"))),
-    ],
-    tags: [...new Set(rows.map((row) => String(row.product_tag || "-")))],
+    categories: [...new Set(rows.map((row) => String(row.product_categ_name || '-')))],
+    tags: [...new Set(rows.map((row) => String(row.product_tag || '-')))],
   };
 }
 
@@ -1416,12 +1275,11 @@ FROM ${saleableMaterialTable()}
 WHERE cust_code = :customerCode AND material_code IS NOT NULL AND TRIM(material_code) <> '' AND material_code <> '10005290'`,
     {
       ...options,
-      parameters: { customerCode: assertIdentifier(customerCode, "客户编码") },
+      parameters: { customerCode: assertIdentifier(customerCode, '客户编码') },
     },
   );
   const raw = rows[0]?.product_total;
   const total = raw == null ? NaN : Number(raw);
-  if (!Number.isSafeInteger(total) || total < 0)
-    throw new Error("可售商品总数无效");
+  if (!Number.isSafeInteger(total) || total < 0) throw new Error('可售商品总数无效');
   return total;
 }

@@ -17,11 +17,21 @@ const { default: SystemPrompt } = await import(
 );
 const { default: Agents } = await import(official('packages/core/agent/lib/index.js'));
 const { createScope } = await import(official('packages/core/scope/lib/index.js'));
-const { default:Sessions, Session, SessionId } = await import(official('packages/core/session/lib/index.js'));
-const {default:Projections}=await import(official('packages/session/session-projection/lib/index.js'));
-const {default:Query}=await import(official('packages/session-query/session-query/lib/index.js'));
-const {default:Typert}=await import(official('packages/typert/registry/lib/index.js'));
-const {default:SessionController}=await import(official('packages/api/session-controller/lib/index.js'));
+const {
+  default: Sessions,
+  Session,
+  SessionId,
+} = await import(official('packages/core/session/lib/index.js'));
+const { default: Projections } = await import(
+  official('packages/session/session-projection/lib/index.js')
+);
+const { default: Query } = await import(
+  official('packages/session-query/session-query/lib/index.js')
+);
+const { default: Typert } = await import(official('packages/typert/registry/lib/index.js'));
+const { default: SessionController } = await import(
+  official('packages/api/session-controller/lib/index.js')
+);
 await mkdir('.scratch', { recursive: true });
 const result = await build({
   entryPoints: ['src/html-pages.ts'],
@@ -60,16 +70,29 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   await ctx.plugin(Sessions);
   await ctx.plugin(Projections);
   new Query(ctx);
-  ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-model'}),saveSelection:async()=>{}});
-  ctx.provide('fileUploads',{registerAgentResolver:()=>()=>{},resolve:()=>undefined,bindPrompt:()=>({commit(){},[Symbol.dispose](){}}),retirePrompt(){}});
-  new SessionController(ctx,{nativeOpen:false});
+  ctx.provide('agentDefaultModel', {
+    currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),
+    saveSelection: async () => {},
+  });
+  ctx.provide('fileUploads', {
+    registerAgentResolver: () => () => {},
+    resolve: () => undefined,
+    bindPrompt: () => ({ commit() {}, [Symbol.dispose]() {} }),
+    retirePrompt() {},
+  });
+  new SessionController(ctx, { nativeOpen: false });
   await ctx.plugin(Tools);
   await ctx.plugin(Agents);
-  const registerSession = async id => {
+  const registerSession = async (id) => {
     const agent = { id, session: Session.create(id) };
-    await ctx.plugin(Object.assign(inner => {
-      agent.ctx = createScope(inner, agent).ctx;
-    }, { inject: ['tools', 'systemPrompt'] }));
+    await ctx.plugin(
+      Object.assign(
+        (inner) => {
+          agent.ctx = createScope(inner, agent).ctx;
+        },
+        { inject: ['tools', 'systemPrompt'] },
+      ),
+    );
     await ctx.agents.register(agent);
     return agent;
   };
@@ -89,7 +112,9 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   let referenceScope = 'fixture-principal';
   const grant = {
     signal: identity.signal,
-    get referenceScope() { return referenceScope; },
+    get referenceScope() {
+      return referenceScope;
+    },
     access: { mode: 'test' },
     allowsEffect: (effect) => enabled && (effect === 'view' || (!viewOnly && effect === 'draft')),
     release: () => {
@@ -152,63 +177,226 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   };
   const readReference = async (referenceId, sessionId = id) => {
     const response = await routes.get('/api/page-interaction/reference/read').fetch(
-      new Request('https://local/api/page-interaction/reference/read', { method: 'POST',
-        body: JSON.stringify({ sessionId, id: referenceId }) }));
+      new Request('https://local/api/page-interaction/reference/read', {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, id: referenceId }),
+      }),
+    );
     return { status: response.status, value: await response.json() };
   };
-  return { call, open, identity, id, releases: () => releases, execute, reference, readReference, registerSession,
-    generation: async () => (await (await routes.get('/api/page-interaction/binding').fetch()).json()).generation,
-    changeReferenceScope: value => { referenceScope = value; } };
+  return {
+    call,
+    open,
+    identity,
+    id,
+    releases: () => releases,
+    execute,
+    reference,
+    readReference,
+    registerSession,
+    generation: async () =>
+      (await (await routes.get('/api/page-interaction/binding').fetch()).json()).generation,
+    changeReferenceScope: (value) => {
+      referenceScope = value;
+    },
+  };
 }
-const bundle=await build({entryPoints:['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'offline-query-registry',setup(api){
- api.onResolve({filter:/^server-only$|^@\/lib\/gea-sql-client$/},args=>({path:args.path,namespace:'fixture'}));
- api.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='server-only'?'export{};':'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};'}));
-}}]});
-const {readDealerMock}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const bundle = await build({
+  entryPoints: ['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+  plugins: [
+    {
+      name: 'offline-query-registry',
+      setup(api) {
+        api.onResolve({ filter: /^server-only$|^@\/lib\/gea-sql-client$/ }, (args) => ({
+          path: args.path,
+          namespace: 'fixture',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
+          contents:
+            args.path === 'server-only'
+              ? 'export{};'
+              : 'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};',
+        }));
+      },
+    },
+  ],
+});
+const { readDealerMock } = await import(
+  'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+);
 
-async function authorCatalog(t,id){
-  const dom=new JSDOM(id==='personal'?await personalFixtureHtml():await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
-  t.after(()=>dom.window.close());
-  Object.assign(dom.window,{AbortController,AbortSignal,TextEncoder,TextDecoder,structuredClone});
-  dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
-  Object.defineProperty(dom.window.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
-  dom.window.fetch=()=>{throw Error('Unexpected real I/O');};
-  const messages=[];
-  dom.window.parent.postMessage=message=>messages.push(message);
-  const port={start(){},close(){},async postMessage(message){messages.push(message);if(message.type==='request'){const result=id==='dealer'&&message.method==='sql'?await readDealerMock(message.parameters):{accepted:true};queueMicrotask(()=>port.onmessage?.({data:{type:'response',id:message.id,result}}));}}};
-  for(const script of dom.window.document.querySelectorAll('script'))dom.window.eval(script.textContent);
-  dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',ports:[port],data:{protocol:'gea-html-v2',type:'connect',context:{session:'catalog-fixture',plugin:'inventory-'+id}}}));
-  if(id==='personal'){
-    for(let i=0;i<100&&!messages.some(m=>m.protocol==='dsh-workbench-view-v1'&&m.type==='ready');i++)await new Promise(done=>setTimeout(done,10));
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',data:{protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-personal',version:1,channel:'catalog-view',generation:1,state:{version:1}}}));
+async function authorCatalog(t, id) {
+  const dom = new JSDOM(
+    id === 'personal'
+      ? await personalFixtureHtml()
+      : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'),
+    {
+      url: 'https://host.example/' + id,
+      referrer: 'https://host.example/',
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+    },
+  );
+  t.after(() => dom.window.close());
+  Object.assign(dom.window, {
+    AbortController,
+    AbortSignal,
+    TextEncoder,
+    TextDecoder,
+    structuredClone,
+  });
+  dom.window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  Object.defineProperty(dom.window.HTMLElement.prototype, 'innerText', {
+    get() {
+      return this.textContent;
+    },
+  });
+  dom.window.fetch = () => {
+    throw Error('Unexpected real I/O');
+  };
+  const messages = [];
+  dom.window.parent.postMessage = (message) => messages.push(message);
+  const port = {
+    start() {},
+    close() {},
+    async postMessage(message) {
+      messages.push(message);
+      if (message.type === 'request') {
+        const result =
+          id === 'dealer' && message.method === 'sql'
+            ? await readDealerMock(message.parameters)
+            : { accepted: true };
+        queueMicrotask(() =>
+          port.onmessage?.({ data: { type: 'response', id: message.id, result } }),
+        );
+      }
+    },
+  };
+  for (const script of dom.window.document.querySelectorAll('script'))
+    dom.window.eval(script.textContent);
+  dom.window.dispatchEvent(
+    new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      origin: 'https://host.example',
+      ports: [port],
+      data: {
+        protocol: 'gea-html-v2',
+        type: 'connect',
+        context: { session: 'catalog-fixture', plugin: 'inventory-' + id },
+      },
+    }),
+  );
+  if (id === 'personal') {
+    for (
+      let i = 0;
+      i < 100 &&
+      !messages.some((m) => m.protocol === 'dsh-workbench-view-v1' && m.type === 'ready');
+      i++
+    )
+      await new Promise((done) => setTimeout(done, 10));
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent('message', {
+        source: dom.window.parent,
+        origin: 'https://host.example',
+        data: {
+          protocol: 'dsh-workbench-view-v1',
+          type: 'restore',
+          page: 'inventory-personal',
+          version: 1,
+          channel: 'catalog-view',
+          generation: 1,
+          state: { version: 1 },
+        },
+      }),
+    );
   }
   let catalog;
-  for(let i=0;i<100;i++){catalog=messages.filter(m=>m.type==='catalog').at(-1);if(catalog?.elements?.some(e=>id==='dealer'?e.id==='filter:customer'&&e.options.includes('customer-A'):e.id.startsWith('personal:risk:')))break;await new Promise(done=>setTimeout(done,10));}
-  return{dom,catalog,messages};
+  for (let i = 0; i < 100; i++) {
+    catalog = messages.filter((m) => m.type === 'catalog').at(-1);
+    if (
+      catalog?.elements?.some((e) =>
+        id === 'dealer'
+          ? e.id === 'filter:customer' && e.options.includes('customer-A')
+          : e.id.startsWith('personal:risk:'),
+      )
+    )
+      break;
+    await new Promise((done) => setTimeout(done, 10));
+  }
+  return { dom, catalog, messages };
 }
-test('the real dealer author catalog accepts its empty all-customers option through the real page route and registry',async t=>{
-  const {catalog}=await authorCatalog(t,'dealer');
-  const filter=catalog?.elements?.find(e=>e.id==='filter:customer');
-  assert.equal(filter?.value,'');assert.deepEqual(Array.from(filter.options),['','customer-A']);
-  const h=await mount(t),{value:{owner}}=await h.open();
-  const send=elements=>h.call('catalog',{owner,parameters:{catalog:{elements},pageSource:'self-report',toolMessages:[]}});
-  const accepted=await send(JSON.parse(JSON.stringify(catalog.elements)));
-  assert.equal(accepted.status,200,JSON.stringify(accepted.value));
-  const strictInvalid=[{...filter,id:''},{...filter,label:''},{...filter,actions:['']},{...filter,members:['']},{...filter,value:42},{...filter,value:'x'.repeat(201)},{...filter,options:[42]},{...filter,options:['x'.repeat(121)]},{...filter,options:Array(25).fill('a')}];
-  for(const invalid of strictInvalid){const rejected=await send([invalid]);assert.equal(rejected.status,400);assert.equal(rejected.value.error,'INVALID_PAGE_CATALOG');}
-  assert.equal((await send(JSON.parse(JSON.stringify(catalog.elements)))).status,200,'strict invalid declarations do not break the valid current author');
+test('the real dealer author catalog accepts its empty all-customers option through the real page route and registry', async (t) => {
+  const { catalog } = await authorCatalog(t, 'dealer');
+  const filter = catalog?.elements?.find((e) => e.id === 'filter:customer');
+  assert.equal(filter?.value, '');
+  assert.deepEqual(Array.from(filter.options), ['', 'customer-A']);
+  const h = await mount(t),
+    {
+      value: { owner },
+    } = await h.open();
+  const send = (elements) =>
+    h.call('catalog', {
+      owner,
+      parameters: { catalog: { elements }, pageSource: 'self-report', toolMessages: [] },
+    });
+  const accepted = await send(JSON.parse(JSON.stringify(catalog.elements)));
+  assert.equal(accepted.status, 200, JSON.stringify(accepted.value));
+  const strictInvalid = [
+    { ...filter, id: '' },
+    { ...filter, label: '' },
+    { ...filter, actions: [''] },
+    { ...filter, members: [''] },
+    { ...filter, value: 42 },
+    { ...filter, value: 'x'.repeat(201) },
+    { ...filter, options: [42] },
+    { ...filter, options: ['x'.repeat(121)] },
+    { ...filter, options: Array(25).fill('a') },
+  ];
+  for (const invalid of strictInvalid) {
+    const rejected = await send([invalid]);
+    assert.equal(rejected.status, 400);
+    assert.equal(rejected.value.error, 'INVALID_PAGE_CATALOG');
+  }
+  assert.equal(
+    (await send(JSON.parse(JSON.stringify(catalog.elements)))).status,
+    200,
+    'strict invalid declarations do not break the valid current author',
+  );
 });
-test('personal actual risk rows use legal matching catalog and DOM targets while original business keys stay intact',async t=>{
-  const {dom,catalog,messages}=await authorCatalog(t,'personal');
-  const context=messages.filter(m=>m.method==='context').at(-1).parameters;
-  const risk=context.parts.personalWorkbench.risks.find(r=>r.id==='["郑州","AGE","60天以上库存"]');
-  assert.ok(risk,'the original business risk key is preserved');
-  const target='personal:risk:'+createHash('sha256').update(risk.id).digest('hex');
-  assert.ok(catalog.elements.some(e=>e.id===target));
-  assert.ok(dom.window.document.querySelector(`[data-page-target="${target}"]`),'the visible row targets exactly the published element');
-  const h=await mount(t),{value:{owner}}=await h.open();
-  const response=await h.call('catalog',{owner,parameters:{catalog:{elements:JSON.parse(JSON.stringify(catalog.elements))},pageSource:'self-report',toolMessages:[]}});
-  assert.equal(response.status,200,JSON.stringify(response.value));
+test('personal actual risk rows use legal matching catalog and DOM targets while original business keys stay intact', async (t) => {
+  const { dom, catalog, messages } = await authorCatalog(t, 'personal');
+  const context = messages.filter((m) => m.method === 'context').at(-1).parameters;
+  const risk = context.parts.personalWorkbench.risks.find(
+    (r) => r.id === '["郑州","AGE","60天以上库存"]',
+  );
+  assert.ok(risk, 'the original business risk key is preserved');
+  const target = 'personal:risk:' + createHash('sha256').update(risk.id).digest('hex');
+  assert.ok(catalog.elements.some((e) => e.id === target));
+  assert.ok(
+    dom.window.document.querySelector(`[data-page-target="${target}"]`),
+    'the visible row targets exactly the published element',
+  );
+  const h = await mount(t),
+    {
+      value: { owner },
+    } = await h.open();
+  const response = await h.call('catalog', {
+    owner,
+    parameters: {
+      catalog: { elements: JSON.parse(JSON.stringify(catalog.elements)) },
+      pageSource: 'self-report',
+      toolMessages: [],
+    },
+  });
+  assert.equal(response.status, 200, JSON.stringify(response.value));
 });
 test('HTML keeps self-reported actions and AG-UI as two real channels on one exact owner', async (t) => {
   const h = await mount(t);
@@ -344,27 +532,41 @@ test('references are bound to their exact owner and cannot claim a Native surfac
   assert.equal((await h.reference({ owner, surface: 'gea-html-inventory-test' })).status, 400);
 });
 
-test('closing one Session preserves another page cached binding, while identity revocation rejects both', async t => {
+test('closing one Session preserves another page cached binding, while identity revocation rejects both', async (t) => {
   const h = await mount(t);
   const other = SessionId('session-22222222-2222-4222-8222-222222222222');
   await h.registerSession(other);
   const ownerA = (await h.open()).value.owner;
   const ownerB = (await h.open({ sessionId: other })).value.owner;
   const generation = await h.generation();
-  const captureB = () => h.reference({ owner: ownerB, sessionId: other, surface: 'gea-html-inventory-test', generation });
+  const captureB = () =>
+    h.reference({
+      owner: ownerB,
+      sessionId: other,
+      surface: 'gea-html-inventory-test',
+      generation,
+    });
   assert.equal((await captureB()).status, 200);
   await h.call('close', { owner: ownerA });
   const kept = await captureB();
-  assert.equal(kept.status, 200, 'B must keep capturing with its existing client binding after A closes');
+  assert.equal(
+    kept.status,
+    200,
+    'B must keep capturing with its existing client binding after A closes',
+  );
   assert.equal((await h.readReference(kept.value.id, other)).status, 200);
-  assert.equal((await h.reference({ owner: ownerA, surface: 'gea-html-inventory-test', generation })).status, 400);
+  assert.equal(
+    (await h.reference({ owner: ownerA, surface: 'gea-html-inventory-test', generation })).status,
+    400,
+  );
   h.identity.abort();
   assert.equal((await captureB()).status, 400);
   assert.equal((await h.readReference(kept.value.id, other)).status, 403);
 });
 
-test('a saved reference survives normal page reopen but requires its current view grant and original principal', async t => {
-  const h = await mount(t), owner = (await h.open()).value.owner;
+test('a saved reference survives normal page reopen but requires its current view grant and original principal', async (t) => {
+  const h = await mount(t),
+    owner = (await h.open()).value.owner;
   const receipt = (await h.reference({ owner, surface: 'gea-html-inventory-test' })).value;
   assert.equal((await h.readReference(receipt.id)).value.text, 'chosen original content');
   assert.equal((await h.readReference(receipt.id, 'session-other')).status, 404);
@@ -407,7 +609,10 @@ test('a missing page is reported and a different resource or Session cannot acqu
     (await h.open({ resourceId: 'unrelated-plugin' })).value.error,
     'PAGE_RESOURCE_NOT_ALLOWED',
   );
-  assert.match((await h.open({ sessionId: 'session-22222222-2222-4222-8222-222222222222' })).value.error,/session .* not found/);
+  assert.match(
+    (await h.open({ sessionId: 'session-22222222-2222-4222-8222-222222222222' })).value.error,
+    /session .* not found/,
+  );
   const owner = (await h.open()).value.owner;
   assert.equal((await h.call('access', { owner })).status, 200);
   await h.call('close', { owner });
@@ -446,68 +651,178 @@ test('correlated HTML replies resolve only the matching action and cancellation 
   assert.deepEqual((await h.call('events', { owner })).value, []);
 });
 
-
-test('the original regional view-only grant allows its visible module filter through the official page tool', async t => {
-  const h=await mount(t,'html',true);
-  const {value:{owner}}=await h.open();
-  const catalog={elements:[{id:'filter:module',role:'field',label:'工作台模块',value:'overview',options:['overview','follow','category','review','analysis'],editable:true,effect:'view'}]};
-  await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}});
-  const action=h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow',reason:'查看模拟提报跟催'});
-  await new Promise(resolve=>setTimeout(resolve,10));
-  const events=(await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).value.events;
-  if(events.length){
-    const toolCallId=events[0].toolCallId;
-    await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[{id:'regional-view-receipt',role:'tool',toolCallId,content:JSON.stringify({toolCallId,applied:true})}]}});
+test('the original regional view-only grant allows its visible module filter through the official page tool', async (t) => {
+  const h = await mount(t, 'html', true);
+  const {
+    value: { owner },
+  } = await h.open();
+  const catalog = {
+    elements: [
+      {
+        id: 'filter:module',
+        role: 'field',
+        label: '工作台模块',
+        value: 'overview',
+        options: ['overview', 'follow', 'category', 'review', 'analysis'],
+        editable: true,
+        effect: 'view',
+      },
+    ],
+  };
+  await h.call('catalog', {
+    owner,
+    parameters: { catalog, pageSource: 'self-report', toolMessages: [] },
+  });
+  const action = h.execute('gea_plugin_page_apply', {
+    kind: 'setValue',
+    target: 'filter:module',
+    value: 'follow',
+    reason: '查看模拟提报跟催',
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const events = (
+    await h.call('catalog', {
+      owner,
+      parameters: { catalog, pageSource: 'self-report', toolMessages: [] },
+    })
+  ).value.events;
+  if (events.length) {
+    const toolCallId = events[0].toolCallId;
+    await h.call('catalog', {
+      owner,
+      parameters: {
+        catalog,
+        pageSource: 'self-report',
+        toolMessages: [
+          {
+            id: 'regional-view-receipt',
+            role: 'tool',
+            toolCallId,
+            content: JSON.stringify({ toolCallId, applied: true }),
+          },
+        ],
+      },
+    });
   }
-  assert.match((await action).value,/"applied":true/);
-  const protectedCatalog={elements:[
-    {id:'field:draft',role:'field',label:'普通草稿',editable:true},
-    {id:'field:readonly',role:'field',label:'只读',effect:'view'},
-    {id:'action:submit',role:'control',label:'提交',actions:['invoke'],effect:'submit'},
-    {id:'action:approve',role:'control',label:'审批',actions:['invoke'],effect:'approve'},
-  ]};
-  await h.call('catalog',{owner,parameters:{catalog:protectedCatalog,pageSource:'self-report',toolMessages:[]}});
-  for(const [args,error] of [
-    [{kind:'setValue',target:'field:draft',value:'draft'},'DATA_ACTION_NOT_ALLOWED'],
-    [{kind:'setValue',target:'field:readonly',value:'readonly'},'ELEMENT_NOT_EDITABLE'],
-    [{kind:'invoke',target:'action:submit',action:'invoke',confirm:true},'EFFECT_NOT_ALLOWED'],
-    [{kind:'invoke',target:'action:approve',action:'invoke',confirm:true},'EFFECT_NOT_ALLOWED'],
-  ]) assert.equal(JSON.parse((await h.execute('gea_plugin_page_apply',args)).value).error,error);
-  const queued=(await h.call('catalog',{owner,parameters:{catalog:protectedCatalog,pageSource:'self-report',toolMessages:[]}})).value.events;
-  assert.deepEqual(queued,[]);
+  assert.match((await action).value, /"applied":true/);
+  const protectedCatalog = {
+    elements: [
+      { id: 'field:draft', role: 'field', label: '普通草稿', editable: true },
+      { id: 'field:readonly', role: 'field', label: '只读', effect: 'view' },
+      {
+        id: 'action:submit',
+        role: 'control',
+        label: '提交',
+        actions: ['invoke'],
+        effect: 'submit',
+      },
+      {
+        id: 'action:approve',
+        role: 'control',
+        label: '审批',
+        actions: ['invoke'],
+        effect: 'approve',
+      },
+    ],
+  };
+  await h.call('catalog', {
+    owner,
+    parameters: { catalog: protectedCatalog, pageSource: 'self-report', toolMessages: [] },
+  });
+  for (const [args, error] of [
+    [{ kind: 'setValue', target: 'field:draft', value: 'draft' }, 'DATA_ACTION_NOT_ALLOWED'],
+    [{ kind: 'setValue', target: 'field:readonly', value: 'readonly' }, 'ELEMENT_NOT_EDITABLE'],
+    [
+      { kind: 'invoke', target: 'action:submit', action: 'invoke', confirm: true },
+      'EFFECT_NOT_ALLOWED',
+    ],
+    [
+      { kind: 'invoke', target: 'action:approve', action: 'invoke', confirm: true },
+      'EFFECT_NOT_ALLOWED',
+    ],
+  ])
+    assert.equal(JSON.parse((await h.execute('gea_plugin_page_apply', args)).value).error, error);
+  const queued = (
+    await h.call('catalog', {
+      owner,
+      parameters: { catalog: protectedCatalog, pageSource: 'self-report', toolMessages: [] },
+    })
+  ).value.events;
+  assert.deepEqual(queued, []);
 });
 
-
-test('explicit view filters keep the existing public cancellation, rate limit and owner release protections', async t => {
-  const h=await mount(t,'html',true), owner=(await h.open()).value.owner;
-  const catalog={elements:[{id:'filter:module',role:'field',label:'工作台模块',editable:true,effect:'view'}]};
-  await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}});
-  for(let index=0;index<30;index++){
-    const abort=new AbortController();
-    const pending=h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'},abort.signal);
-    await new Promise(resolve=>setTimeout(resolve,1));
+test('explicit view filters keep the existing public cancellation, rate limit and owner release protections', async (t) => {
+  const h = await mount(t, 'html', true),
+    owner = (await h.open()).value.owner;
+  const catalog = {
+    elements: [
+      { id: 'filter:module', role: 'field', label: '工作台模块', editable: true, effect: 'view' },
+    ],
+  };
+  await h.call('catalog', {
+    owner,
+    parameters: { catalog, pageSource: 'self-report', toolMessages: [] },
+  });
+  for (let index = 0; index < 30; index++) {
+    const abort = new AbortController();
+    const pending = h.execute(
+      'gea_plugin_page_apply',
+      { kind: 'setValue', target: 'filter:module', value: 'follow' },
+      abort.signal,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1));
     abort.abort();
-    assert.equal((await pending).isError,true);
+    assert.equal((await pending).isError, true);
   }
-  const limited=JSON.parse((await h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'})).value);
-  assert.equal(limited.error,'DRAFT_RATE_LIMITED');
-  const events=(await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).value.events;
-  assert.deepEqual(events,[]);
-  await h.call('close',{owner});
-  const unavailable=await h.execute('gea_plugin_page_apply',{kind:'setValue',target:'filter:module',value:'follow'});
-  assert.equal(unavailable.isError,true);
-  assert.equal((await h.call('catalog',{owner,parameters:{catalog,pageSource:'self-report',toolMessages:[]}})).status,400);
+  const limited = JSON.parse(
+    (
+      await h.execute('gea_plugin_page_apply', {
+        kind: 'setValue',
+        target: 'filter:module',
+        value: 'follow',
+      })
+    ).value,
+  );
+  assert.equal(limited.error, 'DRAFT_RATE_LIMITED');
+  const events = (
+    await h.call('catalog', {
+      owner,
+      parameters: { catalog, pageSource: 'self-report', toolMessages: [] },
+    })
+  ).value.events;
+  assert.deepEqual(events, []);
+  await h.call('close', { owner });
+  const unavailable = await h.execute('gea_plugin_page_apply', {
+    kind: 'setValue',
+    target: 'filter:module',
+    value: 'follow',
+  });
+  assert.equal(unavailable.isError, true);
+  assert.equal(
+    (
+      await h.call('catalog', {
+        owner,
+        parameters: { catalog, pageSource: 'self-report', toolMessages: [] },
+      })
+    ).status,
+    400,
+  );
 });
 
-
-test('disabled capability keeps its static owner but rejects page actions and reference capture',async t=>{
-  const h=await mount(t,'html',true,false);
-  const opened=await h.open();
-  assert.equal(opened.status,200);
-  const owner=opened.value.owner;
-  assert.match(JSON.stringify(await h.execute('gea_page',{action:'context'})),/EFFECT_NOT_ALLOWED/);
-  assert.match(JSON.stringify(await h.execute('gea_page',{action:'refresh'})),/EFFECT_NOT_ALLOWED/);
-  const receipt=await h.reference({owner,surface:'gea-html-inventory-test'});
-  assert.equal(receipt.status,400);
-  assert.match(receipt.value.error,/PAGE_REFERENCE_ACCESS_DENIED/);
+test('disabled capability keeps its static owner but rejects page actions and reference capture', async (t) => {
+  const h = await mount(t, 'html', true, false);
+  const opened = await h.open();
+  assert.equal(opened.status, 200);
+  const owner = opened.value.owner;
+  assert.match(
+    JSON.stringify(await h.execute('gea_page', { action: 'context' })),
+    /EFFECT_NOT_ALLOWED/,
+  );
+  assert.match(
+    JSON.stringify(await h.execute('gea_page', { action: 'refresh' })),
+    /EFFECT_NOT_ALLOWED/,
+  );
+  const receipt = await h.reference({ owner, surface: 'gea-html-inventory-test' });
+  assert.equal(receipt.status, 400);
+  assert.match(receipt.value.error, /PAGE_REFERENCE_ACCESS_DENIED/);
 });

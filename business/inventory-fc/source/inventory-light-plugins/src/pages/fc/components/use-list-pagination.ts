@@ -1,5 +1,5 @@
-"use client";
-import { useState } from "react";
+'use client';
+import { useState } from 'react';
 
 export type RemotePagination = {
   pageNumber: number;
@@ -27,10 +27,8 @@ export function useListPagination<T>(
       pageNumber: page,
       pageSize: state.size,
       totalCount: rows.length,
-      onPageChange: (next: number) =>
-        setState({ key: resetKey, page: next, size: state.size }),
-      onPageSizeChange: (size: number) =>
-        setState({ key: resetKey, page: 1, size }),
+      onPageChange: (next: number) => setState({ key: resetKey, page: next, size: state.size }),
+      onPageSizeChange: (size: number) => setState({ key: resetKey, page: 1, size }),
     },
   };
 }

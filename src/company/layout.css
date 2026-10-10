@@ -140,4 +140,6 @@ html[data-fullscreen] .gea-sidebar-window-row {
   flex: none;
   margin-bottom: 8px;
 }
-.gea-sidebar-owned[data-sidebar-collapsed] .gea-sidebar-brand-row { flex-direction: column; }
+.gea-sidebar-owned[data-sidebar-collapsed] .gea-sidebar-brand-row {
+  flex-direction: column;
+}

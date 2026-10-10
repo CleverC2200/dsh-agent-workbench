@@ -1,37 +1,36 @@
-import React, { useEffect, useRef, useState } from "react";
-import { loadPersonal, reset } from "./data";
-import { readSignal, dataMode } from "./live-input";
+import React, { useEffect, useRef, useState } from 'react';
+import { loadPersonal, reset } from './data';
+import { readSignal, dataMode } from './live-input';
+import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
 import {
-  createPageViewState,
-  usePageViewField,
-} from "../../../../../shared/view-state.js";
-import { dedupeRisks, summarize, type ObjectData, type Risk } from "dsh-agent-manage/inventory-compute/personal";
-import { Button, DataPagination } from "../dsh-ui/controls";
-import { WorkbenchLoading } from "../dsh-ui/workbench-loading";
-import {
-  draft,
-  action,
-  reportElements,
-} from "../../../../../shared/channel.js";
+  dedupeRisks,
+  summarize,
+  type ObjectData,
+  type Risk,
+} from 'dsh-agent-manage/inventory-compute/personal';
+import { Button, DataPagination } from '../dsh-ui/controls';
+import { WorkbenchLoading } from '../dsh-ui/workbench-loading';
+import { draft, action, reportElements } from '../../../../../shared/channel.js';
 import {
   pageContext,
   updateContext,
   withdraw,
   confirmContext,
   clearContext,
-} from "../native/context";
-import css from "./style.module.css";
-import { ObjectPicker } from "./object-picker";
-import { createHash } from "../../../../../shared/browser-crypto";
-import { coverageNotes } from "./coverage";
-const riskTargetId = (id: string) => "personal:risk:" + createHash("sha256").update(id).digest("hex");
+} from '../native/context';
+import css from './style.module.css';
+import { ObjectPicker } from './object-picker';
+import { createHash } from '../../../../../shared/browser-crypto';
+import { coverageNotes } from './coverage';
+const riskTargetId = (id: string) =>
+  'personal:risk:' + createHash('sha256').update(id).digest('hex');
 const fmt = (v: number | null) =>
-  v === null ? "—" : v.toLocaleString("zh-CN", { maximumFractionDigits: 1 });
+  v === null ? '—' : v.toLocaleString('zh-CN', { maximumFractionDigits: 1 });
 function Details({ value }: { value: any }) {
   if (
     value == null ||
     (Array.isArray(value) && !value.length) ||
-    (typeof value === "object" && !Object.keys(value).length)
+    (typeof value === 'object' && !Object.keys(value).length)
   )
     return <span>—</span>;
   if (Array.isArray(value))
@@ -44,12 +43,12 @@ function Details({ value }: { value: any }) {
         ))}
       </div>
     );
-  if (typeof value === "object")
+  if (typeof value === 'object')
     return (
       <dl>
         {Object.entries(value).map(([key, v]) => (
           <div key={key}>
-            <dt>{key === "label" ? "指标" : key === "value" ? "内容" : key}</dt>
+            <dt>{key === 'label' ? '指标' : key === 'value' ? '内容' : key}</dt>
             <dd>
               <Details value={v} />
             </dd>
@@ -59,13 +58,9 @@ function Details({ value }: { value: any }) {
     );
   return <span>{String(value)}</span>;
 }
-const types = ["全部", "缺货", "低库存", "货龄", "大日期", "滞库"];
+const types = ['全部', '缺货', '低库存', '货龄', '大日期', '滞库'];
 const tone = (type: string) =>
-  type === "缺货"
-    ? "risk"
-    : ["货龄", "大日期", "低库存"].includes(type)
-      ? "warn"
-      : "neutral";
+  type === '缺货' ? 'risk' : ['货龄', '大日期', '低库存'].includes(type) ? 'warn' : 'neutral';
 function Section({
   number,
   title,
@@ -86,13 +81,7 @@ function Section({
     </div>
   );
 }
-function Badge({
-  children,
-  state = "neutral",
-}: {
-  children: React.ReactNode;
-  state?: string;
-}) {
+function Badge({ children, state = 'neutral' }: { children: React.ReactNode; state?: string }) {
   return (
     <span className={css.badge} data-tone={state}>
       {children}
@@ -107,28 +96,16 @@ export default function Personal({
     [errors, setErrors] = useState<string[]>([]),
     [loading, setLoading] = useState(true),
     [revision, setRevision] = useState(0);
-  const [view] = useState(
-    () => ownedView ?? createPageViewState("inventory-personal"),
-  );
-  const [selected, setSelected] = usePageViewField(
-    React,
-    view,
-    "selected",
-    "全部",
-  );
-  const [type, setType] = usePageViewField(React, view, "riskType", "全部");
-  const [page, setPage] = usePageViewField(React, view, "page", 1);
-  const [size, setSize] = usePageViewField(React, view, "size", 10);
-  const [feedbackNotes, setFeedbackNotes] = usePageViewField(
-    React,
-    view,
-    "feedbackNotes",
-    {},
-  );
-  const [role, setRole] = useState("全部"),
+  const [view] = useState(() => ownedView ?? createPageViewState('inventory-personal'));
+  const [selected, setSelected] = usePageViewField(React, view, 'selected', '全部');
+  const [type, setType] = usePageViewField(React, view, 'riskType', '全部');
+  const [page, setPage] = usePageViewField(React, view, 'page', 1);
+  const [size, setSize] = usePageViewField(React, view, 'size', 10);
+  const [feedbackNotes, setFeedbackNotes] = usePageViewField(React, view, 'feedbackNotes', {});
+  const [role, setRole] = useState('全部'),
     [detail, setDetail] = useState<Risk | null>(null),
     [feedback, setFeedback] = useState<Risk | null>(null),
-    [note, setNote] = useState(""),
+    [note, setNote] = useState(''),
     [busy, setBusy] = useState(false);
   const writeNote = (value: string) => {
     setNote(value);
@@ -142,28 +119,26 @@ export default function Personal({
     pending = useRef<any>(),
     current = useRef<any>();
   const [referenceReady, setReferenceReady] = useState(false);
-  const [publicationError, setPublicationError] = useState(""),
+  const [publicationError, setPublicationError] = useState(''),
     [publicationRevision, setPublicationRevision] = useState(0);
   useEffect(() => {
     const cancel = () => lifetime.current.abort();
-    window.addEventListener("gea-session-changing", cancel);
-    window.addEventListener("gea-identity-changed", cancel);
+    window.addEventListener('gea-session-changing', cancel);
+    window.addEventListener('gea-identity-changed', cancel);
     return () => {
       cancel();
       reset();
       clearContext();
-      window.removeEventListener("gea-session-changing", cancel);
-      window.removeEventListener("gea-identity-changed", cancel);
+      window.removeEventListener('gea-session-changing', cancel);
+      window.removeEventListener('gea-identity-changed', cancel);
     };
   }, []);
   useEffect(() => {
     setPermissionWarnings([]);
     const warn = (e: any) =>
-      setPermissionWarnings((values) => [
-        ...new Set([...values, e.detail.message]),
-      ]);
-    window.addEventListener("gea-query-warning", warn);
-    return () => window.removeEventListener("gea-query-warning", warn);
+      setPermissionWarnings((values) => [...new Set([...values, e.detail.message])]);
+    window.addEventListener('gea-query-warning', warn);
+    return () => window.removeEventListener('gea-query-warning', warn);
   }, [revision]);
   useEffect(() => {
     let active = true;
@@ -191,32 +166,24 @@ export default function Personal({
   }, [revision]);
   const scope = objects.filter(
     (o) =>
-      (role === "全部" ||
-        (role === "基地" && o.kind === "base") ||
-        (role === "分仓" && o.kind === "branch")) &&
-      (selected === "全部" || o.id === selected),
+      (role === '全部' ||
+        (role === '基地' && o.kind === 'base') ||
+        (role === '分仓' && o.kind === 'branch')) &&
+      (selected === '全部' || o.id === selected),
   );
   const summary = summarize(scope),
     risks = dedupeRisks(scope.flatMap((o) => o.risks)),
-    filtered = risks.filter((r) => type === "全部" || r.tags.includes(type));
+    filtered = risks.filter((r) => type === '全部' || r.tags.includes(type));
   useEffect(() => {
-    if (
-      !loading &&
-      selected !== "全部" &&
-      !objects.some((o) => o.id === selected)
-    )
-      setSelected("全部");
+    if (!loading && selected !== '全部' && !objects.some((o) => o.id === selected))
+      setSelected('全部');
   }, [loading, objects, selected]);
   useEffect(() => {
     if (!loading && page > Math.max(1, Math.ceil(filtered.length / size)))
       setPage(Math.max(1, Math.ceil(filtered.length / size)));
   }, [loading, filtered.length, page, size]);
   current.current = { objects, selected, type, role, loading };
-  const transition = async (
-    requested: any,
-    commit: () => void,
-    operation?: AbortSignal,
-  ) => {
+  const transition = async (requested: any, commit: () => void, operation?: AbortSignal) => {
     const signal = operation
       ? AbortSignal.any([lifetime.current.signal, operation])
       : lifetime.current.signal;
@@ -228,12 +195,11 @@ export default function Personal({
     setReferenceReady(false);
     setDetail(null);
     setFeedback(null);
-    setNote("");
+    setNote('');
     try {
       await withdraw(requested, signal);
       signal.throwIfAborted();
-      if (sequence !== intent.current)
-        throw Error("操作已被后续筛选或刷新替代");
+      if (sequence !== intent.current) throw Error('操作已被后续筛选或刷新替代');
       commit();
     } finally {
       if (sequence === intent.current && !lifetime.current.signal.aborted) {
@@ -247,30 +213,27 @@ export default function Personal({
     operation?.throwIfAborted();
     if (
       !args ||
-      typeof args !== "object" ||
+      typeof args !== 'object' ||
       Array.isArray(args) ||
-      Object.keys(args).some((key) => !["objectId", "riskType"].includes(key))
+      Object.keys(args).some((key) => !['objectId', 'riskType'].includes(key))
     )
-      throw Error("筛选参数无效");
+      throw Error('筛选参数无效');
     const value = current.current;
     if (!Object.keys(args).length) return { unchanged: true };
     if (transitioning.current && pending.current?.refresh)
-      throw Error("正在刷新，请等待当前读取后再筛选");
+      throw Error('正在刷新，请等待当前读取后再筛选');
     const target = {
-      objectId: transitioning.current
-        ? pending.current.objectId
-        : value.selected,
+      objectId: transitioning.current ? pending.current.objectId : value.selected,
       riskType: transitioning.current ? pending.current.riskType : value.type,
       ...args,
     };
     if (
       args.objectId !== undefined &&
-      args.objectId !== "全部" &&
+      args.objectId !== '全部' &&
       !value.objects.some((o: ObjectData) => o.id === args.objectId)
     )
-      throw Error("对象不在已读取授权范围");
-    if (args.riskType !== undefined && !types.includes(args.riskType))
-      throw Error("风险类型无效");
+      throw Error('对象不在已读取授权范围');
+    if (args.riskType !== undefined && !types.includes(args.riskType)) throw Error('风险类型无效');
     if (
       !transitioning.current &&
       target.objectId === value.selected &&
@@ -281,7 +244,7 @@ export default function Personal({
     await transition(
       target,
       () => {
-        setRole("全部");
+        setRole('全部');
         setSelected(target.objectId);
         setType(target.riskType);
         setPage(1);
@@ -300,9 +263,9 @@ export default function Personal({
         reset();
         setObjects([]);
         setLoading(true);
-        setSelected("全部");
-        setType("全部");
-        setRole("全部");
+        setSelected('全部');
+        setType('全部');
+        setRole('全部');
         setRevision((value) => value + 1);
       },
       operation,
@@ -310,15 +273,11 @@ export default function Personal({
     return { refreshing: true };
   };
   useEffect(() => {
-    const stopFilter = action(
-      "filter",
-      "切换已读取授权对象与风险类型",
-      (args, options) => applyFilter(args, options?.signal),
+    const stopFilter = action('filter', '切换已读取授权对象与风险类型', (args, options) =>
+      applyFilter(args, options?.signal),
     );
-    const stopRefresh = action(
-      "refresh",
-      "重新读取当前授权库存范围",
-      (_args, options) => refresh(options?.signal),
+    const stopRefresh = action('refresh', '重新读取当前授权库存范围', (_args, options) =>
+      refresh(options?.signal),
     );
     return () => {
       stopFilter();
@@ -335,14 +294,14 @@ export default function Personal({
     let active = true,
       release: (() => void) | undefined;
     const filters = {
-      allowedFields: ["objectId", "riskType"],
+      allowedFields: ['objectId', 'riskType'],
       current: { objectId: selected, riskType: type },
       options: {
-        objectId: ["全部", ...objects.map((o) => o.id)],
+        objectId: ['全部', ...objects.map((o) => o.id)],
         riskType: types,
       },
     };
-    void updateContext("personalWorkbench", {
+    void updateContext('personalWorkbench', {
       loading,
       scope: scope.map((o) => ({
         id: o.id,
@@ -362,34 +321,34 @@ export default function Personal({
     })
       .then((accepted) => {
         if (!active || !accepted || loading) return;
-        release = reportElements("personal-facts", [
+        release = reportElements('personal-facts', [
           ...metrics.map((m) => ({
-            id: "personal:metric:" + m.title,
-            role: "field",
+            id: 'personal:metric:' + m.title,
+            role: 'field',
             label: m.title,
-            value: m.value === null ? "未知" : String(m.value) + m.unit,
+            value: m.value === null ? '未知' : String(m.value) + m.unit,
           })),
           ...objects.map((o) => {
             const risks = dedupeRisks(o.risks);
             return {
-              id: "personal:object:" + o.id,
-              role: "field",
+              id: 'personal:object:' + o.id,
+              role: 'field',
               label: o.name,
               value: o.error
-                ? "风险待核验"
+                ? '风险待核验'
                 : risks.length
-                  ? risks[0].type + " · " + risks.length + "项"
-                  : "暂未识别风险",
+                  ? risks[0].type + ' · ' + risks.length + '项'
+                  : '暂未识别风险',
             };
           }),
           ...filtered.slice((page - 1) * size, page * size).map((r) => ({
             id: riskTargetId(r.id),
-            role: "row",
-            label: r.object + " · " + r.sku + " · " + r.type,
+            role: 'row',
+            label: r.object + ' · ' + r.sku + ' · ' + r.type,
             value: r.issue,
           })),
         ]);
-        setPublicationError("");
+        setPublicationError('');
         setReferenceReady(true);
       })
       .catch(showError);
@@ -414,23 +373,17 @@ export default function Personal({
     else dialog.current?.close();
   }, [detail, feedback]);
   async function prepareFeedbackDraft() {
-    const signal = AbortSignal.any([
-      lifetime.current.signal,
-      draftAction.current.signal,
-    ]);
+    const signal = AbortSignal.any([lifetime.current.signal, draftAction.current.signal]);
     setBusy(true);
     try {
-      if (
-        !(await confirmContext(signal)) ||
-        pageContext().parts.personalWorkbench.loading
-      )
-        throw Error("当前范围读取未完成");
+      if (!(await confirmContext(signal)) || pageContext().parts.personalWorkbench.loading)
+        throw Error('当前范围读取未完成');
       await draft(
-        "模拟个人库存事项 " +
+        '模拟个人库存事项 ' +
           feedback!.object +
-          " · " +
+          ' · ' +
           feedback!.sku +
-          "\n未发送反馈草稿：" +
+          '\n未发送反馈草稿：' +
           note,
         { signal },
       );
@@ -443,77 +396,70 @@ export default function Personal({
     }
   }
   const objectLabel = scope.length
-    ? `${scope.filter((o) => o.kind === "base").length} 个基地 / ${scope.filter((o) => o.kind === "branch").length} 个分仓`
-    : "—";
+    ? `${scope.filter((o) => o.kind === 'base').length} 个基地 / ${scope.filter((o) => o.kind === 'branch').length} 个分仓`
+    : '—';
   const snapshots = [...new Set(scope.map((o) => o.snapshot).filter(Boolean))];
-  const snapshotLabel =
-    snapshots.length === 1 ? snapshots[0] : snapshots.length ? "多源快照" : "—";
-  const riskCount = (t: string) =>
-    risks.filter((r) => r.tags.includes(t)).length;
-  const knownGaps = scope.filter(
-    (o) => o.inventory !== null && o.target !== null,
-  );
+  const snapshotLabel = snapshots.length === 1 ? snapshots[0] : snapshots.length ? '多源快照' : '—';
+  const riskCount = (t: string) => risks.filter((r) => r.tags.includes(t)).length;
+  const knownGaps = scope.filter((o) => o.inventory !== null && o.target !== null);
   const gapBadge =
     knownGaps.length === scope.length && scope.length
       ? `${knownGaps.filter((o) => o.inventory! > o.target!).length}高${knownGaps.filter((o) => o.inventory! < o.target!).length}低`
-      : "—";
+      : '—';
   const metrics = [
     {
-      title: "当前库存",
+      title: '当前库存',
       value: summary.inventory,
-      unit: "件",
+      unit: '件',
       badge: objectLabel,
       partial: summary.partial.inventory,
-      state: "neutral",
-      label: "汇总口径",
-      sub: "当前可见对象",
+      state: 'neutral',
+      label: '汇总口径',
+      sub: '当前可见对象',
     },
     {
-      title: "库存差额",
+      title: '库存差额',
       value: summary.gap,
-      unit: "件",
-      badge: summary.partial.gap ? "对已知目标" : gapBadge,
+      unit: '件',
+      badge: summary.partial.gap ? '对已知目标' : gapBadge,
       partial: summary.partial.gap,
-      state: summary.gap !== null && summary.gap !== 0 ? "warn" : "neutral",
-      label: summary.partial.target ? "已知目标" : "目标库存",
-      sub: summary.target === null ? "未返回" : fmt(summary.target) + "件",
+      state: summary.gap !== null && summary.gap !== 0 ? 'warn' : 'neutral',
+      label: summary.partial.target ? '已知目标' : '目标库存',
+      sub: summary.target === null ? '未返回' : fmt(summary.target) + '件',
     },
     {
-      title: "平均货龄",
+      title: '平均货龄',
       value: summary.age,
-      unit: "天",
+      unit: '天',
       badge: `${scope.filter((o) => o.age !== null).length}/${scope.length}对象可核验`,
       partial: summary.partial.age,
-      state: "neutral",
-      label: summary.partial.over30 ? "已知31天以上" : "31天以上",
-      sub: summary.over30 === null ? "未返回" : fmt(summary.over30) + "件",
+      state: 'neutral',
+      label: summary.partial.over30 ? '已知31天以上' : '31天以上',
+      sub: summary.over30 === null ? '未返回' : fmt(summary.over30) + '件',
     },
     {
-      title: "当前缺货",
+      title: '当前缺货',
       value: summary.shortage,
-      unit: "件",
-      badge: scope.length ? `已识别 ${riskCount("缺货")} 项` : "暂无对象",
+      unit: '件',
+      badge: scope.length ? `已识别 ${riskCount('缺货')} 项` : '暂无对象',
       partial: summary.partial.shortage,
-      state:
-        summary.shortage !== null && summary.shortage > 0 ? "risk" : "neutral",
-      label: "订单缺口",
+      state: summary.shortage !== null && summary.shortage > 0 ? 'risk' : 'neutral',
+      label: '订单缺口',
       sub:
-        risks.find((r) => r.type === "缺货")?.object ||
-        (summary.shortage === null ? "明细未返回" : "当前未识别"),
+        risks.find((r) => r.type === '缺货')?.object ||
+        (summary.shortage === null ? '明细未返回' : '当前未识别'),
     },
     {
-      title: "滞库风险",
-      value: summary.mixedStagnant ? riskCount("滞库") : summary.stagnant,
-      unit: summary.mixedStagnant ? "项" : "件",
-      badge: summary.mixedStagnant
-        ? "分口径识别"
-        : `已识别 ${riskCount("滞库")} 项`,
+      title: '滞库风险',
+      value: summary.mixedStagnant ? riskCount('滞库') : summary.stagnant,
+      unit: summary.mixedStagnant ? '项' : '件',
+      badge: summary.mixedStagnant ? '分口径识别' : `已识别 ${riskCount('滞库')} 项`,
       partial: summary.partial.stagnant,
-      state: riskCount("滞库") > 0 ? "warn" : "neutral",
-      label: summary.mixedStagnant ? "基地动销/分仓货龄" : "高库存低动销",
+      state: riskCount('滞库') > 0 ? 'warn' : 'neutral',
+      label: summary.mixedStagnant ? '基地动销/分仓货龄' : '高库存低动销',
       sub:
-        risks.find((r) => r.type === "滞库")?.object ||
-        (summary.stagnant === null ? "来源待核验" : "当前未识别"),
+        risks.find((r) => r.type === '滞库')?.object ||
+        (summary.stagnant === null ? '来源待核验' : '当前未识别'),
     },
   ];
   if (loading && !objects.length)
@@ -522,16 +468,13 @@ export default function Personal({
     <main
       className={css.page}
       data-page-reference-ready={referenceReady}
-      data-page-reference-scope={selected + " · " + snapshots.join(" / ")}
+      data-page-reference-scope={selected + ' · ' + snapshots.join(' / ')}
     >
       <header className={css.header}>
         <div className={css.titleRow}>
           <h1>库存管理工作台</h1>
           <span role="status">GEA 授权只读数据 · 反馈仅保存未发送文字</span>
-          <Button
-            disabled={loading}
-            onClick={() => void refresh().catch(showError)}
-          >
+          <Button disabled={loading} onClick={() => void refresh().catch(showError)}>
             刷新
           </Button>
         </div>
@@ -539,13 +482,11 @@ export default function Personal({
           <ObjectPicker
             objects={objects}
             selected={selected}
-            onSelect={(id) =>
-              void applyFilter({ objectId: id }).catch(showError)
-            }
+            onSelect={(id) => void applyFilter({ objectId: id }).catch(showError)}
           />
-          <div className={css.dataTime} title={snapshots.join("；")}>
+          <div className={css.dataTime} title={snapshots.join('；')}>
             数据时间：<b>{snapshotLabel}</b>
-            {loading ? " · 加载中" : ""}
+            {loading ? ' · 加载中' : ''}
           </div>
         </div>
       </header>
@@ -557,41 +498,39 @@ export default function Personal({
         )}
         {(errors.length > 0 || permissionWarnings.length > 0) && (
           <p role="alert" className={css.warning}>
-            {[...errors, ...permissionWarnings].join("；")}
+            {[...errors, ...permissionWarnings].join('；')}
           </p>
         )}
         {scope.some((o) => o.error) && (
           <p role="alert" className={css.warning}>
             {scope
               .filter((o) => o.error)
-              .map((o) => o.name + "：" + o.error)
-              .join("；")}
+              .map((o) => o.name + '：' + o.error)
+              .join('；')}
           </p>
         )}
         <Section number="一" title="今日运营情况分析">
-          <small>
-            {selected === "全部" ? "当前授权范围" : scope[0]?.name || "—"}
-          </small>
+          <small>{selected === '全部' ? '当前授权范围' : scope[0]?.name || '—'}</small>
         </Section>
         <section className={css.analysis}>
           {!scope.length ? (
-            "暂无已返回的授权对象"
+            '暂无已返回的授权对象'
           ) : (
             <>
-              当前范围包括 {scope.filter((o) => o.kind === "base").length}{" "}
-              个基地、{scope.filter((o) => o.kind === "branch").length}{" "}
-              个分仓。当前库存 {fmt(summary.inventory)} 件；
+              当前范围包括 {scope.filter((o) => o.kind === 'base').length} 个基地、
+              {scope.filter((o) => o.kind === 'branch').length} 个分仓。当前库存{' '}
+              {fmt(summary.inventory)} 件；
               {summary.shortage === null
-                ? "当前缺货待核验"
-                : `${summary.partial.shortage ? "已知" : ""}当前缺货 ${fmt(summary.shortage)} 件`}
+                ? '当前缺货待核验'
+                : `${summary.partial.shortage ? '已知' : ''}当前缺货 ${fmt(summary.shortage)} 件`}
               ；
               {summary.age === null
-                ? "平均货龄待核验"
-                : `${summary.partial.age ? "已知范围" : ""}平均货龄 ${fmt(summary.age)} 天`}
+                ? '平均货龄待核验'
+                : `${summary.partial.age ? '已知范围' : ''}平均货龄 ${fmt(summary.age)} 天`}
               。
               {risks.length
                 ? `已识别 ${risks.length} 个待复核对象，优先核对当前订单缺口，再处理货龄和滞库风险。`
-                : "已返回数据中暂未识别风险。"}
+                : '已返回数据中暂未识别风险。'}
               <p>
                 “部分”表示目标、动销或货龄尚未覆盖全部对象，不能将已知值当作全量结论。昨日延续与反馈进展尚未接入。
               </p>
@@ -602,8 +541,7 @@ export default function Personal({
         {scope.some((o) => coverageNotes(o).length > 0) && (
           <details className={css.coverage}>
             <summary>
-              数据完整性说明 ·{" "}
-              {scope.filter((o) => coverageNotes(o).length > 0).length}{" "}
+              数据完整性说明 · {scope.filter((o) => coverageNotes(o).length > 0).length}{' '}
               个对象需核验
             </summary>
             <p>
@@ -614,7 +552,7 @@ export default function Personal({
               .map((o) => (
                 <div key={o.id}>
                   <b>{o.name}</b>
-                  <span>{coverageNotes(o).join("；")}</span>
+                  <span>{coverageNotes(o).join('；')}</span>
                 </div>
               ))}
           </details>
@@ -624,26 +562,26 @@ export default function Personal({
             <button
               key={m.title}
               data-page-block
-              data-page-target={"personal:metric:" + m.title}
+              data-page-target={'personal:metric:' + m.title}
               data-page-label={m.title}
               className={css.metric}
-              title={`${m.title}：${m.value === null ? "待核验" : fmt(m.value) + m.unit}${m.partial ? "（部分，未覆盖全部对象）" : ""}；${m.label}：${m.sub}`}
+              title={`${m.title}：${m.value === null ? '待核验' : fmt(m.value) + m.unit}${m.partial ? '（部分，未覆盖全部对象）' : ''}；${m.label}：${m.sub}`}
               onClick={() => {
                 setDetail({
                   id: m.title,
                   objectId: selected,
-                  object: "当前范围",
-                  sku: "",
-                  category: "",
+                  object: '当前范围',
+                  sku: '',
+                  category: '',
                   type: m.title,
                   tags: [],
                   priority: 0,
                   issue: m.title,
-                  action: "",
-                  role: "",
+                  action: '',
+                  role: '',
                   details: scope.map((o) => ({
                     对象: o.name,
-                    快照: o.snapshot || "未返回",
+                    快照: o.snapshot || '未返回',
                     当前库存: o.inventory,
                     目标库存: o.target,
                     平均货龄: o.age,
@@ -651,9 +589,8 @@ export default function Personal({
                     三十一天以上: o.over30,
                     当前缺货: o.shortage,
                     滞库: o.stagnant,
-                    滞库口径: o.kind === "base" ? "高库存低动销" : "90天及以上",
-                    缺值说明:
-                      coverageNotes(o).join("；") || "当前指标均有可用返回值",
+                    滞库口径: o.kind === 'base' ? '高库存低动销' : '90天及以上',
+                    缺值说明: coverageNotes(o).join('；') || '当前指标均有可用返回值',
                     数据覆盖:
                       Object.entries(o.partial ?? {})
                         .filter(([, v]) => v)
@@ -661,16 +598,16 @@ export default function Personal({
                           ([k]) =>
                             ((
                               ({
-                                target: "目标",
-                                age: "货龄",
-                                over30: "货龄库存",
-                                shortage: "缺口",
-                                stagnant: "动销",
-                                inventory: "库存",
+                                target: '目标',
+                                age: '货龄',
+                                over30: '货龄库存',
+                                shortage: '缺口',
+                                stagnant: '动销',
+                                inventory: '库存',
                               }) as Record<string, string>
-                            )[k] ?? k) + "不完整",
+                            )[k] ?? k) + '不完整',
                         )
-                        .join("、") || "以已返回数据为准",
+                        .join('、') || '以已返回数据为准',
                   })),
                 });
               }}
@@ -683,11 +620,9 @@ export default function Personal({
                 <Badge state={m.state}>{m.badge}</Badge>
               </div>
               <strong data-tone={m.state} data-empty={m.value === null}>
-                {m.title === "库存差额" && m.value !== null && m.value > 0
-                  ? "+"
-                  : ""}
-                {m.value === null ? "待核验" : fmt(m.value)}
-                <em>{m.value === null ? "" : m.unit}</em>
+                {m.title === '库存差额' && m.value !== null && m.value > 0 ? '+' : ''}
+                {m.value === null ? '待核验' : fmt(m.value)}
+                <em>{m.value === null ? '' : m.unit}</em>
               </strong>
               <footer>
                 <span>{m.label}</span>
@@ -704,29 +639,16 @@ export default function Personal({
               <button
                 key={o.id}
                 data-page-block
-                data-page-target={"personal:object:" + o.id}
+                data-page-target={'personal:object:' + o.id}
                 data-page-label={o.name}
-                title={
-                  o.error
-                    ? "风险待核验"
-                    : first?.issue || "已返回数据中暂未识别风险"
-                }
-                onClick={() =>
-                  void applyFilter({ objectId: o.id }).catch(showError)
-                }
+                title={o.error ? '风险待核验' : first?.issue || '已返回数据中暂未识别风险'}
+                onClick={() => void applyFilter({ objectId: o.id }).catch(showError)}
                 aria-pressed={selected === o.id}
               >
-                <i
-                  className={css.dot}
-                  data-tone={first ? tone(first.type) : "neutral"}
-                />
+                <i className={css.dot} data-tone={first ? tone(first.type) : 'neutral'} />
                 <b>{o.name}</b>
                 <span>
-                  {o.error
-                    ? "风险待核验"
-                    : first
-                      ? `${first.type} · ${count} 项`
-                      : "暂未识别风险"}
+                  {o.error ? '风险待核验' : first ? `${first.type} · ${count} 项` : '暂未识别风险'}
                 </span>
               </button>
             );
@@ -738,19 +660,16 @@ export default function Personal({
               <button
                 key={t}
                 aria-pressed={type === t}
-                onClick={() =>
-                  void applyFilter({ riskType: t }).catch(showError)
-                }
+                onClick={() => void applyFilter({ riskType: t }).catch(showError)}
               >
                 {t}
-                {type !== t &&
-                  risks.some((r) => t === "全部" || r.tags.includes(t)) && (
-                    <i aria-label="有待处理事项" />
-                  )}
+                {type !== t && risks.some((r) => t === '全部' || r.tags.includes(t)) && (
+                  <i aria-label="有待处理事项" />
+                )}
               </button>
             ))}
           </nav>
-          <small>{loading ? "加载中" : `共 ${filtered.length} 条`}</small>
+          <small>{loading ? '加载中' : `共 ${filtered.length} 条`}</small>
         </Section>
         <section className={css.tablePanel}>
           <div className={css.scroll}>
@@ -758,35 +677,31 @@ export default function Personal({
               <thead>
                 <tr>
                   {[
-                    "优先级",
-                    "风险类型",
-                    "对象",
-                    "关键问题",
-                    "建议动作",
-                    "责任角色",
-                    "反馈状态",
-                    "操作",
+                    '优先级',
+                    '风险类型',
+                    '对象',
+                    '关键问题',
+                    '建议动作',
+                    '责任角色',
+                    '反馈状态',
+                    '操作',
                   ].map((t) => (
                     <th key={t}>{t}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filtered.slice((page - 1) * size, page * size).map((r, i) => (
+                {filtered.slice((page - 1) * size, page * size).map((r, _i) => (
                   <tr
                     key={r.id}
                     data-page-target={riskTargetId(r.id)}
-                    data-page-label={r.object + " · " + r.sku + " · " + r.type}
+                    data-page-label={r.object + ' · ' + r.sku + ' · ' + r.type}
                   >
                     <td>
                       <span
                         className={css.priority}
                         data-tone={
-                          r.priority === 1
-                            ? "risk"
-                            : r.priority === 2
-                              ? "warn"
-                              : "neutral"
+                          r.priority === 1 ? 'risk' : r.priority === 2 ? 'warn' : 'neutral'
                         }
                       >
                         {r.priority}
@@ -794,7 +709,7 @@ export default function Personal({
                     </td>
                     <td>
                       <Badge state={tone(r.type)}>{r.type}</Badge>
-                      {r.tags.filter((t) => t !== r.type).join(" / ")}
+                      {r.tags.filter((t) => t !== r.type).join(' / ')}
                     </td>
                     <td>
                       <b>{r.object}</b>
@@ -804,7 +719,7 @@ export default function Personal({
                     </td>
                     <td>{r.issue}</td>
                     <td>{r.action}</td>
-                    <td>{r.role || "—"}</td>
+                    <td>{r.role || '—'}</td>
                     <td>
                       <i className={css.dot} data-tone="neutral" />
                       未接入
@@ -815,7 +730,7 @@ export default function Personal({
                         <button
                           onClick={() => {
                             setFeedback(r);
-                            setNote(feedbackNotes[r.id] ?? "");
+                            setNote(feedbackNotes[r.id] ?? '');
                           }}
                         >
                           补充进展
@@ -827,9 +742,7 @@ export default function Personal({
               </tbody>
             </table>
           </div>
-          {!filtered.length && (
-            <p className={css.empty}>当前筛选暂无已识别事项</p>
-          )}
+          {!filtered.length && <p className={css.empty}>当前筛选暂无已识别事项</p>}
           <DataPagination
             pageNumber={page}
             pageSize={size}
@@ -862,7 +775,7 @@ export default function Personal({
         }}
       >
         <header>
-          <h2>{feedback ? "补充进展" : detail?.issue}</h2>
+          <h2>{feedback ? '补充进展' : detail?.issue}</h2>
           <Button
             onClick={() => {
               setDetail(null);
@@ -887,10 +800,7 @@ export default function Personal({
               />
             </label>
             <p>当前文字作为未提交字段保留。插入右侧输入框只形成未发送草稿。</p>
-            <Button
-              disabled={!note.trim() || busy}
-              onClick={() => void prepareFeedbackDraft()}
-            >
+            <Button disabled={!note.trim() || busy} onClick={() => void prepareFeedbackDraft()}>
               插入未发送草稿
             </Button>
           </>

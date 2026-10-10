@@ -31,13 +31,26 @@ const QUERY_TIMEOUT_MS = 15_000;
 
 /** 查询状态按“周期→队列→进度/分析”分层；请求序号和 AbortSignal 防止晚到结果覆盖新选择。 */
 export type SalesPlanQueryClient = {
-  periods: { invoke: (query?: GeaSalesPlanPeriodQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanPeriod>> };
-  list: { invoke: (query?: GeaSalesPlanPageQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanListItem>> };
+  periods: {
+    invoke: (query?: GeaSalesPlanPeriodQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanPeriod>>;
+  };
+  list: {
+    invoke: (query?: GeaSalesPlanPageQuery) => Promise<GeaSalesPlanPage<GeaSalesPlanListItem>>;
+  };
   /** 可选：点刷新时重新解析账号角色，拿到管理员刚改过的节点权限。 */
-  approvalRoles?: { invoke: (input: { signal?: AbortSignal }) => Promise<{ roles: SalesPlanApprovalRole[] }> };
+  approvalRoles?: {
+    invoke: (input: { signal?: AbortSignal }) => Promise<{ roles: SalesPlanApprovalRole[] }>;
+  };
 };
 
-export type RegionalApprovalQueryError = 'workflow' | 'permission' | 'expired' | 'timeout' | 'unavailable' | 'cancelled' | 'failed';
+export type RegionalApprovalQueryError =
+  | 'workflow'
+  | 'permission'
+  | 'expired'
+  | 'timeout'
+  | 'unavailable'
+  | 'cancelled'
+  | 'failed';
 
 type QueryState<T> =
   | { status: 'idle'; data?: undefined; error?: undefined }
@@ -57,7 +70,10 @@ export type SalesPlanAnalysisSummary = {
 
 const idle = { status: 'idle' } as const;
 
-export const classifyRegionalApprovalQueryError = (error: unknown, timedOut = false): RegionalApprovalQueryError => {
+export const classifyRegionalApprovalQueryError = (
+  error: unknown,
+  timedOut = false,
+): RegionalApprovalQueryError => {
   if (isBackendHttpError(error) && error.code === 'GEA_WORKFLOW_LOAD_FAILED') return 'workflow';
   if (timedOut) return 'timeout';
   if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
@@ -110,10 +126,12 @@ export const useRegionalApprovalQuery = ({
   stage?: ApprovalStageId;
   roles?: readonly ApprovalStageId[];
 }) => {
-  const host=useWorkbenchHost();
-  const client=suppliedClient === undefined ? host.salesPlan : suppliedClient;
+  const host = useWorkbenchHost();
+  const client = suppliedClient === undefined ? host.salesPlan : suppliedClient;
   const [analysisResult, setAnalysisResult] =
-    useState<QueryState<{ summary: SalesPlanAnalysisSummary; records: GeaSalesPlanListItem[] }>>(idle);
+    useState<QueryState<{ summary: SalesPlanAnalysisSummary; records: GeaSalesPlanListItem[] }>>(
+      idle,
+    );
   const analysisSummary = useMemo<QueryState<SalesPlanAnalysisSummary>>(
     () =>
       analysisResult.status === 'success'
@@ -121,10 +139,11 @@ export const useRegionalApprovalQuery = ({
         : analysisResult.status === 'error'
           ? { status: 'error', error: analysisResult.error }
           : { status: analysisResult.status },
-    [analysisResult]
+    [analysisResult],
   );
   const [periodsState, setPeriodsState] = useState<QueryState<GeaSalesPlanPeriod[]>>(idle);
-  const [queueState, setQueueState] = useState<QueryState<GeaSalesPlanPage<GeaSalesPlanListItem>>>(idle);
+  const [queueState, setQueueState] =
+    useState<QueryState<GeaSalesPlanPage<GeaSalesPlanListItem>>>(idle);
   const [progressState, setProgressState] = useState<
     QueryState<Record<ApprovalStageId, number>> & {
       statusTotals?: Partial<Record<number, number>>;
@@ -149,7 +168,14 @@ export const useRegionalApprovalQuery = ({
       baseName: scope?.baseName,
       status: scope?.status,
     }),
-    [scope?.areaCode, scope?.baseName, scope?.dealerCode, scope?.orgCode, scope?.provinceCode, scope?.status]
+    [
+      scope?.areaCode,
+      scope?.baseName,
+      scope?.dealerCode,
+      scope?.orgCode,
+      scope?.provinceCode,
+      scope?.status,
+    ],
   );
   useEffect(() => {
     if (!client) {
@@ -179,7 +205,11 @@ export const useRegionalApprovalQuery = ({
         if (periodsRequest.current !== requestId) return;
         const classified = classifyRegionalApprovalQueryError(error, request.didTimeOut());
         if (classified !== 'cancelled' || request.didTimeOut()) {
-          setPeriodsState((current) => ({ status: 'error', data: current.data, error: classified }));
+          setPeriodsState((current) => ({
+            status: 'error',
+            data: current.data,
+            error: classified,
+          }));
         }
       })
       .finally(request.finish);
@@ -190,9 +220,12 @@ export const useRegionalApprovalQuery = ({
   const periodMonths = salesPlanPeriodMonths(periods);
   const selectedPeriods = salesPlanPeriodsForMonth(periods, selectedPeriodMonth);
   const selectedPlanTypeCodes = [...new Set(selectedPeriods.map((period) => period.planTypeCode))];
-  const selectedPlanTypeCode = selectedPlanTypeCodes.length === 1 ? selectedPlanTypeCodes[0] : undefined;
+  const selectedPlanTypeCode =
+    selectedPlanTypeCodes.length === 1 ? selectedPlanTypeCodes[0] : undefined;
   const periodQueries = selectedPeriods.map((period) => {
-    const roleStatuses = roles?.length ? salesPlanVisibleStatuses(period.planTypeCode, roles) : undefined;
+    const roleStatuses = roles?.length
+      ? salesPlanVisibleStatuses(period.planTypeCode, roles)
+      : undefined;
     const requestedStatuses = stage
       ? (stage as string) === 'evaluation'
         ? [...REGIONAL_PLAN_EVALUATION_STATUSES]
@@ -202,12 +235,23 @@ export const useRegionalApprovalQuery = ({
       ? roleStatuses.filter((status) => !requestedStatuses || requestedStatuses.includes(status))
       : requestedStatuses;
     const statuses = resolved
-      ? [...new Set(resolved.filter((status) => Number.isSafeInteger(status) && (scope?.status === undefined || scope.status === status)))].toSorted((a, b) => a - b)
+      ? [
+          ...new Set(
+            resolved.filter(
+              (status) =>
+                Number.isSafeInteger(status) &&
+                (scope?.status === undefined || scope.status === status),
+            ),
+          ),
+        ].toSorted((a, b) => a - b)
       : undefined;
     return { period, statuses };
   });
   const stageStatusesKey = periodQueries
-    .map(({ period, statuses }) => `${period.periodId}:${statuses === undefined ? '*' : statuses.join(',')}`)
+    .map(
+      ({ period, statuses }) =>
+        `${period.periodId}:${statuses === undefined ? '*' : statuses.join(',')}`,
+    )
     .join('|');
 
   useEffect(() => {
@@ -226,57 +270,72 @@ export const useRegionalApprovalQuery = ({
     // 所以这里不再只取分页前缀，而是把每个分区取全（单页 200 条，按上游 total 循环补齐）。
     const serverPageSize = 200;
     const partitions = periodQueries.flatMap(({ period, statuses }) =>
-      (statuses ?? [undefined]).map((status) => ({ period, status }))
+      (statuses ?? [undefined]).map((status) => ({ period, status })),
     );
-    const queuePromise = partitions.length === 0
-      ? Promise.resolve({ records: [], total: 0, size: requestedSize, current: requestedPage, pages: 1 })
-      : Promise.all(
-          partitions.map(async ({ period, status }) => {
-            const baseQuery = {
-              ...stableScope,
-              periodId: period.periodId,
-              planTypeCode: period.planTypeCode,
-              status,
-              pageNo: 1,
-              pageSize: serverPageSize,
-              signal: request.signal,
-            };
-            const first = await client.list.invoke(baseQuery);
-            const pageSizeOfUpstream = Math.max(1, Math.min(serverPageSize, first.size ?? serverPageSize));
-            const pageCount = Math.max(1, Math.ceil(first.total / pageSizeOfUpstream));
-            const rest = pageCount > 1
-              ? await Promise.all(
-                  Array.from({ length: pageCount - 1 }, (_, index) =>
-                    client.list.invoke({ ...baseQuery, pageNo: index + 2 })
-                  )
-                )
-              : [];
-            return { records: [first, ...rest].flatMap((result) => result.records), total: first.total };
-          })
-        ).then((results) => {
-          // 同一计划只会属于一个 (period, status) 分区；这里再去重一次，
-          // 避免上游分页异常重发同一条导致列表出现重复组织行。
-          const records = [...new Map(
-            results
-              .flatMap((result) => result.records)
-              .map((record) => [String(record.planId), record] as const)
-          ).values()]
-            .toSorted((left, right) =>
-              String(right.updatedAt ?? right.submitTime ?? right.planId).localeCompare(
-                String(left.updatedAt ?? left.submitTime ?? left.planId)
-              )
-            );
-          const total = results.reduce((sum, result) => sum + result.total, 0);
-          // records 是完整集合；current / size / pages 只回显调用方请求的分页参数，
-          // 真正的分页由工作台按分组后的外层行完成。
-          return {
-            records,
-            total,
+    const queuePromise =
+      partitions.length === 0
+        ? Promise.resolve({
+            records: [],
+            total: 0,
             size: requestedSize,
             current: requestedPage,
-            pages: Math.max(1, Math.ceil(total / requestedSize)),
-          } satisfies GeaSalesPlanPage<GeaSalesPlanListItem>;
-        });
+            pages: 1,
+          })
+        : Promise.all(
+            partitions.map(async ({ period, status }) => {
+              const baseQuery = {
+                ...stableScope,
+                periodId: period.periodId,
+                planTypeCode: period.planTypeCode,
+                status,
+                pageNo: 1,
+                pageSize: serverPageSize,
+                signal: request.signal,
+              };
+              const first = await client.list.invoke(baseQuery);
+              const pageSizeOfUpstream = Math.max(
+                1,
+                Math.min(serverPageSize, first.size ?? serverPageSize),
+              );
+              const pageCount = Math.max(1, Math.ceil(first.total / pageSizeOfUpstream));
+              const rest =
+                pageCount > 1
+                  ? await Promise.all(
+                      Array.from({ length: pageCount - 1 }, (_, index) =>
+                        client.list.invoke({ ...baseQuery, pageNo: index + 2 }),
+                      ),
+                    )
+                  : [];
+              return {
+                records: [first, ...rest].flatMap((result) => result.records),
+                total: first.total,
+              };
+            }),
+          ).then((results) => {
+            // 同一计划只会属于一个 (period, status) 分区；这里再去重一次，
+            // 避免上游分页异常重发同一条导致列表出现重复组织行。
+            const records = [
+              ...new Map(
+                results
+                  .flatMap((result) => result.records)
+                  .map((record) => [String(record.planId), record] as const),
+              ).values(),
+            ].toSorted((left, right) =>
+              String(right.updatedAt ?? right.submitTime ?? right.planId).localeCompare(
+                String(left.updatedAt ?? left.submitTime ?? left.planId),
+              ),
+            );
+            const total = results.reduce((sum, result) => sum + result.total, 0);
+            // records 是完整集合；current / size / pages 只回显调用方请求的分页参数，
+            // 真正的分页由工作台按分组后的外层行完成。
+            return {
+              records,
+              total,
+              size: requestedSize,
+              current: requestedPage,
+              pages: Math.max(1, Math.ceil(total / requestedSize)),
+            } satisfies GeaSalesPlanPage<GeaSalesPlanListItem>;
+          });
     void queuePromise
       .then((response) => {
         if (queueRequest.current !== requestId || request.signal.aborted) return;
@@ -303,7 +362,12 @@ export const useRegionalApprovalQuery = ({
   ]);
 
   useEffect(() => {
-    if (periodsState.status !== 'success' || !client || !loadStageProgress || selectedPeriods.length === 0) {
+    if (
+      periodsState.status !== 'success' ||
+      !client ||
+      !loadStageProgress ||
+      selectedPeriods.length === 0
+    ) {
       setProgressState(idle);
       return;
     }
@@ -312,32 +376,38 @@ export const useRegionalApprovalQuery = ({
     setProgressState((current) => ({ status: 'loading', data: current.data }));
     const statuses = SALES_PLAN_PROGRESS_STATUSES;
     // Progress is based on the full period and organization scope, not the active approval node.
-    void Promise.all(selectedPeriods.map(async (period) => {
-      const baseQuery = {
-        periodId: period.periodId,
-        planTypeCode: period.planTypeCode,
-        pageNo: 1,
-        pageSize: 1,
-        ...stableScope,
-        status: undefined,
-        signal: request.signal,
-      };
-      const [allRows, ...statusPages] = await Promise.all([
-        client.list.invoke(baseQuery),
-        ...statuses.map((status) => client.list.invoke({ ...baseQuery, status })),
-      ]);
-      return {
-        total: allRows.total,
-        planTypeCode: period.planTypeCode,
-        statusTotals: Object.fromEntries(statuses.map((status, index) => [status, statusPages[index]?.total ?? 0])),
-      };
-    }))
+    void Promise.all(
+      selectedPeriods.map(async (period) => {
+        const baseQuery = {
+          periodId: period.periodId,
+          planTypeCode: period.planTypeCode,
+          pageNo: 1,
+          pageSize: 1,
+          ...stableScope,
+          status: undefined,
+          signal: request.signal,
+        };
+        const [allRows, ...statusPages] = await Promise.all([
+          client.list.invoke(baseQuery),
+          ...statuses.map((status) => client.list.invoke({ ...baseQuery, status })),
+        ]);
+        return {
+          total: allRows.total,
+          planTypeCode: period.planTypeCode,
+          statusTotals: Object.fromEntries(
+            statuses.map((status, index) => [status, statusPages[index]?.total ?? 0]),
+          ),
+        };
+      }),
+    )
       .then((periodTotals) => {
         if (progressRequest.current !== requestId || request.signal.aborted) return;
-        const statusTotals = Object.fromEntries(statuses.map((status) => [
-          status,
-          periodTotals.reduce((sum, period) => sum + (period.statusTotals[status] ?? 0), 0),
-        ]));
+        const statusTotals = Object.fromEntries(
+          statuses.map((status) => [
+            status,
+            periodTotals.reduce((sum, period) => sum + (period.statusTotals[status] ?? 0), 0),
+          ]),
+        );
         setProgressState({
           status: 'success',
           data: approvalStageProgressForSalesPlanPeriods(periodTotals),
@@ -349,7 +419,11 @@ export const useRegionalApprovalQuery = ({
         if (progressRequest.current !== requestId) return;
         const classified = classifyRegionalApprovalQueryError(error, request.didTimeOut());
         if (classified !== 'cancelled' || request.didTimeOut()) {
-          setProgressState((current) => ({ status: 'error', data: current.data, error: classified }));
+          setProgressState((current) => ({
+            status: 'error',
+            data: current.data,
+            error: classified,
+          }));
         }
       })
       .finally(request.finish);
@@ -364,7 +438,12 @@ export const useRegionalApprovalQuery = ({
   ]);
 
   useEffect(() => {
-    if (periodsState.status !== 'success' || !client || !loadAnalysisSummary || periodQueries.length === 0) {
+    if (
+      periodsState.status !== 'success' ||
+      !client ||
+      !loadAnalysisSummary ||
+      periodQueries.length === 0
+    ) {
       setAnalysisResult(idle);
       return;
     }
@@ -374,9 +453,10 @@ export const useRegionalApprovalQuery = ({
     request.signal.addEventListener(
       'abort',
       () => {
-        if (active && request.didTimeOut()) setAnalysisResult({ status: 'error', error: 'timeout' });
+        if (active && request.didTimeOut())
+          setAnalysisResult({ status: 'error', error: 'timeout' });
       },
-      { once: true }
+      { once: true },
     );
     const collect = async () => {
       const rows = new Map<string, GeaSalesPlanListItem>();
@@ -426,13 +506,17 @@ export const useRegionalApprovalQuery = ({
             for (const row of response.records) {
               if (
                 [row.currentQty, row.currentAmount, row.targetAmount].some(
-                  (value) => !/^-?\d+(?:\.\d+)?$/.test(String(value))
+                  (value) => !/^-?\d+(?:\.\d+)?$/.test(String(value)),
                 )
               ) {
                 throw new Error('Invalid analysis decimal');
               }
               const key = `${period.periodId}:${row.planId}`;
-              if (rows.has(key) || row.periodId !== period.periodId || row.planTypeCode !== period.planTypeCode) {
+              if (
+                rows.has(key) ||
+                row.periodId !== period.periodId ||
+                row.planTypeCode !== period.planTypeCode
+              ) {
                 throw new Error('Inconsistent analysis records');
               }
               rows.set(key, row);
@@ -461,7 +545,10 @@ export const useRegionalApprovalQuery = ({
       })
       .catch((error: unknown) => {
         if (!active || (request.signal.aborted && !request.didTimeOut())) return;
-        setAnalysisResult({ status: 'error', error: classifyRegionalApprovalQueryError(error, request.didTimeOut()) });
+        setAnalysisResult({
+          status: 'error',
+          error: classifyRegionalApprovalQueryError(error, request.didTimeOut()),
+        });
       })
       .finally(request.finish);
     return () => {

@@ -677,8 +677,8 @@
           "saved": "已自动暂存",
           "failed": "草稿暂存失败，请重试",
           "failedShort": "暂存失败",
-          "retryShort": "重试"
-        ,"retry": "重试暂存"
+          "retryShort": "重试",
+          "retry": "重试暂存"
         },
         "editCurrent": "编辑调整草稿",
         "editScope": "此处查看汇总；编辑仅作用于当前选中的一个计划。",

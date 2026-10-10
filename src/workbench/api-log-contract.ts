@@ -1,4 +1,4 @@
-export type ApiReplayPolicy = "safe" | "idempotent" | "blocked";
+export type ApiReplayPolicy = 'safe' | 'idempotent' | 'blocked';
 
 export type ApiCatalogEntry = {
   id: string;
@@ -22,7 +22,7 @@ export type ApiLogRecord = {
   startedAt: string;
   endedAt?: string;
   durationMs?: number;
-  outcome: "pending" | "success" | "error";
+  outcome: 'pending' | 'success' | 'error';
   replayPolicy: ApiReplayPolicy;
   replayAvailable: boolean;
   replayedFrom?: string;

@@ -87,8 +87,8 @@
   padding: 10px 14px;
   cursor: pointer;
 }
-.tabs button[aria-selected="true"],
-.tabs button[aria-checked="true"] {
+.tabs button[aria-selected='true'],
+.tabs button[aria-checked='true'] {
   color: var(--dsw-alias-button-primary-fill);
   border-bottom: 2px solid currentColor;
 }
@@ -152,31 +152,121 @@
 }
 
 /* Shared compact workbench components (workbench-ui-style). */
-.input { min-height:36px; border-radius:8px; font-size:11px; line-height:1.4; }
-.card { box-shadow:var(--ui-shadow); }
-.alert { border-radius:8px; font-size:12px; }
-.error { color:var(--ui-risk); border-color:var(--ui-risk); background:var(--ui-risk-soft); }
-.tag { border-radius:999px; font-size:8px; font-weight:700; line-height:1.25; padding:3px 6px; }
-.modal { border-radius:10px; padding:16px; box-shadow:var(--ui-shadow-floating); }
-.menu { border-radius:8px; box-shadow:var(--ui-shadow-floating); }
-.tabs { gap:0; scrollbar-width:none; }
-.tabs::-webkit-scrollbar { display:none; }
-.tabs button { flex:none; height:42px; min-width:100px; padding:0 14px; border-bottom:2px solid transparent; border-radius:0; font-size:10px; font-weight:600; color:var(--ui-secondary); }
-.tabs button:hover:not(:disabled) { background:var(--ui-hover); color:var(--ui-accent); }
-.tabs button[aria-selected="true"], .tabs button[aria-checked="true"] { background:var(--ui-surface); font-weight:800; }
-.table { font-size:10px; }
-.table th, .table td { padding:8px 14px; border-color:var(--ui-divider); }
-.table th { height:38px; font-size:9px; font-weight:800; line-height:1.35; background:var(--ui-soft); }
-.table td { height:44px; color:var(--ui-secondary); }
-.table tbody tr:hover { background:var(--ui-hover); }
-@media(max-width:720px) { .heading { flex-wrap:wrap; } }
+.input {
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.card {
+  box-shadow: var(--ui-shadow);
+}
+.alert {
+  border-radius: 8px;
+  font-size: 12px;
+}
+.error {
+  color: var(--ui-risk);
+  border-color: var(--ui-risk);
+  background: var(--ui-risk-soft);
+}
+.tag {
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 3px 6px;
+}
+.modal {
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: var(--ui-shadow-floating);
+}
+.menu {
+  border-radius: 8px;
+  box-shadow: var(--ui-shadow-floating);
+}
+.tabs {
+  gap: 0;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs button {
+  flex: none;
+  height: 42px;
+  min-width: 100px;
+  padding: 0 14px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ui-secondary);
+}
+.tabs button:hover:not(:disabled) {
+  background: var(--ui-hover);
+  color: var(--ui-accent);
+}
+.tabs button[aria-selected='true'],
+.tabs button[aria-checked='true'] {
+  background: var(--ui-surface);
+  font-weight: 800;
+}
+.table {
+  font-size: 10px;
+}
+.table th,
+.table td {
+  padding: 8px 14px;
+  border-color: var(--ui-divider);
+}
+.table th {
+  height: 38px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.35;
+  background: var(--ui-soft);
+}
+.table td {
+  height: 44px;
+  color: var(--ui-secondary);
+}
+.table tbody tr:hover {
+  background: var(--ui-hover);
+}
+@media (max-width: 720px) {
+  .heading {
+    flex-wrap: wrap;
+  }
+}
 
-.table { background:var(--ui-surface); }
-.table th > button, .table td > button[aria-expanded] { border:0; border-radius:6px; background:transparent; font:inherit; color:inherit; padding:4px 6px; }
-.table th > button:hover, .table td > button[aria-expanded]:hover { background:var(--ui-hover); color:var(--ui-accent); }
-.table td > button[aria-expanded] { min-width:24px; min-height:24px; margin-right:4px; }
+.table {
+  background: var(--ui-surface);
+}
+.table th > button,
+.table td > button[aria-expanded] {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  padding: 4px 6px;
+}
+.table th > button:hover,
+.table td > button[aria-expanded]:hover {
+  background: var(--ui-hover);
+  color: var(--ui-accent);
+}
+.table td > button[aria-expanded] {
+  min-width: 24px;
+  min-height: 24px;
+  margin-right: 4px;
+}
 
-.tableRegion { position: relative; }
+.tableRegion {
+  position: relative;
+}
 .tableLoading {
   position: absolute;
   inset: 0;

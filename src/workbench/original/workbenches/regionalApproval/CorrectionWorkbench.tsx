@@ -26,7 +26,10 @@ import {
 } from './models/salesPlanCorrectionModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
 import type { ApprovalStageId } from './regionalApprovalFixture.ts';
-import { salesPlanVisibleStatuses, chooseInitialSalesPlanPeriod } from './regionalApprovalQueryModel.ts';
+import {
+  salesPlanVisibleStatuses,
+  chooseInitialSalesPlanPeriod,
+} from './regionalApprovalQueryModel.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import { salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { formatExactDecimal, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
@@ -40,7 +43,9 @@ const sum = (
   field: 'targetAmount' | 'corrPlanAmount' | 'mPlanAmount' | 'mPlanQty' | 'corrPlanQty',
 ) => {
   try {
-    return rows.reduce((total, row) => total.plus(correctionDecimal(row[field])), correctionDecimal('0')).toFixed(2);
+    return rows
+      .reduce((total, row) => total.plus(correctionDecimal(row[field])), correctionDecimal('0'))
+      .toFixed(2);
   } catch {
     return undefined;
   }
@@ -64,7 +69,8 @@ export function CorrectionWorkbench({
   actionClient?: SalesPlanActionClient;
   onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;
 }) {
-  const tr = (key: string, values?: Record<string, unknown>) => t(`common.correction.${key}`, values);
+  const tr = (key: string, values?: Record<string, unknown>) =>
+    t(`common.correction.${key}`, values);
   const [periods, setPeriods] = useState<GeaSalesPlanPeriod[]>([]);
   const [periodId, setPeriodId] = useState('');
   const [rows, setRows] = useState<GeaSalesPlanListItem[]>([]);
@@ -77,10 +83,15 @@ export function CorrectionWorkbench({
   const [stage, setStage] = useState('current');
   const period = periods.find((p) => p.periodId === periodId);
   const roleStages = [...(approvalStages ?? [])];
-  const statusScope = roleStages.length ? salesPlanVisibleStatuses(period?.planTypeCode ?? '', roleStages) : undefined;
-  const selectedStatuses = stage === 'current' ? statusScope
-    : salesPlanWorkflow(period?.planTypeCode ?? '').pendingStatuses(stage as 'region' | 'province' | 'area' | 'category')
-        .filter(status => !statusScope || statusScope.includes(status));
+  const statusScope = roleStages.length
+    ? salesPlanVisibleStatuses(period?.planTypeCode ?? '', roleStages)
+    : undefined;
+  const selectedStatuses =
+    stage === 'current'
+      ? statusScope
+      : salesPlanWorkflow(period?.planTypeCode ?? '')
+          .pendingStatuses(stage as 'region' | 'province' | 'area' | 'category')
+          .filter((status) => !statusScope || statusScope.includes(status));
   const statusesKey = selectedStatuses?.join(',');
   const refresh = () => {
     setSelected(undefined);
@@ -96,7 +107,7 @@ export function CorrectionWorkbench({
       .invoke({ planType: 'CORRECTION', pageNo: 1, pageSize: 100, signal: controller.signal })
       .then((result) => {
         if (controller.signal.aborted) return;
-        const available = result.records.filter(p => !p.planType || p.planType === 'CORRECTION');
+        const available = result.records.filter((p) => !p.planType || p.planType === 'CORRECTION');
         setPeriods(available);
         setPeriodId(chooseInitialSalesPlanPeriod(available)?.periodId ?? '');
       })
@@ -112,23 +123,52 @@ export function CorrectionWorkbench({
     setSelected(undefined);
     setLoading(true);
     setError('');
-    const base = { periodId, planTypeCode: period?.planTypeCode, orderType: 'Z' as const, signal: controller.signal };
+    const base = {
+      periodId,
+      planTypeCode: period?.planTypeCode,
+      orderType: 'Z' as const,
+      signal: controller.signal,
+    };
     const load = async () => {
-      if (!selectedStatuses) return queryClient.list.invoke({...base, pageNo: page, pageSize: 20});
-      const pages = await Promise.all(selectedStatuses.map(async status => {
-        const prefix = page * 20;
-        const first = await queryClient.list.invoke({...base, status, pageNo: 1, pageSize: Math.min(200, prefix)});
-        const rest = await Promise.all(Array.from({length: Math.max(0, Math.ceil(Math.min(first.total, prefix) / first.size) - 1)}, (_, i) =>
-          queryClient.list.invoke({...base, status, pageNo: i + 2, pageSize: first.size})));
-        return {total: first.total, records: [first, ...rest].flatMap(p => p.records)};
-      }));
-      const records = pages.flatMap(p => p.records).toSorted((a,b) => String(b.updatedAt ?? b.planId).localeCompare(String(a.updatedAt ?? a.planId)));
-      return {records: records.slice((page - 1) * 20, page * 20), total: pages.reduce((n,p) => n+p.total,0)};
+      if (!selectedStatuses)
+        return queryClient.list.invoke({ ...base, pageNo: page, pageSize: 20 });
+      const pages = await Promise.all(
+        selectedStatuses.map(async (status) => {
+          const prefix = page * 20;
+          const first = await queryClient.list.invoke({
+            ...base,
+            status,
+            pageNo: 1,
+            pageSize: Math.min(200, prefix),
+          });
+          const rest = await Promise.all(
+            Array.from(
+              { length: Math.max(0, Math.ceil(Math.min(first.total, prefix) / first.size) - 1) },
+              (_, i) =>
+                queryClient.list.invoke({ ...base, status, pageNo: i + 2, pageSize: first.size }),
+            ),
+          );
+          return { total: first.total, records: [first, ...rest].flatMap((p) => p.records) };
+        }),
+      );
+      const records = pages
+        .flatMap((p) => p.records)
+        .toSorted((a, b) =>
+          String(b.updatedAt ?? b.planId).localeCompare(String(a.updatedAt ?? a.planId)),
+        );
+      return {
+        records: records.slice((page - 1) * 20, page * 20),
+        total: pages.reduce((n, p) => n + p.total, 0),
+      };
     };
     void load()
       .then((result) => {
         if (controller.signal.aborted) return;
-        if (result.records.some((r) => r.periodId !== periodId || (r.orderType !== 'Z' && r.hasCorrection !== false)))
+        if (
+          result.records.some(
+            (r) => r.periodId !== periodId || (r.orderType !== 'Z' && r.hasCorrection !== false),
+          )
+        )
           throw new Error('CORRECTION_SCOPE_MISMATCH');
         setRows(result.records);
         setTotal(result.total);
@@ -137,11 +177,15 @@ export function CorrectionWorkbench({
         if (!controller.signal.aborted) {
           setRows([]);
           setTotal(0);
-          setError(failure instanceof Error && failure.message === 'CORRECTION_SCOPE_MISMATCH'
-            ? '纠偏接口返回了其他周期或非纠偏数据，请联系管理员核对服务版本'
-            : isBackendHttpError(failure) && failure.status === 403 ? '当前账号无权读取纠偏计划'
-            : isBackendHttpError(failure) && failure.status === 401 ? '登录已失效，请重新登录'
-            : '纠偏列表请求失败，请刷新；若持续失败，请核对后端接口');
+          setError(
+            failure instanceof Error && failure.message === 'CORRECTION_SCOPE_MISMATCH'
+              ? '纠偏接口返回了其他周期或非纠偏数据，请联系管理员核对服务版本'
+              : isBackendHttpError(failure) && failure.status === 403
+                ? '当前账号无权读取纠偏计划'
+                : isBackendHttpError(failure) && failure.status === 401
+                  ? '登录已失效，请重新登录'
+                  : '纠偏列表请求失败，请刷新；若持续失败，请核对后端接口',
+          );
         }
       })
       .finally(() => {
@@ -158,7 +202,10 @@ export function CorrectionWorkbench({
       : undefined;
   return (
     <main className={styles.page}>
-      <div className={styles.toolbar}>{headerControls}<h2>{tr('title')}</h2></div>
+      <div className={styles.toolbar}>
+        {headerControls}
+        <h2>{tr('title')}</h2>
+      </div>
       <div className={styles.toolbar}>
         <Select
           aria-label={tr('period')}
@@ -202,7 +249,7 @@ export function CorrectionWorkbench({
       <p>
         {tr('summary', {
           target: error || loading ? '—' : money(sum(rows, 'targetAmount')),
-          qty: error || loading ? '—' : sum(rows, 'corrPlanQty') ?? '—',
+          qty: error || loading ? '—' : (sum(rows, 'corrPlanQty') ?? '—'),
           amount: error || loading ? '—' : money(sum(rows, 'corrPlanAmount')),
           count: total,
         })}
@@ -241,11 +288,17 @@ export function CorrectionWorkbench({
                       role="img"
                       aria-label={`金额进度 ${m.amountProgress}%${timeProgress == null ? '' : `，时间进度 ${timeProgress.toFixed(2)}%`}`}
                     >
-                      <span style={{ width: `${Math.max(0, Math.min(100, Number(m.amountProgress)))}%` }} />
+                      <span
+                        style={{
+                          width: `${Math.max(0, Math.min(100, Number(m.amountProgress)))}%`,
+                        }}
+                      />
                       {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
                     </div>
                   )}
-                  {timeProgress != null && m.amountProgress != null && Number(m.amountProgress) < timeProgress ? (
+                  {timeProgress != null &&
+                  m.amountProgress != null &&
+                  Number(m.amountProgress) < timeProgress ? (
                     <small>{tr('behind')}</small>
                   ) : null}
                 </>
@@ -286,7 +339,9 @@ export function CorrectionWorkbench({
                   {tr('detail')}
                 </Button>
                 {r.status >= 6 && r.status <= 9 && onResubmit && (
-                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>{tr('resubmit')}</Button>
+                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
+                    {tr('resubmit')}
+                  </Button>
                 )}
               </>
             ),
@@ -339,7 +394,8 @@ function CorrectionDetail({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const tr = (key: string, values?: Record<string, unknown>) => t(`common.correction.${key}`, values);
+  const tr = (key: string, values?: Record<string, unknown>) =>
+    t(`common.correction.${key}`, values);
   const [detail, setDetail] = useState<GeaSalesPlanDetail>();
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [reason, setReason] = useState(''),
@@ -360,7 +416,8 @@ function CorrectionDetail({
       .invoke({ planId: row.planId, signal: controller.signal })
       .then((d) => {
         if (controller.signal.aborted) return;
-        if (d.currentVersion.id !== row.versionId || !d.currentVersion.effective) throw new Error('版本已变化，请刷新');
+        if (d.currentVersion.id !== row.versionId || !d.currentVersion.effective)
+          throw new Error('版本已变化，请刷新');
         setDetail(d);
       })
       .catch(() => {
@@ -371,9 +428,20 @@ function CorrectionDetail({
       controller.abort();
     };
   }, [client, row.planId, row.versionId]);
-  const actor = detail && salesPlanWorkflow(detail.currentVersion.planTypeCode).actor(detail.currentVersion.status);
-  const access = detail && correctionAccess(detail, undefined, stage === 'current' ? undefined : stage as 'region' | 'province' | 'area' | 'category', approvalStages);
-  const writable = Boolean(access && actionClient && (access.roleContractSupported || access.approvalRole === actor));
+  const actor =
+    detail &&
+    salesPlanWorkflow(detail.currentVersion.planTypeCode).actor(detail.currentVersion.status);
+  const access =
+    detail &&
+    correctionAccess(
+      detail,
+      undefined,
+      stage === 'current' ? undefined : (stage as 'region' | 'province' | 'area' | 'category'),
+      approvalStages,
+    );
+  const writable = Boolean(
+    access && actionClient && (access.roleContractSupported || access.approvalRole === actor),
+  );
   const lines = useMemo(
     () =>
       detail?.skus.map((sku) => {
@@ -387,17 +455,24 @@ function CorrectionDetail({
                     ? detail.currentVersion.status === 5
                       ? 10
                       : detail.currentVersion.status
-                    : (salesPlanWorkflow(detail.currentVersion.planTypeCode).pending(stage as (typeof roles)[number]) ??
-                        -1),
+                    : (salesPlanWorkflow(detail.currentVersion.planTypeCode).pending(
+                        stage as (typeof roles)[number],
+                      ) ?? -1),
                   detail.currentVersion.planTypeCode,
                   true,
                   undefined,
-                  stage === 'current' ? access?.approvalRole : stage as 'region' | 'province' | 'area' | 'category',
+                  stage === 'current'
+                    ? access?.approvalRole
+                    : (stage as 'region' | 'province' | 'area' | 'category'),
                 )
               : '0');
           return { sku, line: correctionLine(sku, delta), input: delta, error: '' };
         } catch (e) {
-          return { sku, input: edits[sku.skuCode] ?? '', error: e instanceof Error ? e.message : '数据错误' };
+          return {
+            sku,
+            input: edits[sku.skuCode] ?? '',
+            error: e instanceof Error ? e.message : '数据错误',
+          };
         }
       }) ?? [],
     [detail, edits, stage],
@@ -405,10 +480,16 @@ function CorrectionDetail({
   const invalid = lines.some((x) => x.error);
   const total = invalid
     ? '—'
-    : lines.reduce((n, x) => n.plus(correctionDecimal(x.line!.delta)), correctionDecimal('0')).toFixed();
+    : lines
+        .reduce((n, x) => n.plus(correctionDecimal(x.line!.delta)), correctionDecimal('0'))
+        .toFixed();
   const run = async (kind: GeaSalesPlanActionRequest['action']) => {
     if (!detail || !actionClient || !writable || locked.current) return;
-    if (!pending && ((kind !== 'REJECT' && invalid) || (kind === 'REJECT' && (!reason.trim() || reason.length > 1000))))
+    if (
+      !pending &&
+      ((kind !== 'REJECT' && invalid) ||
+        (kind === 'REJECT' && (!reason.trim() || reason.length > 1000)))
+    )
       return;
     locked.current = true;
     setBusy(true);
@@ -419,13 +500,21 @@ function CorrectionDetail({
         const request: GeaSalesPlanActionRequest = {
           action: kind,
           approvalRole: access!.approvalRole,
-          ...(access!.roleContractSupported ? {approvalPolicy:'role-visible-v1' as const} : {}),
+          ...(access!.roleContractSupported ? { approvalPolicy: 'role-visible-v1' as const } : {}),
           expectedStatus: detail.currentVersion.status,
           expectedSnapshot: access!.snapshotHash,
           adjustmentMode: 'ABSOLUTE_NET',
-          ...(kind === 'REJECT' ? { remark: reason.trim() } : { adjustments: correctionAdjustments(detail, edits, undefined, access!.approvalRole) }),
+          ...(kind === 'REJECT'
+            ? { remark: reason.trim() }
+            : {
+                adjustments: correctionAdjustments(detail, edits, undefined, access!.approvalRole),
+              }),
         };
-        operation = { attempt: new SalesPlanActionAttempt(actionClient), request, retryable: false };
+        operation = {
+          attempt: new SalesPlanActionAttempt(actionClient),
+          request,
+          retryable: false,
+        };
         setPending(operation);
         operation.receipt = await operation.attempt.submit({
           planId: row.planId,
@@ -504,7 +593,11 @@ function CorrectionDetail({
             {row.dealerName ?? row.orgName} · 版本 {row.versionId} ·{' '}
             {actor && actor !== 'customer'
               ? tr(actor)
-              : salesPlanStatusText(detail.currentVersion.status, detail.currentVersion.planTypeCode, t)}{' '}
+              : salesPlanStatusText(
+                  detail.currentVersion.status,
+                  detail.currentVersion.planTypeCode,
+                  t,
+                )}{' '}
             · {writable ? tr('editable') : tr('readonly')}
           </p>
           {!access && <Alert type="info" content={tr('unavailable')} />}
@@ -515,14 +608,26 @@ function CorrectionDetail({
             <table className={styles.detail}>
               <thead>
                 <tr>
-                  {['SKU', 'baseQty', 'newQty', 'baseAmount', 'newAmount', 'delta', 'deltaAmount', 'ai'].map((x) => (
+                  {[
+                    'SKU',
+                    'baseQty',
+                    'newQty',
+                    'baseAmount',
+                    'newAmount',
+                    'delta',
+                    'deltaAmount',
+                    'ai',
+                  ].map((x) => (
                     <th key={x}>{x === 'SKU' ? x : tr(x)}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {lines.map(({ sku, line, input, error: lineError }) => (
-                  <tr key={sku.skuCode} className={line && !line.participates ? styles.inactive : undefined}>
+                  <tr
+                    key={sku.skuCode}
+                    className={line && !line.participates ? styles.inactive : undefined}
+                  >
                     <td>
                       {sku.skuCode}
                       <br />
@@ -538,7 +643,9 @@ function CorrectionDetail({
                         aria-invalid={Boolean(lineError)}
                         value={input}
                         disabled={!writable || busy || Boolean(pending)}
-                        onChange={(value) => setEdits((current) => ({ ...current, [sku.skuCode]: value }))}
+                        onChange={(value) =>
+                          setEdits((current) => ({ ...current, [sku.skuCode]: value }))
+                        }
                       />
                       {lineError ? (
                         <small role="alert">{lineError}</small>
@@ -546,7 +653,13 @@ function CorrectionDetail({
                         <small>{tr('zero')}</small>
                       ) : null}
                     </td>
-                    <td className={salesPlanVarianceClass(line?.delta, styles.positive, styles.negative)}>
+                    <td
+                      className={salesPlanVarianceClass(
+                        line?.delta,
+                        styles.positive,
+                        styles.negative,
+                      )}
+                    >
                       {money(line?.deltaAmount)}
                     </td>
                     <td>{tr('noAi')}</td>

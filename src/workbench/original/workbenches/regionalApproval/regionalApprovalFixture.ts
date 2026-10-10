@@ -8,7 +8,12 @@ export type ApprovalDimension = 'area' | 'province' | 'region' | 'base' | 'custo
 export type ApprovalPermission = 'writable' | 'read-only' | 'denied';
 export type ApprovalAreaKey = 'north' | 'east' | 'central' | 'southwest';
 export type ApprovalBranchKey = 'beijing' | 'hebei' | 'zhejiang' | 'henan' | 'sichuan';
-export type ApprovalDepartmentKey = 'beijing-sales' | 'shijiazhuang' | 'hangzhou' | 'zhengzhou' | 'chengdu';
+export type ApprovalDepartmentKey =
+  | 'beijing-sales'
+  | 'shijiazhuang'
+  | 'hangzhou'
+  | 'zhengzhou'
+  | 'chengdu';
 export type ApprovalCustomerKey = 'northstar' | 'yanzhao' | 'qiantang' | 'zhongyuan' | 'rongcheng';
 
 /** 区域计划评估是展示节点，沿用计划的未提交、待回写和已回写状态。 */
@@ -205,10 +210,12 @@ export const isApprovalStageId = (value: unknown): value is ApprovalStageId =>
 
 export const approvalRowsForStage = (
   rows: readonly RegionalApprovalRow[],
-  stage: ApprovalStageId
-): RegionalApprovalRow[] => rows.filter((row) => approvalStageRank[row.reachedStage] >= approvalStageRank[stage]);
+  stage: ApprovalStageId,
+): RegionalApprovalRow[] =>
+  rows.filter((row) => approvalStageRank[row.reachedStage] >= approvalStageRank[stage]);
 
-export const APPROVAL_DIMENSIONS_BY_STAGE: Record<ApprovalStageId, readonly ApprovalDimension[]> & Record<'evaluation', readonly ApprovalDimension[]> = {
+export const APPROVAL_DIMENSIONS_BY_STAGE: Record<ApprovalStageId, readonly ApprovalDimension[]> &
+  Record<'evaluation', readonly ApprovalDimension[]> = {
   customer: ['customer'],
   region: ['region', 'customer'],
   province: ['province', 'region', 'customer'],

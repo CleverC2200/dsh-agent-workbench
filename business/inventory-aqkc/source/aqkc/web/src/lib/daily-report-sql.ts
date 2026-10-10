@@ -1,13 +1,13 @@
-import { BRANCH_WAREHOUSES, workbenchSql } from "./workbench-sql";
-import { currentOrderSkuQuery } from "./workbench-current-order-sql";
-import type { WorkbenchSqlQuery } from "./workbench-sql-types";
+import { BRANCH_WAREHOUSES, workbenchSql } from './workbench-sql';
+import { currentOrderSkuQuery } from './workbench-current-order-sql';
+import type { WorkbenchSqlQuery } from './workbench-sql-types';
 
 // All queries are server-owned. GEA applies the session's row permissions to
 // each source before aggregation. No browser-provided scope or SQL is accepted.
 export const dailyReportSql = {
   stock: workbenchSql.safetyStockRows,
   age: {
-    name: "daily-report-age-skus",
+    name: 'daily-report-age-skus',
     maxRows: 25_000,
     sql: `WITH ${BRANCH_WAREHOUSES}, latest_age AS (
   SELECT age.base_name AS base_name, age.material_code AS material_code,
@@ -37,16 +37,16 @@ FROM latest_age GROUP BY base_name, material_code
 ORDER BY base_name, material_code`,
   },
   pending: {
-    name: "daily-report-current-orders",
+    name: 'daily-report-current-orders',
     maxRows: 25_000,
     sql: `SELECT r.*,
   CAST((SELECT MAX(source_snapshot_time) FROM agents_scm_branch_pending_order) AS TEXT) AS "report.order_snapshot",
   CAST((SELECT MAX(snapshot_time) FROM agents_scm_inventory_age) AS TEXT) AS "report.inventory_snapshot"
-FROM (${currentOrderSkuQuery.sql.replace("p.missing > 0 OR i.missing > 0 OR ib.base IS NULL THEN NULL", "p.missing > 0 OR i.missing > 0 OR i.material IS NULL OR ib.base IS NULL OR p.quantity < 0 OR p.allocated < 0 OR i.available < 0 THEN NULL")}) r
+FROM (${currentOrderSkuQuery.sql.replace('p.missing > 0 OR i.missing > 0 OR ib.base IS NULL THEN NULL', 'p.missing > 0 OR i.missing > 0 OR i.material IS NULL OR ib.base IS NULL OR p.quantity < 0 OR p.allocated < 0 OR i.available < 0 THEN NULL')}) r
 ORDER BY "workbench.domain", "workbench.base", "workbench.material_code"`,
   },
   fulfillment: {
-    name: "daily-report-fulfillment",
+    name: 'daily-report-fulfillment',
     maxRows: 25_000,
     sql: `WITH latest_orders AS (
   SELECT * FROM agents_scm_order_fulfillment

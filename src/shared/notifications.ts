@@ -34,41 +34,33 @@ export interface NotificationItem {
 }
 
 function record(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('NOTIFICATION_INVALID_RESPONSE');
   return value as Record<string, unknown>;
 }
 function optional(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  if (typeof value !== "string")
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+  if (typeof value !== 'string') throw new Error('NOTIFICATION_INVALID_RESPONSE');
   return value;
 }
 function count(value: unknown): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw new Error('NOTIFICATION_INVALID_RESPONSE');
   return value;
 }
 function optionalNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
-  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+  return typeof value === 'number' && Number.isSafeInteger(value) ? value : null;
 }
 function optionalBoolean(value: unknown): boolean | null {
-  return value === null || value === undefined ? null : typeof value === "boolean" ? value : null;
+  return value === null || value === undefined ? null : typeof value === 'boolean' ? value : null;
 }
 
 /** 投影返回的通知项；详情身份与请求不一致时拒绝返回。 */
-export function notificationDetail(
-  value: unknown,
-  expectedId?: string,
-): NotificationItem {
+export function notificationDetail(value: unknown, expectedId?: string): NotificationItem {
   const row = record(value);
-  if (
-    typeof row.id !== "string" ||
-    !row.id ||
-    (expectedId !== undefined && row.id !== expectedId)
-  )
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+  if (typeof row.id !== 'string' || !row.id || (expectedId !== undefined && row.id !== expectedId))
+    throw new Error('NOTIFICATION_INVALID_RESPONSE');
   const source = row.source == null ? null : record(row.source);
   return {
     id: row.id,
@@ -96,28 +88,37 @@ export function notificationDetail(
           label: optional(source.label),
         }
       : null,
-    target: row.target == null ? null : (() => {
-      const target = record(row.target);
-      return { type: optional(target.type), value: optional(target.value) };
-    })(),
-    approval: row.approval == null ? null : (() => {
-      const approval = record(row.approval);
-      return {
-        instanceId: optional(approval.instance_id),
-        actions: Array.isArray(approval.actions) && approval.actions.every((item) => typeof item === "string") ? approval.actions as string[] : [],
-        actionable: optionalBoolean(approval.actionable),
-        bizKey: optional(approval.biz_key),
-        version: optionalNumber(approval.version),
-      };
-    })(),
+    target:
+      row.target == null
+        ? null
+        : (() => {
+            const target = record(row.target);
+            return { type: optional(target.type), value: optional(target.value) };
+          })(),
+    approval:
+      row.approval == null
+        ? null
+        : (() => {
+            const approval = record(row.approval);
+            return {
+              instanceId: optional(approval.instance_id),
+              actions:
+                Array.isArray(approval.actions) &&
+                approval.actions.every((item) => typeof item === 'string')
+                  ? (approval.actions as string[])
+                  : [],
+              actionable: optionalBoolean(approval.actionable),
+              bizKey: optional(approval.biz_key),
+              version: optionalNumber(approval.version),
+            };
+          })(),
   };
 }
 
 /** 保留服务端总数；遇到重复记录或分页不一致时拒绝隐藏缺失数据。 */
 export function notificationPage(value: unknown, pageSize: number) {
   const row = record(value);
-  if (!Array.isArray(row.items))
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+  if (!Array.isArray(row.items)) throw new Error('NOTIFICATION_INVALID_RESPONSE');
   const items = row.items.map((item) => notificationDetail(item));
   const total = count(row.total);
   if (
@@ -125,12 +126,12 @@ export function notificationPage(value: unknown, pageSize: number) {
     items.length > total ||
     new Set(items.map((item) => item.id)).size !== items.length
   )
-    throw new Error("NOTIFICATION_INVALID_RESPONSE");
+    throw new Error('NOTIFICATION_INVALID_RESPONSE');
   return {
     items,
     total,
     unreadCount: count(row.unread_count),
     pageSize,
-    coverage: items.length === total ? "complete" : "partial",
+    coverage: items.length === total ? 'complete' : 'partial',
   };
 }

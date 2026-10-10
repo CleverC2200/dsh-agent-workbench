@@ -109,24 +109,108 @@
   }
 }
 
-.workbench { min-width:0; width:100%; background:var(--ui-canvas); color:var(--ui-ink); }
-.header { min-height:56px; display:flex; align-items:center; padding:12px 16px; background:var(--ui-surface); border-bottom:1px solid var(--ui-border); }
-.header h2 { margin:0; font-size:18px; line-height:1.35; }
-.content { padding:16px; min-width:0; }
-.kpiGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(154px,1fr)); gap:12px; margin-bottom:12px; }
-.kpiCard { min-width:0; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); padding:12px; box-shadow:var(--ui-shadow); }
-.kpiCard > div:first-child { display:flex; align-items:center; justify-content:space-between; gap:4px; }
-.summaryBox { margin-bottom:12px; padding:16px; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); box-shadow:var(--ui-shadow); }
-.tableCard { max-width:100%; overflow:auto; border:1px solid var(--ui-border); border-radius:10px; background:var(--ui-surface); }
-.tableCard table { width:100%; min-width:950px; border-collapse:collapse; }
-.tableCard th { height:38px; padding:0 14px; background:var(--ui-soft); }
-.tableCard td { height:44px; padding:0 14px; border-bottom:1px solid var(--ui-divider); }
-.wideMetrics { grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); }
-.compactMetrics { grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr)); }
-.compactMetrics.wideMetrics { grid-template-columns:repeat(auto-fit,minmax(min(112px,100%),1fr)); }
-.compactMetrics .skeletonPill { max-width:30%; }
-@media(max-width:520px) { .kpiGrid, .compactMetrics.wideMetrics { grid-template-columns:1fr; } .content { padding:12px; } }
-@media(prefers-reduced-motion:reduce) { .loadingDot, .skeletonBlock { animation:none; } }
+.workbench {
+  min-width: 0;
+  width: 100%;
+  background: var(--ui-canvas);
+  color: var(--ui-ink);
+}
+.header {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+}
+.header h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.35;
+}
+.content {
+  padding: 16px;
+  min-width: 0;
+}
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(154px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.kpiCard {
+  min-width: 0;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  padding: 12px;
+  box-shadow: var(--ui-shadow);
+}
+.kpiCard > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.summaryBox {
+  margin-bottom: 12px;
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow);
+}
+.tableCard {
+  max-width: 100%;
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+.tableCard table {
+  width: 100%;
+  min-width: 950px;
+  border-collapse: collapse;
+}
+.tableCard th {
+  height: 38px;
+  padding: 0 14px;
+  background: var(--ui-soft);
+}
+.tableCard td {
+  height: 44px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--ui-divider);
+}
+.wideMetrics {
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+.compactMetrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+}
+.compactMetrics.wideMetrics {
+  grid-template-columns: repeat(auto-fit, minmax(min(112px, 100%), 1fr));
+}
+.compactMetrics .skeletonPill {
+  max-width: 30%;
+}
+@media (max-width: 520px) {
+  .kpiGrid,
+  .compactMetrics.wideMetrics {
+    grid-template-columns: 1fr;
+  }
+  .content {
+    padding: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loadingDot,
+  .skeletonBlock {
+    animation: none;
+  }
+}
 
 /* Embedded panels already provide the same padding as their loaded cards. */
-.embedded .content { padding:0; }
+.embedded .content {
+  padding: 0;
+}

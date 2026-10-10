@@ -17,17 +17,22 @@ export const SALES_PLAN_STATUS_BY_STAGE: Record<ApprovalStageId, number> = {
   area: 3,
   category: 4,
 };
-export const approvalStageForSalesPlanStatus = (status: number, typeCode = 'Y'): ApprovalStageId | undefined =>
-  salesPlanWorkflow(typeCode).actor(status);
+export const approvalStageForSalesPlanStatus = (
+  status: number,
+  typeCode = 'Y',
+): ApprovalStageId | undefined => salesPlanWorkflow(typeCode).actor(status);
 export const VISIBLE_SALES_PLAN_STATUSES_BY_STAGE = Object.fromEntries(
-  SALES_PLAN_ROLES.map((role) => [role, salesPlanWorkflow('Y').pendingStatuses(role)])
+  SALES_PLAN_ROLES.map((role) => [role, salesPlanWorkflow('Y').pendingStatuses(role)]),
 ) as Record<ApprovalStageId, number[]>;
 export const SALES_PLAN_PROGRESS_STATUSES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 /** 状态可见性会与服务端管理的组织/版本范围取交集，绝不代表授权。 */
-export const salesPlanVisibleStatuses = (typeCode: string, roles: readonly ApprovalStageId[]): number[] => {
+export const salesPlanVisibleStatuses = (
+  typeCode: string,
+  roles: readonly ApprovalStageId[],
+): number[] => {
   const workflow = salesPlanWorkflow(typeCode);
   return SALES_PLAN_PROGRESS_STATUSES.filter((status) =>
-    roles.some((role) => workflow.visibility(status, role) !== 'denied')
+    roles.some((role) => workflow.visibility(status, role) !== 'denied'),
   );
 };
 
@@ -58,7 +63,8 @@ export const salesPlanStageTalliesForWorkflow = (period: {
     SALES_PLAN_ROLES.map((role) => {
       const pending = workflow.pending(role);
       const tally = emptySalesPlanStageTally();
-      if (!Number.isSafeInteger(period.total) || period.total <= 0 || pending === undefined) return [role, tally];
+      if (!Number.isSafeInteger(period.total) || period.total <= 0 || pending === undefined)
+        return [role, tally];
       tally.total = period.total;
       tally.completed = SALES_PLAN_PROGRESS_STATUSES.reduce<number>((sum, status) => {
         // 退回目标保留其确认结果；发起退回的节点必须再次审批。
@@ -66,29 +72,29 @@ export const salesPlanStageTalliesForWorkflow = (period: {
         const active = workflow.actor(status);
         const activePending = active && workflow.pending(active);
         const done =
-          status === 10 ||
-          status === 5 ||
-          (activePending !== undefined && activePending > pending);
+          status === 10 || status === 5 || (activePending !== undefined && activePending > pending);
         return sum + (done ? Math.max(0, period.statusTotals[status] ?? 0) : 0);
       }, 0);
       return [role, tally];
-    })
+    }),
   ) as Record<ApprovalStageId, SalesPlanStageTally>;
 };
 
 const salesPlanStagePercents = (
-  tallies: Record<ApprovalStageId, SalesPlanStageTally>
+  tallies: Record<ApprovalStageId, SalesPlanStageTally>,
 ): Record<ApprovalStageId, number> =>
   Object.fromEntries(
-    SALES_PLAN_ROLES.map((role) => [role, salesPlanStagePercent(tallies[role])])
+    SALES_PLAN_ROLES.map((role) => [role, salesPlanStagePercent(tallies[role])]),
   ) as Record<ApprovalStageId, number>;
 
 export const approvalStageProgressForSalesPlanStatusTotals = (
   total: number,
   statusTotals: Readonly<Partial<Record<number, number>>>,
-  typeCode = 'Y'
+  typeCode = 'Y',
 ): Record<ApprovalStageId, number> =>
-  salesPlanStagePercents(salesPlanStageTalliesForWorkflow({ total, statusTotals, planTypeCode: typeCode }));
+  salesPlanStagePercents(
+    salesPlanStageTalliesForWorkflow({ total, statusTotals, planTypeCode: typeCode }),
+  );
 
 /** 月度分子/分母：先把该月每条工作流分别算出来，再按节点相加。 */
 export const salesPlanStageTallies = (
@@ -96,7 +102,7 @@ export const salesPlanStageTallies = (
     total: number;
     statusTotals: Readonly<Partial<Record<number, number>>>;
     planTypeCode: string;
-  }[]
+  }[],
 ): Record<ApprovalStageId, SalesPlanStageTally> =>
   Object.fromEntries(
     SALES_PLAN_ROLES.map((role) => {
@@ -107,7 +113,7 @@ export const salesPlanStageTallies = (
         sum.total += tally.total;
       }
       return [role, sum];
-    })
+    }),
   ) as Record<ApprovalStageId, SalesPlanStageTally>;
 
 export const approvalStageProgressForSalesPlanPeriods = (
@@ -115,7 +121,7 @@ export const approvalStageProgressForSalesPlanPeriods = (
     total: number;
     statusTotals: Readonly<Partial<Record<number, number>>>;
     planTypeCode: string;
-  }[]
+  }[],
 ): Record<ApprovalStageId, number> => salesPlanStagePercents(salesPlanStageTallies(periods));
 
 export type RegionalApprovalQueryScope = Pick<
@@ -143,7 +149,8 @@ export const toRegionalApprovalLiveRow = (row: GeaSalesPlanListItem): RegionalAp
   currentQty: normalizeSalesPlanDecimal(row.currentQty),
   currentAmount: normalizeSalesPlanDecimal(row.currentAmount),
   source: 'gea',
-  approvalState: row.status === 10 ? 'approved' : row.status >= 6 && row.status <= 9 ? 'returned' : 'pending',
+  approvalState:
+    row.status === 10 ? 'approved' : row.status >= 6 && row.status <= 9 ? 'returned' : 'pending',
 });
 
 export type RegionalApprovalLiveDimensionProjection = {
@@ -186,12 +193,13 @@ const uniqueNames = (values: Array<string | null | undefined>, excluded?: string
   values
     .map((value) => value?.trim())
     .filter(
-      (value, index, names): value is string => Boolean(value) && value !== excluded && names.indexOf(value) === index
+      (value, index, names): value is string =>
+        Boolean(value) && value !== excluded && names.indexOf(value) === index,
     );
 
 export const projectRegionalApprovalLiveDimension = (
   row: RegionalApprovalLiveRow,
-  dimension: ApprovalDimension
+  dimension: ApprovalDimension,
 ): RegionalApprovalLiveDimensionProjection => {
   const name =
     dimension === 'area'
@@ -212,10 +220,17 @@ export const projectRegionalApprovalLiveDimension = (
             row.areaName ?? row.regionName,
             row.baseName,
           ],
-          name
+          name,
         )
       : dimension === 'region'
-        ? uniqueNames([row.provinceName ?? row.provinceRegionName, row.areaName ?? row.regionName, row.baseName], name)
+        ? uniqueNames(
+            [
+              row.provinceName ?? row.provinceRegionName,
+              row.areaName ?? row.regionName,
+              row.baseName,
+            ],
+            name,
+          )
         : dimension === 'province'
           ? uniqueNames([row.areaName ?? row.regionName, row.baseName], name)
           : dimension === 'base'
@@ -225,7 +240,7 @@ export const projectRegionalApprovalLiveDimension = (
                   row.provinceName ?? row.provinceRegionName,
                   row.orgName ?? row.salesGroupName,
                 ],
-                name
+                name,
               )
             : uniqueNames([row.baseName], name);
   return {
@@ -235,7 +250,9 @@ export const projectRegionalApprovalLiveDimension = (
   };
 };
 
-export const chooseInitialSalesPlanPeriod = (periods: readonly GeaSalesPlanPeriod[]): GeaSalesPlanPeriod | undefined =>
+export const chooseInitialSalesPlanPeriod = (
+  periods: readonly GeaSalesPlanPeriod[],
+): GeaSalesPlanPeriod | undefined =>
   periods.find((period) => period.status?.toUpperCase() === 'OPEN') ?? periods[0];
 
 /** 用户只选择月份；Y/DC 等流程类型留在同月各计划内部用于审批判断。 */
@@ -245,7 +262,7 @@ export const salesPlanPeriodMonths = (periods: readonly GeaSalesPlanPeriod[]): s
 
 export const salesPlanPeriodsForMonth = (
   periods: readonly GeaSalesPlanPeriod[],
-  periodMonth: string | undefined
+  periodMonth: string | undefined,
 ): GeaSalesPlanPeriod[] => periods.filter((period) => period.periodMonth === periodMonth);
 
 export const salesPlanPeriodOptionLabel = (periodMonth: string): string => periodMonth;
@@ -253,7 +270,7 @@ export const salesPlanPeriodOptionLabel = (periodMonth: string): string => perio
 /** 聚合展示总数，但不把多个计划版本变成可写对象。 */
 export const groupRegionalApprovalLiveRows = (
   rows: readonly RegionalApprovalLiveRow[],
-  dimension: ApprovalDimension
+  dimension: ApprovalDimension,
 ) => {
   const groups = new Map<string, RegionalApprovalLiveRow[]>();
   for (const row of rows) {
@@ -301,7 +318,9 @@ export const isOpenSalesPlanPeriod = (period: GeaSalesPlanPeriod | undefined): b
 
 const DECIMAL_PATTERN = /^(-?)(\d+)(?:\.(\d+))?$/;
 
-const parseDecimal = (value: string): { negative: boolean; digits: bigint; scale: number } | undefined => {
+const parseDecimal = (
+  value: string,
+): { negative: boolean; digits: bigint; scale: number } | undefined => {
   const match = value.trim().match(DECIMAL_PATTERN);
   if (!match) return undefined;
   const fraction = match[3] ?? '';
@@ -334,14 +353,17 @@ export const addExactDecimals = (values: readonly string[]): string => {
 export const subtractExactDecimals = (left: string | number, right: string | number): string => {
   const normalizedLeft = typeof left === 'number' ? String(left) : left;
   const normalizedRight = (typeof right === 'number' ? String(right) : right).trim();
-  const negatedRight = normalizedRight.startsWith('-') ? normalizedRight.slice(1) : `-${normalizedRight}`;
+  const negatedRight = normalizedRight.startsWith('-')
+    ? normalizedRight.slice(1)
+    : `-${normalizedRight}`;
   return addExactDecimals([normalizedLeft, negatedRight]);
 };
 
 const decimalRatio = (value: string, baseline: string): number | undefined => {
   const valueNumber = Number(value);
   const baselineNumber = Number(baseline);
-  if (!Number.isFinite(valueNumber) || !Number.isFinite(baselineNumber) || baselineNumber === 0) return undefined;
+  if (!Number.isFinite(valueNumber) || !Number.isFinite(baselineNumber) || baselineNumber === 0)
+    return undefined;
   return (valueNumber / baselineNumber) * 100;
 };
 
@@ -351,7 +373,7 @@ export const regionalApprovalLiveProgress = (row: RegionalApprovalLiveRow) => ({
 });
 
 export const aggregateRegionalApprovalLiveCategories = (
-  skus: readonly GeaSalesPlanSku[]
+  skus: readonly GeaSalesPlanSku[],
 ): RegionalApprovalLiveCategorySummary[] => {
   const categorySkus = new Map<string, GeaSalesPlanSku[]>();
   skus.forEach((sku) => {
@@ -361,7 +383,9 @@ export const aggregateRegionalApprovalLiveCategories = (
     categorySkus.set(categoryName, current);
   });
 
-  const officialRank = new Map<string, number>(OFFICIAL_SALES_PLAN_CATEGORY_ORDER.map((name, index) => [name, index]));
+  const officialRank = new Map<string, number>(
+    OFFICIAL_SALES_PLAN_CATEGORY_ORDER.map((name, index) => [name, index]),
+  );
   return [...categorySkus.entries()]
     .toSorted(([left], [right]) => {
       const leftRank = officialRank.get(left) ?? OFFICIAL_SALES_PLAN_CATEGORY_ORDER.length;
@@ -403,11 +427,16 @@ const parseExactDecimal = (value: string) => {
   const match = value.match(/^([+-]?)(\d+)(?:\.(\d+))?$/);
   if (!match) return undefined;
   const fraction = match[3] ?? '';
-  const coefficient = BigInt(`${match[2]}${fraction}`) * (match[1] === '-' ? BigInt(-1) : BigInt(1));
+  const coefficient =
+    BigInt(`${match[2]}${fraction}`) * (match[1] === '-' ? BigInt(-1) : BigInt(1));
   return { coefficient, scale: fraction.length };
 };
 
-export const multiplyExactDecimals = (left: string, right: string, targetScale = 2): string | undefined => {
+export const multiplyExactDecimals = (
+  left: string,
+  right: string,
+  targetScale = 2,
+): string | undefined => {
   const leftDecimal = parseExactDecimal(left);
   const rightDecimal = parseExactDecimal(right);
   if (!leftDecimal || !rightDecimal) return undefined;
@@ -417,7 +446,8 @@ export const multiplyExactDecimals = (left: string, right: string, targetScale =
   const absolute = product < 0 ? -product : product;
   const rounded =
     productScale > targetScale
-      ? absolute / scaleFactor + ((absolute % scaleFactor) * BigInt(2) >= scaleFactor ? BigInt(1) : BigInt(0))
+      ? absolute / scaleFactor +
+        ((absolute % scaleFactor) * BigInt(2) >= scaleFactor ? BigInt(1) : BigInt(0))
       : absolute * BigInt(`1${'0'.repeat(targetScale - productScale)}`);
   const signed = product < 0 ? -rounded : rounded;
   const negative = signed < 0;

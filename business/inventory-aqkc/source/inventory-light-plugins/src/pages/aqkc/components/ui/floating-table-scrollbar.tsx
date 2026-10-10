@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import styles from "./floating-table-scrollbar.module.css";
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import styles from './floating-table-scrollbar.module.css';
 
 type Placement = {
   left: number;
@@ -12,11 +12,7 @@ type Placement = {
 };
 
 /** Share the visible table's horizontal position with a viewport-bottom scrollbar. */
-export function FloatingTableScrollbar({
-  bottomInset = 0,
-}: {
-  bottomInset?: number;
-}) {
+export function FloatingTableScrollbar({ bottomInset = 0 }: { bottomInset?: number }) {
   const anchor = useRef<HTMLSpanElement>(null);
   const scrollbar = useRef<HTMLInputElement>(null);
   const target = useRef<HTMLElement | null>(null);
@@ -35,11 +31,7 @@ export function FloatingTableScrollbar({
       let top = Math.max(0, bounds.top);
       let viewportLeft = Math.max(0, bounds.left);
       let viewportRight = Math.min(window.innerWidth, bounds.right);
-      for (
-        let parent = root.parentElement;
-        parent;
-        parent = parent.parentElement
-      ) {
+      for (let parent = root.parentElement; parent; parent = parent.parentElement) {
         const css = getComputedStyle(parent);
         const clip = parent.getBoundingClientRect();
         if (/(auto|scroll|hidden|clip)/.test(css.overflowX)) {
@@ -84,11 +76,7 @@ export function FloatingTableScrollbar({
             visibleBottom = Math.min(visibleBottom, clip.bottom);
           }
         }
-        if (
-          right - left < 48 ||
-          visibleTop >= visibleBottom - 24 ||
-          rect.bottom <= visibleTop
-        )
+        if (right - left < 48 || visibleTop >= visibleBottom - 24 || rect.bottom <= visibleTop)
           continue;
         selected = container;
         // Once the native track is fully visible, do not render a second track.
@@ -99,8 +87,7 @@ export function FloatingTableScrollbar({
                 left,
                 top: visibleBottom - 8,
                 width: right - left,
-                contentWidth:
-                  container.scrollWidth - container.clientWidth + right - left,
+                contentWidth: container.scrollWidth - container.clientWidth + right - left,
               };
         if (container === preferred) break;
       }
@@ -108,8 +95,7 @@ export function FloatingTableScrollbar({
       setPlacement((previous) =>
         JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
       );
-      if (scrollbar.current && selected)
-        scrollbar.current.value = String(selected.scrollLeft);
+      if (scrollbar.current && selected) scrollbar.current.value = String(selected.scrollLeft);
     };
     const schedule = () => {
       if (!frame) frame = requestAnimationFrame(measure);
@@ -122,8 +108,7 @@ export function FloatingTableScrollbar({
         containers
           .filter(
             (container) =>
-              container.contains(element) &&
-              container.scrollWidth > container.clientWidth + 1,
+              container.contains(element) && container.scrollWidth > container.clientWidth + 1,
           )
           .at(-1) ?? preferred;
       cancelAnimationFrame(frame);
@@ -132,9 +117,7 @@ export function FloatingTableScrollbar({
     const resize = new ResizeObserver(schedule);
     const discover = () => {
       const found = new Set<HTMLElement>();
-      for (const table of root.querySelectorAll(
-        "table:not([aria-hidden='true'])",
-      )) {
+      for (const table of root.querySelectorAll("table:not([aria-hidden='true'])")) {
         for (
           let parent = table.parentElement;
           parent && parent !== root;
@@ -147,8 +130,7 @@ export function FloatingTableScrollbar({
         }
       }
       for (const container of containers) {
-        if (!found.has(container))
-          container.classList.remove(styles.nativeScrollbar);
+        if (!found.has(container)) container.classList.remove(styles.nativeScrollbar);
       }
       containers = [...found];
       resize.disconnect();
@@ -156,28 +138,26 @@ export function FloatingTableScrollbar({
       for (const container of containers) {
         container.classList.add(styles.nativeScrollbar);
         resize.observe(container);
-        for (const table of container.querySelectorAll("table"))
-          resize.observe(table);
+        for (const table of container.querySelectorAll('table')) resize.observe(table);
       }
       schedule();
     };
     const mutations = new MutationObserver(discover);
     mutations.observe(root, { childList: true, subtree: true });
-    document.addEventListener("scroll", schedule, true);
-    root.addEventListener("pointerover", selectTable);
-    root.addEventListener("focusin", selectTable);
-    window.addEventListener("resize", schedule);
+    document.addEventListener('scroll', schedule, true);
+    root.addEventListener('pointerover', selectTable);
+    root.addEventListener('focusin', selectTable);
+    window.addEventListener('resize', schedule);
     discover();
     return () => {
       cancelAnimationFrame(frame);
       resize.disconnect();
       mutations.disconnect();
-      for (const container of containers)
-        container.classList.remove(styles.nativeScrollbar);
-      document.removeEventListener("scroll", schedule, true);
-      root.removeEventListener("pointerover", selectTable);
-      root.removeEventListener("focusin", selectTable);
-      window.removeEventListener("resize", schedule);
+      for (const container of containers) container.classList.remove(styles.nativeScrollbar);
+      document.removeEventListener('scroll', schedule, true);
+      root.removeEventListener('pointerover', selectTable);
+      root.removeEventListener('focusin', selectTable);
+      window.removeEventListener('resize', schedule);
       target.current = null;
     };
   }, [bottomInset]);
@@ -212,12 +192,11 @@ export function FloatingTableScrollbar({
               aria-label="左右移动列表"
               style={
                 {
-                  "--thumb-width": `${Math.max(32, placement.width ** 2 / placement.contentWidth)}px`,
+                  '--thumb-width': `${Math.max(32, placement.width ** 2 / placement.contentWidth)}px`,
                 } as React.CSSProperties
               }
               onChange={(event) => {
-                if (target.current)
-                  target.current.scrollLeft = Number(event.currentTarget.value);
+                if (target.current) target.current.scrollLeft = Number(event.currentTarget.value);
               }}
             />
           </div>,

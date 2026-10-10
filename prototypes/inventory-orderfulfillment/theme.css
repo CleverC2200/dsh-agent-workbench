@@ -85,7 +85,7 @@ body {
   border-radius: 8px;
 }
 .warehouse-options button:hover,
-.warehouse-options button[aria-selected="true"],
+.warehouse-options button[aria-selected='true'],
 .order-page-button:hover:not(:disabled) {
   background: var(--workbench-hover);
   color: var(--brand);

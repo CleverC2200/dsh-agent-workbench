@@ -13,11 +13,11 @@ const DEFAULT_MAX_CHARS = 200;
 const DEFAULT_SAMPLE_ITEMS = 0;
 
 const byteLength = (value: unknown): number =>
-  new TextEncoder().encode(JSON.stringify(value) ?? "").length;
+  new TextEncoder().encode(JSON.stringify(value) ?? '').length;
 
 /** 从用户问题/模型给的 focus 里切出关键词；太短的词没有区分度，直接丢。 */
 export function focusTokens(focus?: string): string[] {
-  if (typeof focus !== "string") return [];
+  if (typeof focus !== 'string') return [];
   return [
     ...new Set(
       focus
@@ -32,7 +32,7 @@ function includesFocus(value: unknown, tokens: string[]): boolean {
   if (tokens.length === 0) return true;
   let text: string;
   try {
-    text = JSON.stringify(value)?.toLowerCase() ?? "";
+    text = JSON.stringify(value)?.toLowerCase() ?? '';
   } catch {
     return false;
   }
@@ -40,7 +40,7 @@ function includesFocus(value: unknown, tokens: string[]): boolean {
 }
 
 export const truncateText = (value: string, maxChars: number): string =>
-  value.length > maxChars ? value.slice(0, maxChars) + "…" : value;
+  value.length > maxChars ? value.slice(0, maxChars) + '…' : value;
 
 type Narrowed = { value: unknown; omitted: number };
 
@@ -50,17 +50,18 @@ function narrow(
   tokens: string[],
   options: { maxItems: number; maxChars: number },
 ): Narrowed {
-  if (typeof value === "string")
+  if (typeof value === 'string')
     return { value: truncateText(value, options.maxChars), omitted: 0 };
-  if (value === null || typeof value !== "object") return { value, omitted: 0 };
+  if (value === null || typeof value !== 'object') return { value, omitted: 0 };
   if (Array.isArray(value)) {
     // 标识列表没有组织名称或字段标签，不能靠 focus 判定它的状态是否存在。
-    const scalars = value.every((item) => item === null || typeof item !== "object");
+    const scalars = value.every((item) => item === null || typeof item !== 'object');
     const matched = scalars ? value : value.filter((item) => includesFocus(item, tokens));
     const kept = matched.slice(0, options.maxItems);
     const children = kept.map((item) => narrow(item, tokens, options));
     // 省略数按"原数组里没进上下文"的条数算：既包括没命中 focus 的，也包括超出上限的。
-    const omitted = value.length - kept.length + children.reduce((total, child) => total + child.omitted, 0);
+    const omitted =
+      value.length - kept.length + children.reduce((total, child) => total + child.omitted, 0);
     return {
       value: children.map((child) => child.value),
       omitted,
@@ -79,15 +80,15 @@ function narrow(
 
 /** 无 focus 又超预算时的摘要：只给数量、字段名与极少量样本。 */
 function brief(value: unknown, maxChars: number, sampleItems: number): unknown {
-  if (typeof value === "string") return truncateText(value, maxChars);
-  if (value === null || typeof value !== "object") return value;
+  if (typeof value === 'string') return truncateText(value, maxChars);
+  if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) {
     const fields = [
       ...new Set(
         value
           .slice(0, 5)
           .flatMap((item) =>
-            item && typeof item === "object" && !Array.isArray(item)
+            item && typeof item === 'object' && !Array.isArray(item)
               ? Object.keys(item as Record<string, unknown>)
               : [],
           ),
@@ -96,17 +97,12 @@ function brief(value: unknown, maxChars: number, sampleItems: number): unknown {
     return {
       count: value.length,
       ...(fields.length ? { fields } : {}),
-      sample: value
-        .slice(0, sampleItems)
-        .map((item) => brief(item, maxChars, sampleItems)),
+      sample: value.slice(0, sampleItems).map((item) => brief(item, maxChars, sampleItems)),
     };
   }
   const source = value as Record<string, unknown>;
   return Object.fromEntries(
-    Object.keys(source).map((key) => [
-      key,
-      brief(source[key], maxChars, sampleItems),
-    ]),
+    Object.keys(source).map((key) => [key, brief(source[key], maxChars, sampleItems)]),
   );
 }
 
@@ -163,12 +159,14 @@ export function compressForModel(
   const omitted = narrowed.omitted;
   const note = [
     tokens.length > 0
-      ? `已按 focus「${tokens.join(" ")}」只保留相关行/字段`
-      : "已只保留摘要（数量与字段名）",
-    omitted > 0 ? `另有 ${omitted} 项未保留；该数量包含不同数组的条目，不是业务行数或未展开行数` : undefined,
-    "需要更多明细时带上更具体的 focus（用户提到的对象或字段名），不要重复整屏拉取。",
+      ? `已按 focus「${tokens.join(' ')}」只保留相关行/字段`
+      : '已只保留摘要（数量与字段名）',
+    omitted > 0
+      ? `另有 ${omitted} 项未保留；该数量包含不同数组的条目，不是业务行数或未展开行数`
+      : undefined,
+    '需要更多明细时带上更具体的 focus（用户提到的对象或字段名），不要重复整屏拉取。',
   ]
     .filter((text): text is string => text !== undefined)
-    .join("；");
+    .join('；');
   return { json, compressed: true, omitted, note };
 }

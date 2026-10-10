@@ -1,2 +1,2 @@
-import { mountPicker } from "./picker.ts";
+import { mountPicker } from './picker.ts';
 mountPicker();

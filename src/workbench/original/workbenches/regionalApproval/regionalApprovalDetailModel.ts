@@ -1,5 +1,8 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { regionalApprovalSkuFixtures, type ApprovalReasonRequirement } from './regionalApprovalDetailFixture.ts';
+import {
+  regionalApprovalSkuFixtures,
+  type ApprovalReasonRequirement,
+} from './regionalApprovalDetailFixture.ts';
 import type { ApprovalVersion, RegionalApprovalRow } from './regionalApprovalFixture.ts';
 
 export type ApprovalSuggestionDisposition = 'pending' | 'accepted' | 'ignored';
@@ -29,15 +32,23 @@ export type ApprovalPlanAdjustment = {
 export type ApprovalDetailStore = {
   plans: Record<string, ApprovalPlanAdjustment>;
   /** Explicit unsent UI text, partitioned by the actual Core Session and current plan/version/role. */
-  liveInputs?: Record<string,Record<string,string>>;
+  liveInputs?: Record<string, Record<string, string>>;
 };
-export const liveInputKey=(sessionId:string,planId:string,versionId:string,role:string|undefined)=>JSON.stringify([sessionId,planId,versionId,role??null]);
+export const liveInputKey = (
+  sessionId: string,
+  planId: string,
+  versionId: string,
+  role: string | undefined,
+) => JSON.stringify([sessionId, planId, versionId, role ?? null]);
 
 export const EMPTY_APPROVAL_DETAIL_STORE: ApprovalDetailStore = { plans: {} };
 
-export const approvalPlanKey = (organizationId: string, version: ApprovalVersion) => `${organizationId}:${version}`;
+export const approvalPlanKey = (organizationId: string, version: ApprovalVersion) =>
+  `${organizationId}:${version}`;
 
-const initialAdjustment = (fixture: ReturnType<typeof regionalApprovalSkuFixtures>[number]): ApprovalSkuAdjustment => ({
+const initialAdjustment = (
+  fixture: ReturnType<typeof regionalApprovalSkuFixtures>[number],
+): ApprovalSkuAdjustment => ({
   skuId: fixture.id,
   initialQuantity: fixture.initialQuantity,
   initialAmount: fixture.initialQuantity * fixture.unitPrice,
@@ -53,12 +64,15 @@ const initialAdjustment = (fixture: ReturnType<typeof regionalApprovalSkuFixture
 export const ensureApprovalPlan = (
   store: ApprovalDetailStore,
   row: RegionalApprovalRow,
-  version: ApprovalVersion
+  version: ApprovalVersion,
 ): ApprovalDetailStore => {
   const key = approvalPlanKey(row.id, version);
   if (store.plans[key]) return store;
   const adjustments = Object.fromEntries(
-    regionalApprovalSkuFixtures(row, version).map((fixture) => [fixture.id, initialAdjustment(fixture)])
+    regionalApprovalSkuFixtures(row, version).map((fixture) => [
+      fixture.id,
+      initialAdjustment(fixture),
+    ]),
   );
   return {
     ...store,
@@ -86,7 +100,7 @@ export type ApprovalDetailAction =
 const updateWorking = (
   plan: ApprovalPlanAdjustment,
   skuId: string,
-  update: (adjustment: ApprovalSkuAdjustment) => ApprovalSkuAdjustment
+  update: (adjustment: ApprovalSkuAdjustment) => ApprovalSkuAdjustment,
 ): ApprovalPlanAdjustment => {
   const current = plan.working[skuId];
   const next = update(current);
@@ -97,7 +111,7 @@ const updateWorking = (
 const updatePlanTotal = (
   plan: ApprovalPlanAdjustment,
   field: 'editedQuantity' | 'editedAmount',
-  requestedTotal: number
+  requestedTotal: number,
 ): ApprovalPlanAdjustment => {
   const target = Math.max(0, Math.round(requestedTotal));
   const entries = Object.entries(plan.working);
@@ -119,7 +133,7 @@ const updatePlanTotal = (
           ...(field === 'editedAmount' ? { suggestionPreviousAmount: undefined } : {}),
         },
       ];
-    })
+    }),
   );
   return { ...plan, working };
 };
@@ -128,7 +142,7 @@ export const reduceApprovalDetailStore = (
   store: ApprovalDetailStore,
   row: RegionalApprovalRow,
   version: ApprovalVersion,
-  action: ApprovalDetailAction
+  action: ApprovalDetailAction,
 ): ApprovalDetailStore => {
   const ensured = ensureApprovalPlan(store, row, version);
   const key = approvalPlanKey(row.id, version);
@@ -172,11 +186,13 @@ export const reduceApprovalDetailStore = (
       };
     });
   }
-  if (action.type === 'edit-plan-quantity') nextPlan = updatePlanTotal(plan, 'editedQuantity', action.quantity);
-  if (action.type === 'edit-plan-amount') nextPlan = updatePlanTotal(plan, 'editedAmount', action.amount);
+  if (action.type === 'edit-plan-quantity')
+    nextPlan = updatePlanTotal(plan, 'editedQuantity', action.quantity);
+  if (action.type === 'edit-plan-amount')
+    nextPlan = updatePlanTotal(plan, 'editedAmount', action.amount);
   if (action.type === 'reason') {
     nextPlan = updateWorking(plan, action.skuId, (adjustment) =>
-      adjustment.reason === action.reason ? adjustment : { ...adjustment, reason: action.reason }
+      adjustment.reason === action.reason ? adjustment : { ...adjustment, reason: action.reason },
     );
   }
   if (action.type === 'reason-all') {
@@ -184,7 +200,10 @@ export const reduceApprovalDetailStore = (
       nextPlan = {
         ...plan,
         working: Object.fromEntries(
-          Object.entries(plan.working).map(([skuId, adjustment]) => [skuId, { ...adjustment, reason: action.reason }])
+          Object.entries(plan.working).map(([skuId, adjustment]) => [
+            skuId,
+            { ...adjustment, reason: action.reason },
+          ]),
         ),
       };
     }
@@ -200,18 +219,22 @@ export const reduceApprovalDetailStore = (
           ? adjustment.suggestionPreviousQuantity
           : adjustment.editedQuantity,
       suggestionPreviousAmount:
-        adjustment.suggestionDisposition === 'accepted' ? adjustment.suggestionPreviousAmount : adjustment.editedAmount,
+        adjustment.suggestionDisposition === 'accepted'
+          ? adjustment.suggestionPreviousAmount
+          : adjustment.editedAmount,
     }));
   }
   if (action.type === 'ignore-suggestion') {
     nextPlan = updateWorking(plan, action.skuId, (adjustment) => ({
       ...adjustment,
       editedQuantity:
-        adjustment.suggestionDisposition === 'accepted' && adjustment.suggestionPreviousQuantity !== undefined
+        adjustment.suggestionDisposition === 'accepted' &&
+        adjustment.suggestionPreviousQuantity !== undefined
           ? adjustment.suggestionPreviousQuantity
           : adjustment.editedQuantity,
       editedAmount:
-        adjustment.suggestionDisposition === 'accepted' && adjustment.suggestionPreviousAmount !== undefined
+        adjustment.suggestionDisposition === 'accepted' &&
+        adjustment.suggestionPreviousAmount !== undefined
           ? adjustment.suggestionPreviousAmount
           : adjustment.editedAmount,
       suggestionDisposition: 'ignored',
@@ -249,7 +272,7 @@ export const reduceApprovalDetailStore = (
                 ? adjustment.suggestionPreviousAmount
                 : adjustment.editedAmount,
           },
-        ])
+        ]),
       ),
     };
   }
@@ -260,8 +283,9 @@ export const reduceApprovalDetailStore = (
 export const approvalPlan = (
   store: ApprovalDetailStore,
   row: RegionalApprovalRow,
-  version: ApprovalVersion
-): ApprovalPlanAdjustment => ensureApprovalPlan(store, row, version).plans[approvalPlanKey(row.id, version)];
+  version: ApprovalVersion,
+): ApprovalPlanAdjustment =>
+  ensureApprovalPlan(store, row, version).plans[approvalPlanKey(row.id, version)];
 
 export const isApprovalPlanDirty = (plan: ApprovalPlanAdjustment) =>
   JSON.stringify(plan.saved) !== JSON.stringify(plan.working);
@@ -273,7 +297,7 @@ export const approvalPlanValidationErrors = (plan: ApprovalPlanAdjustment): stri
         (adjustment.editedQuantity !== adjustment.initialQuantity ||
           adjustment.editedAmount !== adjustment.initialAmount) &&
         adjustment.reasonRequirement === 'required' &&
-        adjustment.reason.trim() === ''
+        adjustment.reason.trim() === '',
     )
     .map((adjustment) => adjustment.skuId);
 
@@ -296,7 +320,7 @@ export const savedApprovalAdjustments = (store: ApprovalDetailStore): SavedAppro
         (adjustment) =>
           adjustment.editedQuantity !== adjustment.initialQuantity ||
           adjustment.editedAmount !== adjustment.initialAmount ||
-          adjustment.suggestionDisposition !== 'pending'
+          adjustment.suggestionDisposition !== 'pending',
       )
       .map((adjustment) => ({
         organizationId: plan.organizationId,
@@ -308,5 +332,5 @@ export const savedApprovalAdjustments = (store: ApprovalDetailStore): SavedAppro
         editedAmount: adjustment.editedAmount,
         reason: adjustment.reason,
         suggestionDisposition: adjustment.suggestionDisposition,
-      }))
+      })),
   );

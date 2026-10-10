@@ -1,19 +1,12 @@
 import { correctionDecision, correctionLine } from './models/salesPlanCorrectionModel.ts';
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Button,
-  Checkbox,
-  Input,
-  Modal,
-  Spin,
-} from "@arco-design/web-react";
-import type { TFunction } from "i18next";
+import React, { useEffect, useMemo, useState } from 'react';
+import { Alert, Button, Checkbox, Input, Modal, Spin } from '@arco-design/web-react';
+import type { TFunction } from 'i18next';
 import type {
   GeaSalesPlanPeriod,
   GeaSalesPlanSku,
   GeaSalesPlanSubmitReceipt,
-} from "../../contracts.ts";
+} from '../../contracts.ts';
 import {
   prepareSalesPlanResubmit,
   salesPlanResubmitReadbackMatches,
@@ -21,7 +14,7 @@ import {
   classifySalesPlanSubmitError,
   type SalesPlanResubmitSource,
   type SalesPlanSubmitClient,
-} from "./models/salesPlanSubmitModel.ts";
+} from './models/salesPlanSubmitModel.ts';
 
 /** 编辑刚读取的退回版本；只有已连接的 Host 可以提交。 */
 export function RegionalApprovalResubmitDialog({
@@ -47,8 +40,8 @@ export function RegionalApprovalResubmitDialog({
     t(`common.assistantSurface.regionalApproval.liveSubmit.${key}`, values);
   const [source, setSource] = useState<SalesPlanResubmitSource>();
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>([]);
-  const [correctionEdits,setCorrectionEdits]=useState<Record<string,string>>({});
-  const [error, setError] = useState("");
+  const [correctionEdits, setCorrectionEdits] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [attempt, setAttempt] = useState<SalesPlanSubmitAttempt>();
@@ -62,11 +55,8 @@ export function RegionalApprovalResubmitDialog({
       client.currentUser.invoke(),
     ])
       .then(async ([detail, currentUser]) => {
-        if (
-          detail.currentVersion.id !== versionId ||
-          !detail.currentVersion.effective
-        )
-          throw new Error("sourceMismatch");
+        if (detail.currentVersion.id !== versionId || !detail.currentVersion.effective)
+          throw new Error('sourceMismatch');
         const rows = await client.versionSkus.invoke({
           versionId,
           signal: controller.signal,
@@ -83,18 +73,23 @@ export function RegionalApprovalResubmitDialog({
         setSkus(rows);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError("sourceMismatch");
+        if (!controller.signal.aborted) setError('sourceMismatch');
       });
     return () => controller.abort();
   }, [planId, versionId, period, client]);
   const input = useMemo(() => {
     if (!source) return undefined;
     try {
-      const submitted=source.detail.currentVersion.orderType === 'Z' ? skus.map(sku=>{
-        const input=correctionEdits[sku.skuCode];if(input===undefined)return sku;
-        const line=correctionLine(sku,input);return {...sku,adjAddQty:line.addQty,adjCutQty:line.cutQty};
-      }):skus;
-      return prepareSalesPlanResubmit({ ...source, skus:submitted });
+      const submitted =
+        source.detail.currentVersion.orderType === 'Z'
+          ? skus.map((sku) => {
+              const input = correctionEdits[sku.skuCode];
+              if (input === undefined) return sku;
+              const line = correctionLine(sku, input);
+              return { ...sku, adjAddQty: line.addQty, adjCutQty: line.cutQty };
+            })
+          : skus;
+      return prepareSalesPlanResubmit({ ...source, skus: submitted });
     } catch {
       return undefined;
     }
@@ -102,14 +97,14 @@ export function RegionalApprovalResubmitDialog({
   const readBack = async (value: GeaSalesPlanSubmitReceipt) => {
     const detail = await client.detail.invoke({ planId });
     if (!salesPlanResubmitReadbackMatches(versionId, value, detail, input?.request))
-      throw new Error("readback");
+      throw new Error('readback');
     setVerified(true);
     onSucceeded();
   };
   const submit = async () => {
     if (!connected || !input || !confirmed || busy || verified) return;
     setBusy(true);
-    setError("");
+    setError('');
     setRetryable(false);
     try {
       if (receipt) {
@@ -122,11 +117,10 @@ export function RegionalApprovalResubmitDialog({
         const fresh = await client.detail.invoke({ planId });
         if (
           fresh.currentVersion.id !== versionId ||
-          fresh.currentVersion.status !==
-            source?.detail.currentVersion.status ||
+          fresh.currentVersion.status !== source?.detail.currentVersion.status ||
           !fresh.currentVersion.effective
         ) {
-          setError("conflict");
+          setError('conflict');
           return;
         }
         const next = new SalesPlanSubmitAttempt(client);
@@ -146,14 +140,14 @@ export function RegionalApprovalResubmitDialog({
   return (
     <Modal
       visible
-      title={tr("title")}
+      title={tr('title')}
       onCancel={onClose}
       closable={!busy}
       maskClosable={false}
       footer={
         <>
           <Button disabled={busy} onClick={onClose}>
-            {tr("close")}
+            {tr('close')}
           </Button>
           <Button
             type="primary"
@@ -167,33 +161,31 @@ export function RegionalApprovalResubmitDialog({
             }
             onClick={() => void submit()}
           >
-            {tr(receipt ? "refresh" : attempt ? "retry" : "confirm")}
+            {tr(receipt ? 'refresh' : attempt ? 'retry' : 'confirm')}
           </Button>
         </>
       }
     >
-      {!connected && (
-        <Alert type="warning" content={tr("disabled.serviceBoundary")} />
-      )}
+      {!connected && <Alert type="warning" content={tr('disabled.serviceBoundary')} />}
       {!source && !error ? <Spin /> : null}
       {source && (
         <>
           <p>
-            {tr("version")}: {versionId} · {tr("period")}: {period.periodMonth}
+            {tr('version')}: {versionId} · {tr('period')}: {period.periodMonth}
           </p>
           <p>
-            {tr("submitter", {
+            {tr('submitter', {
               code: source.currentUser.id,
               name: source.currentUser.username,
             })}
           </p>
-          <div style={{ maxHeight: 360, overflow: "auto" }}>
+          <div style={{ maxHeight: 360, overflow: 'auto' }}>
             {skus.map((sku, index) => (
               <label
                 key={sku.skuCode}
                 style={{
-                  display: "flex",
-                  alignItems: "center",
+                  display: 'flex',
+                  alignItems: 'center',
                   gap: 12,
                   marginBottom: 8,
                 }}
@@ -202,13 +194,28 @@ export function RegionalApprovalResubmitDialog({
                   {sku.skuCode} · {sku.productCategName}
                 </span>
                 <Input
-                  aria-label={`${source.detail.currentVersion.orderType === "Z" ? "纠偏调整量" : tr("quantity")} ${sku.skuCode}`}
-                  value={source.detail.currentVersion.orderType === 'Z' ? correctionEdits[sku.skuCode] ?? (()=>{try{return correctionDecision(sku,0,source.period.planTypeCode);}catch{return '';}})() : sku.qty}
+                  aria-label={`${source.detail.currentVersion.orderType === 'Z' ? '纠偏调整量' : tr('quantity')} ${sku.skuCode}`}
+                  value={
+                    source.detail.currentVersion.orderType === 'Z'
+                      ? (correctionEdits[sku.skuCode] ??
+                        (() => {
+                          try {
+                            return correctionDecision(sku, 0, source.period.planTypeCode);
+                          } catch {
+                            return '';
+                          }
+                        })())
+                      : sku.qty
+                  }
                   disabled={busy || Boolean(attempt)}
                   onChange={(qty) => {
                     setConfirmed(false);
-                    if(source.detail.currentVersion.orderType === 'Z')setCorrectionEdits(values=>({...values,[sku.skuCode]:qty}));
-                    else setSkus(rows=>rows.map((row,i)=>i===index?{...row,qty}:row));
+                    if (source.detail.currentVersion.orderType === 'Z')
+                      setCorrectionEdits((values) => ({ ...values, [sku.skuCode]: qty }));
+                    else
+                      setSkus((rows) =>
+                        rows.map((row, i) => (i === index ? { ...row, qty } : row)),
+                      );
                   }}
                 />
               </label>
@@ -216,37 +223,30 @@ export function RegionalApprovalResubmitDialog({
           </div>
           {input ? (
             <p>
-              {tr("sourceSummary", {
+              {tr('sourceSummary', {
                 count: input.sourceSummary.skuCount,
                 quantity: input.sourceSummary.submittedQty,
                 amount: input.sourceSummary.submittedAmount,
-              })}{" "}
-              · {tr("nextStatus")}: {input.expected.nextStatus}
+              })}{' '}
+              · {tr('nextStatus')}: {input.expected.nextStatus}
             </p>
           ) : (
-            <Alert type="error" content={tr("errors.validation")} />
+            <Alert type="error" content={tr('errors.validation')} />
           )}
-          <Checkbox
-            checked={confirmed}
-            disabled={busy || Boolean(attempt)}
-            onChange={setConfirmed}
-          >
-            {tr("confirmation")}
+          <Checkbox checked={confirmed} disabled={busy || Boolean(attempt)} onChange={setConfirmed}>
+            {tr('confirmation')}
           </Checkbox>
         </>
       )}
       {error && (
-        <Alert
-          type="error"
-          content={receipt ? tr("refreshFailed") : tr(`errors.${error}`)}
-        />
+        <Alert type="error" content={receipt ? tr('refreshFailed') : tr(`errors.${error}`)} />
       )}
       {verified && receipt && (
         <Alert
           type="success"
-          content={tr("success", {
+          content={tr('success', {
             ...receipt,
-            replayed: tr(receipt.replayed ? "replayed" : "created"),
+            replayed: tr(receipt.replayed ? 'replayed' : 'created'),
           })}
         />
       )}

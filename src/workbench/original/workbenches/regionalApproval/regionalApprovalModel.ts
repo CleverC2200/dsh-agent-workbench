@@ -56,31 +56,43 @@ const unique = <T extends string>(values: readonly T[]): T[] => [...new Set(valu
 const rowsMatchingFields = (
   rows: readonly RegionalApprovalRow[],
   filters: ApprovalOrganizationFilters,
-  fields: readonly ApprovalOrganizationFilterField[]
+  fields: readonly ApprovalOrganizationFilterField[],
 ) =>
   rows.filter((row) =>
-    fields.every((field) => filters[field] === ALL_ORGANIZATIONS || rowValue(row, field) === filters[field])
+    fields.every(
+      (field) => filters[field] === ALL_ORGANIZATIONS || rowValue(row, field) === filters[field],
+    ),
   );
 
 export const approvalFilterOptions = (
   rows: readonly RegionalApprovalRow[],
-  filters: ApprovalOrganizationFilters
+  filters: ApprovalOrganizationFilters,
 ): Record<ApprovalOrganizationFilterField, string[]> => ({
   area: unique(rows.map((row) => row.areaKey)),
   branch: unique(rowsMatchingFields(rows, filters, ['area']).map((row) => row.branchKey)),
-  department: unique(rowsMatchingFields(rows, filters, ['area', 'branch']).map((row) => row.departmentKey)),
-  customer: unique(rowsMatchingFields(rows, filters, ['area', 'branch', 'department']).map((row) => row.customerKey)),
+  department: unique(
+    rowsMatchingFields(rows, filters, ['area', 'branch']).map((row) => row.departmentKey),
+  ),
+  customer: unique(
+    rowsMatchingFields(rows, filters, ['area', 'branch', 'department']).map(
+      (row) => row.customerKey,
+    ),
+  ),
   approval: unique(
-    rowsMatchingFields(rows, filters, ['area', 'branch', 'department', 'customer']).map((row) => row.approvalState)
+    rowsMatchingFields(rows, filters, ['area', 'branch', 'department', 'customer']).map(
+      (row) => row.approvalState,
+    ),
   ),
   health: unique(
-    rowsMatchingFields(rows, filters, ['area', 'branch', 'department', 'customer', 'approval']).map((row) => row.health)
+    rowsMatchingFields(rows, filters, ['area', 'branch', 'department', 'customer', 'approval']).map(
+      (row) => row.health,
+    ),
   ),
 });
 
 export const normalizeApprovalFilters = (
   rows: readonly RegionalApprovalRow[],
-  filters: ApprovalOrganizationFilters
+  filters: ApprovalOrganizationFilters,
 ): ApprovalOrganizationFilters => {
   let normalized = { ...filters };
   for (const field of FILTER_ORDER) {
@@ -101,12 +113,12 @@ export const updateApprovalFilter = <Field extends ApprovalOrganizationFilterFie
   rows: readonly RegionalApprovalRow[],
   filters: ApprovalOrganizationFilters,
   field: Field,
-  value: ApprovalOrganizationFilters[Field]
+  value: ApprovalOrganizationFilters[Field],
 ): ApprovalOrganizationFilters => normalizeApprovalFilters(rows, { ...filters, [field]: value });
 
 export const projectApprovalRows = (
   rows: readonly RegionalApprovalRow[],
-  filters: ApprovalOrganizationFilters
+  filters: ApprovalOrganizationFilters,
 ): RegionalApprovalRow[] => rowsMatchingFields(rows, filters, FILTER_ORDER);
 
 export const metricsForApprovalVersion = (row: RegionalApprovalRow, version: ApprovalVersion) => {
@@ -129,7 +141,7 @@ export type ApprovalPage<Row> = {
 export const paginateApprovalRows = <Row>(
   rows: readonly Row[],
   requestedPage: number,
-  pageSize: number
+  pageSize: number,
 ): ApprovalPage<Row> => {
   const safePageSize = Math.max(1, Math.floor(pageSize));
   const pageCount = Math.max(1, Math.ceil(rows.length / safePageSize));
@@ -162,7 +174,7 @@ export const buildApprovalCsv = (
   rows: readonly RegionalApprovalRow[],
   version: ApprovalVersion,
   stage: ApprovalStageId,
-  labels: ApprovalCsvLabels
+  labels: ApprovalCsvLabels,
 ): string => {
   const header = [
     labels.version,

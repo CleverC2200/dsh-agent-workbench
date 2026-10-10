@@ -4,13 +4,7 @@
  */
 export function AgentAvatar({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 96 96"
-      role="img"
-      aria-hidden="true"
-      focusable="false"
-    >
+    <svg className={className} viewBox="0 0 96 96" role="img" aria-hidden="true" focusable="false">
       <defs>
         <linearGradient id="gea-agent-tile" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0" stopColor="#fff6f7" />

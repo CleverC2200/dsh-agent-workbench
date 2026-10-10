@@ -53,7 +53,10 @@ type SalesPlanOverview = {
 
 const idle = { status: 'idle' } as const;
 
-export const classifySalesPlanDetailError = (error: unknown, timedOut = false): SalesPlanDetailError => {
+export const classifySalesPlanDetailError = (
+  error: unknown,
+  timedOut = false,
+): SalesPlanDetailError => {
   if (timedOut) return 'timeout';
   if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
   if (isBackendHttpError(error)) {
@@ -98,11 +101,12 @@ export const useSalesPlanDetail = ({
   initialFromVersionId?: string;
   initialToVersionId?: string;
 }) => {
-  const host=useWorkbenchHost();
-  const client=suppliedClient === undefined ? host.salesPlan : suppliedClient;
+  const host = useWorkbenchHost();
+  const client = suppliedClient === undefined ? host.salesPlan : suppliedClient;
   const [overviewState, setOverviewState] = useState<SalesPlanDetailState<SalesPlanOverview>>(idle);
   const [skuState, setSkuState] = useState<SalesPlanDetailState<GeaSalesPlanSku[]>>(idle);
-  const [compareState, setCompareState] = useState<SalesPlanDetailState<GeaSalesPlanSkuDiff[]>>(idle);
+  const [compareState, setCompareState] =
+    useState<SalesPlanDetailState<GeaSalesPlanSkuDiff[]>>(idle);
   const [selectedVersionId, setSelectedVersionId] = useState<string>();
   const [fromVersionId, setFromVersionId] = useState<string>();
   const [toVersionId, setToVersionId] = useState<string>();
@@ -147,9 +151,13 @@ export const useSalesPlanDetail = ({
         setToVersionId(initialVersionId);
         const current = versions.find((version) => version.id === initialVersionId);
         const previous = versions
-          .filter((version) => version.id !== initialVersionId && (!current || version.seq < current.seq))
+          .filter(
+            (version) => version.id !== initialVersionId && (!current || version.seq < current.seq),
+          )
           .toSorted((left, right) => right.seq - left.seq)[0];
-        setFromVersionId(previous?.id ?? versions.find((version) => version.id !== initialVersionId)?.id);
+        setFromVersionId(
+          previous?.id ?? versions.find((version) => version.id !== initialVersionId)?.id,
+        );
       })
       .catch((error: unknown) => {
         if (overviewRequest.current !== requestId) return;
@@ -165,8 +173,10 @@ export const useSalesPlanDetail = ({
   useEffect(() => {
     if (overviewState.status !== 'success') return;
     const versionIds = new Set(overviewState.data.versions.map((version) => version.id));
-    if (initialFromVersionId && versionIds.has(initialFromVersionId)) setFromVersionId(initialFromVersionId);
-    if (initialToVersionId && versionIds.has(initialToVersionId)) setToVersionId(initialToVersionId);
+    if (initialFromVersionId && versionIds.has(initialFromVersionId))
+      setFromVersionId(initialFromVersionId);
+    if (initialToVersionId && versionIds.has(initialToVersionId))
+      setToVersionId(initialToVersionId);
   }, [initialFromVersionId, initialToVersionId, overviewState]);
 
   useEffect(() => {
@@ -188,20 +198,26 @@ export const useSalesPlanDetail = ({
         setSkuState(
           salesPlanSkusMatchVersion(selectedVersionId, skus)
             ? { status: 'success', data: skus }
-            : { status: 'error', error: 'versionMismatch' }
+            : { status: 'error', error: 'versionMismatch' },
         );
       })
       .catch((error: unknown) => {
         if (skuRequest.current !== requestId) return;
         const classified = classifySalesPlanDetailError(error, request.didTimeOut());
-        if (classified !== 'cancelled' || request.didTimeOut()) setSkuState({ status: 'error', error: classified });
+        if (classified !== 'cancelled' || request.didTimeOut())
+          setSkuState({ status: 'error', error: classified });
       })
       .finally(request.finish);
     return request.cancel;
   }, [client, overviewState, selectedVersionId, skuRevision]);
 
   useEffect(() => {
-    if (overviewState.status !== 'success' || !fromVersionId || !toVersionId || fromVersionId === toVersionId) {
+    if (
+      overviewState.status !== 'success' ||
+      !fromVersionId ||
+      !toVersionId ||
+      fromVersionId === toVersionId
+    ) {
       setCompareState(idle);
       return;
     }
@@ -225,7 +241,7 @@ export const useSalesPlanDetail = ({
         setCompareState(
           salesPlanComparisonMatches(fromVersionId, toVersionId, differences)
             ? { status: 'success', data: differences }
-            : { status: 'error', error: 'versionMismatch' }
+            : { status: 'error', error: 'versionMismatch' },
         );
       })
       .catch((error: unknown) => {

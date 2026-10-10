@@ -1,9 +1,59 @@
-.author-questions{margin:0 0 14px;padding:10px 12px;border:1px solid var(--border,var(--ap-line));border-radius:10px;background:var(--surface,#fff);font-family:inherit;font-size:12px;color:var(--text-body,var(--ap-ink-2))}
-.author-questions summary{cursor:pointer;font-weight:600;line-height:1.6;color:var(--text-strong,var(--ap-ink))}
-.author-questions summary:focus-visible{outline:2px solid var(--brand,#C8352F);outline-offset:4px}
-.author-question-list{display:flex;flex-wrap:wrap;gap:8px;padding-top:10px}
-.author-question-list .arco-btn{height:auto;min-height:30px;white-space:normal;text-align:left;line-height:1.5;padding:5px 10px}
-.author-draft-recovery{margin-top:10px;padding-top:10px;border-top:1px solid var(--border,var(--ap-line))}
-.author-draft-recovery p{margin:0 0 6px;font-weight:600}
-.author-draft-recovery pre{margin:0 0 8px;max-height:120px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:inherit;line-height:1.6}
-.author-quote-status{margin:8px 0 0;color:var(--text-body,var(--ap-ink-2));line-height:1.6;overflow-wrap:anywhere}
+.author-questions {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, var(--ap-line));
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-body, var(--ap-ink-2));
+}
+.author-questions summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--text-strong, var(--ap-ink));
+}
+.author-questions summary:focus-visible {
+  outline: 2px solid var(--brand, #c8352f);
+  outline-offset: 4px;
+}
+.author-question-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 10px;
+}
+.author-question-list .arco-btn {
+  height: auto;
+  min-height: 30px;
+  white-space: normal;
+  text-align: left;
+  line-height: 1.5;
+  padding: 5px 10px;
+}
+.author-draft-recovery {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border, var(--ap-line));
+}
+.author-draft-recovery p {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+.author-draft-recovery pre {
+  margin: 0 0 8px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 1.6;
+}
+.author-quote-status {
+  margin: 8px 0 0;
+  color: var(--text-body, var(--ap-ink-2));
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}

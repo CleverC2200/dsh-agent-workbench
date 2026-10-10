@@ -1,21 +1,17 @@
-import { call } from "./channel.js";
-import { sqlQueryError, DATA_PERMISSION_MESSAGE } from "./query-error.js";
-import {
-  packedSafetyStockSql,
-  unpackSafetyStock,
-  supportsPackedTransfer,
-} from "./aqkc-transfer";
+import { call } from './channel.js';
+import { sqlQueryError, DATA_PERMISSION_MESSAGE } from './query-error.js';
+import { packedSafetyStockSql, unpackSafetyStock, supportsPackedTransfer } from './aqkc-transfer';
 import type {
   WorkbenchSqlQuery,
   WorkbenchSqlRow,
-} from "../../aqkc/web/src/lib/workbench-sql-types";
+} from '../../aqkc/web/src/lib/workbench-sql-types';
 const pending = new Map<string, Promise<WorkbenchSqlRow[]>>();
 export function clearReadCache() {
   pending.clear();
 }
-if (typeof window !== "undefined") {
-  window.addEventListener("gea-identity-changed", clearReadCache);
-  window.addEventListener("light-refresh", clearReadCache);
+if (typeof window !== 'undefined') {
+  window.addEventListener('gea-identity-changed', clearReadCache);
+  window.addEventListener('light-refresh', clearReadCache);
 }
 /** GEA owns the identity and applies the same Consumer grant to every read. */
 export async function queryStock(
@@ -29,11 +25,9 @@ export async function queryStock(
       const packed = supportsPackedTransfer(query.name);
       try {
         const result = await call(
-          "sql",
+          'sql',
           {
-            sql: packed
-              ? packedSafetyStockSql(query.sql, query.name)
-              : query.sql,
+            sql: packed ? packedSafetyStockSql(query.sql, query.name) : query.sql,
             parameters: query.parameters ?? {},
             maxRows: packed ? Math.ceil(query.maxRows / 100) : query.maxRows,
           },
@@ -42,13 +36,11 @@ export async function queryStock(
         signal?.throwIfAborted();
         if (result.rejectedColumns?.length)
           window.dispatchEvent(
-            new CustomEvent("gea-query-warning", {
+            new CustomEvent('gea-query-warning', {
               detail: { message: DATA_PERMISSION_MESSAGE },
             }),
           );
-        return packed
-          ? unpackSafetyStock(result.rows, query.maxRows)
-          : result.rows;
+        return packed ? unpackSafetyStock(result.rows, query.maxRows) : result.rows;
       } catch (error) {
         if (signal?.aborted) throw error;
         throw sqlQueryError(error);

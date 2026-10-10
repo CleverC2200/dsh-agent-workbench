@@ -13,11 +13,11 @@ function fallbackUuid(seed: string) {
   }
 
   const hex = [
-    (hashA >>> 0).toString(16).padStart(8, "0"),
-    (hashB >>> 0).toString(16).padStart(8, "0"),
-    ((hashA ^ hashB) >>> 0).toString(16).padStart(8, "0"),
-    ((hashA + hashB) >>> 0).toString(16).padStart(8, "0"),
-  ].join("");
+    (hashA >>> 0).toString(16).padStart(8, '0'),
+    (hashB >>> 0).toString(16).padStart(8, '0'),
+    ((hashA ^ hashB) >>> 0).toString(16).padStart(8, '0'),
+    ((hashA + hashB) >>> 0).toString(16).padStart(8, '0'),
+  ].join('');
 
   return [
     hex.slice(0, 8),
@@ -25,22 +25,20 @@ function fallbackUuid(seed: string) {
     `4${hex.slice(13, 16)}`,
     `${((parseInt(hex.slice(16, 17), 16) & 0x3) | 0x8).toString(16)}${hex.slice(17, 20)}`,
     hex.slice(20, 32),
-  ].join("-");
+  ].join('-');
 }
 
-export function createRuntimeId(prefix = "id"): string {
+export function createRuntimeId(prefix = 'id'): string {
   if (
-    typeof globalThis !== "undefined" &&
-    "crypto" in globalThis &&
-    typeof globalThis.crypto?.randomUUID === "function"
+    typeof globalThis !== 'undefined' &&
+    'crypto' in globalThis &&
+    typeof globalThis.crypto?.randomUUID === 'function'
   ) {
     return globalThis.crypto.randomUUID();
   }
 
   fallbackCounter += 1;
   return fallbackUuid(
-    `${prefix}-${Date.now()}-${fallbackCounter}-${Math.random()
-      .toString(16)
-      .slice(2, 10)}`,
+    `${prefix}-${Date.now()}-${fallbackCounter}-${Math.random().toString(16).slice(2, 10)}`,
   );
 }

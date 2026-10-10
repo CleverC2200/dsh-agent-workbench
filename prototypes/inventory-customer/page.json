@@ -1,9 +1,7 @@
 {
   "surface": "gea-html-inventory-customer",
   "protocol": "self-report",
-  "pageIds": [
-    "inventory-customer"
-  ],
+  "pageIds": ["inventory-customer"],
   "consumerCode": "customer-inventory-preview",
   "maxEffect": "view"
 }

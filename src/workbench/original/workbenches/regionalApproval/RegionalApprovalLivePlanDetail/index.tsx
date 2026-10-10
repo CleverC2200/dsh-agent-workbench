@@ -6,7 +6,17 @@ import type {
   GeaSalesPlanSkuDiff,
   GeaSalesPlanVersion,
 } from '../../../bridge.ts';
-import { Alert, Button, Empty, Modal, Select, Spin, Table, Tabs, Tag } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Empty,
+  Modal,
+  Select,
+  Spin,
+  Table,
+  Tabs,
+  Tag,
+} from '@arco-design/web-react';
 import type { TableColumnProps } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useState } from 'react';
@@ -51,7 +61,7 @@ const StateBoundary = <T,>({
   if (state.status === 'error') {
     return (
       <div className={styles.state}>
-        <Alert type='error' showIcon content={t(errorKey(state.error))} />
+        <Alert type="error" showIcon content={t(errorKey(state.error))} />
         <Button onClick={retry}>{t('common.assistantSurface.regionalApproval.query.retry')}</Button>
       </div>
     );
@@ -96,8 +106,11 @@ const RegionalApprovalLivePlanDetail: React.FC<{
     initialToVersionId,
   });
   const approvalStage = approvalStageForSalesPlanStatus(row.status, row.planTypeCode) ?? 'customer';
-  const comparedVersions = detail.overviewState.status === 'success' ? detail.overviewState.data.versions : [];
-  const comparedFromVersion = comparedVersions.find((version) => version.id === detail.fromVersionId);
+  const comparedVersions =
+    detail.overviewState.status === 'success' ? detail.overviewState.data.versions : [];
+  const comparedFromVersion = comparedVersions.find(
+    (version) => version.id === detail.fromVersionId,
+  );
   const comparedToVersion = comparedVersions.find((version) => version.id === detail.toVersionId);
 
   useEffect(() => {
@@ -109,7 +122,11 @@ const RegionalApprovalLivePlanDetail: React.FC<{
       id: version.id,
     });
   const skuColumns: TableColumnProps<GeaSalesPlanSku>[] = [
-    { title: t('common.assistantSurface.regionalApproval.liveDetail.columns.sku'), dataIndex: 'skuCode', width: 150 },
+    {
+      title: t('common.assistantSurface.regionalApproval.liveDetail.columns.sku'),
+      dataIndex: 'skuCode',
+      width: 150,
+    },
     {
       title: t('common.assistantSurface.regionalApproval.liveDetail.columns.category'),
       dataIndex: 'productCategName',
@@ -168,7 +185,8 @@ const RegionalApprovalLivePlanDetail: React.FC<{
     {
       title: t('common.assistantSurface.regionalApproval.liveDetail.columns.target'),
       width: 210,
-      render: (_, version) => `${formatExactDecimal(version.targetQty)} · ¥${formatExactDecimal(version.targetAmount)}`,
+      render: (_, version) =>
+        `${formatExactDecimal(version.targetQty)} · ¥${formatExactDecimal(version.targetAmount)}`,
     },
     {
       title: t('common.assistantSurface.regionalApproval.liveDetail.columns.submitter'),
@@ -209,7 +227,11 @@ const RegionalApprovalLivePlanDetail: React.FC<{
     },
   ];
   const compareColumns: TableColumnProps<GeaSalesPlanSkuDiff>[] = [
-    { title: t('common.assistantSurface.regionalApproval.liveDetail.columns.sku'), dataIndex: 'skuCode', width: 150 },
+    {
+      title: t('common.assistantSurface.regionalApproval.liveDetail.columns.sku'),
+      dataIndex: 'skuCode',
+      width: 150,
+    },
     {
       title: t('common.assistantSurface.regionalApproval.liveDetail.columns.change'),
       width: 120,
@@ -245,12 +267,12 @@ const RegionalApprovalLivePlanDetail: React.FC<{
       focusLock
       onCancel={onClose}
       footer={
-        <Button type='primary' onClick={onClose}>
+        <Button type="primary" onClick={onClose}>
           {t('common.assistantSurface.regionalApproval.detail.close')}
         </Button>
       }
     >
-      <div className={styles.body} data-testid='regional-approval-live-plan-detail'>
+      <div className={styles.body} data-testid="regional-approval-live-plan-detail">
         <div className={styles.scopeControls}>
           <div className={styles.field}>
             <span>{t('common.assistantSurface.regionalApproval.liveDetail.plan')}</span>
@@ -261,7 +283,8 @@ const RegionalApprovalLivePlanDetail: React.FC<{
             >
               {rows.map((candidate) => (
                 <Select.Option key={candidate.planId} value={candidate.planId}>
-                  {candidate.baseName ?? candidate.orgCode ?? candidate.dealerCode} · {candidate.planId}
+                  {candidate.baseName ?? candidate.orgCode ?? candidate.dealerCode} ·{' '}
+                  {candidate.planId}
                 </Select.Option>
               ))}
             </Select>
@@ -294,7 +317,9 @@ const RegionalApprovalLivePlanDetail: React.FC<{
             <>
               <div className={styles.summary}>
                 <span>
-                  <small>{t('common.assistantSurface.regionalApproval.liveDetail.currentVersion')}</small>
+                  <small>
+                    {t('common.assistantSurface.regionalApproval.liveDetail.currentVersion')}
+                  </small>
                   <strong>{versionLabel(overview.detail.currentVersion)}</strong>
                 </span>
                 <span>
@@ -302,7 +327,9 @@ const RegionalApprovalLivePlanDetail: React.FC<{
                   <strong>{overview.detail.currentVersion.planId}</strong>
                 </span>
                 <span>
-                  <small>{t('common.assistantSurface.regionalApproval.liveDetail.versionCount')}</small>
+                  <small>
+                    {t('common.assistantSurface.regionalApproval.liveDetail.versionCount')}
+                  </small>
                   <strong>{overview.versions.length}</strong>
                 </span>
                 <span>
@@ -311,61 +338,79 @@ const RegionalApprovalLivePlanDetail: React.FC<{
                 </span>
               </div>
               <Tabs
-                type='line'
+                type="line"
                 activeTab={activeTab}
                 onChange={(tab) => setActiveTab(tab as RegionalApprovalLivePlanDetailTab)}
                 destroyOnHide={false}
               >
-                <Tabs.TabPane key='skus' title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.skus')}>
+                <Tabs.TabPane
+                  key="skus"
+                  title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.skus')}
+                >
                   <StateBoundary state={detail.skuState} t={t} retry={detail.retrySkus}>
                     {(skus) => (
                       <Table
-                        rowKey='id'
+                        rowKey="id"
                         columns={skuColumns}
                         data={skus}
                         pagination={false}
                         scroll={{ x: 820 }}
                         noDataElement={
-                          <Empty description={t('common.assistantSurface.regionalApproval.liveDetail.emptySkus')} />
+                          <Empty
+                            description={t(
+                              'common.assistantSurface.regionalApproval.liveDetail.emptySkus',
+                            )}
+                          />
                         }
                       />
                     )}
                   </StateBoundary>
                 </Tabs.TabPane>
                 <Tabs.TabPane
-                  key='versions'
+                  key="versions"
                   title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.versions')}
                 >
                   <Table
-                    rowKey='id'
+                    rowKey="id"
                     columns={versionColumns}
                     data={overview.versions}
                     pagination={false}
                     scroll={{ x: 760 }}
                   />
                 </Tabs.TabPane>
-                <Tabs.TabPane key='logs' title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.logs')}>
+                <Tabs.TabPane
+                  key="logs"
+                  title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.logs')}
+                >
                   <Table
-                    rowKey='id'
+                    rowKey="id"
                     columns={logColumns}
                     data={overview.logs}
                     pagination={false}
                     scroll={{ x: 1040 }}
                     noDataElement={
-                      <Empty description={t('common.assistantSurface.regionalApproval.liveDetail.emptyLogs')} />
+                      <Empty
+                        description={t(
+                          'common.assistantSurface.regionalApproval.liveDetail.emptyLogs',
+                        )}
+                      />
                     }
                   />
                 </Tabs.TabPane>
                 <Tabs.TabPane
-                  key='compare'
+                  key="compare"
                   title={t('common.assistantSurface.regionalApproval.liveDetail.tabs.compare')}
                 >
                   <div className={styles.compareControls}>
                     <div className={styles.field}>
-                      <span>{t('common.assistantSurface.regionalApproval.liveDetail.compareFrom')}</span>
+                      <span>
+                        {t('common.assistantSurface.regionalApproval.liveDetail.compareFrom')}
+                      </span>
                       <Select
                         value={detail.fromVersionId}
-                        aria-label={t('common.assistantSurface.regionalApproval.liveDetail.compareFrom')}
+                        aria-label={t(
+                          'common.assistantSurface.regionalApproval.liveDetail.compareFrom',
+                        )}
                         onChange={(versionId) => {
                           const nextVersionId = String(versionId);
                           detail.selectFromVersion(nextVersionId);
@@ -380,10 +425,14 @@ const RegionalApprovalLivePlanDetail: React.FC<{
                       </Select>
                     </div>
                     <div className={styles.field}>
-                      <span>{t('common.assistantSurface.regionalApproval.liveDetail.compareTo')}</span>
+                      <span>
+                        {t('common.assistantSurface.regionalApproval.liveDetail.compareTo')}
+                      </span>
                       <Select
                         value={detail.toVersionId}
-                        aria-label={t('common.assistantSurface.regionalApproval.liveDetail.compareTo')}
+                        aria-label={t(
+                          'common.assistantSurface.regionalApproval.liveDetail.compareTo',
+                        )}
                         onChange={(versionId) => {
                           const nextVersionId = String(versionId);
                           detail.selectToVersion(nextVersionId);
@@ -399,22 +448,32 @@ const RegionalApprovalLivePlanDetail: React.FC<{
                     </div>
                   </div>
                   {detail.fromVersionId && detail.fromVersionId === detail.toVersionId ? (
-                    <Empty description={t('common.assistantSurface.regionalApproval.liveDetail.sameVersion')} />
+                    <Empty
+                      description={t(
+                        'common.assistantSurface.regionalApproval.liveDetail.sameVersion',
+                      )}
+                    />
                   ) : (
                     <>
                       <div
                         className={styles.compareReasons}
-                        aria-label={t('common.assistantSurface.regionalApproval.liveDetail.returnReasonEvidence')}
+                        aria-label={t(
+                          'common.assistantSurface.regionalApproval.liveDetail.returnReasonEvidence',
+                        )}
                       >
                         <span>
-                          <small>{t('common.assistantSurface.regionalApproval.liveDetail.compareFrom')}</small>
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.liveDetail.compareFrom')}
+                          </small>
                           <strong>
                             {comparedFromVersion?.returnReason ??
                               t('common.assistantSurface.regionalApproval.query.noReturnReason')}
                           </strong>
                         </span>
                         <span>
-                          <small>{t('common.assistantSurface.regionalApproval.liveDetail.compareTo')}</small>
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.liveDetail.compareTo')}
+                          </small>
                           <strong>
                             {comparedToVersion?.returnReason ??
                               t('common.assistantSurface.regionalApproval.query.noReturnReason')}
@@ -424,14 +483,16 @@ const RegionalApprovalLivePlanDetail: React.FC<{
                       <StateBoundary state={detail.compareState} t={t} retry={detail.retryCompare}>
                         {(differences) => (
                           <Table
-                            rowKey='skuCode'
+                            rowKey="skuCode"
                             columns={compareColumns}
                             data={differences}
                             pagination={false}
                             scroll={{ x: 880 }}
                             noDataElement={
                               <Empty
-                                description={t('common.assistantSurface.regionalApproval.liveDetail.emptyCompare')}
+                                description={t(
+                                  'common.assistantSurface.regionalApproval.liveDetail.emptyCompare',
+                                )}
                               />
                             }
                           />

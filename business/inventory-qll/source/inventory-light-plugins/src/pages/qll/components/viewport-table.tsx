@@ -1,12 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
-import {
-  Table as NativeTable,
-  type TableProps,
-} from "../../../dsh-ui/controls";
-import styles from "./viewport-table.module.css";
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { Table as NativeTable, type TableProps } from '../../../dsh-ui/controls';
+import styles from './viewport-table.module.css';
 
 /** Keep the horizontal control within the table's visible scroll panel. */
 export function Table<T>(props: TableProps<T>) {
@@ -26,24 +23,16 @@ export function Table<T>(props: TableProps<T>) {
     let frame = 0;
     const measure = () => {
       frame = 0;
-      const body = host.querySelector<HTMLElement>(
-        ".dsh-table-body, .dsh-table-content-inner",
-      );
+      const body = host.querySelector<HTMLElement>('.dsh-table-body, .dsh-table-content-inner');
       // With fixed headers the body, not content-inner, owns scrollLeft.
-      source.current =
-        host.querySelector<HTMLElement>(".dsh-table-body") ?? body;
+      source.current = host.querySelector<HTMLElement>('.dsh-table-body') ?? body;
       const target = source.current;
-      const modal = !!host.closest(".dsh-modal");
+      const modal = !!host.closest('.dsh-modal');
       const covered =
         !modal &&
-        [
-          ...document.querySelectorAll<HTMLElement>(
-            ".dsh-modal-wrapper, .dsh-drawer-wrapper",
-          ),
-        ].some(
+        [...document.querySelectorAll<HTMLElement>('.dsh-modal-wrapper, .dsh-drawer-wrapper')].some(
           (overlay) =>
-            overlay.getClientRects().length &&
-            getComputedStyle(overlay).visibility !== "hidden",
+            overlay.getClientRects().length && getComputedStyle(overlay).visibility !== 'hidden',
         );
       if (!target || !host.getClientRects().length || covered) {
         setGeometry(null);
@@ -55,11 +44,7 @@ export function Table<T>(props: TableProps<T>) {
         right = left + (viewport?.width ?? innerWidth);
       let top = viewport?.offsetTop ?? 0,
         bottom = top + (viewport?.height ?? innerHeight);
-      for (
-        let parent = host.parentElement;
-        parent;
-        parent = parent.parentElement
-      ) {
+      for (let parent = host.parentElement; parent; parent = parent.parentElement) {
         const style = getComputedStyle(parent),
           bounds = parent.getBoundingClientRect();
         if (/(auto|scroll|hidden|clip)/.test(style.overflowY)) {
@@ -98,10 +83,7 @@ export function Table<T>(props: TableProps<T>) {
       setGeometry((previous) =>
         JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
       );
-      if (
-        proxy.current &&
-        Math.abs(Number(proxy.current.value) - target.scrollLeft) > 1
-      )
+      if (proxy.current && Math.abs(Number(proxy.current.value) - target.scrollLeft) > 1)
         proxy.current.value = String(target.scrollLeft);
     };
     const schedule = () => {
@@ -116,35 +98,41 @@ export function Table<T>(props: TableProps<T>) {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["class", "style", "hidden"],
+      attributeFilter: ['class', 'style', 'hidden'],
     });
-    document.addEventListener("scroll", schedule, true);
-    window.addEventListener("resize", schedule);
-    window.visualViewport?.addEventListener("resize", schedule);
-    window.visualViewport?.addEventListener("scroll", schedule);
+    document.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('scroll', schedule);
     schedule();
     return () => {
       cancelAnimationFrame(frame);
       resize.disconnect();
       mutation.disconnect();
-      document.removeEventListener("scroll", schedule, true);
-      window.removeEventListener("resize", schedule);
-      window.visualViewport?.removeEventListener("resize", schedule);
-      window.visualViewport?.removeEventListener("scroll", schedule);
+      document.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('scroll', schedule);
     };
   }, []);
 
   useEffect(() => {
-    if (proxy.current && source.current)
-      proxy.current.value = String(source.current.scrollLeft);
+    if (proxy.current && source.current) proxy.current.value = String(source.current.scrollLeft);
   }, [geometry]);
 
   return (
     <div ref={root} className={styles.root} data-viewport-table>
-      <NativeTable<T> {...props} onRow={props.onRow ? (row: T, index: number) => {
-        const events = props.onRow(row, index);
-        return {...events, "data-interactive-row": events?.onClick ? "true" : undefined};
-      } : undefined} />
+      <NativeTable<T>
+        {...props}
+        onRow={
+          props.onRow
+            ? (row: T, index: number) => {
+                const events = props.onRow(row, index);
+                return { ...events, 'data-interactive-row': events?.onClick ? 'true' : undefined };
+              }
+            : undefined
+        }
+      />
       {geometry &&
         createPortal(
           <div
@@ -168,7 +156,7 @@ export function Table<T>(props: TableProps<T>) {
               aria-label="表格横向滚动"
               style={
                 {
-                  "--thumb-width": `${Math.min(geometry.width, Math.max(24, (geometry.width * geometry.width) / geometry.content))}px`,
+                  '--thumb-width': `${Math.min(geometry.width, Math.max(24, (geometry.width * geometry.width) / geometry.content))}px`,
                 } as CSSProperties
               }
               onKeyDown={(event) => {
@@ -192,8 +180,7 @@ export function Table<T>(props: TableProps<T>) {
                 event.currentTarget.value = String(target.scrollLeft);
               }}
               onInput={(event) => {
-                if (source.current)
-                  source.current.scrollLeft = Number(event.currentTarget.value);
+                if (source.current) source.current.scrollLeft = Number(event.currentTarget.value);
               }}
             />
           </div>,

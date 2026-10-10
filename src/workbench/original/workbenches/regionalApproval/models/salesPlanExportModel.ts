@@ -16,13 +16,15 @@ export type SalesPlanExportAmounts = Record<AmountField, string | null>;
 /** 导出每个节点自身的值，绝不从其他审批节点回填。 */
 export const aggregateSalesPlanExportAmounts = (
   row: Pick<GeaSalesPlanListItem, 'versionId' | 'skuCount'>,
-  skus: readonly GeaSalesPlanSku[]
+  skus: readonly GeaSalesPlanSku[],
 ): SalesPlanExportAmounts => {
   if (
     !Number.isSafeInteger(row.skuCount) ||
     row.skuCount < 0 ||
     skus.length !== row.skuCount ||
-    skus.some((sku) => sku.versionId !== row.versionId || !sku.id?.trim() || !sku.skuCode?.trim()) ||
+    skus.some(
+      (sku) => sku.versionId !== row.versionId || !sku.id?.trim() || !sku.skuCode?.trim(),
+    ) ||
     new Set(skus.map((sku) => sku.id)).size !== skus.length ||
     new Set(skus.map((sku) => sku.skuCode)).size !== skus.length
   ) {
@@ -37,7 +39,9 @@ export const aggregateSalesPlanExportAmounts = (
     }
     if (
       skus.some((sku) =>
-        [quantity, amount].some((field) => typeof sku[field] !== 'string' || !/^-?\d+(?:\.\d+)?$/.test(sku[field]))
+        [quantity, amount].some(
+          (field) => typeof sku[field] !== 'string' || !/^-?\d+(?:\.\d+)?$/.test(sku[field]),
+        ),
       )
     ) {
       throw new Error('Incomplete or invalid sales-plan node amounts');

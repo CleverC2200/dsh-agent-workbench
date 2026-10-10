@@ -4,7 +4,7 @@
  * 与业务无关：业务方只说"工具叫什么、参数是什么"，这里不解释参数含义，
  * 也不碰任何业务数据。路由由消费方自己挂（鉴权与路径属于业务/部署决定）。
  */
-import { randomUUID } from "node:crypto";
+import { randomUUID } from 'node:crypto';
 import {
   AGUI_EVENT_TOOL_CALL_ARGS,
   AGUI_EVENT_TOOL_CALL_END,
@@ -13,7 +13,7 @@ import {
   validateToolMessages,
   type AgUiEvent,
   type AgUiToolMessage,
-} from "../page-interaction/page-bridge/protocol.ts";
+} from '../page-interaction/page-bridge/protocol.ts';
 
 type PendingToolCall = {
   toolCallId: string;
@@ -46,7 +46,13 @@ export type PageBridge = {
   take(sessionId: string, toolCallId: string): AgUiToolMessage | undefined;
   /** 取消尚未完成的调用；迟到的页面回执不会再进入宿主结果队列。 */
   cancel(sessionId: string, toolCallId: string): void;
-  wait(sessionId: string, toolCallId: string, waitMs: number, pollMs?: number, signal?: AbortSignal): Promise<AgUiToolMessage | undefined>;
+  wait(
+    sessionId: string,
+    toolCallId: string,
+    waitMs: number,
+    pollMs?: number,
+    signal?: AbortSignal,
+  ): Promise<AgUiToolMessage | undefined>;
   reset(sessionId: string): void;
   /** 身份或部署整体变化时清空所有会话。 */
   resetAll(): void;
@@ -80,10 +86,7 @@ export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
       if (at - cancelledAt > ttlMs) session.cancelled.delete(toolCallId);
   };
 
-  const take = (
-    sessionId: string,
-    toolCallId: string,
-  ): AgUiToolMessage | undefined => {
+  const take = (sessionId: string, toolCallId: string): AgUiToolMessage | undefined => {
     const session = sessions.get(sessionId);
     const result = session?.results.get(toolCallId);
     if (!session || !result) return undefined;
@@ -92,16 +95,13 @@ export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
   };
 
   const cancel = (sessionId: string, toolCallId: string): void => {
-      const session = sessions.get(sessionId);
-      if (!session) return;
-      session.toolCalls = session.toolCalls.filter(
-        (call) => call.toolCallId !== toolCallId,
-      );
-      session.results.delete(toolCallId);
-      session.cancelled.set(toolCallId, now());
-      prune(session, now());
+    const session = sessions.get(sessionId);
+    if (!session) return;
+    session.toolCalls = session.toolCalls.filter((call) => call.toolCallId !== toolCallId);
+    session.results.delete(toolCallId);
+    session.cancelled.set(toolCallId, now());
+    prune(session, now());
   };
-
 
   return {
     enqueue(sessionId, input) {
@@ -120,10 +120,10 @@ export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
 
     pull(sessionId, toolMessages) {
       const session = sessions.get(sessionId);
-      if(!session)return [];
-      prune(session,now());
+      if (!session) return [];
+      prune(session, now());
       for (const message of validateToolMessages(toolMessages)) {
-        if(!session.toolCalls.some(call=>call.toolCallId===message.toolCallId))continue;
+        if (!session.toolCalls.some((call) => call.toolCallId === message.toolCallId)) continue;
         // 超时取消后，页面可能已经在执行并迟到回传；这条回执不能复活调用。
         if (session.cancelled.has(message.toolCallId)) continue;
         session.results.set(message.toolCallId, {
@@ -156,24 +156,40 @@ export function createPageBridge(options: PageBridgeOptions = {}): PageBridge {
 
     async wait(sessionId, toolCallId, waitMs, pollMs = 100, signal) {
       signal?.throwIfAborted();
-      const owner=sessions.get(sessionId);
-      if(!owner)return undefined;
-      const deadline=now()+waitMs;
+      const owner = sessions.get(sessionId);
+      if (!owner) return undefined;
+      const deadline = now() + waitMs;
       try {
-        for(;;){
+        for (;;) {
           signal?.throwIfAborted();
-          if(sessions.get(sessionId)!==owner)throw Error("PAGE_TOOL_OWNER_CHANGED");
-          const result=take(sessionId,toolCallId);
-          if(result)return result;
-          if(now()>=deadline){cancel(sessionId,toolCallId);return undefined;}
-          await new Promise<void>((resolve,reject)=>{
-            const abort=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);reject(signal?.reason);};
-            const timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve();},Math.min(pollMs,Math.max(0,deadline-now())));
-            signal?.addEventListener('abort',abort,{once:true});
-            if(signal?.aborted)abort();
+          if (sessions.get(sessionId) !== owner) throw Error('PAGE_TOOL_OWNER_CHANGED');
+          const result = take(sessionId, toolCallId);
+          if (result) return result;
+          if (now() >= deadline) {
+            cancel(sessionId, toolCallId);
+            return undefined;
+          }
+          await new Promise<void>((resolve, reject) => {
+            const abort = () => {
+              clearTimeout(timer);
+              signal?.removeEventListener('abort', abort);
+              reject(signal?.reason);
+            };
+            const timer = setTimeout(
+              () => {
+                signal?.removeEventListener('abort', abort);
+                resolve();
+              },
+              Math.min(pollMs, Math.max(0, deadline - now())),
+            );
+            signal?.addEventListener('abort', abort, { once: true });
+            if (signal?.aborted) abort();
           });
         }
-      }catch(error){cancel(sessionId,toolCallId);throw error;}
+      } catch (error) {
+        cancel(sessionId, toolCallId);
+        throw error;
+      }
     },
 
     reset(sessionId) {

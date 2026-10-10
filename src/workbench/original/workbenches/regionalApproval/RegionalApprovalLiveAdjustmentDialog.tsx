@@ -1,5 +1,16 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { Alert, Button, Empty, InputNumber, Drawer, Pagination, Spin, Table, Tabs, Tag } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Empty,
+  InputNumber,
+  Drawer,
+  Pagination,
+  Spin,
+  Table,
+  Tabs,
+  Tag,
+} from '@arco-design/web-react';
 import type { TableColumnProps } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -21,7 +32,11 @@ import {
 } from './models/salesPlanAdjustmentModel.ts';
 import { salesPlanSkusMatchVersion } from './models/salesPlanDetailModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
-import { addExactDecimals, formatExactDecimal, type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
+import {
+  addExactDecimals,
+  formatExactDecimal,
+  type RegionalApprovalLiveRow,
+} from './regionalApprovalQueryModel.ts';
 import type { ApprovalDimension } from './regionalApprovalFixture.ts';
 import styles from './RegionalApprovalLiveAdjustmentDialog.module.css';
 import { useSalesPlanAdvice } from './hooks/useSalesPlanAdvice.ts';
@@ -69,7 +84,10 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
   const [dimension, setDimension] = useState<ApprovalDimension>(dimensions[0]);
   const [advicePage, setAdvicePage] = useState(1);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
-  const scopedRows = useMemo(() => adjustmentScopeRows(rows, row, initialDimension), [initialDimension, row, rows]);
+  const scopedRows = useMemo(
+    () => adjustmentScopeRows(rows, row, initialDimension),
+    [initialDimension, row, rows],
+  );
 
   useEffect(() => {
     setDimension(dimensions[0]);
@@ -85,10 +103,13 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
     setState({ status: 'loading' });
     void Promise.all(
       scopedRows.map(async (plan) => {
-        const skus = await client.versionSkus.invoke({ versionId: plan.versionId, signal: controller.signal });
+        const skus = await client.versionSkus.invoke({
+          versionId: plan.versionId,
+          signal: controller.signal,
+        });
         if (!salesPlanSkusMatchVersion(plan.versionId, skus)) throw new Error('version mismatch');
         return { plan, skus };
-      })
+      }),
     )
       .then((entries) => {
         if (controller.signal.aborted) return;
@@ -109,7 +130,13 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
   }, [client, initialDrafts, scopedRows, visible, readOnly]);
 
   const records = state.status === 'success' ? state.records : [];
-  const groups = useMemo(() => groupSalesPlanAdjustmentRecords(records, dimension).filter(group => !isZero(group.quantityDelta) || !isZero(group.amountDelta)), [dimension, records]);
+  const groups = useMemo(
+    () =>
+      groupSalesPlanAdjustmentRecords(records, dimension).filter(
+        (group) => !isZero(group.quantityDelta) || !isZero(group.amountDelta),
+      ),
+    [dimension, records],
+  );
   const pageGroups = groups.slice((advicePage - 1) * 20, advicePage * 20);
   const adviceScope =
     visible && state.status === 'success' && !editor && pageGroups.length > 0
@@ -132,7 +159,7 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
       : undefined;
   const advice = useSalesPlanAdvice(
     adviceScope,
-    t('common.assistantSurface.regionalApproval.liveAdjustment.advicePrompt')
+    t('common.assistantSurface.regionalApproval.liveAdjustment.advicePrompt'),
   );
   const totalDelta = addExactDecimals(groups.map((group) => group.quantityDelta));
 
@@ -142,8 +169,11 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
     onDraftsChange(
       next.map((record) => record.recordId),
       next
-        .filter((record) => record.qty !== String(record.sku.qty) || record.amount !== String(record.sku.amt))
-        .map(adjustmentRecordDraft)
+        .filter(
+          (record) =>
+            record.qty !== String(record.sku.qty) || record.amount !== String(record.sku.amt),
+        )
+        .map(adjustmentRecordDraft),
     );
   };
 
@@ -152,7 +182,7 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
     commit(
       dimension === 'customer'
         ? updateCustomerQuantity(records, group, value)
-        : updateAggregateQuantity(records, group, value)
+        : updateAggregateQuantity(records, group, value),
     );
   };
   const updateAmount = (group: SalesPlanAdjustmentGroup, value: number | undefined) => {
@@ -160,7 +190,7 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
     commit(
       dimension === 'customer'
         ? updateCustomerAmount(records, group, value)
-        : updateAggregateAmount(records, group, value)
+        : updateAggregateAmount(records, group, value),
     );
   };
 
@@ -203,7 +233,9 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
             min={0}
             precision={0}
             value={Number(group.qty)}
-            aria-label={t('common.assistantSurface.regionalApproval.liveAdjustment.editQty', { sku: group.skuCode })}
+            aria-label={t('common.assistantSurface.regionalApproval.liveAdjustment.editQty', {
+              sku: group.skuCode,
+            })}
             onChange={(value) => updateQuantity(group, value)}
           />
         ),
@@ -226,7 +258,9 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
             min={0}
             precision={0}
             value={Number(group.amount)}
-            aria-label={t('common.assistantSurface.regionalApproval.liveAdjustment.editAmount', { sku: group.skuCode })}
+            aria-label={t('common.assistantSurface.regionalApproval.liveAdjustment.editAmount', {
+              sku: group.skuCode,
+            })}
             onChange={(value) => updateAmount(group, value)}
           />
         ),
@@ -235,7 +269,9 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
       title: t('common.assistantSurface.regionalApproval.liveAdjustment.columns.deltaQty'),
       width: 90,
       render: (_, group) => (
-        <span className={salesPlanVarianceClass(group.quantityDelta, styles.positive, styles.negative)}>
+        <span
+          className={salesPlanVarianceClass(group.quantityDelta, styles.positive, styles.negative)}
+        >
           {signed(group.quantityDelta)}
         </span>
       ),
@@ -244,7 +280,9 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
       title: t('common.assistantSurface.regionalApproval.liveAdjustment.columns.deltaAmount'),
       width: 130,
       render: (_, group) => (
-        <span className={salesPlanVarianceClass(group.amountDelta, styles.positive, styles.negative)}>
+        <span
+          className={salesPlanVarianceClass(group.amountDelta, styles.positive, styles.negative)}
+        >
           {signed(group.amountDelta)}
         </span>
       ),
@@ -261,7 +299,9 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
               : advice.state.status === 'ready'
                 ? advice.state.answers[group.id] ||
                   t('common.assistantSurface.regionalApproval.liveAdjustment.advice.noAnswer')
-                : t(`common.assistantSurface.regionalApproval.liveAdjustment.advice.${advice.state.status}`))}
+                : t(
+                    `common.assistantSurface.regionalApproval.liveAdjustment.advice.${advice.state.status}`,
+                  ))}
         </span>
       ),
     },
@@ -270,10 +310,10 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
   return (
     <Drawer
       visible={visible}
-      width='min(960px, 70vw)'
+      width="min(960px, 70vw)"
       mask={false}
       focusLock={false}
-      placement='right'
+      placement="right"
       className={styles.modal}
       title={t('common.assistantSurface.regionalApproval.liveAdjustment.title', {
         organization: adjustmentDimensionName(row, initialDimension),
@@ -287,15 +327,17 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
                   ? 'common.assistantSurface.regionalApproval.liveAdjustment.editScope'
                   : readOnly
                     ? 'common.assistantSurface.regionalApproval.liveAdjustment.readOnlyReason'
-                    : 'common.assistantSurface.regionalApproval.liveAdjustment.footer'
+                    : 'common.assistantSurface.regionalApproval.liveAdjustment.footer',
               )}
             </span>
             {onEdit ? (
-              <Button type='primary' onClick={onEdit}>
+              <Button type="primary" onClick={onEdit}>
                 {t('common.assistantSurface.regionalApproval.liveAdjustment.editCurrent')}
               </Button>
             ) : null}
-            <Button onClick={onClose}>{t('common.assistantSurface.regionalApproval.liveAdjustment.close')}</Button>
+            <Button onClick={onClose}>
+              {t('common.assistantSurface.regionalApproval.liveAdjustment.close')}
+            </Button>
           </div>
         )
       }
@@ -317,30 +359,37 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
               {dimensions.map((item) => (
                 <Tabs.TabPane
                   key={item}
-                  title={t(`common.assistantSurface.regionalApproval.liveAdjustment.dimensions.${item}`)}
+                  title={t(
+                    `common.assistantSurface.regionalApproval.liveAdjustment.dimensions.${item}`,
+                  )}
                 />
               ))}
             </Tabs>
             <span>
               {t('common.assistantSurface.regionalApproval.liveAdjustment.summary', {
                 delta: signed(totalDelta),
-                dimension: t(`common.assistantSurface.regionalApproval.liveAdjustment.dimensions.${dimension}`),
+                dimension: t(
+                  `common.assistantSurface.regionalApproval.liveAdjustment.dimensions.${dimension}`,
+                ),
               })}
             </span>
             <Tag color={readOnly ? 'gray' : 'arcoblue'}>
               {t(
                 readOnly
                   ? 'common.assistantSurface.regionalApproval.liveAdjustment.readOnly'
-                  : 'common.assistantSurface.regionalApproval.liveAdjustment.localDraft'
+                  : 'common.assistantSurface.regionalApproval.liveAdjustment.localDraft',
               )}
             </Tag>
           </div>
-          {state.status === 'success' && !['ready', 'idle', 'loading'].includes(advice.state.status) ? (
+          {state.status === 'success' &&
+          !['ready', 'idle', 'loading'].includes(advice.state.status) ? (
             <Alert
-              type='warning'
-              content={t(`common.assistantSurface.regionalApproval.liveAdjustment.advice.${advice.state.status}`)}
+              type="warning"
+              content={t(
+                `common.assistantSurface.regionalApproval.liveAdjustment.advice.${advice.state.status}`,
+              )}
               action={
-                <Button size='small' onClick={advice.retry}>
+                <Button size="small" onClick={advice.retry}>
                   {t('common.assistantSurface.regionalApproval.liveAdjustment.adviceRetry')}
                 </Button>
               }
@@ -351,35 +400,101 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
               <Spin />
             </div>
           ) : state.status === 'error' ? (
-            <Empty description={t('common.assistantSurface.regionalApproval.liveAdjustment.loadError')} />
+            <Empty
+              description={t('common.assistantSurface.regionalApproval.liveAdjustment.loadError')}
+            />
           ) : readOnly ? (
             <div className={styles.cards}>
-              {pageGroups.length === 0 ? <Empty description={t('common.assistantSurface.regionalApproval.liveAdjustment.empty')} /> : pageGroups.map(group => (
-                <article key={group.id} className={styles.card}>
-                  <div className={styles.skuCell}>
-                    <strong>{group.skuCode} · {group.materialDescription || t('common.assistantSurface.regionalApproval.liveAdjustment.missingDescription')}</strong>
-                    <small>{group.dimensionName} · {group.categoryName || '—'}</small>
-                  </div>
-                  <dl className={styles.values}>
-                    {([
-                      ['baseQty',formatExactDecimal(group.baseQty)],['qty',formatExactDecimal(group.qty)],['deltaQty',signed(group.quantityDelta)],
-                      ['baseAmount',formatExactDecimal(group.baseAmount)],['amount',formatExactDecimal(group.amount)],['deltaAmount',signed(group.amountDelta)],
-                    ] as const).map(([key,value])=><div key={key}><dt>{t('common.assistantSurface.regionalApproval.liveAdjustment.columns.'+key)}</dt><dd>{value}</dd></div>)}
-                  </dl>
-                  <div className={styles.advice}><strong>{t('common.assistantSurface.regionalApproval.liveAdjustment.columns.aiAdvice')}</strong><p>{advice.state.answers[group.id] || (advice.state.status === 'idle' ? '—' : t('common.assistantSurface.regionalApproval.liveAdjustment.advice.'+(advice.state.status === 'ready' ? 'noAnswer' : advice.state.status)))}</p></div>
-                </article>
-              ))}
-              {groups.length > 20 && <Pagination current={advicePage} pageSize={20} total={groups.length} onChange={setAdvicePage} sizeCanChange={false} />}
+              {pageGroups.length === 0 ? (
+                <Empty
+                  description={t('common.assistantSurface.regionalApproval.liveAdjustment.empty')}
+                />
+              ) : (
+                pageGroups.map((group) => (
+                  <article key={group.id} className={styles.card}>
+                    <div className={styles.skuCell}>
+                      <strong>
+                        {group.skuCode} ·{' '}
+                        {group.materialDescription ||
+                          t(
+                            'common.assistantSurface.regionalApproval.liveAdjustment.missingDescription',
+                          )}
+                      </strong>
+                      <small>
+                        {group.dimensionName} · {group.categoryName || '—'}
+                      </small>
+                    </div>
+                    <dl className={styles.values}>
+                      {(
+                        [
+                          ['baseQty', formatExactDecimal(group.baseQty)],
+                          ['qty', formatExactDecimal(group.qty)],
+                          ['deltaQty', signed(group.quantityDelta)],
+                          ['baseAmount', formatExactDecimal(group.baseAmount)],
+                          ['amount', formatExactDecimal(group.amount)],
+                          ['deltaAmount', signed(group.amountDelta)],
+                        ] as const
+                      ).map(([key, value]) => (
+                        <div key={key}>
+                          <dt>
+                            {t(
+                              'common.assistantSurface.regionalApproval.liveAdjustment.columns.' +
+                                key,
+                            )}
+                          </dt>
+                          <dd>{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                    <div className={styles.advice}>
+                      <strong>
+                        {t(
+                          'common.assistantSurface.regionalApproval.liveAdjustment.columns.aiAdvice',
+                        )}
+                      </strong>
+                      <p>
+                        {advice.state.answers[group.id] ||
+                          (advice.state.status === 'idle'
+                            ? '—'
+                            : t(
+                                'common.assistantSurface.regionalApproval.liveAdjustment.advice.' +
+                                  (advice.state.status === 'ready'
+                                    ? 'noAnswer'
+                                    : advice.state.status),
+                              ))}
+                      </p>
+                    </div>
+                  </article>
+                ))
+              )}
+              {groups.length > 20 && (
+                <Pagination
+                  current={advicePage}
+                  pageSize={20}
+                  total={groups.length}
+                  onChange={setAdvicePage}
+                  sizeCanChange={false}
+                />
+              )}
             </div>
           ) : (
             <Table
               borderCell
-              rowKey='id'
+              rowKey="id"
               columns={columns}
               data={groups}
-              pagination={{ current: advicePage, pageSize: 20, onChange: setAdvicePage, sizeCanChange: false }}
+              pagination={{
+                current: advicePage,
+                pageSize: 20,
+                onChange: setAdvicePage,
+                sizeCanChange: false,
+              }}
               scroll={{ x: 1220, y: 480 }}
-              noDataElement={<Empty description={t('common.assistantSurface.regionalApproval.liveAdjustment.empty')} />}
+              noDataElement={
+                <Empty
+                  description={t('common.assistantSurface.regionalApproval.liveAdjustment.empty')}
+                />
+              }
             />
           )}
         </div>

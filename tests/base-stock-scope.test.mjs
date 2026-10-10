@@ -16,8 +16,12 @@ function load(entry) {
   return module.exports;
 }
 
-const { workbenchSql } = load('../business/inventory-aqkc/source/aqkc/web/src/lib/workbench-sql.ts');
-const { dailyReportSql } = load('../business/inventory-aqkc/source/aqkc/web/src/lib/daily-report-sql.ts');
+const { workbenchSql } = load(
+  '../business/inventory-aqkc/source/aqkc/web/src/lib/workbench-sql.ts',
+);
+const { dailyReportSql } = load(
+  '../business/inventory-aqkc/source/aqkc/web/src/lib/daily-report-sql.ts',
+);
 
 test('all base-stock queries exclude warehouses classified as branches', () => {
   for (const query of [

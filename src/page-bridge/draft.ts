@@ -1,11 +1,11 @@
-import { LAYER_POLICY } from "./layers.ts";
+import { LAYER_POLICY } from './layers.ts';
 
 /**
  * 页面草稿动作共用限流、超时、确认和回执。
  * 页面声明元素，执行由调用者提供；本模块不写业务数据。
  */
 
-export type DraftEffect = "view" | "draft" | "submit" | "approve";
+export type DraftEffect = 'view' | 'draft' | 'submit' | 'approve';
 
 export type DraftRequest = {
   sessionId: string;
@@ -18,12 +18,7 @@ export type DraftRequest = {
   reason?: string;
 };
 
-export type DraftReceiptOutcome =
-  | "pending"
-  | "applied"
-  | "rejected"
-  | "timeout"
-  | "failed";
+export type DraftReceiptOutcome = 'pending' | 'applied' | 'rejected' | 'timeout' | 'failed';
 
 export type DraftReceipt = {
   id: string;
@@ -70,7 +65,7 @@ let receiptSeq = 0;
 
 export function createDraftLayer(options: DraftLayerOptions = {}): DraftLayer {
   const now = options.now ?? (() => Date.now());
-  const nextId = options.id ?? (() => "draft-" + ++receiptSeq);
+  const nextId = options.id ?? (() => 'draft-' + ++receiptSeq);
   // 数值统一来自能力层策略表（见 layers.ts），不在这一层另写一套。
   const windowMs = options.windowMs ?? 60_000;
   const maxPerWindow = options.maxPerWindow ?? LAYER_POLICY.draft.maxPerMinute;
@@ -82,14 +77,14 @@ export function createDraftLayer(options: DraftLayerOptions = {}): DraftLayer {
   return {
     begin(request) {
       const at = now();
-      const key = request.sessionId + ":" + request.surface;
+      const key = request.sessionId + ':' + request.surface;
       const recent = (stamps.get(key) ?? []).filter((stamp) => at - stamp < windowMs);
       if (recent.length >= maxPerWindow) {
         stamps.set(key, recent);
         return {
           ok: false,
-          code: "DRAFT_RATE_LIMITED",
-          reason: "这一屏短时间内改动太频繁，先停一下再改。",
+          code: 'DRAFT_RATE_LIMITED',
+          reason: '这一屏短时间内改动太频繁，先停一下再改。',
         };
       }
       recent.push(at);
@@ -103,7 +98,7 @@ export function createDraftLayer(options: DraftLayerOptions = {}): DraftLayer {
         targets: [...request.targets],
         effect: request.effect,
         ...(request.reason === undefined ? {} : { reason: request.reason }),
-        outcome: "pending",
+        outcome: 'pending',
       };
       receipts.unshift(receipt);
       if (receipts.length > maxReceipts) receipts.length = maxReceipts;
@@ -114,19 +109,18 @@ export function createDraftLayer(options: DraftLayerOptions = {}): DraftLayer {
       const receipt = receipts.find((entry) => entry.id === receiptId);
       if (!receipt) return undefined;
       receipt.outcome = outcome.timedOut
-        ? "timeout"
+        ? 'timeout'
         : outcome.applied
-          ? "applied"
+          ? 'applied'
           : outcome.error === undefined
-            ? "rejected"
-            : "failed";
+            ? 'rejected'
+            : 'failed';
       if (outcome.error !== undefined) receipt.error = outcome.error;
       receipt.durationMs = now() - receipt.at;
       return receipt;
     },
 
     receipts: () => receipts,
-    lastFor: (sessionId) =>
-      receipts.find((receipt) => receipt.sessionId === sessionId),
+    lastFor: (sessionId) => receipts.find((receipt) => receipt.sessionId === sessionId),
   };
 }

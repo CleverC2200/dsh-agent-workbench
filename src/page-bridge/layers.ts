@@ -4,15 +4,9 @@
  */
 
 /** 影响等级（与契约里的 effect 同一套名字，这里避免反向依赖）。 */
-export type LayerEffect = "view" | "draft" | "submit" | "approve";
+export type LayerEffect = 'view' | 'draft' | 'submit' | 'approve';
 
-export const CAPABILITY_LAYERS = [
-  "read",
-  "draft",
-  "submit",
-  "approve",
-  "export",
-] as const;
+export const CAPABILITY_LAYERS = ['read', 'draft', 'submit', 'approve', 'export'] as const;
 export type CapabilityLayer = (typeof CAPABILITY_LAYERS)[number];
 
 export type LayerPolicy = {
@@ -80,7 +74,7 @@ export function layerRank(layer: CapabilityLayer): number {
 
 /** 元素影响等级 → 能力层。 */
 export function layerForEffect(effect: LayerEffect): CapabilityLayer {
-  return effect === "view" ? "read" : effect;
+  return effect === 'view' ? 'read' : effect;
 }
 
 /**
@@ -96,10 +90,9 @@ export function layersForContract(input: {
   declared?: readonly CapabilityLayer[];
 }): CapabilityLayer[] {
   const layers = new Set<CapabilityLayer>();
-  if (input.hasView === true || input.hasData === true) layers.add("read");
-  for (const effect of ["draft", "submit", "approve"] as const) {
-    if (layerRank(effect) <= layerRank(layerForEffect(input.maxEffect)))
-      layers.add(effect);
+  if (input.hasView === true || input.hasData === true) layers.add('read');
+  for (const effect of ['draft', 'submit', 'approve'] as const) {
+    if (layerRank(effect) <= layerRank(layerForEffect(input.maxEffect))) layers.add(effect);
   }
   for (const layer of input.declared ?? []) layers.add(layer);
   return CAPABILITY_LAYERS.filter((layer) => layers.has(layer));

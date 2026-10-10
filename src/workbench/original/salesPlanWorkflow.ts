@@ -14,9 +14,17 @@ export const SALES_PLAN_WORKFLOW_ROWS: readonly SalesPlanWorkflowRow[] = Object.
   JD: ['0', '4', 'Y'],
   TM: ['0', '4', 'Y'],
   XN: ['0', '2', '3', '4', 'Y'],
-}).flatMap(([typeCode, nodes]) => nodes.map((nodeNum, examineLevel) => ({ typeCode, examineLevel, nodeNum })));
+}).flatMap(([typeCode, nodes]) =>
+  nodes.map((nodeNum, examineLevel) => ({ typeCode, examineLevel, nodeNum })),
+);
 
-export const SALES_PLAN_ROLES: readonly SalesPlanRole[] = ['customer', 'region', 'province', 'area', 'category'];
+export const SALES_PLAN_ROLES: readonly SalesPlanRole[] = [
+  'customer',
+  'region',
+  'province',
+  'area',
+  'category',
+];
 export const SALES_PLAN_RETURN_CODES: Partial<Record<SalesPlanRole, number>> = {
   customer: 6,
   region: 7,
@@ -42,10 +50,12 @@ export function replaceSalesPlanWorkflowRows(rows: readonly SalesPlanWorkflowRow
 
 export const salesPlanWorkflow = (
   typeCode: string,
-  rows: readonly SalesPlanWorkflowRow[] = liveWorkflowRows ?? SALES_PLAN_WORKFLOW_ROWS
+  rows: readonly SalesPlanWorkflowRow[] = liveWorkflowRows ?? SALES_PLAN_WORKFLOW_ROWS,
 ) => {
   // 先严格验证链条和角色单调性；配置不可信时所有动作和权限计算都保持不可用。
-  const chain = rows.filter((row) => row.typeCode === typeCode).toSorted((a, b) => a.examineLevel - b.examineLevel);
+  const chain = rows
+    .filter((row) => row.typeCode === typeCode)
+    .toSorted((a, b) => a.examineLevel - b.examineLevel);
   const valid =
     chain.length >= 2 &&
     chain[0].examineLevel === 0 &&
@@ -57,7 +67,7 @@ export const salesPlanWorkflow = (
         row.examineLevel >= 0 &&
         (index === 0 || row.examineLevel > chain[index - 1].examineLevel) &&
         Boolean(row.nodeNum) &&
-        (row.nodeNum !== 'Y' || index === chain.length - 1)
+        (row.nodeNum !== 'Y' || index === chain.length - 1),
     ) &&
     new Set(chain.map((row) => row.nodeNum)).size === chain.length;
   const roles = chain.slice(0, -1).map((row) => NODE_ROLES[row.nodeNum]);
@@ -66,8 +76,9 @@ export const salesPlanWorkflow = (
     roles.every(Boolean) &&
     roles.at(-1) === 'category' &&
     roles.every(
-      (role, index) => index === 0 || SALES_PLAN_ROLES.indexOf(role) > SALES_PLAN_ROLES.indexOf(roles[index - 1])
-    )
+      (role, index) =>
+        index === 0 || SALES_PLAN_ROLES.indexOf(role) > SALES_PLAN_ROLES.indexOf(roles[index - 1]),
+    ),
   );
   const roleIndex = (role: SalesPlanRole) => (rolesKnown ? roles!.indexOf(role) : -1);
   const pending = (role: SalesPlanRole): number | undefined => {
@@ -85,7 +96,10 @@ export const salesPlanWorkflow = (
     const next = chain[index + 1];
     return next ? (next.nodeNum === 'Y' ? 5 : Number(next.nodeNum)) : undefined;
   };
-  const transition = (status: number, action: 'SAVE' | 'APPROVE' | 'REJECT'): number | undefined => {
+  const transition = (
+    status: number,
+    action: 'SAVE' | 'APPROVE' | 'REJECT',
+  ): number | undefined => {
     if (!valid) return undefined;
     if (status === 10) return undefined;
     const role = actor(status);

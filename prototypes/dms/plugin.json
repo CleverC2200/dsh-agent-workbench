@@ -14,9 +14,7 @@
       "order": 90
     }
   ],
-  "skills": [
-    "skills/dms/SKILL.md"
-  ],
+  "skills": ["skills/dms/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "dms-writeback-preview",

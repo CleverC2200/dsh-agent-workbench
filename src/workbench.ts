@@ -101,7 +101,10 @@ export class WorkbenchController implements AgentWorkbench {
   private readonly listeners = new Set<() => void>();
   private readonly historyListeners = new Set<() => void>();
   private historyPage: MainPanelId | undefined;
-  private historySelection?: {sessionId: SessionId; expected: Pick<DocumentSession, 'preset' | 'cwd'>};
+  private historySelection?: {
+    sessionId: SessionId;
+    expected: Pick<DocumentSession, 'preset' | 'cwd'>;
+  };
   private historyIntent?: { page: MainPanelId | undefined; controller: AbortController };
   constructor(
     private readonly ports: WorkbenchPorts,
@@ -270,23 +273,49 @@ export class WorkbenchController implements AgentWorkbench {
     for (const listener of this.historyListeners) listener();
   }
   /** A selection intent, not a Core Session or persisted Session directory. */
-  selectHistorySession(page: MainPanelId, sessionId: SessionId, expected: Pick<DocumentSession, 'preset' | 'cwd'>): void {
-    if (this.historyPage !== page || !this.historyIntent || this.historyIntent.controller.signal.aborted) throw Error('PAGE_HISTORY_CANCELLED');
-    this.historySelection = {sessionId, expected};
+  selectHistorySession(
+    page: MainPanelId,
+    sessionId: SessionId,
+    expected: Pick<DocumentSession, 'preset' | 'cwd'>,
+  ): void {
+    if (
+      this.historyPage !== page ||
+      !this.historyIntent ||
+      this.historyIntent.controller.signal.aborted
+    )
+      throw Error('PAGE_HISTORY_CANCELLED');
+    this.historySelection = { sessionId, expected };
   }
-  takeHistoryTarget(sessionId?: SessionId): {page: MainPanelId; expected?: Pick<DocumentSession, 'preset' | 'cwd'>; signal: AbortSignal} | undefined {
+  takeHistoryTarget(
+    sessionId?: SessionId,
+  ):
+    | { page: MainPanelId; expected?: Pick<DocumentSession, 'preset' | 'cwd'>; signal: AbortSignal }
+    | undefined {
     if (!this.historyPage) return undefined;
-    const page = this.historyPage, selection = this.historySelection, controller = this.historyIntent?.controller;
+    const page = this.historyPage,
+      selection = this.historySelection,
+      controller = this.historyIntent?.controller;
     this.historyPage = undefined;
     this.historySelection = undefined;
     this.changed();
-    if (!page || !controller || controller.signal.aborted || (selection && selection.sessionId !== sessionId)) return undefined;
-    return {page, signal: controller.signal, ...(selection ? {expected: selection.expected} : {})};
+    if (
+      !page ||
+      !controller ||
+      controller.signal.aborted ||
+      (selection && selection.sessionId !== sessionId)
+    )
+      return undefined;
+    return {
+      page,
+      signal: controller.signal,
+      ...(selection ? { expected: selection.expected } : {}),
+    };
   }
   /** Finish the still-owned History navigation without revoking its own restore. */
-  async completeHistory(target: {page: MainPanelId; signal: AbortSignal}): Promise<boolean> {
+  async completeHistory(target: { page: MainPanelId; signal: AbortSignal }): Promise<boolean> {
     target.signal.throwIfAborted();
-    if (this.historyIntent?.controller.signal !== target.signal) throw Error('PAGE_HISTORY_CANCELLED');
+    if (this.historyIntent?.controller.signal !== target.signal)
+      throw Error('PAGE_HISTORY_CANCELLED');
     // Hand the completed intent back to normal navigation before open cancels prior intents.
     this.historyIntent = undefined;
     return this.open(target.page);
@@ -307,7 +336,7 @@ export class WorkbenchController implements AgentWorkbench {
   }
   private changed(): void {
     this.snapshot = {
-      ...(this.historyPage ? {historyPage: this.historyPage} : {}),
+      ...(this.historyPage ? { historyPage: this.historyPage } : {}),
       pages: [...this.pages.values()],
       visitedDocuments: [...this.visited].map((id) => this.documents.get(id)!),
       selectedDocument: this.selectedDocument,

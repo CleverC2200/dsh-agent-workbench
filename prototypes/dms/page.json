@@ -1,9 +1,7 @@
 {
   "surface": "gea-html-inventory-dms",
   "protocol": "self-report",
-  "pageIds": [
-    "inventory-dms"
-  ],
+  "pageIds": ["inventory-dms"],
   "consumerCode": "dms-writeback-preview",
   "maxEffect": "view"
 }

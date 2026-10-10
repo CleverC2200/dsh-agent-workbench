@@ -166,10 +166,14 @@ async function fixture(
     selectionRequests = 0;
   let secondInstalled = secondInterpreter;
   const host = {
-    pickDirectory: async () => { calls.push(['directory-picker']); return null; },
+    pickDirectory: async () => {
+      calls.push(['directory-picker']);
+      return null;
+    },
     fetch: async (path, options) => {
       calls.push([path, options]);
-      if (path.endsWith('/config')) return Response.json(noWorkspace ? {} : { cwd: '/owned/workspace' });
+      if (path.endsWith('/config'))
+        return Response.json(noWorkspace ? {} : { cwd: '/owned/workspace' });
       if (path.includes('/resources?')) {
         listRequests++;
         if (delayList)
@@ -177,8 +181,16 @@ async function fixture(
             waiting.push({ kind: 'list', resolve, signal: options.signal }),
           );
         return Response.json([
-          { id: 'original', label: 'Original', kind: 'prompt', installed: true, enabled,
-            ...(nativeResourceSdk && secondInstalled && declareSecondInterpreter ? { interpreters: ['original', 'other'] } : {}) },
+          {
+            id: 'original',
+            label: 'Original',
+            kind: 'prompt',
+            installed: true,
+            enabled,
+            ...(nativeResourceSdk && secondInstalled && declareSecondInterpreter
+              ? { interpreters: ['original', 'other'] }
+              : {}),
+          },
           ...(secondInstalled &&
           (!secondInterpreterOnlyInFirstScope || snapshot.scope === 'principal-a')
             ? [{ id: 'other', label: 'Other', kind: 'prompt', installed: true, enabled: true }]
@@ -186,19 +198,27 @@ async function fixture(
         ]);
       }
       selectionRequests++;
-      if ((delayFirstSelection && selectionRequests === 1) || delaySelectionRequests.includes(selectionRequests))
+      if (
+        (delayFirstSelection && selectionRequests === 1) ||
+        delaySelectionRequests.includes(selectionRequests)
+      )
         return new Promise((resolve) =>
           waiting.push({ kind: 'select', resolve, signal: options.signal }),
         );
       if (selectionFails)
         return Response.json({ error: 'ORIGINAL_RESOURCE_FAILURE' }, { status: 400 });
       const resourceId = JSON.parse(options.body).id;
-      if (nativeResourceSdk && resourceId !== 'original' && !(secondInstalled && resourceId === 'other'))
+      if (
+        nativeResourceSdk &&
+        resourceId !== 'original' &&
+        !(secondInstalled && resourceId === 'other')
+      )
         return Response.json({ error: 'AGENT_RESOURCE_DISABLED_OR_MISSING' }, { status: 400 });
       return enabled
         ? Response.json({
             preset: nativeResourceSdk ? resourceId : 'original',
-            ...(secondInstalled && (!nativeResourceSdk || declareSecondInterpreter) &&
+            ...(secondInstalled &&
+            (!nativeResourceSdk || declareSecondInterpreter) &&
             (!secondInterpreterOnlyInFirstScope || snapshot.scope === 'principal-a')
               ? { interpreters: ['original', 'other'] }
               : {}),
@@ -245,10 +265,10 @@ async function fixture(
     ctx.sessions.list.getSnapshot = () => ({
       phase: 'ready',
       ids: [...presets.keys()],
-      byId: Object.fromEntries([...presets.keys()].map(id => [id, { cwd: '/owned/workspace' }])),
+      byId: Object.fromEntries([...presets.keys()].map((id) => [id, { cwd: '/owned/workspace' }])),
     });
     ctx.workspaces = { create: ({ path }) => host.workspace(path) };
-    ctx.sessions.create = async options => {
+    ctx.sessions.create = async (options) => {
       calls.push(['core-create', options]);
       const id = await host.create(options);
       presets.set(id, null);
@@ -261,30 +281,53 @@ async function fixture(
       return {
         sessionId: id,
         ready: sdkReadyGate?.promise ?? Promise.resolve(),
-        binding: { ctx: { id }, session: { projections: { faceOf: () => ({ getSnapshot: () => presets.get(id) }) } } },
+        binding: {
+          ctx: { id },
+          session: { projections: { faceOf: () => ({ getSnapshot: () => presets.get(id) }) } },
+        },
         release: () => calls.push(['core-release', id]),
       };
     };
-    ctx.remote = { agentPresets: { select: async (id, preset) => {
-      calls.push(['core-select-preset', id, preset]);
-      presets.set(id, preset);
-      return { ok: true, value: preset };
-    } } };
-    ctx.conversation.input.for = binding => ({ state: { getSnapshot: () => ({ draft: sdkDrafts.get(binding.id), draftRev: 0 }) } });
+    ctx.remote = {
+      agentPresets: {
+        select: async (id, preset) => {
+          calls.push(['core-select-preset', id, preset]);
+          presets.set(id, preset);
+          return { ok: true, value: preset };
+        },
+      },
+    };
+    ctx.conversation.input.for = (binding) => ({
+      state: { getSnapshot: () => ({ draft: sdkDrafts.get(binding.id), draftRev: 0 }) },
+    });
     const openSession = ctx.uiWorkspace.openSession;
-    ctx.uiWorkspace.openSession = id => { mainPreset = presets.get(id); openSession(id); };
-    mountNativeResourceSelection(ctx, value => { currentHost = value; });
+    ctx.uiWorkspace.openSession = (id) => {
+      mainPreset = presets.get(id);
+      openSession(id);
+    };
+    mountNativeResourceSelection(ctx, (value) => {
+      currentHost = value;
+    });
     currentHost.fetch = host.fetch;
   }
-  const workbench = new WorkbenchController({
-    panel: () => {},
-    document: (id) => {
-      if (id) ctx.uiWorkspace.openSession(id);
+  const workbench = new WorkbenchController(
+    {
+      panel: () => {},
+      document: (id) => {
+        if (id) ctx.uiWorkspace.openSession(id);
+      },
     },
-  }, restoredSelection ? {
-    getSnapshot: () => ({ version: 2, selections: [{ page: 'native', active: true, ...restoredSelection }], views: [] }),
-    set() {},
-  } : undefined);
+    restoredSelection
+      ? {
+          getSnapshot: () => ({
+            version: 2,
+            selections: [{ page: 'native', active: true, ...restoredSelection }],
+            views: [],
+          }),
+          set() {},
+        }
+      : undefined,
+  );
   workbench.subscribeHistory(() =>
     calls.push(['history', workbench.getSnapshot().selectedDocument?.id]),
   );
@@ -363,7 +406,10 @@ async function fixture(
                     inputActions: { setDraft: (text) => calls.push(['draft', text]) },
                     renderSlot: (name) => createElement('article', { 'data-native-seat': name }),
                   }),
-                createElement('textarea', { 'aria-label': 'SDK draft fixture', defaultValue: nativeResourceSdk ? sdkDrafts.get(sessionId) ?? '' : '' }),
+                createElement('textarea', {
+                  'aria-label': 'SDK draft fixture',
+                  defaultValue: nativeResourceSdk ? (sdkDrafts.get(sessionId) ?? '') : '',
+                }),
               ),
           }),
         ),
@@ -414,7 +460,10 @@ async function fixture(
     restoreHistory: restorePageSession,
     currentSession: () => mainSession,
     workbench,
-    deferSessionReady: () => { sdkReadyGate = Promise.withResolvers(); return sdkReadyGate; },
+    deferSessionReady: () => {
+      sdkReadyGate = Promise.withResolvers();
+      return sdkReadyGate;
+    },
     toolsExpanded: () => expanded,
     removeTools: async () =>
       act(async () => {
@@ -472,10 +521,11 @@ async function fixture(
         chooser.value = id;
         chooser.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       }),
-    selectHistory: async id => act(async () => {
-      await restorePageSession(page.id, id, new AbortController().signal);
-      await workbench.open(page.id);
-    }),
+    selectHistory: async (id) =>
+      act(async () => {
+        await restorePageSession(page.id, id, new AbortController().signal);
+        await workbench.open(page.id);
+      }),
     resolve: async (item, value) => act(async () => item.resolve(Response.json(value))),
   };
 }
@@ -484,47 +534,97 @@ test('reopening a restored Document revalidates the same subject Session after i
   const f = await fixture(t, {
     initialSession: sessionId,
     initialPreset: 'original',
-    restoredSelection: { sessionId, preset: 'original', ownerScope: 'previous-host-run', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'previous-host-run',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
   });
   assert.equal(f.selection()?.sessionId, sessionId);
-  assert.equal(f.selection()?.ownerScope, 'principal-a', 'the confirmed current scope must be rebound through the public resource open callback');
-  assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
-  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 }, 'restoring a reference cannot replace the original Session');
+  assert.equal(
+    f.selection()?.ownerScope,
+    'principal-a',
+    'the confirmed current scope must be rebound through the public resource open callback',
+  );
+  assert.equal(
+    f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession,
+    sessionId,
+  );
+  assert.deepEqual(
+    f.counts(),
+    { sessions: 0, listRequests: 1, selectionRequests: 0 },
+    'restoring a reference cannot replace the original Session',
+  );
 });
 
 for (const oldPreset of ['agent-resource-skill', null, 'standard', 'original']) {
-  test(`new conversation on a received business page uses its current resource after restoring the old ${oldPreset} Core Session`, async t => {
+  test(`new conversation on a received business page uses its current resource after restoring the old ${oldPreset} Core Session`, async (t) => {
     const sessionId = 'session-00000000-0000-4000-8000-000000000024';
     const f = await fixture(t, {
       nativeResourceSdk: true,
       initialSession: sessionId,
       initialPreset: oldPreset,
-      restoredSelection: { sessionId, preset: oldPreset, ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+      restoredSelection: {
+        sessionId,
+        preset: oldPreset,
+        ownerScope: 'principal-a',
+        subject: 'fixture-user-a',
+        cwd: '/owned/workspace',
+      },
     });
     const document = f.dom.window.document;
     assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
-    assert.equal(f.counts().sessions, 0, 'opening historical presentation creates no replacement Session');
-    assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+    assert.equal(
+      f.counts().sessions,
+      0,
+      'opening historical presentation creates no replacement Session',
+    );
+    assert.equal(
+      document.querySelector('[aria-label="SDK draft fixture"]').value,
+      '未发送的历史草稿',
+    );
     await f.newConversation();
-    assert.equal(document.querySelector('[role="alert"]')?.getAttribute('title'), undefined, document.body.textContent);
-    assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, 'session-1');
+    assert.equal(
+      document.querySelector('[role="alert"]')?.getAttribute('title'),
+      undefined,
+      document.body.textContent,
+    );
+    assert.equal(
+      document.querySelector('[data-native-session]')?.dataset.nativeSession,
+      'session-1',
+    );
     assert.deepEqual(
-      JSON.parse(f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1].body),
+      JSON.parse(
+        f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1]
+          .body,
+      ),
       { id: 'original', cwd: '/owned/workspace' },
       'the received page resource is a Manage resource ID, while the old projection remains a Core preset',
     );
-    assert.deepEqual(f.calls.filter(([operation]) => operation === 'core-select-preset'), [['core-select-preset', 'session-1', 'original']]);
+    assert.deepEqual(
+      f.calls.filter(([operation]) => operation === 'core-select-preset'),
+      [['core-select-preset', 'session-1', 'original']],
+    );
     assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '');
     await act(async () => document.querySelector('[aria-label="历史对话"]').click());
     await f.selectHistory(sessionId);
     assert.equal(document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
-    assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
-    assert.equal(f.association().preset, oldPreset, 'the public history borrow observes the unchanged original Core composition');
+    assert.equal(
+      document.querySelector('[aria-label="SDK draft fixture"]').value,
+      '未发送的历史草稿',
+    );
+    assert.equal(
+      f.association().preset,
+      oldPreset,
+      'the public history borrow observes the unchanged original Core composition',
+    );
   });
 }
 
 for (const declareSecondInterpreter of [true, false]) {
-  test(`new conversation ${declareSecondInterpreter ? 'keeps' : 'does not borrow'} an installed Interpreter ${declareSecondInterpreter ? 'declared' : 'not declared'} by the current page`, async t => {
+  test(`new conversation ${declareSecondInterpreter ? 'keeps' : 'does not borrow'} an installed Interpreter ${declareSecondInterpreter ? 'declared' : 'not declared'} by the current page`, async (t) => {
     const sessionId = 'session-00000000-0000-4000-8000-000000000024';
     const f = await fixture(t, {
       nativeResourceSdk: true,
@@ -532,32 +632,62 @@ for (const declareSecondInterpreter of [true, false]) {
       declareSecondInterpreter,
       initialSession: sessionId,
       initialPreset: 'other',
-      restoredSelection: { sessionId, preset: 'other', ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+      restoredSelection: {
+        sessionId,
+        preset: 'other',
+        ownerScope: 'principal-a',
+        subject: 'fixture-user-a',
+        cwd: '/owned/workspace',
+      },
     });
     await f.newConversation();
-    assert.equal(f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'), undefined);
+    assert.equal(
+      f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'),
+      undefined,
+    );
     assert.deepEqual(
-      JSON.parse(f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1].body),
+      JSON.parse(
+        f.calls.find(([path]) => typeof path === 'string' && path.endsWith('/resources/select'))[1]
+          .body,
+      ),
       { id: declareSecondInterpreter ? 'other' : 'original', cwd: '/owned/workspace' },
     );
-    assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, 'session-1');
+    assert.equal(
+      f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession,
+      'session-1',
+    );
   });
 }
 
 for (const oldPreset of ['agent-resource-skill', null]) {
-  test(`restoring an old ${oldPreset ?? 'plain'} Session after Host restart borrows its unchanged composition before explicitly creating from the received page resource`, async t => {
+  test(`restoring an old ${oldPreset ?? 'plain'} Session after Host restart borrows its unchanged composition before explicitly creating from the received page resource`, async (t) => {
     const sessionId = 'session-00000000-0000-4000-8000-000000000024';
     const f = await fixture(t, {
       nativeResourceSdk: true,
       initialSession: sessionId,
       initialPreset: oldPreset,
-      restoredSelection: { sessionId, preset: oldPreset, ownerScope: 'previous-host-run', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+      restoredSelection: {
+        sessionId,
+        preset: oldPreset,
+        ownerScope: 'previous-host-run',
+        subject: 'fixture-user-a',
+        cwd: '/owned/workspace',
+      },
     });
-    assert.equal(f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession, sessionId);
+    assert.equal(
+      f.dom.window.document.querySelector('[data-native-session]')?.dataset.nativeSession,
+      sessionId,
+    );
     assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
     await f.newConversation();
-    assert.equal(f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'), undefined);
-    assert.deepEqual(f.calls.filter(([operation]) => operation === 'core-select-preset'), [['core-select-preset', 'session-1', 'original']]);
+    assert.equal(
+      f.dom.window.document.querySelector('[role="alert"]')?.getAttribute('title'),
+      undefined,
+    );
+    assert.deepEqual(
+      f.calls.filter(([operation]) => operation === 'core-select-preset'),
+      [['core-select-preset', 'session-1', 'original']],
+    );
   });
 }
 
@@ -1041,7 +1171,13 @@ test('a cached Document releases cancelled selection busy state and a late old c
     secondInterpreter: true,
     initialSession: sessionId,
     initialPreset: 'original',
-    restoredSelection: { sessionId, preset: 'original', ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'principal-a',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
     delaySelectionRequests: [1, 2],
   });
   const document = f.dom.window.document;
@@ -1055,15 +1191,29 @@ test('a cached Document releases cancelled selection busy state and a late old c
   assert.equal(oldRequest.signal.aborted, true);
   await f.show();
   assert.equal(chooser().disabled, false, 'returning to the cached Document restores its selector');
-  assert.deepEqual(f.association(), association, 'cancellation preserves the real Session association');
-  assert.deepEqual([...chooser().options].map(option => option.value), ['original', 'other']);
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.deepEqual(
+    f.association(),
+    association,
+    'cancellation preserves the real Session association',
+  );
+  assert.deepEqual(
+    [...chooser().options].map((option) => option.value),
+    ['original', 'other'],
+  );
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
   assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 1 });
 
   await f.selectInterpreter('other');
   assert.equal(chooser().disabled, true);
   await f.resolve(oldRequest, { preset: 'other', interpreters: ['original', 'other'] });
-  assert.equal(chooser().disabled, true, 'the old finally cannot release the current request busy state');
+  assert.equal(
+    chooser().disabled,
+    true,
+    'the old finally cannot release the current request busy state',
+  );
   assert.deepEqual(f.association(), association);
   assert.equal(f.currentSession(), sessionId);
   assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 2 });
@@ -1072,15 +1222,25 @@ test('a cached Document releases cancelled selection busy state and a late old c
   assert.equal(chooser().disabled, false);
   assert.equal(f.association().preset, 'other');
   assert.equal(f.currentSession(), 'session-1');
-  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [['core-release', 'session-1']]);
+  assert.deepEqual(
+    f.calls.filter((row) => row[0] === 'core-release'),
+    [['core-release', 'session-1']],
+  );
   await f.selectInterpreter('original');
   assert.equal(f.currentSession(), sessionId);
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
   assert.equal(chooser().disabled, false);
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 2 });
-  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [
-    ['core-release', 'session-1'], ['core-release', sessionId],
-  ]);
+  assert.deepEqual(
+    f.calls.filter((row) => row[0] === 'core-release'),
+    [
+      ['core-release', 'session-1'],
+      ['core-release', sessionId],
+    ],
+  );
 });
 
 test('a failed Interpreter selection restores the cached Document selector and retains its existing Session', async (t) => {
@@ -1092,7 +1252,10 @@ test('a failed Interpreter selection restores the cached Document selector and r
   await f.resolve(f.waiting[0], { error: 'INTERPRETER_SELECTION_FAILED' });
   assert.equal(chooser().disabled, false);
   assert.deepEqual(f.association(), association);
-  assert.equal(f.dom.window.document.querySelector('[role="alert"]').title, 'INTERPRETER_SELECTION_FAILED');
+  assert.equal(
+    f.dom.window.document.querySelector('[role="alert"]').title,
+    'INTERPRETER_SELECTION_FAILED',
+  );
   await act(async () => f.render());
   await f.hide();
   await f.show();
@@ -1146,79 +1309,176 @@ test('a new resource adapter lifetime refreshes Interpreter metadata without pre
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 2, selectionRequests: 1 });
 });
 
-
-test('the current public restore interface refuses stale preset/cwd and returns to an existing blank with its resident SDK draft', async t => {
-  const sessionId='session-00000000-0000-4000-8000-000000000147';
-  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
-  const document=f.dom.window.document;
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
-  const signal=new AbortController().signal;
-  for(const expected of [{preset:'other',cwd:'/owned/workspace'},{preset:'original',cwd:'/other/workspace'}])
-    await assert.rejects(f.restoreHistory('native',sessionId,signal,expected),/PAGE_SESSION_RECOVERY_MISMATCH/);
-  assert.equal(f.association().sessionId,sessionId);
+test('the current public restore interface refuses stale preset/cwd and returns to an existing blank with its resident SDK draft', async (t) => {
+  const sessionId = 'session-00000000-0000-4000-8000-000000000147';
+  const f = await fixture(t, {
+    nativeResourceSdk: true,
+    initialSession: sessionId,
+    initialPreset: 'original',
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'principal-a',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
+  });
+  const document = f.dom.window.document;
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
+  const signal = new AbortController().signal;
+  for (const expected of [
+    { preset: 'other', cwd: '/owned/workspace' },
+    { preset: 'original', cwd: '/other/workspace' },
+  ])
+    await assert.rejects(
+      f.restoreHistory('native', sessionId, signal, expected),
+      /PAGE_SESSION_RECOVERY_MISMATCH/,
+    );
+  assert.equal(f.association().sessionId, sessionId);
   await f.newConversation();
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'');
-  await act(async()=>f.restoreHistory('native',sessionId,signal,{preset:'original',cwd:'/owned/workspace'}));
-  await f.selectMain(sessionId,'original');
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
-  assert.equal(f.association().sessionId,sessionId);
-  assert.deepEqual(f.calls.filter(row=>row[0]==='core-select-preset'),[['core-select-preset','session-1','original']]);
-  const cancelled=new AbortController();cancelled.abort();
-  await assert.rejects(f.restoreHistory('native',sessionId,cancelled.signal,{preset:'original',cwd:'/owned/workspace'}));
-  assert.equal(f.association().sessionId,sessionId);
+  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '');
+  await act(async () =>
+    f.restoreHistory('native', sessionId, signal, { preset: 'original', cwd: '/owned/workspace' }),
+  );
+  await f.selectMain(sessionId, 'original');
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
+  assert.equal(f.association().sessionId, sessionId);
+  assert.deepEqual(
+    f.calls.filter((row) => row[0] === 'core-select-preset'),
+    [['core-select-preset', 'session-1', 'original']],
+  );
+  const cancelled = new AbortController();
+  cancelled.abort();
+  await assert.rejects(
+    f.restoreHistory('native', sessionId, cancelled.signal, {
+      preset: 'original',
+      cwd: '/owned/workspace',
+    }),
+  );
+  assert.equal(f.association().sessionId, sessionId);
 });
 
-
-test('opening another unassociated Document cancels a deferred History restore even when the main Session does not change', async t => {
-  const sessionId='session-00000000-0000-4000-8000-000000000147';
-  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
-  let target,gate,opening;
-  await act(async()=>{
-    f.workbench.registerFrame({id:'other-document',kind:'html',label:'B'});
+test('opening another unassociated Document cancels a deferred History restore even when the main Session does not change', async (t) => {
+  const sessionId = 'session-00000000-0000-4000-8000-000000000147';
+  const f = await fixture(t, {
+    nativeResourceSdk: true,
+    initialSession: sessionId,
+    initialPreset: 'original',
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'principal-a',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
+  });
+  let target, gate, opening;
+  await act(async () => {
+    f.workbench.registerFrame({ id: 'other-document', kind: 'html', label: 'B' });
     f.workbench.showHistory('native');
-    f.workbench.selectHistorySession('native',sessionId,{preset:'original',cwd:'/owned/workspace'});
-    target=f.workbench.takeHistoryTarget(sessionId);gate=f.deferSessionReady();
-    opening=f.restoreHistory(target.page,sessionId,target.signal,target.expected).then(()=>f.workbench.completeHistory(target));
-    opening.catch(()=>{});
+    f.workbench.selectHistorySession('native', sessionId, {
+      preset: 'original',
+      cwd: '/owned/workspace',
+    });
+    target = f.workbench.takeHistoryTarget(sessionId);
+    gate = f.deferSessionReady();
+    opening = f
+      .restoreHistory(target.page, sessionId, target.signal, target.expected)
+      .then(() => f.workbench.completeHistory(target));
+    opening.catch(() => {});
   });
   try {
-    await act(async()=>f.workbench.open('other-document'));
-    assert.equal(target.signal.aborted,true,'the actual Document navigation must revoke old History');
-    assert.equal(f.currentSession(),sessionId,'document(undefined) keeps the current Core Session');
-    assert.equal(f.workbench.getSnapshot().selectedDocument.id,'other-document');
-    assert.equal(f.workbench.getSnapshot().selection,undefined,'B has no association');
-    await act(async()=>{gate.resolve();await assert.rejects(opening)});
-    assert.equal(f.currentSession(),sessionId);
-    assert.equal(f.workbench.getSnapshot().selectedDocument.id,'other-document','late History must not reopen A');
-    assert.equal(f.workbench.getSnapshot().selection,undefined,'late History must not overwrite B');
-  } finally { gate.resolve(); await opening.catch(()=>{}); }
+    await act(async () => f.workbench.open('other-document'));
+    assert.equal(
+      target.signal.aborted,
+      true,
+      'the actual Document navigation must revoke old History',
+    );
+    assert.equal(
+      f.currentSession(),
+      sessionId,
+      'document(undefined) keeps the current Core Session',
+    );
+    assert.equal(f.workbench.getSnapshot().selectedDocument.id, 'other-document');
+    assert.equal(f.workbench.getSnapshot().selection, undefined, 'B has no association');
+    await act(async () => {
+      gate.resolve();
+      await assert.rejects(opening);
+    });
+    assert.equal(f.currentSession(), sessionId);
+    assert.equal(
+      f.workbench.getSnapshot().selectedDocument.id,
+      'other-document',
+      'late History must not reopen A',
+    );
+    assert.equal(
+      f.workbench.getSnapshot().selection,
+      undefined,
+      'late History must not overwrite B',
+    );
+  } finally {
+    gate.resolve();
+    await opening.catch(() => {});
+  }
 });
 
-test('successful deferred History navigation keeps its own owner and restores the existing Session', async t => {
-  const sessionId='session-00000000-0000-4000-8000-000000000147';
-  const f=await fixture(t,{nativeResourceSdk:true,initialSession:sessionId,initialPreset:'original',restoredSelection:{sessionId,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a',cwd:'/owned/workspace'}});
-  let target,gate,opening;
-  await act(async()=>{
+test('successful deferred History navigation keeps its own owner and restores the existing Session', async (t) => {
+  const sessionId = 'session-00000000-0000-4000-8000-000000000147';
+  const f = await fixture(t, {
+    nativeResourceSdk: true,
+    initialSession: sessionId,
+    initialPreset: 'original',
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'principal-a',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
+  });
+  let target, gate, opening;
+  await act(async () => {
     f.workbench.showHistory('native');
-    f.workbench.selectHistorySession('native',sessionId,{preset:'original',cwd:'/owned/workspace'});
-    target=f.workbench.takeHistoryTarget(sessionId);gate=f.deferSessionReady();
-    opening=f.restoreHistory(target.page,sessionId,target.signal,target.expected).then(()=>f.workbench.completeHistory(target));
+    f.workbench.selectHistorySession('native', sessionId, {
+      preset: 'original',
+      cwd: '/owned/workspace',
+    });
+    target = f.workbench.takeHistoryTarget(sessionId);
+    gate = f.deferSessionReady();
+    opening = f
+      .restoreHistory(target.page, sessionId, target.signal, target.expected)
+      .then(() => f.workbench.completeHistory(target));
   });
   gate.resolve();
-  await act(async()=>{assert.equal(await opening,true)});
-  assert.equal(target.signal.aborted,false,'completion hands off ownership before ordinary navigation');
-  assert.equal(f.workbench.getSnapshot().selectedDocument.id,'native');
-  assert.equal(f.workbench.getSnapshot().selection.sessionId,sessionId);
-  assert.equal(f.dom.window.document.querySelector('[aria-label="SDK draft fixture"]').value,'未发送的历史草稿');
-  await assert.rejects(f.workbench.completeHistory(target),/PAGE_HISTORY_CANCELLED/);
+  await act(async () => {
+    assert.equal(await opening, true);
+  });
+  assert.equal(
+    target.signal.aborted,
+    false,
+    'completion hands off ownership before ordinary navigation',
+  );
+  assert.equal(f.workbench.getSnapshot().selectedDocument.id, 'native');
+  assert.equal(f.workbench.getSnapshot().selection.sessionId, sessionId);
+  assert.equal(
+    f.dom.window.document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
+  await assert.rejects(f.workbench.completeHistory(target), /PAGE_HISTORY_CANCELLED/);
 });
 
- test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async t => {
-  const f = await fixture(t, {noWorkspace:true});
-  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 0);
+test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async (t) => {
+  const f = await fixture(t, { noWorkspace: true });
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 0);
   assert.equal(f.counts().sessions, 0);
   await f.newConversation();
-  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 1);
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 1);
   assert.equal(f.counts().sessions, 0);
   assert.equal(f.currentSession(), undefined);
- });
+});

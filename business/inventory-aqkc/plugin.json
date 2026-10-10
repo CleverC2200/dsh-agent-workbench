@@ -4,9 +4,7 @@
   "name": "基地库存",
   "version": "0.2.6-preview.16-split.12",
   "html": "index.html",
-  "skills": [
-    "skills/aqkc/SKILL.md"
-  ],
+  "skills": ["skills/aqkc/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "base-safety-stock",
