@@ -35,7 +35,7 @@ const bundle=await build({stdin:{contents:`
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',platform:'browser',jsx:'automatic',alias:{react:resolve('node_modules/react')},loader:{'.png':'dataurl','.css':'text'},plugins:[{name:'official-css-modules',setup(build){build.onLoad({filter:/\.module\.css$/},async args=>({contents:await readFile(args.path,'utf8'),loader:'local-css'}))}}]});
 
 async function fixture(t){
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
+ const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1280,height:460}});
  page.on('pageerror',error=>console.error(error));
  const css=(await Promise.all(['theme/tokens.css','src/company/shell.css','src/company/layout.css'].map(file=>readFile(file,'utf8')))).join('\n');

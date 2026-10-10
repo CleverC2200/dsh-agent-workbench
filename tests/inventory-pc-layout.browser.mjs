@@ -14,7 +14,7 @@ const coreTheme=(await Promise.all(['base.css','design-platform.css'].map(name=>
 const catalogCheck=(await build({stdin:{contents:"import{htmlPageCatalog}from'./src/html-page-catalog.ts';import{validatePageCatalog}from'./src/page-bridge/catalog.ts';window.acceptCurrentCatalog=(elements,plugin)=>{const catalog=htmlPageCatalog({surface:'gea-html-'+plugin,tool:'gea_plugin_page_apply',label:'Current mock page',elements});return catalog===null?null:validatePageCatalog(catalog);};",resolveDir:process.cwd()},bundle:true,write:false,platform:'browser',format:'iife'})).outputFiles[0].text;
 const evidence=process.env.INVENTORY_LAYOUT_EVIDENCE;
 async function fixture(t,id,width=559,theme='light',authorDocument,fontSize=14) {
-  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const browser=await chromium.launch({headless:true});
   t.after(()=>browser.close());
   const page=await browser.newPage({viewport:{width:width+721,height:820},deviceScaleFactor:1});
   const authored=authorDocument??await readFile(`lib/business/inventory-${id}/index.html`,'utf8');

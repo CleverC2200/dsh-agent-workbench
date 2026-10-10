@@ -15,7 +15,7 @@ const { outputFiles } = await build({
   platform: "browser",
 });
 async function fixture(t) {
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({
     viewport: { width: 1500, height: 1000 },

@@ -54,7 +54,7 @@ test('actual version hook enforces plan ownership, classifies permission and ign
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>server.close(resolve)));
-  const browser=await chromium.launch({channel:'chrome',headless:true});
+  const browser=await chromium.launch({headless:true});
   t.after(()=>browser.close());
   const page=await browser.newPage();
   const errors=[];

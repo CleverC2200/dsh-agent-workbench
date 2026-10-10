@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {chromium,expect} from '@playwright/test';
 test('SKU viewport scrolls internally, then passes upward scrolling to its parent',async t=>{
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
+ const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const page=await browser.newPage();
  const css=await readFile(new URL('../src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.module.css',import.meta.url),'utf8');
  await page.setContent(`<style>${css} #outer{height:500px;overflow:auto} .spacer{height:250px}</style><div id="outer"><div class="spacer"></div><div class="viewport"><div style="height:1500px">SKU</div></div><div class="spacer"></div></div>`);

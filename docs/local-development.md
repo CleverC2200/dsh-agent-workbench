@@ -2,6 +2,8 @@
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树冻结安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。
 
+日常综合门禁与冻结 CI 入口见 [质量门禁](../QUALITY.md)。
+
 ```sh
 npm ci --ignore-scripts --prefer-offline
 npm run check:knowledge

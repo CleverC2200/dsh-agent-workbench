@@ -46,7 +46,7 @@ test("company query submits complete conditions inside the actual opaque-origin 
       },
     ],
   });
-  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(5000);

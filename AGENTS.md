@@ -17,3 +17,14 @@
 本仓只交付 Workbench 插件。客户端壳、启动器和安装协议由对应客户端所有者处理；页面验证不代表客户端打包、Native 装载或业务验收。本隔离任务不向正式 GitLab/OSS/npm/频道发布，不修改正式运行目录。远端动作按本票有效授权和项目登记目标办理，不能从上游发行说明扩大范围。
 
 [之前的仓级入口](docs/history/AGENTS-before-agent-environment-02.md)与[之前的 README](docs/history/README-before-agent-environment-02.md)按原字节保留为历史。历史资料不作为本任务操作指引。仓内没有独立 Agent Note 或项目记忆文件；当前职责与非直观规则分别就近保存在合同和源码中。
+
+## 质量规则与执行
+
+| 规则 | 执行机制 |
+| --- | --- |
+| 普通开发检查实际知识引用、固定 lint/format 与官方声明 | `quality:fast`，固定策略及质量 CLI 反例 |
+| 冻结候选核实际包名、HEAD、锁、事件 SHA 与登记 Core | `candidate:verify`、`quality:ci`，Core 清单读取相邻 GEA |
+| 原迁移语义输入在冷 runner 保持固定来源 | `migration-history-input.test.mjs`，原 Git blob 与原始字节摘要 |
+| 汇总仅在两个 Core 的所有适用门禁成功时通过 | workflow matrix 与 `run-quality-ci.mjs --phase final` |
+
+检查范围、旧债和验证阶段见 [质量门禁](QUALITY.md)。已有只读 SDK 使用 verify，独立冷 runner 才准备自己的 SDK。

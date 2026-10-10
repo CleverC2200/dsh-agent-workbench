@@ -28,7 +28,7 @@ test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍�
     res.setHeader('Content-Type','text/html');res.end('<div id="root"></div><script src="/app.js"></script>');
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();server.close();});
-  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();
+  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());const page=await browser.newPage();
   await page.goto('http://127.0.0.1:'+server.address().port);
   await expect.poll(()=>polls).toBeGreaterThanOrEqual(2);
   await expect(page.getByRole('alert')).toHaveCount(0);
@@ -66,7 +66,7 @@ test('页面登录后续跳，详情真正可见才发送 ACK，重复轮询不�
     res.setHeader('Content-Type','text/html');res.end('<div id="root"></div><script src="/app.js"></script>');
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeAllConnections();server.close();});
-  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();
+  const browser=await chromium.launch({headless:true});t.after(()=>browser.close());const page=await browser.newPage();
   await page.goto('http://127.0.0.1:'+server.address().port);await expect(page.getByRole('button',{name:'登录并继续'})).toBeVisible();assert.equal(finished,0);
   logged=true;await expect.poll(()=>Boolean(release)).toBe(true);assert.equal(finished,0);assert.equal(await page.evaluate(()=>window.opens),1);
   release();await expect(page.getByRole('dialog')).toBeVisible();await expect.poll(()=>finished).toBe(1);assert.equal(await page.evaluate(()=>window.opens),1);

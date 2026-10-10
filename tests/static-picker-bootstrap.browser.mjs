@@ -24,7 +24,7 @@ test('registered static HTML bootstraps the original picker and enables the actu
  const cleanups=[];const context={effect:fn=>{cleanups.push(fn());},on:()=>()=>{},inject(){},connection:{fetch:{register:()=>()=>{}}}};
  const pages=new HtmlPages(context,'',async()=>picker.outputFiles[0].text);await pages.registerHtml([directory]);
  const html=await(await pages.fetch(new Request('https://host.example/api/agent-workbench/html?id=static-author'))).text();
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();
+ const browser=await chromium.launch({headless:true});t.after(()=>browser.close());const page=await browser.newPage();
  await page.route('https://host.example/**',async route=>route.fulfill({contentType:'text/html; charset=utf-8',body:route.request().url().includes('/api/')?html:'<html><body><div id="trigger"></div><iframe sandbox="allow-scripts" src="/api/agent-workbench/html?id=static-author"></iframe></body></html>'}));
  await page.goto('https://host.example/');await page.addScriptTag({content:parent.outputFiles[0].text});await page.locator('iframe').evaluate(frame=>{frame.src=frame.src;});
  const trigger=page.getByRole('button',{name:'选择内容',exact:true});await expect(trigger).toBeEnabled();await trigger.click();

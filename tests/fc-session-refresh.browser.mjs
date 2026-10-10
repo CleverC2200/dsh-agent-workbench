@@ -42,7 +42,7 @@ const child = (await build({
 })).outputFiles.find(file => !file.path.endsWith('.css')).text;
 
 test('FC waits for its actual Host Session and initializes once when the page port connects without remounting', async t => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.route('http://127.0.0.1:19483/**', route => route.fulfill({ contentType: 'text/html', body: new URL(route.request().url()).pathname === '/fc' ? `<main id="app"></main><script>window.fixtureRemountOnConnect=false</script><script>${child}</script>` : '<html><body></body></html>' }));
@@ -65,7 +65,7 @@ test('FC waits for its actual Host Session and initializes once when the page po
 });
 
 test('the actual FC component retains its search across remounts in one Host Session', async t => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.route('http://127.0.0.1:19483/**', route => route.fulfill({ contentType: 'text/html', body: new URL(route.request().url()).pathname === '/fc' ? `<html><body><main id="app"></main><script>${child}</script></body></html>` : '<html><body></body></html>' }));

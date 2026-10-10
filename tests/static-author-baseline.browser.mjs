@@ -6,7 +6,7 @@ import { chromium, expect } from '@playwright/test';
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 for (const name of ['category', 'mps'])
     test(`editable ${name} author source preserves original business content while the duplicate chat retires`, async (t) => {
-        const browser = await chromium.launch({ channel: 'chrome', headless: true });
+        const browser = await chromium.launch({ headless: true });
         t.after(() => browser.close());
         const original = execFileSync('git', ['show', `${baseline}:static/${name}/index.html`], { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
         const rebuilt = await readFile(`static/${name}/index.html`, 'utf8');

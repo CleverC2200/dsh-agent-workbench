@@ -34,7 +34,7 @@ const item = {
 };
 
 test('inbox shows business wording instead of upstream codes and identifiers', async t => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
   await page.route('http://inbox.test/**', async route => {

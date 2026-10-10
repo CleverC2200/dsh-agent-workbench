@@ -50,7 +50,7 @@ const bundle=await build({stdin:{contents:`
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',platform:'browser',jsx:'automatic',define:{'process.env.DSH_CLIENT_TITLE':'"Sidebar regression"','process.env.NODE_ENV':'"test"'},alias:{react:resolve('node_modules/react'),'react-dom':resolve('node_modules/react-dom'),'@deepseek-ai/cordis':resolve(core,'vendor/cordis/lib/index.js')},loader:{'.png':'dataurl','.css':'text'},plugins:[{name:'official-css-modules',setup(build){build.onLoad({filter:/\.module\.css$/},async args=>({contents:await readFile(args.path,'utf8'),loader:'local-css'}))}}]});
 
 async function fixture(t){
- const browser=await chromium.launch({channel:'chrome',headless:true});
+ const browser=await chromium.launch({headless:true});
  const proof=process.env.SIDEBAR_VERIFY_EVIDENCE;
  const requests=[];
  t.after(async()=>{

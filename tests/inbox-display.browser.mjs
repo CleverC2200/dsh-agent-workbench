@@ -20,7 +20,7 @@ const css = await readFile(new URL('../src/client/native-pages.css', import.meta
 const item = { id: 'notice-1', title: '消息一', body: '详情正文', state: 'unread', kind: 'approval' };
 
 test('opening and closing inbox details preserves the list without a blank reload', async t => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 700 } });
   let listReads = 0;

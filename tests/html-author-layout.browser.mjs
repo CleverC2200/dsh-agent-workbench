@@ -22,7 +22,7 @@ const parent = await compile(`
  window.unassociate=()=>{associated=false;owner.forgetSession(page.id);render();};window.readView=()=>owner.readHtmlViewState(page.id);
 `);
 async function fixture(t) {
-    const browser = await chromium.launch({ channel: 'chrome', headless: true });
+    const browser = await chromium.launch({ headless: true });
     t.after(() => browser.close());
     const page = await browser.newPage({ viewport: { width: 1920, height: 720 } });
     const css = (await Promise.all(['theme/tokens.css', 'src/company/shell.css', 'src/company/layout.css'].map(file => readFile(file, 'utf8')))).join('\n');

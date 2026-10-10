@@ -76,7 +76,7 @@ async function openWorkbench(t,fixtureRows=3,fixtureAccess=false) {
   });
   await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
   t.after(() => new Promise(resolve => server.close(resolve)));
-  const browser = await chromium.launch({channel:'chrome',headless:true});
+  const browser = await chromium.launch({headless:true});
   t.after(() => browser.close());
   const page = await browser.newPage({viewport:{width:1100,height:900}});
   let externalRequests=0;

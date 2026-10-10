@@ -13,7 +13,7 @@ const bundle=await build({stdin:{contents:`
  window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
  root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,platform:'browser',loader:{'.png':'dataurl','.css':'text'}});
 async function documentFixture(t){
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
+ const browser=await chromium.launch({headless:true});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1600,height:700}});
  const css=(await Promise.all(['theme/tokens.css','src/company/shell.css','src/company/layout.css'].map(file=>readFile(file,'utf8')))).join('\n');
  await page.setContent(`<style>${css} html,body{margin:0;height:100%} #root{height:100%;margin-left:280px}</style><div id="root"></div>`);
