@@ -41,6 +41,8 @@ test('public fast quality checks its active documentation, declarations and actu
     assert.equal(peer.status, 0, peer.stderr);
     // Source only; the gate must diagnose missing references before requiring dependency installation.
     cpSync('package.json', join(fixture, 'package.json'));
+    for (const file of ['run-quality-fast.mjs', 'run-quality-checks.mjs'])
+      cpSync(join('scripts', file), join(fixture, 'scripts', file));
     const good = run(fixture, 'check:knowledge');
     assert.equal(good.status, 0, good.stdout + good.stderr);
     const readme = readFileSync(join(fixture, 'README.md'));

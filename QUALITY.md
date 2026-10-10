@@ -1,6 +1,6 @@
 # Workbench 质量门禁
 
-普通开发执行 `npm run quality:fast`。它检查知识引用、Oxlint、Oxfmt、官方声明和质量反例，允许未提交修改。`lint:audit`、`format:audit` 返回全部既有债务的真实结果。
+普通开发执行 `npm run quality:fast`。它分别运行知识引用、Oxlint、Oxfmt、官方声明和质量反例，保留每项结果；任一失败则非零，允许未提交修改。`lint:audit`、`format:audit` 返回全部既有债务的真实结果。
 
 质量策略、工具版本和旧债 blob 固定到原环境改造输入，不随当前 HEAD 更新。旧债仅在文件字节匹配 `9814b3bcf1ae015a63fac9af864c165617791fc3` 时豁免。固定原始策略以 hash 校验，不执行。新鲜 main 的产品字节保持，本轮发现的额外债务会使门禁失败，不能将接线存在视为质量通过。
 
@@ -13,3 +13,5 @@
 迁移 golden 输入保存为 `tests/fixtures/migration-history.raw`，只含既有 Dealer `67e1007aa400a8a9c65c132f144dabd5168a49df` 的原 source 和 Personal `15def488134527647a819812a4b6657ecf9772fe` 的四个原输入。每项原 Git blob、SHA-256 和整份原始字节摘要由测试 helper 校验。它只供测试，不进入插件包；保持原业务断言和拒业务读取。可选 `--dealer-history`、`--personal-history` 额外核显式只读 Git 根与 fixture 原字节相同。冷 CI 不依赖私人 LAN 或旧布局路径。
 
 构建后源码 HEAD、锁和 peers 必须保持，只允许原 lib 与生成 static index 的派生差异，逐文件保存摘要。最终回执区分冻结源码和 prepared 产物；离线质量通过不证明 Native、真实授权、业务、模型或正式发行。
+
+独立质量检查即使前项失败也继续留下后项行为结果。`quality-checks.json` 和 `.runtime/quality-fast.json` 保存分项状态，Actions 在失败时仍上传这些材料；输入或准备失败则立即拒绝，不驱动未准备组合。

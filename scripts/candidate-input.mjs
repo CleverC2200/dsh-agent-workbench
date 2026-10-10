@@ -4,10 +4,10 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const supportedCores = JSON.parse(
-  readFileSync(new URL('../../dsh-gea-plugin/scripts/supported-cores.json', import.meta.url)),
-);
 export function verifyRegisteredCore(head) {
+  const supportedCores = JSON.parse(
+    readFileSync(new URL('../../dsh-gea-plugin/scripts/supported-cores.json', import.meta.url)),
+  );
   if (!supportedCores.some((core) => core.head === head))
     throw Error('CANDIDATE_CORE: registered official Core required');
   return head;

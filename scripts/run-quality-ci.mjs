@@ -1,3 +1,4 @@
+import { runQualityChecks } from './run-quality-checks.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -7,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { verifyRegisteredCore } from './candidate-input.mjs';
 
 const peers = {
-  'dsh-agent-manage': '399bf00728e7408519286e8cd7ad359367eda323',
+  'dsh-agent-manage': '622ab1913ef8d96efee6359d63e5f9a85e60a43f',
   'dsh-gea-plugin': '0a7663db00657541bbda297a3fa702d6ed285b26',
 };
 const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
@@ -239,26 +240,42 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       leaf,
     );
-    if (finalGroup) run('npm', ['run', 'test:final-group']);
-    run('npm', ['run', 'quality:fast']);
     run(
       'npm',
       ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
       resolve('business/inventory-apsplan/source'),
     );
-    const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
-    process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
-    try {
-      run('npm', ['run', 'build:core']);
-    } finally {
-      if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
-      else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
-    }
-    // Recheck concrete exports after preparation, before the full Node behavior gate.
-    run('npm', ['run', 'check:knowledge']);
-    run('npm', ['run', 'test:aps']);
-    run('npm', ['test']);
-    if (values.browser) run('npm', ['run', 'test:browser']);
+    const checks = runQualityChecks([
+      ...(finalGroup
+        ? [{ name: 'final-group', execute: () => run('npm', ['run', 'test:final-group']) }]
+        : []),
+      { name: 'fast', execute: () => run('npm', ['run', 'quality:fast']) },
+      {
+        name: 'build',
+        execute: () => {
+          const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
+          process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
+          try {
+            run('npm', ['run', 'build:core']);
+          } finally {
+            if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
+            else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
+          }
+        },
+      },
+      { name: 'knowledge', execute: () => run('npm', ['run', 'check:knowledge']) },
+      { name: 'aps', execute: () => run('npm', ['run', 'test:aps']) },
+      { name: 'full', execute: () => run('npm', ['test']) },
+      ...(values.browser
+        ? [{ name: 'browser', execute: () => run('npm', ['run', 'test:browser']) }]
+        : []),
+    ]);
+    writeFileSync(
+      resolve(dirname(resolve(input)), 'quality-checks.json'),
+      JSON.stringify(checks, null, 2) + '\n',
+    );
+    if (checks.some((check) => check.status !== 'passed'))
+      refuse('QUALITY_CHECKS_FAILED', JSON.stringify(checks));
     const changed = [
       ...execFileSync('git', ['diff', 'HEAD', '--name-only', '-z'], { encoding: 'utf8' }).split(
         '\0',

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
@@ -30,6 +30,32 @@ test('event scope and final public CLI refuse skipped, cancelled, failed or miss
   for (const key of Object.keys(good)) {
     for (const result of ['', 'skipped', 'cancelled', 'failure'])
       assert.equal(run(['--phase', 'final'], { ...good, [key]: result }).status, 1);
+  }
+});
+
+test('scope and final aggregation run from a cold self-only checkout without peer materials', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'workbench-scope-'));
+  try {
+    mkdirSync(join(fixture, 'scripts'));
+    for (const file of ['run-quality-ci.mjs', 'candidate-input.mjs', 'run-quality-checks.mjs'])
+      copyFileSync(join('scripts', file), join(fixture, 'scripts', file));
+    const call = (phase, env) =>
+      spawnSync(process.execPath, ['scripts/run-quality-ci.mjs', '--phase', phase], {
+        cwd: fixture,
+        encoding: 'utf8',
+        env: { ...process.env, ...env },
+      });
+    const scope = call('scope', { QUALITY_SCOPE_ALLOWED: 'true' });
+    assert.equal(scope.status, 0, scope.stderr);
+    const final = call('final', {
+      QUALITY_SCOPE_RESULT: 'success',
+      QUALITY_GATE_RESULT: 'failure',
+    });
+    assert.equal(final.status, 1);
+    assert.match(final.stderr, /QUALITY_REQUIRED/);
+    assert.doesNotMatch(final.stderr, /ENOENT/);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
   }
 });
 test('frozen admission requires inputs and binds the actual event before preparing anything', () => {
