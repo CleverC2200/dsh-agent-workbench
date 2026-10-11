@@ -4,9 +4,12 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-export function verifyRegisteredCore(head) {
+export function verifyRegisteredCore(
+  head,
+  gea = resolve(import.meta.dirname, '../../dsh-gea-plugin'),
+) {
   const supportedCores = JSON.parse(
-    readFileSync(new URL('../../dsh-gea-plugin/scripts/supported-cores.json', import.meta.url)),
+    readFileSync(resolve(gea, 'scripts/supported-cores.json')),
   );
   if (!supportedCores.some((core) => core.head === head))
     throw Error('CANDIDATE_CORE: registered official Core required');
@@ -60,7 +63,6 @@ export async function readFinalGroup({
   }
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     refuse('CANDIDATE_INPUT_INVALID', input);
-  verifyRegisteredCore(manifest.core);
   if (!Array.isArray(manifest.repositories) || manifest.repositories.length !== 3)
     refuse('CANDIDATE_PEER_REQUIRED', 'exactly three repositories');
   const paths = new Set();
@@ -108,6 +110,11 @@ export async function readFinalGroup({
       refuse('CANDIDATE_DIRTY', entry.repo);
     return { ...entry, tree: git('rev-parse', 'HEAD^{tree}'), lockSha256: digest(committed) };
   });
+  // The validated frozen GEA owns the registry, regardless of the source/prepared layout.
+  verifyRegisteredCore(
+    manifest.core,
+    repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
+  );
   const workbench = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
   const manage = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-manage');
   if (realpathSync(workbench.path) !== realpathSync(resolve(import.meta.dirname, '..')))
