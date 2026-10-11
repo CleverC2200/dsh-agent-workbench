@@ -601,6 +601,7 @@ test('active HTML page requests renew its idle lease while an idle page expires'
 
 test('a missing page is reported and a different resource or Session cannot acquire its owner', async (t) => {
   const h = await mount(t);
+  assert.match((await h.execute('gea_page', { action: 'context' })).value, /不在业务工作台/);
   assert.equal(
     JSON.parse((await h.execute('gea_page', { action: 'context' })).value).code,
     'PAGE_NOT_IN_WORKBENCH',
