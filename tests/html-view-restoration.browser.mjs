@@ -24,9 +24,9 @@ async function fixture(t, includedAssets) {
   const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
   const assetPaths = {
     sample: 'lib/samples/index.html',
-    regional: 'static/regional/index.html',
-    category: 'static/category/index.html',
-    mps: 'static/mps/index.html',
+    regional: 'lib/static/regional/index.html',
+    category: 'lib/static/category/index.html',
+    mps: 'lib/static/mps/index.html',
     customer: 'lib/business/inventory-customer/index.html',
     orderworkbench: 'lib/business/inventory-orderworkbench/index.html',
     fulfillment: 'lib/business/inventory-orderfulfillment/index.html',

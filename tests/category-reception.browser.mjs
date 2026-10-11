@@ -27,7 +27,7 @@ async function fixture(t) {
         ['show', process.env.CATEGORY_SOURCE_BASELINE + ':static/category/index.html'],
         { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
       )
-    : await readFile('static/category/index.html', 'utf8');
+    : await readFile('lib/static/category/index.html', 'utf8');
   await page.route('http://127.0.0.1:19479/**', (route) =>
     route.fulfill({
       contentType: 'text/html',
