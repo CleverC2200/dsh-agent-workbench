@@ -2,7 +2,7 @@
  * 页面草稿动作共用限流、超时、确认和回执。
  * 页面声明元素，执行由调用者提供；本模块不写业务数据。
  */
-export type DraftEffect = "view" | "draft" | "submit" | "approve";
+export type DraftEffect = 'view' | 'draft' | 'submit' | 'approve';
 export type DraftRequest = {
     sessionId: string;
     /** 页面标识（能力契约里的 surface）。 */
@@ -13,7 +13,7 @@ export type DraftRequest = {
     effect: DraftEffect;
     reason?: string;
 };
-export type DraftReceiptOutcome = "pending" | "applied" | "rejected" | "timeout" | "failed";
+export type DraftReceiptOutcome = 'pending' | 'applied' | 'rejected' | 'timeout' | 'failed';
 export type DraftReceipt = {
     id: string;
     at: number;

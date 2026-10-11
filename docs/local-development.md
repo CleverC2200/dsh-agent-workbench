@@ -2,6 +2,8 @@
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树按锁安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。固定官方提交与材料要求由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 核验；类型映射查 [tsconfig.official.json](../tsconfig.official.json)。当前只支持登记的官方输入，本地 SDK 配置不构成发行依赖或发行授权。
 
+普通开发使用 [质量门禁](../QUALITY.md) 的 `npm run quality:fast`，允许未提交修改；全量 audit 保留旧债的真实红结果。`npm run quality:ci` 只用于冻结候选和 CI，接票01输入检查与 Manage 的公共 SDK 准备入口。
+
 ```sh
 npm ci --ignore-scripts --prefer-offline
 npm run check:knowledge
@@ -9,11 +11,11 @@ npm run check:knowledge -- --compare-ref <本票基线SHA>
 npm run typecheck:official
 ```
 
-`check:knowledge` 读取 [agent-knowledge.json](../agent-knowledge.json)，核活跃本地链接、已声明路径、文档中 npm/pnpm 脚本与 Node 脚本。历史引用只核存在，不递归旧命令。`exports:true` 要求导出目标已存在，它不生成假产物。`--compare-ref` 使用当前目标仓库的 TypeScript，核已修改 TS/TSX 的去注释 AST、公共导出、声明输出和法律/工具指令。该模式用于纯注释改动，真实逻辑变化会失败。
+`check:knowledge` 读取 [agent-knowledge.json](../agent-knowledge.json)，核活跃本地链接、已声明路径、文档中 npm/pnpm 脚本与 Node 脚本。历史引用只核存在，不递归旧命令。`quality:fast` 首先对本 checkout 执行此检查，使用当前跟踪的真实导出目标；`quality:ci` 在 `build:core` 后再次核构建产物。`exports:true` 要求导出目标已存在，缺目标会失败，不生成假产物。`--compare-ref` 使用当前目标仓库的 TypeScript，核已修改 TS/TSX 的去注释 AST、公共导出、声明输出和法律/工具指令。该模式用于纯注释改动，真实逻辑变化会失败。
 
-候选冻结后按 [candidate:verify](candidate-input.md) 核干净三仓。普通增量引用或行为测试不要求干净工作树；不要为通过候选输入检查清除自己的在途改动。
+候选冻结后按 [candidate:verify](candidate-input.md) 核干净三仓。默认 CI 固定兼容组与显式最终组的 `--final-group-sha256`、只读 `--phase verify-input` 见该合同；source-only 不证明 SDK、质量、兼容或业务授权。普通增量引用或行为测试不要求干净工作树；不要为通过候选输入检查清除自己的在途改动。
 
-定向行为测试可使用 Node 直接执行：
+运行含 HTML/浏览器的 Node harness 前，在本仓原锁安装下准备 Chromium（`npm exec -- playwright install chromium`），并让准备与测试共用 `PLAYWRIGHT_BROWSERS_PATH`。普通纯 Node 定向行为测试可直接执行：
 
 ```sh
 node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs tests/workbench-original.test.mjs tests/payload-focus-metadata.test.mjs

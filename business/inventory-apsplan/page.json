@@ -1,9 +1,7 @@
 {
   "surface": "gea-html-inventory-apsplan",
   "protocol": "self-report",
-  "pageIds": [
-    "inventory-apsplan"
-  ],
+  "pageIds": ["inventory-apsplan"],
   "consumerCode": "aps",
   "maxEffect": "view"
 }

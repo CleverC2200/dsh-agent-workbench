@@ -1,5 +1,5 @@
-import { call } from "./channel.js";
-import { sqlQueryError } from "./query-error.js";
+import { call } from './channel.js';
+import { sqlQueryError } from './query-error.js';
 
 export type GeaSqlRow = Record<string, string | number | null | undefined>;
 export type GeaSqlParameters = Record<string, unknown>;
@@ -17,9 +17,9 @@ export function clearReadCache() {
   lifetime = new AbortController();
   pending.clear();
 }
-if (typeof window !== "undefined") {
-  window.addEventListener("gea-identity-changed", clearReadCache);
-  window.addEventListener("light-refresh", clearReadCache);
+if (typeof window !== 'undefined') {
+  window.addEventListener('gea-identity-changed', clearReadCache);
+  window.addEventListener('light-refresh', clearReadCache);
 }
 
 async function read(
@@ -40,7 +40,7 @@ async function read(
   const key = JSON.stringify(parameters);
   let request = options.signal ? undefined : pending.get(key);
   if (!request) {
-    request = call("sql", parameters, { signal });
+    request = call('sql', parameters, { signal });
     if (!options.signal) pending.set(key, request);
   }
   try {
@@ -67,10 +67,7 @@ export async function executeGeaSqlPage(
   pageSize = 200,
   options: GeaSqlRequestOptions = {},
 ) {
-  return read(
-    { sql, parameters: options.parameters ?? {}, pageNo, pageSize },
-    options,
-  );
+  return read({ sql, parameters: options.parameters ?? {}, pageNo, pageSize }, options);
 }
 export async function executeAllGeaSqlPages(
   sql: string,
@@ -86,15 +83,9 @@ export async function executeAllGeaSqlPages(
   let total: number | undefined;
   let permissions: string | undefined;
   for (let pageNo = 1; ; pageNo++) {
-    const page = await read(
-      { sql, parameters, pageNo, pageSize },
-      { ...options, signal },
-    );
+    const page = await read({ sql, parameters, pageNo, pageSize }, { ...options, signal });
     signal.throwIfAborted();
-    const pagePermissions = JSON.stringify([
-      page.returnedColumns,
-      page.rejectedColumns,
-    ]);
+    const pagePermissions = JSON.stringify([page.returnedColumns, page.rejectedColumns]);
     if (
       !Number.isSafeInteger(page.total) ||
       page.total < 0 ||
@@ -104,8 +95,8 @@ export async function executeAllGeaSqlPages(
       page.rows.length !== Math.min(pageSize, page.total - rows.length)
     )
       throw new GeaSqlApiError(
-        "查询结果或字段权限在分页期间发生变化或不完整，请刷新后重新查询；未使用不完整结果",
-        "GEA_SQL_RESULT_INCOMPLETE",
+        '查询结果或字段权限在分页期间发生变化或不完整，请刷新后重新查询；未使用不完整结果',
+        'GEA_SQL_RESULT_INCOMPLETE',
         409,
         false,
       );
@@ -113,8 +104,8 @@ export async function executeAllGeaSqlPages(
     permissions = pagePermissions;
     if (Array.isArray(page.rejectedColumns) && page.rejectedColumns.length)
       throw new GeaSqlApiError(
-        "返回字段权限不完整，未使用裁剪结果",
-        "RETURN_PERMISSION_DENIED",
+        '返回字段权限不完整，未使用裁剪结果',
+        'RETURN_PERMISSION_DENIED',
         403,
         false,
       );
@@ -125,7 +116,7 @@ export async function executeAllGeaSqlPages(
 export class GeaSqlApiError extends Error {
   constructor(
     message: string,
-    public code = "GEA_QUERY_FAILED",
+    public code = 'GEA_QUERY_FAILED',
     public status = 503,
     public retryable = false,
   ) {

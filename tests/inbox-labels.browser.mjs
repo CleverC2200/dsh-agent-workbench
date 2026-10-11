@@ -1,8 +1,8 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { mkdir, readFile } from "node:fs/promises";
-import { build } from "esbuild";
-import { chromium, expect } from "@playwright/test";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdir, readFile } from 'node:fs/promises';
+import { build } from 'esbuild';
+import { chromium, expect } from '@playwright/test';
 
 const { outputFiles } = await build({
   stdin: {
@@ -12,9 +12,13 @@ const { outputFiles } = await build({
       import { zh } from './src/client/locales.ts';
       function App(){const [view,setView]=React.useState({pageNo:1,readState:''});return <Inbox t={key=>zh[key]} view={view} onViewChange={setView}/>;}
       createRoot(document.getElementById('root')).render(<App/>);`,
-    resolveDir: process.cwd(), loader: 'tsx',
+    resolveDir: process.cwd(),
+    loader: 'tsx',
   },
-  bundle: true, write: false, platform: 'browser', format: 'iife',
+  bundle: true,
+  write: false,
+  platform: 'browser',
+  format: 'iife',
 });
 const css = await readFile(new URL('../src/client/native-pages.css', import.meta.url), 'utf8');
 
@@ -33,19 +37,32 @@ const item = {
   source: { type: 'workflow', ref: aggregateId, label: 'sales_plan.approval_required' },
 };
 
-test('inbox shows business wording instead of upstream codes and identifiers', async t => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+test('inbox shows business wording instead of upstream codes and identifiers', async (t) => {
+  const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
-  await page.route('http://inbox.test/**', async route => {
+  await page.route('http://inbox.test/**', async (route) => {
     if (route.request().method() !== 'POST') {
       await route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' });
       return;
     }
     const query = route.request().postDataJSON();
-    await route.fulfill({ json: { ok: true, value: query.id
-      ? { detail: item }
-      : { items: [item], total: 1, unreadCount: 1, pageSize: 10, environment: 'test', coverage: 'complete', fetchedAt: '2026-09-21T07:38:06Z' } } });
+    await route.fulfill({
+      json: {
+        ok: true,
+        value: query.id
+          ? { detail: item }
+          : {
+              items: [item],
+              total: 1,
+              unreadCount: 1,
+              pageSize: 10,
+              environment: 'test',
+              coverage: 'complete',
+              fetchedAt: '2026-09-21T07:38:06Z',
+            },
+      },
+    });
   });
   await page.goto('http://inbox.test/');
   await page.addStyleTag({ content: css });

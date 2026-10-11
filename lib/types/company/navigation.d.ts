@@ -33,7 +33,7 @@ export declare function businessMenuTitle(id: string, panels?: readonly Business
  * 业务分组和顺序由 BUSINESS_MENU_PRESET 声明。
  * 未接入的页面保留禁用占位，避免不同账号看到的目录结构跳动。
  */
-export type BusinessMenuSection = "supply" | "plan" | "inventory" | "orders" | "prototypes";
+export type BusinessMenuSection = 'supply' | 'plan' | 'inventory' | 'orders' | 'prototypes';
 export type BusinessMenuItem = {
     id: string;
     title: string;

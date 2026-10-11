@@ -1,27 +1,75 @@
 /* The supplied board CSS remains the visual source; bind its roles to shared tokens. */
 html.aps-plugin-host body {
- --font-sans:var(--workbench-font-family);
- --background:var(--workbench-page);--foreground:var(--workbench-text);
- --v02-surface:var(--workbench-surface);--v02-surface-subtle:var(--workbench-subtle);--v02-surface-muted:var(--workbench-muted-surface);
- --v02-text-strong:var(--workbench-text);--v02-text:var(--workbench-body);--v02-text-muted:var(--workbench-muted);
- --v02-border:var(--workbench-border);--v02-border-strong:var(--workbench-control-border);
- --v02-primary:var(--workbench-brand);--v02-primary-hover:var(--workbench-brand-hover);--v02-primary-soft:var(--workbench-brand-soft);--v02-hover-bg:var(--workbench-hover);
- font-family:var(--workbench-font-family);background:var(--workbench-page);color:var(--workbench-text);
+  --font-sans: var(--workbench-font-family);
+  --background: var(--workbench-page);
+  --foreground: var(--workbench-text);
+  --v02-surface: var(--workbench-surface);
+  --v02-surface-subtle: var(--workbench-subtle);
+  --v02-surface-muted: var(--workbench-muted-surface);
+  --v02-text-strong: var(--workbench-text);
+  --v02-text: var(--workbench-body);
+  --v02-text-muted: var(--workbench-muted);
+  --v02-border: var(--workbench-border);
+  --v02-border-strong: var(--workbench-control-border);
+  --v02-primary: var(--workbench-brand);
+  --v02-primary-hover: var(--workbench-brand-hover);
+  --v02-primary-soft: var(--workbench-brand-soft);
+  --v02-hover-bg: var(--workbench-hover);
+  font-family: var(--workbench-font-family);
+  background: var(--workbench-page);
+  color: var(--workbench-text);
 }
-html.aps-plugin-host .analysis-workspace>.scope-tabs,
-html.aps-plugin-host .analysis-workspace>.secondary-analysis-toolbar {background:var(--workbench-surface);}
-.aps-data-state {margin:8px 12px;padding:10px 12px;border:1px solid var(--workbench-border);border-radius:8px;background:var(--workbench-subtle);font-size:12px;color:var(--workbench-body);}
-.aps-data-state strong,.aps-data-state span {display:block;}
-.aps-data-state summary {cursor:pointer;color:var(--workbench-selected-text);}
-.aps-data-state p {margin:4px 0;}
-.aps-data-state ul {padding-left:20px;}
-@media(max-width:720px){
- html.aps-plugin-host .analysis-workspace>.secondary-analysis-toolbar{height:auto;min-height:50px;flex-wrap:wrap;gap:8px;padding-block:8px;}
+html.aps-plugin-host .analysis-workspace > .scope-tabs,
+html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
+  background: var(--workbench-surface);
 }
-@media(max-width:720px){
- html.aps-plugin-host .secondary-analysis-toolbar .global-top-actions{width:100%;min-width:0;flex-wrap:wrap;}
- html.aps-plugin-host .secondary-analysis-toolbar .period-selector-group{min-width:0;max-width:100%;flex-wrap:wrap;}
+.aps-data-state {
+  margin: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 8px;
+  background: var(--workbench-subtle);
+  font-size: 12px;
+  color: var(--workbench-body);
 }
-@media(max-width:720px){
- html.aps-plugin-host .secondary-analysis-toolbar .active-period-range{flex-basis:100%;white-space:normal;}
+.aps-data-state strong,
+.aps-data-state span {
+  display: block;
+}
+.aps-data-state summary {
+  cursor: pointer;
+  color: var(--workbench-selected-text);
+}
+.aps-data-state p {
+  margin: 4px 0;
+}
+.aps-data-state ul {
+  padding-left: 20px;
+}
+@media (max-width: 720px) {
+  html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
+    height: auto;
+    min-height: 50px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-block: 8px;
+  }
+}
+@media (max-width: 720px) {
+  html.aps-plugin-host .secondary-analysis-toolbar .global-top-actions {
+    width: 100%;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  html.aps-plugin-host .secondary-analysis-toolbar .period-selector-group {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 720px) {
+  html.aps-plugin-host .secondary-analysis-toolbar .active-period-range {
+    flex-basis: 100%;
+    white-space: normal;
+  }
 }

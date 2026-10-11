@@ -34,7 +34,7 @@
   border-color: var(--ui-accent);
   color: var(--ui-accent);
 }
-.shortcuts button[aria-pressed="true"] {
+.shortcuts button[aria-pressed='true'] {
   background: var(--ui-accent);
   border-color: var(--ui-accent);
   color: white;
@@ -93,7 +93,7 @@
   font-size: 11px;
   cursor: pointer;
 }
-.options button[aria-pressed="true"] {
+.options button[aria-pressed='true'] {
   color: var(--ui-accent);
   background: var(--ui-accent-soft);
   border-color: var(--ui-accent);

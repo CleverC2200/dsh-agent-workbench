@@ -9,13 +9,12 @@
  * 参数只允许标量，避免把复杂结构塞进模型工具。
  */
 
-import { focusTokens, truncateText } from "@cleverc2200/dsh-agent-workbench/page-interaction/payload-budget";
+import {
+  focusTokens,
+  truncateText,
+} from '@cleverc2200/dsh-agent-workbench/page-interaction/payload-budget';
 
-export type PageActionScalarType =
-  | "string"
-  | "integer"
-  | "number"
-  | "boolean";
+export type PageActionScalarType = 'string' | 'integer' | 'number' | 'boolean';
 
 export type PageActionScalar = {
   type: PageActionScalarType;
@@ -27,13 +26,13 @@ export type PageActionScalar = {
 export type PageActionParam =
   | PageActionScalar
   | {
-      type: "array";
+      type: 'array';
       required?: boolean;
       description?: string;
       items: { type: PageActionScalarType; description?: string };
     }
   | {
-      type: "object";
+      type: 'object';
       required?: boolean;
       description?: string;
       properties: Record<string, PageActionScalar>;
@@ -48,7 +47,7 @@ export type PageAction = {
    * 动作影响面：view 只改"这一屏怎么看"（默认）；data 会改业务数据。
    * 只有宿主明确放开时，data 动作才会被暴露给模型。
    */
-  scope?: "view" | "data";
+  scope?: 'view' | 'data';
   /** 这个动作接受的参数。 */
   params?: Record<string, PageActionParam>;
 };
@@ -72,21 +71,16 @@ export type PageCatalog = {
 };
 
 /** 通用动词：与页面无关，模型只会这四种操作。 */
-export const PAGE_ACTION_VERBS = [
-  "invoke",
-  "setValue",
-  "select",
-  "clear",
-] as const;
+export const PAGE_ACTION_VERBS = ['invoke', 'setValue', 'select', 'clear'] as const;
 export type PageActionVerb = (typeof PAGE_ACTION_VERBS)[number];
 
-export type PageElementRole = "row" | "field" | "control" | "collection";
+export type PageElementRole = 'row' | 'field' | 'control' | 'collection';
 
 /**
  * 元素的影响等级：view 只改UI视图；draft 修改页面草稿（默认）；submit / approve 会提交或审批，
  * 必须由用户明确要求、且页面当前可点时才允许。
  */
-export const PAGE_ELEMENT_EFFECTS = ["view", "draft", "submit", "approve"] as const;
+export const PAGE_ELEMENT_EFFECTS = ['view', 'draft', 'submit', 'approve'] as const;
 export type PageElementEffect = (typeof PAGE_ELEMENT_EFFECTS)[number];
 
 /**
@@ -139,54 +133,56 @@ const SURFACE_PATTERN = /^[a-z][a-z0-9._-]*$/;
  * 但仍然禁止空白、引号与换行，避免 id 把工具说明的结构撑破。
  */
 const ELEMENT_PATTERN = /^[A-Za-z][A-Za-z0-9:._\-\u4e00-\u9fa5]*$/;
-const ELEMENT_ROLES = ["row", "field", "control", "collection"] as const;
+const ELEMENT_ROLES = ['row', 'field', 'control', 'collection'] as const;
 
 function catalogElements(value: unknown): PageElement[] {
   if (!Array.isArray(value) || value.length > PAGE_CATALOG_LIMITS.maxElements)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   const elements: PageElement[] = value.map((raw) => {
     const element = catalogObject(raw);
     if (
       Object.keys(element).some(
         (key) =>
-          key !== "id" &&
-          key !== "role" &&
-          key !== "label" &&
-          key !== "value" &&
-          key !== "options" &&
-          key !== "actions" &&
-          key !== "editable" &&
-          key !== "members" &&
-          key !== "effect",
+          key !== 'id' &&
+          key !== 'role' &&
+          key !== 'label' &&
+          key !== 'value' &&
+          key !== 'options' &&
+          key !== 'actions' &&
+          key !== 'editable' &&
+          key !== 'members' &&
+          key !== 'effect',
       )
     )
-      throw new Error("INVALID_PAGE_CATALOG");
+      throw new Error('INVALID_PAGE_CATALOG');
     const id = catalogText(element.id, 120);
-    if (!ELEMENT_PATTERN.test(id)) throw new Error("INVALID_PAGE_CATALOG");
+    if (!ELEMENT_PATTERN.test(id)) throw new Error('INVALID_PAGE_CATALOG');
     const role = element.role;
     if (!ELEMENT_ROLES.includes(role as (typeof ELEMENT_ROLES)[number]))
-      throw new Error("INVALID_PAGE_CATALOG");
+      throw new Error('INVALID_PAGE_CATALOG');
     const label = catalogText(element.label, 200);
     const text = (candidate: unknown, max: number) =>
-      candidate === undefined
-        ? undefined
-        : catalogText(candidate, max, true);
-    const list = (candidate: unknown, max: number, allowEmpty = false): readonly string[] | undefined => {
+      candidate === undefined ? undefined : catalogText(candidate, max, true);
+    const list = (
+      candidate: unknown,
+      max: number,
+      allowEmpty = false,
+    ): readonly string[] | undefined => {
       if (candidate === undefined) return undefined;
       if (!Array.isArray(candidate) || candidate.length > max)
-        throw new Error("INVALID_PAGE_CATALOG");
+        throw new Error('INVALID_PAGE_CATALOG');
       return candidate.map((item) => catalogText(item, 120, allowEmpty));
     };
-    if (element.editable !== undefined && typeof element.editable !== "boolean")
-      throw new Error("INVALID_PAGE_CATALOG");
+    if (element.editable !== undefined && typeof element.editable !== 'boolean')
+      throw new Error('INVALID_PAGE_CATALOG');
     if (
       element.effect !== undefined &&
       !(PAGE_ELEMENT_EFFECTS as readonly unknown[]).includes(element.effect)
     )
-      throw new Error("INVALID_PAGE_CATALOG");
+      throw new Error('INVALID_PAGE_CATALOG');
     // 可编辑 = 用户能改：输入框（field）和可选项控件（control，如下拉/分段/页码）都算。
-    if (element.editable === true && role !== "field" && role !== "control")
-      throw new Error("INVALID_PAGE_CATALOG");
+    if (element.editable === true && role !== 'field' && role !== 'control')
+      throw new Error('INVALID_PAGE_CATALOG');
     return {
       id,
       role: role as PageElementRole,
@@ -197,72 +193,55 @@ function catalogElements(value: unknown): PageElement[] {
       ...(list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues, true) === undefined
         ? {}
         : { options: list(element.options, PAGE_CATALOG_LIMITS.maxEnumValues, true)! }),
-      ...(list(element.actions, 8) === undefined
-        ? {}
-        : { actions: list(element.actions, 8)! }),
+      ...(list(element.actions, 8) === undefined ? {} : { actions: list(element.actions, 8)! }),
       ...(element.editable === undefined ? {} : { editable: element.editable }),
-      ...(list(element.members, 300) === undefined
-        ? {}
-        : { members: list(element.members, 300)! }),
-      ...(element.effect === undefined
-        ? {}
-        : { effect: element.effect as PageElementEffect }),
+      ...(list(element.members, 300) === undefined ? {} : { members: list(element.members, 300)! }),
+      ...(element.effect === undefined ? {} : { effect: element.effect as PageElementEffect }),
     };
   });
   if (new Set(elements.map((element) => element.id)).size !== elements.length)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   return elements;
 }
 
 function catalogObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error("INVALID_PAGE_CATALOG");
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new Error('INVALID_PAGE_CATALOG');
   return value as Record<string, unknown>;
 }
 
 function catalogText(value: unknown, max: number, allowEmpty = false): string {
-  if (typeof value !== "string" || (!allowEmpty && value.length === 0) || value.length > max)
-    throw new Error("INVALID_PAGE_CATALOG");
+  if (typeof value !== 'string' || (!allowEmpty && value.length === 0) || value.length > max)
+    throw new Error('INVALID_PAGE_CATALOG');
   return value;
 }
 
 function catalogScalar(value: unknown): PageActionScalar {
   const param = catalogObject(value);
   const type = param.type;
-  if (
-    type !== "string" &&
-    type !== "integer" &&
-    type !== "number" &&
-    type !== "boolean"
-  )
-    throw new Error("INVALID_PAGE_CATALOG");
-  if (param.required !== undefined && typeof param.required !== "boolean")
-    throw new Error("INVALID_PAGE_CATALOG");
+  if (type !== 'string' && type !== 'integer' && type !== 'number' && type !== 'boolean')
+    throw new Error('INVALID_PAGE_CATALOG');
+  if (param.required !== undefined && typeof param.required !== 'boolean')
+    throw new Error('INVALID_PAGE_CATALOG');
   if (
     param.description !== undefined &&
-    (typeof param.description !== "string" ||
+    (typeof param.description !== 'string' ||
       param.description.length > PAGE_CATALOG_LIMITS.maxDescriptionLength)
   )
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   if (
     param.enum !== undefined &&
     (!Array.isArray(param.enum) ||
       param.enum.length === 0 ||
       param.enum.length > PAGE_CATALOG_LIMITS.maxEnumValues ||
-      param.enum.some(
-        (item) => typeof item !== "string" || !NAME_PATTERN.test(item as string),
-      ))
+      param.enum.some((item) => typeof item !== 'string' || !NAME_PATTERN.test(item as string)))
   )
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   return {
     type,
     ...(param.required === undefined ? {} : { required: param.required }),
-    ...(param.description === undefined
-      ? {}
-      : { description: param.description as string }),
-    ...(param.enum === undefined
-      ? {}
-      : { enum: param.enum as readonly string[] }),
+    ...(param.description === undefined ? {} : { description: param.description as string }),
+    ...(param.enum === undefined ? {} : { enum: param.enum as readonly string[] }),
   };
 }
 
@@ -270,73 +249,53 @@ function catalogParams(value: unknown): Record<string, PageActionParam> {
   const params = catalogObject(value);
   const entries = Object.entries(params);
   if (entries.length > PAGE_CATALOG_LIMITS.maxParamsPerAction)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   const result: Record<string, PageActionParam> = {};
   for (const [name, raw] of entries) {
-    if (!NAME_PATTERN.test(name)) throw new Error("INVALID_PAGE_CATALOG");
+    if (!NAME_PATTERN.test(name)) throw new Error('INVALID_PAGE_CATALOG');
     const param = catalogObject(raw);
-    if (param.type === "array") {
+    if (param.type === 'array') {
       const items = catalogObject(param.items);
       if (
         Object.keys(param).some(
-          (key) =>
-            key !== "type" &&
-            key !== "required" &&
-            key !== "description" &&
-            key !== "items",
+          (key) => key !== 'type' && key !== 'required' && key !== 'description' && key !== 'items',
         )
       )
-        throw new Error("INVALID_PAGE_CATALOG");
+        throw new Error('INVALID_PAGE_CATALOG');
       const itemType = items.type;
       if (
-        itemType !== "string" &&
-        itemType !== "integer" &&
-        itemType !== "number" &&
-        itemType !== "boolean"
+        itemType !== 'string' &&
+        itemType !== 'integer' &&
+        itemType !== 'number' &&
+        itemType !== 'boolean'
       )
-        throw new Error("INVALID_PAGE_CATALOG");
+        throw new Error('INVALID_PAGE_CATALOG');
       result[name] = {
-        type: "array",
-        ...(param.required === undefined
-          ? {}
-          : { required: param.required as boolean }),
-        ...(param.description === undefined
-          ? {}
-          : { description: param.description as string }),
+        type: 'array',
+        ...(param.required === undefined ? {} : { required: param.required as boolean }),
+        ...(param.description === undefined ? {} : { description: param.description as string }),
         items: {
           type: itemType,
-          ...(items.description === undefined
-            ? {}
-            : { description: items.description as string }),
+          ...(items.description === undefined ? {} : { description: items.description as string }),
         },
       };
       continue;
     }
-    if (param.type === "object") {
+    if (param.type === 'object') {
       if (
         Object.keys(param).some(
           (key) =>
-            key !== "type" &&
-            key !== "required" &&
-            key !== "description" &&
-            key !== "properties",
+            key !== 'type' && key !== 'required' && key !== 'description' && key !== 'properties',
         )
       )
-        throw new Error("INVALID_PAGE_CATALOG");
+        throw new Error('INVALID_PAGE_CATALOG');
       const properties = catalogObject(param.properties);
       result[name] = {
-        type: "object",
-        ...(param.required === undefined
-          ? {}
-          : { required: param.required as boolean }),
-        ...(param.description === undefined
-          ? {}
-          : { description: param.description as string }),
+        type: 'object',
+        ...(param.required === undefined ? {} : { required: param.required as boolean }),
+        ...(param.description === undefined ? {} : { description: param.description as string }),
         properties: Object.fromEntries(
-          Object.entries(properties).map(([key, value]) => [
-            key,
-            catalogScalar(value),
-          ]),
+          Object.entries(properties).map(([key, value]) => [key, catalogScalar(value)]),
         ),
       };
       continue;
@@ -352,19 +311,19 @@ export function validatePageCatalog(value: unknown): PageCatalog {
   if (
     Object.keys(catalog).some(
       (key) =>
-        key !== "surface" &&
-        key !== "tool" &&
-        key !== "description" &&
-        key !== "reasonField" &&
-        key !== "elements" &&
-        key !== "actions",
+        key !== 'surface' &&
+        key !== 'tool' &&
+        key !== 'description' &&
+        key !== 'reasonField' &&
+        key !== 'elements' &&
+        key !== 'actions',
     )
   )
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   const surface = catalogText(catalog.surface, PAGE_CATALOG_LIMITS.maxNameLength);
-  if (!SURFACE_PATTERN.test(surface)) throw new Error("INVALID_PAGE_CATALOG");
+  if (!SURFACE_PATTERN.test(surface)) throw new Error('INVALID_PAGE_CATALOG');
   const tool = catalogText(catalog.tool, PAGE_CATALOG_LIMITS.maxNameLength);
-  if (!NAME_PATTERN.test(tool)) throw new Error("INVALID_PAGE_CATALOG");
+  if (!NAME_PATTERN.test(tool)) throw new Error('INVALID_PAGE_CATALOG');
   const description = catalogText(
     catalog.description,
     PAGE_CATALOG_LIMITS.maxToolDescriptionLength,
@@ -374,49 +333,34 @@ export function validatePageCatalog(value: unknown): PageCatalog {
       ? undefined
       : catalogText(catalog.reasonField, PAGE_CATALOG_LIMITS.maxNameLength);
   if (reasonField !== undefined && !NAME_PATTERN.test(reasonField))
-    throw new Error("INVALID_PAGE_CATALOG");
-  const elements =
-    catalog.elements === undefined ? undefined : catalogElements(catalog.elements);
+    throw new Error('INVALID_PAGE_CATALOG');
+  const elements = catalog.elements === undefined ? undefined : catalogElements(catalog.elements);
   if (catalog.actions !== undefined && !Array.isArray(catalog.actions))
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   const actions: PageAction[] = (catalog.actions ?? []).map((raw) => {
     const action = catalogObject(raw);
     if (
       Object.keys(action).some(
-        (key) =>
-          key !== "name" &&
-          key !== "description" &&
-          key !== "scope" &&
-          key !== "params",
+        (key) => key !== 'name' && key !== 'description' && key !== 'scope' && key !== 'params',
       )
     )
-      throw new Error("INVALID_PAGE_CATALOG");
-    if (
-      action.scope !== undefined &&
-      action.scope !== "view" &&
-      action.scope !== "data"
-    )
-      throw new Error("INVALID_PAGE_CATALOG");
+      throw new Error('INVALID_PAGE_CATALOG');
+    if (action.scope !== undefined && action.scope !== 'view' && action.scope !== 'data')
+      throw new Error('INVALID_PAGE_CATALOG');
     const name = catalogText(action.name, PAGE_CATALOG_LIMITS.maxNameLength);
-    if (!NAME_PATTERN.test(name)) throw new Error("INVALID_PAGE_CATALOG");
+    if (!NAME_PATTERN.test(name)) throw new Error('INVALID_PAGE_CATALOG');
     return {
       name,
-      description: catalogText(
-        action.description,
-        PAGE_CATALOG_LIMITS.maxDescriptionLength,
-      ),
-      scope: (action.scope as "view" | "data" | undefined) ?? "view",
-      ...(action.params === undefined
-        ? {}
-        : { params: catalogParams(action.params) }),
+      description: catalogText(action.description, PAGE_CATALOG_LIMITS.maxDescriptionLength),
+      scope: (action.scope as 'view' | 'data' | undefined) ?? 'view',
+      ...(action.params === undefined ? {} : { params: catalogParams(action.params) }),
     };
   });
   if (new Set(actions.map((action) => action.name)).size !== actions.length)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   if (actions.length === 0 && (elements?.length ?? 0) === 0)
-    throw new Error("INVALID_PAGE_CATALOG");
-  if (actions.length > PAGE_CATALOG_LIMITS.maxActions)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
+  if (actions.length > PAGE_CATALOG_LIMITS.maxActions) throw new Error('INVALID_PAGE_CATALOG');
   return {
     surface,
     tool,
@@ -428,19 +372,14 @@ export function validatePageCatalog(value: unknown): PageCatalog {
 }
 
 /** 同一个参数被多个动作共用时，说明里要写清哪些动作用它。 */
-function paramDescription(
-  catalog: PageCatalog,
-  name: string,
-): string | undefined {
+function paramDescription(catalog: PageCatalog, name: string): string | undefined {
   const declared = catalog.actions ?? [];
-  const owners = declared
-    .filter((action) => action.params?.[name])
-    .map((action) => action.name);
+  const owners = declared.filter((action) => action.params?.[name]).map((action) => action.name);
   const own = declared
     .map((action) => action.params?.[name]?.description)
     .find((text) => text !== undefined);
   if (owners.length <= 1) return own;
-  return `${owners.join(" / ")} 使用：${own ?? ""}`.trim();
+  return `${owners.join(' / ')} 使用：${own ?? ''}`.trim();
 }
 
 /**
@@ -455,16 +394,14 @@ export function compilePageCatalog(catalog: PageCatalog): {
   const declared = catalog.actions ?? [];
   const parameters: Array<{ name: string } & PageActionParam> = [
     {
-      name: "kind",
-      type: "string",
+      name: 'kind',
+      type: 'string',
       required: true,
       enum: declared.map((action) => action.name),
-      description: declared
-        .map((action) => `${action.name}（${action.description}）`)
-        .join("；"),
+      description: declared.map((action) => `${action.name}（${action.description}）`).join('；'),
     },
   ];
-  const seen = new Set<string>(["kind"]);
+  const seen = new Set<string>(['kind']);
   for (const action of declared) {
     for (const [name, param] of Object.entries(action.params ?? {})) {
       if (seen.has(name)) continue;
@@ -479,29 +416,32 @@ export function compilePageCatalog(catalog: PageCatalog): {
         ...param,
         name,
         required: false,
-        description: [description, requiredIn.length === 0 ? undefined : `${requiredIn.join(" / ")} 必填`]
+        description: [
+          description,
+          requiredIn.length === 0 ? undefined : `${requiredIn.join(' / ')} 必填`,
+        ]
           .filter((text): text is string => Boolean(text))
-          .join("｜"),
+          .join('｜'),
       });
     }
   }
   if (catalog.reasonField !== undefined && !seen.has(catalog.reasonField)) {
     parameters.push({
       name: catalog.reasonField,
-      type: "string",
+      type: 'string',
       required: false,
-      description: "可选：一句话说明为什么改这一屏。",
+      description: '可选：一句话说明为什么改这一屏。',
     });
   }
   const lines = declared.map((action) => {
     const params = Object.entries(action.params ?? {})
-      .map(([name, param]) => `${name}${param.required ? "（必填）" : ""}`)
-      .join(", ");
-    return `- ${action.name}：${action.description}${params ? `｜参数：${params}` : "｜无参数"}`;
+      .map(([name, param]) => `${name}${param.required ? '（必填）' : ''}`)
+      .join(', ');
+    return `- ${action.name}：${action.description}${params ? `｜参数：${params}` : '｜无参数'}`;
   });
-  const description = `${catalog.description}\n可用的动作（kind）：\n${lines.join("\n")}`;
+  const description = `${catalog.description}\n可用的动作（kind）：\n${lines.join('\n')}`;
   if (description.length > PAGE_CATALOG_LIMITS.maxToolDescriptionLength)
-    throw new Error("INVALID_PAGE_CATALOG");
+    throw new Error('INVALID_PAGE_CATALOG');
   return { description, parameters };
 }
 
@@ -515,27 +455,25 @@ function compileElementCatalog(catalog: PageCatalog): {
     (element) =>
       element.editable === true ||
       (element.actions?.length ?? 0) > 0 ||
-      element.role === "collection",
+      element.role === 'collection',
   );
   const readOnly = elements.filter((element) => !interactive.includes(element));
-  const count = (effect: PageElement["effect"]) =>
+  const count = (effect: PageElement['effect']) =>
     elements.filter((element) => element.effect === effect).length;
   const description = [
     catalog.description,
-    "",
+    '',
     // 元素目录**不写进工具说明**：它每次请求都要付一次 token。改成先要目录、按需取。
     `可操作元素 ${interactive.length} 个（可编辑 ${
       elements.filter((element) => element.editable === true).length
     }、可点 ${
       elements.filter((element) => (element.actions?.length ?? 0) > 0).length
-    }、提交类 ${count("submit")}、审批类 ${count("approve")}）；只读元素 ${
-      readOnly.length
-    } 个。`,
-    "元素目录不在说明里：先用 directory=true 取这一屏的 id、名称与当前值（只关心某几行/某字段时带 focus=用户提到的对象或字段名），拿到 id 再用 kind 操作。",
-    "",
-    "规则：invoke 只能执行元素列出的可执行动作；setValue 只能写「可编辑」的 field，或用 collection 一次写它的成员字段；select 只能选可操作元素；后台状态、内部缓存、接口都不在清单里，禁止臆造 id。" +
-      "标了「提交类」「审批类」的元素默认不要动：只有用户这一轮明确要求提交/审批时才调用，并且必须带 confirm=true；页面没标这类元素就说明它不提供该动作，不要找别的办法绕过。",
-  ].join("\n");
+    }、提交类 ${count('submit')}、审批类 ${count('approve')}）；只读元素 ${readOnly.length} 个。`,
+    '元素目录不在说明里：先用 directory=true 取这一屏的 id、名称与当前值（只关心某几行/某字段时带 focus=用户提到的对象或字段名），拿到 id 再用 kind 操作。',
+    '',
+    '规则：invoke 只能执行元素列出的可执行动作；setValue 只能写「可编辑」的 field，或用 collection 一次写它的成员字段；select 只能选可操作元素；后台状态、内部缓存、接口都不在清单里，禁止臆造 id。' +
+      '标了「提交类」「审批类」的元素默认不要动：只有用户这一轮明确要求提交/审批时才调用，并且必须带 confirm=true；页面没标这类元素就说明它不提供该动作，不要找别的办法绕过。',
+  ].join('\n');
   // 长度兜底：宁可截断说明，也不能因为说明太长让工具注册不上。
   const bounded =
     description.length > PAGE_CATALOG_LIMITS.maxToolDescriptionLength
@@ -545,62 +483,62 @@ function compileElementCatalog(catalog: PageCatalog): {
     description: bounded,
     parameters: [
       {
-        name: "kind",
-        type: "string",
+        name: 'kind',
+        type: 'string',
         // kind=directory 与 directory=true 都只请求元素目录，不下发页面动作。
-        enum: [...PAGE_ACTION_VERBS, "directory"],
+        enum: [...PAGE_ACTION_VERBS, 'directory'],
         description:
-          "invoke 执行元素动作；setValue 写可编辑字段；select 选中元素；clear 关浮层/清当前筛选；directory 只取元素目录（等价于传 directory=true）。只要目录时也可以不传 kind。",
+          'invoke 执行元素动作；setValue 写可编辑字段；select 选中元素；clear 关浮层/清当前筛选；directory 只取元素目录（等价于传 directory=true）。只要目录时也可以不传 kind。',
       },
       {
-        name: "target",
-        type: "string",
-        description: "单个元素 id（invoke 必填；setValue 也可以只写一个）",
+        name: 'target',
+        type: 'string',
+        description: '单个元素 id（invoke 必填；setValue 也可以只写一个）',
       },
       {
-        name: "targets",
-        type: "array",
-        items: { type: "string" },
-        description: "多个元素 id（select 必填；setValue 批量改字段时用）",
+        name: 'targets',
+        type: 'array',
+        items: { type: 'string' },
+        description: '多个元素 id（select 必填；setValue 批量改字段时用）',
       },
       {
-        name: "action",
-        type: "string",
-        description: "invoke 使用：元素列出的可执行动作名",
+        name: 'action',
+        type: 'string',
+        description: 'invoke 使用：元素列出的可执行动作名',
       },
       {
-        name: "value",
-        type: "string",
-        description: "setValue 使用：要写入的值",
+        name: 'value',
+        type: 'string',
+        description: 'setValue 使用：要写入的值',
       },
       {
-        name: catalog.reasonField ?? "reason",
-        type: "string",
-        description: "可选：一句话说明为什么改这一屏。",
+        name: catalog.reasonField ?? 'reason',
+        type: 'string',
+        description: '可选：一句话说明为什么改这一屏。',
       },
       {
-        name: "confirm",
-        type: "boolean",
+        name: 'confirm',
+        type: 'boolean',
         description:
-          "提交类/审批类元素必填 true，表示用户这一轮明确要求提交或审批；其它情况不要传。",
+          '提交类/审批类元素必填 true，表示用户这一轮明确要求提交或审批；其它情况不要传。',
       },
       {
-        name: "directory",
-        type: "boolean",
+        name: 'directory',
+        type: 'boolean',
         description:
-          "true 时只返回这一屏的元素目录（id、名称、当前值、能不能改），不下发任何操作。",
+          'true 时只返回这一屏的元素目录（id、名称、当前值、能不能改），不下发任何操作。',
       },
       {
-        name: "focus",
-        type: "string",
+        name: 'focus',
+        type: 'string',
         description:
-          "只看与这些关键词相关的行或字段（用户提到的对象名、编码、字段名）；不带 focus 默认只回摘要。",
+          '只看与这些关键词相关的行或字段（用户提到的对象名、编码、字段名）；不带 focus 默认只回摘要。',
       },
       {
-        name: "values",
-        type: "boolean",
+        name: 'values',
+        type: 'boolean',
         description:
-          "directory=true 时带上：除字段索引外再回当前值与可选项（默认不带，省上下文）。",
+          'directory=true 时带上：除字段索引外再回当前值与可选项（默认不带，省上下文）。',
       },
     ],
   };
@@ -642,13 +580,13 @@ export function elementDirectory(
   const interactive = (element: PageElement) =>
     element.editable === true ||
     (element.actions?.length ?? 0) > 0 ||
-    element.role === "collection";
+    element.role === 'collection';
   const matched = elements.filter(
     (element) =>
       tokens.length === 0 ||
       tokens.some((token) =>
         [element.id, element.label, element.value, ...(element.options ?? [])]
-          .filter((value): value is string => typeof value === "string")
+          .filter((value): value is string => typeof value === 'string')
           .some((value) => value.toLowerCase().includes(token)),
       ),
   );
@@ -666,8 +604,8 @@ export function elementDirectory(
       total: elements.length,
       interactive: elements.filter(interactive).length,
       readOnly: elements.filter((element) => !interactive(element)).length,
-      submit: elements.filter((element) => element.effect === "submit").length,
-      approve: elements.filter((element) => element.effect === "approve").length,
+      submit: elements.filter((element) => element.effect === 'submit').length,
+      approve: elements.filter((element) => element.effect === 'approve').length,
     },
     entries: kept.map((element) => ({
       id: element.id,
@@ -676,9 +614,7 @@ export function elementDirectory(
       ...(!withValues || element.value === undefined
         ? {}
         : { value: truncateText(element.value, 60) }),
-      ...(!withValues || !element.options?.length
-        ? {}
-        : { options: element.options.slice(0, 20) }),
+      ...(!withValues || !element.options?.length ? {} : { options: element.options.slice(0, 20) }),
       ...(element.editable === true ? { editable: true } : {}),
       ...(element.actions?.length ? { actions: element.actions } : {}),
       ...(element.effect === undefined ? {} : { effect: element.effect }),
@@ -686,11 +622,11 @@ export function elementDirectory(
     omitted: ordered.length - kept.length,
     note:
       (tokens.length > 0
-        ? `已按 focus「${tokens.join(" ")}」收窄目录`
-        : "只回了目录，没有下发任何操作") +
+        ? `已按 focus「${tokens.join(' ')}」收窄目录`
+        : '只回了目录，没有下发任何操作') +
       (withValues
-        ? "；含当前值与可选项。"
-        : "；默认只给字段索引（id／名称／能不能改），要看当前值或可选项再带 values=true，并尽量配 focus。"),
+        ? '；含当前值与可选项。'
+        : '；默认只给字段索引（id／名称／能不能改），要看当前值或可选项再带 values=true，并尽量配 focus。'),
   };
 }
 
@@ -699,28 +635,26 @@ export function pageActionEffect(
   catalog: PageCatalog,
   args: Record<string, unknown>,
 ): PageElementEffect {
-  if (!catalog.elements) return "draft";
+  if (!catalog.elements) return 'draft';
   const byId = new Map(catalog.elements.map((element) => [element.id, element]));
   const targets = [
-    ...(typeof args.target === "string" ? [args.target] : []),
+    ...(typeof args.target === 'string' ? [args.target] : []),
     ...(Array.isArray(args.targets)
-      ? (args.targets as unknown[]).filter(
-          (value): value is string => typeof value === "string",
-        )
+      ? (args.targets as unknown[]).filter((value): value is string => typeof value === 'string')
       : []),
   ];
-  let effect: PageElementEffect = targets.length ? "view" : "draft";
+  let effect: PageElementEffect = targets.length ? 'view' : 'draft';
   const visited = new Set<string>();
   for (const id of targets) {
     if (visited.has(id)) continue;
     visited.add(id);
     const element = byId.get(id);
-    if (args.kind === "setValue" && element?.role === "collection")
+    if (args.kind === 'setValue' && element?.role === 'collection')
       targets.push(...(element.members ?? []));
-    const declared = element?.effect ?? "draft";
-    if (declared === "approve") return "approve";
-    if (declared === "submit") effect = "submit";
-    else if (declared === "draft" && effect === "view") effect = "draft";
+    const declared = element?.effect ?? 'draft';
+    if (declared === 'approve') return 'approve';
+    if (declared === 'submit') effect = 'submit';
+    else if (declared === 'draft' && effect === 'view') effect = 'draft';
   }
   return effect;
 }
@@ -735,49 +669,38 @@ export function resolvePageAction(
 ): string | null {
   if (!catalog.elements) return null; // 旧形状由业务自己校验
   const byId = new Map(catalog.elements.map((element) => [element.id, element]));
-  const kind = typeof args.kind === "string" ? args.kind : "";
-  if (!(PAGE_ACTION_VERBS as readonly string[]).includes(kind))
-    return "INVALID_PAGE_ACTION";
-  const one = typeof args.target === "string" ? args.target : undefined;
+  const kind = typeof args.kind === 'string' ? args.kind : '';
+  if (!(PAGE_ACTION_VERBS as readonly string[]).includes(kind)) return 'INVALID_PAGE_ACTION';
+  const one = typeof args.target === 'string' ? args.target : undefined;
   const many = Array.isArray(args.targets)
-    ? (args.targets as unknown[]).filter(
-        (value): value is string => typeof value === "string",
-      )
+    ? (args.targets as unknown[]).filter((value): value is string => typeof value === 'string')
     : [];
   const targets = [...(one === undefined ? [] : [one]), ...many];
-  if (kind === "clear") return null;
-  if (targets.length === 0) return "MISSING_TARGET";
+  if (kind === 'clear') return null;
+  if (targets.length === 0) return 'MISSING_TARGET';
   for (const id of targets) {
     const element = byId.get(id);
-    if (!element) return "UNKNOWN_ELEMENT";
-    if (kind === "setValue") {
-      if (element.role === "collection") continue;
-      if (
-        (element.role !== "field" && element.role !== "control") ||
-        element.editable !== true
-      )
-        return "ELEMENT_NOT_EDITABLE";
+    if (!element) return 'UNKNOWN_ELEMENT';
+    if (kind === 'setValue') {
+      if (element.role === 'collection') continue;
+      if ((element.role !== 'field' && element.role !== 'control') || element.editable !== true)
+        return 'ELEMENT_NOT_EDITABLE';
       continue;
     }
-    if (kind === "invoke") {
-      const action = typeof args.action === "string" ? args.action : "";
-      if (!element.actions?.includes(action)) return "ACTION_NOT_ALLOWED";
+    if (kind === 'invoke') {
+      const action = typeof args.action === 'string' ? args.action : '';
+      if (!element.actions?.includes(action)) return 'ACTION_NOT_ALLOWED';
       // 提交/审批类动作必须由用户明确要求：缺 confirm 一律不下发。
-      if (
-        (element.effect === "submit" || element.effect === "approve") &&
-        args.confirm !== true
-      )
-        return "CONFIRMATION_REQUIRED";
+      if ((element.effect === 'submit' || element.effect === 'approve') && args.confirm !== true)
+        return 'CONFIRMATION_REQUIRED';
       continue;
     }
-    if (kind === "select") {
-      if (!element.actions?.includes("select")) return "ELEMENT_NOT_SELECTABLE";
+    if (kind === 'select') {
+      if (!element.actions?.includes('select')) return 'ELEMENT_NOT_SELECTABLE';
       continue;
     }
   }
-  if (kind === "setValue" && typeof args.value !== "string")
-    return "MISSING_VALUE";
-  if (kind === "invoke" && typeof args.action !== "string")
-    return "MISSING_ACTION";
+  if (kind === 'setValue' && typeof args.value !== 'string') return 'MISSING_VALUE';
+  if (kind === 'invoke' && typeof args.action !== 'string') return 'MISSING_ACTION';
   return null;
 }

@@ -5,9 +5,7 @@
   "version": "0.1.0-ticket24",
   "mode": "mock",
   "html": "index.html",
-  "skills": [
-    "skills/category-plan/SKILL.md"
-  ],
+  "skills": ["skills/category-plan/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "category-plan-prototype",

@@ -11,7 +11,7 @@ import {
   AGUI_EVENT_TOOL_CALL_START,
   type AgUiEvent,
   type AgUiToolMessage,
-} from "./protocol.ts";
+} from './protocol.ts';
 
 export type PageBridgeApplyResult = { applied: boolean; error?: string };
 
@@ -58,9 +58,7 @@ export type PageBridgeClientOptions = {
  * 启动页面桥客户端，返回 dispose。
  * 桥不可用不能影响业务页面本身：所有错误都吞掉并在下一轮重试。
  */
-export function startPageBridgeClient(
-  options: PageBridgeClientOptions,
-): () => void {
+export function startPageBridgeClient(options: PageBridgeClientOptions): () => void {
   if (options.sessionId === null) return () => {};
   const pollMs = options.pollMs ?? 1200;
   const initialDelayMs = options.initialDelayMs ?? 500;
@@ -75,12 +73,9 @@ export function startPageBridgeClient(
   let timer: ReturnType<typeof setTimeout>;
   const closeOnDispose = options.closeOnDispose ?? true;
 
-  const message = (
-    toolCallId: string,
-    result: PageBridgeApplyResult,
-  ): AgUiToolMessage => ({
+  const message = (toolCallId: string, result: PageBridgeApplyResult): AgUiToolMessage => ({
     id: `page-bridge-result-${++counter}`,
-    role: "tool",
+    role: 'tool',
     toolCallId,
     content: JSON.stringify({ toolCallId, applied: result.applied }),
     ...(result.error ? { error: result.error } : {}),
@@ -97,30 +92,24 @@ export function startPageBridgeClient(
     let timedOut = false;
     try {
       return await Promise.race([
-        Promise.resolve(
-          options.apply(
-            args,
-            { toolCallId, toolCallName },
-            controller.signal,
-          ),
-        ),
+        Promise.resolve(options.apply(args, { toolCallId, toolCallName }, controller.signal)),
         new Promise<PageBridgeApplyResult>((resolve) => {
           controller.signal.addEventListener(
-            "abort",
+            'abort',
             () => {
-              if (!timedOut) resolve({ applied: false, error: "APPLY_CANCELLED" });
+              if (!timedOut) resolve({ applied: false, error: 'APPLY_CANCELLED' });
             },
             { once: true },
           );
           timeout = setTimeout(() => {
             timedOut = true;
             controller.abort();
-            resolve({ applied: false, error: "APPLY_TIMEOUT" });
+            resolve({ applied: false, error: 'APPLY_TIMEOUT' });
           }, applyTimeoutMs);
         }),
       ]);
-    } catch (error) {
-      return { applied: false, error: "APPLY_FAILED" };
+    } catch {
+      return { applied: false, error: 'APPLY_FAILED' };
     } finally {
       if (timeout) clearTimeout(timeout);
       activeApplies.delete(toolCallId);
@@ -130,35 +119,29 @@ export function startPageBridgeClient(
   const poll = async (): Promise<void> => {
     const pending = outbox.slice();
     try {
-      const result = await options.request<{ events: AgUiEvent[] }>(
-        options.endpoint,
-        {
-          sessionId: options.sessionId,
-          toolMessages: pending,
-          ...(options.catalog ? { catalog: options.catalog() } : {}),
-          pageSource: "self-report",
-        },
-      );
+      const result = await options.request<{ events: AgUiEvent[] }>(options.endpoint, {
+        sessionId: options.sessionId,
+        toolMessages: pending,
+        ...(options.catalog ? { catalog: options.catalog() } : {}),
+        pageSource: 'self-report',
+      });
       if (stopped) return;
       // A failed response can follow an accepted receipt. Retry the same messages;
       // the Host ignores completed calls, while settled prevents repeating actions.
       outbox.splice(0, pending.length);
       for (const event of result.events ?? []) {
         if (event.type === AGUI_EVENT_TOOL_CALL_START) {
-          buffers.set(event.toolCallId, "");
+          buffers.set(event.toolCallId, '');
           names.set(event.toolCallId, event.toolCallName);
           continue;
         }
         if (event.type === AGUI_EVENT_TOOL_CALL_ARGS) {
-          buffers.set(
-            event.toolCallId,
-            (buffers.get(event.toolCallId) ?? "") + event.delta,
-          );
+          buffers.set(event.toolCallId, (buffers.get(event.toolCallId) ?? '') + event.delta);
           continue;
         }
         if (event.type !== AGUI_EVENT_TOOL_CALL_END) continue;
-        const raw = buffers.get(event.toolCallId) ?? "";
-        const toolCallName = names.get(event.toolCallId) ?? "";
+        const raw = buffers.get(event.toolCallId) ?? '';
+        const toolCallName = names.get(event.toolCallId) ?? '';
         buffers.delete(event.toolCallId);
         names.delete(event.toolCallId);
         if (settled.has(event.toolCallId)) continue;
@@ -167,14 +150,12 @@ export function startPageBridgeClient(
         try {
           args = JSON.parse(raw);
         } catch {
-          outbox.push(message(event.toolCallId, { applied: false, error: "INVALID_TOOL_ARGUMENTS" }));
+          outbox.push(
+            message(event.toolCallId, { applied: false, error: 'INVALID_TOOL_ARGUMENTS' }),
+          );
           continue;
         }
-        const outcome = await runApply(
-          event.toolCallId,
-          toolCallName,
-          args,
-        );
+        const outcome = await runApply(event.toolCallId, toolCallName, args);
         if (stopped) return;
         outbox.push(message(event.toolCallId, outcome));
       }
@@ -193,14 +174,14 @@ export function startPageBridgeClient(
     activeApplies.clear();
     // 最后一件事：把"这个会话没有页面能力"报给宿主。宿主据此立刻注销页面工具，
     // 不必等声明过期。失败就算了：页面已经走了，桥不该影响业务页面本身。
-    if (!closeOnDispose || typeof options.sessionId !== "string") return;
+    if (!closeOnDispose || typeof options.sessionId !== 'string') return;
     try {
       void Promise.resolve(
         options.request(options.endpoint, {
           sessionId: options.sessionId,
           toolMessages: [],
           catalog: null,
-          pageSource: "self-report",
+          pageSource: 'self-report',
         }),
       ).catch(() => {});
     } catch {

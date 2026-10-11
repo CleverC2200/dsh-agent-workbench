@@ -13,8 +13,8 @@ export async function loadDealerSapPrices(
     ok: false,
     data: null,
     _error: {
-      code: "GEA_CAPABILITY_PENDING",
-      message: "SAP 定价尚未接入 GEA 公共能力；价格未知",
+      code: 'GEA_CAPABILITY_PENDING',
+      message: 'SAP 定价尚未接入 GEA 公共能力；价格未知',
       retryable: false,
     },
   };

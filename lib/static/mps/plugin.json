@@ -13,9 +13,7 @@
       "order": 18
     }
   ],
-  "skills": [
-    "skills/inventory-mps/SKILL.md"
-  ],
+  "skills": ["skills/inventory-mps/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "mps-prototype",

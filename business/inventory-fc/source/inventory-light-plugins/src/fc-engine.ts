@@ -1,17 +1,17 @@
-import { forecastCoverage } from "./fc-feedback";
-import { database as sourceDatabase, EMPTY_PLANNING } from "./data.ts";
-import { loadWarehouseCatalog } from "../../fc/src/lib/server/warehouse-catalog.ts";
-import { readWarehouseFacts } from "./warehouse-input";
-import { loadBaseResourceSnapshot } from "../../fc/src/lib/server/base-resources.ts";
-import { projectWarehousePage } from "../../fc/src/lib/workbench-page.ts";
-import { summarizeSnapshot } from "../../fc/src/lib/domain.ts";
+import { forecastCoverage } from './fc-feedback';
+import { database as sourceDatabase, EMPTY_PLANNING } from './data.ts';
+import { loadWarehouseCatalog } from '../../fc/src/lib/server/warehouse-catalog.ts';
+import { readWarehouseFacts } from './warehouse-input';
+import { loadBaseResourceSnapshot } from '../../fc/src/lib/server/base-resources.ts';
+import { projectWarehousePage } from '../../fc/src/lib/workbench-page.ts';
+import { summarizeSnapshot } from '../../fc/src/lib/domain.ts';
 import {
   buildPlanTemplateRows,
   parseImportedPlans,
   applyBusinessPlanning,
-} from "../../fc/src/lib/planning.ts";
-import { LocalPlanning } from "./local-planning.ts";
-import {createFcDatabase} from "./fc-transfer.ts";
+} from '../../fc/src/lib/planning.ts';
+import { LocalPlanning } from './local-planning.ts';
+import { createFcDatabase } from './fc-transfer.ts';
 const database = createFcDatabase(sourceDatabase);
 const previews = new LocalPlanning();
 const facts = new Map<string, Promise<any>>();
@@ -39,7 +39,7 @@ export async function applyLocalPreview(input: any) {
   previews.update(warehouse, input);
   return {
     previewApplied: true,
-    status: "local-only",
+    status: 'local-only',
     warehouseId: warehouse.id,
   };
 }
@@ -60,10 +60,10 @@ export const load = async ({ warehouseId }: any) => {
     ...result,
     metrics: { ...result.metrics, forecastTurnoverDays: coverage.value },
     forecastCoverage: coverage,
-    dataSource: "GEA SQL data_service 分仓库存标准表",
+    dataSource: 'GEA SQL data_service 分仓库存标准表',
     localPreview: preview
       ? {
-          status: "local-only",
+          status: 'local-only',
           revision: preview.revision,
           importCount: preview.imports.length,
           ruleCount: preview.rules.length,
@@ -86,5 +86,5 @@ export {
 
 export { database };
 
-export {loadReplenishmentDetail} from "../../fc/src/lib/server/replenishment-detail.ts";
-export {mergeDmsAdjustments} from "../../fc/src/lib/dms-export.ts";
+export { loadReplenishmentDetail } from '../../fc/src/lib/server/replenishment-detail.ts';
+export { mergeDmsAdjustments } from '../../fc/src/lib/dms-export.ts';

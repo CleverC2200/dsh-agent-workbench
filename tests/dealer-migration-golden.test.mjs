@@ -1,94 +1,87 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { build } from "esbuild";
-import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
-import { resolve } from "node:path";
-import { createRequire } from "node:module";
-const fixed = "67e1007aa400a8a9c65c132f144dabd5168a49df";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
+const fixed = '67e1007aa400a8a9c65c132f144dabd5168a49df';
 async function engine(source) {
   const result = await build({
     stdin: {
       contents: `export {dealerOverviewFacts} from '${source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-overview-facts' : source + '/dealer/web/src/lib/dealer-overview-facts.ts'}';export {suggestedStockQuantity} from '${source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-recommendation' : source + '/dealer/web/src/lib/dealer-demo-live-data.ts'}';export {dealerWorkbenchSql} from '${source}/dealer/web/src/lib/dealer-workbench-sql.ts';export {makeDraft,draftProblems} from '${source}/inventory-light-plugins/src/dealer-draft.ts';export {applicablePolicies,orderTotals} from '${source.endsWith('/source') && source.includes('business/inventory-dealer') ? 'dsh-agent-manage/inventory-compute/dealer-order' : source + '/inventory-light-plugins/src/dealer-order.ts'}';`,
       resolveDir: process.cwd(),
-      loader: "ts",
+      loader: 'ts',
     },
     bundle: true,
     write: false,
-    format: "cjs",
-    platform: "node",
-    define: { "process.env": "{}" },
+    format: 'cjs',
+    platform: 'node',
+    define: { 'process.env': '{}' },
     plugins: [
       {
-        name: "read-only-source",
+        name: 'read-only-source',
         setup(api) {
           api.onResolve({ filter: /^server-only$/ }, () => ({
-            path: "empty",
-            namespace: "empty",
+            path: 'empty',
+            namespace: 'empty',
           }));
-          api.onLoad({ filter: /.*/, namespace: "empty" }, () => ({
-            contents: "export {};",
+          api.onLoad({ filter: /.*/, namespace: 'empty' }, () => ({
+            contents: 'export {};',
           }));
-          api.onResolve(
-            { filter: /(gea-sql-client|dealer-direct-sql-client)$/ },
-            () => ({
-              path: resolve(source, "inventory-light-plugins/src/data.ts"),
-            }),
-          );
+          api.onResolve({ filter: /(gea-sql-client|dealer-direct-sql-client)$/ }, () => ({
+            path: resolve(source, 'inventory-light-plugins/src/data.ts'),
+          }));
           api.onResolve({ filter: /dealer-sap-pricing$/ }, () => ({
-            path: resolve(
-              source,
-              "inventory-light-plugins/src/platform-pending.ts",
-            ),
+            path: resolve(source, 'inventory-light-plugins/src/platform-pending.ts'),
           }));
           api.onResolve({ filter: /^@\// }, (args) =>
-            api.resolve(resolve(source, "dealer/web/src", args.path.slice(2)), {
+            api.resolve(resolve(source, 'dealer/web/src', args.path.slice(2)), {
               kind: args.kind,
               resolveDir: source,
             }),
           );
           api.onResolve({ filter: /channel\.js$/ }, () => ({
-            path: "channel",
-            namespace: "channel",
+            path: 'channel',
+            namespace: 'channel',
           }));
-          api.onLoad({ filter: /.*/, namespace: "channel" }, () => ({
-            contents:
-              'export const call=()=>{throw Error("GOLDEN_TEST_MUST_NOT_READ_BUSINESS");};',
+          api.onLoad({ filter: /.*/, namespace: 'channel' }, () => ({
+            contents: 'export const call=()=>{throw Error("GOLDEN_TEST_MUST_NOT_READ_BUSINESS");};',
           }));
         },
       },
     ],
   });
   const mod = { exports: {} };
-  new Function("require", "module", "exports", result.outputFiles[0].text)(
+  new Function('require', 'module', 'exports', result.outputFiles[0].text)(
     createRequire(import.meta.url),
     mod,
     mod.exports,
   );
   return mod.exports;
 }
-test("migration retains fixed-source metrics, SQL scope, recommendation and local-draft rules", async (t) => {
-  await mkdir(".runtime", { recursive: true });
-  const temporary = await mkdtemp(resolve(".runtime/dealer-golden-")),
-    oldRepo = resolve("../../../../dsh-agent-dealer-plugin");
+test('migration retains fixed-source metrics, SQL scope, recommendation and local-draft rules', async (t) => {
+  await mkdir('.runtime', { recursive: true });
+  const temporary = await mkdtemp(resolve('.runtime/dealer-golden-'));
   t.after(() => rm(temporary, { recursive: true, force: true }));
-  const files = execFileSync(
-    "git",
-    ["ls-tree", "-r", "--name-only", fixed, "source"],
-    { cwd: oldRepo, encoding: "utf8" },
-  )
-    .split("\n")
-    .filter((f) => f && !f.includes("/node_modules") && !f.includes("/build/"));
+  assert.ok(
+    process.env.WORKBENCH_DEALER_HISTORY_ROOT,
+    'DEALER_HISTORY_REQUIRED: explicit read-only original Git source',
+  );
+  const oldRepo = resolve(process.env.WORKBENCH_DEALER_HISTORY_ROOT);
+  const files = execFileSync('git', ['ls-tree', '-r', '--name-only', fixed, 'source'], {
+    cwd: oldRepo,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter((f) => f && !f.includes('/node_modules') && !f.includes('/build/'));
   for (const file of files) {
     const target = resolve(temporary, file);
-    await mkdir(resolve(target, ".."), { recursive: true });
-    await writeFile(
-      target,
-      execFileSync("git", ["show", fixed + ":" + file], { cwd: oldRepo }),
-    );
+    await mkdir(resolve(target, '..'), { recursive: true });
+    await writeFile(target, execFileSync('git', ['show', fixed + ':' + file], { cwd: oldRepo }));
   }
-  const before = await engine(resolve(temporary, "source")),
-    after = await engine(resolve("business/inventory-dealer/source"));
+  const before = await engine(resolve(temporary, 'source')),
+    after = await engine(resolve('business/inventory-dealer/source'));
   const plan = {
     inventory: 60,
     inTransit: 12,
@@ -118,10 +111,7 @@ test("migration retains fixed-source metrics, SQL scope, recommendation and loca
     [plan, { ...daily, stockQtyComplete: false, stockAmountCoverage: 0 }],
     [null, null],
   ])
-    assert.deepEqual(
-      after.dealerOverviewFacts(p, d),
-      before.dealerOverviewFacts(p, d),
-    );
+    assert.deepEqual(after.dealerOverviewFacts(p, d), before.dealerOverviewFacts(p, d));
   assert.equal(after.dealerOverviewFacts(plan, daily).averageCover, 30);
   assert.equal(after.dealerOverviewFacts(null, null).inventory, null);
   for (const values of [
@@ -131,19 +121,16 @@ test("migration retains fixed-source metrics, SQL scope, recommendation and loca
     [100, -1, 2],
     [100, 50, null],
   ])
-    assert.equal(
-      after.suggestedStockQuantity(...values),
-      before.suggestedStockQuantity(...values),
-    );
+    assert.equal(after.suggestedStockQuantity(...values), before.suggestedStockQuantity(...values));
   assert.equal(after.suggestedStockQuantity(100, 60, 12), 28);
   for (const [name, args] of [
-    ["latestSnapshot", [[]]],
-    ["latestSnapshot", [["customer-A"]]],
-    ["latestInventoryDailySnapshot", [["customer-A"]]],
-    ["inventoryDailySummary", ["2026-09-30", ["customer-A"]]],
+    ['latestSnapshot', [[]]],
+    ['latestSnapshot', [['customer-A']]],
+    ['latestInventoryDailySnapshot', [['customer-A']]],
+    ['inventoryDailySummary', ['2026-09-30', ['customer-A']]],
     [
-      "inventoryDailyDetails",
-      ["2026-09-30", [{ customerCode: "customer-A", materialCode: "sku-A" }]],
+      'inventoryDailyDetails',
+      ['2026-09-30', [{ customerCode: 'customer-A', materialCode: 'sku-A' }]],
     ],
   ])
     assert.deepEqual(
@@ -152,34 +139,29 @@ test("migration retains fixed-source metrics, SQL scope, recommendation and loca
       name,
     );
   const row = {
-    code: "sku-A",
-    sku: "汤圆",
-    dealerCode: "customer-A",
+    code: 'sku-A',
+    sku: '汤圆',
+    dealerCode: 'customer-A',
     suggestedStockQty: 28,
-    liveReason: "fixed input",
+    liveReason: 'fixed input',
   };
-  const now = new Date("2026-10-01T00:00:00Z");
+  const now = new Date('2026-10-01T00:00:00Z');
   assert.deepEqual(
-    after.makeDraft(row, "customer-A", false, now),
-    before.makeDraft(row, "customer-A", false, now),
+    after.makeDraft(row, 'customer-A', false, now),
+    before.makeDraft(row, 'customer-A', false, now),
   );
-  assert.throws(() => after.makeDraft(row, "customer-B", false, now));
+  assert.throws(() => after.makeDraft(row, 'customer-B', false, now));
   assert.throws(() =>
-    after.makeDraft(
-      { ...row, suggestedStockQty: null },
-      "customer-A",
-      false,
-      now,
-    ),
+    after.makeDraft({ ...row, suggestedStockQty: null }, 'customer-A', false, now),
   );
   const drafts = [
     {
-      customerCode: "customer-A",
-      code: "sku-A",
+      customerCode: 'customer-A',
+      code: 'sku-A',
       quantity: 20,
       suggestedQuantity: 28,
-      source: "suggestion",
-      reason: "人工复核",
+      source: 'suggestion',
+      reason: '人工复核',
       unitPrice: null,
     },
   ];
@@ -188,46 +170,38 @@ test("migration retains fixed-source metrics, SQL scope, recommendation and loca
   assert.equal(after.orderTotals(drafts).amount, null);
   const policies = [
     {
-      customerCode: "customer-A",
-      verifiedPickupCodes: ["pickup-A"],
-      scopes: [{ productCode: "sku-A", pickupCode: "pickup-A" }],
+      customerCode: 'customer-A',
+      verifiedPickupCodes: ['pickup-A'],
+      scopes: [{ productCode: 'sku-A', pickupCode: 'pickup-A' }],
     },
     {
-      customerCode: "customer-B",
-      verifiedPickupCodes: ["pickup-A"],
-      scopes: [{ productCode: "sku-A", pickupCode: "pickup-A" }],
+      customerCode: 'customer-B',
+      verifiedPickupCodes: ['pickup-A'],
+      scopes: [{ productCode: 'sku-A', pickupCode: 'pickup-A' }],
     },
   ];
   assert.deepEqual(
-    after.applicablePolicies(policies, "customer-A", "sku-A", "pickup-A", now),
-    before.applicablePolicies(policies, "customer-A", "sku-A", "pickup-A", now),
+    after.applicablePolicies(policies, 'customer-A', 'sku-A', 'pickup-A', now),
+    before.applicablePolicies(policies, 'customer-A', 'sku-A', 'pickup-A', now),
   );
-  assert.equal(
-    after.applicablePolicies(policies, "customer-A", "sku-A", "wrong", now)
-      .length,
-    0,
-  );
+  assert.equal(after.applicablePolicies(policies, 'customer-A', 'sku-A', 'wrong', now).length, 0);
   for (const file of [
-    "exceptions",
-    "filter-labels",
-    "fuse-rules",
-    "metric-cards",
-    "report-templates",
-    "split-params",
-    "stock-health",
+    'exceptions',
+    'filter-labels',
+    'fuse-rules',
+    'metric-cards',
+    'report-templates',
+    'split-params',
+    'stock-health',
   ])
     assert.equal(
       await readFile(
-        resolve(
-          "../dsh-agent-manage/src/inventory-compute/dealer-config/" +
-            file +
-            ".json",
-        ),
-        "utf8",
+        resolve('../dsh-agent-manage/src/inventory-compute/dealer-config/' + file + '.json'),
+        'utf8',
       ),
       await readFile(
-        resolve(temporary, "source/dealer/config/biz-rules/" + file + ".json"),
-        "utf8",
+        resolve(temporary, 'source/dealer/config/biz-rules/' + file + '.json'),
+        'utf8',
       ),
       file,
     );

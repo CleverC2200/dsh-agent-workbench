@@ -1,9 +1,7 @@
 {
   "surface": "gea-html-plan-regional",
   "protocol": "self-report",
-  "pageIds": [
-    "gea-regional-plan"
-  ],
+  "pageIds": ["gea-regional-plan"],
   "consumerCode": "regional-plan-prototype",
   "maxEffect": "view"
 }

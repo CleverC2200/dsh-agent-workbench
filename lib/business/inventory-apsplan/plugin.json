@@ -4,9 +4,7 @@
   "name": "产销协同工作台",
   "version": "0.2.0-preview.9-split.17",
   "html": "index.html",
-  "skills": [
-    "skills/aps/SKILL.md"
-  ],
+  "skills": ["skills/aps/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "aps",
@@ -14,11 +12,7 @@
     "contract": "gea-html-v2"
   },
   "status": "integration-preview",
-  "replaces": [
-    "inventory-apsboard",
-    "inventory-apsdemand",
-    "inventory-apsdelivery"
-  ],
+  "replaces": ["inventory-apsboard", "inventory-apsdemand", "inventory-apsdelivery"],
   "declarations": {
     "page": "page.json",
     "capability": "capability.json"

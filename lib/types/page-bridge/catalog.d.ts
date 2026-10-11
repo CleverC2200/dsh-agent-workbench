@@ -8,7 +8,7 @@
  * 约束（同样与业务无关）：动作数量、命名、说明与参数长度都有上限；
  * 参数只允许标量，避免把复杂结构塞进模型工具。
  */
-export type PageActionScalarType = "string" | "integer" | "number" | "boolean";
+export type PageActionScalarType = 'string' | 'integer' | 'number' | 'boolean';
 export type PageActionScalar = {
     type: PageActionScalarType;
     required?: boolean;
@@ -16,7 +16,7 @@ export type PageActionScalar = {
     enum?: readonly string[];
 };
 export type PageActionParam = PageActionScalar | {
-    type: "array";
+    type: 'array';
     required?: boolean;
     description?: string;
     items: {
@@ -24,7 +24,7 @@ export type PageActionParam = PageActionScalar | {
         description?: string;
     };
 } | {
-    type: "object";
+    type: 'object';
     required?: boolean;
     description?: string;
     properties: Record<string, PageActionScalar>;
@@ -38,7 +38,7 @@ export type PageAction = {
      * 动作影响面：view 只改"这一屏怎么看"（默认）；data 会改业务数据。
      * 只有宿主明确放开时，data 动作才会被暴露给模型。
      */
-    scope?: "view" | "data";
+    scope?: 'view' | 'data';
     /** 这个动作接受的参数。 */
     params?: Record<string, PageActionParam>;
 };
@@ -62,7 +62,7 @@ export type PageCatalog = {
 /** 通用动词：与页面无关，模型只会这四种操作。 */
 export declare const PAGE_ACTION_VERBS: readonly ["invoke", "setValue", "select", "clear"];
 export type PageActionVerb = (typeof PAGE_ACTION_VERBS)[number];
-export type PageElementRole = "row" | "field" | "control" | "collection";
+export type PageElementRole = 'row' | 'field' | 'control' | 'collection';
 /**
  * 元素的影响等级：view 只改UI视图；draft 修改页面草稿（默认）；submit / approve 会提交或审批，
  * 必须由用户明确要求、且页面当前可点时才允许。

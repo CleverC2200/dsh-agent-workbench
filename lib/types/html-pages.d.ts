@@ -1,4 +1,4 @@
-import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from "./page-runtime.ts";
+import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from './page-runtime.ts';
 export interface HtmlPage {
     id: string;
     name: string;
@@ -27,7 +27,7 @@ export declare class HtmlPages extends PageRuntime implements WorkbenchPages {
     private readonly css;
     private readonly picker;
     private readonly packageDeclarations;
-    constructor(ctx: import("@deepseek-ai/cordis").Context, css: string, picker: () => Promise<string>);
+    constructor(ctx: import('@deepseek-ai/cordis').Context, css: string, picker: () => Promise<string>);
     registerHtml(roots: readonly string[]): Promise<readonly HtmlPackage[]>;
     list(): HtmlPage[];
     packages(): readonly HtmlPackage[];

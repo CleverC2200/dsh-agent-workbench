@@ -4,9 +4,7 @@
   "name": "经销商库存",
   "version": "0.2.6-preview.6-split.16",
   "html": "index.html",
-  "skills": [
-    "skills/dealer/SKILL.md"
-  ],
+  "skills": ["skills/dealer/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "dealer-inventory-replenishment",

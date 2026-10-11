@@ -1,7 +1,6 @@
 /* Shared paint tokens; geometry remains owned by each business page. */
 :root {
-  --ui-font:
-    "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", Arial, sans-serif;
+  --ui-font: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   --ui-ink: #20232a;
   --ui-secondary: #555d68;
   --ui-muted: #858c96;
@@ -150,8 +149,8 @@ select:focus-visible,
 textarea:focus-visible {
   border-color: var(--ui-accent);
 }
-input[type="checkbox"],
-input[type="radio"] {
+input[type='checkbox'],
+input[type='radio'] {
   accent-color: var(--ui-accent);
 }
 table {

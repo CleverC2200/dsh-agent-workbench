@@ -9,11 +9,7 @@
     "allowJs": true,
     "skipLibCheck": true,
     "jsx": "react-jsx",
-    "lib": [
-      "ESNext",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "declaration": true,
     "emitDeclarationOnly": true,
     "rootDir": "src",
@@ -28,16 +24,9 @@
       "@deepseek-ai/dsh-client-ui-chat/src/client/chat/MessageIconActions.tsx": [
         "../../official-latest-standard/packages/client/ui-chat/lib/types/client/chat/MessageIconActions.d.ts"
       ],
-      "dsh-agent-manage/inventory-compute/*": [
-        "../dsh-agent-manage/src/inventory-compute/*.ts"
-      ],
-      "dsh-agent-manage/aps-compute/*": [
-        "../dsh-agent-manage/src/aps-compute/*.ts"
-      ]
+      "dsh-agent-manage/inventory-compute/*": ["../dsh-agent-manage/src/inventory-compute/*.ts"],
+      "dsh-agent-manage/aps-compute/*": ["../dsh-agent-manage/src/aps-compute/*.ts"]
     }
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

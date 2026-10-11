@@ -4,9 +4,9 @@ import {
   currentSessionId,
   reportElements,
   action,
-} from "../../../business/shared/channel.js";
-import { createPageViewState } from "../../../business/shared/view-state.js";
-export const mpsView = createPageViewState("plan-category-production");
+} from '../../../business/shared/channel.js';
+import { createPageViewState } from '../../../business/shared/view-state.js';
+export const mpsView = createPageViewState('plan-category-production');
 const parts = new Map();
 let restored = false,
   restoration = 0;
@@ -20,9 +20,9 @@ let connected = false,
 let latest;
 let lifetime = new AbortController();
 const notice =
-  "模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。";
+  '模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。';
 mpsView.subscribe((_snapshot, event) => {
-  if (event === "released") {
+  if (event === 'released') {
     cancelPublication();
     restored = false;
     return;
@@ -45,22 +45,12 @@ async function flush() {
       try {
         // Await the previous delivery before sending the latest authored context.
         await publish(next.snapshot, { signal });
-        if (
-          active &&
-          !signal.aborted &&
-          next.epoch === epoch &&
-          next.revision === revision
-        )
-          document.getElementById("mps-context-status").textContent = "";
+        if (active && !signal.aborted && next.epoch === epoch && next.revision === revision)
+          document.getElementById('mps-context-status').textContent = '';
       } catch (error) {
-        if (
-          active &&
-          !signal.aborted &&
-          next.epoch === epoch &&
-          next.revision === revision
-        )
-          document.getElementById("mps-context-status").textContent =
-            "页面上下文连接失败：" + error.message;
+        if (active && !signal.aborted && next.epoch === epoch && next.revision === revision)
+          document.getElementById('mps-context-status').textContent =
+            '页面上下文连接失败：' + error.message;
       }
     }
   } finally {
@@ -78,7 +68,7 @@ function schedule() {
       !active ||
       !restored ||
       !session ||
-      !parts.has("navigation") ||
+      !parts.has('navigation') ||
       [...parts.values()].some((part) => part.restoration !== restoration)
     )
       return;
@@ -87,12 +77,10 @@ function schedule() {
       epoch,
       session,
       snapshot: {
-        page: "主生产计划(MPS) · 模拟原型",
+        page: '主生产计划(MPS) · 模拟原型',
         mock: true,
         notice,
-        parts: Object.fromEntries(
-          [...parts].map(([key, part]) => [key, part.value]),
-        ),
+        parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
       },
     };
     void flush();
@@ -122,10 +110,10 @@ export function useMpsPart(react, key, value, label) {
     };
     parts.set(key, part);
     const stop =
-      key === "navigation"
+      key === 'navigation'
         ? () => {}
-        : reportElements("mps-part:" + key, [
-            { id: "step:" + key, role: "collection", label, editable: false },
+        : reportElements('mps-part:' + key, [
+            { id: 'step:' + key, role: 'collection', label, editable: false },
           ]);
     part.stop = stop;
     schedule();
@@ -138,30 +126,25 @@ export function useMpsPart(react, key, value, label) {
   }, [key, serialized, restoreRevision]);
 }
 export function useMpsNavigation(react, state, select) {
-  useMpsPart(react, "navigation", state);
+  useMpsPart(react, 'navigation', state);
   react.useEffect(
     () =>
       reportElements(
-        "mps-tabs",
+        'mps-tabs',
         state.tabs.map((tab) => ({
-          id: "tab:" + tab.key,
-          role: "control",
+          id: 'tab:' + tab.key,
+          role: 'control',
           label: tab.label,
-          value: state.tab === tab.key ? "当前步骤" : "未选中",
-          actions: ["invoke"],
-          effect: "view",
+          value: state.tab === tab.key ? '当前步骤' : '未选中',
+          actions: ['invoke'],
+          effect: 'view',
         })),
         (args, signal) => {
           signal.throwIfAborted();
-          if (
-            args.kind !== "invoke" ||
-            (args.action && args.action !== "invoke")
-          )
-            throw Error("ACTION_NOT_ALLOWED");
-          const tab = state.tabs.find(
-            (tab) => "tab:" + tab.key === args.target,
-          );
-          if (!tab) throw Error("ELEMENT_GONE");
+          if (args.kind !== 'invoke' || (args.action && args.action !== 'invoke'))
+            throw Error('ACTION_NOT_ALLOWED');
+          const tab = state.tabs.find((tab) => 'tab:' + tab.key === args.target);
+          if (!tab) throw Error('ELEMENT_GONE');
           select(tab.key);
         },
       ),
@@ -172,31 +155,31 @@ void ready.then(() => {
   connected = true;
   schedule();
 });
-const refreshLabel = "刷新MPS模拟原型，恢复当前Session界面意图并保留未发送文字";
-action("refresh", refreshLabel, () => window.location.reload());
+const refreshLabel = '刷新MPS模拟原型，恢复当前Session界面意图并保留未发送文字';
+action('refresh', refreshLabel, () => window.location.reload());
 reportElements(
-  "refresh",
+  'refresh',
   [
     {
-      id: "control:refresh",
-      role: "control",
+      id: 'control:refresh',
+      role: 'control',
       label: refreshLabel,
-      actions: ["invoke"],
-      effect: "view",
+      actions: ['invoke'],
+      effect: 'view',
     },
   ],
   (args, signal) => {
     signal.throwIfAborted();
-    if (args.kind !== "invoke" || (args.action && args.action !== "invoke"))
-      throw Error("ACTION_NOT_ALLOWED");
+    if (args.kind !== 'invoke' || (args.action && args.action !== 'invoke'))
+      throw Error('ACTION_NOT_ALLOWED');
     window.location.reload();
   },
 );
-window.addEventListener("gea-session-changing", () => {
+window.addEventListener('gea-session-changing', () => {
   cancelPublication();
   restored = false;
 });
-window.addEventListener("gea-session-changed", () => {
+window.addEventListener('gea-session-changed', () => {
   cancelPublication();
   restored = false;
   for (const part of parts.values()) part.stop();
@@ -205,21 +188,21 @@ window.addEventListener("gea-session-changed", () => {
   // publish only after the authors have committed that restored projection.
   window.parent.postMessage(
     {
-      protocol: "dsh-workbench-view-v1",
-      type: "ready",
-      page: "plan-category-production",
+      protocol: 'dsh-workbench-view-v1',
+      type: 'ready',
+      page: 'plan-category-production',
       version: 1,
     },
-    "*",
+    '*',
   );
 });
-window.addEventListener("gea-identity-changed", () => {
+window.addEventListener('gea-identity-changed', () => {
   active = false;
   connected = false;
   cancelPublication();
   parts.clear();
 });
-window.addEventListener("pagehide", () => {
+window.addEventListener('pagehide', () => {
   active = false;
   connected = false;
   cancelPublication();

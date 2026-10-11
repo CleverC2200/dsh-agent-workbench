@@ -1,4 +1,4 @@
-import type { PageExecutionConnection, WorkbenchPageExecution } from "./frame.ts";
+import type { PageExecutionConnection, WorkbenchPageExecution } from './frame.ts';
 /** One owned HTML port/lease. Switching identity or reference destroys this exact connection. */
 export declare function connectHtmlFrame(frame: HTMLIFrameElement, connection: PageExecutionConnection, execution: WorkbenchPageExecution, theme: () => {
     active: {
