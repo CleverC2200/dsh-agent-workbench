@@ -8,9 +8,7 @@ export function verifyRegisteredCore(
   head,
   gea = resolve(import.meta.dirname, '../../dsh-gea-plugin'),
 ) {
-  const supportedCores = JSON.parse(
-    readFileSync(resolve(gea, 'scripts/supported-cores.json')),
-  );
+  const supportedCores = JSON.parse(readFileSync(resolve(gea, 'scripts/supported-cores.json')));
   if (!supportedCores.some((core) => core.head === head))
     throw Error('CANDIDATE_CORE: registered official Core required');
   return head;
