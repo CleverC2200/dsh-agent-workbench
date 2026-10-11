@@ -64,7 +64,7 @@ async function fixture(t) {
             ['show', '31fec062d584618efbff07d47d7c1de158a0d9e0:static/' + name + '/index.html'],
             { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
           )
-        : await readFile('static/' + name + '/index.html', 'utf8');
+        : await readFile('lib/static/' + name + '/index.html', 'utf8');
     assets[name] = injectPicker(html, picker);
   }
   await page.route('http://127.0.0.1:19480/**', (route) =>
