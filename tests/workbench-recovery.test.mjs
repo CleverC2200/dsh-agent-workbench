@@ -119,6 +119,89 @@ for (const cancel of ['cancelHistory', 'open', 'dispose'])
     assert.equal(owner.getSnapshot().selectedDocument, undefined);
   });
 
+test('a saved Native page without a Session restores its Document without navigating Core', async (t) => {
+  const store = memory();
+  const page = { id: 'gea-proof', kind: 'native', src: '/native', resourceId: 'gea-readonly' };
+  const initial = new WorkbenchController({ panel: () => {}, document: () => {} }, store);
+  t.after(() => initial.dispose());
+  initial.registerFrame(page);
+  await initial.open(page.id);
+  const navigated = [];
+  const restored = new WorkbenchController(
+    { panel: () => {}, document: (id) => navigated.push(id) },
+    store,
+  );
+  t.after(() => restored.dispose());
+  restored.registerFrame(page);
+  assert.equal(restored.getSnapshot().selectedDocument, page);
+  assert.deepEqual(restored.getSnapshot().visitedDocuments, [page]);
+  assert.equal(restored.getSnapshot().selection, undefined);
+  assert.equal(restored.recoveryTarget(), undefined);
+  assert.deepEqual(navigated, [], 'presentation recovery must not open or create a Core Session');
+  assert.deepEqual(store.getSnapshot().selections, []);
+});
+
+test('a saved association without an active interpretation cannot restore an unbound Document', (t) => {
+  const store = memory({
+    version: 2,
+    page: fc.id,
+    selections: [{ page: fc.id, ...first, active: false }],
+    views: [],
+  });
+  const { owner, navigated } = controller(store);
+  t.after(() => owner.dispose());
+  assert.equal(owner.getSnapshot().selectedDocument, undefined);
+  assert.deepEqual(owner.getSnapshot().visitedDocuments, []);
+  assert.equal(owner.recoveryTarget(), undefined);
+  assert.deepEqual(owner.selectionFor(fc.id, first.preset, first.ownerScope), first);
+  assert.deepEqual(navigated, []);
+});
+
+test('unregistering a restored page clears presentation and UI memory before the same id returns', (t) => {
+  const page = { id: 'workbench-html-table', kind: 'html', src: '/sample' };
+  const controls = { version: 1, keyword: '采购计划', stage: '' };
+  const store = memory({
+    version: 2,
+    page: page.id,
+    selections: [],
+    views: [{ page: page.id, scope: 'static', state: controls }],
+  });
+  const navigated = [];
+  const owner = new WorkbenchController(
+    { panel: () => {}, document: (id) => navigated.push(id) },
+    store,
+  );
+  t.after(() => owner.dispose());
+  const remove = owner.registerFrame(page);
+  assert.equal(owner.getSnapshot().selectedDocument, page);
+  assert.deepEqual(owner.readHtmlViewState(page.id), controls);
+  remove();
+  owner.registerFrame({ ...page, src: '/replacement' });
+  assert.equal(owner.getSnapshot().selectedDocument, undefined);
+  assert.deepEqual(owner.getSnapshot().visitedDocuments, []);
+  assert.equal(owner.readHtmlViewState(page.id), undefined);
+  assert.deepEqual(store.getSnapshot(), { version: 2, selections: [], views: [] });
+  assert.deepEqual(navigated, []);
+});
+
+test('an unknown saved page or a non-Document registration cannot create a restored Document', (t) => {
+  for (const registeredId of ['another-page', 'unknown-page']) {
+    const store = memory({ version: 2, page: 'unknown-page', selections: [], views: [] });
+    const navigated = [];
+    const owner = new WorkbenchController(
+      { panel: () => {}, document: (id) => navigated.push(id) },
+      store,
+    );
+    t.after(() => owner.dispose());
+    owner.register({ id: registeredId });
+    owner.registerFrame(fc);
+    assert.equal(owner.getSnapshot().selectedDocument, undefined);
+    assert.deepEqual(owner.getSnapshot().visitedDocuments, []);
+    assert.equal(owner.recoveryTarget(), undefined);
+    assert.deepEqual(navigated, []);
+  }
+});
+
 test('a fresh presentation restores the same Core Session hint without opening or creating a Session', async () => {
   const store = memory();
   const { owner } = controller(store);
@@ -206,6 +289,8 @@ test('obsolete or malformed presentation metadata cannot become a Session associ
   ]) {
     const { owner, navigated } = controller(memory(value));
     assert.equal(owner.recoveryTarget(), undefined);
+    assert.equal(owner.getSnapshot().selectedDocument, undefined);
+    assert.deepEqual(owner.getSnapshot().visitedDocuments, []);
     assert.equal(owner.selectionFor(fc.id, first.preset, first.ownerScope), undefined);
     assert.deepEqual(navigated, []);
   }

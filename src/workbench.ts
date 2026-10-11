@@ -178,6 +178,12 @@ export class WorkbenchController implements AgentWorkbench {
     if (!this.ports.document) throw Error('WORKBENCH_DOCUMENT_UNAVAILABLE');
     const unregister = this.register(page);
     this.documents.set(page.id, page);
+    // A page with no Session association restores presentation only; Core navigation stays untouched.
+    if (this.rememberedPage === page.id && !this.associations.has(page.id)) {
+      this.selectedDocument = page;
+      this.rememberedPage = undefined;
+      this.visited.add(page.id);
+    }
     this.changed();
     return unregister;
   }
