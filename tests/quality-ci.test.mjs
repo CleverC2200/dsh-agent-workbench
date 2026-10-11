@@ -142,3 +142,44 @@ test('input CLI binds each registered Core and rejects unknown commits before pr
     rmSync(fixture, { recursive: true, force: true });
   }
 });
+
+test('hosted checkout refs and public admission use the reviewed immutable peer commits', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'hosted-peer-pins-'));
+  try {
+    const core = '639ed015397290b3745d163aafe02ffee4aa3f84';
+    const created = spawnSync(
+      process.execPath,
+      [
+        'scripts/run-quality-ci.mjs',
+        '--phase',
+        'input',
+        '--root',
+        directory,
+        '--sha',
+        'a'.repeat(40),
+        '--core-head',
+        core,
+      ],
+      { encoding: 'utf8' },
+    );
+    assert.equal(created.status, 0, created.stderr);
+    const input = JSON.parse(readFileSync(join(directory, 'candidate-input.json'), 'utf8'));
+    const expected = {
+      'dsh-agent-manage': '6f08567a6e032b867464b0cfc55c967942ce2b93',
+      'dsh-gea-plugin': '1abc2d208a27d6e3ded541b6741c09ed2eb201ae',
+    };
+    const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
+    for (const [repo, head] of Object.entries(expected)) {
+      assert.equal(input.repositories.find((entry) => entry.repo === repo)?.head, head);
+      const checkoutRefs = [
+        ...workflow.matchAll(
+          new RegExp('repository: CleverC2200/' + repo + '\\s+ref: ([a-f0-9]{40})', 'g'),
+        ),
+      ].map((match) => match[1]);
+      assert.ok(checkoutRefs.length > 0, repo + ' must be checked out');
+      assert.deepEqual([...new Set(checkoutRefs)], [head], repo + ' checkout and input must agree');
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
