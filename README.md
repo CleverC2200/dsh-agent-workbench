@@ -4,12 +4,15 @@ Workbench 贡献页面目录、Native/HTML 业务文档、公共布局、页面�
 
 ## 开发入口
 
-从本项目 `docs/agents/current-development.md` 找本票登记的 checkout，再读 [AGENTS.md](AGENTS.md)。package.json 的 packageManager、scripts 与 exports 是实际工具链、命令和公开导出来源。
+在外层隔离项目读取 `docs/agents/current-development.md`，按本票冻结输入确认 checkout，再读 [AGENTS.md](AGENTS.md)。package.json 的 packageManager、scripts 与 exports 是实际工具链、命令和公开导出来源。
 
 - [本地准备与检查](docs/local-development.md)
 - [候选输入约定](docs/candidate-input.md)
 - [页面、引用与业务桥合同](docs/workbench-contracts.md)
 - [页面恢复与 Core Session 关联](docs/presentation-recovery.md)
+- 修改页面动作、取消、回执或引用时读[页面能力与受控桥](docs/page-interaction.md)
+- 修改作者模块与生成页时读[HTML 作者源](docs/html-authoring.md)
+- 修改具体业务页时读[业务页面导航](docs/business-pages.md)
 - [共享视觉资源](theme/README.md)
 
 ## 当前实现
@@ -28,6 +31,10 @@ Workbench 贡献页面目录、Native/HTML 业务文档、公共布局、页面�
 
 ## 来源与历史
 
-[官方来源](UPSTREAM.md)、[原销售页面来源](src/workbench/original/SOURCE.md)和各资源的 SOURCE 文件保存来源、许可证与非直观业务原因。模拟页面保持 mock 标记与原必要限制。历史失败、用户 Session 和业务 Prompt/Skill 不在信息清理中重写。
+[官方来源](UPSTREAM.md)、[原销售页面来源](src/workbench/original/SOURCE.md)和各资源的 SOURCE 文件保存来源、许可证与非直观业务原因。来源记录中的禁用状态是对应迁入时的观察，当前销售重提范围读[销售页面合同](src/workbench/original/README.md)并核实际 adapter。模拟页面保持 mock 标记与原必要限制。历史失败、用户 Session 和业务 Prompt/Skill 不在信息清理中重写。
 
-[之前的 README](docs/history/README-before-agent-environment-02.md)与[仓级指引](docs/history/AGENTS-before-agent-environment-02.md)保留原字节，仅供追溯。当前合同在上述活跃入口维护，不从旧文档推断运行、授权或发布事实。
+[历史索引](docs/history.md)按问题导航原 README、仓级指引和模拟阶段来源；原记录保留原字节，仅供追溯。当前合同在上述活跃入口维护，不从旧文档推断运行、授权或发布事实。
+
+## 当前风险入口
+
+外部 Native 工具开合的完整订阅仍需上游接口与窗口证据，见[页面桥](docs/page-interaction.md)。业务来源文件分别保留真实权限、数据、模型及 Native 的未完成验收，见[业务页面导航](docs/business-pages.md)。显式引用旧回执没有内容时保持 unavailable，不能用回执推断可读内容，见[恢复合同](docs/presentation-recovery.md)。这些入口记录要求与缺口，不是本轮运行通过表。

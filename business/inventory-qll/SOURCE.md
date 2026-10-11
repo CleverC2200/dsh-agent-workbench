@@ -1,13 +1,11 @@
 # 全链分布来源
 
-本批从Git对象 `eab392344ab2081222683f2d6d2ae2741fde8e06` 恢复分布页面、确定性业务计算与范围/引用逻辑。Manage资源从 `e8a00c4` 恢复后收窄为固定模拟声明。
+页面、确定性业务计算与范围和引用逻辑恢复自 Git 对象 `eab392344ab2081222683f2d6d2ae2741fde8e06`。趋势面板来源为原 15 Workbench `096e2ccf43a2d766853163754d7469ccb8879fb1`，解释规则来源为原 15 Manage `66bb4380d2f05b803a7478ea2bb29a4d2864dd1b`。原模拟接收阶段的固定输入、数量、预算和缺口保存在[历史来源说明](../../docs/history/inventory-qll-source-before-live-read.md)，不用于判断当前运行模式。
 
-当前菜单入口为 `inventory-qll`，资源为 `gea-html-inventory-qll`，Consumer保留 `full-chain-inventory` 模块标识。`mode=mock`、tables为空且MCP capabilities为空。页面默认2026-09固定模拟输入，105个基地SKU可分页读取；公司库存5580件，客户模拟总量0箱，客户明细观察100件单列。第一页SKU为MOCK-001，分仓15件可用，MOCK-002为0件可用；客户目标缺失为null。
+当前菜单入口为 `inventory-qll`，页面 surface 为 `gea-html-inventory-qll`，Consumer 为 `full-chain-inventory`。运行声明见 [plugin.json](plugin.json) 与 [page.json](page.json)。[qll-source.ts](source/inventory-light-plugins/src/qll-source.ts) 经公共 GEA 通道按固定 SQL 显式读取公司库存、订单和货龄来源，并分别读取当前事实与按需历史。原字段映射和数量、速度纯计算由 Manage 的 `full-chain-source-rows` 唯一维护。渠道读取未启用，缺客户数据保持未知；拒权、错误或取消不回退模拟输入，也不恢复旧 pool/channel。
 
-当前源码只有固定模拟读取，历史SQL适配、全量查询与拒权回退仍保存在原Git对象，本批不作为运行时兼容路径。没有新增真实业务查询、模型Task、业务写入或远端操作。原14真实客户数据集、行级权限及完整原生验收未关闭。
+读取要求明确时点和目标月。分页逐页核 total、字段权限元数据、应返回行数与来源键，任一变化或不完整使该读取失败。并发界限、固定 SQL 与历史窗口以 [qll-source.ts](source/inventory-light-plugins/src/qll-source.ts)、[qll-sql.ts](source/inventory-light-plugins/src/qll-sql.ts) 和 [qll-engine.ts](source/inventory-light-plugins/src/qll-engine.ts) 为准，不从旧模拟快照恢复查询协议。
 
-按Session保存范围、月份、页签、SKU、风险与组织/品类UI意图。业务事实与快照不写入持久UI状态，恢复时由原计算重新读取固定输入。引用与取消复用当前统一页面接口。
+按实际 Session 保存范围、月份、页签、SKU、风险及组织与品类 UI 意图。业务事实与快照不写入持久 UI 状态；身份、Session、范围变化及刷新撤旧事实与引用。缺失历史期间为 null，真实零值仍为 0。当前快照的有效期和引用上限由现有引擎维护。
 
-趋势切片从原15 Workbench `096e2ccf43a2d766853163754d7469ccb8879fb1` 恢复面板、缺失期间呈现与范围绑定，原业务纯计算保留。原15 Manage `66bb4380d2f05b803a7478ea2bb29a4d2864dd1b` 提供趋势解释规则，本批规则按固定mock范围接收。同页页尾“趋势与缺口”复用当前分布快照，品类、组织与SKU过滤均限制当前捕获范围。固定历史输入见 `src/qll-trend-mock.json`，仅验证最近30天、原需求100件、发运后缺口12件、满足88件与缺失期间，不代表真实趋势。
-
-保留原30天窗口、当前快照最多4份与5分钟有效期；明细仍按原10/20/50/100分页上限。原SQL三并发与全量分页保护没有进入mock运行包，仍可由原15Git对象及原固定证据恢复。当前包不执行SQL，不靠失败扩大范围。结构最多298个引用行，另留刷新和一个趋势引用名额。刷新保留现有UI意图而不保存历史事实。真实趋势、行权限、Native与模型仍未验。
+真实客户数据集、行级权限、趋势、Native、模型与完整普通包验收仍需各自对应的回执。当前源码接线、资源声明和历史 fixture 不能证明实际 GEA 授权、真实数据或运行验收。原 14/15 失败与未完成验收保留。

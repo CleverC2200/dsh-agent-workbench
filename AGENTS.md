@@ -16,7 +16,7 @@
 
 本仓只交付 Workbench 插件。客户端壳、启动器和安装协议由对应客户端所有者处理；页面验证不代表客户端打包、Native 装载或业务验收。本隔离任务不向正式 GitLab/OSS/npm/频道发布，不修改正式运行目录。远端动作按本票有效授权和项目登记目标办理，不能从上游发行说明扩大范围。
 
-[之前的仓级入口](docs/history/AGENTS-before-agent-environment-02.md)与[之前的 README](docs/history/README-before-agent-environment-02.md)按原字节保留为历史。历史资料不作为本任务操作指引。仓内没有独立 Agent Note 或项目记忆文件；当前职责与非直观规则分别就近保存在合同和源码中。
+[之前的仓级入口](docs/history/AGENTS-before-agent-environment-02.md)与[之前的 README](docs/history/README-before-agent-environment-02.md)按原字节保留为历史。历史资料不作为本任务操作指引。当前职责与非直观规则分别就近保存在合同和源码中。
 
 ## 质量规则与执行
 

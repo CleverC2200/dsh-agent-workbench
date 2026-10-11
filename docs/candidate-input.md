@@ -6,7 +6,11 @@ Workbench 持有三仓候选检查 CLI。它读取调用者指定的冻结输入
 npm run candidate:verify -- --input /absolute/path/integration-set.json --checkout "$PWD"
 ```
 
-输入沿用项目 `integration-set.json` 的 `core` 与 `repositories`。每个 repository 含 `repo`、绝对 `path`、完整 `head`；必须登记 Workbench、Manage、GEA 各一个。命令拒绝未登记的历史 checkout。实现者独立 checkout 需由该票冻结输入明确登记其路径和提交，不得改共享输入来掩盖失败，也不能把其他任务的集成目录当自己的可写工作树。
+输入使用 `integration-set.json` 的 `core` 与 `repositories`。`core` 必须是固定官方提交的 SHA 字符串；版本与路径说明可另列字段，不能把 `core` 写成对象。项目验证 helper 还要求 `officialCorePath`。固定提交由本仓 `scripts/verify-official-input.mjs` 核验，不由调用者改定。
+
+每个 repository 含 `repo`、绝对 `path`、完整 `head`；必须登记 Workbench、Manage、GEA 各一个。命令拒绝未登记的历史 checkout。实现者独立 checkout 需由该票冻结输入明确登记其路径和提交，不得改共享输入来掩盖失败，也不能把其他任务的集成目录当自己的可写工作树。
+
+早期轮次有把 `core` 保存为对象的登记，不能直接传给本 CLI。核对这种输入时先读原票的检查协议；需要本 CLI 时，在本票自有证据中保存符合合同的派生输入及原登记摘要，保留原三仓路径、提交和 Core 绑定。源登记、实际 dirty 和失败回执保持，不以转换格式解除它们。
 
 冻结核对同时读取各 `path` 下的 `package.json.name`，按现有三仓身份约定核对：`dsh-agent-workbench` 对应 `@cleverc2200/dsh-agent-workbench`，`dsh-agent-manage` 对应 `dsh-agent-manage`，`dsh-gea-plugin` 对应 `@cleverc2200/gea-dsh-prototype`。实际名称不符时返回 `CANDIDATE_PACKAGE_IDENTITY`，列出声明角色、预期包名和观察包名。互换 Manage/GEA 的路径及 HEAD 不能通过该检查。
 

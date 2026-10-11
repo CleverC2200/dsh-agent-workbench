@@ -1,5 +1,20 @@
 {
-  "entries": ["AGENTS.md", "README.md"],
+  "entries": [
+    "AGENTS.md",
+    "README.md",
+    "business/inventory-apsplan/SOURCE.md",
+    "business/inventory-aqkc/SOURCE.md",
+    "business/inventory-dealer/README.md",
+    "business/inventory-dealer/SOURCE.md",
+    "business/inventory-fc/SOURCE.md",
+    "business/inventory-personal/SOURCE.md",
+    "business/inventory-qll/SOURCE.md",
+    "prototypes/dms/README.md",
+    "prototypes/inventory-customer/SOURCE.md",
+    "prototypes/inventory-orderfulfillment/README.md",
+    "src/workbench/original/README.md",
+    "theme/README.md"
+  ],
   "paths": [
     "src/workbench.ts",
     "src/frame-presenter.tsx",

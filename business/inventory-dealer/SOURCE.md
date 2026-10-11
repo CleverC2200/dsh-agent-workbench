@@ -4,6 +4,6 @@
 
 当前数据链路使用原受控 SQL 与完整分页接口，经公共 HTML v2 MessageChannel 交给唯一 GEA Host 执行。固定模拟输入只由离线测试提供，不进入正式页面运行路径。身份或 Session 改变撤回读取与事实。SAP 报价继续沿原能力缺口返回未知；前端展示不代表正式订单提交或价格可用。
 
-Workbench只维护页面与确定性计算；Skill/persona/MCP/能力声明唯一维护于Manage business-resources/inventory-dealer，lib中的资源是构建装配副本。当前消费者、SKU建议口径、本地草稿限制及日期覆盖以保留的业务模块为准；没有真实补货写接口。
+Workbench维护页面和数据通道，确定性业务计算由Manage公开模块维护；Skill/persona/MCP/能力声明唯一维护于Manage business-resources/inventory-dealer，lib中的资源是构建装配副本。当前消费者、SKU建议口径、本地草稿限制及日期覆盖以保留的业务模块为准；没有真实补货写接口。
 
 2026-10-02补正完整性：原源的全量行数组接口在当前Host默认分页下只能取得200条，现由本票数据模块显式完成分页。分页total/字段权限元数据变化、短页、权限失败及取消均拒绝部分结果。业务规则与建议公式保持原源，完整读取不作为以后真实补测才解决的豁免。
