@@ -68,7 +68,7 @@ export default function Dealer() {
   );
   const [view, setView] = usePageViewField(React, dealerView, 'view', 'stock'),
     [pageSize, setPageSize] = usePageViewField(React, dealerView, 'pageSize', 10),
-    [_revision, _setRevision] = useState(0);
+    [revision, _setRevision] = useState(0);
   const [orderBusy, setOrderBusy] = useState(false),
     [suggestions, setSuggestions] = useState<any[]>([]);
   const [orderHeaders, setOrderHeaders] = usePageViewField(

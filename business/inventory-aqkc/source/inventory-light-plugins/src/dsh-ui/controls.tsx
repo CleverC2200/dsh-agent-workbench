@@ -231,7 +231,9 @@ export function Skeleton({ loading = true, children }: any) {
   );
 }
 export const Typography = {
-  Text: ({ children, type: _type, ellipsis: _ellipsis, ...p }: any) => <span {...p}>{children}</span>,
+  Text: ({ children, type: _type, ellipsis: _ellipsis, ...p }: any) => (
+    <span {...p}>{children}</span>
+  ),
 };
 export function Modal({
   visible,
