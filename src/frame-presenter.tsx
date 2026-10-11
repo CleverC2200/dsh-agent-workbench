@@ -1020,7 +1020,9 @@ function createExecution(
       signal,
     });
     const value = await response.json();
-    signal.throwIfAborted();
+    // Return a late opening's owner to setup so it can close it before releasing the Session.
+    // Other replies must never cross their cancelled generation.
+    if (operation !== 'open') signal.throwIfAborted();
     if (!response.ok) throw Error(value.error ?? 'PAGE_REQUEST_FAILED');
     return value;
   };
