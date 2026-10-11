@@ -139,6 +139,10 @@ test('a saved Native page without a Session restores its Document without naviga
   assert.equal(restored.recoveryTarget(), undefined);
   assert.deepEqual(navigated, [], 'presentation recovery must not open or create a Core Session');
   assert.deepEqual(store.getSnapshot().selections, []);
+  assert.equal(restored.getSnapshot().restoredWithoutSession, true);
+  assert.equal(Object.hasOwn(store.getSnapshot(), 'restoredWithoutSession'), false);
+  await restored.open(page.id);
+  assert.equal(restored.getSnapshot().restoredWithoutSession, undefined);
 });
 
 test('a saved association without an active interpretation cannot restore an unbound Document', (t) => {

@@ -212,6 +212,9 @@ export function mountFramePresentation(
     const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
     const selection =
       documentState.selectedDocument?.id === page.id ? documentState.selection : undefined;
+    const restoredWithoutSession =
+      documentState.selectedDocument?.id === page.id &&
+      documentState.restoredWithoutSession === true;
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const associated =
@@ -729,9 +732,12 @@ export function mountFramePresentation(
       resourceRows.current = [];
       resourceRowsOwner.current = undefined;
       const owner = identity.scope + '\0' + page.resourceId;
+      // Restored presentation discovers choices; an explicit page/resource action starts its Session.
       const prepare =
-        (!selection ||
-          (selection.ownerScope !== identity.scope && selection.subject === identity.subject)) &&
+        ((!selection && !restoredWithoutSession) ||
+          (selection &&
+            selection.ownerScope !== identity.scope &&
+            selection.subject === identity.subject)) &&
         preparationOwner.current !== owner;
       if (prepare) preparationOwner.current = owner;
       const controller = new AbortController();
@@ -780,6 +786,7 @@ export function mountFramePresentation(
       resourceHost,
       page.id,
       page.resourceId,
+      restoredWithoutSession,
     ]);
     const toolbar = (
       <div className="gea-page-toolbar-seat">

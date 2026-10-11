@@ -48,6 +48,7 @@ async function fixture(
     initialSession,
     initialPreset = null,
     restoredSelection,
+    restoredPage = false,
     nativeResourceSdk = false,
     declareSecondInterpreter = true,
   } = {},
@@ -163,7 +164,8 @@ async function fixture(
     waiting = [];
   let sessions = 0,
     listRequests = 0,
-    selectionRequests = 0;
+    selectionRequests = 0,
+    sessionOpenRequests = 0;
   let secondInstalled = secondInterpreter;
   const host = {
     pickDirectory: async () => {
@@ -244,6 +246,7 @@ async function fixture(
     mainPreset = initialSession ? initialPreset : undefined;
   ctx.uiWorkspace = {
     openSession: (id) => {
+      sessionOpenRequests++;
       mainSession = id;
       for (const listener of sessionListeners) listener();
     },
@@ -317,11 +320,14 @@ async function fixture(
         if (id) ctx.uiWorkspace.openSession(id);
       },
     },
-    restoredSelection
+    restoredSelection || restoredPage
       ? {
           getSnapshot: () => ({
             version: 2,
-            selections: [{ page: 'native', active: true, ...restoredSelection }],
+            ...(restoredPage ? { page: 'native' } : {}),
+            selections: restoredSelection
+              ? [{ page: 'native', active: true, ...restoredSelection }]
+              : [],
             views: [],
           }),
           set() {},
@@ -367,7 +373,7 @@ async function fixture(
   }
   if (staticDocument) delete page.resourceId;
   workbench.registerFrame(page);
-  await workbench.open(page.id);
+  if (!restoredPage) await workbench.open(page.id);
   function Main() {
     const sessionId = useSyncExternalStore(
       (listener) => {
@@ -459,6 +465,7 @@ async function fixture(
     historyPage: () => workbench.takeHistoryTarget()?.page,
     restoreHistory: restorePageSession,
     currentSession: () => mainSession,
+    sessionOpenRequests: () => sessionOpenRequests,
     workbench,
     deferSessionReady: () => {
       sdkReadyGate = Promise.withResolvers();
@@ -690,6 +697,57 @@ for (const oldPreset of ['agent-resource-skill', null]) {
     );
   });
 }
+
+test('restoring an unbound resource Document reads Interpreter choices without creating or opening a Session', async (t) => {
+  const f = await fixture(t, {
+    restoredPage: true,
+    nativeResourceSdk: true,
+    secondInterpreter: true,
+  });
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+  assert.equal(f.sessionOpenRequests(), 0);
+  assert.equal(f.currentSession(), undefined);
+  assert.equal(f.selection(), undefined);
+  assert.deepEqual(
+    [...f.dom.window.document.querySelector('[aria-label="pageInterpreter"]').options].map(
+      (option) => option.value,
+    ),
+    ['original', 'other'],
+  );
+  assert.equal(
+    f.calls.some(([operation]) => ['core-create', 'core-select-preset'].includes(operation)),
+    false,
+  );
+  await f.load();
+  await act(async () => f.render());
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+  assert.equal(f.sessionOpenRequests(), 0);
+});
+
+for (const action of ['Interpreter choice', 'explicit page reopen'])
+  test(`a restored unbound Document can create a Session after ${action}`, async (t) => {
+    const f = await fixture(t, {
+      restoredPage: true,
+      nativeResourceSdk: true,
+      secondInterpreter: true,
+    });
+    assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+    assert.equal(f.sessionOpenRequests(), 0);
+    if (action === 'Interpreter choice') await f.selectInterpreter('other');
+    else await f.show();
+    assert.deepEqual(f.counts(), {
+      sessions: 1,
+      listRequests: action === 'Interpreter choice' ? 1 : 2,
+      selectionRequests: 1,
+    });
+    assert.equal(f.sessionOpenRequests(), 1);
+    assert.equal(f.currentSession(), 'session-1');
+    assert.equal(f.selection().preset, action === 'Interpreter choice' ? 'other' : 'original');
+    assert.equal(f.workbench.getSnapshot().restoredWithoutSession, undefined);
+    await act(async () => f.render());
+    assert.equal(f.counts().sessions, 1, 'a render cannot repeat the explicit resource action');
+    assert.equal(f.sessionOpenRequests(), 1);
+  });
 
 test('formal page navigation auto-prepares one actual native Session only for an authenticated enabled resource', async (t) => {
   const f = await fixture(t);
