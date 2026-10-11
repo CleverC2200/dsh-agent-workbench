@@ -29,7 +29,11 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
   require,
 );
 const { mountCompanyUI, WorkbenchController } = module.exports;
-function fixture(account, panels = [{ options: { id: 'plugins', label: () => '插件管理' } }]) {
+function fixture(
+  account,
+  panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
+  { memory, restorePageSession } = {},
+) {
   const entries = [],
     calls = [];
   const panelEntries = () =>
@@ -72,13 +76,20 @@ function fixture(account, panels = [{ options: { id: 'plugins', label: () => '�
     },
     effect: () => {},
   };
-  const workbench = new WorkbenchController({
-    panel: (id) => calls.push(['page', id]),
-    document: (id) => calls.push(['document', id]),
-    hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
-  });
-  mountCompanyUI(ctx, workbench, () =>
-    React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
+  const workbench = new WorkbenchController(
+    {
+      panel: (id) => calls.push(['page', id]),
+      document: (id) => calls.push(['document', id]),
+      hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
+    },
+    memory,
+  );
+  mountCompanyUI(
+    ctx,
+    workbench,
+    () =>
+      React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
+    restorePageSession,
   );
   const renderSlot = (name, props = {}, options = {}) => {
     if (name === 'sidebar.panellist') {
@@ -724,6 +735,319 @@ async function mountedDom(t) {
   });
   return { root, dom };
 }
+
+async function mountedMainConversation(t, options = {}) {
+  const { root } = await mountedDom(t);
+  const { entries, workbench } = fixture(options.account, undefined, options);
+  const entry = entries.find((row) => row.options.name === 'main.conversation');
+  const render = (sessionId, epoch = 0) =>
+    React.act(async () =>
+      root.render(
+        React.createElement(entry.component, {
+          key: epoch,
+          sessionId,
+          useSession: (selector) =>
+            selector(
+              sessionId
+                ? { blank: false, running: false, promptAttempted: true, openState: 'open' }
+                : undefined,
+            ),
+          useConversation: (selector) => selector({ activeTargets: new Set(['chat']) }),
+          useSessions: (selector) =>
+            selector(options.catalogue ?? { phase: 'ready', ids: [], byId: {} }),
+          renderFactorySlot: (name, ...args) =>
+            name === 'agent-workbench.document'
+              ? React.createElement('iframe', { 'data-restored-document': true })
+              : nativeFactory(name, ...args, sessionId),
+        }),
+      ),
+    );
+  return { workbench, render };
+}
+
+test('first Core main Session hydration preserves the restored unbound Document presentation', async (t) => {
+  let saved = { version: 2, page: 'gea-proof', selections: [], views: [] };
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => saved,
+      set: (value) => (saved = structuredClone(value)),
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument?.id, 'gea-proof');
+  assert.equal(saved.page, 'gea-proof');
+  assert.equal(
+    document.querySelector('[data-restored-document]').parentElement.style.display,
+    'flex',
+  );
+  assert.equal(workbench.getSnapshot().selection, undefined);
+});
+
+test('a later main Session remount leaves the restored unbound Document', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  assert.equal(
+    document.querySelector('[data-restored-document]').parentElement.style.display,
+    'none',
+  );
+  assert.ok(document.querySelector('.gea-company-main'));
+});
+
+test('closing the main Session consumes the initial allowance before another Session is adopted', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  await render(undefined, 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  await React.act(async () => workbench.open('gea-proof'));
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('an ordinary initial Session consumes the allowance before a late page registration restores presentation', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  await render('session-a');
+  await React.act(async () =>
+    workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null }),
+  );
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, true);
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('first main Session adoption leaves a manually opened unbound Document', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t);
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await workbench.open('gea-proof');
+  await render(undefined);
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('explicit page History binds its Session before the initial presentation allowance', async (t) => {
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+    restorePageSession: async (page, sessionId, signal, expected) => {
+      signal.throwIfAborted();
+      restored.push({ page, sessionId, expected });
+      workbench.associateSession(page, { sessionId, ...expected, ownerScope: 'owner' });
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  const expected = { preset: 'forecast', cwd: '/workspace' };
+  await React.act(async () => {
+    workbench.showHistory('gea-proof');
+    workbench.selectHistorySession('gea-proof', 'session-a', expected);
+  });
+  await render('session-a');
+  assert.deepEqual(restored, [{ page: 'gea-proof', sessionId: 'session-a', expected }]);
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  assert.deepEqual(workbench.getSnapshot().selection, {
+    sessionId: 'session-a',
+    ...expected,
+    ownerScope: 'owner',
+  });
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, undefined);
+});
+
+test('main Session observation starts fresh for each mounted company UI lifetime', async (t) => {
+  for (const lifetime of ['before UI teardown', 'after UI reconstruction'])
+    await t.test(lifetime, async (t) => {
+      const { workbench, render } = await mountedMainConversation(t, {
+        memory: {
+          getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+          set: () => {},
+        },
+      });
+      workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+      await render(undefined);
+      await render('session-a');
+      assert.equal(workbench.getSnapshot().selectedDocument?.id, 'gea-proof');
+      await render('session-b', 1);
+      assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+    });
+});
+
+test('a bound Document retains its matching main Session and leaves on a remounted different Session', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t);
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  workbench.associateSession('gea-proof', {
+    sessionId: 'session-a',
+    preset: 'forecast',
+    ownerScope: 'owner',
+  });
+  await workbench.open('gea-proof');
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('initial main Session observation does not restore a saved page whose Session is missing', async (t) => {
+  const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({
+        version: 2,
+        page: 'gea-proof',
+        selections: [
+          { page: 'gea-proof', active: true, sessionId, preset: null, ownerScope: null },
+        ],
+        views: [],
+      }),
+      set: () => {},
+    },
+    restorePageSession: async (...args) => restored.push(args),
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  assert.deepEqual(restored, []);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  assert.equal(workbench.recoveryTarget().sessionId, sessionId);
+});
+
+test('initial main Session observation preserves validated bound business Session recovery', async (t) => {
+  const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+  const selection = {
+    sessionId,
+    preset: 'forecast',
+    ownerScope: 'old-owner',
+    subject: 'subject',
+    cwd: '/workspace',
+  };
+  const identity = {
+    state: 'confirmed',
+    scope: 'current-owner',
+    subject: 'subject',
+    status: { authenticated: true },
+  };
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    account: { getSnapshot: () => identity, subscribe: () => () => {} },
+    catalogue: { phase: 'ready', ids: [sessionId], byId: { [sessionId]: { cwd: '/workspace' } } },
+    memory: {
+      getSnapshot: () => ({
+        version: 2,
+        page: 'gea-proof',
+        selections: [{ page: 'gea-proof', active: true, ...selection }],
+        views: [],
+      }),
+      set: () => {},
+    },
+    restorePageSession: async (page, sessionId, signal, expected) => {
+      signal.throwIfAborted();
+      restored.push({ page, sessionId, expected });
+      workbench.associateSession(page, { ...selection, ownerScope: 'current-owner' });
+    },
+  });
+  workbench.registerFrame({
+    id: 'gea-proof',
+    kind: 'local',
+    resourceId: 'forecast',
+    body: () => null,
+  });
+  await render(undefined);
+  await render(sessionId);
+  assert.equal(restored.length, 1);
+  assert.deepEqual(restored[0], {
+    page: 'gea-proof',
+    sessionId,
+    expected: { page: 'gea-proof', ...selection, resourceId: 'forecast' },
+  });
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  assert.deepEqual(workbench.getSnapshot().selection, {
+    ...selection,
+    ownerScope: 'current-owner',
+  });
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, undefined);
+});
+
+test('initial main Session observation keeps GEA identity checks on saved business Session recovery', async (t) => {
+  for (const state of ['unknown', 'signed-out'])
+    await t.test(state, async (t) => {
+      const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+      const restored = [];
+      const identity =
+        state === 'unknown'
+          ? { state: 'unknown', scope: null, status: null }
+          : { state: 'confirmed', scope: null, subject: null, status: { authenticated: false } };
+      const { workbench, render } = await mountedMainConversation(t, {
+        account: {
+          getSnapshot: () => identity,
+          subscribe: () => () => {},
+        },
+        catalogue: {
+          phase: 'ready',
+          ids: [sessionId],
+          byId: { [sessionId]: { cwd: '/workspace' } },
+        },
+        memory: {
+          getSnapshot: () => ({
+            version: 2,
+            page: 'gea-proof',
+            selections: [
+              {
+                page: 'gea-proof',
+                active: true,
+                sessionId,
+                preset: 'forecast',
+                ownerScope: 'old-owner',
+                subject: 'old-subject',
+                cwd: '/workspace',
+              },
+            ],
+            views: [],
+          }),
+          set: () => {},
+        },
+        restorePageSession: async (...args) => restored.push(args),
+      });
+      workbench.registerFrame({
+        id: 'gea-proof',
+        kind: 'local',
+        resourceId: 'forecast',
+        body: () => null,
+      });
+      await render(undefined);
+      await render('session-a');
+      assert.deepEqual(restored, []);
+      assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+      assert.equal(
+        workbench.recoveryTarget()?.sessionId,
+        state === 'unknown' ? sessionId : undefined,
+      );
+    });
+});
 
 test('public official and third-party panel rows keep order, icons, activation, live removal and the collapsed badge', async (t) => {
   const { root } = await mountedDom(t);

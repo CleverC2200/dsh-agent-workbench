@@ -122,6 +122,13 @@ export function mountCompanyUI(
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
   const t = ctx.locale.bind('companyWorkbench');
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
+  // Core's single main.conversation outlet remounts on later Session changes.
+  // Keep its observation for this UI lifetime; the first nonempty value consumes
+  // the bootstrap allowance even when no presentation was restored.
+  // These public props carry no navigation intent or same-Session reveal revision.
+  let mainSessionObservation:
+    | { sessionId: SessionId | undefined; hasObservedSession: boolean }
+    | undefined;
   ctx.effect(() => {
     const style = document.createElement('style');
     style.dataset.companyWorkbench = 'formal-508feea';
@@ -840,10 +847,14 @@ export function mountCompanyUI(
       identity.error,
       authority,
     ]);
-    const previousMainSession = useRef(sessionId);
     useEffect(() => {
-      const changed = previousMainSession.current !== sessionId;
-      previousMainSession.current = sessionId;
+      const previous = mainSessionObservation;
+      const changed = previous !== undefined && previous.sessionId !== sessionId;
+      const firstSession = !!sessionId && !previous?.hasObservedSession;
+      mainSessionObservation = {
+        sessionId,
+        hasObservedSession: !!sessionId || previous?.hasObservedSession === true,
+      };
       if (!sessionId) {
         if (changed) workbench.leaveDocument();
         return;
@@ -855,7 +866,10 @@ export function mountCompanyUI(
         const state = workbench.getSnapshot();
         if (
           (state.selection && state.selection.sessionId !== sessionId) ||
-          (changed && state.selectedDocument && !state.selection)
+          (changed &&
+            state.selectedDocument &&
+            !state.selection &&
+            !(firstSession && state.restoredWithoutSession))
         )
           workbench.leaveDocument();
         return;
