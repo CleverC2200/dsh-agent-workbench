@@ -1,7 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, realpathSync, symlinkSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  realpathSync,
+  symlinkSync,
+} from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -30,13 +38,25 @@ function fixture(t, officialPath) {
     if (repo === repos[0]) writeFileSync(resolve(checkout, 'tsconfig.official.json'), JSON.stringify({ compilerOptions: { paths: { '@deepseek-ai/cordis': ['../../official-latest-standard/vendor/cordis/lib/types/index.d.ts'] } } }));
     git(checkout, 'init', '-q');
     git(checkout, 'add', '.');
-    git(checkout, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'known local inputs');
+    git(
+      checkout,
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'known local inputs',
+    );
     manifest.repositories.push({ repo, path: checkout, head: git(checkout, 'rev-parse', 'HEAD') });
   }
   const input = resolve(directory, 'integration-set.json');
   const run = (checkout = manifest.repositories[0].path) => {
     writeFileSync(input, JSON.stringify(manifest));
-    return spawnSync(process.execPath, [cli, '--input', input, '--checkout', checkout], { cwd: directory, encoding: 'utf8' });
+    return spawnSync(process.execPath, [cli, '--input', input, '--checkout', checkout], {
+      cwd: directory,
+      encoding: 'utf8',
+    });
   };
   return { directory, manifest, run };
 }
@@ -45,12 +65,12 @@ function rejected(result, diagnostic) {
   assert.match(result.stderr, diagnostic);
 }
 
-test('a historical checkout is refused before inspecting candidate inputs', t => {
+test('a historical checkout is refused before inspecting candidate inputs', (t) => {
   const { directory, run } = fixture(t);
   rejected(run(resolve(directory, 'historical/dsh-agent-workbench')), /CANDIDATE_CHECKOUT/);
 });
 
-test('a clean registered combination reports candidate scope and exact observed inputs', t => {
+test('a clean registered combination reports candidate scope and exact observed inputs', (t) => {
   const { manifest, run } = fixture(t);
   const result = run();
   assert.equal(result.status, 0, result.stderr);
@@ -58,7 +78,10 @@ test('a clean registered combination reports candidate scope and exact observed 
   assert.equal(receipt.stage, 'candidate-input');
   assert.equal(receipt.status, 'passed');
   assert.equal(receipt.runtime, 'not-observed');
-  assert.deepEqual(receipt.repositories.map(({ repo, head }) => ({ repo, head })), manifest.repositories.map(({ repo, head }) => ({ repo, head })));
+  assert.deepEqual(
+    receipt.repositories.map(({ repo, head }) => ({ repo, head })),
+    manifest.repositories.map(({ repo, head }) => ({ repo, head })),
+  );
 });
 
 test('a clean rc.2 candidate binds its own registered official declaration source', t => {
@@ -107,7 +130,40 @@ test('a peer at a different commit is refused and its files stay untouched', t =
   assert.equal(git(peer.path, 'status', '--porcelain'), before);
 });
 
-test('tracked and untracked peer changes are refused without clearing either change', t => {
+test('clean Manage and GEA checkouts cannot exchange candidate roles', (t) => {
+  const { manifest, run } = fixture(t);
+  const manage = manifest.repositories[1];
+  const gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-agent-manage/);
+  for (const entry of [manage, gea]) assert.equal(git(entry.path, 'status', '--porcelain'), '');
+});
+
+test('a clean committed peer with the wrong package name cannot claim its candidate role', (t) => {
+  const { manifest, run } = fixture(t);
+  const peer = manifest.repositories[2];
+  const file = resolve(peer.path, 'package.json');
+  const packageJson = JSON.parse(readFileSync(file, 'utf8'));
+  packageJson.name = '@cleverc2200/gea-dsh-prototype-wrong';
+  writeFileSync(file, JSON.stringify(packageJson));
+  git(peer.path, 'add', 'package.json');
+  git(
+    peer.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'wrong committed package identity',
+  );
+  peer.head = git(peer.path, 'rev-parse', 'HEAD');
+  assert.equal(git(peer.path, 'status', '--porcelain'), '');
+  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-gea-plugin/);
+});
+
+test('tracked and untracked peer changes are refused without clearing either change', (t) => {
   const { manifest, run } = fixture(t);
   const peer = manifest.repositories[1];
   const lock = resolve(peer.path, 'pnpm-lock.yaml');
@@ -121,51 +177,89 @@ test('tracked and untracked peer changes are refused without clearing either cha
   assert.equal(readFileSync(source, 'utf8'), 'export const changed = true;\n');
 });
 
-test('missing peer registration cannot turn a partial checkout into a complete candidate', t => {
+test('missing peer registration cannot turn a partial checkout into a complete candidate', (t) => {
   const { manifest, run } = fixture(t);
   manifest.repositories.pop();
   rejected(run(), /CANDIDATE_PEER_REQUIRED.*dsh-gea-plugin/);
 });
 
-test('a peer committed without its frozen lock is refused', t => {
+test('a peer committed without its frozen lock is refused', (t) => {
   const { manifest, run } = fixture(t);
   const peer = manifest.repositories[1];
   git(peer.path, 'rm', 'pnpm-lock.yaml');
-  git(peer.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'missing lock');
+  git(
+    peer.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'missing lock',
+  );
   peer.head = git(peer.path, 'rev-parse', 'HEAD');
   rejected(run(), /CANDIDATE_MATERIAL_REQUIRED.*dsh-agent-manage.*pnpm-lock.yaml/);
 });
 
-test('missing official configuration returns an input diagnostic instead of an filesystem error', t => {
+test('missing official configuration returns an input diagnostic instead of an filesystem error', (t) => {
   const { manifest, run } = fixture(t);
   const workbench = manifest.repositories[0];
   git(workbench.path, 'rm', 'tsconfig.official.json');
-  git(workbench.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'missing official config');
+  git(
+    workbench.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'missing official config',
+  );
   workbench.head = git(workbench.path, 'rev-parse', 'HEAD');
   rejected(run(), /OFFICIAL_MATERIAL_REQUIRED.*tsconfig.official.json/);
 });
 
-test('an absent SDK declaration is refused with its declared path', t => {
+test('an absent SDK declaration is refused with its declared path', (t) => {
   const { manifest, run } = fixture(t);
   const workbench = manifest.repositories[0];
   const file = resolve(workbench.path, 'tsconfig.official.json');
   const config = JSON.parse(readFileSync(file, 'utf8'));
-  config.compilerOptions.paths['@deepseek-ai/dsh-session'] = ['../../official-latest-standard/missing/lib/types/index.d.ts'];
+  config.compilerOptions.paths['@deepseek-ai/dsh-session'] = [
+    '../../official-latest-standard/missing/lib/types/index.d.ts',
+  ];
   writeFileSync(file, JSON.stringify(config));
   git(workbench.path, 'add', '.');
-  git(workbench.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'missing SDK declaration');
+  git(
+    workbench.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'missing SDK declaration',
+  );
   workbench.head = git(workbench.path, 'rev-parse', 'HEAD');
   rejected(run(), /OFFICIAL_MATERIAL_REQUIRED.*dsh-session/);
 });
 
-test('a locally committed substitute Core cannot satisfy the official baseline', t => {
+test('a locally committed substitute Core cannot satisfy the official baseline', (t) => {
   const { directory, run } = fixture(t);
   const core = resolve(directory, 'wrong-core');
   mkdirSync(resolve(core, 'vendor/cordis/lib/types'), { recursive: true });
   writeFileSync(resolve(core, 'vendor/cordis/lib/types/index.d.ts'), 'export {};\n');
   git(core, 'init', '-q');
   git(core, 'add', '.');
-  git(core, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'wrong Core');
+  git(
+    core,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'wrong Core',
+  );
   rmSync(resolve(directory, 'official-latest-standard'));
   symlinkSync(core, resolve(directory, 'official-latest-standard'));
   const before = git(core, 'status', '--porcelain');
@@ -178,31 +272,40 @@ test('missing input binding is refused before reading or modifying any checkout'
   rejected(result, /CANDIDATE_INPUT_REQUIRED/);
 });
 
-test('the frozen set cannot declare a different Core while loading the fixed SDK', t => {
+test('the frozen set cannot declare a different Core while loading the fixed SDK', (t) => {
   const { manifest, run } = fixture(t);
   manifest.core = '0'.repeat(40);
   rejected(run(), /CANDIDATE_CORE/);
 });
 
-test('an ignored uncommitted lock cannot replace frozen input material', t => {
+test('an ignored uncommitted lock cannot replace frozen input material', (t) => {
   const { manifest, run } = fixture(t);
   const peer = manifest.repositories[1];
   git(peer.path, 'rm', 'pnpm-lock.yaml');
   writeFileSync(resolve(peer.path, '.gitignore'), 'pnpm-lock.yaml\n');
   git(peer.path, 'add', '.');
-  git(peer.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'ignored lock');
+  git(
+    peer.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'ignored lock',
+  );
   peer.head = git(peer.path, 'rev-parse', 'HEAD');
   writeFileSync(resolve(peer.path, 'pnpm-lock.yaml'), 'unbound lock\n');
   rejected(run(), /CANDIDATE_LOCK.*dsh-agent-manage/);
 });
 
-test('a registered peer whose checkout is absent is refused with the peer name', t => {
+test('a registered peer whose checkout is absent is refused with the peer name', (t) => {
   const { manifest, run } = fixture(t);
   rmSync(manifest.repositories[2].path, { recursive: true });
   rejected(run(), /CANDIDATE_PEER_REQUIRED.*dsh-gea-plugin/);
 });
 
-test('an absent official SDK is refused with an official material diagnostic', t => {
+test('an absent official SDK is refused with an official material diagnostic', (t) => {
   const { directory, run } = fixture(t);
   rmSync(resolve(directory, 'official-latest-standard'));
   rejected(run(), /OFFICIAL_MATERIAL_REQUIRED.*cordis/);

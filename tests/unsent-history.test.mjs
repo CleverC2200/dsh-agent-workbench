@@ -23,13 +23,7 @@ new Function('module', 'exports', 'require', built.outputFiles[0].text)(
   module.exports,
   require,
 );
-const {
-  PageUnsentHistory,
-  WorkbenchController,
-  act,
-  createElement,
-  createRoot,
-} = module.exports;
+const { PageUnsentHistory, WorkbenchController, act, createElement, createRoot } = module.exports;
 const old = 'session-11111111-1111-4111-8111-111111111147',
   fresh = 'session-22222222-2222-4222-8222-222222222247';
 const preset = 'gea-html-inventory-dms',
@@ -41,9 +35,10 @@ for (const cold of [false, true])
       pretendToBeVisual: true,
     });
     const saved = new Map(
-      ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map(
-        (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
-      ),
+      ['window', 'document', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
+        key,
+        Object.getOwnPropertyDescriptor(globalThis, key),
+      ]),
     );
     for (const [key, value] of [
       ['window', dom.window],
@@ -152,9 +147,7 @@ for (const cold of [false, true])
           cwd,
           sessions,
           request: async () =>
-            Response.json([
-              { id: preset, enabled: true, installed: true, kind: 'prompt' },
-            ]),
+            Response.json([{ id: preset, enabled: true, installed: true, kind: 'prompt' }]),
           language: 'zh',
           selectedSessionId: fresh,
           onChoose: (...args) => opens.push(args),

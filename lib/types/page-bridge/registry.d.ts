@@ -8,10 +8,10 @@
  *
  * 依赖 DSH 的能力：`agent.ctx.tools.register`（按 agent 作用域注册，返回 disposer）。
  */
-import type { Context } from "@deepseek-ai/cordis";
-import { type PageElementEffect } from "./catalog.ts";
-import type { PageBridge } from "./host.ts";
-import { type DraftLayer } from "./draft.ts";
+import type { Context } from '@deepseek-ai/cordis';
+import { type PageElementEffect } from './catalog.ts';
+import type { PageBridge } from './host.ts';
+import { type DraftLayer } from './draft.ts';
 export type PageToolConsumer = {
     /** 业务侧语义校验/归一化：返回真正下发给页面的参数。 */
     validate?: (args: Record<string, unknown>, sessionId: string) => unknown;
@@ -33,9 +33,9 @@ export type PageToolConsumer = {
     allowSurfaces?: readonly string[];
     /**
      * 哪些页面允许暴露"会改数据"的动作（页面自述的 surface）。
-   * 默认空：只暴露改视图的动作；页面自己声明了 data 动作也不给模型。
-   * 只对白名单页面逐页放开，避免"任何页面都能被改数据"。
-   */
+     * 默认空：只暴露改视图的动作；页面自己声明了 data 动作也不给模型。
+     * 只对白名单页面逐页放开，避免"任何页面都能被改数据"。
+     */
     dataActionSurfaces?: readonly string[];
     allowsDataAction?: (surface: string, sessionId: string) => boolean;
     /**

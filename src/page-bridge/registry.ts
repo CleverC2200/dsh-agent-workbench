@@ -8,10 +8,10 @@
  *
  * 依赖 DSH 的能力：`agent.ctx.tools.register`（按 agent 作用域注册，返回 disposer）。
  */
-import type { Context } from "@deepseek-ai/cordis";
-import type { SessionId } from "@deepseek-ai/dsh-session";
-import type { Agent } from "@deepseek-ai/dsh-agent";
-import { defineTool } from "@deepseek-ai/dsh-tools";
+import type { Context } from '@deepseek-ai/cordis';
+import type { SessionId } from '@deepseek-ai/dsh-session';
+import type { Agent } from '@deepseek-ai/dsh-agent';
+import { defineTool } from '@deepseek-ai/dsh-tools';
 import {
   compilePageCatalog,
   elementDirectory,
@@ -22,17 +22,15 @@ import {
   type PageActionScalar,
   type PageCatalog,
   type PageElementEffect,
-} from "./catalog.ts";
-import type { PageBridge } from "./host.ts";
-import { createDraftLayer, type DraftLayer } from "./draft.ts";
+} from './catalog.ts';
+import type { PageBridge } from './host.ts';
+import { createDraftLayer, type DraftLayer } from './draft.ts';
 
 export type PageToolConsumer = {
   /** 业务侧语义校验/归一化：返回真正下发给页面的参数。 */
   validate?: (args: Record<string, unknown>, sessionId: string) => unknown;
   /** 业务侧的当前页面状态：桥用它判断"改动后的状态是否已经报回来"。 */
-  stateSnapshot?: (
-    sessionId: string,
-  ) => { sequence: number; state: unknown } | undefined;
+  stateSnapshot?: (sessionId: string) => { sequence: number; state: unknown } | undefined;
   /** 单次调用等页面执行的时长。 */
   waitMs?: number;
   /** 应用成功后再等页面报回新状态的时长。 */
@@ -46,11 +44,11 @@ export type PageToolConsumer = {
   allowSurfaces?: readonly string[];
   /**
    * 哪些页面允许暴露"会改数据"的动作（页面自述的 surface）。
- * 默认空：只暴露改视图的动作；页面自己声明了 data 动作也不给模型。
- * 只对白名单页面逐页放开，避免"任何页面都能被改数据"。
- */
+   * 默认空：只暴露改视图的动作；页面自己声明了 data 动作也不给模型。
+   * 只对白名单页面逐页放开，避免"任何页面都能被改数据"。
+   */
   dataActionSurfaces?: readonly string[];
-  allowsDataAction?: (surface:string,sessionId:string)=>boolean;
+  allowsDataAction?: (surface: string, sessionId: string) => boolean;
   /**
    * 工作台会话里要禁用的全局工具（例如浏览器/MCP 那批）。
    * 只作用于"页面声明过能力的那个 agent"，普通对话不受影响。
@@ -69,27 +67,26 @@ function parsePageContent(content: string): unknown {
   try {
     return JSON.parse(content);
   } catch {
-    return { applied: false, error: "INVALID_PAGE_RECEIPT" };
+    return { applied: false, error: 'INVALID_PAGE_RECEIPT' };
   }
 }
 
 /** 目录里的标量参数 -> DSH schema 片段（只做机械映射）。 */
 function scalarSchema(value: PageActionScalar) {
-  const description =
-    value.description === undefined ? {} : { description: value.description };
+  const description = value.description === undefined ? {} : { description: value.description };
   switch (value.type) {
-    case "string":
+    case 'string':
       return {
-        type: "string" as const,
+        type: 'string' as const,
         ...description,
         ...(value.enum === undefined ? {} : { enum: [...value.enum] }),
       };
-    case "integer":
-      return { type: "integer" as const, ...description };
-    case "number":
-      return { type: "number" as const, ...description };
-    case "boolean":
-      return { type: "boolean" as const, ...description };
+    case 'integer':
+      return { type: 'integer' as const, ...description };
+    case 'number':
+      return { type: 'number' as const, ...description };
+    case 'boolean':
+      return { type: 'boolean' as const, ...description };
   }
 }
 
@@ -97,13 +94,11 @@ function scalarSchema(value: PageActionScalar) {
 function parameterSchema(parameter: { name: string } & PageActionParam) {
   const shared = {
     ...(parameter.required ? { required: true as const } : {}),
-    ...(parameter.description === undefined
-      ? {}
-      : { description: parameter.description }),
+    ...(parameter.description === undefined ? {} : { description: parameter.description }),
   };
-  if (parameter.type === "array")
+  if (parameter.type === 'array')
     return {
-      type: "array" as const,
+      type: 'array' as const,
       ...shared,
       items: scalarSchema({
         type: parameter.items.type,
@@ -112,16 +107,13 @@ function parameterSchema(parameter: { name: string } & PageActionParam) {
           : { description: parameter.items.description }),
       }),
     };
-  if (parameter.type === "object")
+  if (parameter.type === 'object')
     return {
-      type: "object" as const,
+      type: 'object' as const,
       additionalProperties: false,
       ...shared,
       properties: Object.fromEntries(
-        Object.entries(parameter.properties).map(([name, value]) => [
-          name,
-          scalarSchema(value),
-        ]),
+        Object.entries(parameter.properties).map(([name, value]) => [name, scalarSchema(value)]),
       ),
     };
   return { ...scalarSchema(parameter), ...shared };
@@ -153,7 +145,7 @@ export function createPageToolRegistry(
     }
   >();
   const restrictionFailed = new Set<string>();
-  let closed=false;
+  let closed = false;
 
   /**
    * 只在该 agent 作用域禁用指定全局工具。
@@ -163,12 +155,14 @@ export function createPageToolRegistry(
     agent: { ctx: { tools: { restrict: (f: { deny: string[] }) => () => void } } },
     candidates: readonly string[],
   ): (() => void) | undefined => {
-    const known = ctx.tools.schemas().map(tool=>tool.name).filter(name=>name!=="run_code");
+    const known = ctx.tools
+      .schemas()
+      .map((tool) => tool.name)
+      .filter((name) => name !== 'run_code');
     const target = new Set<string>();
     for (const name of candidates) if (known.includes(name)) target.add(name);
     // 兜底：所有浏览器 MCP 工具（按前缀，未来新增的也覆盖）。
-    for (const name of known)
-      if (/^mcp__browser/i.test(name)) target.add(name);
+    for (const name of known) if (/^mcp__browser/i.test(name)) target.add(name);
     if (target.size === 0) return undefined;
     try {
       return agent.ctx.tools.restrict({ deny: [...target] });
@@ -185,43 +179,46 @@ export function createPageToolRegistry(
   const skipped = new Set<string>();
   // 页面关闭后不再声明，工具应当在合理时间内消失，而不是一直挂着。
   const staleMs = consumer.staleMs ?? 30_000;
-  const sweep = setInterval(() => {
-    const now = Date.now();
-    for (const [sessionId, entry] of [...registered])
-      if (now - entry.at > staleMs) {
-        dispose(sessionId);
-      }
-  }, Math.min(staleMs, 10_000));
+  const sweep = setInterval(
+    () => {
+      const now = Date.now();
+      for (const [sessionId, entry] of Array.from(registered))
+        if (now - entry.at > staleMs) {
+          dispose(sessionId);
+        }
+    },
+    Math.min(staleMs, 10_000),
+  );
   sweep.unref?.();
 
   const invoke = async (
     sessionId: string,
     catalog: PageCatalog,
     args: Record<string, unknown>,
-    options: { dataAllowed: boolean; signal:AbortSignal },
+    options: { dataAllowed: boolean; signal: AbortSignal },
   ): Promise<string> => {
     options.signal.throwIfAborted();
-    const kind = typeof args.kind === "string" ? args.kind : null;
+    const kind = typeof args.kind === 'string' ? args.kind : null;
     // 只要目录、不做事：目录本身不再写进工具说明（那会让每次请求都付一次 token）。
     // kind=directory 与 directory=true 都只请求元素目录，不执行页面动作。
-    if (args.directory === true || kind === "directory")
+    if (args.directory === true || kind === 'directory')
       return JSON.stringify({
-        source: "PAGE_BRIDGE",
-        protocol: "ag-ui-frontend-tool",
-        authority: "view-only",
+        source: 'PAGE_BRIDGE',
+        protocol: 'ag-ui-frontend-tool',
+        authority: 'view-only',
         tool: { toolCallName: catalog.tool, toolCallId: null },
         directory: elementDirectory(catalog, {
-          ...(typeof args.focus === "string" ? { focus: args.focus } : {}),
+          ...(typeof args.focus === 'string' ? { focus: args.focus } : {}),
           ...(args.values === true ? { values: true } : {}),
         }),
-        note: "这是只读目录：没有下发任何操作，也不会改动这一屏。",
+        note: '这是只读目录：没有下发任何操作，也不会改动这一屏。',
       });
     /** 拒绝一次调用：命令没有下发，模型据此知道"这条路走不通"而不是页面没反应。 */
     const refuse = (error: string, note: string) =>
       JSON.stringify({
-        source: "PAGE_BRIDGE",
-        protocol: "ag-ui-frontend-tool",
-        authority: "view-only",
+        source: 'PAGE_BRIDGE',
+        protocol: 'ag-ui-frontend-tool',
+        authority: 'view-only',
         tool: { toolCallName: catalog.tool, toolCallId: null },
         kind,
         applied: false,
@@ -231,48 +228,48 @@ export function createPageToolRegistry(
     // 没给动词也没要目录：说清楚要传什么，而不是抛一个看不懂的元素错误。
     if (kind === null)
       return refuse(
-        "PAGE_KIND_REQUIRED",
-        "要改这一屏请传 kind=invoke/setValue/select/clear（并给 target/action/value）；只要元素目录就传 directory=true。",
+        'PAGE_KIND_REQUIRED',
+        '要改这一屏请传 kind=invoke/setValue/select/clear（并给 target/action/value）；只要元素目录就传 directory=true。',
       );
     // 只读元素不能被改、后台元素不存在：宿主按页面声明先挡一道。
     const violation = resolvePageAction(catalog, args);
-    if (violation) return refuse(violation, "页面没有开放这个元素/动作，命令没有下发。");
+    if (violation) return refuse(violation, '页面没有开放这个元素/动作，命令没有下发。');
     const effect = pageActionEffect(catalog, args);
-    if (kind === "setValue" && effect !== "view" && !options.dataAllowed)
-      return refuse("DATA_ACTION_NOT_ALLOWED", "这个页面只允许改视图，不允许写字段。");
+    if (kind === 'setValue' && effect !== 'view' && !options.dataAllowed)
+      return refuse('DATA_ACTION_NOT_ALLOWED', '这个页面只允许改视图，不允许写字段。');
     // 影响等级由契约卡住：只声明"改草稿"的页面，提交/审批类元素不下载到页面。
-    const allowsEffect = consumer.allowsEffect ?? (() => effect === "view" || effect === "draft");
+    const allowsEffect = consumer.allowsEffect ?? (() => effect === 'view' || effect === 'draft');
     if (!allowsEffect(catalog.surface, effect, sessionId))
       return refuse(
-        "EFFECT_NOT_ALLOWED",
-        effect === "approve"
-          ? "这个页面没有开放审批动作，命令没有下发。"
-          : "这个页面没有开放提交动作，命令没有下发。",
+        'EFFECT_NOT_ALLOWED',
+        effect === 'approve'
+          ? '这个页面没有开放审批动作，命令没有下发。'
+          : '这个页面没有开放提交动作，命令没有下发。',
       );
     // "改草稿"这一层统一管限流、回执与超时：页面只声明能力，不写执行逻辑。
     const begun = drafts.begin({
       sessionId,
       surface: catalog.surface,
-      kind: kind ?? "",
+      kind: kind ?? '',
       targets: [
-        ...(typeof args.target === "string" ? [args.target] : []),
+        ...(typeof args.target === 'string' ? [args.target] : []),
         ...(Array.isArray(args.targets)
           ? (args.targets as unknown[]).filter(
-              (value): value is string => typeof value === "string",
+              (value): value is string => typeof value === 'string',
             )
           : []),
       ],
       effect,
-      ...(typeof args[catalog.reasonField ?? "reason"] === "string"
-        ? { reason: String(args[catalog.reasonField ?? "reason"]) }
+      ...(typeof args[catalog.reasonField ?? 'reason'] === 'string'
+        ? { reason: String(args[catalog.reasonField ?? 'reason']) }
         : {}),
     });
     if (!begun.ok) return refuse(begun.code, begun.reason);
     // 元素目录由桥自己按声明校验；旧的动作目录仍交给业务校验器。
     const validated =
       consumer.validate && catalog.elements === undefined
-      ? consumer.validate(args, sessionId)
-      : args;
+        ? consumer.validate(args, sessionId)
+        : args;
     const before = consumer.stateSnapshot?.(sessionId)?.sequence ?? 0;
     options.signal.throwIfAborted();
     const toolCallId = bridge.enqueue(sessionId, {
@@ -281,11 +278,11 @@ export function createPageToolRegistry(
     });
     let message;
     try {
-      message = await bridge.wait(sessionId, toolCallId, waitMs,100,options.signal);
+      message = await bridge.wait(sessionId, toolCallId, waitMs, 100, options.signal);
       options.signal.throwIfAborted();
-    }catch(error){
-      bridge.cancel(sessionId,toolCallId);
-      drafts.finish(begun.receiptId,{applied:false,error:"PAGE_TOOL_CANCELLED"});
+    } catch (error) {
+      bridge.cancel(sessionId, toolCallId);
+      drafts.finish(begun.receiptId, { applied: false, error: 'PAGE_TOOL_CANCELLED' });
       throw error;
     }
     if (message === undefined) bridge.cancel(sessionId, toolCallId);
@@ -294,17 +291,19 @@ export function createPageToolRegistry(
       try {
         const content = JSON.parse(message.content);
         pageApplied = content?.toolCallId === toolCallId && content?.applied === true;
-      } catch { /* Current page receipts are JSON; malformed receipts never prove success. */ }
+      } catch {
+        /* Current page receipts are JSON; malformed receipts never prove success. */
+      }
     }
     const applied = pageApplied;
     const pageError =
       message === undefined
-        ? "PAGE_TOOL_PENDING"
-        : message.error ?? (pageApplied ? undefined : "PAGE_TOOL_NOT_APPLIED");
+        ? 'PAGE_TOOL_PENDING'
+        : (message.error ?? (pageApplied ? undefined : 'PAGE_TOOL_NOT_APPLIED'));
     drafts.finish(begun.receiptId, {
       applied,
       ...(message === undefined
-        ? { error: "PAGE_TOOL_PENDING", timedOut: true }
+        ? { error: 'PAGE_TOOL_PENDING', timedOut: true }
         : pageError === undefined
           ? {}
           : { error: pageError }),
@@ -323,41 +322,42 @@ export function createPageToolRegistry(
     options.signal.throwIfAborted();
     const snapshotAfterApply = (snapshot?.sequence ?? 0) > before;
     return JSON.stringify({
-      source: "PAGE_BRIDGE",
-      protocol: "ag-ui-frontend-tool",
-      authority: "view-only",
+      source: 'PAGE_BRIDGE',
+      protocol: 'ag-ui-frontend-tool',
+      authority: 'view-only',
       tool: { toolCallName: catalog.tool, toolCallId },
       kind,
       applied,
-      pageSource: "self-report",
-      draft: receipt === undefined
-        ? null
-        : {
-            id: receipt.id,
-            outcome: receipt.outcome,
-            ...(receipt.error === undefined ? {} : { error: receipt.error }),
-          },
+      pageSource: 'self-report',
+      draft:
+        receipt === undefined
+          ? null
+          : {
+              id: receipt.id,
+              outcome: receipt.outcome,
+              ...(receipt.error === undefined ? {} : { error: receipt.error }),
+            },
       snapshotAfterApply,
       ...(message === undefined
         ? {
-            availability: "pending",
-            code: "PAGE_TOOL_PENDING",
+            availability: 'pending',
+            code: 'PAGE_TOOL_PENDING',
             reason:
-              "页面还没执行这次改动（可能刚切走工作台或页面正在加载）。现在不能说页面已经改好了。",
+              '页面还没执行这次改动（可能刚切走工作台或页面正在加载）。现在不能说页面已经改好了。',
           }
         : {}),
       ...(pageError ? { error: pageError } : {}),
       ...(applied && !snapshotAfterApply
         ? {
-            availability: "refreshing",
-            code: "PAGE_STATE_REFRESHING",
+            availability: 'refreshing',
+            code: 'PAGE_STATE_REFRESHING',
             reason:
-              "页面已经应用了这次改动，但还没报回改动后的状态；下面附的是改动前的状态，不要用它判断改动结果。",
+              '页面已经应用了这次改动，但还没报回改动后的状态；下面附的是改动前的状态，不要用它判断改动结果。',
           }
         : {}),
       page: message === undefined ? null : parsePageContent(message.content),
       state: snapshot?.state ?? null,
-      note: "只改了当前页面的显示范围，没有读取或改动任何业务数据，也不代表审批意见。",
+      note: '只改了当前页面的显示范围，没有读取或改动任何业务数据，也不代表审批意见。',
     });
   };
 
@@ -365,7 +365,7 @@ export function createPageToolRegistry(
     const existing = registered.get(sessionId);
     if (!existing) return;
     registered.delete(sessionId);
-    existing.controller.abort(new Error("PAGE_TOOL_OWNER_RELEASED"));
+    existing.controller.abort(new Error('PAGE_TOOL_OWNER_RELEASED'));
     bridge.reset(sessionId);
     existing.dispose();
     existing.restraint?.();
@@ -377,11 +377,8 @@ export function createPageToolRegistry(
      * - 不带声明（undefined）：保持现状（轮询不必每次都重复声明）；
      * - 显式声明为 null：页面已经没有可调用动作，注销该会话的工具。
      */
-    declare(
-      sessionId: string,
-      rawCatalog: unknown,
-    ): void {
-      if(closed)throw Error("PAGE_TOOL_REGISTRY_CLOSED");
+    declare(sessionId: string, rawCatalog: unknown): void {
+      if (closed) throw Error('PAGE_TOOL_REGISTRY_CLOSED');
       if (rawCatalog === undefined) return;
       if (rawCatalog === null) {
         dispose(sessionId);
@@ -389,18 +386,16 @@ export function createPageToolRegistry(
       }
       const catalog = validatePageCatalog(rawCatalog);
       // 只允许改白名单里的页面；不在名单里就当作没有能力。
-      if (
-        consumer.allowSurfaces &&
-        !consumer.allowSurfaces.includes(catalog.surface)
-      ) {
+      if (consumer.allowSurfaces && !consumer.allowSurfaces.includes(catalog.surface)) {
         dispose(sessionId);
         return;
       }
       // 默认只暴露"改这一屏怎么看"的动作；改业务数据的动作必须显式放开。
       const dataAllowed =
-        consumer.allowsDataAction?.(catalog.surface,sessionId) ?? (consumer.dataActionSurfaces?.includes(catalog.surface) === true);
+        consumer.allowsDataAction?.(catalog.surface, sessionId) ??
+        consumer.dataActionSurfaces?.includes(catalog.surface) === true;
       const actions = (catalog.actions ?? []).filter(
-        (action) => action.scope !== "data" || dataAllowed,
+        (action) => action.scope !== 'data' || dataAllowed,
       );
       // 元素目录的页面没有自定义动作；只要它声明了元素就继续注册。
       if (actions.length === 0 && (catalog.elements?.length ?? 0) === 0) {
@@ -418,16 +413,16 @@ export function createPageToolRegistry(
       if (!agent) {
         if (!skipped.has(sessionId)) {
           skipped.add(sessionId);
-          console.log(
-            `[page-bridge] declare skipped (no live agent) session=${sessionId}`,
-          );
+          console.log(`[page-bridge] declare skipped (no live agent) session=${sessionId}`);
         }
         return;
       }
       // A refreshed view catalog is still the same live page owner. Its own
       // command can change that catalog before the next poll returns its result.
-      const sameOwner = existing?.agent === agent &&
-        existing.surface === effective.surface && existing.tool === effective.tool;
+      const sameOwner =
+        existing?.agent === agent &&
+        existing.surface === effective.surface &&
+        existing.tool === effective.tool;
       if (sameOwner && existing.key === key) {
         existing.at = Date.now();
         return;
@@ -443,45 +438,38 @@ export function createPageToolRegistry(
           name: effective.tool,
           description,
           parameters: Object.fromEntries(
-            parameters.map((parameter) => [
-              parameter.name,
-              parameterSchema(parameter),
-            ]),
+            parameters.map((parameter) => [parameter.name, parameterSchema(parameter)]),
           ),
           output: {
-            schema: { type: "string" },
-            render: (_args, value) => [{ type: "text", text: value }],
+            schema: { type: 'string' },
+            render: (_args, value) => [{ type: 'text', text: value }],
             presentationMeta: () => ({
-              source: "PAGE_BRIDGE",
-              authority: "view-only",
+              source: 'PAGE_BRIDGE',
+              authority: 'view-only',
             }),
           },
           timeoutMs: waitMs + 4000,
           isConcurrencySafe: () => false,
           presentCall: (args) => ({
-            card: "generic",
-            title: `${effective.tool} · ${String(args.kind ?? "")}`,
+            card: 'generic',
+            title: `${effective.tool} · ${String(args.kind ?? '')}`,
             rawInput: args,
           }),
           execute: async (args, exec) => {
-            if(exec.agent?.id!==sessionId)throw Error("PAGE_TOOL_SESSION_MISMATCH");
+            if (exec.agent?.id !== sessionId) throw Error('PAGE_TOOL_SESSION_MISMATCH');
             return invoke(sessionId, effective, args, {
-              dataAllowed,signal:AbortSignal.any([exec.signal,controller.signal]),
+              dataAllowed,
+              signal: AbortSignal.any([exec.signal, controller.signal]),
             });
           },
         }),
       );
       const restraint = consumer.denyGlobalToolsInWorkbench
-        ? restrictWorkbenchTools(
-            agent as never,
-            consumer.denyGlobalToolsInWorkbench,
-          )
+        ? restrictWorkbenchTools(agent as never, consumer.denyGlobalToolsInWorkbench)
         : undefined;
       if (consumer.denyGlobalToolsInWorkbench && !restraint && !restrictionFailed.has(sessionId)) {
         restrictionFailed.add(sessionId);
-        console.log(
-          `[page-bridge] workbench tool restriction not applied session=${sessionId}`,
-        );
+        console.log(`[page-bridge] workbench tool restriction not applied session=${sessionId}`);
       }
       registered.set(sessionId, {
         key,
@@ -503,10 +491,14 @@ export function createPageToolRegistry(
       dispose(sessionId);
     },
     disposeAll(): void {
-      for (const sessionId of [...registered.keys()]) dispose(sessionId);
+      for (const sessionId of Array.from(registered.keys())) dispose(sessionId);
     },
     /** End this owner, including its stale-entry timer. Identity resets use disposeAll instead. */
-    shutdown():void {closed=true;clearInterval(sweep);for(const sessionId of [...registered.keys()])dispose(sessionId);},
+    shutdown(): void {
+      closed = true;
+      clearInterval(sweep);
+      for (const sessionId of Array.from(registered.keys())) dispose(sessionId);
+    },
     /** 最近的"改草稿"回执，供诊断与验收复核。 */
     receipts: () => drafts.receipts(),
   };

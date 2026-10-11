@@ -504,7 +504,16 @@ export function mountFramePresentation(
           })
           .catch(() => {});
       };
-    }, [associated, selection, session?.openState, loaded, currentExecution, inputActions, page, title]);
+    }, [
+      associated,
+      selection,
+      session?.openState,
+      loaded,
+      currentExecution,
+      inputActions,
+      page,
+      title,
+    ]);
     useEffect(() => {
       if (
         page.resourceId ||
@@ -545,7 +554,8 @@ export function mountFramePresentation(
         reference.release();
       };
     }, [page.resourceId, associated, session?.openState, selection, inputActions, loaded, title]);
-    const interpreter = interpreters.find((row) => row.id === selection?.preset)?.id ?? page.resourceId;
+    const interpreter =
+      interpreters.find((row) => row.id === selection?.preset)?.id ?? page.resourceId;
     const connect = async (
       cwd?: string,
       ownerSignal?: AbortSignal,
@@ -607,10 +617,15 @@ export function mountFramePresentation(
         // Host scope changes across restarts. Reopen the same subject's retained
         // Session through the public owner, which validates its preset and cwd.
         if (
-          !cached && reuse && selection && identity.subject &&
+          !cached &&
+          reuse &&
+          selection &&
+          identity.subject &&
           selection.subject === identity.subject &&
-          selection.preset === (interpreterId ?? null) && selection.cwd === directory
-        ) cached = selection;
+          selection.preset === (interpreterId ?? null) &&
+          selection.cwd === directory
+        )
+          cached = selection;
         if (cached)
           await host.open(cached.sessionId, undefined, signal, (selected) => {
             if (selected.preset !== cached.preset || selected.cwd !== directory)
@@ -618,7 +633,10 @@ export function mountFramePresentation(
             associated(selected);
           });
         else {
-          if (interpreterId !== page.resourceId && !interpreters.some((row) => row.id === interpreterId))
+          if (
+            interpreterId !== page.resourceId &&
+            !interpreters.some((row) => row.id === interpreterId)
+          )
             throw Error('PAGE_INTERPRETER_UNAVAILABLE');
           await selectResource(host, interpreterId!, signal, directory, associated);
         }
@@ -706,9 +724,10 @@ export function mountFramePresentation(
       resourceRows.current = [];
       resourceRowsOwner.current = undefined;
       const owner = identity.scope + '\0' + page.resourceId;
-      const prepare = (!selection || (
-        selection.ownerScope !== identity.scope && selection.subject === identity.subject
-      )) && preparationOwner.current !== owner;
+      const prepare =
+        (!selection ||
+          (selection.ownerScope !== identity.scope && selection.subject === identity.subject)) &&
+        preparationOwner.current !== owner;
       if (prepare) preparationOwner.current = owner;
       const controller = new AbortController();
       preparation.current = controller;
@@ -765,8 +784,7 @@ export function mountFramePresentation(
           onHistory={() => workbench.showHistory(page.id)}
           onNewConversation={() => {
             workbench.cancelHistory();
-            if (page.resourceId)
-              void connect(undefined, undefined, interpreter, false);
+            if (page.resourceId) void connect(undefined, undefined, interpreter, false);
             else void newPlainConversation();
           }}
           onAssociateCurrent={!page.resourceId ? associateCurrent : undefined}
@@ -1016,7 +1034,8 @@ function createExecution(
     close: async (connection) => {
       await request('close', { owner: connection.owner }, AbortSignal.timeout(5000));
     },
-    draft: (connection, text, signal) => insertPageFeedbackDraft(ctx, connection.sessionId, text, signal),
+    draft: (connection, text, signal) =>
+      insertPageFeedbackDraft(ctx, connection.sessionId, text, signal),
     prompt: async (connection, text, signal) => {
       signal.throwIfAborted();
       const result = await ctx.remote.session.prompt(

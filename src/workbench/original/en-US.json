@@ -677,8 +677,8 @@
           "saved": "Saved automatically",
           "failed": "Draft save failed. Retry.",
           "failedShort": "Save failed",
-          "retryShort": "Retry"
-        ,"retry": "Retry save"
+          "retryShort": "Retry",
+          "retry": "Retry save"
         },
         "editCurrent": "Edit adjustment draft",
         "editScope": "This view shows aggregates. Editing applies only to the currently selected plan.",

@@ -3,7 +3,7 @@
  * 页面声明允许的能力层，执行侧使用同一策略；本表不执行业务动作。
  */
 /** 影响等级（与契约里的 effect 同一套名字，这里避免反向依赖）。 */
-export type LayerEffect = "view" | "draft" | "submit" | "approve";
+export type LayerEffect = 'view' | 'draft' | 'submit' | 'approve';
 export declare const CAPABILITY_LAYERS: readonly ["read", "draft", "submit", "approve", "export"];
 export type CapabilityLayer = (typeof CAPABILITY_LAYERS)[number];
 export type LayerPolicy = {

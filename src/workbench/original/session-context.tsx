@@ -10,8 +10,13 @@ export interface WorkbenchSession {
 const WorkbenchSessionContext = createContext<WorkbenchSession>({ conversationId: null });
 
 /** 传递真实绑定的 DSH Session ID；工作台不会创建会话。 */
-export function WorkbenchSessionProvider({ value, children }: React.PropsWithChildren<{ value: WorkbenchSession }>) {
-  return <WorkbenchSessionContext.Provider value={value}>{children}</WorkbenchSessionContext.Provider>;
+export function WorkbenchSessionProvider({
+  value,
+  children,
+}: React.PropsWithChildren<{ value: WorkbenchSession }>) {
+  return (
+    <WorkbenchSessionContext.Provider value={value}>{children}</WorkbenchSessionContext.Provider>
+  );
 }
 
 /** 当前业务页面通过此 Hook 读取已绑定的 Core Session 地址。 */

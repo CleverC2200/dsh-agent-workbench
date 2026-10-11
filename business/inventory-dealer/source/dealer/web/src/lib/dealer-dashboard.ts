@@ -1,6 +1,55 @@
-import {dealerCubeContract,CubeRow,cube,planMonthDimension,loadBizRuleFile,loadFuseRules,statusContext,loadFilterLabels,loadMetricCards,loadStockHealth,DealerCustomer,DealerCustomerInventorySummary,DealerCategoryInventorySummary,DealerDashboardRecord,DealerDashboardSummary,DealerInventoryDailySummary,DealerFilterLabel,DealerMetricCard,DealerStockHealth,DealerAgingRow,DealerDetailScope,DealerMetric,DealerMetricCondition,numberOf,dateOnly,planMonthOf,dedupeRows,asCustomer,resultTableRow,matchesMetricCondition,validDetailScope,ageRowsFromCube,withRatio,summarizeDealerDashboard} from 'dsh-agent-manage/inventory-compute/dealer-dashboard';
-export type {DealerCustomer,DealerCustomerInventorySummary,DealerCategoryInventorySummary,DealerDashboardRecord,DealerDashboardSummary,DealerInventoryDailySummary,DealerFilterLabel,DealerMetricCard,DealerStockHealth,DealerAgingRow,DealerDetailScope,DealerMetric,DealerMetricCondition} from 'dsh-agent-manage/inventory-compute/dealer-dashboard';
-import "server-only";
+import {
+  dealerCubeContract,
+  CubeRow,
+  cube,
+  planMonthDimension,
+  loadBizRuleFile,
+  loadFuseRules,
+  statusContext,
+  loadFilterLabels,
+  loadMetricCards,
+  loadStockHealth,
+  DealerCustomer,
+  DealerCustomerInventorySummary,
+  DealerCategoryInventorySummary,
+  DealerDashboardRecord,
+  DealerDashboardSummary,
+  DealerInventoryDailySummary,
+  DealerFilterLabel as _DealerFilterLabel,
+  DealerMetricCard as _DealerMetricCard,
+  DealerStockHealth as _DealerStockHealth,
+  DealerAgingRow as _DealerAgingRow,
+  DealerDetailScope,
+  DealerMetric,
+  DealerMetricCondition as _DealerMetricCondition,
+  numberOf,
+  dateOnly,
+  planMonthOf,
+  dedupeRows,
+  asCustomer,
+  resultTableRow,
+  matchesMetricCondition,
+  validDetailScope,
+  ageRowsFromCube,
+  withRatio,
+  summarizeDealerDashboard,
+} from 'dsh-agent-manage/inventory-compute/dealer-dashboard';
+export type {
+  DealerCustomer,
+  DealerCustomerInventorySummary,
+  DealerCategoryInventorySummary,
+  DealerDashboardRecord,
+  DealerDashboardSummary,
+  DealerInventoryDailySummary,
+  DealerFilterLabel,
+  DealerMetricCard,
+  DealerStockHealth,
+  DealerAgingRow,
+  DealerDetailScope,
+  DealerMetric,
+  DealerMetricCondition,
+} from 'dsh-agent-manage/inventory-compute/dealer-dashboard';
+import 'server-only';
 
 import {
   dealerWorkbenchSql,
@@ -21,11 +70,9 @@ import {
   queryWorkbenchShortageDetails,
   queryWorkbenchSummary,
   queryWorkbenchSqlPage,
-} from "@/lib/dealer-workbench-sql";
+} from '@/lib/dealer-workbench-sql';
 
-import { GeaSqlApiError } from "@/lib/gea-sql-client";
-
-
+import { GeaSqlApiError } from '@/lib/gea-sql-client';
 
 const GEA_CUSTOMER_BOOTSTRAP_LIMIT = 10;
 
@@ -34,16 +81,16 @@ const GEA_CUSTOMER_SEARCH_LIMIT = 20;
 const GEA_DASHBOARD_INITIAL_ROW_LIMIT = 200;
 
 const metricSqlColumns: Record<DealerMetric, string> = {
-  budget_amount: "simulation_need_amount",
-  budget_rate: "budget_rate",
-  planned_qty_rate: "planned_qty_rate",
-  shipped_qty: "ship_qty",
-  in_transit_qty: "in_transit_qty",
-  stock_qty: "stock_qty",
-  target_inventory: "target_inventory",
-  pre_order_qty: "pre_order_qty",
-  turnover_days: "turnover_days",
-  stock_age: "avg_stock_age",
+  budget_amount: 'simulation_need_amount',
+  budget_rate: 'budget_rate',
+  planned_qty_rate: 'planned_qty_rate',
+  shipped_qty: 'ship_qty',
+  in_transit_qty: 'in_transit_qty',
+  stock_qty: 'stock_qty',
+  target_inventory: 'target_inventory',
+  pre_order_qty: 'pre_order_qty',
+  turnover_days: 'turnover_days',
+  stock_age: 'avg_stock_age',
 };
 
 async function assertAuthorizedSqlCustomerCodes(
@@ -56,8 +103,8 @@ async function assertAuthorizedSqlCustomerCodes(
   const rows = await queryWorkbenchLatestSnapshot(scopedCustomerCodes, options);
   if (!dateOnly(rows[0]?.[dealerCubeContract.snapshotDimension])) {
     throw new GeaSqlApiError(
-      "查询范围包含当前用户无权访问的客户",
-      "GEA_SQL_CUSTOMER_SCOPE_FORBIDDEN",
+      '查询范围包含当前用户无权访问的客户',
+      'GEA_SQL_CUSTOMER_SCOPE_FORBIDDEN',
       403,
       false,
     );
@@ -72,7 +119,7 @@ export type DealerDashboardLoadOptions = {
   /** UI default: select the sole visible customer using the queried total. */
   autoSelectOnlyCustomer?: boolean;
   /** Only fetch this stock tab; omitted by existing full-workspace consumers. */
-  stockTab?: "customer" | "category" | "sku" | "shortage" | "expiry";
+  stockTab?: 'customer' | 'category' | 'sku' | 'shortage' | 'expiry';
   /** Partial table response; global metrics remain in the existing document. */
   tabDataOnly?: boolean;
   planMonth?: string;
@@ -85,7 +132,7 @@ export type DealerDashboardLoadOptions = {
   companyProductFacets?: boolean;
   onTiming?: (stage: string, durationMs: number) => void;
   /** Internal export scope; never used for normal screen pagination. */
-  exportTab?: "sku" | "shortage" | "customer" | "category" | "expiry";
+  exportTab?: 'sku' | 'shortage' | 'customer' | 'category' | 'expiry';
   actionId?: string;
   clientRequestId?: string;
   signal?: AbortSignal;
@@ -101,7 +148,7 @@ export type DealerDashboardLoadOptions = {
   shortagePage?: number;
   /** Shortage-SKU page size; does not change the regular SKU page. */
   shortagePageSize?: number;
-  scope?: "single" | "sales" | "all";
+  scope?: 'single' | 'sales' | 'all';
   snapshotDate?: string;
   /** Trusted GEA dealer identity; narrows customer-list queries to one code. */
   lockedCustomerCode?: string;
@@ -119,26 +166,23 @@ export type DealerCustomerSearchResult = {
  * stays server-paged, so opening the picker never reads all authorized rows.
  */
 export async function loadDealerCustomers(
-  search = "",
+  search = '',
   offset = 0,
   limit = GEA_CUSTOMER_SEARCH_LIMIT,
   options: DealerDashboardLoadOptions = {},
 ): Promise<DealerCustomerSearchResult> {
   const safeSearch = search.trim().slice(0, 100);
-  const safeOffset = Number.isFinite(offset)
-    ? Math.max(0, Math.floor(offset))
-    : 0;
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0;
   const safeLimit = Number.isFinite(limit)
     ? Math.max(1, Math.min(GEA_CUSTOMER_SEARCH_LIMIT, Math.floor(limit)))
     : GEA_CUSTOMER_SEARCH_LIMIT;
-  const exactCustomerCode = options.lockedCustomerCode ?? "";
+  const exactCustomerCode = options.lockedCustomerCode ?? '';
   const customerScope = exactCustomerCode ? [exactCustomerCode] : [];
   const snapshotRows = options.snapshotDate
     ? []
     : await queryWorkbenchLatestSnapshot(customerScope, options);
   const snapshotDate =
-    options.snapshotDate ??
-    dateOnly(snapshotRows[0]?.[dealerCubeContract.snapshotDimension]);
+    options.snapshotDate ?? dateOnly(snapshotRows[0]?.[dealerCubeContract.snapshotDimension]);
   if (!snapshotDate)
     return {
       customers: [],
@@ -172,21 +216,18 @@ export async function loadDealerResultPage(
   page: number,
   pageSize: number,
 ) {
-  if (!validDetailScope(scope)) throw new Error("结果查询范围无效");
-  const authorizedCustomerCodes = await assertAuthorizedSqlCustomerCodes(
-    scope.customerCodes,
-  );
+  if (!validDetailScope(scope)) throw new Error('结果查询范围无效');
+  const authorizedCustomerCodes = await assertAuthorizedSqlCustomerCodes(scope.customerCodes);
   const safePage = Math.max(0, Math.floor(page));
   const safePageSize = Math.min(200, Math.max(1, Math.floor(pageSize)));
   const needsInMemoryFilter =
-    scope.stockCondition === "equals_zero" ||
-    scope.metricCondition !== undefined;
+    scope.stockCondition === 'equals_zero' || scope.metricCondition !== undefined;
   const sqlOrderColumn =
-    scope.orderBy === "stockAge"
-      ? "avg_stock_age"
-      : scope.orderBy === "metric" && scope.metricCondition
+    scope.orderBy === 'stockAge'
+      ? 'avg_stock_age'
+      : scope.orderBy === 'metric' && scope.metricCondition
         ? metricSqlColumns[scope.metricCondition.metric]
-        : "pre_order_qty";
+        : 'pre_order_qty';
   const query = dealerWorkbenchSql.result({
     snapshotDate: scope.snapshotDate,
     planMonth: scope.planMonth,
@@ -206,16 +247,14 @@ export async function loadDealerResultPage(
     : (await queryWorkbenchSqlPage(query, safePage, safePageSize)).records;
   // 主粒度去重：明细模式按 snapshot+cust+material+plan_month 保留最新记录，
   // 与 Agent 侧 workspace 的口径一致；汇总模式行已由 Cube 聚合，不再重复。
-  const deduped = scope.mode === "detail" ? dedupeRows(rows).rows : rows;
+  const deduped = scope.mode === 'detail' ? dedupeRows(rows).rows : rows;
   const pageRows = needsInMemoryFilter
     ? deduped.slice(safePage * safePageSize, (safePage + 1) * safePageSize)
     : deduped;
   return {
     page: safePage,
     pageSize: safePageSize,
-    rows: pageRows.map((row) =>
-      resultTableRow(row, scope.metricCondition, context),
-    ),
+    rows: pageRows.map((row) => resultTableRow(row, scope.metricCondition, context)),
   };
 }
 
@@ -223,10 +262,7 @@ export async function loadDealerDashboard(
   customerCode?: string,
   options: DealerDashboardLoadOptions = {},
 ) {
-  const measure = async <T>(
-    stage: string,
-    task: () => Promise<T>,
-  ): Promise<T> => {
+  const measure = async <T>(stage: string, task: () => Promise<T>): Promise<T> => {
     const start = performance.now();
     try {
       return await task();
@@ -234,21 +270,18 @@ export async function loadDealerDashboard(
       options.onTiming?.(stage, performance.now() - start);
     }
   };
-  const fuseRuleConfig = loadBizRuleFile("fuse-rules");
-  const exceptionRuleConfig = loadBizRuleFile("exceptions");
+  const fuseRuleConfig = loadBizRuleFile('fuse-rules');
+  const exceptionRuleConfig = loadBizRuleFile('exceptions');
   const fuseRules = loadFuseRules(fuseRuleConfig);
   const filterLabels = loadFilterLabels();
   const metricCards = loadMetricCards();
   const stockHealth = loadStockHealth();
   const customerBootstrapLimit = GEA_CUSTOMER_BOOTSTRAP_LIMIT;
   const effectiveCustomerCode = customerCode;
-  let requestedScope = customerCode ? "single" : (options.scope ?? "single");
-  const knownScope = Boolean(
-    effectiveCustomerCode || requestedScope !== "single",
-  );
+  let requestedScope = customerCode ? 'single' : (options.scope ?? 'single');
+  const knownScope = Boolean(effectiveCustomerCode || requestedScope !== 'single');
   const metadataCodes =
-    options.overviewCustomerCodes ??
-    (effectiveCustomerCode ? [effectiveCustomerCode] : []);
+    options.overviewCustomerCodes ?? (effectiveCustomerCode ? [effectiveCustomerCode] : []);
   const pinnedSnapshot =
     options.tabDataOnly &&
     options.snapshotDate &&
@@ -256,24 +289,18 @@ export async function loadDealerDashboard(
       ? options.snapshotDate
       : undefined;
   const pinnedMonth =
-    pinnedSnapshot &&
-    options.planMonth &&
-    /^20\d{2}-\d{2}$/.test(options.planMonth)
+    pinnedSnapshot && options.planMonth && /^20\d{2}-\d{2}$/.test(options.planMonth)
       ? options.planMonth
       : undefined;
-  const combinedMetadata = Boolean(
-    options.stockTab && knownScope && !pinnedSnapshot,
-  );
+  const combinedMetadata = Boolean(options.stockTab && knownScope && !pinnedSnapshot);
   const snapshotRows = pinnedSnapshot
     ? [{ [dealerCubeContract.snapshotDimension]: pinnedSnapshot }]
-    : await measure("snapshot", () =>
+    : await measure('snapshot', () =>
         combinedMetadata
           ? queryWorkbenchSnapshotMonths(metadataCodes, options)
           : queryWorkbenchLatestSnapshot(metadataCodes, options),
       );
-  const snapshotDate = dateOnly(
-    snapshotRows[0]?.[dealerCubeContract.snapshotDimension],
-  );
+  const snapshotDate = dateOnly(snapshotRows[0]?.[dealerCubeContract.snapshotDimension]);
   if (!snapshotDate) {
     return {
       customers: [] as DealerCustomer[],
@@ -310,51 +337,48 @@ export async function loadDealerDashboard(
     ? [{ [planMonthDimension]: pinnedMonth }]
     : combinedMetadata
       ? snapshotRows.filter(
-          (row) =>
-            dateOnly(row[dealerCubeContract.snapshotDimension]) ===
-            snapshotDate,
+          (row) => dateOnly(row[dealerCubeContract.snapshotDimension]) === snapshotDate,
         )
       : null;
   // The daily snapshot and full daily totals do not depend on plan-order details.
   const earlyDailySnapshot = knownScope
-    ? measure("daily_snapshot", () =>
+    ? measure('daily_snapshot', () =>
         options.tabDataOnly && options.inventoryDailyStatDate
           ? Promise.resolve([
               {
-                "dealer_inventory_daily.stat_date":
-                  options.inventoryDailyStatDate,
+                'dealer_inventory_daily.stat_date': options.inventoryDailyStatDate,
               },
             ])
           : queryWorkbenchLatestInventoryDailySnapshot(metadataCodes, options),
       )
     : null;
   const earlyDailySummary = earlyDailySnapshot?.then((rows) => {
-    const date = dateOnly(rows[0]?.["dealer_inventory_daily.stat_date"]);
+    const date = dateOnly(rows[0]?.['dealer_inventory_daily.stat_date']);
     return date && !options.companyProductsOnly && !options.tabDataOnly
-      ? measure("daily_summary", () =>
+      ? measure('daily_summary', () =>
           queryWorkbenchInventoryDailySummary(date, metadataCodes, options),
         )
       : ({} as CubeRow);
   });
   // Join below; attach a handler now so an earlier independent failure cannot leak a rejection.
   earlyDailySummary?.catch(() => {});
-  const customerQuery = measure("customers", () =>
+  const customerQuery = measure('customers', () =>
     queryWorkbenchCustomers(
       snapshotDate,
-      "",
-      effectiveCustomerCode ?? "",
+      '',
+      effectiveCustomerCode ?? '',
       0,
       customerBootstrapLimit,
       options,
     ),
   );
   const [customerResult, selectedMonthRows] =
-    effectiveCustomerCode || requestedScope !== "single"
+    effectiveCustomerCode || requestedScope !== 'single'
       ? await Promise.all([
           customerQuery,
           metadataMonths
             ? Promise.resolve(metadataMonths)
-            : measure("months", () =>
+            : measure('months', () =>
                 queryWorkbenchPlanMonths(snapshotDate, metadataCodes, options),
               ),
         ])
@@ -365,18 +389,17 @@ export async function loadDealerDashboard(
   const customers = authorizedCustomers;
   const autoSelectedCustomer = Boolean(
     options.autoSelectOnlyCustomer &&
-    requestedScope !== "single" &&
+    requestedScope !== 'single' &&
     !options.overviewOnly &&
     !options.overviewCustomerCodes &&
     customerResult.total === 1 &&
     customers.length === 1,
   );
   if (autoSelectedCustomer) {
-    requestedScope = "single";
+    requestedScope = 'single';
   }
   const activeCustomerCode =
-    effectiveCustomerCode &&
-    customers.some((item) => item.code === effectiveCustomerCode)
+    effectiveCustomerCode && customers.some((item) => item.code === effectiveCustomerCode)
       ? effectiveCustomerCode
       : (customers[0]?.code ?? null);
   if (!activeCustomerCode) {
@@ -412,12 +435,12 @@ export async function loadDealerDashboard(
   }
   const scopedCustomerCodes = options.overviewCustomerCodes
     ? options.overviewCustomerCodes
-    : requestedScope === "sales" || requestedScope === "all"
+    : requestedScope === 'sales' || requestedScope === 'all'
       ? []
       : [activeCustomerCode];
   const monthRows = selectedMonthRows
     ? selectedMonthRows
-    : await measure("months", () =>
+    : await measure('months', () =>
         queryWorkbenchPlanMonths(snapshotDate, scopedCustomerCodes, options),
       );
   const months = monthRows
@@ -465,35 +488,27 @@ export async function loadDealerDashboard(
 
   // 页签只读取自己的明细，顶部指标仍使用全范围汇总。下载保留完整数据。
   const stockTab = options.companyProductsOnly
-    ? "sku"
+    ? 'sku'
     : options.exportTab
       ? undefined
       : options.stockTab;
   const readSku =
-    !options.overviewOnly &&
-    (!stockTab || stockTab === "sku" || stockTab === "expiry");
+    !options.overviewOnly && (!stockTab || stockTab === 'sku' || stockTab === 'expiry');
   const readCustomers =
-    !options.overviewOnly &&
-    !options.companyProductsOnly &&
-    (!stockTab || stockTab === "customer");
+    !options.overviewOnly && !options.companyProductsOnly && (!stockTab || stockTab === 'customer');
   const readCategory =
     !options.overviewOnly &&
     !options.companyProductsOnly &&
-    (!stockTab || stockTab === "category" || stockTab === "sku");
+    (!stockTab || stockTab === 'category' || stockTab === 'sku');
   const readShortage =
-    !options.overviewOnly &&
-    !options.companyProductsOnly &&
-    (!stockTab || stockTab === "shortage");
+    !options.overviewOnly && !options.companyProductsOnly && (!stockTab || stockTab === 'shortage');
   const detailPage = Number.isFinite(options.detailPage)
     ? Math.max(0, Math.floor(options.detailPage ?? 0))
     : 0;
   const detailPageSize = Number.isFinite(options.detailPageSize)
     ? Math.max(
         1,
-        Math.min(
-          200,
-          Math.floor(options.detailPageSize ?? GEA_DASHBOARD_INITIAL_ROW_LIMIT),
-        ),
+        Math.min(200, Math.floor(options.detailPageSize ?? GEA_DASHBOARD_INITIAL_ROW_LIMIT)),
       )
     : GEA_DASHBOARD_INITIAL_ROW_LIMIT;
   const customerPage = Number.isFinite(options.customerPage)
@@ -510,41 +525,30 @@ export async function loadDealerDashboard(
     : 10;
   const includeCompanyProducts = Boolean(
     options.includeCompanyProducts &&
-    requestedScope === "single" &&
+    requestedScope === 'single' &&
     scopedCustomerCodes.length === 1,
   );
   const fullSkuDetails =
-    options.exportTab === "expiry" ||
-    stockTab === "expiry" ||
-    options.exportTab === "sku" ||
-    Boolean(
-      options.companyProductsOnly && options.companyProductFilters?.download,
-    );
+    options.exportTab === 'expiry' ||
+    stockTab === 'expiry' ||
+    options.exportTab === 'sku' ||
+    Boolean(options.companyProductsOnly && options.companyProductFilters?.download);
   const customerPageResultPromise = !readCustomers
     ? Promise.resolve({ records: [] as CubeRow[], total: customerResult.total })
     : customerPage === 0 && customerPageSize === customerBootstrapLimit
       ? Promise.resolve(customerResult)
-      : measure("customers", () =>
-          queryWorkbenchCustomers(
-            snapshotDate,
-            "",
-            "",
-            customerPage,
-            customerPageSize,
-            options,
-          ),
+      : measure('customers', () =>
+          queryWorkbenchCustomers(snapshotDate, '', '', customerPage, customerPageSize, options),
         );
   const dailySnapshotPromise =
     (autoSelectedCustomer ? null : earlyDailySnapshot) ??
-    measure("daily_snapshot", () =>
+    measure('daily_snapshot', () =>
       queryWorkbenchLatestInventoryDailySnapshot(scopedCustomerCodes, options),
     );
   const categorySummaryPromise = dailySnapshotPromise.then((snapshotRows) => {
-    const inventoryDailyStatDate = dateOnly(
-      snapshotRows[0]?.["dealer_inventory_daily.stat_date"],
-    );
+    const inventoryDailyStatDate = dateOnly(snapshotRows[0]?.['dealer_inventory_daily.stat_date']);
     return inventoryDailyStatDate && readCategory
-      ? measure("category", () =>
+      ? measure('category', () =>
           queryWorkbenchCategorySummaries(
             snapshotDate,
             planMonth,
@@ -566,37 +570,28 @@ export async function loadDealerDashboard(
   ] = await Promise.all([
     readSku
       ? dailySnapshotPromise.then((snapshotRows) =>
-          measure("details", () =>
+          measure('details', () =>
             queryWorkbenchDashboard(
               snapshotDate,
               planMonth,
               scopedCustomerCodes,
               detailPage,
               detailPageSize,
-              stockTab === "expiry"
-                ? { ...options, exportTab: "expiry" }
-                : options,
-              dateOnly(snapshotRows[0]?.["dealer_inventory_daily.stat_date"]),
-              options.companyProductsOnly
-                ? options.companyProductFilters || {}
-                : undefined,
+              stockTab === 'expiry' ? { ...options, exportTab: 'expiry' } : options,
+              dateOnly(snapshotRows[0]?.['dealer_inventory_daily.stat_date']),
+              options.companyProductsOnly ? options.companyProductFilters || {} : undefined,
             ),
           ),
         )
       : Promise.resolve({ records: [] as CubeRow[], total: 0 }),
     options.companyProductsOnly || options.tabDataOnly
       ? Promise.resolve({} as CubeRow)
-      : measure("summary", () =>
-          queryWorkbenchSummary(
-            snapshotDate,
-            planMonth,
-            scopedCustomerCodes,
-            options,
-          ),
+      : measure('summary', () =>
+          queryWorkbenchSummary(snapshotDate, planMonth, scopedCustomerCodes, options),
         ),
     !readCustomers
       ? Promise.resolve({ records: [] as CubeRow[], total: 0 })
-      : measure("customer_summary", () =>
+      : measure('customer_summary', () =>
           queryWorkbenchCustomerSummaries(
             snapshotDate,
             planMonth,
@@ -610,7 +605,7 @@ export async function loadDealerDashboard(
     dailySnapshotPromise,
     !readShortage
       ? Promise.resolve({ records: [] as CubeRow[], total: 0 })
-      : measure("shortage", () =>
+      : measure('shortage', () =>
           queryWorkbenchShortageDetails(
             snapshotDate,
             planMonth,
@@ -626,34 +621,29 @@ export async function loadDealerDashboard(
   const shortageRows = shortageResult.records;
 
   const inventoryDailyStatDate = dateOnly(
-    inventoryDailySnapshotRows[0]?.["dealer_inventory_daily.stat_date"],
+    inventoryDailySnapshotRows[0]?.['dealer_inventory_daily.stat_date'],
   );
   const dailyKeysFor = (sourceRows: CubeRow[]) => {
     const seen = new Set<string>();
     return sourceRows
       .map((row) => ({
-        customerCode: String(row["dealer_plan_order.cust_code"] ?? "").trim(),
-        materialCode: String(
-          row["dealer_plan_order.material_code"] ?? "",
-        ).trim(),
+        customerCode: String(row['dealer_plan_order.cust_code'] ?? '').trim(),
+        materialCode: String(row['dealer_plan_order.material_code'] ?? '').trim(),
       }))
       .filter((key) => {
         const id = JSON.stringify([key.customerCode, key.materialCode]);
-        if (!key.customerCode || !key.materialCode || seen.has(id))
-          return false;
+        if (!key.customerCode || !key.materialCode || seen.has(id)) return false;
         seen.add(id);
         return true;
       });
   };
   const inventoryDailyKeys = fullSkuDetails ? [] : dailyKeysFor(rows);
   const shortageInventoryDailyKeys =
-    options.exportTab === "shortage" ? [] : dailyKeysFor(shortageRows);
+    options.exportTab === 'shortage' ? [] : dailyKeysFor(shortageRows);
   const dailyCustomerCodes = (
-    options.exportTab === "customer"
-      ? customerSummaryResult.records
-      : customerPageResult.records
+    options.exportTab === 'customer' ? customerSummaryResult.records : customerPageResult.records
   )
-    .map((row) => String(row["dealer_plan_order.cust_code"] ?? "").trim())
+    .map((row) => String(row['dealer_plan_order.cust_code'] ?? '').trim())
     .filter(Boolean);
   const [
     inventoryDailyRows,
@@ -664,7 +654,7 @@ export async function loadDealerDashboard(
     ? await Promise.all([
         !readSku
           ? Promise.resolve([] as CubeRow[])
-          : measure("daily_details", () =>
+          : measure('daily_details', () =>
               queryWorkbenchInventoryDailyDetails(
                 inventoryDailyStatDate,
                 inventoryDailyKeys,
@@ -675,7 +665,7 @@ export async function loadDealerDashboard(
         (autoSelectedCustomer ? null : earlyDailySummary) ??
           (options.companyProductsOnly || options.tabDataOnly
             ? Promise.resolve({} as CubeRow)
-            : measure("daily_summary", () =>
+            : measure('daily_summary', () =>
                 queryWorkbenchInventoryDailySummary(
                   inventoryDailyStatDate,
                   scopedCustomerCodes,
@@ -684,7 +674,7 @@ export async function loadDealerDashboard(
               )),
         !readCustomers
           ? Promise.resolve([] as CubeRow[])
-          : measure("daily_customers", () =>
+          : measure('daily_customers', () =>
               queryWorkbenchInventoryDailyCustomerSummaries(
                 inventoryDailyStatDate,
                 dailyCustomerCodes,
@@ -693,14 +683,12 @@ export async function loadDealerDashboard(
             ),
         !readShortage
           ? Promise.resolve([] as CubeRow[])
-          : measure("shortage_daily", () =>
+          : measure('shortage_daily', () =>
               queryWorkbenchInventoryDailyDetails(
                 inventoryDailyStatDate,
                 shortageInventoryDailyKeys,
                 options,
-                options.exportTab === "shortage"
-                  ? scopedCustomerCodes
-                  : undefined,
+                options.exportTab === 'shortage' ? scopedCustomerCodes : undefined,
               ),
             ),
       ])
@@ -708,23 +696,41 @@ export async function loadDealerDashboard(
   if (
     includeCompanyProducts &&
     (rows.some(
-      (row) =>
-        String(row["dealer_plan_order.cust_code"] ?? "").trim() !==
-        activeCustomerCode,
+      (row) => String(row['dealer_plan_order.cust_code'] ?? '').trim() !== activeCustomerCode,
     ) ||
       inventoryDailyRows.some(
         (row) =>
-          String(row["dealer_inventory_daily.cust_code"] ?? "").trim() !==
-          activeCustomerCode,
+          String(row['dealer_inventory_daily.cust_code'] ?? '').trim() !== activeCustomerCode,
       ))
   )
-    throw new GeaSqlApiError(
-      "商品客户范围不匹配",
-      "COMPANY_PRODUCT_SCOPE_FORBIDDEN",
-      403,
-      false,
-    );
-  const {dailyInventoryCoverageComplete,inventoryDailySummary,dedupedRows,records,shortageRecords,summary,customerSummaries,categorySummaries}=summarizeDealerDashboard({rows,inventoryDailyRows,shortageInventoryDailyRows,inventoryDailySummaryRow,scopedCustomerCodes,customerResult,inventoryDailyStatDate,shortageRows,fuseRuleConfig,exceptionRuleConfig,options,summaryRow,customerSummaryResult,inventoryDailyCustomerRows,customerPageResult,categorySummaryRows});
+    throw new GeaSqlApiError('商品客户范围不匹配', 'COMPANY_PRODUCT_SCOPE_FORBIDDEN', 403, false);
+  const {
+    dailyInventoryCoverageComplete,
+    inventoryDailySummary,
+    dedupedRows,
+    records,
+    shortageRecords,
+    summary,
+    customerSummaries,
+    categorySummaries,
+  } = summarizeDealerDashboard({
+    rows,
+    inventoryDailyRows,
+    shortageInventoryDailyRows,
+    inventoryDailySummaryRow,
+    scopedCustomerCodes,
+    customerResult,
+    inventoryDailyStatDate,
+    shortageRows,
+    fuseRuleConfig,
+    exceptionRuleConfig,
+    options,
+    summaryRow,
+    customerSummaryResult,
+    inventoryDailyCustomerRows,
+    customerPageResult,
+    categorySummaryRows,
+  });
   return {
     customers,
     customerTotal: customerResult.total,
@@ -734,9 +740,7 @@ export async function loadDealerDashboard(
     customerPageSize,
     categorySummaries,
     shortageRecords,
-    shortageTotal: readShortage
-      ? shortageResult.total
-      : numberOf(summaryRow.shortage_sku_count),
+    shortageTotal: readShortage ? shortageResult.total : numberOf(summaryRow.shortage_sku_count),
     shortagePage,
     shortagePageSize,
     activeCustomerCode,
@@ -764,38 +768,34 @@ export async function loadDealerAging(
   inventorySource?: string | null,
 ) {
   await assertAuthorizedSqlCustomerCodes([customerCode]);
-  const source = String(inventorySource ?? "").trim();
+  const source = String(inventorySource ?? '').trim();
   const isWenli = /文沥|D-Link|dlink/i.test(source);
   const isSimulated = /提报|推演|库存推演/i.test(source);
   if (isWenli && !isSimulated) {
-    const rows = await queryWorkbenchAging("wl", customerCode, materialCode);
+    const rows = await queryWorkbenchAging('wl', customerCode, materialCode);
     return {
       sourceUnknown: false,
-      rows: withRatio(ageRowsFromCube(rows, "文沥/D-Link")),
+      rows: withRatio(ageRowsFromCube(rows, '文沥/D-Link')),
     };
   }
   if (isSimulated && !isWenli) {
-    const rows = await queryWorkbenchAging(
-      "simulated",
-      customerCode,
-      materialCode,
-    );
+    const rows = await queryWorkbenchAging('simulated', customerCode, materialCode);
     return {
       sourceUnknown: false,
-      rows: withRatio(ageRowsFromCube(rows, "提报推演")),
+      rows: withRatio(ageRowsFromCube(rows, '提报推演')),
     };
   }
   // 主表库存来源缺失或不明确：不直接穿透单一明细表、不合并口径判断，
   // 两套来源分别展示并提示先确认主表库存口径（规划规则包 5.4/6.2）。
   const [wlRows, simulatedRows] = await Promise.all([
-    queryWorkbenchAging("wl", customerCode, materialCode),
-    queryWorkbenchAging("simulated", customerCode, materialCode),
+    queryWorkbenchAging('wl', customerCode, materialCode),
+    queryWorkbenchAging('simulated', customerCode, materialCode),
   ]);
   return {
     sourceUnknown: true,
     rows: [
-      ...withRatio(ageRowsFromCube(wlRows, "文沥/D-Link")),
-      ...withRatio(ageRowsFromCube(simulatedRows, "提报推演")),
+      ...withRatio(ageRowsFromCube(wlRows, '文沥/D-Link')),
+      ...withRatio(ageRowsFromCube(simulatedRows, '提报推演')),
     ],
   };
 }

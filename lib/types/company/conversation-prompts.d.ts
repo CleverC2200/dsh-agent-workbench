@@ -2,8 +2,8 @@
  * 各业务页面的欢迎文案、固定功能与推荐问题。
  * Workbench 只贡献呈现；输入、草稿和模型任务沿当前 Core 接口。
  */
-export type ConversationActionIcon = "chart" | "alert" | "info" | "check" | "versions" | "opinion" | "box" | "users";
-export type ConversationActionTone = "brand" | "info" | "success";
+export type ConversationActionIcon = 'chart' | 'alert' | 'info' | 'check' | 'versions' | 'opinion' | 'box' | 'users';
+export type ConversationActionTone = 'brand' | 'info' | 'success';
 export type ConversationPromptAction = {
     icon: ConversationActionIcon;
     tone: ConversationActionTone;

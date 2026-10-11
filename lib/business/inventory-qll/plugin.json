@@ -4,9 +4,7 @@
   "name": "全链库存分布",
   "version": "0.2.6-preview.14-split.48",
   "html": "index.html",
-  "skills": [
-    "skills/qll/SKILL.md"
-  ],
+  "skills": ["skills/qll/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "full-chain-inventory",

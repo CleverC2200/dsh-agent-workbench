@@ -1,19 +1,88 @@
 /* Dealer inventory uses one vertical page scroll and an 8px horizontal dock. */
-.root { min-width: 0; }
-.root :global(.dsh-table-content-inner), .root :global(.dsh-table-body) { overscroll-behavior-x: contain; }
-.scrollbar { position: fixed; height: 8px; background: #f1f1f1; }
-.root :global(.dsh-table-content-inner)::-webkit-scrollbar, .root :global(.dsh-table-body)::-webkit-scrollbar { height: 8px; width: 8px; }
-.root :global(.dsh-table-content-inner)::-webkit-scrollbar-track, .root :global(.dsh-table-body)::-webkit-scrollbar-track { background: #f1f1f1; }
-.root :global(.dsh-table-content-inner)::-webkit-scrollbar-thumb, .root :global(.dsh-table-body)::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 6px; }
-.root :global(.dsh-table-content-inner)::-webkit-scrollbar-thumb:hover, .root :global(.dsh-table-body)::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
-@supports not selector(::-webkit-scrollbar) {
-  .root :global(.dsh-table-content-inner), .root :global(.dsh-table-body) { scrollbar-width: thin; scrollbar-color: #c1c1c1 #f1f1f1; }
+.root {
+  min-width: 0;
 }
-.scrollbar input { display: block; appearance: none; -webkit-appearance: none; width: 100%; height: 8px; margin: 0; padding: 0; border: 0; background: transparent; touch-action: none; cursor: pointer; }
-.scrollbar input::-webkit-slider-runnable-track { height: 8px; background: #f1f1f1; }
-.scrollbar input::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: var(--thumb-width); height: 8px; border: 0; border-radius: 6px; background: #c1c1c1; cursor: ew-resize; }
-.scrollbar input::-moz-range-track { height: 8px; background: #f1f1f1; }
-.scrollbar input::-moz-range-thumb { box-sizing: border-box; width: var(--thumb-width); height: 8px; border: 0; border-radius: 6px; background: #c1c1c1; cursor: ew-resize; }
-.scrollbar input:hover::-webkit-slider-thumb { background: #a8a8a8; }
-.scrollbar input:hover::-moz-range-thumb { background: #a8a8a8; }
-.scrollbar input:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+.root :global(.dsh-table-content-inner),
+.root :global(.dsh-table-body) {
+  overscroll-behavior-x: contain;
+}
+.scrollbar {
+  position: fixed;
+  height: 8px;
+  background: #f1f1f1;
+}
+.root :global(.dsh-table-content-inner)::-webkit-scrollbar,
+.root :global(.dsh-table-body)::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.root :global(.dsh-table-content-inner)::-webkit-scrollbar-track,
+.root :global(.dsh-table-body)::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+.root :global(.dsh-table-content-inner)::-webkit-scrollbar-thumb,
+.root :global(.dsh-table-body)::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 6px;
+}
+.root :global(.dsh-table-content-inner)::-webkit-scrollbar-thumb:hover,
+.root :global(.dsh-table-body)::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .root :global(.dsh-table-content-inner),
+  .root :global(.dsh-table-body) {
+    scrollbar-width: thin;
+    scrollbar-color: #c1c1c1 #f1f1f1;
+  }
+}
+.scrollbar input {
+  display: block;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: none;
+  cursor: pointer;
+}
+.scrollbar input::-webkit-slider-runnable-track {
+  height: 8px;
+  background: #f1f1f1;
+}
+.scrollbar input::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: var(--thumb-width);
+  height: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #c1c1c1;
+  cursor: ew-resize;
+}
+.scrollbar input::-moz-range-track {
+  height: 8px;
+  background: #f1f1f1;
+}
+.scrollbar input::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--thumb-width);
+  height: 8px;
+  border: 0;
+  border-radius: 6px;
+  background: #c1c1c1;
+  cursor: ew-resize;
+}
+.scrollbar input:hover::-webkit-slider-thumb {
+  background: #a8a8a8;
+}
+.scrollbar input:hover::-moz-range-thumb {
+  background: #a8a8a8;
+}
+.scrollbar input:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 1px;
+}
