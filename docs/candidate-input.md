@@ -1,5 +1,7 @@
 # 候选输入检查
 
+本私有候选固定 Core `8ff14441ac932b55cf1f14b1715128eaa162b1ec`、锁 SHA-256 `10da992dcf0e2a50cdf94c3335adf18c63beca7fdaa0d4adf649f0a5428dd266` 与 `pnpm@11.11.0`。上游 `5badb15009ae1756c3afe0ae0cef1faafc290ccc` 保持保护。SDK 路径保留旧目录名 `official-latest-standard`，实际指向本任务独立候选，不代表官方发行。输入常量不能由调用者覆盖。CI 默认 peer cuts 与 CI 流程未在本轮更新或验证。
+
 Workbench 持有三仓候选检查 CLI。它读取调用者指定的冻结输入，检查登记目标、三仓提交、dirty、提交内的锁和固定官方 Core SDK。它不安装依赖、不构建、不更新登记、不启动 Host/客户端或访问业务。
 
 ```sh

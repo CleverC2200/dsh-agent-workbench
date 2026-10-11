@@ -4,7 +4,7 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const coreCommit = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
+const coreCommit = '8ff14441ac932b55cf1f14b1715128eaa162b1ec';
 export const candidatePackageNames = Object.freeze({
   'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
   'dsh-agent-manage': 'dsh-agent-manage',

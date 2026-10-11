@@ -13,7 +13,7 @@ export interface PageBusinessGrant {
         sequence: number;
         state: unknown;
     } | undefined;
-    allowsEffect(effect: PageElementEffect | "view"): boolean;
+    allowsEffect(effect: PageElementEffect | 'view'): boolean;
     release(): void;
 }
 export interface BusinessPage {

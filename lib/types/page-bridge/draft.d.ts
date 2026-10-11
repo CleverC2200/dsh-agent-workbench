@@ -1,13 +1,8 @@
 /**
- * "改草稿"这一层能力的统一实现。
- *
- * 迁移前后的业务页面都要被对话改草稿（改输入框、点按钮、选行），但限流、超时、
- * 确认策略和回执这几件事不该在每个页面里各写一遍：页面只声明"我有这些元素"，
- * 执行就走这一层。这样新页面接入时不用再写执行逻辑，行为也一致。
- *
- * 这一层只记账和把关，不认识任何具体业务，也不碰业务数据。
+ * 页面草稿动作共用限流、超时、确认和回执。
+ * 页面声明元素，执行由调用者提供；本模块不写业务数据。
  */
-export type DraftEffect = "view" | "draft" | "submit" | "approve";
+export type DraftEffect = 'view' | 'draft' | 'submit' | 'approve';
 export type DraftRequest = {
     sessionId: string;
     /** 页面标识（能力契约里的 surface）。 */
@@ -18,7 +13,7 @@ export type DraftRequest = {
     effect: DraftEffect;
     reason?: string;
 };
-export type DraftReceiptOutcome = "pending" | "applied" | "rejected" | "timeout" | "failed";
+export type DraftReceiptOutcome = 'pending' | 'applied' | 'rejected' | 'timeout' | 'failed';
 export type DraftReceipt = {
     id: string;
     at: number;

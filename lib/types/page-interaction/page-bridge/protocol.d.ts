@@ -7,8 +7,7 @@
  *
  * 协议依据：AG-UI 的前端工具调用生命周期与 ToolMessage 类型。
  *
- * 不引 @ag-ui/core：官方包是纯类型+常量（zod 为可选 peer）。字段名严格对齐，
- * 将来要换成官方包或换成真 SSE 端点，是机械替换。
+ * 类型与事件字段按 AG-UI 契约声明；本层不加载额外协议运行时。
  */
 /** agent -> 页面：工具调用开始。 */
 export declare const AGUI_EVENT_TOOL_CALL_START: "TOOL_CALL_START";
@@ -37,7 +36,7 @@ export type AgUiEvent = AgUiToolCallStartEvent | AgUiToolCallArgsEvent | AgUiToo
  */
 export type AgUiToolMessage = {
     id: string;
-    role: "tool";
+    role: 'tool';
     toolCallId: string;
     content: string;
     error?: string;

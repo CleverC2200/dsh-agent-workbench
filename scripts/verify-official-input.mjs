@@ -19,7 +19,7 @@ export function verifyOfficialInput(root = resolve(import.meta.dirname, '..')) {
     throw Error('OFFICIAL_MATERIAL_REQUIRED: @deepseek-ai/cordis declaration');
   }
   const official = resolve(dirname(cordis), '../../../..');
-  const expected = '5badb15009ae1756c3afe0ae0cef1faafc290ccc';
+  const expected = '8ff14441ac932b55cf1f14b1715128eaa162b1ec';
   const head = execFileSync('git', ['-C', official, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

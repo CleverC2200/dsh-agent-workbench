@@ -34,7 +34,7 @@ function fixture(t) {
     resolve(root, config.compilerOptions.paths['@deepseek-ai/cordis'][0]),
   );
   symlinkSync(resolve(cordis, '../../../../..'), resolve(directory, 'official-latest-standard'));
-  const manifest = { core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc', repositories: [] };
+  const manifest = { core: '8ff14441ac932b55cf1f14b1715128eaa162b1ec', repositories: [] };
   for (const repo of repos) {
     const checkout = resolve(directory, 'candidate', repo);
     mkdirSync(checkout, { recursive: true });

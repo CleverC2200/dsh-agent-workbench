@@ -2420,7 +2420,12 @@
           return result;
         }).then(
           (result) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, result }),
-          (error) => ownerChannel.postMessage({ type: "invoked", id: message.id, session, error: error.message })
+          (error) => ownerChannel.postMessage({
+            type: "invoked",
+            id: message.id,
+            session,
+            error: error.message
+          })
         ).finally(() => {
           if (invoking.get(message.id)?.controller === controller) invoking.delete(message.id);
         });
@@ -2483,14 +2488,31 @@
   // business/shared/view-state.js
   var PROTOCOL = "dsh-workbench-view-v1";
   function createPageViewState(page) {
-    const sessionPage = ["gea-regional-plan", "plan-region-category", "plan-category-production", "inventory-qll", "inventory-fc", "inventory-aqkc", "inventory-dealer", "inventory-customer", "inventory-orderworkbench", "inventory-orderfulfillment", "inventory-personal", "inventory-apsplan", "inventory-dms"].includes(page);
+    const sessionPage = [
+      "gea-regional-plan",
+      "plan-region-category",
+      "plan-category-production",
+      "inventory-qll",
+      "inventory-fc",
+      "inventory-aqkc",
+      "inventory-dealer",
+      "inventory-customer",
+      "inventory-orderworkbench",
+      "inventory-orderfulfillment",
+      "inventory-personal",
+      "inventory-apsplan",
+      "inventory-dms"
+    ].includes(page);
     let state = { version: 1 };
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
     const releasedChannels = /* @__PURE__ */ new Set();
     const send = () => {
       if (binding)
-        window.parent.postMessage({ protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state }, "*");
+        window.parent.postMessage(
+          { protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state },
+          "*"
+        );
     };
     const ready2 = () => window.parent.postMessage({ protocol: PROTOCOL, type: "ready", page, version: 1 }, "*");
     const receive = (event) => {
@@ -2516,28 +2538,34 @@
       if (value.type !== "restore" || typeof value.channel !== "string" || !Number.isSafeInteger(value.generation) || value.generation < 0 || releasedChannels.has(value.channel) || binding?.channel === value.channel && value.generation < binding.generation)
         return;
       binding = { channel: value.channel, generation: value.generation };
-      state = dirty ? { ...value.state, ...state } : { ...value.state ?? {}, version: 1 };
+      state = dirty ? { ...value.state, ...state } : { ...value.state, version: 1 };
       dirty = false;
-      for (const listener of listeners)
-        listener(state, "restore");
+      for (const listener of listeners) listener(state, "restore");
       send();
     };
     window.addEventListener("message", receive);
-    window.addEventListener("pagehide", () => {
-      binding = void 0;
-      window.removeEventListener("message", receive);
-      listeners.clear();
-    }, { once: true });
+    window.addEventListener(
+      "pagehide",
+      () => {
+        binding = void 0;
+        window.removeEventListener("message", receive);
+        listeners.clear();
+      },
+      { once: true }
+    );
     ready2();
-    return { get: () => state, subscribe: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }, update: (changes) => {
-      state = { ...state, ...changes, version: 1 };
-      if (binding || !sessionPage)
-        dirty = true;
-      send();
-    } };
+    return {
+      get: () => state,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      update: (changes) => {
+        state = { ...state, ...changes, version: 1 };
+        if (binding || !sessionPage) dirty = true;
+        send();
+      }
+    };
   }
 
   // static/regional/source/page-author.js
@@ -2979,7 +3007,13 @@
       }, 2400);
     }
     var T0 = new Date(2026, 8, 18);
-    var state = { ctx: resolveContext(T0), selDay: null, selEv: null, repDim: "customer", module: "overview" };
+    var state = {
+      ctx: resolveContext(T0),
+      selDay: null,
+      selEv: null,
+      repDim: "customer",
+      module: "overview"
+    };
     var HIST = [];
     var HIST_SEED = [
       {
@@ -4021,38 +4055,83 @@
             await publish(value);
             if (!attached) return;
             if (current !== publication) continue;
-            unregisterRegional = reportElements("regional-plan", [
-              { id: "field:simulation", role: "field", label: "\u6570\u636E\u6765\u6E90", value: value.notice },
-              { id: "field:period", role: "field", label: "\u671F\u95F4", value: value.filters.date + " \xB7 " + value.period.label + " \xB7 " + value.period.phase },
-              { id: "filter:module", role: "field", label: "\u5DE5\u4F5C\u53F0\u6A21\u5757", value: value.filters.module, options: MODS, editable: true, effect: "view" },
-              ...value.controls.dimension ? [{ id: "filter:dimension", role: "field", label: "\u63D0\u62A5\u7EF4\u5EA6", value: value.filters.dimension, options: ["customer", "region", "province", "bigr"], editable: true, effect: "view" }] : [],
-              ...value.controls.date ? [{ id: "filter:date", role: "field", label: "\u6A21\u62DF\u65E5\u671F", value: value.filters.date, editable: true, effect: "view" }] : []
-            ], async function(args, signal) {
-              if (args.kind !== "setValue") throw Error("ACTION_NOT_ALLOWED");
-              var key = args.target.slice(7), input = args.value;
-              if (key === "module" && !MODS.includes(input)) throw Error("INVALID_REGIONAL_MODULE");
-              if (key === "dimension" && !["customer", "region", "province", "bigr"].includes(input)) throw Error("INVALID_REGIONAL_DIMENSION");
-              if (key === "date" && (typeof input !== "string" || !/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(input) || !Number.isFinite(Date.parse(input + "T12:00:00Z")) || (/* @__PURE__ */ new Date(input + "T12:00:00Z")).toISOString().slice(0, 10) !== input)) throw Error("INVALID_SIMULATION_DATE");
-              await new Promise(function(resolve) {
-                requestAnimationFrame(resolve);
-              });
-              signal.throwIfAborted();
-              if (key === "dimension" && state.module !== "follow" || key === "date" && !$("simBox").classList.contains("open")) throw Error("ELEMENT_GONE");
-              if (key === "module") switchMod(input);
-              else if (key === "dimension") {
-                state.repDim = input;
-                [].forEach.call($("repDim").querySelectorAll("button"), function(b) {
-                  b.classList.toggle("on", b.getAttribute("data-dim") === input);
+            unregisterRegional = reportElements(
+              "regional-plan",
+              [
+                {
+                  id: "field:simulation",
+                  role: "field",
+                  label: "\u6570\u636E\u6765\u6E90",
+                  value: value.notice
+                },
+                {
+                  id: "field:period",
+                  role: "field",
+                  label: "\u671F\u95F4",
+                  value: value.filters.date + " \xB7 " + value.period.label + " \xB7 " + value.period.phase
+                },
+                {
+                  id: "filter:module",
+                  role: "field",
+                  label: "\u5DE5\u4F5C\u53F0\u6A21\u5757",
+                  value: value.filters.module,
+                  options: MODS,
+                  editable: true,
+                  effect: "view"
+                },
+                ...value.controls.dimension ? [
+                  {
+                    id: "filter:dimension",
+                    role: "field",
+                    label: "\u63D0\u62A5\u7EF4\u5EA6",
+                    value: value.filters.dimension,
+                    options: ["customer", "region", "province", "bigr"],
+                    editable: true,
+                    effect: "view"
+                  }
+                ] : [],
+                ...value.controls.date ? [
+                  {
+                    id: "filter:date",
+                    role: "field",
+                    label: "\u6A21\u62DF\u65E5\u671F",
+                    value: value.filters.date,
+                    editable: true,
+                    effect: "view"
+                  }
+                ] : []
+              ],
+              async function(args, signal) {
+                if (args.kind !== "setValue") throw Error("ACTION_NOT_ALLOWED");
+                var key = args.target.slice(7), input = args.value;
+                if (key === "module" && !MODS.includes(input))
+                  throw Error("INVALID_REGIONAL_MODULE");
+                if (key === "dimension" && !["customer", "region", "province", "bigr"].includes(input))
+                  throw Error("INVALID_REGIONAL_DIMENSION");
+                if (key === "date" && (typeof input !== "string" || !/^20\d{2}-(0[1-9]|1[0-2])-\d{2}$/.test(input) || !Number.isFinite(Date.parse(input + "T12:00:00Z")) || (/* @__PURE__ */ new Date(input + "T12:00:00Z")).toISOString().slice(0, 10) !== input))
+                  throw Error("INVALID_SIMULATION_DATE");
+                await new Promise(function(resolve) {
+                  requestAnimationFrame(resolve);
                 });
-              } else if (key === "date") {
-                $("simDate").value = input;
-                state.ctx = resolveContext(/* @__PURE__ */ new Date(input + "T12:00:00"));
-                state.selDay = null;
-                state.selEv = null;
-              } else throw Error("ELEMENT_GONE");
-              renderAll();
-              saveView();
-            });
+                signal.throwIfAborted();
+                if (key === "dimension" && state.module !== "follow" || key === "date" && !$("simBox").classList.contains("open"))
+                  throw Error("ELEMENT_GONE");
+                if (key === "module") switchMod(input);
+                else if (key === "dimension") {
+                  state.repDim = input;
+                  [].forEach.call($("repDim").querySelectorAll("button"), function(b) {
+                    b.classList.toggle("on", b.getAttribute("data-dim") === input);
+                  });
+                } else if (key === "date") {
+                  $("simDate").value = input;
+                  state.ctx = resolveContext(/* @__PURE__ */ new Date(input + "T12:00:00"));
+                  state.selDay = null;
+                  state.selEv = null;
+                } else throw Error("ELEMENT_GONE");
+                renderAll();
+                saveView();
+              }
+            );
             $("regionalSyncStatus").textContent = "";
           } catch (error) {
             if (attached && current === publication)
@@ -4069,8 +4148,15 @@
         simulation: true,
         notice: "\u6A21\u62DF\u6570\u636E\uFF1B\u8DDF\u50AC\u548C\u4FDD\u5B58\u5747\u4E3A\u672C\u9875\u6F14\u793A\uFF0C\u65E0\u771F\u5B9E\u4E1A\u52A1\u5199\u5165",
         filters: { module: state.module, dimension: state.repDim, date: $("simDate").value },
-        controls: { dimension: state.module === "follow", date: $("simBox").classList.contains("open") },
-        period: { order: state.ctx.order, label: WINDOW_CFG[state.ctx.order].label, phase: state.ctx.phase },
+        controls: {
+          dimension: state.module === "follow",
+          date: $("simBox").classList.contains("open")
+        },
+        period: {
+          order: state.ctx.order,
+          label: WINDOW_CFG[state.ctx.order].label,
+          phase: state.ctx.phase
+        },
         selectedDay: state.selDay,
         selectedEvent: state.selEv,
         rhythm: clone(RHYTHM_BACKUP || RHYTHM),
@@ -4093,11 +4179,15 @@
       unregisterRegional();
       $("regionalSyncStatus").textContent = "\u9875\u9762\u8FDE\u63A5\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u8FDB\u5165\u3002";
     });
-    window.addEventListener("pagehide", function() {
-      attached = false;
-      publication++;
-      unregisterRegional();
-    }, { once: true });
+    window.addEventListener(
+      "pagehide",
+      function() {
+        attached = false;
+        publication++;
+        unregisterRegional();
+      },
+      { once: true }
+    );
     function switchMod(mod) {
       state.module = mod;
       document.querySelectorAll(".modtab").forEach(function(b) {

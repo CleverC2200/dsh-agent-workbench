@@ -1,14 +1,9 @@
 /**
- * 能力层：把"对话能做什么"切成几层，每层一套统一策略——限流、超时、回执、执行前确认、
- * 是否会写业务数据。模块只声明"我有哪几层"，执行侧统一按这张表执行。
- *
- * 之前这些参数散在三处：草稿层（限流/回执）、页面桥（动作超时）、只读工具（读取超时），
- * 各自写各自的数。这里收成一份，改一处就是改所有模块。
- *
- * 只放"策略数值"，不认识任何具体业务，也不执行任何动作。
+ * 集中维护能力层的限流、超时、回执、执行确认和写入策略。
+ * 页面声明允许的能力层，执行侧使用同一策略；本表不执行业务动作。
  */
 /** 影响等级（与契约里的 effect 同一套名字，这里避免反向依赖）。 */
-export type LayerEffect = "view" | "draft" | "submit" | "approve";
+export type LayerEffect = 'view' | 'draft' | 'submit' | 'approve';
 export declare const CAPABILITY_LAYERS: readonly ["read", "draft", "submit", "approve", "export"];
 export type CapabilityLayer = (typeof CAPABILITY_LAYERS)[number];
 export type LayerPolicy = {

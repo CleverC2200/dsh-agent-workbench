@@ -71,7 +71,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private readonly historyListeners;
     private historyPage;
     private historySelection?;
-    private historyController?;
+    private historyIntent?;
     constructor(ports: WorkbenchPorts, memory?: WorkbenchPresentationMemory | undefined);
     register(page: WorkbenchPage): () => void;
     open(id: MainPanelId): Promise<boolean>;
