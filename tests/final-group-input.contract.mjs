@@ -204,12 +204,8 @@ test('public final-group admission binds real source only and rejects invalid in
           env: { ...process.env, CI: '', QUALITY_EXPECTED_SHA: '' },
         },
       );
-      // This change targets Workbench; the committed sibling Manage fixture keeps
-      // its historical rejection until its own runner is updated independently.
-      reject(
-        compatibility,
-        name === 'dsh-agent-workbench' ? /CANDIDATE_FINAL_GROUP_REQUIRED/ : /CANDIDATE_HEAD/,
-      );
+      // Both runners require the admitted group hash before candidate execution.
+      reject(compatibility, /CANDIDATE_FINAL_GROUP_REQUIRED/);
       command(coldCore, 'git', [
         '-c',
         'user.name=Fixture',
