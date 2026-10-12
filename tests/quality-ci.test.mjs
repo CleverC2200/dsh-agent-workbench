@@ -1,7 +1,16 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import {
+  readFileSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  mkdirSync,
+  copyFileSync,
+  readdirSync,
+} from 'node:fs';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 
@@ -21,6 +30,17 @@ const run = (args, environment = {}) => {
     env: { ...env, ...environment },
   });
 };
+test('retired input writer cannot create a candidate from historical peer constants', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'workbench-retired-ci-input-'));
+  try {
+    const result = run(['--phase', 'input', '--root', fixture, '--sha', 'a'.repeat(40)]);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /CANDIDATE_FINAL_GROUP_REQUIRED/);
+    assert.deepEqual(readdirSync(fixture), []);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
 test('event scope and final public CLI refuse skipped, cancelled, failed or missing gates', () => {
   assert.equal(run(['--phase', 'scope'], { QUALITY_SCOPE_ALLOWED: 'true' }).status, 0);
   for (const scope of ['', 'false'])
@@ -58,27 +78,40 @@ test('scope and final aggregation run from a cold self-only checkout without pee
     rmSync(fixture, { recursive: true, force: true });
   }
 });
-test('frozen admission requires inputs and binds the actual event before preparing anything', () => {
-  assert.match(run([]).stderr, /CANDIDATE_INPUT_REQUIRED/);
+test('frozen admission requires input hash and binds the actual event before preparation', () => {
+  assert.match(run([]).stderr, /CANDIDATE_FINAL_GROUP_REQUIRED/);
+  assert.match(run(['--final-group-sha256', 'a'.repeat(64)]).stderr, /CANDIDATE_INPUT_REQUIRED/);
   const fixture = mkdtempSync(join(tmpdir(), 'workbench-ci-'));
   try {
-    const result = run(['--phase', 'input', '--root', fixture, '--sha', 'a'.repeat(40)]);
-    assert.equal(result.status, 0, result.stderr);
+    const manifest = {
+      core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
+      repositories: ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'].map((repo) => {
+        const path = join(fixture, repo);
+        mkdirSync(path);
+        return {
+          repo,
+          path: repo === 'dsh-agent-workbench' ? process.cwd() : path,
+          head: 'a'.repeat(40),
+        };
+      }),
+    };
     const file = join(fixture, 'candidate-input.json');
-    const manifest = JSON.parse(readFileSync(file));
-    assert.equal(manifest.repositories.length, 3);
-    assert.equal(manifest.repositories[0].head, 'a'.repeat(40));
-    manifest.repositories[0].path = process.cwd();
     writeFileSync(file, JSON.stringify(manifest));
-    assert.match(run(['--input', file], { CI: 'true' }).stderr, /CANDIDATE_EVENT_REQUIRED/);
+    const sha256 = createHash('sha256').update(readFileSync(file)).digest('hex');
+    const args = ['--input', file, '--final-group-sha256', sha256];
+    assert.match(run(args, { CI: 'true' }).stderr, /CANDIDATE_EVENT_REQUIRED/);
     assert.match(
-      run(['--input', file], { CI: 'true', QUALITY_EXPECTED_SHA: 'b'.repeat(40) }).stderr,
+      run(args, { CI: 'true', QUALITY_EXPECTED_SHA: 'b'.repeat(40) }).stderr,
       /CANDIDATE_EVENT_MISMATCH/,
     );
-    assert.match(
-      run(['--phase', 'input', '--root', fixture, '--sha', 'main']).stderr,
-      /CANDIDATE_EVENT_REQUIRED/,
-    );
+    for (const hash of ['', 'main', 'A'.repeat(64), 'a'.repeat(64) + '\n']) {
+      const result = run(['--input', file, '--final-group-sha256', hash]);
+      assert.equal(result.status, 1);
+      assert.match(result.stderr, /CANDIDATE_FINAL_GROUP_REQUIRED/);
+    }
+    const changedHash = run(['--input', file, '--final-group-sha256', '0'.repeat(64)]);
+    assert.equal(changedHash.status, 1);
+    assert.match(changedHash.stderr, /CANDIDATE_INPUT_HASH/);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
@@ -102,7 +135,7 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   );
   assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/supported-cores\.json/);
   assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
-  assert.match(workflow, /npm run quality:ci -- --prepare-sdk/);
+  assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE" --prepare-sdk/);
   assert.doesNotMatch(workflow, /PLUGIN_SPLIT_.*_HISTORY_SOURCE/);
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /needs: \[candidate-scope, gates\]/);
@@ -114,42 +147,15 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   assert.ok(scripts['test:browser']);
 });
 
-test('input CLI binds each registered Core and rejects unknown commits before preparation', () => {
-  const fixture = mkdtempSync(join(tmpdir(), 'workbench-dual-ci-'));
-  try {
-    for (const core of JSON.parse(readFileSync('../dsh-gea-plugin/scripts/supported-cores.json'))) {
-      const result = run([
-        '--phase',
-        'input',
-        '--root',
-        fixture,
-        '--sha',
-        'a'.repeat(40),
-        '--core-head',
-        core.head,
-      ]);
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(JSON.parse(readFileSync(join(fixture, 'candidate-input.json'))).core, core.head);
-    }
-    assert.match(
-      run([
-        '--phase',
-        'input',
-        '--root',
-        fixture,
-        '--sha',
-        'a'.repeat(40),
-        '--core-head',
-        'f'.repeat(40),
-      ]).stderr,
-      /CANDIDATE_CORE/,
-    );
-  } finally {
-    rmSync(fixture, { recursive: true, force: true });
-  }
+test('candidate execution cannot use an ambient input without an explicit --input', () => {
+  const result = run(['--final-group-sha256', 'a'.repeat(64)], {
+    QUALITY_CANDIDATE: '/ambient/candidate-input.json',
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /CANDIDATE_INPUT_REQUIRED/);
 });
 
-test('hosted events use only admitted peer outputs while the local legacy input remains explicit', () => {
+test('hosted events and local execution share the admitted frozen group contract', () => {
   const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
   assert.match(
     workflow,

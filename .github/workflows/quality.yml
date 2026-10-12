@@ -156,7 +156,7 @@ jobs:
         env:
           INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
           CORE_HEAD: ${{ matrix.core }}
-        run: npm run quality:ci -- --prepare-sdk --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256"
+        run: npm run quality:ci -- --input "$QUALITY_CANDIDATE" --prepare-sdk --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256"
       - name: Keep independent quality results including failure
         if: always()
         uses: actions/upload-artifact@v7
