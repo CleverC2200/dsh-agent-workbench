@@ -35,4 +35,4 @@ Browser 检查使用本仓锁定的 Playwright Chromium。已有浏览器缓存�
 本地 source/assets 分开的 browser fixture 可用 `WORKBENCH_BROWSER_ASSET_ROOT` 指向同任务已核源码对应的真实构建树；它只读取 lib 和三个既有生成的 static index。源码与资产 SHA、构建输入及只读范围须分别记录。
 
 
-CI 执行 `npm run quality:ci`，先核实际本仓事件、冻结 peers、包身份、HEAD、锁和 clean 源码，再复用 Manage 公共接口准备独立 SDK。`quality:fast` 保留知识、lint、format、官方类型和反例各项结果；后续执行 build:core、知识产物、APS、Node 和显式 browser 门禁。结果失败仍上传，汇总拒绝失败、跳过、取消或缺失。源码与产物状态分别记录；这不证明 Native、业务、模型或发行验收。
+CI 执行 `npm run quality:ci`，先核实际本仓事件、冻结 peers、包身份、HEAD、锁和 clean 源码，再复用 Manage 公共接口准备独立 SDK。CI 使用 `quality:fast -- --checks-only` 保留知识、lint、format 和官方类型结果，再执行 build:core、构建后的知识产物检查与 `test:ci`。`test:ci` 一次运行原 Node、FC、质量脚本反例及 APS 外部数据测试的完整集合，显式 browser 独立运行。开发默认 `quality:fast` 仍包含公开 CLI 反例，`test`、`test:quality`、`test:aps` 与 `test:browser` 可分别使用。结果失败仍上传，汇总拒绝失败、跳过、取消或缺失。源码与产物状态分别记录；这不证明 Native、业务、模型或发行验收。

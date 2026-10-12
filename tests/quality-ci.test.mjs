@@ -8,6 +8,7 @@ import {
   mkdirSync,
   copyFileSync,
   readdirSync,
+  globSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -188,4 +189,83 @@ test('hosted events and local execution share the admitted frozen group contract
   );
   assert.match(workflow, /--final-group-sha256 "\$INPUT_SHA256"/);
   assert.doesNotMatch(workflow, /--phase input/);
+});
+
+test('CI executes the complete former test union once and retains standalone commands', () => {
+  const scripts = JSON.parse(readFileSync('package.json')).scripts;
+  const files = (command) => {
+    assert.equal(typeof command, 'string');
+    return command
+      .split(/\s+/)
+      .filter((arg) => arg.endsWith('.mjs'))
+      .flatMap((pattern) => globSync(pattern));
+  };
+  const before = ['test:final-group', 'test', 'test:quality', 'test:aps', 'test:browser'].flatMap(
+    (name) => files(scripts[name]),
+  );
+  const after = ['test:final-group', 'test:ci', 'test:browser'].flatMap((name) =>
+    files(scripts[name]),
+  );
+  assert.deepEqual([...new Set(after)].sort(), [...new Set(before)].sort());
+  assert.equal(after.length, new Set(after).size, 'each test file runs once');
+  assert.ok(after.includes('scripts/run-quality-checks.test.mjs'));
+  assert.ok(after.some((file) => file.startsWith('business/inventory-apsplan/source/tests/data/')));
+  assert.ok(after.some((file) => file.endsWith('.browser.mjs')));
+  const ci = readFileSync('scripts/run-quality-ci.mjs', 'utf8');
+  assert.match(ci, /run\('npm', \['run', 'quality:fast', '--', '--checks-only'\]\)/);
+  assert.match(ci, /run\('npm', \['run', 'test:ci'\]\)/);
+  assert.doesNotMatch(ci, /run\('npm', \[(?:'test'|'run', 'test:aps'|'run', 'test:quality')\]\)/);
+});
+
+test('fast CLI keeps development tests and performs only checks when CI owns the test union', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'workbench-fast-'));
+  try {
+    mkdirSync(join(fixture, 'scripts'));
+    for (const file of ['run-quality-fast.mjs', 'run-quality-checks.mjs'])
+      copyFileSync(join('scripts', file), join(fixture, 'scripts', file));
+    writeFileSync(
+      join(fixture, 'record.mjs'),
+      `
+      import { appendFileSync } from 'node:fs';
+      appendFileSync('calls.jsonl', JSON.stringify(process.argv[2]) + '\\n');
+    `,
+    );
+    const commands = [
+      'check:knowledge',
+      'lint',
+      'format:check',
+      'typecheck:official',
+      'test:quality',
+    ];
+    writeFileSync(
+      join(fixture, 'package.json'),
+      JSON.stringify({
+        private: true,
+        scripts: Object.fromEntries(commands.map((name) => [name, 'node record.mjs ' + name])),
+      }),
+    );
+    const call = (...args) => {
+      writeFileSync(join(fixture, 'calls.jsonl'), '');
+      const result = spawnSync(process.execPath, ['scripts/run-quality-fast.mjs', ...args], {
+        cwd: fixture,
+        encoding: 'utf8',
+      });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const observed = readFileSync(join(fixture, 'calls.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map(JSON.parse);
+      const receipt = JSON.parse(readFileSync(join(fixture, '.runtime/quality-fast.json'), 'utf8'));
+      assert.deepEqual(
+        receipt.map((entry) => entry.name),
+        observed,
+      );
+      assert.ok(receipt.every((entry) => entry.status === 'passed'));
+      return observed;
+    };
+    assert.deepEqual(call(), commands);
+    assert.deepEqual(call('--checks-only'), commands.slice(0, -1));
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 });

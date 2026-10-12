@@ -1,19 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { transformSync } from 'esbuild';
-const source = readFileSync(
-  new URL('../business/inventory-aqkc/source/aqkc/web/src/lib/cube-dashboard.ts', import.meta.url),
-  'utf8',
+import { build } from 'esbuild';
+import { selectDefaultPublishedTargetInventory } from '../business/inventory-aqkc/source/aqkc/web/src/lib/target-inventory-version-policy.js';
+
+const compiled = await build({
+  stdin: {
+    contents: `
+      export * from './business/inventory-aqkc/source/aqkc/web/src/lib/cube-dashboard.ts';
+      export { safetyStockRowsForBase } from './business/inventory-aqkc/source/aqkc/web/src/lib/workbench-sql.ts';
+    `,
+    resolveDir: process.cwd(),
+  },
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+  plugins: [
+    {
+      name: 'gea-host',
+      setup(api) {
+        // Only the external Host RPC is replaced. Calculation and formatting modules are real.
+        api.onResolve({ filter: /channel\.js$/ }, () => ({
+          path: 'gea-host',
+          namespace: 'host',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'host' }, () => ({
+          contents: 'export const call=(...args)=>globalThis.stockSourceHost(...args);',
+        }));
+      },
+    },
+  ],
+});
+const {
+  alignAgeInventory,
+  missingSafetyStockTargetBases,
+  targetInventoryOutput,
+  safetyStockRowsForBase,
+  loadInventoryDashboardTabs,
+} = await import(
+  'data:text/javascript;base64,' + Buffer.from(compiled.outputFiles[0].text).toString('base64')
 );
-const helper = source.slice(
-  source.indexOf('export function alignAgeInventory'),
-  source.indexOf('type DetailFilters'),
-);
-const code = transformSync(helper, { loader: 'ts', format: 'cjs' }).code;
-const module = { exports: {} };
-new Function('module', 'exports', code)(module, module.exports);
-const { alignAgeInventory, missingSafetyStockTargetBases } = module.exports;
 const target = (material, current, finalTarget) => ({
   'safety_stock.base_name': '遂平',
   'safety_stock.material_code': material,
@@ -68,45 +94,22 @@ test('age-only bases are identified instead of being counted as target coverage'
   assert.equal(rows[1]['safety_stock.source'], 'age-only');
   assert.equal(rows[1]['safety_stock.final_target_inventory'], undefined);
 });
-const targetOutputSource = source.slice(
-  source.indexOf('export function targetInventoryOutput'),
-  source.indexOf('function targetInventoryDisplay'),
-);
-const targetOutputCode = transformSync(
-  'const numberOf = value => Number(value ?? 0);\n' + targetOutputSource,
-  { loader: 'ts', format: 'cjs' },
-).code;
-const targetOutputModule = { exports: {} };
-new Function('module', 'exports', targetOutputCode)(targetOutputModule, targetOutputModule.exports);
 test('age-only seasonal SKU does not fabricate a zero target', () => {
   assert.equal(
-    targetOutputModule.exports.targetInventoryOutput({
+    targetInventoryOutput({
       'safety_stock.source': 'age-only',
       'safety_stock.product_categ_name': '粽子',
     }),
     null,
   );
   assert.equal(
-    targetOutputModule.exports.targetInventoryOutput({
+    targetInventoryOutput({
       'safety_stock.product_categ_name': '粽子',
       'safety_stock.planned_daily_demand': 0,
     }),
     0,
   );
 });
-const versionPolicySource = readFileSync(
-  new URL(
-    '../business/inventory-aqkc/source/aqkc/web/src/lib/target-inventory-version-policy.js',
-    import.meta.url,
-  ),
-  'utf8',
-);
-const versionPolicyCode = transformSync(versionPolicySource, { loader: 'js', format: 'cjs' }).code;
-const versionPolicyModule = { exports: {} };
-new Function('module', 'exports', versionPolicyCode)(
-  versionPolicyModule,
-  versionPolicyModule.exports,
-);
 test('all five bases remain in the September 23 next-month rolling scope', () => {
   const bases = ['华东', '华南', '西南', '遂平', '郑州'];
   const rows = bases.map((base) => ({
@@ -114,10 +117,7 @@ test('all five bases remain in the September 23 next-month rolling scope', () =>
     'safety_stock.target_month': '2026-10-01',
     'safety_stock.inventory_version': '滚动',
   }));
-  const selected = versionPolicyModule.exports.selectDefaultPublishedTargetInventory(
-    rows,
-    new Date('2026-09-23T01:00:00Z'),
-  );
+  const selected = selectDefaultPublishedTargetInventory(rows, new Date('2026-09-23T01:00:00Z'));
   assert.equal(selected.targetMonth, '2026-10-01');
   assert.equal(selected.inventoryVersion, '滚动');
   assert.deepEqual(
@@ -130,18 +130,7 @@ test('all five bases remain in the September 23 next-month rolling scope', () =>
 });
 
 test('missing-base retry uses the governed source with a named base parameter', () => {
-  const sqlSource = readFileSync(
-    new URL('../business/inventory-aqkc/source/aqkc/web/src/lib/workbench-sql.ts', import.meta.url),
-    'utf8',
-  );
-  const helper = sqlSource.slice(
-    sqlSource.indexOf('export function safetyStockRowsForBase'),
-    sqlSource.indexOf('export type WorkbenchSqlName'),
-  );
-  const transformed = transformSync(helper, { loader: 'ts', format: 'cjs' }).code;
-  const target = { exports: {} };
-  new Function('module', 'exports', transformed)(target, target.exports);
-  const query = target.exports.safetyStockRowsForBase('华南');
+  const query = safetyStockRowsForBase('华南');
   assert.deepEqual(query.parameters, { gea_p1: '华南' });
   assert.match(query.sql, /FROM agents_scm_safety_stock AS stock/);
   assert.match(query.sql, /stock\.base_name = :gea_p1/);
@@ -152,39 +141,28 @@ test('missing-base retry uses the governed source with a named base parameter', 
   assert.doesNotMatch(query.sql, /\bOVER\s*\(|SELECT\s+\*/i);
 });
 
-test('age structure aggregates current inventory without an unrelated age variable', () => {
-  const functionSource = source.slice(
-    source.indexOf('function aggregateAgeStructureRows'),
-    source.indexOf('/** Read-only tab aggregates'),
-  );
-  const transformed = transformSync(functionSource, { loader: 'ts', format: 'cjs' }).code;
-  const aggregate = new Function(
-    'categoryName',
-    'numberOf',
-    'displayNumber',
-    'displayQuantityShare',
-    `${transformed}\nreturn aggregateAgeStructureRows;`,
-  )(
-    (value) => String(value ?? '未分类'),
-    (value) => Number(value ?? 0),
-    (value) => Number(value).toLocaleString('en-US'),
-    (value, total) => `${value} / ${total ? `${((value / total) * 100).toFixed(1)}%` : '0.0%'}`,
-  );
-  const rows = aggregate(
-    [
-      {
-        'inventory_age.base_name': '遂平',
-        'inventory_age.material_code': 'A',
-        'inventory_age.current_inventory': 12,
-      },
-      {
-        'inventory_age.base_name': '遂平',
-        'inventory_age.material_code': 'B',
-        'inventory_age.current_inventory': 8,
-      },
-    ],
-    'base',
-  );
+test('age structure aggregates current inventory through the dashboard tab', async (t) => {
+  const previousHost = globalThis.stockSourceHost;
+  t.after(() => {
+    if (previousHost === undefined) delete globalThis.stockSourceHost;
+    else globalThis.stockSourceHost = previousHost;
+  });
+  globalThis.stockSourceHost = async (method, { sql }) => {
+    assert.equal(method, 'sql');
+    return {
+      rows: sql.includes('inventory_age.current_inventory')
+        ? [{ dsh_group: 0, dsh_count: 2, dsh_rows: JSON.stringify([age('A', 12), age('B', 8)]) }]
+        : [
+            {
+              'safety_stock.base_name': '遂平',
+              'safety_stock.target_month': '2026-10-01',
+              'safety_stock.inventory_version': '滚动',
+            },
+          ],
+    };
+  };
+  const tabs = await loadInventoryDashboardTabs(undefined, undefined, undefined, '货龄结构');
+  const rows = tabs.货龄结构.rows;
   assert.equal(rows[0].level, '遂平');
   assert.equal(rows[0].current, '20');
   assert.equal(rows[0].skuCount, '2');
