@@ -129,6 +129,10 @@ test('partial groups, mutable refs, changed tuple, own event mismatch and unknow
 
 test('workflow dispatch admission rejects unsafe inputs before peer checkout and produces the writer tuple', () => {
   const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
+  assert.match(
+    workflow,
+    /github\.ref \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/,
+  );
   const inline = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/);
   assert.ok(inline);
   const code = inline[1].replace(/^          /gm, '');
