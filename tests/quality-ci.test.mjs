@@ -92,8 +92,14 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
     /QUALITY_EXPECTED_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/,
   );
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
-  assert.equal((workflow.match(/fetch-depth: 0/g) ?? []).length, 6);
-  assert.equal((workflow.match(/persist-credentials: false/g) ?? []).length, 6);
+  assert.equal(
+    (workflow.match(/fetch-depth: 0/g) ?? []).length,
+    (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
+  );
+  assert.equal(
+    (workflow.match(/persist-credentials: false/g) ?? []).length,
+    (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
+  );
   assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/supported-cores\.json/);
   assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
   assert.match(workflow, /npm run quality:ci -- --prepare-sdk/);
@@ -173,7 +179,12 @@ test('hosted checkout refs and public admission use the reviewed immutable peer 
       assert.equal(input.repositories.find((entry) => entry.repo === repo)?.head, head);
       const checkoutRefs = [
         ...workflow.matchAll(
-          new RegExp('repository: CleverC2200/' + repo + '\\s+ref: ([a-f0-9]{40})', 'g'),
+          new RegExp(
+            'repository: CleverC2200/' +
+              repo +
+              "\\s+ref: \\$\\{\\{ (?:steps\\.group|needs\\.candidate-scope)\\.outputs\\.[a-z-]+ \\|\\| '([a-f0-9]{40})' \\}\\}",
+            'g',
+          ),
         ),
       ].map((match) => match[1]);
       assert.ok(checkoutRefs.length > 0, repo + ' must be checked out');
