@@ -150,11 +150,13 @@ test('public final-group admission binds real source only and rejects invalid in
       reject(run(name, ['--final-group-sha256', '0'.repeat(64)]), /CANDIDATE_INPUT_HASH/);
       reject(run(name, [], { CI: 'true' }), /CANDIDATE_EVENT_REQUIRED/);
       reject(run(name, [], { QUALITY_EXPECTED_SHA: 'a'.repeat(40) }), /CANDIDATE_EVENT_MISMATCH/);
-      if (name === 'dsh-agent-workbench')
+      if (name === 'dsh-agent-workbench') {
+        reject(run(name, ['--core-head', '']), /CANDIDATE_CORE_MISMATCH/);
         reject(
           run(name, ['--core-head', '639ed015397290b3745d163aafe02ffee4aa3f84']),
-          /CANDIDATE_CORE/,
+          /CANDIDATE_CORE_MISMATCH/,
         );
+      }
       for (const [mutate, pattern] of [
         [
           (x) => {
@@ -254,6 +256,12 @@ test('public final-group admission binds real source only and rejects invalid in
         assert.equal(observed.status, 0, observed.stdout + observed.stderr);
         assert.equal(JSON.parse(observed.stdout).official.commit, core);
         assert.equal(existsSync(join(fixture, 'official-latest-standard')), false);
+        if (name === 'dsh-agent-workbench') {
+          const explicit = run(name, ['--core-head', core]);
+          assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
+          assert.equal(JSON.parse(explicit.stdout).official.commit, core);
+          assert.equal(existsSync(join(fixture, 'official-latest-standard')), false);
+        }
       }
     }
     writeFileSync(file, bytes);

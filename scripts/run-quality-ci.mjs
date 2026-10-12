@@ -84,8 +84,8 @@ try {
       ci: process.env.CI,
     });
     const manifest = finalGroup.manifest;
-    if (values['core-head'] && values['core-head'] !== manifest.core)
-      refuse('CANDIDATE_CORE', 'selected Core must match the admitted group');
+    if (values['core-head'] !== undefined && values['core-head'] !== manifest.core)
+      refuse('CANDIDATE_CORE_MISMATCH', 'selected Core must match the admitted group');
     if (values.phase === 'verify-input') {
       console.log(JSON.stringify(finalGroup.receipt));
       process.exit(0);
