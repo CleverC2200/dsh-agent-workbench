@@ -7,9 +7,9 @@ Workbench 在未修改的官方 DSH `5badb15009ae1756c3afe0ae0cef1faafc290ccc` �
 原生页面注册官方 `main` keyed slot，再登记标题元数据。`main` 的注册事实决定目录是否显示；`register` 只补充标题，不建立第二份安装或授权清单。
 
 ```ts
-const disposePage = ctx.slots.register({ name: 'main', key: panelId }, Page);
-const disposeTitle = ctx.agentWorkbench.register({ id: panelId, label: () => title });
-await ctx.agentWorkbench.open(panelId);
+const disposePage = ctx.slots.register({ name: 'main', key: panelId }, Page)
+const disposeTitle = ctx.agentWorkbench.register({ id: panelId, label: () => title })
+await ctx.agentWorkbench.open(panelId)
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
