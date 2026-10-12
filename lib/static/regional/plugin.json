@@ -13,9 +13,7 @@
       "order": 20
     }
   ],
-  "skills": [
-    "skills/regional/SKILL.md"
-  ],
+  "skills": ["skills/regional/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "regional-plan-prototype",

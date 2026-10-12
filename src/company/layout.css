@@ -55,7 +55,7 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: white;
+  background: var(--dsw-alias-bg-base);
 }
 .gea-native-content {
   flex: 1;

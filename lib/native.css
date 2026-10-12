@@ -27274,7 +27274,7 @@ p.arco-typography {
 .RegionalApprovalWorkbench_progressTreeHeader,
 .RegionalApprovalWorkbench_progressTreeRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--progress-completion-width) var(--progress-pending-width) var( --progress-status-width );
+  grid-template-columns: minmax(0, 1fr) var(--progress-completion-width) var( --progress-pending-width ) var(--progress-status-width);
   align-items: center;
   gap: 16px;
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile } from './helpers/prepared-assets.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 

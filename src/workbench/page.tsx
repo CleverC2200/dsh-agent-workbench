@@ -32,6 +32,15 @@ import {
   type PageBridgeApplyResult,
 } from '../page-interaction/page-bridge/client.ts';
 
+/** 宿主按能力契约给出的模块索引：页面用它把 pageId 映射到受管 consumerCode。 */
+type _ModuleInfo = {
+  id: string;
+  label: string;
+  surface?: string;
+  consumerCode?: string;
+  pageIds: string[];
+};
+
 type Translate = (key: CopyKey) => string;
 type AnalysisScope = 'summary' | 'details';
 type VisibleWorkbenchContext = {
@@ -189,6 +198,9 @@ function query<T>(kind: string, input: { signal?: AbortSignal } = {}): Promise<T
   const { signal, ...fields } = input;
   return rpc<T>('workbench/query', { kind, query: fields }, signal);
 }
+const _unavailable = async (): Promise<never> => {
+  throw new Error('GEA_WRITE_ADAPTER_NOT_CONNECTED');
+};
 const loadWorkflow = createWorkflowLoader((signal) => rpc('workflow/config', {}, signal));
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
@@ -519,6 +531,24 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       clearTimeout(timer);
     };
   }, [qr]);
+  const _run = async (work: (signal: AbortSignal) => Promise<void>) => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setBusy(true);
+    setError('');
+    try {
+      await work(controller.signal);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setError(requestErrorMessage(error, t));
+        if (error instanceof BackendHttpError && error.status === 401)
+          window.parent.postMessage({ type: 'gea:identity' }, window.location.origin);
+      }
+    } finally {
+      if (request.current === controller) setBusy(false);
+    }
+  };
   useEffect(() => {
     if (!status || status.authenticated) return;
     const controller = new AbortController();

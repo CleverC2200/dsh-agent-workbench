@@ -1,5 +1,4 @@
-// oxlint-disable-next-line no-unused-expressions
-('use client');
+void 'use client';
 
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Tooltip, type TableProps } from '../../../dsh-ui/controls';

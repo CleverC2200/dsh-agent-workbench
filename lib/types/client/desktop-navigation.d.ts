@@ -30,7 +30,7 @@ export declare function createNavigationSelection(): {
     set(next: PageNavigation | null): void;
 };
 /** 独立提示条不阻断正常业务；轮询持续观察身份变化，已处理 receipt 不重复打开。 */
-export declare function DesktopNavigation({ t, open, login }: {
+export declare function DesktopNavigation({ t, open, login, }: {
     t: (key: CopyKey) => string;
     open: (target: ReadyNavigation, signal: AbortSignal) => Promise<void>;
     login: () => void;

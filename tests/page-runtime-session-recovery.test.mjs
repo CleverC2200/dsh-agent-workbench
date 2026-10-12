@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile as _writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -57,6 +57,30 @@ const deferred = () => {
 };
 const tick = () => new Promise((done) => setImmediate(done));
 
+class UnexpectedModelAdapter extends LlmAdapter {
+  constructor(onRequest) {
+    super();
+    this.onRequest = onRequest;
+  }
+  async *generate() {
+    this.onRequest();
+    yield Promise.reject(new Error('Unexpected model request'));
+  }
+  async listModels() {
+    return [{ id: 'fixture-model' }];
+  }
+}
+
+test('unexpected model fixture keeps async iterator rejection and never yields a model result', async () => {
+  let requests = 0;
+  const iterator = new UnexpectedModelAdapter(() => requests++).generate();
+  assert.equal(iterator[Symbol.asyncIterator](), iterator);
+  assert.equal(requests, 0);
+  await assert.rejects(iterator.next(), { message: 'Unexpected model request' });
+  assert.equal(requests, 1);
+  assert.deepEqual(await iterator.next(), { value: undefined, done: true });
+});
+
 async function fixture(t, options = {}) {
   const root = await mkdtemp(join(tmpdir(), 'workbench-cold-session-'));
   const cwd = join(root, 'workspace');
@@ -86,19 +110,7 @@ async function fixture(t, options = {}) {
   await ctx.plugin(Tools);
   await ctx.plugin(Agents);
   await ctx.plugin(Loop, { agents: [] });
-  ctx.llm.registerAdapter(
-    ['fixture'],
-    new (class extends LlmAdapter {
-      async *generate() {
-        modelRequests++;
-        if (modelRequests < 0) yield undefined;
-        throw Error('Unexpected model request');
-      }
-      async listModels() {
-        return [{ id: 'fixture-model' }];
-      }
-    })(),
-  );
+  ctx.llm.registerAdapter(['fixture'], new UnexpectedModelAdapter(() => modelRequests++));
   ctx.sessionProjections.register(agentPresetProjectionDefinition);
   ctx.provide('agentDefaultModel', {
     currentSelection: () => ({ provider: 'fixture', model: 'fixture-model' }),

@@ -3,8 +3,7 @@ import * as React from 'react';
 import { createPageViewState, usePageViewField } from '../../../shared/view-state.js';
 const apsView = createPageViewState('inventory-apsplan');
 import { scopedData } from 'dsh-agent-manage/aps-compute/adapter';
-// oxlint-disable-next-line no-unused-expressions
-('use client');
+void 'use client';
 
 import {
   useEffect,
@@ -12,6 +11,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as _ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -32,6 +32,7 @@ import {
   History,
   LayoutGrid,
   Link2,
+  Menu as _Menu,
   MessageSquare,
   PackageSearch,
   PanelLeftClose,
@@ -48,7 +49,14 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react';
-import {} from '@/components/ui/table';
+import {
+  Table as _Table,
+  TableBody as _TableBody,
+  TableCell as _TableCell,
+  TableHead as _TableHead,
+  TableHeader as _TableHeader,
+  TableRow as _TableRow,
+} from '@/components/ui/table';
 import {
   baseProductHierarchy,
   type BaseProductItem,
@@ -57,6 +65,7 @@ import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
 import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
 import {
+  metricValues as _metricValues,
   comparisonValues,
   createMetricReader,
   formatNumber,
@@ -307,7 +316,7 @@ function EditableHelp({
             aria-label={`${label}编辑器`}
           >
             <strong>{label.replace('查看并编辑', '')}</strong>
-            <p>说明编辑属于当前页面预览，不会写入真实业务系统。</p>
+            <p>{'说明编辑属于当前页面预览，不会写入真实业务系统。'}</p>
             <textarea
               aria-label="编辑当前问号说明"
               value={draft}
@@ -325,10 +334,10 @@ function EditableHelp({
                   setOpen(false);
                 }}
               >
-                取消
+                {'取消'}
               </button>
               <button className="primary" onClick={save}>
-                保存修改
+                {'保存修改'}
               </button>
             </footer>
           </div>,
@@ -1550,53 +1559,60 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     <div className="page workspace-page coordination-page">
       <section className="coordination-toolbar">
         <div>
-          <h2>产销协同工作台V0.1</h2>
-          <p>全链路经营健康与异常协同</p>
+          <h2>{'产销协同工作台V0.1'}</h2>
+          <p>{'全链路经营健康与异常协同'}</p>
         </div>
         <div>
           <button>
-            2026年9月
+            {'2026年9月'}
             <ChevronDown />
           </button>
           <button>
-            全部基地
+            {'全部基地'}
             <ChevronDown />
           </button>
-          <span>演示假设</span>
+          <span>{'演示假设'}</span>
         </div>
       </section>
       <section className="summary-strip coord-ai-summary">
         <div className="summary-main">
           <span className="summary-tag">
             <Sparkles />
-            AI 整体分析
+            {'AI 整体分析'}
           </span>
           <p className="summary-copy">
-            本月计划需求 <b>881 万件</b>，销售计划准确率 <b>95.6%</b>；生产计划完成
-            61.7%，库存与交付指标均低于目标。
+            {'本月计划需求 '}
+            <b>{'881 万件'}</b>
+            {'，销售计划准确率 '}
+            <b>{'95.6%'}</b>
+            {'；生产计划完成 61.7%，库存与交付指标均低于目标。'}
           </p>
-          <strong>建议：遂平提产 2 万件、华南双班增产 3 万件并启动 ODM 寻源。</strong>
+          <strong>{'建议：遂平提产 2 万件、华南双班增产 3 万件并启动 ODM 寻源。'}</strong>
         </div>
         <div className="summary-note">
-          <small>供需侧</small>
+          <small>{'供需侧'}</small>
           <p>
-            产能缺口 <b>8.3 万件</b>，集中于 305 馄饨等重点品类。
+            {'产能缺口 '}
+            <b>{'8.3 万件'}</b>
+            {'，集中于 305 馄饨等重点品类。'}
           </p>
         </div>
         <div className="summary-note">
-          <small>库存交付侧</small>
+          <small>{'库存交付侧'}</small>
           <p>
-            库存 <b>50.9 万件</b>且结构错配，准交率低于目标。
+            {'库存 '}
+            <b>{'50.9 万件'}</b>
+            {'且结构错配，准交率低于目标。'}
           </p>
         </div>
       </section>
       <section>
         <div className="section-heading">
           <div>
-            <span>经营总览</span>
-            <h2>核心经营指标</h2>
+            <span>{'经营总览'}</span>
+            <h2>{'核心经营指标'}</h2>
           </div>
-          <p>全部基地口径 · 8 个指标</p>
+          <p>{'全部基地口径 · 8 个指标'}</p>
         </div>
         <div className="coord-metric-grid">
           {metrics.map((item) => {
@@ -1652,13 +1668,13 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
         </div>
         <div className="coord-table">
           <div className="coord-head">
-            <span>品类</span>
-            <span>销售类</span>
-            <span>计划类</span>
-            <span>生产类</span>
-            <span>库存类</span>
-            <span>交付类</span>
-            <span>结论</span>
+            <span>{'品类'}</span>
+            <span>{'销售类'}</span>
+            <span>{'计划类'}</span>
+            <span>{'生产类'}</span>
+            <span>{'库存类'}</span>
+            <span>{'交付类'}</span>
+            <span>{'结论'}</span>
           </div>
           {categoryRows.map((row) => (
             <div className="coord-row" key={row.name}>
@@ -1718,64 +1734,66 @@ function DemandOperationsPage() {
         <div>
           <span>
             <Sparkles />
-            AI 需求信号研判
+            {'AI 需求信号研判'}
           </span>
-          <h2>本周需求波动可控，3 个品类需重排预测</h2>
+          <h2>{'本周需求波动可控，3 个品类需重排预测'}</h2>
           <p>
-            水饺受渠道促销拉动超预测 14.8%，火锅料连续两周低于预测，建议联动库存调整下期需求计划。
+            {
+              '水饺受渠道促销拉动超预测 14.8%，火锅料连续两周低于预测，建议联动库存调整下期需求计划。'
+            }
           </p>
         </div>
         <div className="hero-score">
-          <strong>87.6%</strong>
-          <small>预测准确率</small>
+          <strong>{'87.6%'}</strong>
+          <small>{'预测准确率'}</small>
         </div>
       </section>
       <section>
         <div className="section-heading">
           <div>
-            <span>需求健康</span>
-            <h2>需求计划核心指标</h2>
+            <span>{'需求健康'}</span>
+            <h2>{'需求计划核心指标'}</h2>
           </div>
-          <p>数据截至 2026.08.23</p>
+          <p>{'数据截至 2026.08.23'}</p>
         </div>
         <div className="ops-metric-grid">
           <article>
-            <small>预测准确率</small>
-            <strong>87.6%</strong>
-            <em className="good">环比 +2.4pp</em>
+            <small>{'预测准确率'}</small>
+            <strong>{'87.6%'}</strong>
+            <em className="good">{'环比 +2.4pp'}</em>
           </article>
           <article>
-            <small>预测偏差率</small>
-            <strong>8.3%</strong>
-            <em className="good">目标内</em>
+            <small>{'预测偏差率'}</small>
+            <strong>{'8.3%'}</strong>
+            <em className="good">{'目标内'}</em>
           </article>
           <article>
-            <small>需求变更率</small>
-            <strong>6.8%</strong>
-            <em className="bad">超目标 1.8pp</em>
+            <small>{'需求变更率'}</small>
+            <strong>{'6.8%'}</strong>
+            <em className="bad">{'超目标 1.8pp'}</em>
           </article>
           <article>
-            <small>活动纳入率</small>
-            <strong>94.2%</strong>
-            <em className="watch">待确认 3 项</em>
+            <small>{'活动纳入率'}</small>
+            <strong>{'94.2%'}</strong>
+            <em className="watch">{'待确认 3 项'}</em>
           </article>
         </div>
       </section>
       <section>
         <div className="section-heading">
           <div>
-            <span>品类洞察</span>
-            <h2>预测与实际需求偏差</h2>
+            <span>{'品类洞察'}</span>
+            <h2>{'预测与实际需求偏差'}</h2>
           </div>
-          <p>按绝对偏差排序</p>
+          <p>{'按绝对偏差排序'}</p>
         </div>
         <div className="panel demand-board">
           <div className="board-head">
-            <span>品类</span>
-            <span>计划预测</span>
-            <span>实际需求</span>
-            <span>偏差</span>
-            <span>信号判断</span>
+            <span>{'品类'}</span>
+            <span>{'计划预测'}</span>
+            <span>{'实际需求'}</span>
+            <span>{'偏差'}</span>
+            <span>{'信号判断'}</span>
           </div>
           {demandItems.map((item) => (
             <div className="board-row" key={item.name}>
@@ -1791,35 +1809,35 @@ function DemandOperationsPage() {
       <section>
         <div className="section-heading">
           <div>
-            <span>协同动作</span>
-            <h2>需求共识待办</h2>
+            <span>{'协同动作'}</span>
+            <h2>{'需求共识待办'}</h2>
           </div>
-          <p>销售、市场与计划共同确认</p>
+          <p>{'销售、市场与计划共同确认'}</p>
         </div>
         <div className="decision-grid">
           <article className="panel">
-            <i>01</i>
+            <i>{'01'}</i>
             <div>
-              <h3>确认水饺渠道增量</h3>
-              <p>华东大促追加 6.3 万件，需在 8 月 25 日前锁定。</p>
+              <h3>{'确认水饺渠道增量'}</h3>
+              <p>{'华东大促追加 6.3 万件，需在 8 月 25 日前锁定。'}</p>
             </div>
-            <b>销售负责</b>
+            <b>{'销售负责'}</b>
           </article>
           <article className="panel">
-            <i>02</i>
+            <i>{'02'}</i>
             <div>
-              <h3>下调火锅料滚动预测</h3>
-              <p>连续两周低于预测，建议下期需求计划下调 8%。</p>
+              <h3>{'下调火锅料滚动预测'}</h3>
+              <p>{'连续两周低于预测，建议下期需求计划下调 8%。'}</p>
             </div>
-            <b>计划负责</b>
+            <b>{'计划负责'}</b>
           </article>
           <article className="panel">
-            <i>03</i>
+            <i>{'03'}</i>
             <div>
-              <h3>补齐活动需求参数</h3>
-              <p>3 项九月活动缺少门店覆盖和转化率假设。</p>
+              <h3>{'补齐活动需求参数'}</h3>
+              <p>{'3 项九月活动缺少门店覆盖和转化率假设。'}</p>
             </div>
-            <b>市场负责</b>
+            <b>{'市场负责'}</b>
           </article>
         </div>
       </section>
@@ -1915,16 +1933,16 @@ function SalesPlanPage({ runId }: { runId: number }) {
       <section className="panel sales-plan-board">
         <header className="sales-plan-toolbar">
           <div className="sales-plan-title">
-            <h2>计划列表</h2>
+            <h2>{'计划列表'}</h2>
             <div className="sales-plan-steps">
               <span className={generationStage === 'processing' ? 'active' : 'done'}>
-                {generationStage === 'processing' && <em>处理中</em>}
+                {generationStage === 'processing' && <em>{'处理中'}</em>}
                 <b>
                   {generationStage === 'processing' ? <span className="sales-plan-spinner" /> : '1'}
                 </b>
-                数据处理
+                {'数据处理'}
               </span>
-              <i>→</i>
+              <i>{'→'}</i>
               <span
                 className={
                   generationStage === 'forecasting'
@@ -1934,7 +1952,7 @@ function SalesPlanPage({ runId }: { runId: number }) {
                       : ''
                 }
               >
-                {generationStage === 'forecasting' && <em>处理中</em>}
+                {generationStage === 'forecasting' && <em>{'处理中'}</em>}
                 <b>
                   {generationStage === 'forecasting' ? (
                     <span className="sales-plan-spinner" />
@@ -1942,21 +1960,23 @@ function SalesPlanPage({ runId }: { runId: number }) {
                     '2'
                   )}
                 </b>
-                AI 预测生成
+                {'AI 预测生成'}
               </span>
-              <i>→</i>
+              <i>{'→'}</i>
               <span className={generationStage === 'ready' ? 'current' : ''}>
-                <b>3</b>计划提报
+                <b>{'3'}</b>
+                {'计划提报'}
               </span>
             </div>
           </div>
           <div className="sales-plan-period">
             <div className="sales-plan-mode">
-              <button className="selected">月初</button>
-              <button>纠偏</button>
+              <button className="selected">{'月初'}</button>
+              <button>{'纠偏'}</button>
             </div>
             <button className="sales-plan-month">
-              2026 年 10 月<ChevronDown />
+              {'2026 年 10 月'}
+              <ChevronDown />
             </button>
           </div>
         </header>
@@ -1965,15 +1985,15 @@ function SalesPlanPage({ runId }: { runId: number }) {
             <div className="sales-plan-filters">
               <div>
                 <button>
-                  全部大区
+                  {'全部大区'}
                   <ChevronDown />
                 </button>
                 <button>
-                  全部省区
+                  {'全部省区'}
                   <ChevronDown />
                 </button>
                 <button>
-                  全部状态
+                  {'全部状态'}
                   <ChevronDown />
                 </button>
               </div>
@@ -1984,13 +2004,13 @@ function SalesPlanPage({ runId }: { runId: number }) {
             </div>
             <div className="sales-plan-table-wrap">
               <div className="sales-plan-row sales-plan-head">
-                <span>序号</span>
-                <span>经销商</span>
-                <span>目标金额</span>
-                <span>提报进度</span>
-                <span>库存健康</span>
-                <span>健康度分析</span>
-                <span>操作</span>
+                <span>{'序号'}</span>
+                <span>{'经销商'}</span>
+                <span>{'目标金额'}</span>
+                <span>{'提报进度'}</span>
+                <span>{'库存健康'}</span>
+                <span>{'健康度分析'}</span>
+                <span>{'操作'}</span>
               </div>
               {salesPlans.map((item, index) => (
                 <article className="sales-plan-row" key={item.code}>
@@ -2018,25 +2038,28 @@ function SalesPlanPage({ runId }: { runId: number }) {
                       <i>
                         <b style={{ width: `${item.progress}%` }} />
                       </i>
-                      <strong>{formatNumber(item.progress, 1)}%</strong>
+                      <strong>
+                        {formatNumber(item.progress, 1)}
+                        {'%'}
+                      </strong>
                     </div>
                     <p>
-                      <span>提报金额</span>
+                      <span>{'提报金额'}</span>
                       <b>{item.reported}</b>
-                      <span>目标金额</span>
+                      <span>{'目标金额'}</span>
                       <b>{item.target}</b>
                     </p>
                   </div>
                   <div className="sales-plan-stock">
-                    <span>当前库存　-</span>
-                    <span>周转天数　-</span>
-                    <span>平均货龄　-</span>
+                    <span>{'当前库存　-'}</span>
+                    <span>{'周转天数　-'}</span>
+                    <span>{'平均货龄　-'}</span>
                   </div>
                   <div className="sales-plan-health">
-                    <em>数据不足</em>
-                    <span>▸ 历史与本次提报对比</span>
+                    <em>{'数据不足'}</em>
+                    <span>{'▸ 历史与本次提报对比'}</span>
                   </div>
-                  <button className="sales-plan-action">开始提报</button>
+                  <button className="sales-plan-action">{'开始提报'}</button>
                 </article>
               ))}
             </div>
@@ -2102,57 +2125,58 @@ function DeliveryOperationsPage() {
         <div>
           <span>
             <Sparkles />
-            AI 交付风险研判
+            {'AI 交付风险研判'}
           </span>
-          <h2>准交风险集中在郑州装车与遂平派车</h2>
+          <h2>{'准交风险集中在郑州装车与遂平派车'}</h2>
           <p>
-            未来 24 小时共有 18 笔订单存在延期风险，其中 7
-            笔影响重点客户，建议优先释放月台与车辆资源。
+            {
+              '未来 24 小时共有 18 笔订单存在延期风险，其中 7 笔影响重点客户，建议优先释放月台与车辆资源。'
+            }
           </p>
         </div>
         <div className="hero-score">
-          <strong>94.37%</strong>
-          <small>本月准交率</small>
+          <strong>{'94.37%'}</strong>
+          <small>{'本月准交率'}</small>
         </div>
       </section>
       <section>
         <div className="section-heading">
           <div>
-            <span>交付健康</span>
-            <h2>订单履约核心指标</h2>
+            <span>{'交付健康'}</span>
+            <h2>{'订单履约核心指标'}</h2>
           </div>
-          <p>实时履约口径</p>
+          <p>{'实时履约口径'}</p>
         </div>
         <div className="ops-metric-grid">
           <article>
-            <small>订单满足率</small>
-            <strong>92.71%</strong>
-            <em className="bad">距目标 -2.29pp</em>
+            <small>{'订单满足率'}</small>
+            <strong>{'92.71%'}</strong>
+            <em className="bad">{'距目标 -2.29pp'}</em>
           </article>
           <article>
-            <small>准交率</small>
-            <strong>94.37%</strong>
-            <em className="bad">距目标 -4.13pp</em>
+            <small>{'准交率'}</small>
+            <strong>{'94.37%'}</strong>
+            <em className="bad">{'距目标 -4.13pp'}</em>
           </article>
           <article>
-            <small>在途订单</small>
-            <strong>286</strong>
-            <em className="good">运行正常</em>
+            <small>{'在途订单'}</small>
+            <strong>{'286'}</strong>
+            <em className="good">{'运行正常'}</em>
           </article>
           <article>
-            <small>风险订单</small>
-            <strong>18</strong>
-            <em className="bad">重点客户 7 笔</em>
+            <small>{'风险订单'}</small>
+            <strong>{'18'}</strong>
+            <em className="bad">{'重点客户 7 笔'}</em>
           </article>
         </div>
       </section>
       <section>
         <div className="section-heading">
           <div>
-            <span>履约链路</span>
-            <h2>今日订单状态分布</h2>
+            <span>{'履约链路'}</span>
+            <h2>{'今日订单状态分布'}</h2>
           </div>
-          <p>共 1,248 笔订单</p>
+          <p>{'共 1,248 笔订单'}</p>
         </div>
         <div className="delivery-flow panel">
           {[
@@ -2178,18 +2202,18 @@ function DeliveryOperationsPage() {
       <section>
         <div className="section-heading">
           <div>
-            <span>异常穿透</span>
-            <h2>重点交付订单</h2>
+            <span>{'异常穿透'}</span>
+            <h2>{'重点交付订单'}</h2>
           </div>
-          <p>按承诺时间与客户等级排序</p>
+          <p>{'按承诺时间与客户等级排序'}</p>
         </div>
         <div className="panel delivery-table">
           <div className="delivery-head">
-            <span>订单号</span>
-            <span>交付线路</span>
-            <span>承诺时间</span>
-            <span>当前状态</span>
-            <span>预计延迟</span>
+            <span>{'订单号'}</span>
+            <span>{'交付线路'}</span>
+            <span>{'承诺时间'}</span>
+            <span>{'当前状态'}</span>
+            <span>{'预计延迟'}</span>
           </div>
           {deliveries.map((item) => (
             <div className="delivery-row" key={item.order}>
@@ -2509,7 +2533,7 @@ function IntelligentWorkbenchPage({
     { date: '09月17日', scope: '休闲品类', metric: '临期库存例行复盘', result: '方案已采纳' },
   ];
   const activeHistory = live ? [] : historyDialog === 'warning' ? warningHistory : actionHistory;
-  const _completedTaskCount = tasks.filter((task) => task.status === '已完成').length;
+  const completedTaskCount = tasks.filter((task) => task.status === '已完成').length;
   const taskCount = live ? tasks.length : Math.max(tasks.length, 39);
   const warningCount = live && !live.data ? '—' : warningEvents.length;
   const pendingActionCount =
@@ -2582,7 +2606,10 @@ function IntelligentWorkbenchPage({
       <section className="intelligent-section intelligent-metrics-first" aria-label="经营态势">
         <div className="intelligent-section-heading">
           <div>
-            <span>核心指标 · {live ? periodLabel : '月度视角'}</span>
+            <span>
+              {'核心指标 · '}
+              {live ? periodLabel : '月度视角'}
+            </span>
           </div>
           <p>
             {live
@@ -2596,8 +2623,12 @@ function IntelligentWorkbenchPage({
             aria-label="经营指标"
           >
             <div className="business-metric-table-head">
-              <strong>经营指标</strong>
-              <span>智能工作台核心指标 · {businessMetrics.length}项</span>
+              <strong>{'经营指标'}</strong>
+              <span>
+                {'智能工作台核心指标 · '}
+                {businessMetrics.length}
+                {'项'}
+              </span>
             </div>
             <div
               className={`kpi-grid period-kpi-grid overview-flat-kpi-grid scope-kpi-count-${businessMetrics.length}`}
@@ -2634,13 +2665,14 @@ function IntelligentWorkbenchPage({
                     <span>{item.unit}</span>
                   </div>
                   <div className="kpi-comparison-head">
-                    <span>对比指标</span>
-                    <span>变化量</span>
+                    <span>{'对比指标'}</span>
+                    <span>{'变化量'}</span>
                   </div>
                   <div className="kpi-comparison-rows">
                     <div>
                       <span>
-                        上月同期 <em>{item.previous}</em>
+                        {'上月同期 '}
+                        <em>{item.previous}</em>
                       </span>
                       <b className="good">
                         {item.deltaDirection === 'none' ? null : item.deltaDirection === 'down' ? (
@@ -2653,7 +2685,8 @@ function IntelligentWorkbenchPage({
                     </div>
                     <div>
                       <span>
-                        去年同月同期 <em>{item.same}</em>
+                        {'去年同月同期 '}
+                        <em>{item.same}</em>
                       </span>
                       <b className="good">
                         {item.yoyDirection === 'none' ? null : item.yoyDirection === 'down' ? (
@@ -2685,8 +2718,8 @@ function IntelligentWorkbenchPage({
           aria-label="运营指标"
         >
           <div className="business-metric-table-head">
-            <strong>运营指标</strong>
-            <span>智能协同运营状态 · 3项</span>
+            <strong>{'运营指标'}</strong>
+            <span>{'智能协同运营状态 · 3项'}</span>
           </div>
           <div className="intelligent-hero-stats">
             <button
@@ -2702,8 +2735,8 @@ function IntelligentWorkbenchPage({
               }
             >
               <div>
-                <small>预警观察</small>
-                <em>进入预警区间</em>
+                <small>{'预警观察'}</small>
+                <em>{'进入预警区间'}</em>
               </div>
               <strong>{warningCount}</strong>
             </button>
@@ -2720,8 +2753,8 @@ function IntelligentWorkbenchPage({
               }
             >
               <div>
-                <small>待决策建议</small>
-                <em>AI方案已就绪</em>
+                <small>{'待决策建议'}</small>
+                <em>{'AI方案已就绪'}</em>
               </div>
               <strong>{pendingActionCount}</strong>
             </button>
@@ -2738,8 +2771,8 @@ function IntelligentWorkbenchPage({
               }
             >
               <div>
-                <small>执行中任务</small>
-                <em>统一闭环跟踪</em>
+                <small>{'执行中任务'}</small>
+                <em>{'统一闭环跟踪'}</em>
               </div>
               <strong>{activeTaskCount}</strong>
             </button>
@@ -2761,7 +2794,7 @@ function IntelligentWorkbenchPage({
         >
           <span>
             <Sparkles />
-            AI 今日经营简报
+            {'AI 今日经营简报'}
           </span>
           <h2>{live ? pageBriefing.title : '2项指标进入预警区间，3项AI方案等待决策'}</h2>
           <p>
@@ -2777,20 +2810,20 @@ function IntelligentWorkbenchPage({
           <section className="intelligent-work-column" id="intelligent-warning-panel">
             <div className="intelligent-section-heading">
               <div>
-                <span>事件预警</span>
-                <h2>进入预警区间的指标</h2>
+                <span>{'事件预警'}</span>
+                <h2>{'进入预警区间的指标'}</h2>
               </div>
               <div className="section-heading-actions">
                 <b>{warningCount}</b>
                 <button aria-haspopup="dialog" onClick={() => setHistoryDialog('warning')}>
-                  查看更多
+                  {'查看更多'}
                   <ArrowRight />
                 </button>
               </div>
             </div>
             <div className="intelligent-alert-panel panel">
               <p className="workflow-section-note">
-                尚未达到严重状态，先提示关注并支持进入看板核查，不自动生成处置任务。
+                {'尚未达到严重状态，先提示关注并支持进入看板核查，不自动生成处置任务。'}
               </p>
               <div className="intelligent-action-list warning-insight-list">
                 {warningEvents.map((item) => (
@@ -2806,35 +2839,42 @@ function IntelligentWorkbenchPage({
                         <Bell />
                       </span>
                       <div>
-                        <small>阈值预警 · {item.range}</small>
+                        <small>
+                          {'阈值预警 · '}
+                          {item.range}
+                        </small>
                         <strong>{item.scope}</strong>
                         <em>
-                          {item.metric} · {item.gap}
+                          {item.metric}
+                          {' · '}
+                          {item.gap}
                         </em>
                       </div>
-                      <b>预警</b>
+                      <b>{'预警'}</b>
                     </header>
                     <div className="ai-analysis-block">
                       <p>
-                        <span>AI分析</span>
+                        <span>{'AI分析'}</span>
                         {item.diagnosis}
                       </p>
                       <small>
-                        依据：{item.evidence} · 可信度{' '}
+                        {'依据：'}
+                        {item.evidence}
+                        {' · 可信度 '}
                         {Number.isFinite(item.confidence) ? `${item.confidence}%` : '—'}
                       </small>
                     </div>
                     <div className="suggested-plan">
                       <span>
-                        <small>区间判断</small>
+                        <small>{'区间判断'}</small>
                         <strong>{item.range}</strong>
                       </span>
                       <span>
-                        <small>变化趋势</small>
+                        <small>{'变化趋势'}</small>
                         <b>{item.trend}</b>
                       </span>
                       <span>
-                        <small>数据证据</small>
+                        <small>{'数据证据'}</small>
                         <b>{item.evidence}</b>
                       </span>
                     </div>
@@ -2843,7 +2883,7 @@ function IntelligentWorkbenchPage({
                         className="primary warning-action"
                         onClick={() => onOpenV02('production', item.dimension)}
                       >
-                        进入V0.2核查明细
+                        {'进入V0.2核查明细'}
                         <ArrowRight />
                       </button>
                     </div>
@@ -2855,20 +2895,20 @@ function IntelligentWorkbenchPage({
           <section className="intelligent-work-column" id="intelligent-action-panel">
             <div className="intelligent-section-heading">
               <div>
-                <span>行动建议</span>
-                <h2>AI分析与待决策方案</h2>
+                <span>{'行动建议'}</span>
+                <h2>{'AI分析与待决策方案'}</h2>
               </div>
               <div className="section-heading-actions">
                 <b>{pendingActionCount}</b>
                 <button aria-haspopup="dialog" onClick={() => setHistoryDialog('action')}>
-                  查看更多
+                  {'查看更多'}
                   <ArrowRight />
                 </button>
               </div>
             </div>
             <div className="intelligent-action-panel panel">
               <p className="workflow-section-note">
-                严重指标、业务事件和日历任务由AI完成分析并生成可执行方案。
+                {'严重指标、业务事件和日历任务由AI完成分析并生成可执行方案。'}
               </p>
               <div className="intelligent-action-list">
                 {actionSuggestions.map((item) => {
@@ -2899,22 +2939,29 @@ function IntelligentWorkbenchPage({
                         </span>
                         <div>
                           <small>
-                            {item.trigger} · {item.triggerNote}
+                            {item.trigger}
+                            {' · '}
+                            {item.triggerNote}
                           </small>
                           <strong>{item.scope}</strong>
                           <em>
-                            {item.metric} · {item.gap}
+                            {item.metric}
+                            {' · '}
+                            {item.gap}
                           </em>
                         </div>
                         <b>{statusLabel}</b>
                       </header>
                       <div className="ai-analysis-block">
                         <p>
-                          <span>AI分析</span>
+                          <span>{'AI分析'}</span>
                           {item.diagnosis}
                         </p>
                         <small>
-                          {calendarDriven ? '输入依据' : '依据'}：{item.evidence} · 可信度{' '}
+                          {calendarDriven ? '输入依据' : '依据'}
+                          {'：'}
+                          {item.evidence}
+                          {' · 可信度 '}
                           {Number.isFinite(item.confidence) ? `${item.confidence}%` : '—'}
                         </small>
                       </div>
@@ -2932,13 +2979,19 @@ function IntelligentWorkbenchPage({
                             {calendarDriven ? '执行主体 / 触发时间' : '建议责任人 / 时限'}
                           </small>
                           <b>
-                            {item.owner} · {item.due}
+                            {item.owner}
+                            {' · '}
+                            {item.due}
                           </b>
                         </span>
                       </div>
                       <div className="action-buttons">
-                        <button onClick={() => updateDecision(item.id, 'dismissed')}>不采纳</button>
-                        <button onClick={() => updateDecision(item.id, 'adopted')}>仅采纳</button>
+                        <button onClick={() => updateDecision(item.id, 'dismissed')}>
+                          {'不采纳'}
+                        </button>
+                        <button onClick={() => updateDecision(item.id, 'adopted')}>
+                          {'仅采纳'}
+                        </button>
                         <button onClick={() => updateDecision(item.id, 'editing')}>
                           {state === 'editing' ? '方案调整中' : '修改方案'}
                         </button>
@@ -2950,7 +3003,7 @@ function IntelligentWorkbenchPage({
                           {state === 'tasked' ? (
                             <>
                               <Check />
-                              已创建任务
+                              {'已创建任务'}
                             </>
                           ) : state === 'editing' ? (
                             '调整后建任务'
@@ -2975,28 +3028,31 @@ function IntelligentWorkbenchPage({
       >
         <div className="intelligent-task-heading">
           <div>
-            <span>任务追踪 · 复用V0.2任务数据</span>
-            <h2 id="intelligent-task-title">统一协同任务</h2>
-            <p>AI主动处置与人工发起事项进入同一任务池，按责任、时限、结果和证据统一闭环。</p>
+            <span>{'任务追踪 · 复用V0.2任务数据'}</span>
+            <h2 id="intelligent-task-title">{'统一协同任务'}</h2>
+            <p>{'AI主动处置与人工发起事项进入同一任务池，按责任、时限、结果和证据统一闭环。'}</p>
           </div>
           <div className="task-count-filters" role="group" aria-label="智能工作台任务状态筛选">
             <button
               className={`completed ${intelligentTaskStatus === '已完成' ? 'selected' : ''}`}
               onClick={() => setIntelligentTaskStatus('已完成')}
             >
-              已完成 <b>{completedTaskCount}</b>
+              {'已完成 '}
+              <b>{completedTaskCount}</b>
             </button>
             <button
               className={`incomplete ${intelligentTaskStatus === '未完成' ? 'selected' : ''}`}
               onClick={() => setIntelligentTaskStatus('未完成')}
             >
-              未完成 <b>{tasks.length - completedTaskCount}</b>
+              {'未完成 '}
+              <b>{tasks.length - completedTaskCount}</b>
             </button>
             <button
               className={`total ${intelligentTaskStatus === '全部' ? 'selected' : ''}`}
               onClick={() => setIntelligentTaskStatus('全部')}
             >
-              全部 <b>{tasks.length}</b>
+              {'全部 '}
+              <b>{tasks.length}</b>
             </button>
           </div>
         </div>
@@ -3004,13 +3060,13 @@ function IntelligentWorkbenchPage({
           {visibleTasks.length ? (
             <>
               <div className="intelligent-task-head">
-                <span>协作模式</span>
-                <span>任务来源</span>
-                <span>分析对象 / 异常指标</span>
-                <span>任务内容</span>
-                <span>责任人</span>
-                <span>完成时间</span>
-                <span>状态与操作</span>
+                <span>{'协作模式'}</span>
+                <span>{'任务来源'}</span>
+                <span>{'分析对象 / 异常指标'}</span>
+                <span>{'任务内容'}</span>
+                <span>{'责任人'}</span>
+                <span>{'完成时间'}</span>
+                <span>{'状态与操作'}</span>
               </div>
               {visibleTasks.map((task) => {
                 const machineLed = task.id.startsWith('ai-');
@@ -3031,7 +3087,9 @@ function IntelligentWorkbenchPage({
                     <strong>
                       {task.scopeType}
                       <small>
-                        {task.analysisPeriod || '既有任务'} · {task.dataCutoff || '—'}
+                        {task.analysisPeriod || '既有任务'}
+                        {' · '}
+                        {task.dataCutoff || '—'}
                       </small>
                     </strong>
                     <b>
@@ -3054,12 +3112,12 @@ function IntelligentWorkbenchPage({
                         {task.status === '已完成' ? (
                           <>
                             <Check />
-                            查看结果
+                            {'查看结果'}
                           </>
                         ) : (
                           <>
                             <ClipboardCheck />
-                            填写结果
+                            {'填写结果'}
                           </>
                         )}
                       </button>
@@ -3082,8 +3140,8 @@ function IntelligentWorkbenchPage({
           ) : (
             <div className="assigned-task-empty">
               <ClipboardCheck />
-              <strong>当前筛选条件暂无任务</strong>
-              <p>切换任务状态查看其他任务。</p>
+              <strong>{'当前筛选条件暂无任务'}</strong>
+              <p>{'切换任务状态查看其他任务。'}</p>
             </div>
           )}
         </div>
@@ -3099,16 +3157,16 @@ function IntelligentWorkbenchPage({
         >
           <header>
             <div>
-              <span>闭环标准</span>
-              <h2>动作完成不等于问题解决</h2>
+              <span>{'闭环标准'}</span>
+              <h2>{'动作完成不等于问题解决'}</h2>
             </div>
             <button onClick={() => onOpenV02('overview')}>
-              回看经营指标
+              {'回看经营指标'}
               <ArrowRight />
             </button>
           </header>
           <p>
-            任务完成后继续观察指标是否恢复；只有“动作完成 + 指标恢复 + 经验沉淀”才视为真正闭环。
+            {'任务完成后继续观察指标是否恢复；只有“动作完成 + 指标恢复 + 经验沉淀”才视为真正闭环。'}
           </p>
         </article>
         <article
@@ -3121,21 +3179,21 @@ function IntelligentWorkbenchPage({
           <header>
             <span>
               <Bot />
-              数字人状态摘要
+              {'数字人状态摘要'}
             </span>
             <em>{live ? '待接入' : '运行正常'}</em>
           </header>
           <div>
             <span>
-              <small>自治水平</small>
+              <small>{'自治水平'}</small>
               <strong>{live ? '—' : '61%'}</strong>
             </span>
             <span>
-              <small>今日扫描</small>
+              <small>{'今日扫描'}</small>
               <strong>{live ? '—' : '24轮'}</strong>
             </span>
             <span>
-              <small>待人工审核</small>
+              <small>{'待人工审核'}</small>
               <strong>{live ? '—' : '12项'}</strong>
             </span>
           </div>
@@ -3144,7 +3202,7 @@ function IntelligentWorkbenchPage({
             {live ? '数字人执行状态待接入。' : '最近一次扫描已完成，未发现数据连接或技能调用异常。'}
           </p>
           <button onClick={onOpenDigital}>
-            进入管理后台
+            {'进入管理后台'}
             <ArrowRight />
           </button>
         </article>
@@ -3167,7 +3225,10 @@ function IntelligentWorkbenchPage({
             >
               <header>
                 <div>
-                  <small>{historyDialog === 'warning' ? '事件预警' : '行动建议'} · 历史记录</small>
+                  <small>
+                    {historyDialog === 'warning' ? '事件预警' : '行动建议'}
+                    {' · 历史记录'}
+                  </small>
                   <h2 id="insight-history-title">
                     {historyDialog === 'warning' ? '历史预警列表' : '历史建议列表'}
                   </h2>
@@ -3187,10 +3248,10 @@ function IntelligentWorkbenchPage({
               </header>
               <div className="insight-history-table">
                 <div className="insight-history-head">
-                  <span>日期</span>
-                  <span>分析对象</span>
-                  <span>当时数据</span>
-                  <span>处理结果</span>
+                  <span>{'日期'}</span>
+                  <span>{'分析对象'}</span>
+                  <span>{'当时数据'}</span>
+                  <span>{'处理结果'}</span>
                 </div>
                 {activeHistory.map((item) => (
                   <article key={`${item.date}-${item.scope}`}>
@@ -3202,8 +3263,12 @@ function IntelligentWorkbenchPage({
                 ))}
               </div>
               <footer>
-                <span>共 {activeHistory.length} 条历史记录</span>
-                <button onClick={() => setHistoryDialog(null)}>关闭</button>
+                <span>
+                  {'共 '}
+                  {activeHistory.length}
+                  {' 条历史记录'}
+                </span>
+                <button onClick={() => setHistoryDialog(null)}>{'关闭'}</button>
               </footer>
             </section>
           </div>,
@@ -3426,22 +3491,25 @@ function DigitalHumanWorkbenchPage({
             <span>
               <strong>
                 <i />
-                产销协同数字人
+                {'产销协同数字人'}
               </strong>
-              <small>正在执行：{stages.find((stage) => stage.id === activeStage)?.title}</small>
+              <small>
+                {'正在执行：'}
+                {stages.find((stage) => stage.id === activeStage)?.title}
+              </small>
             </span>
           </div>
           <div className="compact-stats">
             <span>
-              <small>自治水平</small>
-              <b>61%</b>
+              <small>{'自治水平'}</small>
+              <b>{'61%'}</b>
             </span>
             <span>
-              <small>自主完成</small>
-              <b>73</b>
+              <small>{'自主完成'}</small>
+              <b>{'73'}</b>
             </span>
             <span className="needs-review">
-              <small>待人工审核</small>
+              <small>{'待人工审核'}</small>
               <b>{pendingReviews}</b>
             </span>
           </div>
@@ -3452,7 +3520,7 @@ function DigitalHumanWorkbenchPage({
                 ?.scrollTo({ top: 0, behavior: 'smooth' })
             }
           >
-            返回数字人主页 ↑
+            {'返回数字人主页 ↑'}
           </button>
         </div>
       )}
@@ -3465,34 +3533,36 @@ function DigitalHumanWorkbenchPage({
           <div>
             <p className="digital-kicker">
               <Bot />
-              产销协同数字人 · 运行中
+              {'产销协同数字人 · 运行中'}
             </p>
-            <h2>这是我的工作台，我负责持续发现问题并推动闭环</h2>
+            <h2>{'这是我的工作台，我负责持续发现问题并推动闭环'}</h2>
             <p>
-              当前受暗数据限制，我先完成指标扫描、异常研判、任务草拟和过程跟踪；关键派发、现场事实补充与闭环验收由你决策。随着知识与规则沉淀，我会逐步提高自主完成比例。
+              {
+                '当前受暗数据限制，我先完成指标扫描、异常研判、任务草拟和过程跟踪；关键派发、现场事实补充与闭环验收由你决策。随着知识与规则沉淀，我会逐步提高自主完成比例。'
+              }
             </p>
           </div>
         </div>
         <div className="autonomy-card">
           <div>
-            <span>当前自治水平</span>
-            <strong>61%</strong>
+            <span>{'当前自治水平'}</span>
+            <strong>{'61%'}</strong>
           </div>
           <div className="autonomy-track">
             <i />
           </div>
-          <small>人机协同阶段 · 目标 100% 自主闭环</small>
+          <small>{'人机协同阶段 · 目标 100% 自主闭环'}</small>
         </div>
       </section>
 
       <section className="digital-metric-section" aria-labelledby="v02-core-metric-title">
         <div className="digital-metric-heading">
           <div>
-            <span>V0.2 看板</span>
-            <h2 id="v02-core-metric-title">核心经营指标</h2>
+            <span>{'V0.2 看板'}</span>
+            <h2 id="v02-core-metric-title">{'核心经营指标'}</h2>
           </div>
           <button onClick={onOpenV02}>
-            查看完整看板
+            {'查看完整看板'}
             <ArrowRight />
           </button>
         </div>
@@ -3522,43 +3592,43 @@ function DigitalHumanWorkbenchPage({
       >
         <div className="digital-metric-heading">
           <div>
-            <span>工作统计</span>
-            <h2 id="digital-task-metric-title">数字人任务指标</h2>
+            <span>{'工作统计'}</span>
+            <h2 id="digital-task-metric-title">{'数字人任务指标'}</h2>
           </div>
-          <p>本周实时更新</p>
+          <p>{'本周实时更新'}</p>
         </div>
         <div className="digital-stat-grid">
           <button onClick={() => selectStage('close')}>
             <span className="stat-icon done">
               <Check />
             </span>
-            <small>本周已完成工作</small>
+            <small>{'本周已完成工作'}</small>
             <strong>{128 + completedTasks}</strong>
-            <em>较上周 +18</em>
+            <em>{'较上周 +18'}</em>
           </button>
           <button onClick={() => selectStage('diagnose')}>
             <span className="stat-icon auto">
               <Sparkles />
             </span>
-            <small>数字人自主完成</small>
-            <strong>73</strong>
-            <em>占全部工作 57%</em>
+            <small>{'数字人自主完成'}</small>
+            <strong>{'73'}</strong>
+            <em>{'占全部工作 57%'}</em>
           </button>
           <button className="attention" onClick={() => selectStage('orchestrate')}>
             <span className="stat-icon review">
               <Users />
             </span>
-            <small>待人工审核</small>
+            <small>{'待人工审核'}</small>
             <strong>{pendingReviews}</strong>
-            <em>需要确认派发与责任人</em>
+            <em>{'需要确认派发与责任人'}</em>
           </button>
           <button onClick={() => selectStage('investigate')}>
             <span className="stat-icon evidence">
               <ClipboardCheck />
             </span>
-            <small>待人工补充信息</small>
-            <strong>8</strong>
-            <em>现场原因与处置结果</em>
+            <small>{'待人工补充信息'}</small>
+            <strong>{'8'}</strong>
+            <em>{'现场原因与处置结果'}</em>
           </button>
         </div>
       </section>
@@ -3566,16 +3636,16 @@ function DigitalHumanWorkbenchPage({
       <section className="digital-process-section">
         <div className="section-heading">
           <div>
-            <span>工作步骤</span>
-            <h2>数字人的异常闭环工作流</h2>
+            <span>{'工作步骤'}</span>
+            <h2>{'数字人的异常闭环工作流'}</h2>
           </div>
-          <p>左右滑动查看全部 · 点击环节进入功能页</p>
+          <p>{'左右滑动查看全部 · 点击环节进入功能页'}</p>
         </div>
         <div className="digital-execution-strip" aria-live="polite">
           <div className="execution-current">
             <span className="execution-live-dot" />
             <div>
-              <small>持续执行中</small>
+              <small>{'持续执行中'}</small>
               <strong>
                 {executionPulse % 2 === 0
                   ? '正在扫描指标变化与任务状态'
@@ -3585,15 +3655,18 @@ function DigitalHumanWorkbenchPage({
           </div>
           <div className="execution-meta">
             <span>
-              <small>今日执行</small>
-              <b>{scanRounds} 轮</b>
+              <small>{'今日执行'}</small>
+              <b>
+                {scanRounds}
+                {' 轮'}
+              </b>
             </span>
             <span>
-              <small>本轮状态</small>
-              <b>4/5 环节并行</b>
+              <small>{'本轮状态'}</small>
+              <b>{'4/5 环节并行'}</b>
             </span>
             <span>
-              <small>下次扫描</small>
+              <small>{'下次扫描'}</small>
               <b>{scanCountdownLabel}</b>
             </span>
           </div>
@@ -3649,7 +3722,10 @@ function DigitalHumanWorkbenchPage({
       <section className="panel digital-stage-workspace" id="digital-stage-workspace">
         <header className="stage-header">
           <div>
-            <span>{stages.find((stage) => stage.id === activeStage)?.index} · 当前工作环节</span>
+            <span>
+              {stages.find((stage) => stage.id === activeStage)?.index}
+              {' · 当前工作环节'}
+            </span>
             <h2>{stages.find((stage) => stage.id === activeStage)?.title}</h2>
           </div>
           <div className="stage-tabs">
@@ -3671,18 +3747,18 @@ function DigitalHumanWorkbenchPage({
               <div>
                 <span>
                   <LayoutGrid />
-                  实时复用 V0.2
+                  {'实时复用 V0.2'}
                 </span>
-                <h3>产销协同管理看板</h3>
-                <p>下方是 V0.2 的真实页面组件，指标、清单、任务和样式修改会自动同步到这里。</p>
+                <h3>{'产销协同管理看板'}</h3>
+                <p>{'下方是 V0.2 的真实页面组件，指标、清单、任务和样式修改会自动同步到这里。'}</p>
               </div>
               <button onClick={onOpenV02}>
-                独立打开 V0.2
+                {'独立打开 V0.2'}
                 <ArrowRight />
               </button>
             </div>
             <button type="button" onClick={onOpenV02}>
-              在当前工作台打开经营看板
+              {'在当前工作台打开经营看板'}
               <ArrowRight />
             </button>
           </div>
@@ -3694,22 +3770,22 @@ function DigitalHumanWorkbenchPage({
               <div>
                 <span>
                   <LayoutGrid />
-                  V0.2 看板运营
+                  {'V0.2 看板运营'}
                 </span>
-                <strong>指标事实与异常入口</strong>
+                <strong>{'指标事实与异常入口'}</strong>
               </div>
               <div>
                 <button>
                   <CalendarDays />
-                  2026年8月
+                  {'2026年8月'}
                   <ChevronDown />
                 </button>
                 <button>
-                  W35 · 08.24–08.30
+                  {'W35 · 08.24–08.30'}
                   <ChevronDown />
                 </button>
                 <button className="open-v02" onClick={onOpenV02}>
-                  进入完整看板
+                  {'进入完整看板'}
                   <ArrowRight />
                 </button>
               </div>
@@ -3718,15 +3794,16 @@ function DigitalHumanWorkbenchPage({
               <div>
                 <Sparkles />
                 <span>
-                  <strong>数字人本轮看板结论</strong>
+                  <strong>{'数字人本轮看板结论'}</strong>
                   <p>
-                    12 项指标中 4 项达标、7 项未达、1
-                    项无目标观察；订单满足率和准交率为本轮优先诊断对象。
+                    {
+                      '12 项指标中 4 项达标、7 项未达、1 项无目标观察；订单满足率和准交率为本轮优先诊断对象。'
+                    }
                   </p>
                 </span>
               </div>
               <button onClick={() => selectStage('diagnose')}>
-                查看异常研判
+                {'查看异常研判'}
                 <ArrowRight />
               </button>
             </div>
@@ -3736,8 +3813,10 @@ function DigitalHumanWorkbenchPage({
                   <header>
                     <strong>{group.name}</strong>
                     <span>
-                      {group.metrics.filter((metric) => metric.state === '健康').length}/
-                      {group.metrics.length} 健康
+                      {group.metrics.filter((metric) => metric.state === '健康').length}
+                      {'/'}
+                      {group.metrics.length}
+                      {' 健康'}
                     </span>
                   </header>
                   {group.metrics.map((metric) => (
@@ -3771,21 +3850,21 @@ function DigitalHumanWorkbenchPage({
             <div className="embedded-risk-board">
               <header>
                 <div>
-                  <span>异常指标清单</span>
-                  <h3>按严重程度与目标差距排序</h3>
+                  <span>{'异常指标清单'}</span>
+                  <h3>{'按严重程度与目标差距排序'}</h3>
                 </div>
                 <button onClick={() => selectStage('diagnose')}>
-                  全部进入诊断
+                  {'全部进入诊断'}
                   <ArrowRight />
                 </button>
               </header>
               <div className="embedded-risk-head">
-                <span>排序</span>
-                <span>分析对象</span>
-                <span>异常指标</span>
-                <span>当前值</span>
-                <span>严重程度</span>
-                <span>任务状态</span>
+                <span>{'排序'}</span>
+                <span>{'分析对象'}</span>
+                <span>{'异常指标'}</span>
+                <span>{'当前值'}</span>
+                <span>{'严重程度'}</span>
+                <span>{'任务状态'}</span>
               </div>
               {[
                 {
@@ -3851,25 +3930,26 @@ function DigitalHumanWorkbenchPage({
             <div className="stage-callout">
               <Sparkles />
               <div>
-                <strong>数字人已完成本轮指标扫描</strong>
+                <strong>{'数字人已完成本轮指标扫描'}</strong>
                 <p>
-                  基于 V0.2 的指标卡、清单和任务状态识别到 2 项严重、2
-                  项预警；以下分析只使用可见数据，缺失事实明确标注，不替代人工判断。
+                  {
+                    '基于 V0.2 的指标卡、清单和任务状态识别到 2 项严重、2 项预警；以下分析只使用可见数据，缺失事实明确标注，不替代人工判断。'
+                  }
                 </p>
               </div>
               <button onClick={onOpenV02}>
-                查看 V0.2 数据底座
+                {'查看 V0.2 数据底座'}
                 <ArrowRight />
               </button>
             </div>
             <div className="diagnosis-table">
               <div className="diagnosis-row head">
-                <span>严重程度</span>
-                <span>异常对象</span>
-                <span>异常指标</span>
-                <span>AI初步研判</span>
-                <span>待补证据</span>
-                <span>下一步</span>
+                <span>{'严重程度'}</span>
+                <span>{'异常对象'}</span>
+                <span>{'异常指标'}</span>
+                <span>{'AI初步研判'}</span>
+                <span>{'待补证据'}</span>
+                <span>{'下一步'}</span>
               </div>
               {reviewItems.map((item) => (
                 <div className="diagnosis-row" key={item.id}>
@@ -3877,8 +3957,8 @@ function DigitalHumanWorkbenchPage({
                   <strong>{item.target}</strong>
                   <b>{item.metric}</b>
                   <p>{item.reason}</p>
-                  <span>现场原因 / 业务动作</span>
-                  <button onClick={() => selectStage('orchestrate')}>进入编排</button>
+                  <span>{'现场原因 / 业务动作'}</span>
+                  <button onClick={() => selectStage('orchestrate')}>{'进入编排'}</button>
                 </div>
               ))}
             </div>
@@ -3890,12 +3970,17 @@ function DigitalHumanWorkbenchPage({
             <div className="stage-callout human">
               <Users />
               <div>
-                <strong>这里是当前最重要的人工决策点</strong>
+                <strong>{'这里是当前最重要的人工决策点'}</strong>
                 <p>
-                  数字人已经生成责任人、任务内容和时限建议。当前预警任务必须人工确认；严重任务可按规则自动派发，仍允许人工复核。
+                  {
+                    '数字人已经生成责任人、任务内容和时限建议。当前预警任务必须人工确认；严重任务可按规则自动派发，仍允许人工复核。'
+                  }
                 </p>
               </div>
-              <span>{pendingReviews} 项待审核</span>
+              <span>
+                {pendingReviews}
+                {' 项待审核'}
+              </span>
             </div>
             <div className="task-draft-list">
               {reviewItems.map((item) => {
@@ -3908,29 +3993,31 @@ function DigitalHumanWorkbenchPage({
                       </em>
                       <div>
                         <h3>
-                          {item.target} · {item.metric}
+                          {item.target}
+                          {' · '}
+                          {item.metric}
                         </h3>
                         <p>{item.reason}</p>
                       </div>
                     </div>
                     <div className="task-draft-meta">
                       <span>
-                        <small>AI推荐责任人</small>
+                        <small>{'AI推荐责任人'}</small>
                         <strong>{item.owner}</strong>
                       </span>
                       <span>
-                        <small>建议完成时间</small>
+                        <small>{'建议完成时间'}</small>
                         <strong>{item.due}</strong>
                       </span>
                       <span>
-                        <small>派发策略</small>
+                        <small>{'派发策略'}</small>
                         <strong>
                           {item.level === '严重' ? '规则允许自动派发' : '必须人工确认'}
                         </strong>
                       </span>
                     </div>
                     <div className="task-draft-actions">
-                      <button className="secondary">调整任务</button>
+                      <button className="secondary">{'调整任务'}</button>
                       <button
                         className="primary"
                         disabled={approved}
@@ -3939,7 +4026,7 @@ function DigitalHumanWorkbenchPage({
                         {approved ? (
                           <>
                             <Check />
-                            已确认派发
+                            {'已确认派发'}
                           </>
                         ) : (
                           '确认并派发'
@@ -3958,12 +4045,14 @@ function DigitalHumanWorkbenchPage({
             <div className="stage-callout evidence">
               <ClipboardCheck />
               <div>
-                <strong>人补事实，数字人负责跟踪、校验和催办</strong>
+                <strong>{'人补事实，数字人负责跟踪、校验和催办'}</strong>
                 <p>
-                  暗数据不做臆测。现场人员补充根因、影响范围和措施后，数字人将更新任务进度并判断是否具备闭环条件。
+                  {
+                    '暗数据不做臆测。现场人员补充根因、影响范围和措施后，数字人将更新任务进度并判断是否具备闭环条件。'
+                  }
                 </p>
               </div>
-              <span>8 项进行中</span>
+              <span>{'8 项进行中'}</span>
             </div>
             <div className="investigation-grid">
               {[
@@ -3994,14 +4083,19 @@ function DigitalHumanWorkbenchPage({
                     <strong>{item.name}</strong>
                     <em>{item.time}</em>
                   </div>
-                  <p>责任人：{item.owner}</p>
+                  <p>
+                    {'责任人：'}
+                    {item.owner}
+                  </p>
                   <div className="progress-track">
                     <i style={{ width: `${item.progress}%` }} />
                   </div>
                   <span>
-                    {item.progress}% · {item.missing}
+                    {item.progress}
+                    {'% · '}
+                    {item.missing}
                   </span>
-                  <button>补充调研结果</button>
+                  <button>{'补充调研结果'}</button>
                 </article>
               ))}
             </div>
@@ -4013,12 +4107,14 @@ function DigitalHumanWorkbenchPage({
             <div className="stage-callout close">
               <Check />
               <div>
-                <strong>不是“任务完成”，而是“指标恢复 + 经验沉淀”</strong>
+                <strong>{'不是“任务完成”，而是“指标恢复 + 经验沉淀”'}</strong>
                 <p>
-                  验收通过后，完成原因、纠偏措施和验证结果会回传到任务与知识库，供下一次异常判断与自动处置复用。
+                  {
+                    '验收通过后，完成原因、纠偏措施和验证结果会回传到任务与知识库，供下一次异常判断与自动处置复用。'
+                  }
                 </p>
               </div>
-              <span>5 项待验收</span>
+              <span>{'5 项待验收'}</span>
             </div>
             <div className="closure-list">
               {[
@@ -4051,16 +4147,16 @@ function DigitalHumanWorkbenchPage({
                   </div>
                   <b>{item.result}</b>
                   <p>
-                    <span>确认根因</span>
+                    <span>{'确认根因'}</span>
                     {item.cause}
                   </p>
                   <p>
-                    <span>有效措施</span>
+                    <span>{'有效措施'}</span>
                     {item.action}
                   </p>
                   <div>
-                    <button className="secondary">退回补充</button>
-                    <button className="primary">确认闭环</button>
+                    <button className="secondary">{'退回补充'}</button>
+                    <button className="primary">{'确认闭环'}</button>
                   </div>
                 </article>
               ))}
@@ -4071,26 +4167,26 @@ function DigitalHumanWorkbenchPage({
 
       <section className="digital-evolution panel">
         <div>
-          <span>自治演进</span>
-          <h2>人不是退出闭环，而是从执行者转为规则制定者与例外决策者</h2>
+          <span>{'自治演进'}</span>
+          <h2>{'人不是退出闭环，而是从执行者转为规则制定者与例外决策者'}</h2>
         </div>
         <div className="evolution-steps">
           <article className="current">
-            <i>现在</i>
-            <strong>人机协同</strong>
-            <p>AI识别与建议，人确认派发、补充暗数据并验收。</p>
+            <i>{'现在'}</i>
+            <strong>{'人机协同'}</strong>
+            <p>{'AI识别与建议，人确认派发、补充暗数据并验收。'}</p>
           </article>
           <ArrowRight />
           <article>
-            <i>下一阶段</i>
-            <strong>规则内自治</strong>
-            <p>成熟规则下自动派发、催办和初步验收，例外升级给人。</p>
+            <i>{'下一阶段'}</i>
+            <strong>{'规则内自治'}</strong>
+            <p>{'成熟规则下自动派发、催办和初步验收，例外升级给人。'}</p>
           </article>
           <ArrowRight />
           <article>
-            <i>目标态</i>
-            <strong>自主闭环</strong>
-            <p>数字人自主完成常规闭环，人负责策略、授权和重大例外。</p>
+            <i>{'目标态'}</i>
+            <strong>{'自主闭环'}</strong>
+            <p>{'数字人自主完成常规闭环，人负责策略、授权和重大例外。'}</p>
           </article>
         </div>
       </section>
@@ -4866,8 +4962,8 @@ export default function Home({
         <span>{kpi.unit}</span>
       </div>
       <div className="kpi-comparison-head">
-        <span>对比指标</span>
-        <span>变化量</span>
+        <span>{'对比指标'}</span>
+        <span>{'变化量'}</span>
       </div>
       <div className="kpi-comparison-grid">
         <div className="comparison-values">
@@ -4914,7 +5010,8 @@ export default function Home({
           </b>
         ) : (
           <b className={kpi.ok ? 'good' : 'bad'}>
-            差距 {formatDelta(kpi.value - kpi.target, kpi.unit)}
+            {'差距 '}
+            {formatDelta(kpi.value - kpi.target, kpi.unit)}
           </b>
         )}
       </div>
@@ -5002,13 +5099,15 @@ export default function Home({
       return (
         <>
           <span role="gridcell">
-            {Number.isFinite(values.sales) ? values.sales.toLocaleString('zh-CN') : '—'}万元
+            {Number.isFinite(values.sales) ? values.sales.toLocaleString('zh-CN') : '—'}
+            {'万元'}
           </span>
           <b
             role="gridcell"
             className={liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'}
           >
-            {formatNumber(values.budget, 2)}%
+            {formatNumber(values.budget, 2)}
+            {'%'}
           </b>
           <span
             role="gridcell"
@@ -5026,7 +5125,8 @@ export default function Home({
             role="gridcell"
             className={liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'}
           >
-            {formatNumber(values.reporting, 2)}%
+            {formatNumber(values.reporting, 2)}
+            {'%'}
           </b>
           <span
             role="gridcell"
@@ -5060,9 +5160,13 @@ export default function Home({
                 : '未达'}
         </span>
         <b role="gridcell" className={liveData ? 'neutral' : current >= 100 ? 'good' : 'bad'}>
-          {formatNumber(current, 2)}%
+          {formatNumber(current, 2)}
+          {'%'}
         </b>
-        <span role="gridcell">{formatNumber(previous, 2)}%</span>
+        <span role="gridcell">
+          {formatNumber(previous, 2)}
+          {'%'}
+        </span>
         <span
           role="gridcell"
           className={
@@ -6315,8 +6419,8 @@ export default function Home({
     >
       <header className="global-topbar">
         <div className="global-brand">
-          <span className="brand-mark">思</span>
-          <strong>GEA平台</strong>
+          <span className="brand-mark">{'思'}</span>
+          <strong>{'GEA平台'}</strong>
           <button
             className="icon-button global-nav-toggle"
             aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
@@ -6339,12 +6443,12 @@ export default function Home({
         <nav aria-label="主导航" className="gea-nav">
           <a className="nav-item ai-entry" href="#overview">
             <Bot />
-            <span>AI工作台</span>
+            <span>{'AI工作台'}</span>
           </a>
           <div className="nav-group workbench-group">
             <button className="nav-item nav-parent workbench-parent">
               <LayoutGrid />
-              <span>产销协同工作台</span>
+              <span>{'产销协同工作台'}</span>
               <ChevronDown className="chevron" />
             </button>
             <button
@@ -6358,13 +6462,13 @@ export default function Home({
                 );
               }}
             >
-              产销协同智能工作台
+              {'产销协同智能工作台'}
             </button>
             <button
               className={`nav-child ${activeWorkspace === 'plan' ? 'active' : ''}`}
               onClick={() => setActiveWorkspace('plan')}
             >
-              产销协同看板
+              {'产销协同看板'}
             </button>
             <button
               className={`nav-child ${activeWorkspace === 'digital' ? 'active' : ''}`}
@@ -6375,33 +6479,33 @@ export default function Home({
                 );
               }}
             >
-              产销协同数字人
+              {'产销协同数字人'}
             </button>
           </div>
           <div className="nav-group">
             <button className="nav-item nav-parent">
               <Users />
-              <span>客户管理</span>
+              <span>{'客户管理'}</span>
               <ChevronDown className="chevron" />
             </button>
             <a className="nav-child" href="#overview">
-              经销商工作台
+              {'经销商工作台'}
             </a>
             <a className="nav-child" href="#base">
-              经销商库存
+              {'经销商库存'}
             </a>
             <a className="nav-child" href="#issues">
-              经销商补货
+              {'经销商补货'}
             </a>
           </div>
           <div className="nav-group">
             <button className="nav-item nav-parent">
               <ClipboardCheck />
-              <span>计划管理</span>
+              <span>{'计划管理'}</span>
               <ChevronDown className="chevron" />
             </button>
             <a className="nav-child" href="#overview">
-              计划管理工作台
+              {'计划管理工作台'}
             </a>
             <button
               className={`nav-child ${activeWorkspace === 'sales-plan' ? 'active' : ''}`}
@@ -6410,40 +6514,40 @@ export default function Home({
                 setActiveWorkspace('sales-plan');
               }}
             >
-              销售计划
+              {'销售计划'}
             </button>
             <a className="nav-child" href="#category">
-              生产计划
+              {'生产计划'}
             </a>
             <a className="nav-child" href="#base">
-              排产计划
+              {'排产计划'}
             </a>
           </div>
           <div className="nav-group">
             <button className="nav-item nav-parent">
               <Boxes />
-              <span>库存管理</span>
+              <span>{'库存管理'}</span>
               <ChevronDown className="chevron" />
             </button>
             <a className="nav-child" href="#overview">
-              库存管理工作台
+              {'库存管理工作台'}
             </a>
             <a className="nav-child" href="#cross-analysis">
-              全链库存
+              {'全链库存'}
             </a>
             <a className="nav-child" href="#base-dashboard">
-              基地库存
+              {'基地库存'}
             </a>
             <a className="nav-child" href="#base">
-              分仓库存
+              {'分仓库存'}
             </a>
           </div>
         </nav>
         <div className="sidebar-footer">
-          <div className="avatar">刘</div>
+          <div className="avatar">{'刘'}</div>
           <div>
-            <strong>刘壮壮</strong>
-            <small>计划管理部</small>
+            <strong>{'刘壮壮'}</strong>
+            <small>{'计划管理部'}</small>
           </div>
           <button className="icon-button" aria-label="设置">
             <Target />
@@ -6466,7 +6570,11 @@ export default function Home({
                       : '当前范围暂无可用数据'}
             </strong>
             <span>
-              截止 {liveDate} · {selectedBase} · GEA 授权只读
+              {'截止 '}
+              {liveDate}
+              {' · '}
+              {selectedBase}
+              {' · GEA 授权只读'}
               {live.data
                 ? ' · 读取时间 ' +
                   new Date(live.data.readAt).toLocaleString('zh-CN', {
@@ -6477,20 +6585,26 @@ export default function Home({
             </span>
             {live.error && <p>{live.error}</p>}
             <details>
-              <summary>来源与缺失说明</summary>
+              <summary>{'来源与缺失说明'}</summary>
               <ul>
                 {(apsEvidence.sources as any[]).map((source) => (
                   <li key={source.id}>
-                    {source.label}：{source.status} · 当前范围 {source.groups} 组
+                    {source.label}
+                    {'：'}
+                    {source.status}
+                    {' · 当前范围 '}
+                    {source.groups}
+                    {' 组'}
                     {source.error ? ' · ' + source.error.message : ''}
                   </li>
                 ))}
               </ul>
               <p>
-                缺失指标：{apsEvidence.missing.join('、') || '当前展示指标均有数值'}
-                。查询截止时间不等同于各来源实际快照；未返回的来源快照日期保持未知。
+                {'缺失指标：'}
+                {apsEvidence.missing.join('、') || '当前展示指标均有数值'}
+                {'。查询截止时间不等同于各来源实际快照；未返回的来源快照日期保持未知。'}
               </p>
-              <p>任务及编辑属于本页预览，未保存或提交业务系统。</p>
+              <p>{'任务及编辑属于本页预览，未保存或提交业务系统。'}</p>
             </details>
           </section>
         )}
@@ -6498,8 +6612,8 @@ export default function Home({
           <div className="context-selection-banner" role="status">
             <Link2 />
             <span>
-              <strong>选择当前声明的指标引用</strong>
-              <small>引用保留当前范围与来源，按 Esc 取消</small>
+              <strong>{'选择当前声明的指标引用'}</strong>
+              <small>{'引用保留当前范围与来源，按 Esc 取消'}</small>
             </span>
             <div>
               {referenceOptions.map((item) => (
@@ -6509,7 +6623,7 @@ export default function Home({
               ))}
             </div>
             <button type="button" onClick={() => setContextSelectionMode(false)}>
-              取消
+              {'取消'}
             </button>
           </div>
         )}
@@ -6564,7 +6678,7 @@ export default function Home({
               <div className="dashboard-module-toolbar" aria-label="看板工具栏">
                 <span className="dashboard-module-label">
                   <LayoutGrid />
-                  产销协同看板
+                  {'产销协同看板'}
                 </span>
                 <button
                   className="open-intelligent-tasks"
@@ -6582,12 +6696,12 @@ export default function Home({
                   {embedMode ? (
                     <>
                       <ArrowLeft />
-                      返回智能工作台
+                      {'返回智能工作台'}
                     </>
                   ) : (
                     <>
                       <ClipboardCheck />
-                      任务统一到智能工作台管理
+                      {'任务统一到智能工作台管理'}
                       <ArrowRight />
                     </>
                   )}
@@ -6600,7 +6714,7 @@ export default function Home({
                   className={analysisScope === 'overview' ? 'selected' : ''}
                   onClick={() => chooseAnalysisScope('overview')}
                 >
-                  总览视角
+                  {'总览视角'}
                 </button>
                 <button
                   role="tab"
@@ -6608,7 +6722,7 @@ export default function Home({
                   className={analysisScope === 'production' ? 'selected' : ''}
                   onClick={() => chooseAnalysisScope('production')}
                 >
-                  生产视角
+                  {'生产视角'}
                 </button>
                 <button
                   role="tab"
@@ -6616,7 +6730,7 @@ export default function Home({
                   className={analysisScope === 'sales' ? 'selected' : ''}
                   onClick={() => chooseAnalysisScope('sales')}
                 >
-                  销售视角
+                  {'销售视角'}
                 </button>
               </div>
               <div className="secondary-analysis-toolbar" aria-label="时间范围与统计粒度">
@@ -6674,7 +6788,7 @@ export default function Home({
                           aria-label="统计日期筛选"
                         >
                           <small>
-                            选择
+                            {'选择'}
                             {timeGranularity === 'year'
                               ? '年份'
                               : timeGranularity === 'day'
@@ -6683,7 +6797,7 @@ export default function Home({
                           </small>
                           <div className="date-picker-sections">
                             <section>
-                              <strong>年</strong>
+                              <strong>{'年'}</strong>
                               <div className="date-picker-year">
                                 {yearOptions.map((year) => (
                                   <button
@@ -6699,7 +6813,7 @@ export default function Home({
                             </section>
                             {timeGranularity !== 'year' && (
                               <section>
-                                <strong>月</strong>
+                                <strong>{'月'}</strong>
                                 <div className="date-picker-month">
                                   {monthOptions.map((month) => (
                                     <button
@@ -6724,7 +6838,7 @@ export default function Home({
                             )}
                             {timeGranularity === 'day' && (
                               <section>
-                                <strong>日</strong>
+                                <strong>{'日'}</strong>
                                 <div className="date-picker-day">
                                   {dayOptions.map((day) => (
                                     <button
@@ -6772,7 +6886,10 @@ export default function Home({
                             role="menu"
                             aria-label={`${selectedPeriodLabel}自然周筛选`}
                           >
-                            <small>{selectedPeriodLabel} · 选择自然周</small>
+                            <small>
+                              {selectedPeriodLabel}
+                              {' · 选择自然周'}
+                            </small>
                             {naturalWeekOptions.map((week) => (
                               <button
                                 key={week.key}
@@ -6796,7 +6913,10 @@ export default function Home({
                         )}
                       </div>
                     )}
-                    <span className="active-period-range">数据范围：{periodMeta.range}</span>
+                    <span className="active-period-range">
+                      {'数据范围：'}
+                      {periodMeta.range}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -6804,12 +6924,18 @@ export default function Home({
                 <div className="section-heading">
                   <div>
                     <span id="kpi-title">
-                      {analysisScope === 'overview' ? '经营指标' : '核心指标'} ·{' '}
+                      {analysisScope === 'overview' ? '经营指标' : '核心指标'}
+                      {' · '}
                       {activeAnalysisPeriod}
                     </span>
                   </div>
                   <p>
-                    {periodMeta.range} · {periodMeta.current} / {periodMeta.previous} /{' '}
+                    {periodMeta.range}
+                    {' · '}
+                    {periodMeta.current}
+                    {' / '}
+                    {periodMeta.previous}
+                    {' / '}
                     {periodMeta.change}
                   </p>
                 </div>
@@ -6827,7 +6953,10 @@ export default function Home({
                           <div className="business-metric-table-head">
                             <strong>{group.label}</strong>
                             <span>
-                              {group.description} · {group.kpis.length}项
+                              {group.description}
+                              {' · '}
+                              {group.kpis.length}
+                              {'项'}
                             </span>
                           </div>
                           <div
@@ -6842,7 +6971,7 @@ export default function Home({
                 ) : (
                   <>
                     {analysisScope === 'overview' && (
-                      <div className="business-metric-table-head">经营指标</div>
+                      <div className="business-metric-table-head">{'经营指标'}</div>
                     )}
                     <div
                       className={`kpi-grid period-kpi-grid overview-flat-kpi-grid scope-kpi-count-${scopedPeriodKpis.length}`}
@@ -6867,7 +6996,10 @@ export default function Home({
                   </span>
                   <div className="score">
                     <strong>{scopeSummary.score}</strong>
-                    <span>/{scopeSummary.total}</span>
+                    <span>
+                      {'/'}
+                      {scopeSummary.total}
+                    </span>
                     <p>{scopeSummary.label}</p>
                   </div>
                   <p className="summary-copy">
@@ -6890,26 +7022,32 @@ export default function Home({
                         ? '经营指标'
                         : analysisScope === 'production'
                           ? '生产视角'
-                          : '销售视角'}{' '}
-                      · 指标清单 · {activeAnalysisPeriod}
+                          : '销售视角'}
+                      {' · 指标清单 · '}
+                      {activeAnalysisPeriod}
                     </span>
                     <h2 id="overview-list-title">
-                      {scopedOverviewMetricMeta.length}项
+                      {scopedOverviewMetricMeta.length}
+                      {'项'}
                       {analysisScope === 'overview' ? '经营指标' : '指标'}
-                      {periodMeta.shortLabel}明细
+                      {periodMeta.shortLabel}
+                      {'明细'}
                     </h2>
                   </div>
-                  <p>数据范围：{periodMeta.range}</p>
+                  <p>
+                    {'数据范围：'}
+                    {periodMeta.range}
+                  </p>
                 </div>
                 <div className="panel overview-list-table">
                   <div
                     className={`overview-list-row overview-list-head active-period-list ${activeMetricListVariant}`}
                   >
-                    <span>指标</span>
-                    {analysisScope === 'overview' && <span>统计口径</span>}
-                    {analysisScope === 'production' && <span>指标分类</span>}
-                    <span>目标</span>
-                    <span>达成状态</span>
+                    <span>{'指标'}</span>
+                    {analysisScope === 'overview' && <span>{'统计口径'}</span>}
+                    {analysisScope === 'production' && <span>{'指标分类'}</span>}
+                    <span>{'目标'}</span>
+                    <span>{'达成状态'}</span>
                     <span>{analysisScope === 'overview' ? '当前值' : periodMeta.current}</span>
                     <span>{periodMeta.previous}</span>
                     <span>{periodMeta.change}</span>
@@ -7001,7 +7139,7 @@ export default function Home({
                     className={productionDimension === 'category' ? 'selected' : ''}
                     onClick={() => setProductionDimension('category')}
                   >
-                    品类维度
+                    {'品类维度'}
                   </button>
                   <button
                     role="tab"
@@ -7010,7 +7148,7 @@ export default function Home({
                     className={productionDimension === 'base' ? 'selected' : ''}
                     onClick={() => setProductionDimension('base')}
                   >
-                    基地维度
+                    {'基地维度'}
                   </button>
                   <button
                     role="tab"
@@ -7019,7 +7157,7 @@ export default function Home({
                     className={productionDimension === 'cross' ? 'selected' : ''}
                     onClick={() => setProductionDimension('cross')}
                   >
-                    交叉分析
+                    {'交叉分析'}
                   </button>
                 </div>
               )}
@@ -7027,12 +7165,18 @@ export default function Home({
               <section id="sales-region-dashboard" aria-labelledby="sales-region-title">
                 <div className="section-heading">
                   <div>
-                    <span>销售组织维度</span>
-                    <h2 id="sales-region-title">大区 / 省区 / 销售组指标下钻</h2>
+                    <span>{'销售组织维度'}</span>
+                    <h2 id="sales-region-title">{'大区 / 省区 / 销售组指标下钻'}</h2>
                   </div>
                   <p>
-                    {selectedPeriodLabel} · {salesOrgCounts.regions} 个大区 ·{' '}
-                    {salesOrgCounts.provinces} 个省区 · {salesOrgCounts.teams} 个销售组
+                    {selectedPeriodLabel}
+                    {' · '}
+                    {salesOrgCounts.regions}
+                    {' 个大区 · '}
+                    {salesOrgCounts.provinces}
+                    {' 个省区 · '}
+                    {salesOrgCounts.teams}
+                    {' 个销售组'}
                   </p>
                 </div>
                 <div className="sales-region-grid">
@@ -7049,7 +7193,10 @@ export default function Home({
                           onClick={() => selectSalesRegion(region.name)}
                         >
                           <strong>{region.name}</strong>
-                          <span>{region.children?.length || 0} 个下级组织</span>
+                          <span>
+                            {region.children?.length || 0}
+                            {' 个下级组织'}
+                          </span>
                         </button>
                         <button
                           className="sales-region-card-metric"
@@ -7057,12 +7204,14 @@ export default function Home({
                           onClick={() => selectSalesRegion(region.name, 'budget')}
                         >
                           <span>
-                            销售预算达成率<small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                            {'销售预算达成率'}
+                            <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
                           </span>
                           <b
                             className={liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'}
                           >
-                            {formatNumber(values.budget, 2)}%
+                            {formatNumber(values.budget, 2)}
+                            {'%'}
                             <small>
                               {liveData
                                 ? '实际值'
@@ -7076,14 +7225,16 @@ export default function Home({
                           onClick={() => selectSalesRegion(region.name, 'reporting')}
                         >
                           <span>
-                            销售提报准确率<small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                            {'销售提报准确率'}
+                            <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
                           </span>
                           <b
                             className={
                               liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'
                             }
                           >
-                            {formatNumber(values.reporting, 2)}%
+                            {formatNumber(values.reporting, 2)}
+                            {'%'}
                             <small>
                               {liveData
                                 ? '实际值'
@@ -7102,7 +7253,7 @@ export default function Home({
                     className={salesMetricTab === 'overview' ? 'selected' : ''}
                     onClick={() => setSalesMetricTab('overview')}
                   >
-                    两指标总览
+                    {'两指标总览'}
                   </button>
                   <button
                     role="tab"
@@ -7110,7 +7261,7 @@ export default function Home({
                     className={salesMetricTab === 'budget' ? 'selected' : ''}
                     onClick={() => setSalesMetricTab('budget')}
                   >
-                    销售预算达成率
+                    {'销售预算达成率'}
                   </button>
                   <button
                     role="tab"
@@ -7118,7 +7269,7 @@ export default function Home({
                     className={salesMetricTab === 'reporting' ? 'selected' : ''}
                     onClick={() => setSalesMetricTab('reporting')}
                   >
-                    销售提报准确率
+                    {'销售提报准确率'}
                   </button>
                 </div>
                 <div
@@ -7130,27 +7281,27 @@ export default function Home({
                     className={`sales-org-row sales-org-head ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
                     role="row"
                   >
-                    <span role="columnheader">组织名称</span>
-                    <span role="columnheader">层级</span>
+                    <span role="columnheader">{'组织名称'}</span>
+                    <span role="columnheader">{'层级'}</span>
                     {salesMetricTab === 'overview' ? (
                       <>
-                        <span role="columnheader">销售额</span>
-                        <span role="columnheader">预算达成率</span>
-                        <span role="columnheader">达成状态</span>
-                        <span role="columnheader">提报准确率</span>
-                        <span role="columnheader">达成状态</span>
+                        <span role="columnheader">{'销售额'}</span>
+                        <span role="columnheader">{'预算达成率'}</span>
+                        <span role="columnheader">{'达成状态'}</span>
+                        <span role="columnheader">{'提报准确率'}</span>
+                        <span role="columnheader">{'达成状态'}</span>
                       </>
                     ) : (
                       <>
-                        <span role="columnheader">目标</span>
-                        <span role="columnheader">达成状态</span>
+                        <span role="columnheader">{'目标'}</span>
+                        <span role="columnheader">{'达成状态'}</span>
                         <span role="columnheader">{periodMeta.current}</span>
                         <span role="columnheader">{periodMeta.previous}</span>
                         <span role="columnheader">{periodMeta.change}</span>
                       </>
                     )}
-                    <span role="columnheader">风险状态</span>
-                    <span role="columnheader">任务派发</span>
+                    <span role="columnheader">{'风险状态'}</span>
+                    <span role="columnheader">{'任务派发'}</span>
                   </div>
                   {salesOrgHierarchy.map((region) => {
                     const regionOpen = expandedSalesRegions.includes(region.name);
@@ -7171,7 +7322,7 @@ export default function Home({
                             {region.name}
                           </button>
                           <span role="gridcell">
-                            <em>大区</em>
+                            <em>{'大区'}</em>
                           </span>
                           {renderSalesMetricCells(region.name)}
                           {renderSalesWorkflowCells(region.name, region.name)}
@@ -7224,7 +7375,7 @@ export default function Home({
                                           {team.name}
                                         </strong>
                                         <span role="gridcell">
-                                          <em>销售组</em>
+                                          <em>{'销售组'}</em>
                                         </span>
                                         {renderSalesMetricCells(teamScope)}
                                         {renderSalesWorkflowCells(teamScope, teamScope)}
@@ -7243,11 +7394,21 @@ export default function Home({
               <section id="category-operations" data-context-id="category">
                 <div className="section-heading">
                   <div>
-                    <span>品类模块 · {activeAnalysisPeriod}</span>
-                    <h2>品类{activeProductionMetricNames.length}项指标达成看板</h2>
+                    <span>
+                      {'品类模块 · '}
+                      {activeAnalysisPeriod}
+                    </span>
+                    <h2>
+                      {'品类'}
+                      {activeProductionMetricNames.length}
+                      {'项指标达成看板'}
+                    </h2>
                   </div>
                   <p>
-                    数据范围：{periodMeta.range} · 快照指标截至{dataCutoff}
+                    {'数据范围：'}
+                    {periodMeta.range}
+                    {' · 快照指标截至'}
+                    {dataCutoff}
                   </p>
                 </div>
                 <div className="category-health-grid">
@@ -7344,7 +7505,10 @@ export default function Home({
                   </div>
                   <div className="category-period-heading">
                     <div>
-                      <span>生产视角 · 指标清单 · {activeAnalysisPeriod}</span>
+                      <span>
+                        {'生产视角 · 指标清单 · '}
+                        {activeAnalysisPeriod}
+                      </span>
                       <h3>
                         {categoryTab === 'overview'
                           ? `${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
@@ -7352,11 +7516,14 @@ export default function Home({
                       </h3>
                     </div>
                     <p>
-                      数据范围：{periodMeta.range} · 快照截至{dataCutoff}
+                      {'数据范围：'}
+                      {periodMeta.range}
+                      {' · 快照截至'}
+                      {dataCutoff}
                     </p>
                   </div>
                   <div className="category-drill-note" role="note">
-                    品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。
+                    {'品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。'}
                   </div>
                   <div
                     className="category-table-content category-drill-table"
@@ -7373,19 +7540,21 @@ export default function Home({
                       style={categoryTab === 'overview' ? productionOverviewRowStyle : undefined}
                       role="row"
                     >
-                      <strong role="columnheader">名称</strong>
-                      <span role="columnheader">层级</span>
+                      <strong role="columnheader">{'名称'}</strong>
+                      <span role="columnheader">{'层级'}</span>
                       {categoryTab === 'overview' ? (
                         activeProductionMetricNames.map((name) => (
                           <span role="columnheader" key={name}>
                             {name}
-                            {metricStatisticType(name) === '快照指标' ? <small>快照</small> : null}
+                            {metricStatisticType(name) === '快照指标' ? (
+                              <small>{'快照'}</small>
+                            ) : null}
                           </span>
                         ))
                       ) : (
                         <>
-                          <span role="columnheader">目标</span>
-                          <span role="columnheader">达成状态</span>
+                          <span role="columnheader">{'目标'}</span>
+                          <span role="columnheader">{'达成状态'}</span>
                           <span role="columnheader">
                             {metricStatisticType(activeCategoryMetric || '') === '快照指标'
                               ? '当前值'
@@ -7397,8 +7566,8 @@ export default function Home({
                           <span role="columnheader">{periodMeta.yoy}</span>
                         </>
                       )}
-                      <span role="columnheader">风险状态</span>
-                      <span role="columnheader">任务派发</span>
+                      <span role="columnheader">{'风险状态'}</span>
+                      <span role="columnheader">{'任务派发'}</span>
                     </div>
                     {baseProductHierarchy.map((category) => {
                       const categoryOpen = expandedCategoryListCategories.includes(category.name);
@@ -7420,7 +7589,7 @@ export default function Home({
                               {category.name}
                             </button>
                             <span role="gridcell">
-                              <em>品类</em>
+                              <em>{'品类'}</em>
                             </span>
                             {renderCategoryMetricCells(categoryValues)}
                             {renderDrillWorkflowCells(
@@ -7455,7 +7624,7 @@ export default function Home({
                                       {item.name}
                                     </button>
                                     <span role="gridcell">
-                                      <em>品项</em>
+                                      <em>{'品项'}</em>
                                     </span>
                                     {renderCategoryMetricCells(itemValues)}
                                     {renderDrillWorkflowCells(
@@ -7484,7 +7653,7 @@ export default function Home({
                                             {material}
                                           </strong>
                                           <span role="gridcell">
-                                            <em>物料组</em>
+                                            <em>{'物料组'}</em>
                                           </span>
                                           {renderCategoryMetricCells(materialValues)}
                                           {renderDrillWorkflowCells(
@@ -7509,11 +7678,21 @@ export default function Home({
               <section id="base-dashboard" data-context-id="base">
                 <div className="section-heading">
                   <div>
-                    <span>基地模块 · {activeAnalysisPeriod}</span>
-                    <h2>基地{activeProductionMetricNames.length}项指标达成看板</h2>
+                    <span>
+                      {'基地模块 · '}
+                      {activeAnalysisPeriod}
+                    </span>
+                    <h2>
+                      {'基地'}
+                      {activeProductionMetricNames.length}
+                      {'项指标达成看板'}
+                    </h2>
                   </div>
                   <p>
-                    数据范围：{periodMeta.range} · 快照指标截至{dataCutoff}
+                    {'数据范围：'}
+                    {periodMeta.range}
+                    {' · 快照指标截至'}
+                    {dataCutoff}
                   </p>
                 </div>
                 <div className="base-health-grid">
@@ -7573,10 +7752,20 @@ export default function Home({
               <section id="cross-analysis" data-context-id="cross">
                 <div className="matrix-heading cross-heading">
                   <div>
-                    <span>交叉分析 · {activeAnalysisPeriod}</span>
-                    <h2>基地 × 品类{activeCrossMatrixModes.length}项指标矩阵</h2>
+                    <span>
+                      {'交叉分析 · '}
+                      {activeAnalysisPeriod}
+                    </span>
+                    <h2>
+                      {'基地 × 品类'}
+                      {activeCrossMatrixModes.length}
+                      {'项指标矩阵'}
+                    </h2>
                     <small>
-                      数据范围：{periodMeta.range} · 快照指标截至{dataCutoff}
+                      {'数据范围：'}
+                      {periodMeta.range}
+                      {' · 快照指标截至'}
+                      {dataCutoff}
                     </small>
                   </div>
                   <div className="segmented cross-tabs" aria-label="矩阵指标切换">
@@ -7595,11 +7784,12 @@ export default function Home({
                   <div className="matrix panel">
                     {activeCrossMode === 'stock' && (
                       <div className="matrix-format-note">
-                        格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · {periodMeta.label}
+                        {'格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · '}
+                        {periodMeta.label}
                       </div>
                     )}
                     <div className="matrix-row matrix-header">
-                      <span>基地</span>
+                      <span>{'基地'}</span>
                       {matrixCategoryNames.map((c) => (
                         <span key={c}>{c}</span>
                       ))}
@@ -7660,7 +7850,7 @@ export default function Home({
                           <div className="matrix-row matrix-unavailable" key={row.name}>
                             <strong>{row.name}</strong>
                             {matrixCategoryNames.map((category) => (
-                              <span key={category}>—</span>
+                              <span key={category}>{'—'}</span>
                             ))}
                           </div>
                         ))}
@@ -7675,7 +7865,7 @@ export default function Home({
                     />
                     <div className="ai-heading">
                       <Sparkles />
-                      <span>AI 矩阵研判</span>
+                      <span>{'AI 矩阵研判'}</span>
                     </div>
                     <h3>{matrixAnalysis.title}</h3>
                     <p>{matrixAnalysis.copy}</p>
@@ -7684,15 +7874,15 @@ export default function Home({
                       <div className="legend">
                         <span>
                           <i className="heat-good" />
-                          健康
+                          {'健康'}
                         </span>
                         <span>
                           <i className="heat-watch" />
-                          预警
+                          {'预警'}
                         </span>
                         <span>
                           <i className="heat-critical" />
-                          严重
+                          {'严重'}
                         </span>
                       </div>
                     )}
@@ -7705,14 +7895,17 @@ export default function Home({
                 >
                   <header>
                     <div>
-                      <span>指标清单</span>
+                      <span>{'指标清单'}</span>
                       <h3 id="matrix-risk-list-title">
                         {activeMatrixListMeta.label}
                         {matrix ? '风险状态排序' : '明细'}
                       </h3>
                     </div>
                     <p>
-                      {matrixRiskRows.length} 项 · 目标 {activeMatrixListMeta.target} ·{' '}
+                      {matrixRiskRows.length}
+                      {' 项 · 目标 '}
+                      {activeMatrixListMeta.target}
+                      {' · '}
                       {matrix ? '基地 × 品类明细' : '当前汇总视角'}
                     </p>
                   </header>
@@ -7722,13 +7915,13 @@ export default function Home({
                     aria-label={`${activeMatrixListMeta.label}风险排序清单`}
                   >
                     <div className="matrix-risk-row matrix-risk-head" role="row">
-                      <span role="columnheader">排序</span>
-                      <span role="columnheader">分析范围</span>
-                      <span role="columnheader">当前值</span>
-                      <span role="columnheader">目标差距</span>
-                      <span role="columnheader">风险状态</span>
-                      <span role="columnheader">数据粒度</span>
-                      <span role="columnheader">任务派发</span>
+                      <span role="columnheader">{'排序'}</span>
+                      <span role="columnheader">{'分析范围'}</span>
+                      <span role="columnheader">{'当前值'}</span>
+                      <span role="columnheader">{'目标差距'}</span>
+                      <span role="columnheader">{'风险状态'}</span>
+                      <span role="columnheader">{'数据粒度'}</span>
+                      <span role="columnheader">{'任务派发'}</span>
                     </div>
                     <div className="matrix-risk-body">
                       {matrixRiskRows.length ? (
@@ -7744,7 +7937,11 @@ export default function Home({
                               {formatNumber(item.value, 2)}
                               {activeMatrixListMeta.unit}
                               {item.adjusted !== undefined ? (
-                                <small>剔除大日期 {formatNumber(item.adjusted, 2)}天</small>
+                                <small>
+                                  {'剔除大日期 '}
+                                  {formatNumber(item.adjusted, 2)}
+                                  {'天'}
+                                </small>
                               ) : null}
                             </span>
                             <span
@@ -7827,7 +8024,10 @@ export default function Home({
                   </div>
                   <div className="category-period-heading">
                     <div>
-                      <span>生产视角 · 基地指标清单 · {activeAnalysisPeriod}</span>
+                      <span>
+                        {'生产视角 · 基地指标清单 · '}
+                        {activeAnalysisPeriod}
+                      </span>
                       <h3>
                         {baseTab === 'overview'
                           ? `基地${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
@@ -7835,12 +8035,16 @@ export default function Home({
                       </h3>
                     </div>
                     <p>
-                      数据范围：{periodMeta.range} · 快照截至{dataCutoff}
+                      {'数据范围：'}
+                      {periodMeta.range}
+                      {' · 快照截至'}
+                      {dataCutoff}
                     </p>
                   </div>
                   <div className="category-drill-note" role="note">
-                    按“基地 → 品类 → 品项 →
-                    物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。
+                    {
+                      '按“基地 → 品类 → 品项 → 物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。'
+                    }
                   </div>
                   <div
                     className="category-table-content category-drill-table base-drill-table"
@@ -7856,19 +8060,21 @@ export default function Home({
                       className={`category-drill-row category-drill-head ${baseTab === 'overview' ? 'period-synced-overview' : 'period-metric'}`}
                       role="row"
                     >
-                      <strong role="columnheader">基地 / 品类 / 品项 / 物料组</strong>
-                      <span role="columnheader">层级</span>
+                      <strong role="columnheader">{'基地 / 品类 / 品项 / 物料组'}</strong>
+                      <span role="columnheader">{'层级'}</span>
                       {baseTab === 'overview' ? (
                         activeProductionMetricNames.map((name) => (
                           <span role="columnheader" key={name}>
                             {name}
-                            {metricStatisticType(name) === '快照指标' ? <small>快照</small> : null}
+                            {metricStatisticType(name) === '快照指标' ? (
+                              <small>{'快照'}</small>
+                            ) : null}
                           </span>
                         ))
                       ) : (
                         <>
-                          <span role="columnheader">目标</span>
-                          <span role="columnheader">达成状态</span>
+                          <span role="columnheader">{'目标'}</span>
+                          <span role="columnheader">{'达成状态'}</span>
                           <span role="columnheader">
                             {metricStatisticType(activeBaseMetric || '') === '快照指标'
                               ? '当前值'
@@ -7880,8 +8086,8 @@ export default function Home({
                           <span role="columnheader">{periodMeta.yoy}</span>
                         </>
                       )}
-                      <span role="columnheader">风险状态</span>
-                      <span role="columnheader">任务派发</span>
+                      <span role="columnheader">{'风险状态'}</span>
+                      <span role="columnheader">{'任务派发'}</span>
                     </div>
                     {base830.map((base) => {
                       const baseOpen = expandedBaseRows.includes(base.name);
@@ -7903,7 +8109,7 @@ export default function Home({
                               {base.name}
                             </button>
                             <span role="gridcell">
-                              <em>基地</em>
+                              <em>{'基地'}</em>
                             </span>
                             {renderBaseMetricCells(baseValues)}
                             {renderDrillWorkflowCells(
@@ -7940,7 +8146,7 @@ export default function Home({
                                       {category}
                                     </button>
                                     <span role="gridcell">
-                                      <em>品类</em>
+                                      <em>{'品类'}</em>
                                     </span>
                                     {renderBaseMetricCells(categoryValues)}
                                     {renderDrillWorkflowCells(
@@ -7981,7 +8187,7 @@ export default function Home({
                                               {item.name}
                                             </button>
                                             <span role="gridcell">
-                                              <em>品项</em>
+                                              <em>{'品项'}</em>
                                             </span>
                                             {renderBaseMetricCells(itemValues)}
                                             {renderDrillWorkflowCells(
@@ -8011,7 +8217,7 @@ export default function Home({
                                                     {material}
                                                   </strong>
                                                   <span role="gridcell">
-                                                    <em>物料组</em>
+                                                    <em>{'物料组'}</em>
                                                   </span>
                                                   {renderBaseMetricCells(materialValues)}
                                                   {renderDrillWorkflowCells(
@@ -8039,7 +8245,7 @@ export default function Home({
               <section id="issues" data-context-id="risk">
                 <div className="section-heading issue-heading">
                   <div>
-                    <span>问题诊断</span>
+                    <span>{'问题诊断'}</span>
                     <h2>
                       {analysisScope === 'overview'
                         ? '产销协同重点风险'
@@ -8064,13 +8270,13 @@ export default function Home({
                           className={overviewRiskPerspective === 'production' ? 'selected' : ''}
                           onClick={() => setOverviewRiskPerspective('production')}
                         >
-                          生产风险
+                          {'生产风险'}
                         </button>
                         <button
                           className={overviewRiskPerspective === 'sales' ? 'selected' : ''}
                           onClick={() => setOverviewRiskPerspective('sales')}
                         >
-                          销售风险
+                          {'销售风险'}
                         </button>
                       </>
                     ) : analysisScope === 'sales' ? (
@@ -8120,28 +8326,36 @@ export default function Home({
                     </div>
                     <div className="diagnostic-risk-summary">
                       <span className="risk-period-context">
-                        {activeAnalysisPeriod} · 截至{dataCutoff}
+                        {activeAnalysisPeriod}
+                        {' · 截至'}
+                        {dataCutoff}
                       </span>
                       <span className="critical">
-                        严重 <b>{criticalRiskCount}</b>
+                        {'严重 '}
+                        <b>{criticalRiskCount}</b>
                       </span>
                       <span className="warning">
-                        预警 <b>{warningRiskCount}</b>
+                        {'预警 '}
+                        <b>{warningRiskCount}</b>
                       </span>
-                      <small>按风险等级与目标差距排序 · 展示 {diagnosticItems.length} 项</small>
+                      <small>
+                        {'按风险等级与目标差距排序 · 展示 '}
+                        {diagnosticItems.length}
+                        {' 项'}
+                      </small>
                       <EditableHelp compact {...annotationHelp.shortage} />
                     </div>
                   </header>
                   <div className="diagnostic-risk-head" role="row">
-                    <span>排序</span>
-                    <span>分析对象</span>
-                    <span>层级</span>
-                    <span>异常指标</span>
-                    <span>当前值</span>
-                    <span>目标</span>
-                    <span>目标差距</span>
-                    <span>风险状态</span>
-                    <span>任务操作</span>
+                    <span>{'排序'}</span>
+                    <span>{'分析对象'}</span>
+                    <span>{'层级'}</span>
+                    <span>{'异常指标'}</span>
+                    <span>{'当前值'}</span>
+                    <span>{'目标'}</span>
+                    <span>{'目标差距'}</span>
+                    <span>{'风险状态'}</span>
+                    <span>{'任务操作'}</span>
                   </div>
                   <div className="diagnostic-risk-list">
                     {diagnosticItems.length ? (
@@ -8205,10 +8419,10 @@ export default function Home({
               <section id="cadence">
                 <div className="section-heading">
                   <div>
-                    <span>会议节奏</span>
-                    <h2>月度计划协同日历</h2>
+                    <span>{'会议节奏'}</span>
+                    <h2>{'月度计划协同日历'}</h2>
                   </div>
-                  <p>每月 24—30 日关键协同窗口</p>
+                  <p>{'每月 24—30 日关键协同窗口'}</p>
                 </div>
                 <div className="panel cadence">
                   <div className="cadence-line" />
@@ -8217,7 +8431,11 @@ export default function Home({
                       <div className={`day-dot ${item.done ? 'done' : ''}`}>
                         {item.done ? <Check /> : item.day}
                       </div>
-                      <small>8月{item.day}日</small>
+                      <small>
+                        {'8月'}
+                        {item.day}
+                        {'日'}
+                      </small>
                       <h3>{item.title}</h3>
                       <p>{item.owner}</p>
                     </article>
@@ -8307,58 +8525,58 @@ export default function Home({
                     <CircleHelp />
                   </button>
                 </div>
-                <h2 id="agent-name">产销协同数字人</h2>
+                <h2 id="agent-name">{'产销协同数字人'}</h2>
                 <p>
-                  我可以帮你分析产销指标、识别经营异常、生成改善建议，并跟进协同任务的闭环进度。
+                  {'我可以帮你分析产销指标、识别经营异常、生成改善建议，并跟进协同任务的闭环进度。'}
                 </p>
               </section>
               <section className="agent-functions" aria-labelledby="agent-functions-title">
-                <h3 id="agent-functions-title">常用功能</h3>
+                <h3 id="agent-functions-title">{'常用功能'}</h3>
                 <div className="agent-function-list">
                   <button onClick={() => askAI('生成本周产销协同会议摘要')}>
                     <LayoutGrid />
                     <span>
-                      <strong>经营情况总览</strong>
-                      <small>快速查看核心指标与主要风险</small>
+                      <strong>{'经营情况总览'}</strong>
+                      <small>{'快速查看核心指标与主要风险'}</small>
                     </span>
                     <ArrowRight />
                   </button>
                   <button onClick={() => askAI('哪些基地订单满足率未达目标？')}>
                     <PackageSearch />
                     <span>
-                      <strong>定位异常指标</strong>
-                      <small>识别未达标基地与关键差距</small>
+                      <strong>{'定位异常指标'}</strong>
+                      <small>{'识别未达标基地与关键差距'}</small>
                     </span>
                     <ArrowRight />
                   </button>
                   <button onClick={() => askAI('水饺缺货的根因和措施？')}>
                     <WandSparkles />
                     <span>
-                      <strong>生成改善建议</strong>
-                      <small>分析根因并给出纠偏动作</small>
+                      <strong>{'生成改善建议'}</strong>
+                      <small>{'分析根因并给出纠偏动作'}</small>
                     </span>
                     <ArrowRight />
                   </button>
                   <button onClick={() => askAI('列出本周到期任务')}>
                     <ClipboardCheck />
                     <span>
-                      <strong>跟进协同任务</strong>
-                      <small>查看待办、到期任务与闭环状态</small>
+                      <strong>{'跟进协同任务'}</strong>
+                      <small>{'查看待办、到期任务与闭环状态'}</small>
                     </span>
                     <ArrowRight />
                   </button>
                   <button onClick={() => setExportDialogOpen(true)}>
                     <Download />
                     <span>
-                      <strong>导出经营报表</strong>
-                      <small>选择指标、风险或任务内容导出</small>
+                      <strong>{'导出经营报表'}</strong>
+                      <small>{'选择指标、风险或任务内容导出'}</small>
                     </span>
                     <ArrowRight />
                   </button>
                 </div>
               </section>
               <section className="agent-suggestions" aria-labelledby="agent-suggestions-title">
-                <h3 id="agent-suggestions-title">你可以这样问</h3>
+                <h3 id="agent-suggestions-title">{'你可以这样问'}</h3>
                 <div className="prompt-list">
                   {suggestedQuestions.slice(0, 4).map((question) => (
                     <button key={question} onClick={() => askAI(question)}>
@@ -8377,7 +8595,7 @@ export default function Home({
                   <div>
                     {message.contexts?.length ? (
                       <div className="message-contexts">
-                        <small>引用看板</small>
+                        <small>{'引用看板'}</small>
                         {message.contexts.map((context) => (
                           <em key={context}>{context}</em>
                         ))}
@@ -8393,7 +8611,7 @@ export default function Home({
         <div className="chat-composer">
           {selectedContexts.length > 0 && (
             <div className="selected-context-cards">
-              <span>已引用看板内容</span>
+              <span>{'已引用看板内容'}</span>
               {selectedContexts.map((item) => (
                 <article key={item.id}>
                   <div>
@@ -8482,8 +8700,8 @@ export default function Home({
             >
               <header>
                 <div>
-                  <small>报表导出</small>
-                  <h2 id="export-dialog-title">选择需要导出的内容</h2>
+                  <small>{'报表导出'}</small>
+                  <h2 id="export-dialog-title">{'选择需要导出的内容'}</h2>
                 </div>
                 <button
                   type="button"
@@ -8525,7 +8743,7 @@ export default function Home({
               </div>
               <footer>
                 <button type="button" onClick={() => setExportDialogOpen(false)}>
-                  取消
+                  {'取消'}
                 </button>
                 <button
                   type="button"
@@ -8534,7 +8752,7 @@ export default function Home({
                   onClick={exportReport}
                 >
                   <Download />
-                  导出所选内容
+                  {'导出所选内容'}
                 </button>
               </footer>
             </section>
@@ -8564,15 +8782,19 @@ export default function Home({
                     alt="产销协同数字人头像"
                   />
                   <div>
-                    <small>数字员工岗位说明</small>
-                    <h2 id="agent-detail-title">产销协同数字人</h2>
-                    <p>面向计划、销售、生产、库存与履约协同场景，持续发现异常并推动问题闭环。</p>
+                    <small>{'数字员工岗位说明'}</small>
+                    <h2 id="agent-detail-title">{'产销协同数字人'}</h2>
+                    <p>
+                      {'面向计划、销售、生产、库存与履约协同场景，持续发现异常并推动问题闭环。'}
+                    </p>
                     <div className="agent-detail-mentors" aria-label="导师信息">
                       <span>
-                        <b>业务导师</b>产销协同负责人
+                        <b>{'业务导师'}</b>
+                        {'产销协同负责人'}
                       </span>
                       <span>
-                        <b>IT 导师</b>数字化平台主管
+                        <b>{'IT 导师'}</b>
+                        {'数字化平台主管'}
                       </span>
                     </div>
                   </div>
@@ -8591,43 +8813,49 @@ export default function Home({
                   <div className="agent-detail-section-title">
                     <ClipboardCheck />
                     <div>
-                      <span>岗位职责</span>
-                      <small>这个数字人负责什么</small>
+                      <span>{'岗位职责'}</span>
+                      <small>{'这个数字人负责什么'}</small>
                     </div>
                   </div>
                   <ol>
                     <li>
-                      <strong>经营监测</strong>
+                      <strong>{'经营监测'}</strong>
                       <p>
-                        持续扫描销售、计划、订单、库存和履约指标，识别目标偏差、趋势恶化与异常组合。
+                        {
+                          '持续扫描销售、计划、订单、库存和履约指标，识别目标偏差、趋势恶化与异常组合。'
+                        }
                       </p>
                     </li>
                     <li>
-                      <strong>异常研判</strong>
+                      <strong>{'异常研判'}</strong>
                       <p>
-                        结合基地、品类、客户和时间维度定位问题范围，形成异常等级、影响范围和优先级判断。
+                        {
+                          '结合基地、品类、客户和时间维度定位问题范围，形成异常等级、影响范围和优先级判断。'
+                        }
                       </p>
                     </li>
                     <li>
-                      <strong>原因与措施建议</strong>
+                      <strong>{'原因与措施建议'}</strong>
                       <p>
-                        汇总指标变化、业务事实和历史经验，生成待核实原因、纠偏建议及预期改善目标。
+                        {
+                          '汇总指标变化、业务事实和历史经验，生成待核实原因、纠偏建议及预期改善目标。'
+                        }
                       </p>
                     </li>
                     <li>
-                      <strong>任务编排</strong>
-                      <p>根据异常对象推荐责任人、任务内容和完成时限，支持人工确认后派发。</p>
+                      <strong>{'任务编排'}</strong>
+                      <p>{'根据异常对象推荐责任人、任务内容和完成时限，支持人工确认后派发。'}</p>
                     </li>
                     <li>
-                      <strong>过程跟踪</strong>
+                      <strong>{'过程跟踪'}</strong>
                       <p>
-                        跟踪任务进度、到期风险和一线补充信息，对超期或信息不足事项及时提醒升级。
+                        {'跟踪任务进度、到期风险和一线补充信息，对超期或信息不足事项及时提醒升级。'}
                       </p>
                     </li>
                     <li>
-                      <strong>闭环复盘</strong>
+                      <strong>{'闭环复盘'}</strong>
                       <p>
-                        核验整改动作与指标恢复情况，区分“动作完成”和“问题关闭”，沉淀可复用经验。
+                        {'核验整改动作与指标恢复情况，区分“动作完成”和“问题关闭”，沉淀可复用经验。'}
                       </p>
                     </li>
                   </ol>
@@ -8636,44 +8864,46 @@ export default function Home({
                   <div className="agent-detail-section-title">
                     <WandSparkles />
                     <div>
-                      <span>岗位技能</span>
-                      <small>这个数字人能够怎么做</small>
+                      <span>{'岗位技能'}</span>
+                      <small>{'这个数字人能够怎么做'}</small>
                     </div>
                   </div>
                   <ol>
                     <li>
-                      <strong>指标理解与问数</strong>
-                      <p>理解指标口径、目标和业务含义，可基于看板引用内容回答经营问题。</p>
+                      <strong>{'指标理解与问数'}</strong>
+                      <p>{'理解指标口径、目标和业务含义，可基于看板引用内容回答经营问题。'}</p>
                     </li>
                     <li>
-                      <strong>多维穿透分析</strong>
-                      <p>从总览下钻至基地、品类和交叉组合，对比本期、环比、同比与目标差距。</p>
+                      <strong>{'多维穿透分析'}</strong>
+                      <p>{'从总览下钻至基地、品类和交叉组合，对比本期、环比、同比与目标差距。'}</p>
                     </li>
                     <li>
-                      <strong>异常识别与分级</strong>
-                      <p>按规则识别健康、预警和严重状态，并对风险进行排序与聚焦。</p>
+                      <strong>{'异常识别与分级'}</strong>
+                      <p>{'按规则识别健康、预警和严重状态，并对风险进行排序与聚焦。'}</p>
                     </li>
                     <li>
-                      <strong>归因推理与建议生成</strong>
-                      <p>将数据异常与业务事实关联，输出原因假设、核查清单和可执行改善动作。</p>
+                      <strong>{'归因推理与建议生成'}</strong>
+                      <p>{'将数据异常与业务事实关联，输出原因假设、核查清单和可执行改善动作。'}</p>
                     </li>
                     <li>
-                      <strong>协同任务管理</strong>
-                      <p>生成、派发、催办和追踪异常任务，记录责任、时限、处理结果与完成证据。</p>
-                    </li>
-                    <li>
-                      <strong>人机协同与知识沉淀</strong>
+                      <strong>{'协同任务管理'}</strong>
                       <p>
-                        在关键决策点请求人工确认，将经过验证的规则、案例和处置经验用于后续工作。
+                        {'生成、派发、催办和追踪异常任务，记录责任、时限、处理结果与完成证据。'}
+                      </p>
+                    </li>
+                    <li>
+                      <strong>{'人机协同与知识沉淀'}</strong>
+                      <p>
+                        {'在关键决策点请求人工确认，将经过验证的规则、案例和处置经验用于后续工作。'}
                       </p>
                     </li>
                   </ol>
                 </section>
               </div>
               <footer>
-                <span>高风险派发、业务事实确认和最终闭环验收仍由人工决策。</span>
+                <span>{'高风险派发、业务事实确认和最终闭环验收仍由人工决策。'}</span>
                 <button type="button" onClick={() => setAgentDetailsOpen(false)}>
-                  我知道了
+                  {'我知道了'}
                 </button>
               </footer>
             </section>
@@ -8696,9 +8926,13 @@ export default function Home({
             >
               <header>
                 <div>
-                  <small>{taskTarget.scopeType}异常任务</small>
+                  <small>
+                    {taskTarget.scopeType}
+                    {'异常任务'}
+                  </small>
                   <h2 id="task-dialog-title">
-                    {taskTarget.taskId ? '修改任务' : '派发任务'} ·{' '}
+                    {taskTarget.taskId ? '修改任务' : '派发任务'}
+                    {' · '}
                     {taskScopeDisplay(taskTarget.scopeType, taskTarget.scope)}
                   </h2>
                 </div>
@@ -8707,16 +8941,16 @@ export default function Home({
                 </button>
               </header>
               <div className="task-period-preview">
-                <span>分析周期</span>
+                <span>{'分析周期'}</span>
                 <b>{activeAnalysisPeriod}</b>
-                <span>统计口径</span>
+                <span>{'统计口径'}</span>
                 <b>{metricStatisticType(taskDraft.metric)}</b>
-                <span>数据截止</span>
+                <span>{'数据截止'}</span>
                 <b>{dataCutoff}</b>
               </div>
               <div className="task-dialog-fields">
                 <label>
-                  <span>异常指标</span>
+                  <span>{'异常指标'}</span>
                   <select
                     value={taskDraft.metric}
                     onChange={(event) => {
@@ -8734,7 +8968,7 @@ export default function Home({
                   </select>
                 </label>
                 <label>
-                  <span>责任人</span>
+                  <span>{'责任人'}</span>
                   <input
                     autoFocus
                     required
@@ -8746,7 +8980,7 @@ export default function Home({
                   />
                 </label>
                 <label className="task-content-field">
-                  <span>任务内容</span>
+                  <span>{'任务内容'}</span>
                   <textarea
                     required
                     value={taskDraft.content}
@@ -8756,7 +8990,7 @@ export default function Home({
                   />
                 </label>
                 <label>
-                  <span>完成时间</span>
+                  <span>{'完成时间'}</span>
                   <input
                     type="date"
                     required
@@ -8769,7 +9003,7 @@ export default function Home({
               </div>
               <footer>
                 <button type="button" onClick={() => setTaskTarget(null)}>
-                  取消
+                  {'取消'}
                 </button>
                 <button
                   className="primary"
@@ -8803,9 +9037,11 @@ export default function Home({
               >
                 <header>
                   <div>
-                    <small>任务闭环</small>
+                    <small>{'任务闭环'}</small>
                     <h2 id="completion-dialog-title">
-                      {isCompleted ? '查看完成情况' : '录入完成情况'} · {task.scope}
+                      {isCompleted ? '查看完成情况' : '录入完成情况'}
+                      {' · '}
+                      {task.scope}
                     </h2>
                   </div>
                   <button
@@ -8821,17 +9057,23 @@ export default function Home({
                   <strong>{task.metric}</strong>
                   <p>{task.content}</p>
                   <small>
-                    统计口径：{task.analysisPeriod || '既有任务'} ·{' '}
-                    {task.statisticType || metricStatisticType(task.metric)}　数据截止：
+                    {'统计口径：'}
+                    {task.analysisPeriod || '既有任务'}
+                    {' · '}
+                    {task.statisticType || metricStatisticType(task.metric)}
+                    {'　数据截止：'}
                     {task.dataCutoff || '—'}
                   </small>
                   <small>
-                    责任人：{task.owner}　计划完成时间：{task.due}
+                    {'责任人：'}
+                    {task.owner}
+                    {'　计划完成时间：'}
+                    {task.due}
                   </small>
                 </div>
                 <div className="task-dialog-fields">
                   <label className="task-content-field">
-                    <span>完成情况</span>
+                    <span>{'完成情况'}</span>
                     {isCompleted ? (
                       <div className="completion-detail">
                         {task.completionSummary || '暂无完成情况记录'}
@@ -8848,7 +9090,7 @@ export default function Home({
                   </label>
                   {isCompleted && (
                     <label>
-                      <span>实际完成时间</span>
+                      <span>{'实际完成时间'}</span>
                       <div className="completion-meta">
                         {task.completedAt
                           ? new Date(task.completedAt).toLocaleString('zh-CN', { hour12: false })
@@ -8864,19 +9106,19 @@ export default function Home({
                       type="button"
                       onClick={() => setCompletionTargetId(null)}
                     >
-                      关闭
+                      {'关闭'}
                     </button>
                   ) : (
                     <>
                       <button type="button" onClick={() => setCompletionTargetId(null)}>
-                        取消
+                        {'取消'}
                       </button>
                       <button
                         className="primary completion-confirm"
                         type="submit"
                         disabled={!completionDraft.trim()}
                       >
-                        确认完成
+                        {'确认完成'}
                       </button>
                     </>
                   )}

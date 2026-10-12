@@ -25,7 +25,10 @@ import { downloadWorkbook, readWorkbook } from '../dsh-ui/workbook.ts';
 import { usePageFilter } from '../native/page-filter.tsx';
 
 import {
+  AlertTriangle as _AlertTriangle,
   Check,
+  ChevronDown as _ChevronDown,
+  ChevronRight as _ChevronRight,
   Columns3,
   Download,
   FileSpreadsheet,
@@ -33,10 +36,16 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  Sparkles as _Sparkles,
   X,
 } from '../dsh-ui/icons';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+
+import {
+  formatKpiDetail as _formatKpiDetail,
+  formatTurnoverDetail as _formatTurnoverDetail,
+} from '../../../fc/src/lib/kpi-format.ts';
 
 import {
   BaseResourcesTable,
@@ -125,6 +134,7 @@ import {
 } from '../../../fc/src/lib/domain.ts';
 
 import {
+  BRANCH_RULESET as _BRANCH_RULESET,
   DEFAULT_CYCLE_PREVIEW,
   findConsumptionFirstSkus,
   type CyclePreviewConfiguration,
@@ -1459,8 +1469,8 @@ export function BranchInventoryAgent() {
         <header className="agent-topbar compact-topbar">
           <div className="agent-topbar-context">
             <div className="workspace-heading">
-              <strong>分仓库存经营看板</strong>
-              <span>库存监控 · 补货决策 · 订单履约</span>
+              <strong>{'分仓库存经营看板'}</strong>
+              <span>{'库存监控 · 补货决策 · 订单履约'}</span>
             </div>
             <div className="steps" aria-label="运营步骤">
               {STEPS.map((step, index) => (
@@ -1477,19 +1487,19 @@ export function BranchInventoryAgent() {
                     <i>{index < currentStep ? <Check size={12} /> : index + 1}</i>
                     <span>{step}</span>
                   </button>
-                  {index < STEPS.length - 1 && <b aria-hidden="true">→</b>}
+                  {index < STEPS.length - 1 && <b aria-hidden="true">{'→'}</b>}
                 </Fragment>
               ))}
             </div>
             {!awaitingData && !snapshotEmpty && !hasLiveWarehouseSource(snapshot) && (
-              <span className="readonly-badge">演示数据（非真实业务）</span>
+              <span className="readonly-badge">{'演示数据（非真实业务）'}</span>
             )}
             <button
               type="button"
               className="secondary-button"
               onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
             >
-              刷新
+              {'刷新'}
             </button>
             <div className="warehouse-switch">
               <WarehouseSelect
@@ -1509,12 +1519,12 @@ export function BranchInventoryAgent() {
               onClick={() => setDialog('cycle')}
             >
               <SlidersHorizontal size={16} />
-              <span>补货周期</span>
+              <span>{'补货周期'}</span>
               <strong>
                 {awaitingData || snapshotEmpty ? '—' : `${warehouseCycle.cycleDays}天`}
               </strong>
             </button>
-            {readOnlyHistory && <span className="readonly-badge">历史快照 · 只读</span>}
+            {readOnlyHistory && <span className="readonly-badge">{'历史快照 · 只读'}</span>}
           </div>
         </header>
         <div className="agent-layout without-ai workspace-only">
@@ -1578,7 +1588,7 @@ export function BranchInventoryAgent() {
                     <article key={card.title} className={`kpi-card ${card.color}`}>
                       <div className="kpi-title">
                         <span>{card.title}</span>
-                        {card.partial && <small>已核实范围</small>}
+                        {card.partial && <small>{'已核实范围'}</small>}
                       </div>
                       <div className={`kpi-value ${card.color}`}>
                         {card.value}
@@ -1600,22 +1610,22 @@ export function BranchInventoryAgent() {
                 </div>
                 <section className="priority-analysis" aria-label="AI 洞察">
                   <h3>
-                    <span className="analysis-label">AI 洞察</span>
-                    <small>经营洞察</small>
+                    <span className="analysis-label">{'AI 洞察'}</span>
+                    <small>{'经营洞察'}</small>
                   </h3>
                   <p>
-                    <b>核心判断：</b>
+                    <b>{'核心判断：'}</b>
                     {workbenchAnalysis.judgment}
                   </p>
                   {workbenchAnalysis.relationship && (
                     <p>
-                      <b>关系分析：</b>
+                      <b>{'关系分析：'}</b>
                       {workbenchAnalysis.relationship}
                     </p>
                   )}
                   {workbenchAnalysis.boundary && (
                     <p>
-                      <b>数据边界：</b>
+                      <b>{'数据边界：'}</b>
                       {workbenchAnalysis.boundary}
                     </p>
                   )}
@@ -1623,7 +1633,11 @@ export function BranchInventoryAgent() {
 
                 {snapshot.dataQuality?.warnings?.length ? (
                   <details className="data-quality-note">
-                    <summary>数据完整性说明（{snapshot.dataQuality.warnings.length} 项）</summary>
+                    <summary>
+                      {'数据完整性说明（'}
+                      {snapshot.dataQuality.warnings.length}
+                      {' 项）'}
+                    </summary>
                     {snapshot.dataQuality.warnings.map((warning) => (
                       <p key={warning}>{warning}</p>
                     ))}
@@ -1667,13 +1681,13 @@ export function BranchInventoryAgent() {
                   {sessionReady && snapshotLoading && !blockingError && (
                     <WorkbenchLoading title="正在读取当前分仓" compact />
                   )}
-                  <p>可先切换库存业务页签；未读取的数据不作为库存事实。</p>
+                  <p>{'可先切换库存业务页签；未读取的数据不作为库存事实。'}</p>
                 </div>
               ) : (
                 <>
                   {(snapshot as any).localPreview && (
                     <div className="inline-note" role="status">
-                      计划与周期试算 · 未保存
+                      {'计划与周期试算 · 未保存'}
                     </div>
                   )}
                   {snapshotError && sessionMode === 'gea' ? (
@@ -1683,15 +1697,17 @@ export function BranchInventoryAgent() {
                         className="secondary-button"
                         onClick={() => setPageRevision((value) => value + 1)}
                       >
-                        重试读取
+                        {'重试读取'}
                       </button>
-                      <p>可切换其他页签查看数据。</p>
+                      <p>{'可切换其他页签查看数据。'}</p>
                     </div>
                   ) : (
                     <>
                       {snapshotLoading && (
                         <div role="status" className="inline-note">
-                          正在读取第 {replenishmentPage} 页…
+                          {'正在读取第 '}
+                          {replenishmentPage}
+                          {' 页…'}
                         </div>
                       )}
                       <FixedTableScrollbar viewKey={`${warehouseId}:${activeTab}:${layoutMode}`} />
@@ -1699,13 +1715,13 @@ export function BranchInventoryAgent() {
                         {activeTab === 'base' ? (
                           <>
                             <label className="order-status-filter">
-                              基地
+                              {'基地'}
                               <select
                                 aria-label="选择基地"
                                 value={baseName}
                                 onChange={(event) => setBaseName(event.target.value)}
                               >
-                                <option value="">全部</option>
+                                <option value="">{'全部'}</option>
                                 {(snapshot.baseResourceQuery?.baseNames ?? []).map((name) => (
                                   <option key={name}>{name}</option>
                                 ))}
@@ -1727,7 +1743,7 @@ export function BranchInventoryAgent() {
                               className="secondary-button"
                               onClick={() => setBaseSku(baseSkuInput.trim())}
                             >
-                              查询
+                              {'查询'}
                             </button>
                           </>
                         ) : (
@@ -1751,7 +1767,7 @@ export function BranchInventoryAgent() {
                                 checked={businessOnly}
                                 onChange={(event) => setBusinessOnly(event.target.checked)}
                               />
-                              有业务
+                              {'有业务'}
                             </label>
                             <label className={`filter-chip ${urgentOnly ? 'active' : ''}`}>
                               <input
@@ -1768,7 +1784,7 @@ export function BranchInventoryAgent() {
                                   }
                                 }}
                               />
-                              紧急 SKU
+                              {'紧急 SKU'}
                             </label>
                             <label className={`filter-chip ${riskOnly ? 'active' : ''}`}>
                               <input
@@ -1785,13 +1801,13 @@ export function BranchInventoryAgent() {
                                   }
                                 }}
                               />
-                              低于建议
+                              {'低于建议'}
                             </label>
                           </>
                         )}
                         {activeTab === 'orders' && (
                           <label className="order-status-filter">
-                            状态
+                            {'状态'}
                             <select
                               aria-label="订单状态"
                               value={orderStatus}
@@ -1840,7 +1856,7 @@ export function BranchInventoryAgent() {
                           }}
                         >
                           <RotateCcw size={14} />
-                          重置
+                          {'重置'}
                         </button>
                         <div className="toolbar-spacer" />
                         {activeTab === 'plan' && (
@@ -1855,11 +1871,11 @@ export function BranchInventoryAgent() {
                               }}
                             >
                               <FileSpreadsheet size={15} />
-                              下载模板
+                              {'下载模板'}
                             </button>
                             <label className="secondary-button file-button">
                               <FileSpreadsheet size={15} />
-                              导入 Excel
+                              {'导入 Excel'}
                               <input
                                 type="file"
                                 accept=".xlsx"
@@ -1880,7 +1896,7 @@ export function BranchInventoryAgent() {
                                 disabled={readOnlyHistory || exportBusy}
                                 onClick={() => autoSaveDraft(draft)}
                               >
-                                重试保存
+                                {'重试保存'}
                               </button>
                             )}
                             <button
@@ -1888,14 +1904,14 @@ export function BranchInventoryAgent() {
                               disabled={readOnlyHistory || exportBusy}
                               onClick={() => setDialog('draft')}
                             >
-                              草稿（
+                              {'草稿（'}
                               {
                                 new Set([
                                   ...Object.keys(draft.quantities),
                                   ...Object.keys(draft.reasons),
                                 ]).size
                               }
-                              ）
+                              {'）'}
                             </button>
                             <button
                               className="primary-button panel-primary"
@@ -1914,14 +1930,14 @@ export function BranchInventoryAgent() {
                               onClick={() => setDialog('columns')}
                             >
                               <Columns3 size={15} />
-                              列设置
+                              {'列设置'}
                             </button>
                           </>
                         )}
                         {activeTab !== 'orders' && (
                           <button className="secondary-button" onClick={exportCsv}>
                             <Download size={15} />
-                            CSV
+                            {'CSV'}
                           </button>
                         )}
                       </div>
@@ -1984,7 +2000,7 @@ export function BranchInventoryAgent() {
                               </tbody>
                             </table>
                             {!replenishments.length && (
-                              <div className="empty-state">没有符合当前筛选条件的 SKU</div>
+                              <div className="empty-state">{'没有符合当前筛选条件的 SKU'}</div>
                             )}
                           </div>
                           <DataPagination
@@ -2009,14 +2025,14 @@ export function BranchInventoryAgent() {
                           <table className="data-table">
                             <thead>
                               <tr>
-                                <th>订单号</th>
-                                <th>客户</th>
-                                <th>订单日期</th>
-                                <th>SKU个数</th>
-                                <th>需求量</th>
-                                <th>已占用</th>
-                                <th>剩余需求量</th>
-                                <th>状态</th>
+                                <th>{'订单号'}</th>
+                                <th>{'客户'}</th>
+                                <th>{'订单日期'}</th>
+                                <th>{'SKU个数'}</th>
+                                <th>{'需求量'}</th>
+                                <th>{'已占用'}</th>
+                                <th>{'剩余需求量'}</th>
+                                <th>{'状态'}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -2064,17 +2080,22 @@ export function BranchInventoryAgent() {
                                             {order.lines.map((line) => (
                                               <div key={line.sku}>
                                                 <strong>
-                                                  {line.sku} · {line.productName}
+                                                  {line.sku}
+                                                  {' · '}
+                                                  {line.productName}
                                                 </strong>
-                                                <span>需求量：{number(line.orderedQty)}</span>
                                                 <span>
-                                                  已占用：
+                                                  {'需求量：'}
+                                                  {number(line.orderedQty)}
+                                                </span>
+                                                <span>
+                                                  {'已占用：'}
                                                   {number(line.allocatedQty)}
                                                 </span>
                                                 <span
                                                   className={line.shortageQty ? 'danger-text' : ''}
                                                 >
-                                                  剩余需求量：
+                                                  {'剩余需求量：'}
                                                   {number(line.shortageQty)}
                                                 </span>
                                               </div>
@@ -2158,7 +2179,7 @@ export function BranchInventoryAgent() {
                             </tbody>
                           </table>
                           {!inventoryPagination.rows.length && (
-                            <div className="empty-state">没有符合当前筛选条件的 SKU</div>
+                            <div className="empty-state">{'没有符合当前筛选条件的 SKU'}</div>
                           )}
                         </div>
                       )}
@@ -2167,8 +2188,9 @@ export function BranchInventoryAgent() {
                         <>
                           <div className="inline-note">
                             <FileSpreadsheet size={16} />{' '}
-                            同分仓、同月份以导入计划为准，缺行不自动补齐；未导入月份沿用原计划。
-                            模板一行对应一个月份。试算结果尚未保存，关闭页面后清除。
+                            {
+                              '同分仓、同月份以导入计划为准，缺行不自动补齐；未导入月份沿用原计划。 模板一行对应一个月份。试算结果尚未保存，关闭页面后清除。'
+                            }
                           </div>
                           <EffectivePlansTable
                             rows={planPagination.rows}
@@ -2181,7 +2203,7 @@ export function BranchInventoryAgent() {
                             {...planPagination.props}
                           />
                           <details>
-                            <summary>当前页 SKU 的人工计划记录</summary>
+                            <summary>{'当前页 SKU 的人工计划记录'}</summary>
                             <PlanningTable
                               key={warehouseId}
                               rows={(snapshot.planning?.imports ?? []).filter((row) =>
@@ -2214,39 +2236,51 @@ export function BranchInventoryAgent() {
                           <div className="resource-grid">
                             <article className="resource-card">
                               <div>
-                                <strong>本月入库</strong>
+                                <strong>{'本月入库'}</strong>
                               </div>
-                              <p>{number(snapshot.operationsSummary.inboundQty)} 件</p>
+                              <p>
+                                {number(snapshot.operationsSummary.inboundQty)}
+                                {' 件'}
+                              </p>
                             </article>
                             <article className="resource-card">
                               <div>
-                                <strong>本月出库</strong>
+                                <strong>{'本月出库'}</strong>
                               </div>
-                              <p>{number(snapshot.operationsSummary.outboundQty)} 件</p>
+                              <p>
+                                {number(snapshot.operationsSummary.outboundQty)}
+                                {' 件'}
+                              </p>
                             </article>
                             <article className="resource-card">
                               <div>
-                                <strong>本月仓储费</strong>
+                                <strong>{'本月仓储费'}</strong>
                               </div>
                               <p>{money(snapshot.operationsSummary.storageFee)}</p>
                             </article>
                             <article className="resource-card">
                               <div>
-                                <strong>本月运输费</strong>
+                                <strong>{'本月运输费'}</strong>
                               </div>
                               <p>{money(snapshot.operationsSummary.transportFee)}</p>
                             </article>
                             <article className="resource-card">
                               <div>
-                                <strong>分仓过仓量</strong>
+                                <strong>{'分仓过仓量'}</strong>
                               </div>
-                              <p>{number(snapshot.throughput.branchShipQty)} 件</p>
+                              <p>
+                                {number(snapshot.throughput.branchShipQty)}
+                                {' 件'}
+                              </p>
                             </article>
                             <article className="resource-card">
                               <div>
-                                <strong>省区整体出货</strong>
+                                <strong>{'省区整体出货'}</strong>
                               </div>
-                              <p>{number(snapshot.throughput.provinceShipQty)} 件</p>
+                              <p>
+                                {number(snapshot.throughput.provinceShipQty)}
+                                {' 件'}
+                              </p>
                             </article>
                           </div>
                           <div className="resource-grid">
@@ -2275,7 +2309,10 @@ export function BranchInventoryAgent() {
                                   <div>
                                     <strong>{item.title}</strong>
                                     <p>{item.detail}</p>
-                                    <small>建议：{item.suggestedAction}</small>
+                                    <small>
+                                      {'建议：'}
+                                      {item.suggestedAction}
+                                    </small>
                                   </div>
                                 </article>
                               ))}
@@ -2283,17 +2320,18 @@ export function BranchInventoryAgent() {
                               .filter((row) => row.kind === 'exception')
                               .map(({ item }) => (
                                 <article key={`${item.type}-${item.sku}`}>
-                                  <span className="severity 中">人</span>
+                                  <span className="severity 中">{'人'}</span>
                                   <div>
                                     <strong>
-                                      {item.sku} · {businessExceptionLabel(item.type)}
+                                      {item.sku}
+                                      {' ·'} {businessExceptionLabel(item.type)}
                                     </strong>
                                     <p>{item.detail}</p>
                                     <small>
                                       {item.status === 'needs-maintenance'
                                         ? '需维护规则后人工确认'
                                         : '待人工确认'}{' '}
-                                      · 不自动改变计划
+                                      {'· 不自动改变计划'}
                                     </small>
                                   </div>
                                 </article>
@@ -2337,9 +2375,9 @@ export function BranchInventoryAgent() {
                           <footer className="table-status-line">
                             {submissionStatus === 'failed' && <em>{submissionError}</em>}
                             {submissionStatus === 'pending' && (
-                              <em className="success-text">业务待办已创建，未执行下单</em>
+                              <em className="success-text">{'业务待办已创建，未执行下单'}</em>
                             )}
-                            {readOnlyHistory && <em className="readonly-text">历史结果只读</em>}
+                            {readOnlyHistory && <em className="readonly-text">{'历史结果只读'}</em>}
                           </footer>
                         )}
                     </>
@@ -2359,7 +2397,7 @@ export function BranchInventoryAgent() {
         >
           <div className="plan-template-settings">
             <label>
-              分仓
+              {'分仓'}
               <select
                 value={templateWarehouse}
                 disabled={templateLoading}
@@ -2373,7 +2411,7 @@ export function BranchInventoryAgent() {
               </select>
             </label>
             <label>
-              计划月份
+              {'计划月份'}
               <input
                 type="month"
                 value={templateMonth}
@@ -2382,8 +2420,9 @@ export function BranchInventoryAgent() {
               />
             </label>
             <p>
-              20
-              日起默认次月，仅可导入当前月或次月。出货、调拨计划留空按0处理；分仓编码、月份和SKU编码必填。大类、物料组缺失不影响导入。
+              {
+                '20 日起默认次月，仅可导入当前月或次月。出货、调拨计划留空按0处理；分仓编码、月份和SKU编码必填。大类、物料组缺失不影响导入。'
+              }
             </p>
             {templateError && (
               <p role="alert" className="danger-text">
@@ -2445,19 +2484,19 @@ export function BranchInventoryAgent() {
             />
           ) : dialog === 'draft' ? (
             <div className="draft-changes">
-              <p>修改自动保留至本次页面关闭。撤销后恢复该商品的最新系统建议量。</p>
-              {draft.dirty && <p role="alert">自动保存失败，请重试保存。</p>}
+              <p>{'修改自动保留至本次页面关闭。撤销后恢复该商品的最新系统建议量。'}</p>
+              {draft.dirty && <p role="alert">{'自动保存失败，请重试保存。'}</p>}
               {detailError && <p role="alert">{detailError}</p>}
               <div className="confirmation-table-scroll">
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>SKU 编码</th>
-                      <th>SKU 名称</th>
-                      <th>系统建议量</th>
-                      <th>修改后补货量</th>
-                      <th>调整备注</th>
-                      <th>操作</th>
+                      <th>{'SKU 编码'}</th>
+                      <th>{'SKU 名称'}</th>
+                      <th>{'系统建议量'}</th>
+                      <th>{'修改后补货量'}</th>
+                      <th>{'调整备注'}</th>
+                      <th>{'操作'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2480,7 +2519,7 @@ export function BranchInventoryAgent() {
                               aria-label={`撤销 ${sku} 修改`}
                               onClick={() => undoDraftChange(sku)}
                             >
-                              撤销修改
+                              {'撤销修改'}
                             </button>
                           </td>
                         </tr>
@@ -2490,31 +2529,39 @@ export function BranchInventoryAgent() {
                 </table>
               </div>
               {!Object.keys(draft.quantities).length && !Object.keys(draft.reasons).length && (
-                <p>暂无人工修改，全部使用系统建议量。</p>
+                <p>{'暂无人工修改，全部使用系统建议量。'}</p>
               )}
             </div>
           ) : dialog === 'export' ? (
             <div className="submission-confirm">
               {exportError && <p role="alert">{exportError}</p>}
               {exportBusy ? (
-                <p role="status">正在读取全仓补货清单…</p>
+                <p role="status">{'正在读取全仓补货清单…'}</p>
               ) : exportPreview ? (
                 <>
                   <p>
-                    {exportPreview.warehouseName} · {exportPreview.month} · 共{' '}
-                    {exportPreview.rows.length} 个 SKU（仅包含补货量大于 0 的商品）。确认后导出
-                    Excel 并清空草稿，未向业务系统下单。
+                    {exportPreview.warehouseName}
+                    {' · '}
+                    {exportPreview.month}
+                    {' · 共 '}
+                    {exportPreview.rows.length}
+                    {
+                      ' 个 SKU（仅包含补货量大于 0 的商品）。确认后导出 Excel 并清空草稿，未向业务系统下单。'
+                    }
                   </p>
                   {exportPreview.missing > 0 && (
-                    <p role="alert">{exportPreview.missing} 个 SKU 数量待核实，未纳入导出。</p>
+                    <p role="alert">
+                      {exportPreview.missing}
+                      {' 个 SKU 数量待核实，未纳入导出。'}
+                    </p>
                   )}
                   <div className="confirmation-table-scroll">
                     <table className="data-table">
                       <thead>
                         <tr>
-                          <th>SKU 编码</th>
-                          <th>SKU 名称</th>
-                          <th>补货量</th>
+                          <th>{'SKU 编码'}</th>
+                          <th>{'SKU 名称'}</th>
+                          <th>{'补货量'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -2530,16 +2577,16 @@ export function BranchInventoryAgent() {
                   </div>
                   <footer>
                     <button className="secondary-button" onClick={closeExport}>
-                      取消
+                      {'取消'}
                     </button>
                     <button className="primary-button" onClick={exportConfirmedDraft}>
-                      确认导出
+                      {'确认导出'}
                     </button>
                   </footer>
                 </>
               ) : (
                 <button className="secondary-button" onClick={() => void prepareExport()}>
-                  重试读取
+                  {'重试读取'}
                 </button>
               )}
             </div>
@@ -2562,7 +2609,7 @@ export function BranchInventoryAgent() {
           ) : detailError ? (
             <p role="alert">{detailError}</p>
           ) : snapshot.page && !detailSnapshot ? (
-            <p role="status">正在读取完整指标明细…</p>
+            <p role="status">{'正在读取完整指标明细…'}</p>
           ) : (
             <KpiDetail kind={dialog} snapshot={detailSnapshot ?? snapshot} />
           )}
@@ -2632,7 +2679,7 @@ function ReplenishmentTableRows({
                 <button className="sku-link" aria-expanded={expanded} onClick={onToggle}>
                   {row.sku}
                 </button>
-                {row.urgent && <b className="urgent-badge">急</b>}
+                {row.urgent && <b className="urgent-badge">{'急'}</b>}
               </>
             ) : column === 'reason' ? (
               <input
@@ -2669,6 +2716,18 @@ function ReplenishmentTableRows({
       )}
     </>
   );
+}
+
+function _cycleLevelLabel(level: ReplenishmentRow['cycleRuleLevel']): string {
+  return (
+    {
+      sku: 'SKU规则',
+      'material-group': '物料组规则',
+      category: '品类规则',
+      warehouse: '分仓规则',
+      default: '系统默认',
+    } as const
+  )[level];
 }
 
 function businessExceptionLabel(
@@ -2759,21 +2818,26 @@ function KpiDetail({ kind, snapshot }: { kind: string; snapshot: WarehouseSnapsh
           </strong>
         </div>
         <div>
-          <span>已计算 / 待核实 SKU</span>
+          <span>{'已计算 / 待核实 SKU'}</span>
           <strong>
-            {summary.computedCount} / {summary.missingCount}
+            {summary.computedCount}
+            {' / '}
+            {summary.missingCount}
           </strong>
         </div>
         <p>
-          仅汇总已有确定建议值的
-          SKU；缺失项未按0计入，也不代表全仓需求已完整。当前未进入计划计算的库存或订单 SKU
-          请同时查看数据完整性说明。数据不完整时，创建待办仍保持校验。
+          {
+            '仅汇总已有确定建议值的 SKU；缺失项未按0计入，也不代表全仓需求已完整。当前未进入计划计算的库存或订单 SKU 请同时查看数据完整性说明。数据不完整时，创建待办仍保持校验。'
+          }
         </p>
         {snapshot.replenishments
           .filter((row) => row.recommendedQty === null)
           .map((row) => (
             <p key={row.sku}>
-              {row.sku} · {row.productName}：
+              {row.sku}
+              {' · '}
+              {row.productName}
+              {'：'}
               {row.calculationMissing?.length
                 ? `缺少${row.calculationMissing.join('、')}`
                 : '计算要素待核实'}
@@ -2786,36 +2850,49 @@ function KpiDetail({ kind, snapshot }: { kind: string; snapshot: WarehouseSnapsh
     return (
       <div className="modal-metrics">
         <div>
-          <span>平均库龄</span>
-          <strong>{snapshot.metrics.averageAgeDays} 天</strong>
+          <span>{'平均库龄'}</span>
+          <strong>
+            {snapshot.metrics.averageAgeDays}
+            {' 天'}
+          </strong>
         </div>
         <div>
-          <span>大日期库存</span>
+          <span>{'大日期库存'}</span>
           <strong>{number(snapshot.metrics.bigDateQty)}</strong>
         </div>
         <div>
-          <span>滞库库存</span>
+          <span>{'滞库库存'}</span>
           <strong>{number(snapshot.metrics.stagnantQty)}</strong>
         </div>
         <p>
-          {snapshot.warehouseName} · {snapshot.snapshotTime}；
-          {kind === 'stagnant' ? '以下为库龄 ≥ 90 天的库存' : '以下为库龄 ≥ 60 天的库存'}，按 SKU
-          汇总。批次可在货龄结构页展开核对。
+          {snapshot.warehouseName}
+          {' · '}
+          {snapshot.snapshotTime}
+          {'；'}
+          {kind === 'stagnant' ? '以下为库龄 ≥ 90 天的库存' : '以下为库龄 ≥ 60 天的库存'}
+          {'，按 SKU 汇总。批次可在货龄结构页展开核对。'}
         </p>
         <div className="detail-grid">
           {aging.rows.map((row) => (
             <div key={row.sku}>
               <strong>
-                {row.sku} · {row.productName}
+                {row.sku}
+                {' · '}
+                {row.productName}
               </strong>
               <span>
-                {kind === 'stagnant' ? '滞库' : '大日期'}数量 {number(row.quantity)}
+                {kind === 'stagnant' ? '滞库' : '大日期'}
+                {'数量 '}
+                {number(row.quantity)}
               </span>
-              <span>其中90天以上 {number(row.stagnantQty)}</span>
+              <span>
+                {'其中90天以上 '}
+                {number(row.stagnantQty)}
+              </span>
             </div>
           ))}
         </div>
-        {!aging.rows.length && <p>当前没有符合该货龄范围的库存。</p>}
+        {!aging.rows.length && <p>{'当前没有符合该货龄范围的库存。'}</p>}
         <DataPagination ariaLabel="货龄指标明细分页" itemLabel="SKU" {...aging.props} />
       </div>
     );
@@ -2823,56 +2900,76 @@ function KpiDetail({ kind, snapshot }: { kind: string; snapshot: WarehouseSnapsh
     return (
       <div className="modal-metrics">
         <div>
-          <span>缺口数量</span>
+          <span>{'缺口数量'}</span>
           <strong>{number(snapshot.metrics.shortageQty)}</strong>
         </div>
         <div>
-          <span>缺口 SKU 数</span>
+          <span>{'缺口 SKU 数'}</span>
           <strong>{snapshot.metrics.shortageSkuCount}</strong>
         </div>
         <p>
           {snapshot.metricScopes?.pendingOrders ?? '数据来自当前仓客户订单行'}
-          ；缺口按订单量减已分配量计算，不等于当月订单量减发货量。
+          {'；缺口按订单量减已分配量计算，不等于当月订单量减发货量。'}
         </p>
         <div className="detail-grid">
           {shortage.rows.map((row, index) => (
             <div key={`${row.orderNo}-${row.sku}-${index}`}>
               <strong>
-                {row.orderNo} · {row.sku} · {row.productName}
+                {row.orderNo}
+                {' · '}
+                {row.sku}
+                {' · '}
+                {row.productName}
               </strong>
-              <span>客户：{row.customer}</span>
               <span>
-                需求 {number(row.orderedQty)} / 已占用 {number(row.allocatedQty)}
+                {'客户：'}
+                {row.customer}
               </span>
-              <span>剩余需求 {number(row.shortageQty)}</span>
+              <span>
+                {'需求 '}
+                {number(row.orderedQty)}
+                {' / 已占用 '}
+                {number(row.allocatedQty)}
+              </span>
+              <span>
+                {'剩余需求 '}
+                {number(row.shortageQty)}
+              </span>
             </div>
           ))}
         </div>
-        {!shortage.rows.length && <p>当前没有存在缺口的订单行。</p>}
+        {!shortage.rows.length && <p>{'当前没有存在缺口的订单行。'}</p>}
         <DataPagination ariaLabel="订单缺口明细分页" itemLabel="订单行" {...shortage.props} />
       </div>
     );
   return (
     <div className="modal-metrics">
       <div>
-        <span>库存</span>
+        <span>{'库存'}</span>
         <strong>{number(snapshot.metrics.inventoryQty)}</strong>
       </div>
       <div>
-        <span>在途</span>
+        <span>{'在途'}</span>
         <strong>{number(snapshot.metrics.inTransitQty)}</strong>
       </div>
       <div>
-        <span>履约率</span>
+        <span>{'履约率'}</span>
         <strong>{snapshot.metrics.fulfillmentRate}</strong>
       </div>
       <div>
-        <span>建议补货</span>
+        <span>{'建议补货'}</span>
         <strong>{number(snapshot.metrics.recommendedQty)}</strong>
       </div>
       <p>
-        来源：{snapshot.dataSource}；库存快照：{snapshot.snapshotTime}。
-        {snapshot.metricScopes?.fulfillment}；{snapshot.metricScopes?.pendingOrders}。
+        {'来源：'}
+        {snapshot.dataSource}
+        {'；库存快照：'}
+        {snapshot.snapshotTime}
+        {'。'}
+        {snapshot.metricScopes?.fulfillment}
+        {'；'}
+        {snapshot.metricScopes?.pendingOrders}
+        {'。'}
         {snapshot.dataQuality?.inTransit.reason}
       </p>
     </div>
@@ -2895,7 +2992,7 @@ function ColumnSettings({
   );
   return (
     <div className="settings-list">
-      <p>拖动表头可调整顺序；产品信息固定在左侧，实际补货量固定在右侧。</p>
+      <p>{'拖动表头可调整顺序；产品信息固定在左侧，实际补货量固定在右侧。'}</p>
       {freezable.map((column) => (
         <label key={column}>
           <input
@@ -2914,7 +3011,7 @@ function ColumnSettings({
       ))}
       <button className="secondary-button" onClick={onReset}>
         <RotateCcw size={15} />
-        恢复默认顺序
+        {'恢复默认顺序'}
       </button>
     </div>
   );
@@ -2935,17 +3032,26 @@ function ImportPreview({
     <div className="import-preview">
       {errors.length ? (
         <div className="import-errors">
-          <strong>发现 {errors.length} 个错误</strong>
+          <strong>
+            {'发现 '}
+            {errors.length}
+            {' 个错误'}
+          </strong>
           {errors.map((error, index) => (
             <p key={index}>
-              第 {error.row} 行 · {error.field}：{error.message}
+              {'第 '}
+              {error.row}
+              {' 行 · '}
+              {error.field}
+              {'：'}
+              {error.message}
             </p>
           ))}
         </div>
       ) : (
         <div className="import-success">
           <Check size={18} />
-          校验通过，确认后开始试算，尚未保存。
+          {'校验通过，确认后开始试算，尚未保存。'}
         </div>
       )}
       <div className="table-scroll">
@@ -2970,12 +3076,14 @@ function ImportPreview({
       </div>
       <footer className="import-actions">
         <span>
-          共 {rows.length} 行；预览前 20
-          行。按分仓和月份整包替换；该月缺行不会回补同步数据。其他月份保留。空白计划量按确认 0
-          处理。
+          {'共 '}
+          {rows.length}
+          {
+            ' 行；预览前 20 行。按分仓和月份整包替换；该月缺行不会回补同步数据。其他月份保留。空白计划量按确认 0 处理。'
+          }
         </span>
         <button className="primary-button" disabled={!canApply} onClick={onApply}>
-          确认导入并重算
+          {'确认导入并重算'}
         </button>
       </footer>
     </div>

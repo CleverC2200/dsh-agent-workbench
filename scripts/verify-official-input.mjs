@@ -2,7 +2,7 @@ import { readFileSync, realpathSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-/** Only the two registered official baselines are accepted, with clean tracked source. */
+/** Only registered official baselines and the private security candidate are accepted, with clean tracked source. */
 export function verifyOfficialCore(official) {
   const supportedCores = JSON.parse(
     readFileSync(

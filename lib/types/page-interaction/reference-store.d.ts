@@ -1,4 +1,4 @@
-import { type ReferenceReceipt } from "./reference.ts";
+import { type ReferenceReceipt } from './reference.ts';
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain';
 import { type StoredReference } from './reference-domain.ts';
 /** Core owns durability; the conversation only carries a small receipt. */

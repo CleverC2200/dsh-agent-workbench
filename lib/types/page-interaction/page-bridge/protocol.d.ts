@@ -36,7 +36,7 @@ export type AgUiEvent = AgUiToolCallStartEvent | AgUiToolCallArgsEvent | AgUiToo
  */
 export type AgUiToolMessage = {
     id: string;
-    role: "tool";
+    role: 'tool';
     toolCallId: string;
     content: string;
     error?: string;

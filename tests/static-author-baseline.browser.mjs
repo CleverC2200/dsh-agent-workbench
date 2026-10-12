@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 const baseline = '312adf90f1abcc05d9421083b2386939634d8796';
 for (const name of ['category', 'mps'])
@@ -13,7 +13,7 @@ for (const name of ['category', 'mps'])
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
     });
-    const rebuilt = await readFile(`static/${name}/index.html`, 'utf8');
+    const rebuilt = await readFile(`lib/static/${name}/index.html`, 'utf8');
     const observe = async (html) => {
       const context = await browser.newContext({ viewport: { width: 1500, height: 900 } });
       const page = await context.newPage();

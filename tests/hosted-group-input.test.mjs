@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import {
   mkdtempSync,
   mkdirSync,
@@ -131,34 +131,57 @@ test('workflow dispatch admission rejects unsafe inputs before peer checkout and
   const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
   assert.match(
     workflow,
-    /github\.ref \}\}-\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/,
+    /run: node scripts\/read-hosted-peer-input.mjs --repo dsh-agent-workbench/,
   );
-  const inline = workflow.match(/node --input-type=module <<'NODE'\n([\s\S]*?)\n          NODE/);
-  assert.ok(inline);
-  const code = inline[1].replace(/^          /gm, '');
+  const reader = resolve('scripts/read-hosted-peer-input.mjs');
   const directory = mkdtempSync(join(tmpdir(), 'workbench-dispatch-'));
   try {
+    const git = (...args) =>
+      execFileSync('git', ['-C', directory, ...args], { encoding: 'utf8' }).trim();
+    git('init', '--quiet');
+    writeFileSync(join(directory, 'source'), 'scope fixture');
+    git('add', '.');
+    git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '--quiet',
+      '-m',
+      'actual event',
+    );
+    const head = git('rev-parse', 'HEAD');
     const output = join(directory, 'scope-output');
     const valid = {
-      MANAGE_SHA: group[0][1],
-      WORKBENCH_SHA: group[1][1],
-      GEA_SHA: group[2][1],
-      EXPECTED_SHA: group[1][1],
+      QUALITY_GROUP_MANAGE: group[0][1],
+      QUALITY_GROUP_WORKBENCH: head,
+      QUALITY_GROUP_GEA: group[2][1],
+      QUALITY_EXPECTED_SHA: head,
+      QUALITY_SCOPE_ALLOWED: 'true',
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+      GITHUB_REPOSITORY: 'CleverC2200/dsh-agent-workbench',
     };
     const call = (changes = {}) =>
-      spawnSync(process.execPath, ['--input-type=module', '-e', code], {
+      spawnSync(process.execPath, [reader, '--repo', 'dsh-agent-workbench'], {
+        cwd: directory,
         env: { ...process.env, ...valid, ...changes, GITHUB_OUTPUT: output },
         encoding: 'utf8',
       });
-    for (const key of ['GEA_SHA', 'WORKBENCH_SHA', 'MANAGE_SHA']) {
-      for (const value of ['', 'main', 'a'.repeat(40) + '\n', '$(touch injected)']) {
+    for (const key of ['QUALITY_GROUP_GEA', 'QUALITY_GROUP_WORKBENCH', 'QUALITY_GROUP_MANAGE']) {
+      for (const value of ['', 'main', 'a'.repeat(40) + '\n', '$(touch injected)'])
         assert.equal(call({ [key]: value }).status, 1);
-      }
     }
-    assert.match(call({ EXPECTED_SHA: '0'.repeat(40) }).stderr, /CANDIDATE_EVENT_MISMATCH/);
+    assert.match(call({ QUALITY_EXPECTED_SHA: '0'.repeat(40) }).stderr, /CANDIDATE_EVENT_MISMATCH/);
     const result = call();
     assert.equal(result.status, 0, result.stderr);
-    assert.match(readFileSync(output, 'utf8'), new RegExp(`group-id=${groupId}\\n$`));
+    const tuple = [
+      [group[0][0], group[0][1]],
+      [group[1][0], head],
+      [group[2][0], group[2][1]],
+    ];
+    const expected = createHash('sha256').update(JSON.stringify(tuple)).digest('hex');
+    assert.match(readFileSync(output, 'utf8'), new RegExp(`group-id=${expected}\\n`));
     assert.match(
       workflow,
       /cancel-in-progress: \$\{\{ github.event_name != 'workflow_dispatch' \}\}/,
@@ -167,5 +190,46 @@ test('workflow dispatch admission rejects unsafe inputs before peer checkout and
     assert.match(workflow, /candidate-group\.json/);
   } finally {
     rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('source-event receipts preserve baseline provenance without declaring a joint run', () => {
+  const f = fixture('dsh-agent-workbench');
+  try {
+    const baselineId = 'd'.repeat(64);
+    const result = f.call({
+      QUALITY_SOURCE_KIND: 'source-event',
+      QUALITY_BASELINE_ID: baselineId,
+      GITHUB_EVENT_NAME: 'push',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const receipt = JSON.parse(readFileSync(join(f.root, 'candidate-group.json')));
+    assert.equal(receipt.sourceKind, 'source-event');
+    assert.equal(receipt.baselineId, baselineId);
+    assert.deepEqual(receipt.group, group);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('missing or mismatched hosted source provenance cannot create candidate evidence', () => {
+  const f = fixture('dsh-agent-workbench');
+  try {
+    for (const env of [
+      { QUALITY_SOURCE_KIND: 'source-event', QUALITY_BASELINE_ID: '' },
+      { QUALITY_SOURCE_KIND: 'joint-group', QUALITY_BASELINE_ID: 'd'.repeat(64) },
+      {
+        QUALITY_SOURCE_KIND: 'source-event',
+        QUALITY_BASELINE_ID: 'd'.repeat(64),
+        GITHUB_EVENT_NAME: 'workflow_dispatch',
+      },
+      { QUALITY_SOURCE_KIND: 'joint-group', GITHUB_EVENT_NAME: 'push' },
+      { QUALITY_SOURCE_KIND: 'source-event', QUALITY_BASELINE_ID: 'd'.repeat(64) + '\n' },
+    ])
+      assert.equal(f.call(env).status, 1);
+    assert.equal(existsSync(join(f.root, 'candidate-input.json')), false);
+    assert.equal(existsSync(join(f.root, 'candidate-group.json')), false);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
   }
 });

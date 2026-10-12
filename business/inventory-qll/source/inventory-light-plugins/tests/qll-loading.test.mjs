@@ -1,7 +1,18 @@
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile as _readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
+const _empty = () => ({
+  baseInventory: [],
+  branchInventory: [],
+  customerInventory: [],
+  agingBatches: [],
+  orders: [],
+  pendingOrders: [],
+  activeCustomerIds30d: [],
+  inventoryTrend: [],
+});
 test('cancelled bridge calls stop pending work without cancelling unrelated calls', async () => {
   const previousDocument = globalThis.document;
   globalThis.document = { referrer: 'https://host.test', body: {} };

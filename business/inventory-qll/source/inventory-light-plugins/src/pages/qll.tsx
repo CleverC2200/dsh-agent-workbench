@@ -3,6 +3,7 @@ import { scopeDescription } from './qll/components/structure-evidence';
 import { ReferenceStructure, rowStatus } from './qll/components/reference-structure';
 import { customerMetrics } from 'dsh-agent-manage/inventory-compute/full-chain-customer-metrics';
 import { WorkbenchLoading } from '../dsh-ui/workbench-loading';
+import { reportElements as _reportElements } from '../channel.js';
 import { updateContext, removeContextPart } from '../native/context';
 import { usePageFilter } from '../native/page-filter.tsx';
 
@@ -18,6 +19,10 @@ import {
   DatePicker,
   Input,
   Modal,
+  Message as _Message,
+  Radio as _Radio,
+  Skeleton as _Skeleton,
+  Space as _Space,
   Tabs,
   Tag,
   Tooltip,
@@ -27,6 +32,8 @@ import {
 import { Table } from './qll/components/viewport-table';
 
 import { IconInfoCircle, IconRefresh } from '../dsh-ui/icons';
+
+import { z as _z } from 'zod';
 
 import type {
   FullChainWorkspace,
@@ -238,13 +245,20 @@ function KpiCard({
             <>
               {metric.explanation}
               {metricKey === 'orderGap' && (
-                <div>当前备单量来自基地与分仓最新备单快照，不以月累计订单替代</div>
+                <div>{'当前备单量来自基地与分仓最新备单快照，不以月累计订单替代'}</div>
               )}
               {inventoryMetric && inventoryMetric.planCustomerDate && (
-                <div>客户总量快照：{inventoryMetric.planCustomerDate}；在仓 + 在途</div>
+                <div>
+                  {'客户总量快照：'}
+                  {inventoryMetric.planCustomerDate}
+                  {'；在仓 + 在途'}
+                </div>
               )}
               {inventoryMetric && inventoryMetric.observedCustomer > 0 && (
-                <div>客户日快照观察：{cardValue(inventoryMetric.observedCustomer, '件')}</div>
+                <div>
+                  {'客户日快照观察：'}
+                  {cardValue(inventoryMetric.observedCustomer, '件')}
+                </div>
               )}
               {layerSummary}
             </>
@@ -253,7 +267,7 @@ function KpiCard({
           {splitValues ? (
             <strong className={styles.kpiValue}>
               {cardValue(splitValues[0].value, splitValues[0].unit)}
-              <small className={styles.kpiScopeLabel}>基地</small>
+              <small className={styles.kpiScopeLabel}>{'基地'}</small>
             </strong>
           ) : (
             <strong
@@ -266,11 +280,17 @@ function KpiCard({
         {splitValues && (
           <dl className={styles.kpiHelpers}>
             <div>
-              <dt>基地{metricKey === 'turnover' ? '周转' : '满足率'}</dt>
+              <dt>
+                {'基地'}
+                {metricKey === 'turnover' ? '周转' : '满足率'}
+              </dt>
               <dd>{cardValue(splitValues[0].value, splitValues[0].unit)}</dd>
             </div>
             <div>
-              <dt>分仓{metricKey === 'turnover' ? '周转' : '满足率'}</dt>
+              <dt>
+                {'分仓'}
+                {metricKey === 'turnover' ? '周转' : '满足率'}
+              </dt>
               <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
             </div>
             {customerHelper}
@@ -288,46 +308,46 @@ function KpiCard({
             ) : metricKey === 'aging' ? (
               <>
                 <div>
-                  <dt>基地货龄</dt>
+                  <dt>{'基地货龄'}</dt>
                   <dd>{cardValue(workspace.layerMetrics?.base.averageAgeDays ?? null, '天')}</dd>
                 </div>
                 <div>
-                  <dt>分仓货龄</dt>
+                  <dt>{'分仓货龄'}</dt>
                   <dd>{cardValue(workspace.layerMetrics?.branch.averageAgeDays ?? null, '天')}</dd>
                 </div>
               </>
             ) : metricKey === 'turnover' ? (
               <>
                 <div>
-                  <dt>基地周转</dt>
+                  <dt>{'基地周转'}</dt>
                   <dd>{cardValue(workspace.layerMetrics?.base.turnoverDays ?? null, '天')}</dd>
                 </div>
                 <div>
-                  <dt>分仓周转</dt>
+                  <dt>{'分仓周转'}</dt>
                   <dd>{cardValue(workspace.layerMetrics?.branch.turnoverDays ?? null, '天')}</dd>
                 </div>
               </>
             ) : metricKey === 'fulfillment' ? (
               <>
                 <div>
-                  <dt>基地满足率</dt>
+                  <dt>{'基地满足率'}</dt>
                   <dd>{cardValue(workspace.fulfillment.factory.rate, '%')}</dd>
                 </div>
                 <div>
-                  <dt>分仓满足率</dt>
+                  <dt>{'分仓满足率'}</dt>
                   <dd>{cardValue(workspace.fulfillment.branch.rate, '%')}</dd>
                 </div>
               </>
             ) : metricKey === 'orderGap' ? (
               <>
                 <div>
-                  <dt>基地缺货量</dt>
+                  <dt>{'基地缺货量'}</dt>
                   <dd>
                     {cardValue(workspace.orderExecution?.currentBaseShortageQty ?? null, '件')}
                   </dd>
                 </div>
                 <div>
-                  <dt>分仓缺货量</dt>
+                  <dt>{'分仓缺货量'}</dt>
                   <dd>
                     {cardValue(workspace.orderExecution?.currentBranchShortageQty ?? null, '件')}
                   </dd>
@@ -340,7 +360,7 @@ function KpiCard({
                   <dd>{cardValue(metric.target, metric.unit)}</dd>
                 </div>
                 <div>
-                  <dt>较目标差异</dt>
+                  <dt>{'较目标差异'}</dt>
                   <dd>
                     {metric.current == null || metric.target == null
                       ? '-'
@@ -895,7 +915,7 @@ export function FullChainWorkbench() {
           row.layer === 'customer' ? (
             '不参与'
           ) : value == null ? (
-            <Text type="secondary">不可用</Text>
+            <Text type="secondary">{'不可用'}</Text>
           ) : (
             Math.round(value).toLocaleString('zh-CN')
           ),
@@ -975,7 +995,7 @@ export function FullChainWorkbench() {
         render: (value: number | null) =>
           value == null ? (
             <Tooltip content="未匹配到货龄批次，或批次货龄不完整">
-              <span>货龄待补齐</span>
+              <span>{'货龄待补齐'}</span>
             </Tooltip>
           ) : (
             Math.round(value).toLocaleString('zh-CN')
@@ -1161,7 +1181,7 @@ export function FullChainWorkbench() {
       <div className={styles.workspacePanels}>
         <section className={styles.workbench}>
           <header ref={headerRef} className={styles.header}>
-            <h1 className={styles.title}>全链路库存</h1>
+            <h1 className={styles.title}>{'全链路库存'}</h1>
             <div className={styles.controls}>
               <label className={styles.channelSwitch}>
                 <input
@@ -1173,7 +1193,7 @@ export function FullChainWorkbench() {
                   title="渠道读取未启用"
                 />
                 <span aria-hidden="true" />
-                含渠道
+                {'含渠道'}
               </label>
               <span className={styles.objectCount}>
                 {workspace
@@ -1212,7 +1232,7 @@ export function FullChainWorkbench() {
                   style={{ width: 120 }}
                 />
                 <Button size="small" onClick={submitQuery}>
-                  查询
+                  {'查询'}
                 </Button>
                 <Tooltip content="刷新库存数据">
                   <Button
@@ -1232,7 +1252,7 @@ export function FullChainWorkbench() {
               <Alert
                 type="error"
                 content={error}
-                action={<Button onClick={() => void load()}>重试</Button>}
+                action={<Button onClick={() => void load()}>{'重试'}</Button>}
               />
             )}
             {workspace?.channelUnavailable && (
@@ -1271,14 +1291,16 @@ export function FullChainWorkbench() {
                           <span className={styles.aiInsightIcon}>
                             <IconInfoCircle />
                           </span>
-                          <strong>AI 洞察</strong>
-                          <span className={styles.aiInsightBadge}>经营洞察</span>
+                          <strong>{'AI 洞察'}</strong>
+                          <span className={styles.aiInsightBadge}>{'经营洞察'}</span>
                         </div>
                         <p>
-                          <b>核心判断：</b>公司库存{' '}
+                          <b>{'核心判断：'}</b>
+                          {'公司库存 '}
                           {formatMetric(workspace.kpis.inventoryLevel.companyCurrent, '件', true)}
-                          ，当前订单缺口 {formatMetric(workspace.kpis.orderGap.current, '件', true)}
-                          。
+                          {'，当前订单缺口 '}
+                          {formatMetric(workspace.kpis.orderGap.current, '件', true)}
+                          {'。'}
                           {workspace.kpis.orderGap.current == null
                             ? '当前缺口证据不足，不能判断实际缺货。'
                             : workspace.kpis.orderGap.current > 0
@@ -1286,7 +1308,7 @@ export function FullChainWorkbench() {
                               : '当前未见订单缺口，低库存仍需与实际缺货区分。'}
                         </p>
                         <p>
-                          <b>关系分析：</b>
+                          <b>{'关系分析：'}</b>
                           {workspace.risks.length
                             ? workspace.risks
                                 .slice(0, 2)
@@ -1298,7 +1320,7 @@ export function FullChainWorkbench() {
                             : ''}
                         </p>
                         <p>
-                          <b>数据边界：</b>
+                          <b>{'数据边界：'}</b>
                           {workspace.confidence.summary}
                         </p>
                         <div className={styles.statusFilters} aria-label="经营状态快速筛选">
@@ -1325,26 +1347,25 @@ export function FullChainWorkbench() {
                       </section>
 
                       <details className={styles.confidence}>
-                        <summary>数据取值说明与各层日期</summary>
+                        <summary>{'数据取值说明与各层日期'}</summary>
                         <div className={styles.headerMeta}>
                           <span>
-                            基地库存：
+                            {'基地库存：'}
                             {workspace.freshness.byDomain.baseInventory ?? '不可用'}
                           </span>
                           <span>
-                            分仓库存：
+                            {'分仓库存：'}
                             {workspace.freshness.byDomain.branchInventory ?? '不可用'}
                           </span>
                           {workspace.scope === 'all-channel' && (
                             <>
                               <span>
-                                客户统计日：
+                                {'客户统计日：'}
                                 {workspace.freshness.byDomain.customerStatistics ?? '不可用'}
                               </span>
                               <span>
-                                客户上传范围：
-                                {workspace.freshness.byDomain.customerOldestUpload ??
-                                  '未知'} 至{' '}
+                                {'客户上传范围：'}
+                                {workspace.freshness.byDomain.customerOldestUpload ?? '未知'} {'至'}{' '}
                                 {workspace.freshness.byDomain.customer ?? '未知'}
                               </span>
                             </>
@@ -1355,16 +1376,20 @@ export function FullChainWorkbench() {
                         ))}
                         {workspace.customerObservationRisks.length > 0 && (
                           <div className={styles.observationStrip}>
-                            <strong>客户观察信号 · 不计入公司主判断</strong>
+                            <strong>{'客户观察信号 · 不计入公司主判断'}</strong>
                             {workspace.customerObservationRisks.map((r) => (
                               <p key={r.code}>
-                                {r.title}：{r.detail}
+                                {r.title}
+                                {'：'}
+                                {r.detail}
                               </p>
                             ))}
                           </div>
                         )}
                         <p className={styles.referenceFoot}>
-                          公司数量为件；客户预订单总量为箱，渠道日快照为件，未做跨单位加总。基地周转使用计划日均、分仓使用实际日均出库，不合成公司回顾周转。大区、省区、物料组暂无对应来源，不展示演示归属。
+                          {
+                            '公司数量为件；客户预订单总量为箱，渠道日快照为件，未做跨单位加总。基地周转使用计划日均、分仓使用实际日均出库，不合成公司回顾周转。大区、省区、物料组暂无对应来源，不展示演示归属。'
+                          }
                         </p>
                       </details>
                       <Card className={styles.detailCard} bordered={false}>
@@ -1406,9 +1431,9 @@ export function FullChainWorkbench() {
                               <>
                                 <div className={styles.tabIntro}>
                                   <div>
-                                    <strong>分层库龄判断</strong>
+                                    <strong>{'分层库龄判断'}</strong>
                                     <span>
-                                      基地、分仓、客户阈值不同，不合并成一个全国“超期”定义。
+                                      {'基地、分仓、客户阈值不同，不合并成一个全国“超期”定义。'}
                                     </span>
                                   </div>
                                   <Tag
@@ -1418,7 +1443,7 @@ export function FullChainWorkbench() {
                                         : 'orange'
                                     }
                                   >
-                                    FIFO 14天预测：
+                                    {'FIFO 14天预测：'}
                                     {workspace.aging.projections.day14.state === 'available'
                                       ? '可用'
                                       : '部分可用'}
@@ -1468,7 +1493,7 @@ export function FullChainWorkbench() {
                                       align: 'right',
                                       render: (v: number | null) =>
                                         v == null ? (
-                                          <Tag color="gray">缺少批次/速度</Tag>
+                                          <Tag color="gray">{'缺少批次/速度'}</Tag>
                                         ) : (
                                           Math.round(v).toLocaleString('zh-CN')
                                         ),
@@ -1479,7 +1504,7 @@ export function FullChainWorkbench() {
                                       align: 'right',
                                       render: (v: number | null) =>
                                         v == null ? (
-                                          <Tag color="gray">缺少批次/速度</Tag>
+                                          <Tag color="gray">{'缺少批次/速度'}</Tag>
                                         ) : (
                                           Math.round(v).toLocaleString('zh-CN')
                                         ),
@@ -1496,10 +1521,10 @@ export function FullChainWorkbench() {
                               <>
                                 <div className={styles.tabIntro}>
                                   <div>
-                                    <strong>订单满足率与缺口</strong>
-                                    <span>当月履约和当前待分配是两个概念，分别展示。</span>
+                                    <strong>{'订单满足率与缺口'}</strong>
+                                    <span>{'当月履约和当前待分配是两个概念，分别展示。'}</span>
                                   </div>
-                                  <Tag color="red">缺口目标 0 件</Tag>
+                                  <Tag color="red">{'缺口目标 0 件'}</Tag>
                                 </div>
                                 <Table
                                   rowKey="key"
@@ -1550,7 +1575,7 @@ export function FullChainWorkbench() {
                                       align: 'right',
                                       render: (v: number | null) =>
                                         v == null ? (
-                                          <Tag color="gray">待匹配</Tag>
+                                          <Tag color="gray">{'待匹配'}</Tag>
                                         ) : (
                                           Math.round(v).toLocaleString('zh-CN')
                                         ),
@@ -1630,7 +1655,7 @@ export function FullChainWorkbench() {
                   </strong>
                 </div>
                 <div>
-                  <span>数据日期</span>
+                  <span>{'数据日期'}</span>
                   <strong>{selectedMetric.sourceDate ?? '不可用'}</strong>
                 </div>
               </div>
@@ -1671,12 +1696,16 @@ export function FullChainWorkbench() {
                   />
 
                   <p className={styles.evidenceLine}>
-                    旧快照仅保存履约路径汇总，刷新工作台可获取新版逐仓明细。
+                    {'旧快照仅保存履约路径汇总，刷新工作台可获取新版逐仓明细。'}
                   </p>
                 </>
               )}
               <div className={styles.evidenceLine}>
-                结果快照 {workspace.workspaceId} · {workspace.contractVersion} · 只读
+                {'结果快照 '}
+                {workspace.workspaceId}
+                {' · '}
+                {workspace.contractVersion}
+                {' · 只读'}
               </div>
             </div>
           )}

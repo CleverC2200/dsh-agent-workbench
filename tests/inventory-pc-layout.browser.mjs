@@ -1,38 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from './helpers/prepared-assets.mjs';
 import { execFileSync } from 'node:child_process';
+import { readDealerMock } from './fixtures/dealer-mock-sql.mjs';
+import { createCompanyWire } from './fixtures/full-chain-company-wire.mjs';
+import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
-import { createCompanyWire } from './fixtures/full-chain-company-wire.mjs';
-const dealerBundle = await build({
-  entryPoints: ['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],
-  bundle: true,
-  write: false,
-  platform: 'node',
-  format: 'esm',
-  plugins: [
-    {
-      name: 'offline-query-registry',
-      setup(api) {
-        api.onResolve({ filter: /^server-only$|^@\/lib\/gea-sql-client$/ }, (args) => ({
-          path: args.path,
-          namespace: 'fixture',
-        }));
-        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
-          contents:
-            args.path === 'server-only'
-              ? 'export{};'
-              : 'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};',
-        }));
-      },
-    },
-  ],
-});
-const { readDealerMock } = await import(
-  'data:text/javascript;base64,' + Buffer.from(dealerBundle.outputFiles[0].text).toString('base64')
-);
 const presentation =
   process.env.INVENTORY_LAYOUT_BASELINE === '1'
     ? execFileSync(
@@ -110,14 +84,6 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
     (id === 'personal'
       ? await personalFixtureHtml()
       : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'));
-  const companyWire = createCompanyWire();
-  await page.exposeFunction('readFixtureRequest', async (message) =>
-    id === 'qll' && ['access', 'sql'].includes(message.method)
-      ? companyWire(message.method, message.parameters)
-      : id === 'dealer' && message.method === 'sql'
-        ? readDealerMock(message.parameters)
-        : { accepted: true },
-  );
   const pluginId = ['regional', 'category', 'mps'].includes(id)
     ? JSON.parse(await readFile(`lib/static/${id}/plugin.json`, 'utf8')).id
     : `inventory-${id}`;
@@ -135,6 +101,22 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (message) => {
     if (message.text().startsWith('CATALOG_PARSE_FAILED ')) errors.push(message.text());
+  });
+  const companyWire = createCompanyWire();
+  await page.exposeFunction('replyToLayoutRequest', async (message) => {
+    assert.equal(message.session, 'layout-session');
+    if (id === 'qll' && ['sql', 'access'].includes(message.method))
+      return companyWire(message.method, message.parameters);
+    if (id === 'dealer' && message.method === 'sql') return readDealerMock(message.parameters);
+    if (message.method === 'context') return { ok: true };
+    if (id === 'personal' && message.method === 'draft') {
+      assert.match(
+        message.parameters.text,
+        /未发送反馈草稿：[\s\S]*保留原稿。核对库存后补充进展。/,
+      );
+      return { ok: true };
+    }
+    throw Error('UNEXPECTED_LAYOUT_REQUEST: ' + message.method);
   });
   await page.route('**/*', (route) => {
     const url = new URL(route.request().url());
@@ -154,50 +136,70 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
       if(event.source!==frame.contentWindow)return;
       const data=event.data;
       if(data?.protocol==='agent-workbench-theme'&&data.type==='ready'){window.themeReady=true;frame.contentWindow.postMessage({protocol:'agent-workbench-theme',dark:${theme === 'dark'},fontSize:${fontSize}},'*');}
-      if(data?.protocol==='gea-html-v2'&&data.type==='ready'&&!connected){connected=true;const pair=new MessageChannel();pair.port1.onmessage=async event=>{const message=event.data;window.requests.push(message);if(message.type==='catalog'){try{window.acceptCurrentCatalog(message.elements,'${pluginId}');window.catalogs.push(message.elements);}catch(error){const invalid=message.elements.filter(element=>{try{window.acceptCurrentCatalog([element],'${pluginId}');return false;}catch{return true;}});console.error('CATALOG_PARSE_FAILED '+JSON.stringify({error:error.message,invalid}));}}if(message.type==='request'){try{pair.port1.postMessage({type:'response',id:message.id,result:await window.readFixtureRequest(message)});}catch(error){pair.port1.postMessage({type:'response',id:message.id,error:error.message});}}if(message.type==='theme:subscribe'){const style=getComputedStyle(document.body);const tokens=${process.env.INVENTORY_LAYOUT_CORE_TOKENS === '1' ? "Object.fromEntries([...style].filter(name=>name.startsWith('--dsw-')).map(name=>[name,style.getPropertyValue(name)]))" : '{}'};pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'${pluginId}'},colorScheme:'${theme}',fontSize:${fontSize},tokens});}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'${pluginId}'}},'*',[pair.port2]);}
-      if(data?.protocol==='dsh-workbench-view-v1'&&data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:data.page,version:1,channel:'layout-view',generation:1,state:${JSON.stringify(id === 'qll' ? { version: 1, asOf: '2026-10-02', scope: 'company', month: '2026-09' } : { version: 1 })}},'*');
+      if(data?.protocol==='gea-html-v2'&&data.type==='ready'&&!connected){connected=true;const pair=new MessageChannel();pair.port1.onmessage=async event=>{const message=event.data;window.requests.push(message);if(message.type==='catalog'){try{window.acceptCurrentCatalog(message.elements,'${pluginId}');window.catalogs.push(message.elements);}catch(error){const invalid=message.elements.filter(element=>{try{window.acceptCurrentCatalog([element],'${pluginId}');return false;}catch{return true;}});console.error('CATALOG_PARSE_FAILED '+JSON.stringify({error:error.message,invalid}));}}if(message.type==='request'){try{pair.port1.postMessage({type:'response',id:message.id,result:await window.replyToLayoutRequest(message)});}catch(error){pair.port1.postMessage({type:'response',id:message.id,error:error.message});}}if(message.type==='theme:subscribe'){const style=getComputedStyle(document.body);const tokens=${process.env.INVENTORY_LAYOUT_CORE_TOKENS === '1' ? "Object.fromEntries([...style].filter(name=>name.startsWith('--dsw-')).map(name=>[name,style.getPropertyValue(name)]))" : '{}'};pair.port1.postMessage({type:'theme',version:'1.1.1',context:{session:'layout-session',plugin:'${pluginId}'},colorScheme:'${theme}',fontSize:${fontSize},tokens});}};frame.contentWindow.postMessage({protocol:'gea-html-v2',type:'connect',context:{session:'layout-session',plugin:'${pluginId}'}},'*',[pair.port2]);}
+      if(data?.protocol==='dsh-workbench-view-v1'&&data.type==='ready')frame.contentWindow.postMessage({protocol:'dsh-workbench-view-v1',type:'restore',page:data.page,version:1,channel:'layout-view',generation:1,state:{version:1}},'*');
     });</script>`,
     });
   });
   await page.goto('http://inventory-layout.test/');
   const frame = page.frameLocator('iframe');
+  await expect.poll(() => page.evaluate(() => window.themeReady)).toBe(true);
+  await expect
+    .poll(() => frame.locator('body').evaluate((body) => body.hasAttribute('data-ds-dark-theme')))
+    .toBe(theme === 'dark');
+  await frame.locator('body').evaluate(async (body) => {
+    await Promise.all(
+      body
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation instanceof CSSTransition)
+        .map((animation) => animation.finished.catch(() => {})),
+    );
+  });
+  if (id === 'qll' && authorDocument === undefined) await startCompanyQuery(frame);
+
   t.after(async () => {
     assert.deepEqual(network, []);
     assert.deepEqual(errors, []);
   });
   return { page, frame };
 }
+async function startCompanyQuery(frame) {
+  const date = frame.getByPlaceholder('读取时点');
+  await date.fill('2026-10-02');
+  await date.press('Enter');
+  await frame.getByRole('button', { name: '查询', exact: true }).click();
+  await expect(frame.locator('#app')).toContainText('5,580');
+}
 async function readablePaint(locator) {
-  await expect(locator).toBeVisible();
-  let paint;
-  await expect
-    .poll(async () => {
-      paint = await locator.evaluateAll(([el]) => {
-        if (!el?.isConnected) return null;
-        const style = getComputedStyle(el);
-        let node = el,
-          background = '';
-        while (node) {
-          const value = getComputedStyle(node).backgroundColor;
-          if (value !== 'rgba(0, 0, 0, 0)') {
-            background = value;
-            break;
-          }
-          node = node.parentElement;
-        }
-        return { text: el.textContent.trim().slice(0, 100), color: style.color, background };
-      });
-      return paint?.color ?? '';
-    })
-    .not.toBe('');
-  assert.match(
-    paint.background,
-    /^rgba?\(/,
-    `${paint.text}: no opaque paint background ${JSON.stringify(paint)}`,
-  );
+  const paint = await locator.evaluateAll((elements) => {
+    if (elements.length !== 1)
+      throw Error(`Readable paint requires one current element, received ${elements.length}`);
+    const [el] = elements;
+    if (!el.isConnected) throw Error('Readable paint requires a connected element');
+    const style = getComputedStyle(el);
+    let node = el,
+      background = '';
+    while (node) {
+      const value = getComputedStyle(node).backgroundColor;
+      if (value !== 'rgba(0, 0, 0, 0)') {
+        background = value;
+        break;
+      }
+      node = node.parentElement;
+    }
+    return {
+      text: el.textContent.trim().slice(0, 100),
+      color: style.color,
+      background,
+      pageReferenceReady: el.ownerDocument
+        .querySelector('[data-page-reference-ready]')
+        ?.getAttribute('data-page-reference-ready'),
+    };
+  });
   const luminance = (value) => {
-    const rgb = value
-      .match(/[\d.]+/g)
+    const components = value.match(/[\d.]+/g);
+    assert.ok(components?.length >= 3, `Readable paint requires a resolved RGB color: ${value}`);
+    const rgb = components
       .slice(0, 3)
       .map(Number)
       .map((v) => {
@@ -229,14 +231,26 @@ for (const id of ['qll', 'dealer'])
     if (id === 'dealer') {
       await frame.getByRole('tab', { name: 'SKU库存', exact: true }).press('Enter');
       await expect(frame.getByRole('heading', { name: 'SKU库存', exact: true })).toBeVisible();
-      await expect(frame.getByRole('button', { name: '下载', exact: true })).toBeEnabled();
+      await expect(frame.locator('section[data-page-reference-ready]')).toHaveAttribute(
+        'data-page-reference-ready',
+        'true',
+      );
       targets.push(
         frame.locator('[role="status"]').filter({ hasText: 'SAP 定价' }).first(),
         frame.getByRole('button', { name: '下载', exact: true }),
       );
     }
     const paints = [];
-    for (const target of targets) paints.push(await readablePaint(target));
+    for (const target of targets) {
+      const paint = await readablePaint(target);
+      if (id === 'dealer')
+        assert.equal(
+          paint.pageReferenceReady,
+          'true',
+          'Dealer paint belongs to the loaded current scope',
+        );
+      paints.push(paint);
+    }
     if (evidence) {
       await mkdir(evidence, { recursive: true });
       await writeFile(evidence + '/' + id + '-dark-paint.json', JSON.stringify(paints, null, 2));
@@ -510,7 +524,13 @@ for (const theme of ['light', 'dark'])
       ).toBeEnabled();
       if (evidence)
         await page.screenshot({ path: evidence + `/personal-dialog-${width}-${theme}.png` });
-      await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+      const beforeDrafts = await page.evaluate(
+        () => window.requests.filter((x) => x.method === 'draft').length,
+      );
+      await dialog.getByRole('button', { name: '插入未发送草稿', exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.requests.filter((x) => x.method === 'draft').length))
+        .toBe(beforeDrafts + 1);
       await expect(dialog).toBeHidden();
     }
   });
@@ -666,6 +686,7 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
   await expect(trend.locator('figcaption')).toContainText('基地库存/件：0');
   // A fresh author page checks the original order values independently of prior focus.
   await page.goto('http://inventory-layout.test/');
+  await startCompanyQuery(page.frameLocator('iframe'));
   await page.locator('iframe').evaluate((el) => (el.style.height = '780px'));
   const next = page.frameLocator('iframe').getByRole('region', { name: '全链库存趋势与缺口' });
   await expect

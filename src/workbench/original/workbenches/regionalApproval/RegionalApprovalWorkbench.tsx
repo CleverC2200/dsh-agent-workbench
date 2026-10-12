@@ -1,5 +1,6 @@
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
+import { correctionMetrics as _correctionMetrics } from './models/salesPlanCorrectionModel.ts';
 import { CorrectionWorkbench } from './CorrectionWorkbench.tsx';
 import type { GeaSalesPlanPeriod } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
@@ -9,7 +10,10 @@ import type { GeaSalesPlanPeriod } from '../../contracts.ts';
  */
 const SHOW_VERSION_CONTROLS = false;
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
-import { SALES_PLAN_RETURN_CODES } from '../../salesPlanWorkflow.ts';
+import {
+  SALES_PLAN_RETURN_CODES,
+  SALES_PLAN_ROLES as _SALES_PLAN_ROLES,
+} from '../../salesPlanWorkflow.ts';
 import {
   aggregateSalesPlanExportAmounts,
   SALES_PLAN_EXPORT_AMOUNT_PAIRS,
@@ -132,7 +136,10 @@ import {
   type SalesPlanQueryClient,
 } from './useRegionalApprovalQuery.ts';
 import type { SalesPlanDetailClient } from './hooks/useSalesPlanDetail.ts';
-import type { SalesPlanActionClient } from './models/salesPlanActionModel.ts';
+import {
+  salesPlanApprovalNodeForStatus as _salesPlanApprovalNodeForStatus,
+  type SalesPlanActionClient,
+} from './models/salesPlanActionModel.ts';
 import type { GeaSalesPlanActionReceipt, GeaSalesPlanVersion } from '../../bridge.ts';
 import { useWorkbenchHost } from '../../bridge.ts';
 import type { PageElement } from '../../../../page-bridge/catalog.ts';
@@ -372,6 +379,21 @@ type RegionalApprovalLiveTableRow =
       plan: RegionalApprovalLiveRow;
       category: RegionalApprovalLiveCategorySummary;
     };
+
+const _categoryComparisonState = (summary: RegionalApprovalLiveCategorySummary) => {
+  if (
+    (summary.amountProgress === undefined && !isExactZero(summary.amountDelta)) ||
+    (summary.quantityProgress === undefined && !isExactZero(summary.quantityDelta))
+  ) {
+    return 'warning' as const;
+  }
+  const progress = [summary.amountProgress, summary.quantityProgress].filter(
+    (value): value is number => value !== undefined,
+  );
+  if (progress.some((value) => value < 85 || value > 115)) return 'warning' as const;
+  if (progress.some((value) => value < 95 || value > 105)) return 'attention' as const;
+  return 'healthy' as const;
+};
 
 type PersistedApprovalWorkbenchState = {
   currentStage: ApprovalStageId;
@@ -1294,6 +1316,8 @@ const RegionalApprovalWorkbench: React.FC<{
 
     return undefined;
   };
+  const _liveRowCanApprove = (row: RegionalApprovalLiveRow) =>
+    !liveActionDisabledReason(row, 'APPROVE');
   /** 与单笔按钮同源的角色解析：多角色账号按当前节点过滤逐个尝试，取第一个允许该动作的角色。 */
   const liveActionAccessFor = (row: RegionalApprovalLiveRow, kind: LiveActionKind) => {
     const detail = liveAccess.entries[row.versionId];
@@ -2799,11 +2823,15 @@ const RegionalApprovalWorkbench: React.FC<{
             {fixtureApprovalStatusTag(row)}
           </div>
           <span>
-            {t(areaLabelKey(row.areaKey))} · {t(branchLabelKey(row.branchKey))} ·{' '}
-            {t(departmentLabelKey(row.departmentKey))}
+            {t(areaLabelKey(row.areaKey))}
+            {' · '}
+            {t(branchLabelKey(row.branchKey))}
+            {' ·'} {t(departmentLabelKey(row.departmentKey))}
           </span>
           <small>
-            {row.customerCode} · {t(customerLabelKey(row.customerKey))}
+            {row.customerCode}
+            {' · '}
+            {t(customerLabelKey(row.customerKey))}
             <Button
               type="text"
               size="mini"
@@ -3345,7 +3373,7 @@ const RegionalApprovalWorkbench: React.FC<{
                     <strong>
                       {liveQuery.enabled && stage.id === displayStage ? (
                         <span style={{ color: 'rgb(var(--warning-6))' }} aria-hidden>
-                          ➜{' '}
+                          {'➜'}{' '}
                         </span>
                       ) : null}
                       {t(stageLabelKey(stage.id))}
@@ -3716,8 +3744,9 @@ const RegionalApprovalWorkbench: React.FC<{
                             {
                               REGIONAL_APPROVAL_ROWS.find((row) => row.customerKey === value)
                                 ?.customerCode
-                            }{' '}
-                            · {t(customerLabelKey(value as RegionalApprovalRow['customerKey']))}
+                            }
+                            {' ·'}{' '}
+                            {t(customerLabelKey(value as RegionalApprovalRow['customerKey']))}
                           </Select.Option>
                         ))}
                   </Select>
@@ -4136,7 +4165,9 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>
                     <strong>{t(organizationLabelKey(row.organizationKey))}</strong>
                     <small>
-                      {number(versionMetrics.quantity)} · {money(versionMetrics.amount)}
+                      {number(versionMetrics.quantity)}
+                      {' · '}
+                      {money(versionMetrics.amount)}
                     </small>
                   </span>
                   <Progress percent={progress} size="small" />

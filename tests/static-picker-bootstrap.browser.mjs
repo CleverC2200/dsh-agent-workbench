@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile, rm, mkdir } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, mkdir } from './helpers/prepared-assets.mjs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
@@ -97,7 +97,8 @@ test('registered static HTML bootstraps the original picker and enables the actu
   await page.goto('https://host.example/');
   await page.addScriptTag({ content: parent.outputFiles[0].text });
   await page.locator('iframe').evaluate((frame) => {
-    Reflect.set(frame, 'src', frame.src);
+    const source = frame.src;
+    frame.src = source;
   });
   const trigger = page.getByRole('button', { name: '选择内容', exact: true });
   await expect(trigger).toBeEnabled();

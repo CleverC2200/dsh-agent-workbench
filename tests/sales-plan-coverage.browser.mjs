@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
-import { readFile } from 'node:fs/promises';
+import { readFile } from './helpers/prepared-assets.mjs';
 import * as XLSX from 'xlsx-republish';
 
 // Exercise the actual workbench effects, monthly cells and visible failure feedback.

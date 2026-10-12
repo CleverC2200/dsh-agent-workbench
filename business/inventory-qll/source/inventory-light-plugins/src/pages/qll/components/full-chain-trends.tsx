@@ -223,9 +223,9 @@ export function FullChainTrends({
   return (
     <section className={styles.chartBlock} aria-label="全链库存趋势与缺口">
       <div className={styles.chartHeader}>
-        <strong>趋势与缺口</strong>
+        <strong>{'趋势与缺口'}</strong>
         <label>
-          指标{' '}
+          {'指标'}{' '}
           <select
             aria-label="趋势指标"
             value={metric}
@@ -250,14 +250,18 @@ export function FullChainTrends({
               setState('cancelled');
             }}
           >
-            取消查询
+            {'取消查询'}
           </Button>
         )}
       </div>
       <p>
-        目标月 {workspace.filters.month} · {organization?.objectName ?? '当前授权组织'} ·{' '}
-        {filters.category || '全部品类'} · SKU {workspace.filters.sku || '全部'}
-        。最近30天观察，订单限定目标月；风险标签仅筛选结构表。
+        {'目标月 '}
+        {workspace.filters.month}
+        {' ·'} {organization?.objectName ?? '当前授权组织'}
+        {' ·'} {filters.category || '全部品类'}
+        {' · SKU '}
+        {workspace.filters.sku || '全部'}
+        {'。最近30天观察，订单限定目标月；风险标签仅筛选结构表。'}
       </p>
       {state === 'error' ? (
         <p role="alert">{error}</p>
@@ -273,7 +277,7 @@ export function FullChainTrends({
         <>
           <TrendChart data={data} series={shownSeries} />
           <p>
-            缺失期间或层级以断线表示，不补零、不插值；真实零值保留。
+            {'缺失期间或层级以断线表示，不补零、不插值；真实零值保留。'}
             {metric === 'orders' && '发运后缺口沿用原计算，不等同当前待分配缺口。'}
           </p>
         </>

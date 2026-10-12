@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from './helpers/prepared-assets.mjs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -731,13 +731,13 @@ async function publicMpsContext(t, page) {
     Session,
     SessionId,
   } = await import(official('packages/core/session/lib/index.js'));
+  const { default: Typert } = await import(official('packages/typert/registry/lib/index.js'));
   const { default: Projections } = await import(
     official('packages/session/session-projection/lib/index.js')
   );
   const { default: Query } = await import(
     official('packages/session-query/session-query/lib/index.js')
   );
-  const { default: Typert } = await import(official('packages/typert/registry/lib/index.js'));
   const { default: SessionController } = await import(
     official('packages/api/session-controller/lib/index.js')
   );
@@ -768,7 +768,6 @@ async function publicMpsContext(t, page) {
     routes = new Map(),
     owners = new Map(),
     agents = new Map();
-  await temporaryReferenceStorage(t, ctx);
   ctx.provide('connection', {
     fetch: {
       register(route) {
@@ -777,6 +776,7 @@ async function publicMpsContext(t, page) {
       },
     },
   });
+  await temporaryReferenceStorage(t, ctx);
   await ctx.plugin(SystemPrompt, {});
   await ctx.plugin(Typert);
   await ctx.plugin(Sessions);
@@ -837,6 +837,7 @@ async function publicMpsContext(t, page) {
       release() {},
     }),
   );
+  t.after(() => ctx.fiber.dispose());
   const call = async (input) => {
     const response = await routes.get('/api/agent-workbench/page').fetch(
       new Request('https://local/api/agent-workbench/page', {

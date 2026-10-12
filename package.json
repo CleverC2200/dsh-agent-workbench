@@ -114,7 +114,7 @@
     "lint:audit": "node scripts/quality.mjs lint-audit",
     "format:check": "node scripts/quality.mjs format",
     "format:audit": "node scripts/quality.mjs format-audit",
-    "test:quality": "node --test scripts/run-quality-checks.test.mjs tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/quality-knowledge.test.mjs tests/candidate-input.test.mjs tests/migration-history-input.test.mjs",
+    "test:quality": "node --test scripts/run-quality-checks.test.mjs tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/hosted-peer-input.test.mjs tests/quality-knowledge.test.mjs tests/candidate-input.test.mjs tests/migration-history-input.test.mjs",
     "test:final-group": "node --test tests/final-group-input.contract.mjs",
     "quality:fast": "node scripts/run-quality-fast.mjs",
     "quality:ci": "node scripts/run-quality-ci.mjs"
@@ -167,7 +167,8 @@
     "@deepseek-ai/dsh-client-ui-chat": "file:../../official-latest-standard/packages/client/ui-chat",
     "@deepseek-ai/dsh-client-ui-sidebar-right": "file:../../official-latest-standard/packages/client/ui-sidebar-right",
     "oxlint": "1.87.0",
-    "oxfmt": "0.72.0"
+    "oxfmt": "0.72.0",
+    "lucide-react": "1.31.0"
   },
   "packageManager": "npm@11.11.0"
 }

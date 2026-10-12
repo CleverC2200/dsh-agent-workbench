@@ -2,34 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
-import { build } from 'esbuild';
-const bundle = await build({
-  entryPoints: ['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],
-  bundle: true,
-  write: false,
-  platform: 'node',
-  format: 'esm',
-  plugins: [
-    {
-      name: 'offline-query-registry',
-      setup(api) {
-        api.onResolve({ filter: /^server-only$|^@\/lib\/gea-sql-client$/ }, (args) => ({
-          path: args.path,
-          namespace: 'fixture',
-        }));
-        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
-          contents:
-            args.path === 'server-only'
-              ? 'export{};'
-              : 'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};',
-        }));
-      },
-    },
-  ],
-});
-const { readDealerMock } = await import(
-  'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
-);
+import { readDealerMock } from './fixtures/dealer-mock-sql.mjs';
 const pause = () => new Promise((resolve) => setTimeout(resolve, 25));
 async function until(check) {
   for (let i = 0; i < 100; i++) {

@@ -400,18 +400,20 @@ export async function loadWarehouseSnapshot(
   const planDates = [
     ...new Set(planResult.rows.map((row) => text(row.target_month)).filter(Boolean)),
   ].sort();
-  // Missing plans must not hide real stock. Calendar values label the empty
-  // plan panel only; never synthesize plan rows, quantities or snapshot dates.
-  const currentPlanDate = planDates[0] ?? `${addDays(calculationDate, -1).slice(0, 7)}-01`;
-  const nextPlanDate =
-    planDates[1] ?? (planDates[0] || `${nextMonth(currentPlanDate.slice(0, 7))}-01`);
+  // Plans belong to the calculation month and its calendar successor. Missing
+  // months stay unknown; historical or later plans never fill their place.
+  const currentPlanDate = `${calculationDate.slice(0, 7)}-01`;
+  const nextPlanDate = `${nextMonth(calculationDate.slice(0, 7))}-01`;
   const currentPlanRows = planResult.rows.filter(
     (row) => text(row.target_month) === currentPlanDate,
   );
   const planMaterialCodes = [
     ...new Set(currentPlanRows.map((row) => text(row.material_code)).filter(Boolean)),
   ];
-  if (planResult.rows.length && (!planDates.length || !planMaterialCodes.length))
+  if (
+    planResult.rows.length &&
+    (!planDates.length || !planResult.rows.some((row) => text(row.material_code)))
+  )
     throw new WarehouseSnapshotDataError(`${source.warehouseName}最新计划缺少月份或 SKU`);
 
   const hasOrderFulfillment = Boolean(optionalTables.rows[0]?.order_fulfillment);

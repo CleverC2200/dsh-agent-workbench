@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile } from './helpers/prepared-assets.mjs';
 import { execFileSync } from 'node:child_process';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -156,7 +156,15 @@ test('the category suggestion detail restores from the original current author o
     .first()
     .getByText('查看依据', { exact: true })
     .click();
-  await expect.poll(() => page.evaluate(() => window.state()?.suggestionId)).not.toBeNull();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          typeof window.state()?.suggestionId === 'string' &&
+          window.state().suggestionId.length > 0,
+      ),
+    )
+    .toBe(true);
   await page.evaluate(() => window.openCategory('session-A'));
   await expect(page.frameLocator('iframe').locator('.arco-modal-title')).toHaveText(
     '行动建议 · 依据与影响',
@@ -175,6 +183,7 @@ test('the original category event detail opens and restores its current simulate
   await expect(page.frameLocator('iframe').locator('.arco-modal-title')).toHaveText(
     '粽子产能缺口将拉低品类订单满足率',
   );
+  await expect.poll(() => page.evaluate(() => window.state()?.eventId)).toBe('ev-zongzi-cap');
   await page.evaluate(() => window.openCategory('session-A'));
   await expect(page.frameLocator('iframe').locator('.arco-modal-title')).toHaveText(
     '粽子产能缺口将拉低品类订单满足率',

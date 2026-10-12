@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 test('SKU viewport scrolls internally, then passes upward scrolling to its parent', async (t) => {
   const browser = await chromium.launch({ headless: true });

@@ -204,6 +204,39 @@ test('a peer at a different commit is refused and its files stay untouched', (t)
   assert.equal(git(peer.path, 'status', '--porcelain'), before);
 });
 
+test('clean Manage and GEA checkouts cannot exchange candidate roles', (t) => {
+  const { manifest, run } = fixture(t);
+  const manage = manifest.repositories[1];
+  const gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-agent-manage/);
+  for (const entry of [manage, gea]) assert.equal(git(entry.path, 'status', '--porcelain'), '');
+});
+
+test('a clean committed peer with the wrong package name cannot claim its candidate role', (t) => {
+  const { manifest, run } = fixture(t);
+  const peer = manifest.repositories[2];
+  const file = resolve(peer.path, 'package.json');
+  const packageJson = JSON.parse(readFileSync(file, 'utf8'));
+  packageJson.name = '@cleverc2200/gea-dsh-prototype-wrong';
+  writeFileSync(file, JSON.stringify(packageJson));
+  git(peer.path, 'add', 'package.json');
+  git(
+    peer.path,
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    'wrong committed package identity',
+  );
+  peer.head = git(peer.path, 'rev-parse', 'HEAD');
+  assert.equal(git(peer.path, 'status', '--porcelain'), '');
+  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-gea-plugin/);
+});
+
 test('tracked and untracked peer changes are refused without clearing either change', (t) => {
   const { manifest, run } = fixture(t);
   const peer = manifest.repositories[1];

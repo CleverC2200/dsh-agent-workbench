@@ -32,7 +32,7 @@ function Details({ value }: { value: any }) {
     (Array.isArray(value) && !value.length) ||
     (typeof value === 'object' && !Object.keys(value).length)
   )
-    return <span>—</span>;
+    return <span>{'—'}</span>;
   if (Array.isArray(value))
     return (
       <div>
@@ -472,10 +472,10 @@ export default function Personal({
     >
       <header className={css.header}>
         <div className={css.titleRow}>
-          <h1>库存管理工作台</h1>
-          <span role="status">GEA 授权只读数据 · 反馈仅保存未发送文字</span>
+          <h1>{'库存管理工作台'}</h1>
+          <span role="status">{'GEA 授权只读数据 · 反馈仅保存未发送文字'}</span>
           <Button disabled={loading} onClick={() => void refresh().catch(showError)}>
-            刷新
+            {'刷新'}
           </Button>
         </div>
         <div className={css.headRow}>
@@ -485,7 +485,8 @@ export default function Personal({
             onSelect={(id) => void applyFilter({ objectId: id }).catch(showError)}
           />
           <div className={css.dataTime} title={snapshots.join('；')}>
-            数据时间：<b>{snapshotLabel}</b>
+            {'数据时间：'}
+            <b>{snapshotLabel}</b>
             {loading ? ' · 加载中' : ''}
           </div>
         </div>
@@ -517,22 +518,26 @@ export default function Personal({
             '暂无已返回的授权对象'
           ) : (
             <>
-              当前范围包括 {scope.filter((o) => o.kind === 'base').length} 个基地、
-              {scope.filter((o) => o.kind === 'branch').length} 个分仓。当前库存{' '}
-              {fmt(summary.inventory)} 件；
+              {'当前范围包括 '}
+              {scope.filter((o) => o.kind === 'base').length} {'个基地、'}
+              {scope.filter((o) => o.kind === 'branch').length} {'个分仓。当前库存 '}
+              {fmt(summary.inventory)}
+              {' 件；'}
               {summary.shortage === null
                 ? '当前缺货待核验'
                 : `${summary.partial.shortage ? '已知' : ''}当前缺货 ${fmt(summary.shortage)} 件`}
-              ；
+              {'；'}
               {summary.age === null
                 ? '平均货龄待核验'
                 : `${summary.partial.age ? '已知范围' : ''}平均货龄 ${fmt(summary.age)} 天`}
-              。
+              {'。'}
               {risks.length
                 ? `已识别 ${risks.length} 个待复核对象，优先核对当前订单缺口，再处理货龄和滞库风险。`
                 : '已返回数据中暂未识别风险。'}
               <p>
-                “部分”表示目标、动销或货龄尚未覆盖全部对象，不能将已知值当作全量结论。昨日延续与反馈进展尚未接入。
+                {
+                  '“部分”表示目标、动销或货龄尚未覆盖全部对象，不能将已知值当作全量结论。昨日延续与反馈进展尚未接入。'
+                }
               </p>
             </>
           )}
@@ -541,11 +546,13 @@ export default function Personal({
         {scope.some((o) => coverageNotes(o).length > 0) && (
           <details className={css.coverage}>
             <summary>
-              数据完整性说明 · {scope.filter((o) => coverageNotes(o).length > 0).length}{' '}
-              个对象需核验
+              {'数据完整性说明 ·'} {scope.filter((o) => coverageNotes(o).length > 0).length}{' '}
+              {'个对象需核验'}
             </summary>
             <p>
-              空值不等于零。以下说明仅针对本工作台当前授权查询结果；源库是否确实无记录，还需数据提供方确认。
+              {
+                '空值不等于零。以下说明仅针对本工作台当前授权查询结果；源库是否确实无记录，还需数据提供方确认。'
+              }
             </p>
             {scope
               .filter((o) => coverageNotes(o).length > 0)
@@ -615,7 +622,7 @@ export default function Personal({
               <div>
                 <span>
                   {m.title}
-                  {m.partial && <small> · 部分</small>}
+                  {m.partial && <small>{' · 部分'}</small>}
                 </span>
                 <Badge state={m.state}>{m.badge}</Badge>
               </div>
@@ -714,7 +721,9 @@ export default function Personal({
                     <td>
                       <b>{r.object}</b>
                       <small>
-                        {r.category} · {r.sku}
+                        {r.category}
+                        {' · '}
+                        {r.sku}
                       </small>
                     </td>
                     <td>{r.issue}</td>
@@ -722,18 +731,18 @@ export default function Personal({
                     <td>{r.role || '—'}</td>
                     <td>
                       <i className={css.dot} data-tone="neutral" />
-                      未接入
+                      {'未接入'}
                     </td>
                     <td>
                       <div className={css.rowActions}>
-                        <button onClick={() => setDetail(r)}>查看明细</button>
+                        <button onClick={() => setDetail(r)}>{'查看明细'}</button>
                         <button
                           onClick={() => {
                             setFeedback(r);
                             setNote(feedbackNotes[r.id] ?? '');
                           }}
                         >
-                          补充进展
+                          {'补充进展'}
                         </button>
                       </div>
                     </td>
@@ -742,7 +751,7 @@ export default function Personal({
               </tbody>
             </table>
           </div>
-          {!filtered.length && <p className={css.empty}>当前筛选暂无已识别事项</p>}
+          {!filtered.length && <p className={css.empty}>{'当前筛选暂无已识别事项'}</p>}
           <DataPagination
             pageNumber={page}
             pageSize={size}
@@ -758,11 +767,13 @@ export default function Personal({
         <Section number="四" title="当前需协同事件" />
         <section className={css.event}>
           <div className={css.eventTitle}>
-            <b>协同事件数据尚未接入</b>
-            <Badge>未接入</Badge>
+            <b>{'协同事件数据尚未接入'}</b>
+            <Badge>{'未接入'}</Badge>
           </div>
           <div className={css.eventBody}>
-            目前可在上方风险事项中查看明细、补充进展并交给对话整理草稿。事件状态与历史反馈未返回，不能视为没有待办事件。
+            {
+              '目前可在上方风险事项中查看明细、补充进展并交给对话整理草稿。事件状态与历史反馈未返回，不能视为没有待办事件。'
+            }
           </div>
         </section>
       </div>
@@ -782,16 +793,18 @@ export default function Personal({
               setFeedback(null);
             }}
           >
-            关闭
+            {'关闭'}
           </Button>
         </header>
         {feedback ? (
           <>
             <p>
-              {feedback.object} · {feedback.sku}
+              {feedback.object}
+              {' · '}
+              {feedback.sku}
             </p>
             <label>
-              原因说明与处理计划
+              {'原因说明与处理计划'}
               <textarea
                 value={note}
                 onChange={(e) => writeNote(e.target.value)}
@@ -799,9 +812,9 @@ export default function Personal({
                 placeholder="原因、处理计划、责任角色、预计完成时间"
               />
             </label>
-            <p>当前文字作为未提交字段保留。插入右侧输入框只形成未发送草稿。</p>
+            <p>{'当前文字作为未提交字段保留。插入右侧输入框只形成未发送草稿。'}</p>
             <Button disabled={!note.trim() || busy} onClick={() => void prepareFeedbackDraft()}>
-              插入未发送草稿
+              {'插入未发送草稿'}
             </Button>
           </>
         ) : (

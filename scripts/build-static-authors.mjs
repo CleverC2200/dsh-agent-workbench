@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { compileHtmlAuthor } from './html-author.mjs';
-import ts from 'typescript';
+import { verifyFixedAuthoredData } from './static-author-provenance.mjs';
 const questionStyles = await readFile(
   new URL('../business/shared/author-questions.css', import.meta.url),
   'utf8',
@@ -29,21 +29,7 @@ for (const page of ['category', 'mps']) {
   for (const [file, digest] of Object.entries(source.fixed)) {
     if (hash(files[file]) !== digest) throw Error(`STATIC_FIXED_RESOURCE_CHANGED: ${page}/${file}`);
   }
-  for (const [name, expected] of Object.entries(source.fixedAuthoredData)) {
-    const ast = ts.createSourceFile(
-      expected.file,
-      files[expected.file],
-      ts.ScriptTarget.Latest,
-      true,
-      ts.ScriptKind.JS,
-    );
-    const found = ast.statements
-      .filter(ts.isVariableStatement)
-      .flatMap((statement) => [...statement.declarationList.declarations])
-      .find((value) => value.name.getText(ast) === name);
-    if (!found?.initializer || hash(found.initializer.getText(ast)) !== expected.sha256)
-      throw Error(`STATIC_AUTHORED_DATA_CHANGED: ${page}/${name}`);
-  }
+  verifyFixedAuthoredData(page, files, source);
   const author = await build({
     stdin: {
       contents: files['data.js'] + '\n' + files['app.js'],

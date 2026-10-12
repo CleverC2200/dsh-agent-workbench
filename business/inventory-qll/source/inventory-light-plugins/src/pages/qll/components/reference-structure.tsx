@@ -306,20 +306,20 @@ export function ReferenceStructure({
   const filterControls = (
     <div className={styles.referenceFilters} role="group" aria-label="库存结构筛选">
       <label>
-        品类
+        {'品类'}
         <select
           aria-label="品类筛选"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
-          <option value="">全部品类</option>
+          <option value="">{'全部品类'}</option>
           {categories.map((c) => (
             <option key={c}>{c}</option>
           ))}
         </select>
       </label>
       <label>
-        SKU
+        {'SKU'}
         <input
           aria-label="SKU编码筛选"
           placeholder="输入完整SKU编码"
@@ -333,11 +333,11 @@ export function ReferenceStructure({
           }}
         />
       </label>
-      <Button onClick={submitSku}>查询</Button>
+      <Button onClick={submitSku}>{'查询'}</Button>
       <label>
-        组织
+        {'组织'}
         <select aria-label="组织筛选" value={org} onChange={(e) => setOrg(e.target.value)}>
-          <option value="">全部组织</option>
+          <option value="">{'全部组织'}</option>
           {(['base', 'branch', 'customer'] as const)
             .filter((l) => l !== 'customer' || workspace.scope === 'all-channel')
             .map((l) => (
@@ -354,9 +354,9 @@ export function ReferenceStructure({
         </select>
       </label>
       <label>
-        状态
+        {'状态'}
         <select aria-label="状态筛选" value={status} onChange={(e) => onStatus(e.target.value)}>
-          <option value="">全部状态</option>
+          <option value="">{'全部状态'}</option>
           {['低库存', '大日期', '数据待复核', '未命中风险'].map((s) => (
             <option key={s}>{s}</option>
           ))}
@@ -370,9 +370,12 @@ export function ReferenceStructure({
           onSku('');
         }}
       >
-        重置
+        {'重置'}
       </Button>
-      <span className={styles.filteredCount}>{filtered.length} 个品类×组织</span>
+      <span className={styles.filteredCount}>
+        {filtered.length}
+        {' 个品类×组织'}
+      </span>
     </div>
   );
   return (
@@ -394,13 +397,17 @@ export function ReferenceStructure({
       />
       {references.coverage.omittedRows > 0 && (
         <div role="status">
-          当前可引用 {references.coverage.referencedRows}/{references.coverage.visibleRows}{' '}
-          行；请收窄筛选以引用其余行。
+          {'当前可引用 '}
+          {references.coverage.referencedRows}
+          {'/'}
+          {references.coverage.visibleRows}
+          {' 行；请收窄筛选以引用其余行。'}
         </div>
       )}
       <div className={styles.referenceFoot}>
-        品类 / 组织行点击展开；SKU
-        点击查看详情。公司实物库存与渠道观察分列；低于目标不代表已发生缺货。各层周转、货龄按各自口径展示。
+        {
+          '品类 / 组织行点击展开；SKU 点击查看详情。公司实物库存与渠道观察分列；低于目标不代表已发生缺货。各层周转、货龄按各自口径展示。'
+        }
       </div>
       <Modal
         visible={!!selected}
@@ -420,7 +427,9 @@ export function ReferenceStructure({
         {selected && (
           <div className={styles.skuDetail}>
             <h3>
-              {selected.objectName} · {selected.category}
+              {selected.objectName}
+              {' · '}
+              {selected.category}
             </h3>
             <Tag>{rowStatus(selected)}</Tag>
             <dl>

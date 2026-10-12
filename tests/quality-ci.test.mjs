@@ -149,48 +149,37 @@ test('input CLI binds each registered Core and rejects unknown commits before pr
   }
 });
 
-test('hosted checkout refs and public admission use the reviewed immutable peer commits', () => {
-  const directory = mkdtempSync(join(tmpdir(), 'hosted-peer-pins-'));
-  try {
-    const core = '639ed015397290b3745d163aafe02ffee4aa3f84';
-    const created = spawnSync(
-      process.execPath,
-      [
-        'scripts/run-quality-ci.mjs',
-        '--phase',
-        'input',
-        '--root',
-        directory,
-        '--sha',
-        'a'.repeat(40),
-        '--core-head',
-        core,
-      ],
-      { encoding: 'utf8' },
+test('hosted events use only admitted peer outputs while the local legacy input remains explicit', () => {
+  const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
+  assert.match(
+    workflow,
+    /run: node scripts\/read-hosted-peer-input.mjs --repo dsh-agent-workbench/,
+  );
+  for (const [repo, output] of [
+    ['dsh-agent-manage', 'manage-sha'],
+    ['dsh-gea-plugin', 'gea-sha'],
+  ]) {
+    const refs = [
+      ...workflow.matchAll(new RegExp('repository: CleverC2200/' + repo + '\\s+ref: (.*)', 'g')),
+    ].map((match) => match[1]);
+    assert.ok(refs.length > 0, repo + ' must be checked out');
+    assert.ok(
+      refs.every(
+        (ref) =>
+          ref === '${{ needs.candidate-scope.outputs.' + output + ' }}' ||
+          ref === '${{ steps.group.outputs.' + output + ' }}',
+      ),
     );
-    assert.equal(created.status, 0, created.stderr);
-    const input = JSON.parse(readFileSync(join(directory, 'candidate-input.json'), 'utf8'));
-    const expected = {
-      'dsh-agent-manage': '6f08567a6e032b867464b0cfc55c967942ce2b93',
-      'dsh-gea-plugin': '1abc2d208a27d6e3ded541b6741c09ed2eb201ae',
-    };
-    const workflow = readFileSync('.github/workflows/quality.yml', 'utf8');
-    for (const [repo, head] of Object.entries(expected)) {
-      assert.equal(input.repositories.find((entry) => entry.repo === repo)?.head, head);
-      const checkoutRefs = [
-        ...workflow.matchAll(
-          new RegExp(
-            'repository: CleverC2200/' +
-              repo +
-              "\\s+ref: \\$\\{\\{ (?:steps\\.group|needs\\.candidate-scope)\\.outputs\\.[a-z-]+ \\|\\| '([a-f0-9]{40})' \\}\\}",
-            'g',
-          ),
-        ),
-      ].map((match) => match[1]);
-      assert.ok(checkoutRefs.length > 0, repo + ' must be checked out');
-      assert.deepEqual([...new Set(checkoutRefs)], [head], repo + ' checkout and input must agree');
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
+    assert.ok(refs.every((ref) => !ref.includes('||')));
   }
+  assert.match(
+    workflow,
+    /QUALITY_SOURCE_KIND: \$\{\{ needs.candidate-scope.outputs.source-kind \}\}/,
+  );
+  assert.match(
+    workflow,
+    /QUALITY_BASELINE_ID: \$\{\{ needs.candidate-scope.outputs.baseline-id \}\}/,
+  );
+  assert.match(workflow, /--final-group-sha256 "\$INPUT_SHA256"/);
+  assert.doesNotMatch(workflow, /--phase input/);
 });

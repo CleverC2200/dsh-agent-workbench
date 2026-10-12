@@ -2,6 +2,7 @@ import { buildFullChainWorkspace } from 'dsh-agent-manage/inventory-compute/full
 import type {
   FullChainData,
   WorkspaceFilters,
+  WorkspaceScope as _WorkspaceScope,
 } from 'dsh-agent-manage/inventory-compute/full-chain-types';
 import { summarizeStructure } from 'dsh-agent-manage/inventory-compute/full-chain-category-structure';
 import { currentSessionId, call } from './channel.js';

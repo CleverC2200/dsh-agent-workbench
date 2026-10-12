@@ -3,7 +3,17 @@ import { applicablePolicies, orderTotals } from 'dsh-agent-manage/inventory-comp
 import { DealerOverview } from '../pages/dealer/overview';
 import css from '../pages/dealer/workbench.module.css';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Alert, Button, Input, InputNumber, Table, Tabs, Space } from '../dsh-ui/controls';
+import {
+  Alert,
+  Button,
+  Input,
+  InputNumber,
+  Select as _Select,
+  Table,
+  Tabs,
+  Space,
+  Card as _Card,
+} from '../dsh-ui/controls';
 import { loadDealerCustomers, loadDealerDemoPayload } from '../dealer-engine';
 import { action, reportElements } from '../channel.js';
 import { updateContext, beginQuery } from './context';
@@ -552,14 +562,14 @@ export default function Dealer() {
             }
             onClick={() => add(row)}
           >
-            采纳建议
+            {'采纳建议'}
           </Button>
           <Button
             size="mini"
             disabled={!customer || Boolean(cart[customer + ':' + row.code])}
             onClick={() => add(row, true)}
           >
-            人工选品
+            {'人工选品'}
           </Button>
         </Space>
       ),
@@ -601,7 +611,7 @@ export default function Dealer() {
                 setTab('sku');
               }}
             >
-              客户明细
+              {'客户明细'}
             </Button>
           ),
         },
@@ -718,7 +728,7 @@ export default function Dealer() {
   if (loading && !data && !error) return <WorkbenchLoading title="客户库存" cards={8} compact />;
   return (
     <>
-      <p role="status">GEA 授权只读数据。建议采纳与订单校验仅保存本地草稿，不提交补货。</p>
+      <p role="status">{'GEA 授权只读数据。建议采纳与订单校验仅保存本地草稿，不提交补货。'}</p>
       <section
         className={css.shell}
         data-page-reference-ready={!loading && Boolean(data) && loadedScope.current === scopeKey}
@@ -730,7 +740,7 @@ export default function Dealer() {
               aria-current={view === 'stock'}
               onClick={() => navigate(customer ? 'sku' : 'customer')}
             >
-              客户库存
+              {'客户库存'}
             </button>
             <button
               aria-current={view !== 'stock'}
@@ -742,14 +752,14 @@ export default function Dealer() {
                 }
               }}
             >
-              客户订单
+              {'客户订单'}
             </button>
           </nav>
           <div className={css.customerPicker}>
             <details className={css.customerMenu} key={customer}>
               <summary>
                 {customers.find((c) => c.code === customer)?.name || customer || '全部负责客户'}
-                <span aria-hidden="true">⌄</span>
+                <span aria-hidden="true">{'⌄'}</span>
               </summary>
               <div className={css.customerOptions}>
                 <Input
@@ -769,7 +779,7 @@ export default function Dealer() {
                       setSearch('');
                     }}
                   >
-                    全部负责客户
+                    {'全部负责客户'}
                   </button>
                 )}
                 {customers.map((c) => (
@@ -786,11 +796,14 @@ export default function Dealer() {
                     <small>{c.code}</small>
                   </button>
                 ))}
-                {!customers.length && <small>暂无匹配客户</small>}
+                {!customers.length && <small>{'暂无匹配客户'}</small>}
               </div>
             </details>
             {view === 'stock' && (
-              <small>库存快照：{data?.inventoryDateLabel || data?.snapshotDate || '—'}</small>
+              <small>
+                {'库存快照：'}
+                {data?.inventoryDateLabel || data?.snapshotDate || '—'}
+              </small>
             )}
           </div>
         </header>
@@ -804,7 +817,7 @@ export default function Dealer() {
                 setPage(1);
               }}
             >
-              公司商品
+              {'公司商品'}
             </button>
             <button
               aria-current={view === 'master' && tab === 'policies'}
@@ -814,7 +827,7 @@ export default function Dealer() {
                 setPage(1);
               }}
             >
-              本月政策
+              {'本月政策'}
             </button>
             <button
               aria-current={view === 'master' && tab === 'sku'}
@@ -824,10 +837,10 @@ export default function Dealer() {
                 setPage(1);
               }}
             >
-              当前库存
+              {'当前库存'}
             </button>
             <button aria-current={view === 'order'} onClick={() => setView('order')}>
-              建议订单
+              {'建议订单'}
             </button>
           </nav>
         )}
@@ -904,7 +917,7 @@ export default function Dealer() {
                     setPage(1);
                   }}
                 >
-                  <option value="">全部品类</option>
+                  <option value="">{'全部品类'}</option>
                   {(data?.companyProductFacets?.categories ?? []).map((v: string) => (
                     <option key={v}>{v}</option>
                   ))}
@@ -920,7 +933,7 @@ export default function Dealer() {
                     setPage(1);
                   }}
                 >
-                  <option value="">全部标签</option>
+                  <option value="">{'全部标签'}</option>
                   {(data?.companyProductFacets?.tags ?? []).map((v: string) => (
                     <option key={v}>{v}</option>
                   ))}
@@ -954,10 +967,10 @@ export default function Dealer() {
                       value={stockAction}
                       onChange={(e) => setStockAction(e.target.value)}
                     >
-                      <option value="all">全部建议</option>
-                      <option value="replenish">建议补货</option>
-                      <option value="observe">无需补货</option>
-                      <option value="unknown">待核查</option>
+                      <option value="all">{'全部建议'}</option>
+                      <option value="replenish">{'建议补货'}</option>
+                      <option value="observe">{'无需补货'}</option>
+                      <option value="unknown">{'待核查'}</option>
                     </select>
                   )}
                   <select
@@ -965,7 +978,7 @@ export default function Dealer() {
                     value={stockCategory}
                     onChange={(e) => setStockCategory(e.target.value)}
                   >
-                    <option value="all">全部品类</option>
+                    <option value="all">{'全部品类'}</option>
                     {Array.from(
                       new Set([
                         ...stockCategories,
@@ -992,7 +1005,7 @@ export default function Dealer() {
                   title="下载当前筛选后的全部数据（CSV）"
                   onClick={() => void exportCustomer()}
                 >
-                  下载
+                  {'下载'}
                 </Button>
               )}
             </div>
@@ -1028,10 +1041,11 @@ export default function Dealer() {
                   aria-current={orderPanel === 'suggestion'}
                   onClick={() => setOrderPanel('suggestion')}
                 >
-                  建议订单
+                  {'建议订单'}
                 </button>
                 <button aria-current={orderPanel === 'cart'} onClick={() => setOrderPanel('cart')}>
-                  购物车 · {customerCart.length}
+                  {'购物车 · '}
+                  {customerCart.length}
                 </button>
               </nav>
               <Button
@@ -1039,7 +1053,7 @@ export default function Dealer() {
                 loading={orderBusy}
                 onClick={() => void loadSuggestions()}
               >
-                生成建议订单
+                {'生成建议订单'}
               </Button>
             </div>
             {!customer && (
@@ -1047,30 +1061,34 @@ export default function Dealer() {
             )}
             <div className={css.orderMeta}>
               <label>
-                客户车型
+                {'客户车型'}
                 <select
                   aria-label="订单车型"
                   disabled={!customer}
                   value={header.car}
                   onChange={(e) => setHeader('car', e.target.value)}
                 >
-                  <option value="">请选择车型</option>
+                  <option value="">{'请选择车型'}</option>
                   {(data?.customerCars ?? []).map((r: any) => (
                     <option key={r.id || r.code} value={r.id || r.code}>
-                      {r.name} · {r.min ?? '—'}～{r.max ?? '—'}
+                      {r.name}
+                      {' · '}
+                      {r.min ?? '—'}
+                      {'～'}
+                      {r.max ?? '—'}
                     </option>
                   ))}
                 </select>
               </label>
               <label>
-                提货点
+                {'提货点'}
                 <select
                   aria-label="订单提货点"
                   disabled={!customer}
                   value={header.pickup}
                   onChange={(e) => setHeader('pickup', e.target.value)}
                 >
-                  <option value="">请选择提货点</option>
+                  <option value="">{'请选择提货点'}</option>
                   {(data?.customerPickupPoints ?? []).map((r: any) => (
                     <option key={r.code} value={r.code}>
                       {r.name}
@@ -1079,17 +1097,19 @@ export default function Dealer() {
                 </select>
               </label>
               <label>
-                收货地址
+                {'收货地址'}
                 <select
                   aria-label="订单收货地址"
                   disabled={!customer}
                   value={header.receive}
                   onChange={(e) => setHeader('receive', e.target.value)}
                 >
-                  <option value="">请选择收货地址</option>
+                  <option value="">{'请选择收货地址'}</option>
                   {(data?.customerReceives ?? []).map((r: any) => (
                     <option key={r.code} value={r.code}>
-                      {r.name} · {r.address}
+                      {r.name}
+                      {' · '}
+                      {r.address}
                     </option>
                   ))}
                 </select>
@@ -1133,7 +1153,7 @@ export default function Dealer() {
                             })
                           }
                         >
-                          采纳至草稿
+                          {'采纳至草稿'}
                         </Button>
                       ),
                     },
@@ -1181,7 +1201,7 @@ export default function Dealer() {
                             }))
                           }
                         >
-                          <option value="">不选政策</option>
+                          <option value="">{'不选政策'}</option>
                           {applicablePolicies(
                             data?.policies ?? [],
                             r.customerCode,
@@ -1241,15 +1261,19 @@ export default function Dealer() {
                             })
                           }
                         >
-                          移除
+                          {'移除'}
                         </Button>
                       ),
                     },
                   ]}
                 />
                 <p className={css.orderFooter}>
-                  当前范围 {totals.count} 个 SKU · 数量 {display(totals.quantity)} · 金额{' '}
-                  {display(totals.amount)} 元。政策优惠未计入金额；实时报价未接入时金额保持未知。
+                  {'当前范围 '}
+                  {totals.count}
+                  {' 个 SKU · 数量 '}
+                  {display(totals.quantity)} {'· 金额 '}
+                  {display(totals.amount)}{' '}
+                  {'元。政策优惠未计入金额；实时报价未接入时金额保持未知。'}
                 </p>
                 <Space>
                   <Button
@@ -1266,7 +1290,7 @@ export default function Dealer() {
                       )
                     }
                   >
-                    导出补货草稿
+                    {'导出补货草稿'}
                   </Button>
                   <Button
                     disabled={!Object.keys(cart).length || problems.length > 0}
@@ -1277,10 +1301,10 @@ export default function Dealer() {
                       )
                     }
                   >
-                    核对草稿
+                    {'核对草稿'}
                   </Button>
                   <Button disabled title="暂不支持提交订单">
-                    提交订单
+                    {'提交订单'}
                   </Button>
                 </Space>
               </section>

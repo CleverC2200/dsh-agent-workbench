@@ -6,7 +6,7 @@ export interface WorkbenchSession {
     preparingAnalysis?: boolean;
 }
 /** 传递真实绑定的 DSH Session ID；工作台不会创建会话。 */
-export declare function WorkbenchSessionProvider({ value, children }: React.PropsWithChildren<{
+export declare function WorkbenchSessionProvider({ value, children, }: React.PropsWithChildren<{
     value: WorkbenchSession;
 }>): React.JSX.Element;
 /** 当前业务页面通过此 Hook 读取已绑定的 Core Session 地址。 */

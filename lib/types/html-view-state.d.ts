@@ -253,7 +253,7 @@ export type DealerViewState = {
 export type QllViewState = {
     version: 1;
     asOf?: string;
-    scope?: "company" | "all-channel";
+    scope?: 'company' | 'all-channel';
     month?: string;
     tab?: string;
     sku?: string;
