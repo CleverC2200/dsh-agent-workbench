@@ -40,6 +40,9 @@ function fixture(repo) {
   const own = repositories.find((entry) => entry.repo === repo);
   const env = {
     ...process.env,
+    GITHUB_EVENT_NAME: 'workflow_dispatch',
+    QUALITY_SOURCE_KIND: 'joint-group',
+    QUALITY_BASELINE_ID: '',
     QUALITY_GROUP_MANAGE: group[0][1],
     QUALITY_GROUP_WORKBENCH: group[1][1],
     QUALITY_GROUP_GEA: group[2][1],
@@ -194,21 +197,23 @@ test('workflow dispatch admission rejects unsafe inputs before peer checkout and
 });
 
 test('source-event receipts preserve baseline provenance without declaring a joint run', () => {
-  const f = fixture('dsh-agent-workbench');
-  try {
-    const baselineId = 'd'.repeat(64);
-    const result = f.call({
-      QUALITY_SOURCE_KIND: 'source-event',
-      QUALITY_BASELINE_ID: baselineId,
-      GITHUB_EVENT_NAME: 'push',
-    });
-    assert.equal(result.status, 0, result.stderr);
-    const receipt = JSON.parse(readFileSync(join(f.root, 'candidate-group.json')));
-    assert.equal(receipt.sourceKind, 'source-event');
-    assert.equal(receipt.baselineId, baselineId);
-    assert.deepEqual(receipt.group, group);
-  } finally {
-    rmSync(f.root, { recursive: true, force: true });
+  for (const event of ['push', 'pull_request']) {
+    const f = fixture('dsh-agent-workbench');
+    try {
+      const baselineId = 'd'.repeat(64);
+      const result = f.call({
+        QUALITY_SOURCE_KIND: 'source-event',
+        QUALITY_BASELINE_ID: baselineId,
+        GITHUB_EVENT_NAME: event,
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const receipt = JSON.parse(readFileSync(join(f.root, 'candidate-group.json')));
+      assert.equal(receipt.sourceKind, 'source-event');
+      assert.equal(receipt.baselineId, baselineId);
+      assert.deepEqual(receipt.group, group);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
   }
 });
 
@@ -224,6 +229,7 @@ test('missing or mismatched hosted source provenance cannot create candidate evi
         GITHUB_EVENT_NAME: 'workflow_dispatch',
       },
       { QUALITY_SOURCE_KIND: 'joint-group', GITHUB_EVENT_NAME: 'push' },
+      { QUALITY_SOURCE_KIND: 'joint-group', GITHUB_EVENT_NAME: 'pull_request' },
       { QUALITY_SOURCE_KIND: 'source-event', QUALITY_BASELINE_ID: 'd'.repeat(64) + '\n' },
     ])
       assert.equal(f.call(env).status, 1);
