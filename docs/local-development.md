@@ -6,6 +6,8 @@
 
 准备依赖前，按本票输入将固定 Core SDK 放在 package 与类型配置声明的相对路径，并提供同级 GEA 的登记支持清单。可以只读引用既有已准备 SDK 与 GEA；SDK 验证失败时，交由该输入的 owner 在自有 checkout 准备后再继续。原生 Action 只在当前工作树冻结安装，不准备 Core、相邻仓或内嵌业务依赖。已有任务继续使用自己的冻结输入。
 
+类型检查 Action 使用 `typecheck:official`，核心构建使用同一份 `tsconfig.official.json`。完整质量 Action 需在其执行环境中设置 `DSH_QUALITY_INPUT` 为本票冻结组 JSON 的绝对路径，并设置 `DSH_QUALITY_INPUT_SHA256` 为该文件原始字节的 SHA256。它将两项输入显式传入现有 `quality:ci`，同时运行 browser 阶段；所需 Core、三仓及浏览器输入仍须按本票准备，缺少输入时拒绝执行，不借用历史登记。
+
 日常综合门禁与冻结 CI 入口见 [质量门禁](../QUALITY.md)。
 
 ```sh

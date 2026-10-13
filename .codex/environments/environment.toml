@@ -65,14 +65,14 @@ npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
 name = "类型检查"
 icon = "tool"
 command = '''
-npm run typecheck
+npm run typecheck:official
 '''
 
 [[actions]]
 name = "核心构建"
 icon = "tool"
 command = '''
-npm run build:core
+DSH_TYPECHECK_PROJECT=tsconfig.official.json npm run build:core
 '''
 
 [[actions]]
@@ -86,5 +86,8 @@ npm run quality:fast
 name = "完整质量验收（需冻结输入）"
 icon = "tool"
 command = '''
-npm run quality:ci
+set -eu
+: "${DSH_QUALITY_INPUT:?请指定本票冻结组输入的绝对路径}"
+: "${DSH_QUALITY_INPUT_SHA256:?请指定冻结输入原始字节的 SHA256}"
+npm run quality:ci -- --input "$DSH_QUALITY_INPUT" --final-group-sha256 "$DSH_QUALITY_INPUT_SHA256" --browser
 '''
