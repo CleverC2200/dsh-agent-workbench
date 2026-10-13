@@ -2,6 +2,12 @@
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树按锁安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。固定官方提交与材料要求由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 核验；类型映射查 [tsconfig.official.json](../tsconfig.official.json)。当前只支持登记的官方输入，本地 SDK 配置不构成发行依赖或发行授权。
 
+创建后续任务的自有工作树时，使用该任务冻结提交中的 [Codex 原生环境](../.codex/environments/environment.toml)。setup 只检查已安装工具；在 Actions 中先运行工具检查，再按任务需要运行准备依赖和定向检查。配置中的完整质量验收需另行满足冻结输入，不随创建工作树或准备依赖自动执行。
+
+准备依赖前，按本票输入将固定 Core SDK 放在 package 与类型配置声明的相对路径，并提供同级 GEA 的登记支持清单。可以只读引用既有已准备 SDK 与 GEA；SDK 验证失败时，交由该输入的 owner 在自有 checkout 准备后再继续。原生 Action 只在当前工作树冻结安装，不准备 Core、相邻仓或内嵌业务依赖。已有任务继续使用自己的冻结输入。
+
+类型检查 Action 使用 `typecheck:official`，核心构建使用同一份 `tsconfig.official.json`。完整质量 Action 需在其执行环境中设置 `DSH_QUALITY_INPUT` 为本票冻结组 JSON 的绝对路径，并设置 `DSH_QUALITY_INPUT_SHA256` 为该文件原始字节的 SHA256。它将两项输入显式传入现有 `quality:ci`，同时运行 browser 阶段；所需 Core、三仓及浏览器输入仍须按本票准备，缺少输入时拒绝执行，不借用历史登记。
+
 日常综合门禁与冻结 CI 入口见 [质量门禁](../QUALITY.md)。
 
 ```sh
