@@ -387,6 +387,7 @@ async function fixture(
       page,
       active: state.selectedDocument?.id === page.id,
       sessionId,
+      useSessions: (select) => select(ctx.sessions.list.getSnapshot()),
       useProjection: () => mainPreset,
       useSession: (selector) =>
         sessionId
@@ -1531,12 +1532,40 @@ test('successful deferred History navigation keeps its own owner and restores th
   await assert.rejects(f.workbench.completeHistory(target), /PAGE_HISTORY_CANCELLED/);
 });
 
-test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async (t) => {
+test('explicitly opening an unconfigured business page offers the official picker and cancellation creates no Session', async (t) => {
   const f = await fixture(t, { noWorkspace: true });
-  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 0);
-  assert.equal(f.counts().sessions, 0);
-  await f.newConversation();
   assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 1);
   assert.equal(f.counts().sessions, 0);
+  await f.newConversation();
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 2);
+  assert.equal(f.counts().sessions, 0);
   assert.equal(f.currentSession(), undefined);
+});
+
+test('an explicit business page inherits the current Core workspace and prepares once without a new-conversation click', async (t) => {
+  const f = await fixture(t, {
+    noWorkspace: true,
+    initialSession: 'history-session',
+    nativeResourceSdk: true,
+  });
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
+  assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
+  assert.equal(f.currentSession(), 'session-1');
+  assert.equal(f.selection().cwd, '/owned/workspace');
+  assert.equal(f.dom.window.document.body.textContent.includes('WORKBENCH_WORKSPACE_REQUIRED'), false);
+  await f.hide();
+  await f.show();
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
+});
+
+test('creating a plain page conversation inherits the real current Core workspace', async (t) => {
+  const f = await fixture(t, {
+    staticDocument: true,
+    noWorkspace: true,
+    initialSession: 'history-session',
+  });
+  await f.newConversation();
+  assert.equal(f.counts().sessions, 1);
+  assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
+  assert.equal(f.selection().cwd, '/owned/workspace');
 });

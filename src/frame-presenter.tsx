@@ -129,6 +129,7 @@ export function mountFramePresentation(
     active,
     navigationError,
     sessionId,
+    useSessions,
     useSession,
     useProjection,
     inputActions,
@@ -218,6 +219,9 @@ export function mountFramePresentation(
       documentState.restoredWithoutSession === true;
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
+    const currentCwd = useSessions((value) =>
+      sessionId ? value.byId[sessionId]?.cwd : undefined,
+    );
     const associated =
       active &&
       selection?.sessionId === sessionId &&
@@ -586,7 +590,12 @@ export function mountFramePresentation(
         ? AbortSignal.any([controller.signal, ownerSignal])
         : controller.signal;
       try {
-        const requested = await resourceWorkspace(host.fetch, signal, cwd, host.pickDirectory);
+        const requested = await resourceWorkspace(
+          host.fetch,
+          signal,
+          cwd ?? selection?.cwd ?? currentCwd,
+          host.pickDirectory,
+        );
         const { path: directory } = await host.workspace(requested);
         signal.throwIfAborted();
         const associated = (selected: {
@@ -666,11 +675,11 @@ export function mountFramePresentation(
       setBusy(true);
       setError('');
       try {
-        // An explicit deployment directory or the official picker supplies the new Session Workspace.
+        // Borrow the current Core Workspace before requesting another directory.
         const cwd = await resourceWorkspace(
           host.fetch,
           controller.signal,
-          undefined,
+          selection?.cwd ?? currentCwd,
           host.pickDirectory,
         );
         const { workspaceId } = await host.workspace(cwd);
@@ -744,7 +753,12 @@ export function mountFramePresentation(
       const controller = new AbortController();
       preparation.current = controller;
       void (async () => {
-        const cwd = await resourceWorkspace(host.fetch, controller.signal, selection?.cwd);
+        const cwd = await resourceWorkspace(
+          host.fetch,
+          controller.signal,
+          selection?.cwd ?? currentCwd,
+          prepare ? host.pickDirectory : undefined,
+        );
         const response = await host.fetch(
           '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
           { signal: controller.signal, cache: 'no-store' },
@@ -788,6 +802,7 @@ export function mountFramePresentation(
       page.id,
       page.resourceId,
       restoredWithoutSession,
+      currentCwd,
     ]);
     const toolbar = (
       <div className="gea-page-toolbar-seat">
