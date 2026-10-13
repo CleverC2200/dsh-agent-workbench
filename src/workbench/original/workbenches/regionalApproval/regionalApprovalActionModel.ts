@@ -61,10 +61,14 @@ export const EMPTY_REGIONAL_APPROVAL_ACTION_STORE: RegionalApprovalActionStore =
   results: {},
 };
 
-export const regionalApprovalActionKey = (kind: RegionalApprovalActionKind, scope: RegionalApprovalActionScope) =>
-  `${kind}:${scope.organizationId}:${scope.version}:${scope.approvalStage}`;
+export const regionalApprovalActionKey = (
+  kind: RegionalApprovalActionKind,
+  scope: RegionalApprovalActionScope,
+) => `${kind}:${scope.organizationId}:${scope.version}:${scope.approvalStage}`;
 
-export const regionalApprovalReturnValidationErrors = (store: RegionalApprovalActionStore): string[] => {
+export const regionalApprovalReturnValidationErrors = (
+  store: RegionalApprovalActionStore,
+): string[] => {
   const errors: string[] = [];
   if (!store.returnDraft.target) errors.push('target');
   if (!store.returnDraft.reason.trim()) errors.push('reason');
@@ -72,8 +76,9 @@ export const regionalApprovalReturnValidationErrors = (store: RegionalApprovalAc
   return errors;
 };
 
-export const regionalApprovalSubmitValidationErrors = (store: RegionalApprovalActionStore): string[] =>
-  store.submitConfirmed ? [] : ['confirmation'];
+export const regionalApprovalSubmitValidationErrors = (
+  store: RegionalApprovalActionStore,
+): string[] => (store.submitConfirmed ? [] : ['confirmation']);
 
 export type RegionalApprovalActionStoreAction =
   | { type: 'return-target'; target: RegionalApprovalReturnTarget }
@@ -88,7 +93,7 @@ export type RegionalApprovalActionStoreAction =
 
 export const reduceRegionalApprovalActionStore = (
   store: RegionalApprovalActionStore,
-  action: RegionalApprovalActionStoreAction
+  action: RegionalApprovalActionStoreAction,
 ): RegionalApprovalActionStore => {
   if (action.type === 'return-target') {
     if (store.returnDraft.target === action.target) return store;
@@ -103,19 +108,31 @@ export const reduceRegionalApprovalActionStore = (
     return { ...store, returnDraft: { ...store.returnDraft, impactScope: action.impactScope } };
   }
   if (action.type === 'submit-confirmed') {
-    return store.submitConfirmed === action.confirmed ? store : { ...store, submitConfirmed: action.confirmed };
+    return store.submitConfirmed === action.confirmed
+      ? store
+      : { ...store, submitConfirmed: action.confirmed };
   }
-  if (action.type === 'clear-operation') return store.operation ? { ...store, operation: undefined } : store;
+  if (action.type === 'clear-operation')
+    return store.operation ? { ...store, operation: undefined } : store;
   if (action.type === 'start') {
     if (store.operation?.status === 'loading' || store.results[action.command.key]) return store;
     return { ...store, operation: { command: action.command, status: 'loading' } };
   }
 
   const operation = store.operation;
-  if (!operation || operation.command.requestId !== action.requestId || operation.status !== 'loading') return store;
-  if (action.type === 'cancel') return { ...store, operation: { ...operation, status: 'cancelled' } };
+  if (
+    !operation ||
+    operation.command.requestId !== action.requestId ||
+    operation.status !== 'loading'
+  )
+    return store;
+  if (action.type === 'cancel')
+    return { ...store, operation: { ...operation, status: 'cancelled' } };
   if (action.type === 'failure') {
-    return { ...store, operation: { ...operation, status: 'failure', errorCode: action.errorCode } };
+    return {
+      ...store,
+      operation: { ...operation, status: 'failure', errorCode: action.errorCode },
+    };
   }
   if (action.type === 'success') {
     const result: RegionalApprovalActionResult = {
@@ -136,10 +153,12 @@ export const reduceRegionalApprovalActionStore = (
 };
 
 export type RegionalApprovalActionExecutor = (
-  command: RegionalApprovalActionCommand
+  command: RegionalApprovalActionCommand,
 ) => Promise<RegionalApprovalFixtureOutcome>;
 
-export const executeRegionalApprovalFixtureAction: RegionalApprovalActionExecutor = async (command) => {
+export const executeRegionalApprovalFixtureAction: RegionalApprovalActionExecutor = async (
+  command,
+) => {
   await new Promise((resolve) => setTimeout(resolve, 320));
   return {
     source: 'fixture',
@@ -148,5 +167,6 @@ export const executeRegionalApprovalFixtureAction: RegionalApprovalActionExecuto
   };
 };
 
-export const regionalApprovalFixtureResults = (store: RegionalApprovalActionStore): RegionalApprovalActionResult[] =>
-  Object.values(store.results);
+export const regionalApprovalFixtureResults = (
+  store: RegionalApprovalActionStore,
+): RegionalApprovalActionResult[] => Object.values(store.results);

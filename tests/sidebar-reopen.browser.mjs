@@ -1,20 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,writeFile} from 'node:fs/promises';
-import {resolve} from 'node:path';
-import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
-import {verifyOfficialCore} from '../scripts/verify-official-input.mjs';
+import { readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { build } from 'esbuild';
+import { chromium, expect } from '@playwright/test';
+import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 
-const core=resolve(process.env.DSH_TEST_CORE??'../../official-latest-standard');
+const core = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
 verifyOfficialCore(core);
 
 // Real Cordis registration, official Renderer/AppFrame/store/controller and
 // company UI. Only Session/workspace data and composer are recording fixtures.
-const bundle=await build({stdin:{contents:`
- import React from 'react';import{Context}from ${JSON.stringify(resolve(core,'vendor/cordis/lib/index.js'))};
- import{apply as rendererApply}from ${JSON.stringify(resolve(core,'packages/client/ui-renderer/src/client/index.ts'))};
- import{apply as layoutApply,inject as layoutInject}from ${JSON.stringify(resolve(core,'packages/client/ui-layout/src/client/index.ts'))};
+const bundle = await build({
+  stdin: {
+    contents: `
+ import React from 'react';import{Context}from ${JSON.stringify(resolve(core, 'vendor/cordis/lib/index.js'))};
+ import{apply as rendererApply}from ${JSON.stringify(resolve(core, 'packages/client/ui-renderer/src/client/index.ts'))};
+ import{apply as layoutApply,inject as layoutInject}from ${JSON.stringify(resolve(core, 'packages/client/ui-layout/src/client/index.ts'))};
  import{mountCompanyUI}from'./src/company/ui.tsx';import{WorkbenchController}from'./src/workbench.ts';
  import{mountFramePresentation}from'./src/frame-presenter.tsx';
  (async()=>{const source=value=>({getSnapshot:()=>value,subscribe:()=>()=>{}});
@@ -47,7 +49,37 @@ const bundle=await build({stdin:{contents:`
  window.selectSecond=()=>workbench.open(second.id);
  window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel(null);};
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
- `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,write:false,outfile:'fixture.js',platform:'browser',jsx:'automatic',define:{'process.env.DSH_CLIENT_TITLE':'"Sidebar regression"','process.env.NODE_ENV':'"test"'},alias:{react:resolve('node_modules/react'),'react-dom':resolve('node_modules/react-dom'),'@deepseek-ai/cordis':resolve(core,'vendor/cordis/lib/index.js')},loader:{'.png':'dataurl','.css':'text'},plugins:[{name:'official-css-modules',setup(build){build.onLoad({filter:/\.module\.css$/},async args=>({contents:await readFile(args.path,'utf8'),loader:'local-css'}))}}]});
+ `,
+    resolveDir: process.cwd(),
+    loader: 'tsx',
+  },
+  bundle: true,
+  write: false,
+  outfile: 'fixture.js',
+  platform: 'browser',
+  jsx: 'automatic',
+  define: {
+    'process.env.DSH_CLIENT_TITLE': '"Sidebar regression"',
+    'process.env.NODE_ENV': '"test"',
+  },
+  alias: {
+    react: resolve('node_modules/react'),
+    'react-dom': resolve('node_modules/react-dom'),
+    '@deepseek-ai/cordis': resolve(core, 'vendor/cordis/lib/index.js'),
+  },
+  loader: { '.png': 'dataurl', '.css': 'text' },
+  plugins: [
+    {
+      name: 'official-css-modules',
+      setup(build) {
+        build.onLoad({ filter: /\.module\.css$/ }, async (args) => ({
+          contents: await readFile(args.path, 'utf8'),
+          loader: 'local-css',
+        }));
+      },
+    },
+  ],
+});
 
 async function fixture(t) {
   const browser = await chromium.launch({ headless: true });

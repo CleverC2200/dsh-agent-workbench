@@ -31,8 +31,13 @@
   padding: 6px 12px;
   cursor: pointer;
 }
-.gea-account-login-backdrop button:disabled { cursor: default; }
-.gea-account-login-backdrop :focus-visible { outline: 2px solid #ed4348; outline-offset: 3px; }
+.gea-account-login-backdrop button:disabled {
+  cursor: default;
+}
+.gea-account-login-backdrop :focus-visible {
+  outline: 2px solid #ed4348;
+  outline-offset: 3px;
+}
 .gea-account-login-backdrop .gea-account-login-close {
   position: absolute;
   top: 12px;
@@ -47,10 +52,28 @@
   background: transparent;
   color: #687084;
 }
-.gea-account-login-close:hover { background: #ececf1; color: #242936; }
-.gea-account-login-backdrop .gea-login-logo { display: block; margin: 0 auto 16px; object-fit: contain; }
-.gea-account-login-backdrop h2 { margin: 0 0 4px; font-size: 24px; line-height: 1.4; font-weight: 600; color: #242936; }
-.gea-account-login-backdrop p { margin: 8px 0 12px; line-height: 1.7; color: #596173; font-size: 14px; }
+.gea-account-login-close:hover {
+  background: #ececf1;
+  color: #242936;
+}
+.gea-account-login-backdrop .gea-login-logo {
+  display: block;
+  margin: 0 auto 16px;
+  object-fit: contain;
+}
+.gea-account-login-backdrop h2 {
+  margin: 0 0 4px;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #242936;
+}
+.gea-account-login-backdrop p {
+  margin: 8px 0 12px;
+  line-height: 1.7;
+  color: #596173;
+  font-size: 14px;
+}
 .gea-account-login-backdrop .gea-login-submit {
   width: 100%;
   min-height: 42px;
@@ -58,12 +81,22 @@
   color: white;
   border: 0;
   border-radius: 8px;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
   font-size: 14px;
 }
-.gea-account-login-backdrop .gea-login-submit:hover:not(:disabled) { background: #414b5e; }
-.gea-account-login-backdrop .gea-login-submit:disabled { background: #e5e7eb; color: #666e7b; }
-.gea-account-login-backdrop [role="alert"] { color: #b42318; overflow-wrap: anywhere; }
+.gea-account-login-backdrop .gea-login-submit:hover:not(:disabled) {
+  background: #414b5e;
+}
+.gea-account-login-backdrop .gea-login-submit:disabled {
+  background: #e5e7eb;
+  color: #666e7b;
+}
+.gea-account-login-backdrop [role='alert'] {
+  color: #b42318;
+  overflow-wrap: anywhere;
+}
 .gea-account-login-backdrop .gea-login-qr {
   position: relative;
   width: 236px;
@@ -77,8 +110,16 @@
   border-radius: 12px;
   background: white;
 }
-.gea-account-login-backdrop .gea-login-qr img { display: block; max-width: 100%; height: auto; opacity: 1; transition: opacity 180ms ease; }
-.gea-account-login-backdrop .gea-login-qr.is-expired img { opacity: 0.08; }
+.gea-account-login-backdrop .gea-login-qr img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+.gea-account-login-backdrop .gea-login-qr.is-expired img {
+  opacity: 0.08;
+}
 .gea-account-login-backdrop .gea-qr-placeholder,
 .gea-account-login-backdrop .gea-qr-expired {
   display: flex;
@@ -90,39 +131,145 @@
   font-size: 13px;
   text-align: center;
 }
-.gea-account-login-backdrop .gea-qr-expired { position: absolute; inset: 0; padding: 20px; gap: 4px; }
-.gea-account-login-backdrop .gea-qr-expired p { margin: 0; color: #242936; font-weight: 600; }
-.gea-account-login-backdrop .gea-wait-dots { display: flex; gap: 6px; align-items: center; height: 24px; }
-.gea-account-login-backdrop .gea-wait-dots i { display: block; width: 6px; height: 18px; border-radius: 3px; background: #7264cf; animation: gea-account-login-wait 1200ms ease-in-out infinite; }
-.gea-account-login-backdrop .gea-wait-dots i:nth-child(2) { animation-delay: 150ms; }
-.gea-account-login-backdrop .gea-wait-dots i:nth-child(3) { animation-delay: 300ms; }
-@keyframes gea-account-login-wait {
-  0%, 100% { transform: scaleY(0.4); opacity: 0.5; }
-  50% { transform: scaleY(1); opacity: 1; }
+.gea-account-login-backdrop .gea-qr-expired {
+  position: absolute;
+  inset: 0;
+  padding: 20px;
+  gap: 4px;
 }
-.gea-account-login-backdrop .gea-login-status { min-height: 24px; margin: 10px 0 18px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; }
-.gea-account-login-backdrop .gea-ready-dot { width: 6px; height: 6px; border-radius: 50%; background: #7264cf; }
-.gea-account-login-backdrop .gea-login-tip { margin-top: 18px; text-align: left; }
-.gea-account-login-backdrop .gea-environments { margin: 16px 0 12px; padding: 0; border: 0; display: flex; gap: 12px; text-align: left; }
-.gea-account-login-backdrop .gea-environments legend { margin-bottom: 10px; font-size: 14px; color: #242936; }
-.gea-account-login-backdrop .gea-environments label { flex: 1; position: relative; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border: 1px solid #ccd0dd; border-radius: 6px; cursor: pointer; color: #384152; }
-.gea-account-login-backdrop .gea-environments label:has(input:checked) { border-color: #7264cf; background: #f0edfc; color: #5446a5; }
-.gea-account-login-backdrop .gea-environments input { accent-color: #7264cf; margin: 0; }
-.gea-account-login-backdrop .gea-environments:disabled label { cursor: default; }
-.gea-account-login-backdrop .gea-login-tip strong { color: #414b5e; font-size: 13px; font-weight: 600; }
-.gea-account-login-backdrop .gea-login-tip p { margin: 4px 0 0; font-size: 13px; }
-.gea-account-login-backdrop footer { color: #687084; font-size: 12px; border-top: 0; margin-top: 20px; padding-top: 0; }
+.gea-account-login-backdrop .gea-qr-expired p {
+  margin: 0;
+  color: #242936;
+  font-weight: 600;
+}
+.gea-account-login-backdrop .gea-wait-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  height: 24px;
+}
+.gea-account-login-backdrop .gea-wait-dots i {
+  display: block;
+  width: 6px;
+  height: 18px;
+  border-radius: 3px;
+  background: #7264cf;
+  animation: gea-account-login-wait 1200ms ease-in-out infinite;
+}
+.gea-account-login-backdrop .gea-wait-dots i:nth-child(2) {
+  animation-delay: 150ms;
+}
+.gea-account-login-backdrop .gea-wait-dots i:nth-child(3) {
+  animation-delay: 300ms;
+}
+@keyframes gea-account-login-wait {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+.gea-account-login-backdrop .gea-login-status {
+  min-height: 24px;
+  margin: 10px 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.gea-account-login-backdrop .gea-ready-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #7264cf;
+}
+.gea-account-login-backdrop .gea-login-tip {
+  margin-top: 18px;
+  text-align: left;
+}
+.gea-account-login-backdrop .gea-environments {
+  margin: 16px 0 12px;
+  padding: 0;
+  border: 0;
+  display: flex;
+  gap: 12px;
+  text-align: left;
+}
+.gea-account-login-backdrop .gea-environments legend {
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #242936;
+}
+.gea-account-login-backdrop .gea-environments label {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid #ccd0dd;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #384152;
+}
+.gea-account-login-backdrop .gea-environments label:has(input:checked) {
+  border-color: #7264cf;
+  background: #f0edfc;
+  color: #5446a5;
+}
+.gea-account-login-backdrop .gea-environments input {
+  accent-color: #7264cf;
+  margin: 0;
+}
+.gea-account-login-backdrop .gea-environments:disabled label {
+  cursor: default;
+}
+.gea-account-login-backdrop .gea-login-tip strong {
+  color: #414b5e;
+  font-size: 13px;
+  font-weight: 600;
+}
+.gea-account-login-backdrop .gea-login-tip p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.gea-account-login-backdrop footer {
+  color: #687084;
+  font-size: 12px;
+  border-top: 0;
+  margin-top: 20px;
+  padding-top: 0;
+}
 @media (max-width: 480px) {
-  .gea-account-login-backdrop { padding: 16px; }
-  .gea-account-login-dialog { padding: 24px; }
-  .gea-account-login-backdrop h2 { font-size: 22px; }
+  .gea-account-login-backdrop {
+    padding: 16px;
+  }
+  .gea-account-login-dialog {
+    padding: 24px;
+  }
+  .gea-account-login-backdrop h2 {
+    font-size: 22px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .gea-account-login-backdrop .gea-wait-dots i { animation: none; }
+  .gea-account-login-backdrop .gea-wait-dots i {
+    animation: none;
+  }
   .gea-account-login-backdrop .gea-login-qr img,
-  .gea-account-login-backdrop .gea-login-submit { transition: none; }
+  .gea-account-login-backdrop .gea-login-submit {
+    transition: none;
+  }
 }
 @media (max-height: 680px) {
-  .gea-account-login-backdrop { align-items: flex-start; }
-  .gea-account-login-dialog { padding-top: 24px; }
+  .gea-account-login-backdrop {
+    align-items: flex-start;
+  }
+  .gea-account-login-dialog {
+    padding-top: 24px;
+  }
 }

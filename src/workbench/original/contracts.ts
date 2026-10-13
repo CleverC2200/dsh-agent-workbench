@@ -34,7 +34,7 @@ export type GeaSalesPlanPeriodQuery = {
 };
 
 export type GeaSalesPlanListItem = {
-  orderType?: "M" | "Z";
+  orderType?: 'M' | 'Z';
   monthlyApproved?: boolean;
   hasCorrection?: boolean;
   mPlanAmount?: string;
@@ -75,7 +75,7 @@ export type GeaSalesPlanListItem = {
 };
 
 export type GeaSalesPlanPageQuery = {
-  orderType?: "M" | "Z";
+  orderType?: 'M' | 'Z';
   periodId?: GeaSalesPlanId;
   planTypeCode?: string;
   dealerCode?: GeaSalesPlanId;
@@ -171,8 +171,17 @@ export type GeaSalesPlanActionContext = {
 
 export type GeaSalesPlanDetail = {
   /** 带版本的适配器契约；证据缺失时保持纠偏写入禁用。 */
-  correctionContext?: { contract: 'absolute-net-v1'; monthlyApproved: boolean; approvalOpen: boolean };
-  dmsMock?: { source: 'DMS_MOCK'; syncStatus: string; finishedAt: string | null; receipts: Array<{key:string;dmsId:string}> };
+  correctionContext?: {
+    contract: 'absolute-net-v1';
+    monthlyApproved: boolean;
+    approvalOpen: boolean;
+  };
+  dmsMock?: {
+    source: 'DMS_MOCK';
+    syncStatus: string;
+    finishedAt: string | null;
+    receipts: Array<{ key: string; dmsId: string }>;
+  };
 
   /** 当前用户任务分配；由已认证 Host 匹配并刷新。 */
   actionContext?: GeaSalesPlanActionContext;
@@ -223,7 +232,7 @@ export type GeaSalesPlanSubmitItem = {
 };
 
 export type GeaSalesPlanSubmitRequest = {
-  adjustmentMode?: "ABSOLUTE_NET";
+  adjustmentMode?: 'ABSOLUTE_NET';
   orderType: 'M' | 'Z';
   status: number;
   periodId: GeaSalesPlanId;
@@ -271,7 +280,7 @@ export type GeaSalesPlanSkuAdjustment = {
 export type GeaSalesPlanActionRequest = {
   approvalPolicy?: 'role-visible-v1';
   approvalRole?: GeaSalesPlanApprovalRole;
-  adjustmentMode?: "ABSOLUTE_NET";
+  adjustmentMode?: 'ABSOLUTE_NET';
   expectedSnapshot?: string;
   action: GeaSalesPlanAction;
   expectedStatus: number;

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { execFileSync } from 'node:child_process';
+import { migrationHistory } from './helpers/migration-history.mjs';
 import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createRequire } from 'node:module';
@@ -63,22 +63,13 @@ async function engine(source) {
 test('migration retains fixed-source metrics, SQL scope, recommendation and local-draft rules', async (t) => {
   await mkdir('.runtime', { recursive: true });
   const temporary = await mkdtemp(resolve('.runtime/dealer-golden-'));
+  const original = migrationHistory('dealer', process.env.WORKBENCH_DEALER_HISTORY_ROOT);
+  assert.equal(original.commit, fixed);
   t.after(() => rm(temporary, { recursive: true, force: true }));
-  assert.ok(
-    process.env.WORKBENCH_DEALER_HISTORY_ROOT,
-    'DEALER_HISTORY_REQUIRED: explicit read-only original Git source',
-  );
-  const oldRepo = resolve(process.env.WORKBENCH_DEALER_HISTORY_ROOT);
-  const files = execFileSync('git', ['ls-tree', '-r', '--name-only', fixed, 'source'], {
-    cwd: oldRepo,
-    encoding: 'utf8',
-  })
-    .split('\n')
-    .filter((f) => f && !f.includes('/node_modules') && !f.includes('/build/'));
-  for (const file of files) {
+  for (const [file, entry] of Object.entries(original.files)) {
     const target = resolve(temporary, file);
     await mkdir(resolve(target, '..'), { recursive: true });
-    await writeFile(target, execFileSync('git', ['show', fixed + ':' + file], { cwd: oldRepo }));
+    await writeFile(target, entry.text);
   }
   const before = await engine(resolve(temporary, 'source')),
     after = await engine(resolve('business/inventory-dealer/source'));

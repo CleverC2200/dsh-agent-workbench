@@ -2,6 +2,8 @@
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树按锁安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。固定官方提交与材料要求由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 核验；类型映射查 [tsconfig.official.json](../tsconfig.official.json)。当前只支持登记的官方输入，本地 SDK 配置不构成发行依赖或发行授权。
 
+日常综合门禁与冻结 CI 入口见 [质量门禁](../QUALITY.md)。
+
 ```sh
 npm ci --ignore-scripts --prefer-offline
 npm run check:knowledge

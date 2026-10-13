@@ -212,6 +212,9 @@ export function mountFramePresentation(
     const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
     const selection =
       documentState.selectedDocument?.id === page.id ? documentState.selection : undefined;
+    const restoredWithoutSession =
+      documentState.selectedDocument?.id === page.id &&
+      documentState.restoredWithoutSession === true;
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const associated =
@@ -663,7 +666,12 @@ export function mountFramePresentation(
       setError('');
       try {
         // An explicit deployment directory or the official picker supplies the new Session Workspace.
-        const cwd = await resourceWorkspace(host.fetch, controller.signal, undefined, host.pickDirectory);
+        const cwd = await resourceWorkspace(
+          host.fetch,
+          controller.signal,
+          undefined,
+          host.pickDirectory,
+        );
         const { workspaceId } = await host.workspace(cwd);
         controller.signal.throwIfAborted();
         const id = await host.create({ workspaceId });
@@ -724,9 +732,12 @@ export function mountFramePresentation(
       resourceRows.current = [];
       resourceRowsOwner.current = undefined;
       const owner = identity.scope + '\0' + page.resourceId;
+      // Restored presentation discovers choices; an explicit page/resource action starts its Session.
       const prepare =
-        (!selection ||
-          (selection.ownerScope !== identity.scope && selection.subject === identity.subject)) &&
+        ((!selection && !restoredWithoutSession) ||
+          (selection &&
+            selection.ownerScope !== identity.scope &&
+            selection.subject === identity.subject)) &&
         preparationOwner.current !== owner;
       if (prepare) preparationOwner.current = owner;
       const controller = new AbortController();
@@ -775,6 +786,7 @@ export function mountFramePresentation(
       resourceHost,
       page.id,
       page.resourceId,
+      restoredWithoutSession,
     ]);
     const toolbar = (
       <div className="gea-page-toolbar-seat">
@@ -1015,7 +1027,9 @@ function createExecution(
       signal,
     });
     const value = await response.json();
-    signal.throwIfAborted();
+    // Return a late opening's owner to setup so it can close it before releasing the Session.
+    // Other replies must never cross their cancelled generation.
+    if (operation !== 'open') signal.throwIfAborted();
     if (!response.ok) throw Error(value.error ?? 'PAGE_REQUEST_FAILED');
     return value;
   };

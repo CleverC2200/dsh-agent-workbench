@@ -13,7 +13,7 @@ for (const name of ['category', 'mps'])
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
     });
-    const rebuilt = await readFile(`static/${name}/index.html`, 'utf8');
+    const rebuilt = await readFile(`lib/static/${name}/index.html`, 'utf8');
     const observe = async (html) => {
       const context = await browser.newContext({ viewport: { width: 1500, height: 900 } });
       const page = await context.newPage();

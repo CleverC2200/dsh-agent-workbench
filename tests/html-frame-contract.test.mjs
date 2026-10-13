@@ -121,6 +121,30 @@ test('ready before the current opening finishes connects once to the latest Sess
   assert.deepEqual(errors, []);
 });
 
+test('two superseded openings and repeated ready connect only the latest Session', async (t) => {
+  const { page, child, errors } = await fixture(t);
+  await page.evaluate(() => window.bind('session-2'));
+  await page.evaluate(() => window.finishOpen('session-1'));
+  await expect.poll(() => page.evaluate(() => opens)).toEqual(['session-1', 'session-2']);
+  await page.evaluate(() => window.bind('session-3'));
+  await child.evaluate(() => {
+    for (let i = 0; i < 3; i++) parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
+  });
+  assert.deepEqual(await child.evaluate(() => connects), []);
+  await page.evaluate(() => window.finishOpen('session-2'));
+  await expect
+    .poll(() => page.evaluate(() => opens))
+    .toEqual(['session-1', 'session-2', 'session-3']);
+  await page.evaluate(() => window.finishOpen('session-3'));
+  await expect
+    .poll(() => child.evaluate(() => connects))
+    .toEqual([{ plugin: 'inventory-fixture', session: 'session-3' }]);
+  const calls = await page.evaluate(() => window.calls);
+  for (const id of ['session-1', 'session-2'])
+    assert.ok(calls.some((call) => call.operation === 'close' && call.owner === 'owner-' + id));
+  assert.deepEqual(errors, []);
+});
+
 test('an absent page association keeps ready available for a later valid Session', async (t) => {
   const { page, child, errors } = await fixture(t);
   await page.evaluate(() => window.suspend());

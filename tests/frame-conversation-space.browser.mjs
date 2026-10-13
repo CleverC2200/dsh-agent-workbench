@@ -21,10 +21,10 @@ const bundle = await build({
  const root=createRoot(document.getElementById('root'));const page={id:'gea-inbox',resourceId:'original',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
  const inputActions={setDraft:text=>{document.querySelector('textarea').value=text},persistDraft(){}};
  const session={blank:true,running:false,promptAttempted:false,openState:'open'};documents.registerFrame(page);documents.associateSession(page.id,{sessionId:reference.sessionId,preset:'original',ownerScope:identity.scope,subject:identity.subject});documents.open(page.id);
- let selectedView='chat';window.persistenceBindings=0;window.persistenceReleases=0;
+ let selectedView='chat';window.persistenceBindings=0;window.persistenceReleases=0;const bindDraft=()=>{window.persistenceBindings++;return()=>window.persistenceReleases++};
  const trajectory={eventNodes:Array.from({length:40},(_,i)=>({kind:'user',seq:i+1,time:1000+i,content:[{type:'text',text:'真实轨迹公开快照 '+i}],source:null})),eventLocations:new Map(),requests:[],callSchemas:new Map(),partial:null,runningCalls:[]};
- const shares={sessionId:reference.sessionId,useSession:fn=>fn(session),inputActions,useSessions:fn=>fn({byId:{}}),useSessionStatus:fn=>fn(new Map()),useWorkspaces:fn=>fn({items:[],phase:'ready'}),useInput:fn=>fn({}),useComposerBlock:fn=>fn(undefined),selectWorkspace:()=>Promise.resolve(),t:key=>key,
- useConversation:fn=>fn({activeTargets:new Set(session.blank?[]:[selectedView])}),useConversationViews:fn=>fn([{id:'chat'},{id:'trajectory'}]),useInspectCall:fn=>fn(undefined),useStore:fn=>fn({view:selectedView,viewRequest:null}),actions:{setDraft(){},completeViewRequest(){}},bindDraftPersistence:()=>{window.persistenceBindings++;return()=>window.persistenceReleases++},openView(){},useTrajectory:fn=>fn(trajectory),useDuration:fn=>fn(false),loadOlder:async()=>false,loadImage:async()=>undefined,setActualDuration(){},
+ const shares={sessionId:reference.sessionId,useSession:fn=>fn(session),inputActions,useSessions:fn=>fn({byId:{}}),useSessionStatus:fn=>fn(new Map()),useWorkspaces:fn=>fn({items:[],phase:'ready'}),useInput:fn=>fn({draft:''}),useComposerBlock:fn=>fn(undefined),selectWorkspace:()=>Promise.resolve(),t:key=>key,
+ useConversation:fn=>fn({activeTargets:new Set(session.blank?[]:[selectedView])}),useConversationViews:fn=>fn([{id:'chat'},{id:'trajectory'}]),useInspectCall:fn=>fn(undefined),useStore:fn=>fn({view:selectedView,viewRequest:null,draft:''}),actions:{setDraft(){},completeViewRequest(){}},bindDraftPersistence:bindDraft,bindDraftMirror:bindDraft,openView(){},useTrajectory:fn=>fn(trajectory),useDuration:fn=>fn(false),loadOlder:async()=>false,loadImage:async()=>undefined,setActualDuration(){},
  renderSlot:(name,props)=>name==='conversation.composer.bar'?React.createElement('textarea',{'aria-label':'公开composer草稿',defaultValue:'',rows:5,style:{boxSizing:'border-box',height:132,width:'100%',resize:'none'}}):name==='conversation.session'?React.createElement('div',{'data-slot':name,style:{display:'contents'}},React.createElement(DefaultConversationViews,shares)):name==='conversation.view'?selectedView==='trajectory'?React.createElement(TrajectoryView,{...shares,...props}):React.createElement('article',{style:{flex:'1 0 auto'}},Array.from({length:40},(_,i)=>React.createElement('p',{key:i},'历史长消息 '+i+'：现有对话内容继续由公开Session槽呈现。'))):null,
  renderSlotChain:(_name,_props,options)=>options.fallback};
  function renderFactorySlot(_name,options,extension){const positions=extension?.slots;return React.createElement(ConversationContent,{...shares,...options,useFactorySlot:(name,fallback)=>{const Slot=positions?.[name]??fallback;return React.useMemo(()=>props=>React.createElement(Slot,{...shares,...props}),[Slot])}})}
@@ -62,7 +62,15 @@ async function fixture(t) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 460 } });
-  page.on('pageerror', (error) => console.error(error));
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  t.after(() =>
+    assert.deepEqual(
+      errors,
+      [],
+      'the official Conversation callbacks must execute without runtime errors',
+    ),
+  );
   const css = (
     await Promise.all(
       ['theme/tokens.css', 'src/company/shell.css', 'src/company/layout.css'].map((file) =>

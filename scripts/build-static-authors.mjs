@@ -1,5 +1,5 @@
 /** Build editable author modules while preserving the existing vendor, data and visual resources. */
-import { readFile, writeFile, cp } from 'node:fs/promises';
+import { readFile, writeFile, cp, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,12 @@ const questionStyles = await readFile(
   'utf8',
 );
 const hash = (value) => createHash('sha256').update(value).digest('hex');
+const outputs = new URL('../lib/static/', import.meta.url);
+await mkdir(outputs, { recursive: true });
+await cp(new URL('../static/', import.meta.url), outputs, {
+  recursive: true,
+  filter: (source) => !source.endsWith('/source'),
+});
 for (const page of ['category', 'mps']) {
   const root = new URL(`../static/${page}/source/`, import.meta.url);
   const source = JSON.parse(await readFile(new URL('SOURCE.json', root), 'utf8'));
@@ -44,11 +50,11 @@ for (const page of ['category', 'mps']) {
       '__WORKBENCH_AUTHOR_STYLES__',
       () => files['vendor.css'] + '\n' + files['layout.css'] + '\n' + questionStyles,
     );
-  await writeFile(new URL(`../static/${page}/index.html`, import.meta.url), html);
+  await writeFile(new URL(`${page}/index.html`, outputs), html);
 }
 const regionalSource = new URL('../static/regional/source/index.html', import.meta.url);
 await writeFile(
-  new URL('../static/regional/index.html', import.meta.url),
+  new URL('regional/index.html', outputs),
   await compileHtmlAuthor(
     await readFile(regionalSource, 'utf8'),
     fileURLToPath(new URL('../static/regional/source/', import.meta.url)),
@@ -58,6 +64,6 @@ await writeFile(
 for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
   await cp(
     new URL(`../../dsh-agent-manage/business-resources/plan-regional/${name}`, import.meta.url),
-    new URL(`../static/regional/${name}`, import.meta.url),
+    new URL(`regional/${name}`, outputs),
     { recursive: true },
   );

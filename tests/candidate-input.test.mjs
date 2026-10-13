@@ -12,30 +12,58 @@ import {
 } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 
 const root = resolve(import.meta.dirname, '..');
 const cli = resolve(root, 'scripts/verify-candidate-input.mjs');
 const repos = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'];
-const packageNames = ['@cleverc2200/dsh-agent-workbench', 'dsh-agent-manage', '@cleverc2200/gea-dsh-prototype'];
+const packageNames = [
+  '@cleverc2200/dsh-agent-workbench',
+  'dsh-agent-manage',
+  '@cleverc2200/gea-dsh-prototype',
+];
 function git(path, ...args) {
   const result = spawnSync('git', ['-C', path, ...args], { encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t, officialPath) {
+function fixture(t, officialPath, hostEnvironment = process.env) {
   const directory = mkdtempSync(resolve(tmpdir(), 'agent-input-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const config = JSON.parse(readFileSync(resolve(root, 'tsconfig.official.json'), 'utf8'));
-  const cordis = realpathSync(resolve(root, config.compilerOptions.paths['@deepseek-ai/cordis'][0]));
+  const cordis = realpathSync(
+    resolve(root, config.compilerOptions.paths['@deepseek-ai/cordis'][0]),
+  );
   const official = officialPath ?? resolve(cordis, '../../../../..');
   symlinkSync(official, resolve(directory, 'official-latest-standard'));
   const manifest = { core: git(official, 'rev-parse', 'HEAD'), repositories: [] };
   for (const repo of repos) {
     const checkout = resolve(directory, 'candidate', repo);
     mkdirSync(checkout, { recursive: true });
-    writeFileSync(resolve(checkout, 'package.json'), JSON.stringify({ name: packageNames[repos.indexOf(repo)], packageManager: repo === repos[0] ? 'npm@11.11.0' : 'pnpm@10.16.0' }));
-    writeFileSync(resolve(checkout, repo === repos[0] ? 'package-lock.json' : 'pnpm-lock.yaml'), 'fixture lock\n');
-    if (repo === repos[0]) writeFileSync(resolve(checkout, 'tsconfig.official.json'), JSON.stringify({ compilerOptions: { paths: { '@deepseek-ai/cordis': ['../../official-latest-standard/vendor/cordis/lib/types/index.d.ts'] } } }));
+    writeFileSync(
+      resolve(checkout, 'package.json'),
+      JSON.stringify({
+        name: packageNames[repos.indexOf(repo)],
+        packageManager: repo === repos[0] ? 'npm@11.11.0' : 'pnpm@10.16.0',
+      }),
+    );
+    writeFileSync(
+      resolve(checkout, repo === repos[0] ? 'package-lock.json' : 'pnpm-lock.yaml'),
+      'fixture lock\n',
+    );
+    if (repo === repos[0])
+      writeFileSync(
+        resolve(checkout, 'tsconfig.official.json'),
+        JSON.stringify({
+          compilerOptions: {
+            paths: {
+              '@deepseek-ai/cordis': [
+                '../../official-latest-standard/vendor/cordis/lib/types/index.d.ts',
+              ],
+            },
+          },
+        }),
+      );
     git(checkout, 'init', '-q');
     git(checkout, 'add', '.');
     git(
@@ -51,12 +79,35 @@ function fixture(t, officialPath) {
     manifest.repositories.push({ repo, path: checkout, head: git(checkout, 'rev-parse', 'HEAD') });
   }
   const input = resolve(directory, 'integration-set.json');
-  const run = (checkout = manifest.repositories[0].path) => {
+  const run = (
+    checkout = manifest.repositories[0].path,
+    finalGroup = false,
+    eventEnvironment = {},
+  ) => {
     writeFileSync(input, JSON.stringify(manifest));
-    return spawnSync(process.execPath, [cli, '--input', input, '--checkout', checkout], {
-      cwd: directory,
-      encoding: 'utf8',
-    });
+    return spawnSync(
+      process.execPath,
+      [
+        cli,
+        '--input',
+        input,
+        '--checkout',
+        checkout,
+        ...(finalGroup
+          ? ['--final-group-sha256', createHash('sha256').update(readFileSync(input)).digest('hex')]
+          : []),
+      ],
+      {
+        cwd: directory,
+        encoding: 'utf8',
+        env: {
+          ...hostEnvironment,
+          CI: 'true',
+          QUALITY_EXPECTED_SHA: manifest.repositories[0].head,
+          ...eventEnvironment,
+        },
+      },
+    );
   };
   return { directory, manifest, run };
 }
@@ -84,26 +135,35 @@ test('a clean registered combination reports candidate scope and exact observed 
   );
 });
 
-test('a clean rc.2 candidate binds its own registered official declaration source', t => {
-  const official = process.env.DSH_RC2_CORE_CHECKOUT ?? resolve(root, '../../official-0.2.0-rc.2');
+test('a clean candidate binds the selected registered official declaration source', (t) => {
+  const official =
+    process.env.DSH_RC2_CORE_CHECKOUT ?? resolve(root, '../../official-latest-standard');
   const { manifest, run } = fixture(t, official);
-  assert.equal(manifest.core, '639ed015397290b3745d163aafe02ffee4aa3f84');
+  assert.equal(
+    manifest.core,
+    process.env.DSH_RC2_CORE_CHECKOUT
+      ? '639ed015397290b3745d163aafe02ffee4aa3f84'
+      : (process.env.QUALITY_CORE_HEAD ?? '5badb15009ae1756c3afe0ae0cef1faafc290ccc'),
+  );
   const result = run();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(JSON.parse(result.stdout).core, manifest.core);
 });
 
-test('swapped Manage and GEA checkouts are refused even when each declared head matches', t => {
+test('swapped Manage and GEA checkouts are refused even when each declared head matches', (t) => {
   const { manifest, run } = fixture(t);
   const manage = manifest.repositories[1];
   const gea = manifest.repositories[2];
   [manage.path, gea.path] = [gea.path, manage.path];
   [manage.head, gea.head] = [gea.head, manage.head];
-  rejected(run(), /CANDIDATE_PACKAGE_IDENTITY.*dsh-agent-manage.*dsh-agent-manage.*@cleverc2200\/gea-dsh-prototype/);
+  rejected(
+    run(),
+    /CANDIDATE_PACKAGE_IDENTITY.*dsh-agent-manage.*dsh-agent-manage.*@cleverc2200\/gea-dsh-prototype/,
+  );
 });
 
 for (const [index, repo] of repos.entries()) {
-  test(`${repo} is refused when its committed package name identifies another plugin`, t => {
+  test(`${repo} is refused when its committed package name identifies another plugin`, (t) => {
     const { manifest, run } = fixture(t);
     const peer = manifest.repositories[index];
     const file = resolve(peer.path, 'package.json');
@@ -111,17 +171,31 @@ for (const [index, repo] of repos.entries()) {
     pkg.name = 'unrelated-plugin';
     writeFileSync(file, JSON.stringify(pkg));
     git(peer.path, 'add', 'package.json');
-    git(peer.path, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'incorrect package identity');
+    git(
+      peer.path,
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'incorrect package identity',
+    );
     peer.head = git(peer.path, 'rev-parse', 'HEAD');
     const result = run();
     rejected(result, /CANDIDATE_PACKAGE_IDENTITY/);
-    assert.ok(result.stderr.includes(`${repo} expects package.json.name=${packageNames[index]}; observed "unrelated-plugin"`), result.stderr);
+    assert.ok(
+      result.stderr.includes(
+        `${repo} expects package.json.name=${packageNames[index]}; observed "unrelated-plugin"`,
+      ),
+      result.stderr,
+    );
     assert.equal(readFileSync(file, 'utf8'), JSON.stringify(pkg));
     assert.equal(git(peer.path, 'status', '--porcelain'), '');
   });
 }
 
-test('a peer at a different commit is refused and its files stay untouched', t => {
+test('a peer at a different commit is refused and its files stay untouched', (t) => {
   const { manifest, run } = fixture(t);
   const peer = manifest.repositories[1];
   const before = git(peer.path, 'status', '--porcelain');
@@ -309,4 +383,53 @@ test('an absent official SDK is refused with an official material diagnostic', (
   const { directory, run } = fixture(t);
   rmSync(resolve(directory, 'official-latest-standard'));
   rejected(run(), /OFFICIAL_MATERIAL_REQUIRED.*cordis/);
+});
+
+for (const wrongName of [false, true])
+  test(`explicit frozen input refuses historical package identity error ${wrongName ? 'name' : 'roles'}`, (t) => {
+    const { manifest, run } = fixture(t);
+    if (wrongName) {
+      const peer = manifest.repositories[2];
+      const file = resolve(peer.path, 'package.json');
+      const pkg = JSON.parse(readFileSync(file));
+      pkg.name = '@cleverc2200/gea-dsh-prototype-wrong';
+      writeFileSync(file, JSON.stringify(pkg));
+      git(peer.path, 'add', 'package.json');
+      git(
+        peer.path,
+        '-c',
+        'user.name=Fixture',
+        '-c',
+        'user.email=fixture@example.invalid',
+        'commit',
+        '-qm',
+        'historical wrong package name',
+      );
+      peer.head = git(peer.path, 'rev-parse', 'HEAD');
+    } else {
+      const manage = manifest.repositories[1],
+        gea = manifest.repositories[2];
+      [manage.path, gea.path] = [gea.path, manage.path];
+      [manage.head, gea.head] = [gea.head, manage.head];
+    }
+    rejected(run(undefined, true), /CANDIDATE_PACKAGE_IDENTITY/);
+  });
+
+test('synthetic final-group fixtures bind their own CI event and preserve missing or mismatched event rejection', (t) => {
+  const { manifest, run } = fixture(t, undefined, {
+    ...process.env,
+    CI: 'true',
+    GITHUB_ACTIONS: 'true',
+    QUALITY_EXPECTED_SHA: 'f'.repeat(40),
+  });
+  const manage = manifest.repositories[1],
+    gea = manifest.repositories[2];
+  [manage.path, gea.path] = [gea.path, manage.path];
+  [manage.head, gea.head] = [gea.head, manage.head];
+  rejected(run(undefined, true), /CANDIDATE_PACKAGE_IDENTITY/);
+  rejected(
+    run(undefined, true, { QUALITY_EXPECTED_SHA: '0'.repeat(40) }),
+    /CANDIDATE_EVENT_MISMATCH/,
+  );
+  rejected(run(undefined, true, { QUALITY_EXPECTED_SHA: '' }), /CANDIDATE_EVENT_REQUIRED/);
 });

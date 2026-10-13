@@ -235,6 +235,7 @@ export class PageRuntime {
                   availability: 'not-in-workbench',
                   code: 'PAGE_NOT_IN_WORKBENCH',
                   action: args.action,
+                  message: '当前对话不在业务工作台，无法读取或操作页面；请先打开对应业务页面。',
                 });
               if (!owner.grant.allowsEffect(args.action === 'draft' ? 'draft' : 'view'))
                 throw Error('EFFECT_NOT_ALLOWED');
@@ -283,7 +284,7 @@ export class PageRuntime {
     };
   }
   private ownerFor(session: string) {
-    return [...this.owners.values()].find((owner) => owner.session === session);
+    return Array.from(this.owners.values()).find((owner) => owner.session === session);
   }
   private assert(token: unknown): OwnedPage {
     const owner = typeof token === 'string' ? this.owners.get(token) : undefined;

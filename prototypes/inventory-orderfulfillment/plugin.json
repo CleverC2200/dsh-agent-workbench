@@ -4,9 +4,7 @@
   "name": "订单履约",
   "version": "0.1.0-preview.3-split.22",
   "html": "index.html",
-  "skills": [
-    "skills/orderfulfillment/SKILL.md"
-  ],
+  "skills": ["skills/orderfulfillment/SKILL.md"],
   "mcp": "mcp.json",
   "mode": "mock",
   "pageContext": "live",

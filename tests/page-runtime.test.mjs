@@ -201,27 +201,122 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     },
   };
 }
-const bundle=await build({entryPoints:['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],bundle:true,write:false,platform:'node',format:'esm',plugins:[{name:'offline-query-registry',setup(api){
- api.onResolve({filter:/^server-only$|^@\/lib\/gea-sql-client$/},args=>({path:args.path,namespace:'fixture'}));
- api.onLoad({filter:/.*/,namespace:'fixture'},args=>({contents:args.path==='server-only'?'export{};':'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};'}));
-}}]});
-const {readDealerMock}=await import('data:text/javascript;base64,'+Buffer.from(bundle.outputFiles[0].text).toString('base64'));
+const bundle = await build({
+  entryPoints: ['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+  plugins: [
+    {
+      name: 'offline-query-registry',
+      setup(api) {
+        api.onResolve({ filter: /^server-only$|^@\/lib\/gea-sql-client$/ }, (args) => ({
+          path: args.path,
+          namespace: 'fixture',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
+          contents:
+            args.path === 'server-only'
+              ? 'export{};'
+              : 'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};',
+        }));
+      },
+    },
+  ],
+});
+const { readDealerMock } = await import(
+  'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+);
 
-async function authorCatalog(t,id){
-  const dom=new JSDOM(id==='personal'?await personalFixtureHtml():await readFile(`lib/business/inventory-${id}/index.html`,'utf8'),{url:'https://host.example/'+id,referrer:'https://host.example/',runScripts:'outside-only',pretendToBeVisual:true});
-  t.after(()=>dom.window.close());
-  Object.assign(dom.window,{AbortController,AbortSignal,TextEncoder,TextDecoder,structuredClone});
-  dom.window.ResizeObserver=class{observe(){}unobserve(){}disconnect(){}};
-  Object.defineProperty(dom.window.HTMLElement.prototype,'innerText',{get(){return this.textContent;}});
-  dom.window.fetch=()=>{throw Error('Unexpected real I/O');};
-  const messages=[];
-  dom.window.parent.postMessage=message=>messages.push(message);
-  const port={start(){},close(){},async postMessage(message){messages.push(message);if(message.type==='request'){const result=id==='dealer'&&message.method==='sql'?await readDealerMock(message.parameters):{accepted:true};queueMicrotask(()=>port.onmessage?.({data:{type:'response',id:message.id,result}}));}}};
-  for(const script of dom.window.document.querySelectorAll('script'))dom.window.eval(script.textContent);
-  dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',ports:[port],data:{protocol:'gea-html-v2',type:'connect',context:{session:'catalog-fixture',plugin:'inventory-'+id}}}));
-  if(id==='personal'){
-    for(let i=0;i<100&&!messages.some(m=>m.protocol==='dsh-workbench-view-v1'&&m.type==='ready');i++)await new Promise(done=>setTimeout(done,10));
-    dom.window.dispatchEvent(new dom.window.MessageEvent('message',{source:dom.window.parent,origin:'https://host.example',data:{protocol:'dsh-workbench-view-v1',type:'restore',page:'inventory-personal',version:1,channel:'catalog-view',generation:1,state:{version:1}}}));
+async function authorCatalog(t, id) {
+  const dom = new JSDOM(
+    id === 'personal'
+      ? await personalFixtureHtml()
+      : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'),
+    {
+      url: 'https://host.example/' + id,
+      referrer: 'https://host.example/',
+      runScripts: 'outside-only',
+      pretendToBeVisual: true,
+    },
+  );
+  t.after(() => dom.window.close());
+  Object.assign(dom.window, {
+    AbortController,
+    AbortSignal,
+    TextEncoder,
+    TextDecoder,
+    structuredClone,
+  });
+  dom.window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+  Object.defineProperty(dom.window.HTMLElement.prototype, 'innerText', {
+    get() {
+      return this.textContent;
+    },
+  });
+  dom.window.fetch = () => {
+    throw Error('Unexpected real I/O');
+  };
+  const messages = [];
+  dom.window.parent.postMessage = (message) => messages.push(message);
+  const port = {
+    start() {},
+    close() {},
+    async postMessage(message) {
+      messages.push(message);
+      if (message.type === 'request') {
+        const result =
+          id === 'dealer' && message.method === 'sql'
+            ? await readDealerMock(message.parameters)
+            : { accepted: true };
+        queueMicrotask(() =>
+          port.onmessage?.({ data: { type: 'response', id: message.id, result } }),
+        );
+      }
+    },
+  };
+  for (const script of dom.window.document.querySelectorAll('script'))
+    dom.window.eval(script.textContent);
+  dom.window.dispatchEvent(
+    new dom.window.MessageEvent('message', {
+      source: dom.window.parent,
+      origin: 'https://host.example',
+      ports: [port],
+      data: {
+        protocol: 'gea-html-v2',
+        type: 'connect',
+        context: { session: 'catalog-fixture', plugin: 'inventory-' + id },
+      },
+    }),
+  );
+  if (id === 'personal') {
+    for (
+      let i = 0;
+      i < 100 &&
+      !messages.some((m) => m.protocol === 'dsh-workbench-view-v1' && m.type === 'ready');
+      i++
+    )
+      await new Promise((done) => setTimeout(done, 10));
+    dom.window.dispatchEvent(
+      new dom.window.MessageEvent('message', {
+        source: dom.window.parent,
+        origin: 'https://host.example',
+        data: {
+          protocol: 'dsh-workbench-view-v1',
+          type: 'restore',
+          page: 'inventory-personal',
+          version: 1,
+          channel: 'catalog-view',
+          generation: 1,
+          state: { version: 1 },
+        },
+      }),
+    );
   }
   let catalog;
   for (let i = 0; i < 100; i++) {
@@ -506,6 +601,7 @@ test('active HTML page requests renew its idle lease while an idle page expires'
 
 test('a missing page is reported and a different resource or Session cannot acquire its owner', async (t) => {
   const h = await mount(t);
+  assert.match((await h.execute('gea_page', { action: 'context' })).value, /不在业务工作台/);
   assert.equal(
     JSON.parse((await h.execute('gea_page', { action: 'context' })).value).code,
     'PAGE_NOT_IN_WORKBENCH',

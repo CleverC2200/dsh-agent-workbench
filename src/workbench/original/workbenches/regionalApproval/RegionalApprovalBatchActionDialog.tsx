@@ -77,7 +77,13 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       return;
     }
     setSecondsToClose(AUTO_CLOSE_SECONDS);
-    const timer = window.setInterval(() => setSecondsToClose((current) => (current === undefined ? current : Math.max(0, current - 1))), 1000);
+    const timer = window.setInterval(
+      () =>
+        setSecondsToClose((current) =>
+          current === undefined ? current : Math.max(0, current - 1),
+        ),
+      1000,
+    );
     return () => window.clearInterval(timer);
   }, [outcomes]);
 
@@ -86,8 +92,10 @@ const RegionalApprovalBatchActionDialog: React.FC<{
     closeRef.current();
   }, [secondsToClose]);
 
-  const mixedReject = kind === 'REJECT' && items.some((item) => item.row.status >= 7 && item.row.status <= 9)
-    && items.some((item) => item.row.status >= 1 && item.row.status <= 4);
+  const mixedReject =
+    kind === 'REJECT' &&
+    items.some((item) => item.row.status >= 7 && item.row.status <= 9) &&
+    items.some((item) => item.row.status >= 1 && item.row.status <= 4);
   const submittable = items.filter((item) => item.access?.allowedActions.includes(kind));
   const submitted = outcomes?.filter((outcome) => outcome.status === 'success').length ?? 0;
   const failed = outcomes?.filter((outcome) => outcome.status === 'failed').length ?? 0;
@@ -110,12 +118,20 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       const label = planLabel(item.row);
       const context = planContext(item.row) || undefined;
       if (!item.access?.allowedActions.includes(kind)) {
-        collected.push({ planId: item.row.planId, label, ...(context ? { context } : {}), status: 'skipped', detail: skipText(item) });
+        collected.push({
+          planId: item.row.planId,
+          label,
+          ...(context ? { context } : {}),
+          status: 'skipped',
+          detail: skipText(item),
+        });
         continue;
       }
       const request: GeaSalesPlanActionRequest = {
         approvalRole: item.access.approvalRole,
-        ...(item.access.roleContractSupported ? { approvalPolicy: 'role-visible-v1' as const } : {}),
+        ...(item.access.roleContractSupported
+          ? { approvalPolicy: 'role-visible-v1' as const }
+          : {}),
         action: kind,
         expectedStatus: item.row.status,
         ...(item.access.snapshotHash ? { expectedSnapshot: item.access.snapshotHash } : {}),
@@ -133,7 +149,12 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           serverWorkflowResult: !item.access.snapshotHash,
           serverRoleResult: item.access.roleContractSupported,
         });
-        collected.push({ planId: item.row.planId, label, ...(context ? { context } : {}), status: 'success' });
+        collected.push({
+          planId: item.row.planId,
+          label,
+          ...(context ? { context } : {}),
+          status: 'success',
+        });
       } catch (error) {
         const classified = classifySalesPlanActionError(error);
         if (classified.kind === 'permission') onPermissionDenied(item.row.versionId);
@@ -157,8 +178,8 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       className={styles.liveModal}
       title={t(
         kind === 'APPROVE'
-            ? 'common.assistantSurface.regionalApproval.liveBatch.approveTitle'
-            : 'common.assistantSurface.regionalApproval.liveBatch.rejectTitle',
+          ? 'common.assistantSurface.regionalApproval.liveBatch.approveTitle'
+          : 'common.assistantSurface.regionalApproval.liveBatch.rejectTitle',
         { count: items.length },
       )}
       maskClosable={false}
@@ -174,7 +195,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
             </Button>
           </div>
           <Button
-            type='primary'
+            type="primary"
             status={kind === 'REJECT' ? 'danger' : undefined}
             loading={busy}
             disabled={invalid || locked || !client}
@@ -182,28 +203,35 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           >
             {t(
               kind === 'APPROVE'
-                  ? 'common.assistantSurface.regionalApproval.liveBatch.confirmApprove'
-                  : 'common.assistantSurface.regionalApproval.liveBatch.confirmReject',
+                ? 'common.assistantSurface.regionalApproval.liveBatch.confirmApprove'
+                : 'common.assistantSurface.regionalApproval.liveBatch.confirmReject',
             )}
           </Button>
         </div>
       }
     >
-      <div className={styles.body} data-testid='regional-approval-batch-action-dialog'>
-        <p data-testid='regional-approval-batch-summary'>
+      <div className={styles.body} data-testid="regional-approval-batch-action-dialog">
+        <p data-testid="regional-approval-batch-summary">
           {t('common.assistantSurface.regionalApproval.liveBatch.summary', {
             total: items.length,
             ready: submittable.length,
           })}
         </p>
-        <ul className={styles.businessChecksum} data-testid='regional-approval-batch-items'>
+        <ul className={styles.businessChecksum} data-testid="regional-approval-batch-items">
           {items.map((item) => (
             <li key={item.row.planId}>
               <strong>{planLabel(item.row)}</strong>
               {planContext(item.row) ? <span> · {planContext(item.row)}</span> : null}
               {item.access?.allowedActions.includes(kind) ? (
-                mixedReject ? <span> · {t(`common.assistantSurface.regionalApproval.liveBatch.${item.row.status >= 7 ? 'repeatRejectTag' : 'rejectTag'}`)}</span>
-                  : null
+                mixedReject ? (
+                  <span>
+                    {' '}
+                    ·{' '}
+                    {t(
+                      `common.assistantSurface.regionalApproval.liveBatch.${item.row.status >= 7 ? 'repeatRejectTag' : 'rejectTag'}`,
+                    )}
+                  </span>
+                ) : null
               ) : (
                 <span> · {skipText(item)}</span>
               )}
@@ -236,16 +264,24 @@ const RegionalApprovalBatchActionDialog: React.FC<{
           })}
         </Checkbox>
         {attempted && invalid && !locked ? (
-          <Alert type='error' showIcon content={t('common.assistantSurface.regionalApproval.liveBatch.required')} />
+          <Alert
+            type="error"
+            showIcon
+            content={t('common.assistantSurface.regionalApproval.liveBatch.required')}
+          />
         ) : null}
         {busy ? (
           <div className={styles.loadingState}>
             <Spin size={16} />
-            <span>{t('common.assistantSurface.regionalApproval.liveBatch.loading', { count: items.length })}</span>
+            <span>
+              {t('common.assistantSurface.regionalApproval.liveBatch.loading', {
+                count: items.length,
+              })}
+            </span>
           </div>
         ) : null}
         {outcomes ? (
-          <div data-testid='regional-approval-batch-result' aria-live='polite'>
+          <div data-testid="regional-approval-batch-result" aria-live="polite">
             <Alert
               type={failed ? 'warning' : 'success'}
               showIcon
@@ -256,19 +292,28 @@ const RegionalApprovalBatchActionDialog: React.FC<{
               })}
             />
             {secondsToClose === undefined ? null : (
-              <p className={styles.formControl} data-testid='regional-approval-batch-autoclose'>
-                {t('common.assistantSurface.regionalApproval.liveBatch.autoClose', { seconds: secondsToClose })}
+              <p className={styles.formControl} data-testid="regional-approval-batch-autoclose">
+                {t('common.assistantSurface.regionalApproval.liveBatch.autoClose', {
+                  seconds: secondsToClose,
+                })}
               </p>
             )}
-            {unsuccessful.length > 0 ? <ul className={styles.businessChecksum}>
-              {unsuccessful.map((outcome) => (
+            {unsuccessful.length > 0 ? (
+              <ul className={styles.businessChecksum}>
+                {unsuccessful.map((outcome) => (
                   <li key={outcome.planId}>
                     <strong>{outcome.label}</strong>
                     {outcome.context ? <span> · {outcome.context}</span> : null}
-                    <span> · {outcome.detail ?? t('common.assistantSurface.regionalApproval.liveBatch.skipped')}</span>
+                    <span>
+                      {' '}
+                      ·{' '}
+                      {outcome.detail ??
+                        t('common.assistantSurface.regionalApproval.liveBatch.skipped')}
+                    </span>
                   </li>
                 ))}
-            </ul> : null}
+              </ul>
+            ) : null}
           </div>
         ) : null}
       </div>

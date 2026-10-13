@@ -1,14 +1,14 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { scrollbarGeometry } from "../../../../../fc/src/lib/table-scrollbar.ts";
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { scrollbarGeometry } from '../../../../../fc/src/lib/table-scrollbar.ts';
 
 /** A viewport-bottom horizontal scrollbar for the active business table. */
 export function FixedTableScrollbar({
   viewKey,
-  boundary = ".workspace",
-  selector = ".table-scroll",
+  boundary = '.workspace',
+  selector = '.table-scroll',
   layer = 40,
 }: {
   viewKey: string;
@@ -41,9 +41,7 @@ export function FixedTableScrollbar({
       const viewport = { width: window.innerWidth, height: window.innerHeight };
       const bounds = workspace.getBoundingClientRect();
       // Only bind visible overflowing tables; a prior answer may contain an offscreen table.
-      const table = Array.from(
-        host.querySelectorAll<HTMLElement>(selector),
-      ).find(
+      const table = Array.from(host.querySelectorAll<HTMLElement>(selector)).find(
         (element) =>
           scrollbarGeometry(
             element.getBoundingClientRect(),
@@ -63,7 +61,7 @@ export function FixedTableScrollbar({
         observed = table;
         resize.observe(table);
       }
-      const content = table.querySelector("table");
+      const content = table.querySelector('table');
       if (content !== observedTable) {
         if (observedTable) resize.unobserve(observedTable);
         observedTable = content;
@@ -78,16 +76,12 @@ export function FixedTableScrollbar({
       );
       setGeometry((old) =>
         Object.keys(next).every(
-          (key) =>
-            next[key as keyof typeof next] === old[key as keyof typeof old],
+          (key) => next[key as keyof typeof next] === old[key as keyof typeof old],
         )
           ? old
           : next,
       );
-      if (
-        bar.current &&
-        Math.abs(bar.current.scrollLeft - table.scrollLeft) > 1
-      )
+      if (bar.current && Math.abs(bar.current.scrollLeft - table.scrollLeft) > 1)
         bar.current.scrollLeft = table.scrollLeft;
     };
     const schedule = () => {
@@ -102,8 +96,8 @@ export function FixedTableScrollbar({
       subtree: true,
       characterData: true,
     });
-    window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, {
+    window.addEventListener('resize', schedule);
+    window.addEventListener('scroll', schedule, {
       capture: true,
       passive: true,
     });
@@ -112,15 +106,14 @@ export function FixedTableScrollbar({
       cancelAnimationFrame(frame);
       resize.disconnect();
       mutation.disconnect();
-      window.removeEventListener("resize", schedule);
-      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('scroll', schedule, true);
       target.current = null;
     };
   }, [viewKey, boundary, selector]);
 
   useEffect(() => {
-    if (bar.current && target.current)
-      bar.current.scrollLeft = target.current.scrollLeft;
+    if (bar.current && target.current) bar.current.scrollLeft = target.current.scrollLeft;
   }, [geometry]);
 
   return (
@@ -144,16 +137,12 @@ export function FixedTableScrollbar({
             onScroll={(event) => {
               if (
                 target.current &&
-                Math.abs(
-                  target.current.scrollLeft - event.currentTarget.scrollLeft,
-                ) > 1
+                Math.abs(target.current.scrollLeft - event.currentTarget.scrollLeft) > 1
               )
                 target.current.scrollLeft = event.currentTarget.scrollLeft;
             }}
           >
-            <div
-              style={{ width: geometry.width + geometry.maxScroll, height: 1 }}
-            />
+            <div style={{ width: geometry.width + geometry.maxScroll, height: 1 }} />
           </div>,
           document.body,
         )}

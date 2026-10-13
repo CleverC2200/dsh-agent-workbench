@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   existsSync,
+  copyFileSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -59,6 +60,27 @@ test('public final-group admission binds real source only and rejects invalid in
       mkdirSync(dirname(root), { recursive: true });
       // Clone each actual peer's complete Git input; no package stubs, dependencies or borrowed outputs.
       command(fixture, 'git', ['clone', '--quiet', '--no-hardlinks', source, root]);
+      if (name === 'dsh-agent-workbench') {
+        // Exercise the current public runner before its delivery commit exists.
+        for (const file of ['run-quality-ci.mjs', 'verify-candidate-input.mjs'])
+          copyFileSync(join(source, 'scripts', file), join(root, 'scripts', file));
+        command(root, 'git', [
+          'add',
+          'scripts/run-quality-ci.mjs',
+          'scripts/verify-candidate-input.mjs',
+        ]);
+        command(root, 'git', [
+          '-c',
+          'user.name=Fixture',
+          '-c',
+          'user.email=fixture@example.invalid',
+          'commit',
+          '--quiet',
+          '--allow-empty',
+          '-m',
+          'current public runner input',
+        ]);
+      }
     }
     const manifest = {
       core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
@@ -87,10 +109,13 @@ test('public final-group admission binds real source only and rejects invalid in
     const bytes = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
     writeFileSync(file, bytes);
     const sha256 = hash(bytes);
+    const fixtureEnvironment = (name, overrides = {}) => ({
+      ...process.env,
+      CI: 'true',
+      QUALITY_EXPECTED_SHA: manifest.repositories.find((entry) => entry.repo === name).head,
+      ...overrides,
+    });
     const run = (name, extra = [], env = {}) => {
-      const environment = { ...process.env, ...env };
-      if (!Object.hasOwn(env, 'CI')) delete environment.CI;
-      if (!Object.hasOwn(env, 'QUALITY_EXPECTED_SHA')) delete environment.QUALITY_EXPECTED_SHA;
       return spawnSync(
         process.execPath,
         [
@@ -105,7 +130,7 @@ test('public final-group admission binds real source only and rejects invalid in
           coldCore,
           ...extra,
         ],
-        { cwd: roots[name], encoding: 'utf8', env: environment },
+        { cwd: roots[name], encoding: 'utf8', env: fixtureEnvironment(name, env) },
       );
     };
     for (const name of ['dsh-agent-workbench', 'dsh-agent-manage']) {
@@ -128,8 +153,15 @@ test('public final-group admission binds real source only and rejects invalid in
       reject(run(name, ['--unknown-final-parameter']), /Unknown option/);
       reject(run(name, ['--final-group-sha256']), /ERR_PARSE_ARGS_INVALID_OPTION_VALUE/);
       reject(run(name, ['--final-group-sha256', '0'.repeat(64)]), /CANDIDATE_INPUT_HASH/);
-      reject(run(name, [], { CI: 'true' }), /CANDIDATE_EVENT_REQUIRED/);
+      reject(run(name, [], { QUALITY_EXPECTED_SHA: '' }), /CANDIDATE_EVENT_REQUIRED/);
       reject(run(name, [], { QUALITY_EXPECTED_SHA: 'a'.repeat(40) }), /CANDIDATE_EVENT_MISMATCH/);
+      if (name === 'dsh-agent-workbench') {
+        reject(run(name, ['--core-head', '']), /CANDIDATE_CORE_MISMATCH/);
+        reject(
+          run(name, ['--core-head', '639ed015397290b3745d163aafe02ffee4aa3f84']),
+          /CANDIDATE_CORE_MISMATCH/,
+        );
+      }
       for (const [mutate, pattern] of [
         [
           (x) => {
@@ -174,10 +206,11 @@ test('public final-group admission binds real source only and rejects invalid in
         {
           cwd: roots[name],
           encoding: 'utf8',
-          env: { ...process.env, CI: '', QUALITY_EXPECTED_SHA: '' },
+          env: fixtureEnvironment(name),
         },
       );
-      reject(compatibility, /CANDIDATE_HEAD/);
+      // Both runners require the admitted group hash before candidate execution.
+      reject(compatibility, /CANDIDATE_FINAL_GROUP_REQUIRED/);
       command(coldCore, 'git', [
         '-c',
         'user.name=Fixture',
@@ -211,6 +244,28 @@ test('public final-group admission binds real source only and rejects invalid in
       reject(run(name), /CANDIDATE_HISTORY_REQUIRED/);
       rmSync(shallow);
     }
+    // Both original official sources remain admitted with explicit full input/hash.
+    const originalCores = [
+      '639ed015397290b3745d163aafe02ffee4aa3f84',
+      '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
+    ];
+    for (const core of originalCores) {
+      command(coldCore, 'git', ['checkout', '--quiet', '--detach', core]);
+      writeFileSync(file, JSON.stringify({ ...manifest, core }));
+      for (const name of ['dsh-agent-workbench', 'dsh-agent-manage']) {
+        const observed = run(name);
+        assert.equal(observed.status, 0, observed.stdout + observed.stderr);
+        assert.equal(JSON.parse(observed.stdout).official.commit, core);
+        assert.equal(existsSync(join(fixture, 'official-latest-standard')), false);
+        if (name === 'dsh-agent-workbench') {
+          const explicit = run(name, ['--core-head', core]);
+          assert.equal(explicit.status, 0, explicit.stdout + explicit.stderr);
+          assert.equal(JSON.parse(explicit.stdout).official.commit, core);
+          assert.equal(existsSync(join(fixture, 'official-latest-standard')), false);
+        }
+      }
+    }
+    writeFileSync(file, bytes);
     // The same public reader returns the byte guard used before each quality effect.
     const { readFinalGroup } = await import(
       pathToFileURL(join(roots['dsh-agent-workbench'], 'scripts/candidate-input.mjs'))
@@ -238,10 +293,15 @@ test('public final-group admission binds real source only and rejects invalid in
         '--core-source',
         coldCore,
       ],
-      { cwd: roots['dsh-agent-workbench'], encoding: 'utf8' },
+      {
+        cwd: roots['dsh-agent-workbench'],
+        encoding: 'utf8',
+        env: fixtureEnvironment('dsh-agent-workbench'),
+      },
     );
     assert.notEqual(full.status, 0);
     assert.match(full.stderr, /CANDIDATE_CORE_SOURCE_REQUIRED|OFFICIAL_MATERIAL_REQUIRED/);
+    t.diagnostic(JSON.stringify({ stage: 'missing-core-material-rejected', stderr: full.stderr }));
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

@@ -1,16 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { resolve } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { migrationHistory } from './helpers/migration-history.mjs';
 
 const source = 'business/inventory-personal/source/inventory-light-plugins/src/personal/data.ts';
-const history = process.env.WORKBENCH_PERSONAL_HISTORY_ROOT;
-assert.ok(
-  history,
-  'WORKBENCH_PERSONAL_HISTORY_ROOT must declare the read-only original Personal Git source',
-);
-const originalRef = '15def488134527647a819812a4b6657ecf9772fe';
+const originalSource = migrationHistory('personal', process.env.WORKBENCH_PERSONAL_HISTORY_ROOT);
 const original = 'history:source/inventory-light-plugins/src/personal/data.ts';
 async function loader(entry) {
   const output = await build({
@@ -34,14 +28,11 @@ async function loader(entry) {
               namespace: 'history',
             }),
           );
-          api.onLoad({ filter: /.*/, namespace: 'history' }, ({ path }) => ({
-            contents: execFileSync(
-              'git',
-              ['-C', resolve(history), 'show', originalRef + ':' + path],
-              { encoding: 'utf8' },
-            ),
-            loader: 'ts',
-          }));
+          api.onLoad({ filter: /.*/, namespace: 'history' }, ({ path }) => {
+            const entry = originalSource.files[path];
+            assert.ok(entry, `missing fixed original source ${path}`);
+            return { contents: entry.text, loader: 'ts' };
+          });
           api.onResolve(
             {
               filter:

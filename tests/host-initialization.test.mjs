@@ -24,14 +24,49 @@ test('Host initializes package resources in a Chinese path and serves the regist
       '<html><head></head><body>' + id + '</body></html>',
     );
   }
-  const themeInputs=Object.fromEntries(await Promise.all(['tokens.css','html-defaults.css'].map(async name=>[name,await readFile('theme/'+name,'utf8')])));
-  for(const [name,contents] of Object.entries(themeInputs))await writeFile(join(root,'theme',name),contents);
-  await writeFile(join(root, 'samples/plugin.json'), JSON.stringify({schemaVersion: 1, id: 'workbench-html-table', name: '表格样板', html: 'index.html'}));
-  await writeFile(join(root, 'samples/index.html'), '<html><head></head><body>中文资源已加载</body></html>');
-  for (const id of ['fc','aqkc','qll','dealer','customer','orderworkbench','orderfulfillment','apsplan']) {
-    const directory=join(root,'business','inventory-'+id);await mkdir(directory,{recursive:true});
-    await writeFile(join(directory,'plugin.json'),JSON.stringify({schemaVersion:1,id:'inventory-'+id,name:id,html:'index.html'}));
-    await writeFile(join(directory,'index.html'),'<html><head></head><body>'+id+'</body></html>');
+  const themeInputs = Object.fromEntries(
+    await Promise.all(
+      ['tokens.css', 'html-defaults.css'].map(async (name) => [
+        name,
+        await readFile('theme/' + name, 'utf8'),
+      ]),
+    ),
+  );
+  for (const [name, contents] of Object.entries(themeInputs))
+    await writeFile(join(root, 'theme', name), contents);
+  await writeFile(
+    join(root, 'samples/plugin.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      id: 'workbench-html-table',
+      name: '表格样板',
+      html: 'index.html',
+    }),
+  );
+  await writeFile(
+    join(root, 'samples/index.html'),
+    '<html><head></head><body>中文资源已加载</body></html>',
+  );
+  for (const id of [
+    'fc',
+    'aqkc',
+    'qll',
+    'dealer',
+    'customer',
+    'orderworkbench',
+    'orderfulfillment',
+    'apsplan',
+  ]) {
+    const directory = join(root, 'business', 'inventory-' + id);
+    await mkdir(directory, { recursive: true });
+    await writeFile(
+      join(directory, 'plugin.json'),
+      JSON.stringify({ schemaVersion: 1, id: 'inventory-' + id, name: id, html: 'index.html' }),
+    );
+    await writeFile(
+      join(directory, 'index.html'),
+      '<html><head></head><body>' + id + '</body></html>',
+    );
   }
   await build({
     entryPoints: ['src/page-interaction/page.ts'],
@@ -80,16 +115,35 @@ test('Host initializes package resources in a Chinese path and serves the regist
     },
   };
   await apply(context, {});
-  await assert.rejects(apply(context, {cwd:'relative/project'}), /cwd must be absolute/);
+  await assert.rejects(apply(context, { cwd: 'relative/project' }), /cwd must be absolute/);
   const configuration = await (await routes.get('/api/agent-workbench/config').fetch()).json();
-  assert.deepEqual(configuration, {}, 'ordinary bundle startup does not manufacture a business directory from process.cwd');
-  const metadata = await routes.get('/api/agent-workbench/pages').fetch(new Request('https://localhost/api/agent-workbench/pages'));
+  assert.deepEqual(
+    configuration,
+    {},
+    'ordinary bundle startup does not manufacture a business directory from process.cwd',
+  );
+  const metadata = await routes
+    .get('/api/agent-workbench/pages')
+    .fetch(new Request('https://localhost/api/agent-workbench/pages'));
   const pages = await metadata.json();
   assert.equal(pages[0].name, '表格样板');
-  for (const id of ['inventory-qll','inventory-dealer','inventory-customer','inventory-orderworkbench','inventory-orderfulfillment']) assert.equal(pages.filter(page=>page.id===id).length,1);
-  assert.equal(context.workbenchPages.packages().length,12);
-  assert.equal(pages.filter(page=>page.id==='inventory-apsplan').length,1, 'the shipped APS page is part of ordinary empty-config startup');
-  const response = await routes.get('/api/agent-workbench/html').fetch(new Request('https://localhost' + pages[0].url));
+  for (const id of [
+    'inventory-qll',
+    'inventory-dealer',
+    'inventory-customer',
+    'inventory-orderworkbench',
+    'inventory-orderfulfillment',
+  ])
+    assert.equal(pages.filter((page) => page.id === id).length, 1);
+  assert.equal(context.workbenchPages.packages().length, 12);
+  assert.equal(
+    pages.filter((page) => page.id === 'inventory-apsplan').length,
+    1,
+    'the shipped APS page is part of ordinary empty-config startup',
+  );
+  const response = await routes
+    .get('/api/agent-workbench/html')
+    .fetch(new Request('https://localhost' + pages[0].url));
   assert.equal(response.status, 200);
   const servedHtml = await response.text();
   assert.match(servedHtml, /中文资源已加载/);

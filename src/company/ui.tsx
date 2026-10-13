@@ -1,5 +1,12 @@
-import {PageUnsentHistory} from './unsent-history.tsx';
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { PageUnsentHistory } from './unsent-history.tsx';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
@@ -115,6 +122,13 @@ export function mountCompanyUI(
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
   const t = ctx.locale.bind('companyWorkbench');
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
+  // Core's single main.conversation outlet remounts on later Session changes.
+  // Keep its observation for this UI lifetime; the first nonempty value consumes
+  // the bootstrap allowance even when no presentation was restored.
+  // These public props carry no navigation intent or same-Session reveal revision.
+  let mainSessionObservation:
+    | { sessionId: SessionId | undefined; hasObservedSession: boolean }
+    | undefined;
   ctx.effect(() => {
     const style = document.createElement('style');
     style.dataset.companyWorkbench = 'formal-508feea';
@@ -193,7 +207,10 @@ export function mountCompanyUI(
       authority?.getSnapshot ?? (() => unavailableAccount),
       authority?.getSnapshot ?? (() => unavailableAccount),
     );
-    const authenticated = identity.state === 'confirmed' && identity.error === undefined && identity.status?.authenticated === true;
+    const authenticated =
+      identity.state === 'confirmed' &&
+      identity.error === undefined &&
+      identity.status?.authenticated === true;
     const user = authenticated ? identity.status?.user : null;
     const name = user?.name ?? '',
       avatarUrl = user?.avatar ?? '';
@@ -205,7 +222,10 @@ export function mountCompanyUI(
       trigger = useRef<HTMLButtonElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
     const [loginOpen, setLoginOpen] = useState(false);
-    const closeLogin = useCallback(() => { setLoginOpen(false); trigger.current?.focus(); }, []);
+    const closeLogin = useCallback(() => {
+      setLoginOpen(false);
+      trigger.current?.focus();
+    }, []);
     useEffect(() => {
       if (loginOpen && (authenticated || !authority)) closeLogin();
     }, [loginOpen, authenticated, authority, closeLogin]);
@@ -350,11 +370,20 @@ export function mountCompanyUI(
                 <span aria-hidden="true">⚙</span>
                 <span>{t('settings')}</span>
               </button>
-              {!authenticated && <button type="button" role="menuitem"
-                className="gea-logout-button" disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
-                onClick={() => { close(); setLoginOpen(true); }}>
-                {t('signInGea')}
-              </button>}
+              {!authenticated && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="gea-logout-button"
+                  disabled={!authority || identity.state !== 'confirmed' || Boolean(identity.error)}
+                  onClick={() => {
+                    close();
+                    setLoginOpen(true);
+                  }}
+                >
+                  {t('signInGea')}
+                </button>
+              )}
               {name && (
                 <div className="gea-logout-control">
                   <button
@@ -385,9 +414,13 @@ export function mountCompanyUI(
             </div>,
             document.body,
           )}
-        {loginOpen && authority && !authenticated && createPortal(
-          <LoginDialog account={authority} t={t} onClose={closeLogin} />, document.body,
-        )}
+        {loginOpen &&
+          authority &&
+          !authenticated &&
+          createPortal(
+            <LoginDialog account={authority} t={t} onClose={closeLogin} />,
+            document.body,
+          )}
       </>
     );
   }
@@ -488,8 +521,10 @@ export function mountCompanyUI(
     };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
-    const panels = ctx.slots.entriesOfSlot('sidebar.panellist')
-      .slice().sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
+    const panels = ctx.slots
+      .entriesOfSlot('sidebar.panellist')
+      .slice()
+      .sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
     const modules = [{ id: DIRECTORY, label: '工作台' }];
     return (
       <aside
@@ -541,18 +576,23 @@ export function mountCompanyUI(
           const id = options.id as MainPanelId;
           const label = resolveSlotLabel(options.label) ?? id;
           const active = activePanel === id;
-          return <button
-            key={id}
-            type="button"
-            className={'gea-sidebar-tab gea-plugin-entry' + (active ? ' is-active' : '')}
-            aria-label={label}
-            title={collapsed ? label : undefined}
-            aria-current={active ? 'page' : undefined}
-            onClick={() => { workbench.leaveDocument(); ctx.layout.selectPanel(id); }}
-          >
-            {renderSlot('sidebar.panellist', { size: collapsed ? 18 : 16, active }, { only: id })}
-            {!collapsed && <span>{label}</span>}
-          </button>;
+          return (
+            <button
+              key={id}
+              type="button"
+              className={'gea-sidebar-tab gea-plugin-entry' + (active ? ' is-active' : '')}
+              aria-label={label}
+              title={collapsed ? label : undefined}
+              aria-current={active ? 'page' : undefined}
+              onClick={() => {
+                workbench.leaveDocument();
+                ctx.layout.selectPanel(id);
+              }}
+            >
+              {renderSlot('sidebar.panellist', { size: collapsed ? 18 : 16, active }, { only: id })}
+              {!collapsed && <span>{label}</span>}
+            </button>
+          );
         })}
         <div className="gea-sidebar-region" data-gea-drawer={drawer}>
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
@@ -807,10 +847,14 @@ export function mountCompanyUI(
       identity.error,
       authority,
     ]);
-    const previousMainSession = useRef(sessionId);
     useEffect(() => {
-      const changed = previousMainSession.current !== sessionId;
-      previousMainSession.current = sessionId;
+      const previous = mainSessionObservation;
+      const changed = previous !== undefined && previous.sessionId !== sessionId;
+      const firstSession = !!sessionId && !previous?.hasObservedSession;
+      mainSessionObservation = {
+        sessionId,
+        hasObservedSession: !!sessionId || previous?.hasObservedSession === true,
+      };
       if (!sessionId) {
         if (changed) workbench.leaveDocument();
         return;
@@ -822,7 +866,10 @@ export function mountCompanyUI(
         const state = workbench.getSnapshot();
         if (
           (state.selection && state.selection.sessionId !== sessionId) ||
-          (changed && state.selectedDocument && !state.selection)
+          (changed &&
+            state.selectedDocument &&
+            !state.selection &&
+            !(firstSession && state.restoredWithoutSession))
         )
           workbench.leaveDocument();
         return;

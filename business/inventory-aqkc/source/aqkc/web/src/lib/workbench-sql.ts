@@ -1,5 +1,5 @@
-import { currentOrdersQuery, currentOrderSkuQuery } from "./workbench-current-order-sql";
-import type { WorkbenchSqlQuery } from "./workbench-sql-types";
+import { currentOrdersQuery, currentOrderSkuQuery } from './workbench-current-order-sql';
+import type { WorkbenchSqlQuery } from './workbench-sql-types';
 
 const LATEST_SAFETY_STOCK = `
 WITH latest_safety_stock AS (
@@ -39,7 +39,7 @@ export const workbenchSql = {
   currentOrders: currentOrdersQuery,
   currentOrderSkus: currentOrderSkuQuery,
   scope: {
-    name: "workbench-scope",
+    name: 'workbench-scope',
     maxRows: 100,
     sql: `${LATEST_SAFETY_STOCK}
 SELECT
@@ -52,7 +52,7 @@ GROUP BY target_month, inventory_version
 ORDER BY target_month, inventory_version`,
   },
   safetyStockRows: {
-    name: "workbench-safety-stock-rows",
+    name: 'workbench-safety-stock-rows',
     // Latest snapshots now include >25k rows across months/versions; keep a finite
     // full-result bound shared by GEA and direct reads instead of truncating them.
     maxRows: 50_000,
@@ -86,7 +86,7 @@ FROM latest_safety_stock
 ORDER BY base_name, material_code, inventory_version, id`,
   },
   supportByBase: (days: number): WorkbenchSqlQuery => ({
-    name: "workbench-support-by-base",
+    name: 'workbench-support-by-base',
     maxRows: 200,
     sql: `WITH ${BRANCH_WAREHOUSES}, latest_inventory_age AS (
   SELECT age.base_name AS base_name, age.qty AS qty, age.productage AS productage
@@ -158,7 +158,7 @@ FROM order_by_base
 ORDER BY "workbench.domain", "workbench.base"`,
   }),
   orderStructure: {
-    name: "workbench-order-structure",
+    name: 'workbench-order-structure',
     maxRows: 25_000,
     sql: `WITH latest_order_fulfillment AS (
   SELECT *
@@ -187,7 +187,7 @@ GROUP BY belong_base, product_categ_name, new_material_code, new_material_name
 ORDER BY belong_base, product_categ_name, new_material_code`,
   },
   ageStructure: (overAgeDays: number): WorkbenchSqlQuery => ({
-    name: "workbench-age-structure",
+    name: 'workbench-age-structure',
     maxRows: 25_000,
     sql: `${LATEST_INVENTORY_AGE},
 latest_safety_stock AS (
@@ -243,7 +243,7 @@ ORDER BY age.base_name, age.product_categ_name, age.material_code`,
 /** Retry an omitted base through the same governed resource and consumer. */
 export function safetyStockRowsForBase(base: string): WorkbenchSqlQuery {
   return {
-    name: "workbench-safety-stock-base-retry",
+    name: 'workbench-safety-stock-base-retry',
     maxRows: 10_000,
     parameters: { gea_p1: base },
     sql: `WITH latest_snapshot AS (

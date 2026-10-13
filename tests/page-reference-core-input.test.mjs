@@ -76,14 +76,22 @@ function fixture(t, save, { quote = false } = {}) {
     true,
   );
   const before = shell.snapshot.draft;
-  const persistence = [], timeline = [];
-  const write = draft => { persistence.push(draft); timeline.push('writer'); };
-  const offPersistence = typeof shell.bindDraftPersistence === 'function'
-    ? shell.bindDraftPersistence(write)
-    : shell.bindMirror(write);
+  const persistence = [],
+    timeline = [];
+  const write = (draft) => {
+    persistence.push(draft);
+    timeline.push('writer');
+  };
+  const offPersistence =
+    typeof shell.bindDraftPersistence === 'function'
+      ? shell.bindDraftPersistence(write)
+      : shell.bindMirror(write);
   if (typeof shell.actions.persistDraft === 'function') {
     const flush = shell.actions.persistDraft;
-    shell.actions.persistDraft = () => { timeline.push('flush'); flush(); };
+    shell.actions.persistDraft = () => {
+      timeline.push('flush');
+      flush();
+    };
   }
   const reference = { sessionId: 'owned', binding: { ctx: {} } };
   const effects = [];
@@ -116,14 +124,39 @@ function fixture(t, save, { quote = false } = {}) {
   };
   const frame = dom.window.document.querySelector('iframe');
   const posted = [];
-  frame.contentWindow.postMessage = value => { posted.push(value); if (value.type === 'result') timeline.push('ack'); };
+  frame.contentWindow.postMessage = (value) => {
+    posted.push(value);
+    if (value.type === 'result') timeline.push('ack');
+  };
   const api = installPageInteraction(ctx);
   const offTrigger = api.mountTrigger(dom.window.document.querySelector('#trigger'), 'owned');
-  const dispose = api.bindFrame(quote
-    ? { mode: 'quote', frame, reference, page: '原页面', inputActions: shell.actions, isCurrentSession: () => true }
-    : { mode: 'business', frame, reference, page: '原页面', surface: 'gea-workbench', owner: 'owned-lease', inputActions: shell.actions });
+  const dispose = api.bindFrame(
+    quote
+      ? {
+          mode: 'quote',
+          frame,
+          reference,
+          page: '原页面',
+          inputActions: shell.actions,
+          isCurrentSession: () => true,
+        }
+      : {
+          mode: 'business',
+          frame,
+          reference,
+          page: '原页面',
+          surface: 'gea-workbench',
+          owner: 'owned-lease',
+          inputActions: shell.actions,
+        },
+  );
   t.after(() => {
-    dispose(); offTrigger(); effects.reverse().forEach(fn => fn()); offPersistence(); shell.dispose(); dom.window.close();
+    dispose();
+    offTrigger();
+    effects.reverse().forEach((fn) => fn());
+    offPersistence();
+    shell.dispose();
+    dom.window.close();
     for (const [key, descriptor] of saved)
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else delete globalThis[key];
@@ -187,10 +220,19 @@ test('actual Core editor keeps text edited during save and inserts using the cur
   assert.equal(f.submissions(), 0);
 });
 
-test('static quote reaches the actual Core draft writer before success while preserving resident text and chips', async t => {
-  const f = fixture(t, () => { throw Error('Static quotes must not call business transport'); }, { quote: true });
+test('static quote reaches the actual Core draft writer before success while preserving resident text and chips', async (t) => {
+  const f = fixture(
+    t,
+    () => {
+      throw Error('Static quotes must not call business transport');
+    },
+    { quote: true },
+  );
   const message = await f.ready();
-  message('quote', { requestId: 'plain-quote', reference: { text: '未发送的问题', label: '分析问题', targets: [] } });
+  message('quote', {
+    requestId: 'plain-quote',
+    reference: { text: '未发送的问题', label: '分析问题', targets: [] },
+  });
   assert.equal((await f.result())?.ok, true);
   assert.equal(f.shell.snapshot.occurrences.length, 1);
   assert.ok(f.shell.snapshot.draft.includes(f.before));
@@ -200,11 +242,24 @@ test('static quote reaches the actual Core draft writer before success while pre
   assert.equal(typeof saved === 'string' ? saved : saved.text, f.shell.snapshot.draft);
   assert.ok(f.timeline.indexOf('writer') < f.timeline.indexOf('ack'), f.timeline.join(','));
   if (typeof f.shell.actions.persistDraft === 'function') {
-    assert.ok(f.timeline.indexOf('flush') < f.timeline.indexOf('ack'), 'alpha retains its explicit flush before acknowledgment');
+    assert.ok(
+      f.timeline.indexOf('flush') < f.timeline.indexOf('ack'),
+      'alpha retains its explicit flush before acknowledgment',
+    );
     assert.equal(saved.references.length, 1, 'alpha persists semantic references');
   } else {
-    assert.equal(f.timeline.includes('flush'), false, 'rc.2 uses its official automatic draft writer');
+    assert.equal(
+      f.timeline.includes('flush'),
+      false,
+      'rc.2 uses its official automatic draft writer',
+    );
   }
   assert.equal(f.submissions(), 0);
-  t.diagnostic(JSON.stringify({ core, persistence: typeof saved === 'string' ? 'clipboard-text' : 'semantic-document', timeline: f.timeline }));
+  t.diagnostic(
+    JSON.stringify({
+      core,
+      persistence: typeof saved === 'string' ? 'clipboard-text' : 'semantic-document',
+      timeline: f.timeline,
+    }),
+  );
 });

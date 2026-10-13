@@ -2,12 +2,19 @@
  * No whole-row JSON, synthetic values, windows or hidden permission fields.
  */
 export function columnarQuery(sql: string): string | null {
-  const tokens = [...sql.matchAll(/'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_$]*|[(),]/g)];
-  let depth = 0, start = -1;
+  const tokens = [
+    ...sql.matchAll(
+      /'(?:''|[^'])*'|"(?:""|[^"])*"|--[^\r\n]*|\/\*[\s\S]*?\*\/|[A-Za-z_][A-Za-z0-9_$]*|[(),]/g,
+    ),
+  ];
+  let depth = 0,
+    start = -1;
   const columns: string[] = [];
   const add = (end: number) => {
     const expression = sql.slice(start, end).trim();
-    const match = expression.match(/\bAS\s+(?:"([A-Za-z_][A-Za-z0-9_$]*)"|([A-Za-z_][A-Za-z0-9_$]*))\s*$/i);
+    const match = expression.match(
+      /\bAS\s+(?:"([A-Za-z_][A-Za-z0-9_$]*)"|([A-Za-z_][A-Za-z0-9_$]*))\s*$/i,
+    );
     if (!match) return false;
     columns.push(match[1] ?? match[2]);
     return true;
@@ -22,7 +29,9 @@ export function columnarQuery(sql: string): string | null {
       start = token.index! + 1;
     } else if (depth === 0 && start >= 0 && word === 'FROM') {
       if (!add(token.index!) || new Set(columns).size !== columns.length) return null;
-      const projection = columns.map(c => `CAST(JSON_AGG("dsh_columns"."${c}") AS TEXT) AS "${c}"`).join(',\n');
+      const projection = columns
+        .map((c) => `CAST(JSON_AGG("dsh_columns"."${c}") AS TEXT) AS "${c}"`)
+        .join(',\n');
       return `SELECT ${projection}\nFROM (\n${sql.replace(/;\s*$/, '')}\n) AS "dsh_columns"`;
     }
   }
@@ -31,10 +40,18 @@ export function columnarQuery(sql: string): string | null {
 
 export function unpackColumns(result: any) {
   if (result.rows.length !== 1) throw Error('GEA_COLUMNAR_RESULT_INVALID');
-  const entries = Object.entries(result.rows[0]).map(([key, value]) => [key, typeof value === 'string' ? JSON.parse(value) : value] as const);
-  const length = entries.find(([,v]) => Array.isArray(v))?.[1].length ?? 0;
-  if (length > 200000 || entries.some(([,v]) => v !== null && (!Array.isArray(v) || v.length !== length)) || (length && entries.some(([,v])=>v === null)))
+  const entries = Object.entries(result.rows[0]).map(
+    ([key, value]) => [key, typeof value === 'string' ? JSON.parse(value) : value] as const,
+  );
+  const length = entries.find(([, v]) => Array.isArray(v))?.[1].length ?? 0;
+  if (
+    length > 200000 ||
+    entries.some(([, v]) => v !== null && (!Array.isArray(v) || v.length !== length)) ||
+    (length && entries.some(([, v]) => v === null))
+  )
     throw Error('GEA_COLUMNAR_RESULT_INVALID');
-  const rows = Array.from({length}, (_,i) => Object.fromEntries(entries.map(([key,value])=>[key,value[i]])));
-  return {...result, rows, records: rows, total: length};
+  const rows = Array.from({ length }, (_, i) =>
+    Object.fromEntries(entries.map(([key, value]) => [key, value[i]])),
+  );
+  return { ...result, rows, records: rows, total: length };
 }

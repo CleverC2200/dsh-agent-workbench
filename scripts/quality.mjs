@@ -1,14 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { extname, relative, resolve } from 'node:path';
 import { devNull } from 'node:os';
 
 const root = resolve(import.meta.dirname, '..');
+const output = (value) => writeFileSync(1, String(value) + '\n');
+const diagnostic = (value) => writeFileSync(2, String(value) + '\n');
 // Fixed pre-migration input; never advance this to absorb new lint/format debt.
 const baseline = '9814b3bcf1ae015a63fac9af864c165617791fc3';
 function refuse(message) {
-  console.error(message);
+  diagnostic(message);
   process.exit(2);
 }
 // Exact original b42c62e:scripts/quality.mjs bytes are data, never executed.
@@ -167,7 +169,7 @@ const result = spawnSync(binary, args, {
   maxBuffer: 16 * 1024 * 1024,
 });
 if (result.error || result.signal || ![0, 1].includes(result.status)) {
-  console.error(result.error ?? result.stderr ?? 'QUALITY_TOOL_FAILED');
+  diagnostic(result.error ?? result.stderr ?? 'QUALITY_TOOL_FAILED');
   process.exit(2);
 }
 let bad;
@@ -175,13 +177,13 @@ if (lint) {
   const output = JSON.parse(result.stdout);
   // Parse errors/config errors are never baseline debt.
   if (output.diagnostics.some((diagnostic) => !diagnostic.code)) {
-    console.error(result.stdout);
+    diagnostic(result.stdout);
     process.exit(2);
   }
   bad = [...new Set(output.diagnostics.map((diagnostic) => diagnostic.filename))];
 } else {
   if (result.stderr.trim()) {
-    console.error(result.stderr);
+    diagnostic(result.stderr);
     process.exit(2);
   }
   bad = result.stdout.trim().split('\n').filter(Boolean);
@@ -194,8 +196,8 @@ if (
   throw Error('QUALITY_TOOL_OUTPUT_INVALID');
 }
 if (audit) {
-  console.log(result.stdout);
-  console.log(
+  output(result.stdout);
+  output(
     `QUALITY_AUDIT: ${selected.length} files, ${bad.length} files with ${lint ? 'lint' : 'format'} debt`,
   );
   process.exit(result.status);
@@ -218,10 +220,10 @@ function unchanged(file) {
   return objects.get(file) === hash;
 }
 const violations = bad.filter((file) => !unchanged(file));
-for (const file of violations) console.error(`${lint ? 'LINT' : 'FORMAT'}_REQUIRED: ${file}`);
+for (const file of violations) diagnostic(`${lint ? 'LINT' : 'FORMAT'}_REQUIRED: ${file}`);
 if (lint && violations.length) {
   const output = JSON.parse(result.stdout);
-  console.error(
+  diagnostic(
     JSON.stringify(
       output.diagnostics.filter((diagnostic) => violations.includes(diagnostic.filename)),
       null,
@@ -229,7 +231,7 @@ if (lint && violations.length) {
     ),
   );
 }
-console.log(
+output(
   `QUALITY_INCREMENTAL: ${selected.length} files scanned; ${bad.length - violations.length} unchanged baseline debt files; ${violations.length} changed/new violations; baseline ${baseline}`,
 );
 process.exit(violations.length ? 1 : 0);

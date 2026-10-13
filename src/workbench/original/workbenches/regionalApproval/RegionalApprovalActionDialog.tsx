@@ -1,9 +1,24 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { Alert, Button, Checkbox, Input, Modal, Radio, Select, Spin, Tabs, Tag } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Checkbox,
+  Input,
+  Modal,
+  Radio,
+  Select,
+  Spin,
+  Tabs,
+  Tag,
+} from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useMemo, useRef, useState } from 'react';
 import type { SavedApprovalAdjustment } from './regionalApprovalDetailModel.ts';
-import type { ApprovalStageId, ApprovalVersion, RegionalApprovalRow } from './regionalApprovalFixture.ts';
+import type {
+  ApprovalStageId,
+  ApprovalVersion,
+  RegionalApprovalRow,
+} from './regionalApprovalFixture.ts';
 import { reportSalesPlanError } from './models/salesPlanActionModel.ts';
 import {
   executeRegionalApprovalFixtureAction,
@@ -52,9 +67,11 @@ const RegionalApprovalActionDialog: React.FC<{
   const scopedAdjustments = useMemo(
     () =>
       savedAdjustments.filter(
-        (adjustment) => rows.some((row) => row.id === adjustment.organizationId) && adjustment.version === version
+        (adjustment) =>
+          rows.some((row) => row.id === adjustment.organizationId) &&
+          adjustment.version === version,
       ),
-    [rows, savedAdjustments, version]
+    [rows, savedAdjustments, version],
   );
   const scopes = useMemo<RegionalApprovalActionScope[]>(
     () =>
@@ -62,22 +79,30 @@ const RegionalApprovalActionDialog: React.FC<{
         organizationId: row.id,
         version,
         approvalStage,
-        savedAdjustmentCount: scopedAdjustments.filter((adjustment) => adjustment.organizationId === row.id).length,
+        savedAdjustmentCount: scopedAdjustments.filter(
+          (adjustment) => adjustment.organizationId === row.id,
+        ).length,
       })),
-    [approvalStage, rows, scopedAdjustments, version]
+    [approvalStage, rows, scopedAdjustments, version],
   );
   const actionKeys = scopes.map((scope) => regionalApprovalActionKey(kind, scope));
   const completedResult = actionKeys.length > 0 && actionKeys.every((key) => store.results[key]);
   const operation = store.operation;
-  const operationForCurrentAction = operation && actionKeys.includes(operation.command.key) ? operation : undefined;
+  const operationForCurrentAction =
+    operation && actionKeys.includes(operation.command.key) ? operation : undefined;
   const loading = operation?.status === 'loading';
   const validationErrors =
-    kind === 'return' ? regionalApprovalReturnValidationErrors(store) : regionalApprovalSubmitValidationErrors(store);
+    kind === 'return'
+      ? regionalApprovalReturnValidationErrors(store)
+      : regionalApprovalSubmitValidationErrors(store);
 
   const dispatch = (action: Parameters<typeof reduceRegionalApprovalActionStore>[1]) =>
     onStoreChange((current) => reduceRegionalApprovalActionStore(current, action));
 
-  const buildCommand = (scope: RegionalApprovalActionScope, attempt: number): RegionalApprovalActionCommand => {
+  const buildCommand = (
+    scope: RegionalApprovalActionScope,
+    attempt: number,
+  ): RegionalApprovalActionCommand => {
     const requestId = `${kind}-${scope.organizationId}-${version}-${++requestSequence.current}`;
     return {
       requestId,
@@ -115,7 +140,8 @@ const RegionalApprovalActionDialog: React.FC<{
         success += 1;
       } catch (error) {
         failed.push(row.id);
-        const errorCode = error instanceof Error && error.message ? error.message : 'fixture_action_failed';
+        const errorCode =
+          error instanceof Error && error.message ? error.message : 'fixture_action_failed';
         // V1.8 #12：样例操作的失败提示也只给业务语言，技术细节进控制台。
         reportSalesPlanError('fixture-action', errorCode);
         dispatch({
@@ -133,7 +159,7 @@ const RegionalApprovalActionDialog: React.FC<{
   const retry = () =>
     run(
       (operationForCurrentAction?.command.attempt ?? 1) + 1,
-      rows.filter((row) => failedRowIds.includes(row.id))
+      rows.filter((row) => failedRowIds.includes(row.id)),
     );
   const cancelLoading = () => {
     if (operation?.status !== 'loading') return;
@@ -154,25 +180,37 @@ const RegionalApprovalActionDialog: React.FC<{
     if (!operationForCurrentAction) return null;
     if (operationForCurrentAction.status === 'loading') {
       return (
-        <Alert type='info' showIcon content={t('common.assistantSurface.regionalApproval.action.status.loading')} />
+        <Alert
+          type="info"
+          showIcon
+          content={t('common.assistantSurface.regionalApproval.action.status.loading')}
+        />
       );
     }
     if (operationForCurrentAction.status === 'success') {
       return (
-        <Alert type='success' showIcon content={t('common.assistantSurface.regionalApproval.action.status.success')} />
+        <Alert
+          type="success"
+          showIcon
+          content={t('common.assistantSurface.regionalApproval.action.status.success')}
+        />
       );
     }
     if (operationForCurrentAction.status === 'failure') {
       return (
         <Alert
-          type='error'
+          type="error"
           showIcon
           content={t('common.assistantSurface.regionalApproval.action.status.failure')}
         />
       );
     }
     return (
-      <Alert type='warning' showIcon content={t('common.assistantSurface.regionalApproval.action.status.cancelled')} />
+      <Alert
+        type="warning"
+        showIcon
+        content={t('common.assistantSurface.regionalApproval.action.status.cancelled')}
+      />
     );
   };
 
@@ -193,21 +231,22 @@ const RegionalApprovalActionDialog: React.FC<{
               {t('common.assistantSurface.regionalApproval.action.cancel')}
             </Button>
             {loading ? (
-              <Button status='danger' onClick={cancelLoading}>
+              <Button status="danger" onClick={cancelLoading}>
                 {t('common.assistantSurface.regionalApproval.action.cancelExecution')}
               </Button>
-            ) : operationForCurrentAction?.status === 'failure' || operationForCurrentAction?.status === 'cancelled' ? (
-              <Button type='primary' onClick={retry}>
+            ) : operationForCurrentAction?.status === 'failure' ||
+              operationForCurrentAction?.status === 'cancelled' ? (
+              <Button type="primary" onClick={retry}>
                 {t('common.assistantSurface.regionalApproval.action.retry')}
               </Button>
             ) : (
-              <Button type='primary' disabled={Boolean(completedResult)} onClick={() => run()}>
+              <Button type="primary" disabled={Boolean(completedResult)} onClick={() => run()}>
                 {t(
                   completedResult
                     ? 'common.assistantSurface.regionalApproval.action.completed'
                     : kind === 'return'
                       ? 'common.assistantSurface.regionalApproval.action.confirmReturn'
-                      : 'common.assistantSurface.regionalApproval.action.confirmSubmit'
+                      : 'common.assistantSurface.regionalApproval.action.confirmSubmit',
                 )}
               </Button>
             )}
@@ -215,15 +254,23 @@ const RegionalApprovalActionDialog: React.FC<{
         </div>
       }
     >
-      <div className={styles.body} data-testid='regional-approval-action-dialog'>
-        <Alert type='warning' showIcon content={t('common.assistantSurface.regionalApproval.action.fixtureBoundary')} />
+      <div className={styles.body} data-testid="regional-approval-action-dialog">
+        <Alert
+          type="warning"
+          showIcon
+          content={t('common.assistantSurface.regionalApproval.action.fixtureBoundary')}
+        />
         <div className={styles.scopeSummary}>
           <span>
             <small>{t('common.assistantSurface.regionalApproval.action.organization')}</small>
             <strong>
               {rows.length === 1
-                ? t(`common.assistantSurface.regionalApproval.organizations.${rows[0].organizationKey}`)
-                : t('common.assistantSurface.regionalApproval.action.batchOrganizations', { count: rows.length })}
+                ? t(
+                    `common.assistantSurface.regionalApproval.organizations.${rows[0].organizationKey}`,
+                  )
+                : t('common.assistantSurface.regionalApproval.action.batchOrganizations', {
+                    count: rows.length,
+                  })}
             </strong>
           </span>
           <span>
@@ -234,11 +281,14 @@ const RegionalApprovalActionDialog: React.FC<{
             <small>{t('common.assistantSurface.regionalApproval.action.savedAdjustments')}</small>
             <strong>{scopedAdjustments.length}</strong>
           </span>
-          <Tag color='red'>{t('common.assistantSurface.regionalApproval.action.fixtureTag')}</Tag>
+          <Tag color="red">{t('common.assistantSurface.regionalApproval.action.fixtureTag')}</Tag>
         </div>
 
         <Tabs activeTab={kind} onChange={switchKind}>
-          <Tabs.TabPane key='return' title={t('common.assistantSurface.regionalApproval.action.tabs.return')}>
+          <Tabs.TabPane
+            key="return"
+            title={t('common.assistantSurface.regionalApproval.action.tabs.return')}
+          >
             <div className={styles.form}>
               <div className={styles.formControl}>
                 <span>{t('common.assistantSurface.regionalApproval.action.returnTarget')}</span>
@@ -246,14 +296,20 @@ const RegionalApprovalActionDialog: React.FC<{
                   aria-label={t('common.assistantSurface.regionalApproval.action.returnTarget')}
                   value={store.returnDraft.target || undefined}
                   status={attempted && validationErrors.includes('target') ? 'error' : undefined}
-                  placeholder={t('common.assistantSurface.regionalApproval.action.returnTargetPlaceholder')}
+                  placeholder={t(
+                    'common.assistantSurface.regionalApproval.action.returnTargetPlaceholder',
+                  )}
                   onChange={(target) => dispatch({ type: 'return-target', target })}
                 >
-                  <Select.Option value='previous-stage'>
-                    {t('common.assistantSurface.regionalApproval.action.returnTargets.previousStage')}
+                  <Select.Option value="previous-stage">
+                    {t(
+                      'common.assistantSurface.regionalApproval.action.returnTargets.previousStage',
+                    )}
                   </Select.Option>
-                  <Select.Option value='submitting-organization'>
-                    {t('common.assistantSurface.regionalApproval.action.returnTargets.submittingOrganization')}
+                  <Select.Option value="submitting-organization">
+                    {t(
+                      'common.assistantSurface.regionalApproval.action.returnTargets.submittingOrganization',
+                    )}
                   </Select.Option>
                 </Select>
               </div>
@@ -264,11 +320,15 @@ const RegionalApprovalActionDialog: React.FC<{
                   aria-label={t('common.assistantSurface.regionalApproval.action.impactScope')}
                   onChange={(impactScope) => dispatch({ type: 'return-impact', impactScope })}
                 >
-                  <Radio value='current-organization'>
-                    {t('common.assistantSurface.regionalApproval.action.impactScopes.currentOrganization')}
+                  <Radio value="current-organization">
+                    {t(
+                      'common.assistantSurface.regionalApproval.action.impactScopes.currentOrganization',
+                    )}
                   </Radio>
-                  <Radio value='filtered-scope'>
-                    {t('common.assistantSurface.regionalApproval.action.impactScopes.filteredScope')}
+                  <Radio value="filtered-scope">
+                    {t(
+                      'common.assistantSurface.regionalApproval.action.impactScopes.filteredScope',
+                    )}
                   </Radio>
                 </Radio.Group>
               </div>
@@ -278,29 +338,41 @@ const RegionalApprovalActionDialog: React.FC<{
                   value={store.returnDraft.reason}
                   status={attempted && validationErrors.includes('reason') ? 'error' : undefined}
                   aria-label={t('common.assistantSurface.regionalApproval.action.returnReason')}
-                  placeholder={t('common.assistantSurface.regionalApproval.action.returnReasonPlaceholder')}
+                  placeholder={t(
+                    'common.assistantSurface.regionalApproval.action.returnReasonPlaceholder',
+                  )}
                   autoSize={{ minRows: 2, maxRows: 4 }}
                   onChange={(reason) => dispatch({ type: 'return-reason', reason })}
                 />
               </div>
               {attempted && validationErrors.length > 0 ? (
-                <Alert type='error' content={t('common.assistantSurface.regionalApproval.action.requiredError')} />
+                <Alert
+                  type="error"
+                  content={t('common.assistantSurface.regionalApproval.action.requiredError')}
+                />
               ) : null}
             </div>
           </Tabs.TabPane>
-          <Tabs.TabPane key='submit' title={t('common.assistantSurface.regionalApproval.action.tabs.submit')}>
+          <Tabs.TabPane
+            key="submit"
+            title={t('common.assistantSurface.regionalApproval.action.tabs.submit')}
+          >
             <div className={styles.form}>
               <div className={styles.adjustmentSummary}>
-                <strong>{t('common.assistantSurface.regionalApproval.action.adjustmentSummary')}</strong>
+                <strong>
+                  {t('common.assistantSurface.regionalApproval.action.adjustmentSummary')}
+                </strong>
                 {scopedAdjustments.length > 0 ? (
                   scopedAdjustments.map((adjustment) => (
                     <span key={adjustment.skuId}>
-                      {adjustment.skuId.split('-').at(-1)} · {adjustment.initialQuantity} → {adjustment.editedQuantity}{' '}
-                      · {adjustment.reason}
+                      {adjustment.skuId.split('-').at(-1)} · {adjustment.initialQuantity} →{' '}
+                      {adjustment.editedQuantity} · {adjustment.reason}
                     </span>
                   ))
                 ) : (
-                  <span>{t('common.assistantSurface.regionalApproval.action.noSavedAdjustments')}</span>
+                  <span>
+                    {t('common.assistantSurface.regionalApproval.action.noSavedAdjustments')}
+                  </span>
                 )}
               </div>
               <Checkbox
@@ -311,7 +383,10 @@ const RegionalApprovalActionDialog: React.FC<{
                 {t('common.assistantSurface.regionalApproval.action.submitConfirmation')}
               </Checkbox>
               {attempted && validationErrors.length > 0 ? (
-                <Alert type='error' content={t('common.assistantSurface.regionalApproval.action.confirmationError')} />
+                <Alert
+                  type="error"
+                  content={t('common.assistantSurface.regionalApproval.action.confirmationError')}
+                />
               ) : null}
             </div>
           </Tabs.TabPane>
@@ -328,7 +403,10 @@ const RegionalApprovalActionDialog: React.FC<{
           <Alert
             type={batchSummary.failed > 0 ? 'warning' : 'success'}
             showIcon
-            content={t('common.assistantSurface.regionalApproval.action.status.batch', batchSummary)}
+            content={t(
+              'common.assistantSurface.regionalApproval.action.status.batch',
+              batchSummary,
+            )}
           />
         ) : null}
       </div>

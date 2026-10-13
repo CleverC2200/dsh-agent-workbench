@@ -45,6 +45,7 @@ async function fixture(t, fetcher) {
   const cleanups = [],
     slots = new Map();
   let workbench;
+  const sessionCalls = [];
   const ctx = {
     locale: {
       register: () => () => {},
@@ -66,13 +67,34 @@ async function fixture(t, fetcher) {
     inject: () => {},
     on: () => () => {},
     layout: { selectPanel() {} },
-    uiWorkspace: { openSession() {} },
+    uiWorkspace: {
+      openSession(...args) {
+        sessionCalls.push(args);
+      },
+    },
+    sessions: {
+      retain(...args) {
+        sessionCalls.push(args);
+        throw Error('unexpected Session retention');
+      },
+    },
+    remote: {
+      session: {
+        create(...args) {
+          sessionCalls.push(args);
+          throw Error('unexpected Session creation');
+        },
+      },
+    },
     slots: {
       entries: () => [],
       registerFactory: () => () => {},
       register: (options, component) => {
-        slots.set(options.id ?? options.key ?? options.name, component);
-        return () => {};
+        const id = options.id ?? options.key ?? options.name;
+        slots.set(id, component);
+        return () => {
+          slots.delete(id);
+        };
       },
       inject: (_name, fn) => {
         const off = fn();
@@ -99,6 +121,11 @@ async function fixture(t, fetcher) {
     workbench,
     slots,
     dispose,
+    sessionCalls,
+    stop: async () => {
+      await act(async () => root.unmount());
+      dispose();
+    },
     notice: () => dom.window.document.getElementById('notice').innerHTML,
     retry: async () =>
       act(async () => {
@@ -145,8 +172,32 @@ test('current page catalog registers every declared HTML view once and never obs
     assert.equal(selected.src, page.url);
   }
   assert.deepEqual(urls, ['/api/agent-workbench/pages']);
+  assert.deepEqual(
+    h.sessionCalls,
+    [],
+    'catalog discovery and display never create or bind a Session',
+  );
   h.dispose();
   assert.equal(h.workbench.getSnapshot().pages.length, 0);
+});
+
+test('unmounted discovery removes its slot and cancels a late catalog response', async (t) => {
+  const pending = Promise.withResolvers();
+  let signal;
+  const h = await fixture(t, async (_url, options) => {
+    signal = options.signal;
+    return pending.promise;
+  });
+  await h.stop();
+  assert.equal(signal.aborted, true);
+  assert.equal(h.slots.has('workbench-page-discovery'), false);
+  assert.equal(h.notice(), '');
+  pending.resolve(
+    Response.json([{ id: 'late', name: 'Late', pluginId: 'late', view: '', url: '/html' }]),
+  );
+  await act(async () => await new Promise((resolve) => setImmediate(resolve)));
+  assert.equal(h.workbench.getSnapshot().pages.length, 0);
+  assert.deepEqual(h.sessionCalls, []);
 });
 
 for (const failure of ['HTTP', 'network'])

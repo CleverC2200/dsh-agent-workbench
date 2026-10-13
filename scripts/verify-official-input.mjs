@@ -4,10 +4,12 @@ import { execFileSync } from 'node:child_process';
 
 /** Only registered official baselines and the private security candidate are accepted, with clean tracked source. */
 export function verifyOfficialCore(official) {
-  const supportedCores = JSON.parse(readFileSync(
-    new URL('../../dsh-gea-plugin/scripts/supported-cores.json', import.meta.url),
-    'utf8',
-  ));
+  const supportedCores = JSON.parse(
+    readFileSync(
+      new URL('../../dsh-gea-plugin/scripts/supported-cores.json', import.meta.url),
+      'utf8',
+    ),
+  );
   const head = execFileSync('git', ['-C', official, 'rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
@@ -16,7 +18,7 @@ export function verifyOfficialCore(official) {
     ['-C', official, 'status', '--porcelain', '--untracked-files=no'],
     { encoding: 'utf8' },
   ).trim();
-  if (!supportedCores.some(core => core.head === head) || dirty)
+  if (!supportedCores.some((core) => core.head === head) || dirty)
     throw Error(
       `OFFICIAL_INPUT_REQUIRED: expected a clean registered official Core; got ${head}${dirty ? ' with tracked changes' : ''}`,
     );

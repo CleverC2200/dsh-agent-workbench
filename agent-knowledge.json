@@ -23,22 +23,24 @@
     "src/page-interaction/reference-store.ts",
     "src/workbench-entry.tsx",
     "scripts/check-agent-knowledge.mjs",
-    "scripts/verify-official-input.mjs"
+    "scripts/verify-official-input.mjs",
+    "scripts/candidate-input.mjs",
+    "scripts/quality.mjs",
+    "scripts/run-quality-ci.mjs"
   ],
   "scripts": [
     "check:knowledge",
     "candidate:verify",
     "typecheck:official",
     "build:core",
-    "test"
+    "test",
+    "quality:fast",
+    "quality:ci",
+    "lint",
+    "format:check",
+    "test:quality"
   ],
   "exports": true,
-  "peers": [
-    "../dsh-gea-plugin"
-  ],
-  "history": [
-    "docs/history",
-    "UPSTREAM.md",
-    "src/workbench/original/SOURCE.md"
-  ]
+  "peers": ["../dsh-gea-plugin"],
+  "history": ["docs/history", "UPSTREAM.md", "src/workbench/original/SOURCE.md"]
 }

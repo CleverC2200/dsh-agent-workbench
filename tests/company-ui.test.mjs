@@ -29,10 +29,15 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
   require,
 );
 const { mountCompanyUI, WorkbenchController } = module.exports;
-function fixture(account, panels = [{ options: { id: 'plugins', label: () => '插件管理' } }]) {
+function fixture(
+  account,
+  panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
+  { memory, restorePageSession } = {},
+) {
   const entries = [],
     calls = [];
-  const panelEntries = () => Array.isArray(panels) ? panels : panels.entriesOfSlot('sidebar.panellist');
+  const panelEntries = () =>
+    Array.isArray(panels) ? panels : panels.entriesOfSlot('sidebar.panellist');
   const ctx = {
     layout: {
       selectPanel: (id) => calls.push(['panel', id]),
@@ -46,16 +51,20 @@ function fixture(account, panels = [{ options: { id: 'plugins', label: () => '�
     },
     slots: {
       entries: (name) =>
-        !Array.isArray(panels) ? panels.entries(name) : name === 'sidebar.panellist'
-          ? panels
-          : [
-              { options: { key: 'gea-proof' } },
-              { options: { key: 'inventory-fc' } },
-              { options: { key: 'plugins' } },
-              ...entries.filter((entry) => entry.options.name === 'main'),
-            ],
-      entriesOfSlot: name => !Array.isArray(panels) ? panels.entriesOfSlot(name) : ctx.slots.entries(name),
-      subscribe: (name, listener) => Array.isArray(panels) ? () => {} : panels.subscribe(name, listener),
+        !Array.isArray(panels)
+          ? panels.entries(name)
+          : name === 'sidebar.panellist'
+            ? panels
+            : [
+                { options: { key: 'gea-proof' } },
+                { options: { key: 'inventory-fc' } },
+                { options: { key: 'plugins' } },
+                ...entries.filter((entry) => entry.options.name === 'main'),
+              ],
+      entriesOfSlot: (name) =>
+        !Array.isArray(panels) ? panels.entriesOfSlot(name) : ctx.slots.entries(name),
+      subscribe: (name, listener) =>
+        Array.isArray(panels) ? () => {} : panels.subscribe(name, listener),
       inject: (_name, fn) => fn(),
       register: (options, component) => {
         entries.push({ options, component });
@@ -67,20 +76,30 @@ function fixture(account, panels = [{ options: { id: 'plugins', label: () => '�
     },
     effect: () => {},
   };
-  const workbench = new WorkbenchController({
-    panel: (id) => calls.push(['page', id]),
-    document: (id) => calls.push(['document', id]),
-    hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
-  });
-  mountCompanyUI(ctx, workbench, () =>
-    React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
+  const workbench = new WorkbenchController(
+    {
+      panel: (id) => calls.push(['page', id]),
+      document: (id) => calls.push(['document', id]),
+      hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
+    },
+    memory,
+  );
+  mountCompanyUI(
+    ctx,
+    workbench,
+    () =>
+      React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
+    restorePageSession,
   );
   const renderSlot = (name, props = {}, options = {}) => {
     if (name === 'sidebar.panellist') {
-      const entry = panelEntries().find(row => row.options.id === options.only);
-      return entry?.component ? React.createElement(entry.component, props) : React.createElement('svg', {
-        'data-public-panel-icon': options.only, 'data-active': props.active,
-      });
+      const entry = panelEntries().find((row) => row.options.id === options.only);
+      return entry?.component
+        ? React.createElement(entry.component, props)
+        : React.createElement('svg', {
+            'data-public-panel-icon': options.only,
+            'data-active': props.active,
+          });
     }
     if (name === 'sidebar.toggle.badge' && !Array.isArray(panels)) {
       const entry = panels.entriesOfSlot(name)[0];
@@ -441,7 +460,12 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
   const snapshot = {
     state: 'confirmed',
     scope: 'host-fixture',
-    status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Fixture User' } },
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: true,
+      user: { name: 'Fixture User' },
+    },
   };
   const delayed = Promise.withResolvers();
   let logoutSignal;
@@ -678,13 +702,25 @@ test('opening real history from a static Document returns to native Conversation
   assert.ok(document.querySelector('.gea-company-main'));
 });
 
-
 async function mountedDom(t) {
-  const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true, url: 'http://localhost' });
-  const values = { window: dom.window, document: dom.window.document, Node: dom.window.Node,
-    navigator: dom.window.navigator, IS_REACT_ACT_ENVIRONMENT: true,
-    fetch: () => { throw Error('Account presentation must not fetch business/model routes'); } };
-  const saved = Object.keys(values).map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
+  const dom = new JSDOM('<main id="root"></main>', {
+    pretendToBeVisual: true,
+    url: 'http://localhost',
+  });
+  const values = {
+    window: dom.window,
+    document: dom.window.document,
+    Node: dom.window.Node,
+    navigator: dom.window.navigator,
+    IS_REACT_ACT_ENVIRONMENT: true,
+    fetch: () => {
+      throw Error('Account presentation must not fetch business/model routes');
+    },
+  };
+  const saved = Object.keys(values).map((key) => [
+    key,
+    Object.getOwnPropertyDescriptor(globalThis, key),
+  ]);
   for (const [key, value] of Object.entries(values))
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
   const { createRoot } = await import('react-dom/client');
@@ -700,77 +736,490 @@ async function mountedDom(t) {
   return { root, dom };
 }
 
-test('public official and third-party panel rows keep order, icons, activation, live removal and the collapsed badge', async t => {
+async function mountedMainConversation(t, options = {}) {
+  const { root } = await mountedDom(t);
+  const { entries, workbench } = fixture(options.account, undefined, options);
+  const entry = entries.find((row) => row.options.name === 'main.conversation');
+  const render = (sessionId, epoch = 0) =>
+    React.act(async () =>
+      root.render(
+        React.createElement(entry.component, {
+          key: epoch,
+          sessionId,
+          useSession: (selector) =>
+            selector(
+              sessionId
+                ? { blank: false, running: false, promptAttempted: true, openState: 'open' }
+                : undefined,
+            ),
+          useConversation: (selector) => selector({ activeTargets: new Set(['chat']) }),
+          useSessions: (selector) =>
+            selector(options.catalogue ?? { phase: 'ready', ids: [], byId: {} }),
+          renderFactorySlot: (name, ...args) =>
+            name === 'agent-workbench.document'
+              ? React.createElement('iframe', { 'data-restored-document': true })
+              : nativeFactory(name, ...args, sessionId),
+        }),
+      ),
+    );
+  return { workbench, render };
+}
+
+test('first Core main Session hydration preserves the restored unbound Document presentation', async (t) => {
+  let saved = { version: 2, page: 'gea-proof', selections: [], views: [] };
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => saved,
+      set: (value) => (saved = structuredClone(value)),
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument?.id, 'gea-proof');
+  assert.equal(saved.page, 'gea-proof');
+  assert.equal(
+    document.querySelector('[data-restored-document]').parentElement.style.display,
+    'flex',
+  );
+  assert.equal(workbench.getSnapshot().selection, undefined);
+});
+
+test('a later main Session remount leaves the restored unbound Document', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  assert.equal(
+    document.querySelector('[data-restored-document]').parentElement.style.display,
+    'none',
+  );
+  assert.ok(document.querySelector('.gea-company-main'));
+});
+
+test('closing the main Session consumes the initial allowance before another Session is adopted', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  await render(undefined, 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  await React.act(async () => workbench.open('gea-proof'));
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('an ordinary initial Session consumes the allowance before a late page registration restores presentation', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+  });
+  await render('session-a');
+  await React.act(async () =>
+    workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null }),
+  );
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, true);
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('first main Session adoption leaves a manually opened unbound Document', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t);
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await workbench.open('gea-proof');
+  await render(undefined);
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('explicit page History binds its Session before the initial presentation allowance', async (t) => {
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+      set: () => {},
+    },
+    restorePageSession: async (page, sessionId, signal, expected) => {
+      signal.throwIfAborted();
+      restored.push({ page, sessionId, expected });
+      workbench.associateSession(page, { sessionId, ...expected, ownerScope: 'owner' });
+    },
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  const expected = { preset: 'forecast', cwd: '/workspace' };
+  await React.act(async () => {
+    workbench.showHistory('gea-proof');
+    workbench.selectHistorySession('gea-proof', 'session-a', expected);
+  });
+  await render('session-a');
+  assert.deepEqual(restored, [{ page: 'gea-proof', sessionId: 'session-a', expected }]);
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  assert.deepEqual(workbench.getSnapshot().selection, {
+    sessionId: 'session-a',
+    ...expected,
+    ownerScope: 'owner',
+  });
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, undefined);
+});
+
+test('main Session observation starts fresh for each mounted company UI lifetime', async (t) => {
+  for (const lifetime of ['before UI teardown', 'after UI reconstruction'])
+    await t.test(lifetime, async (t) => {
+      const { workbench, render } = await mountedMainConversation(t, {
+        memory: {
+          getSnapshot: () => ({ version: 2, page: 'gea-proof', selections: [], views: [] }),
+          set: () => {},
+        },
+      });
+      workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+      await render(undefined);
+      await render('session-a');
+      assert.equal(workbench.getSnapshot().selectedDocument?.id, 'gea-proof');
+      await render('session-b', 1);
+      assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+    });
+});
+
+test('a bound Document retains its matching main Session and leaves on a remounted different Session', async (t) => {
+  const { workbench, render } = await mountedMainConversation(t);
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  workbench.associateSession('gea-proof', {
+    sessionId: 'session-a',
+    preset: 'forecast',
+    ownerScope: 'owner',
+  });
+  await workbench.open('gea-proof');
+  await render('session-a');
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  await render('session-b', 1);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+});
+
+test('initial main Session observation does not restore a saved page whose Session is missing', async (t) => {
+  const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    memory: {
+      getSnapshot: () => ({
+        version: 2,
+        page: 'gea-proof',
+        selections: [
+          { page: 'gea-proof', active: true, sessionId, preset: null, ownerScope: null },
+        ],
+        views: [],
+      }),
+      set: () => {},
+    },
+    restorePageSession: async (...args) => restored.push(args),
+  });
+  workbench.registerFrame({ id: 'gea-proof', kind: 'local', body: () => null });
+  await render(undefined);
+  await render('session-a');
+  assert.deepEqual(restored, []);
+  assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+  assert.equal(workbench.recoveryTarget().sessionId, sessionId);
+});
+
+test('initial main Session observation preserves validated bound business Session recovery', async (t) => {
+  const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+  const selection = {
+    sessionId,
+    preset: 'forecast',
+    ownerScope: 'old-owner',
+    subject: 'subject',
+    cwd: '/workspace',
+  };
+  const identity = {
+    state: 'confirmed',
+    scope: 'current-owner',
+    subject: 'subject',
+    status: { authenticated: true },
+  };
+  const restored = [];
+  const { workbench, render } = await mountedMainConversation(t, {
+    account: { getSnapshot: () => identity, subscribe: () => () => {} },
+    catalogue: { phase: 'ready', ids: [sessionId], byId: { [sessionId]: { cwd: '/workspace' } } },
+    memory: {
+      getSnapshot: () => ({
+        version: 2,
+        page: 'gea-proof',
+        selections: [{ page: 'gea-proof', active: true, ...selection }],
+        views: [],
+      }),
+      set: () => {},
+    },
+    restorePageSession: async (page, sessionId, signal, expected) => {
+      signal.throwIfAborted();
+      restored.push({ page, sessionId, expected });
+      workbench.associateSession(page, { ...selection, ownerScope: 'current-owner' });
+    },
+  });
+  workbench.registerFrame({
+    id: 'gea-proof',
+    kind: 'local',
+    resourceId: 'forecast',
+    body: () => null,
+  });
+  await render(undefined);
+  await render(sessionId);
+  assert.equal(restored.length, 1);
+  assert.deepEqual(restored[0], {
+    page: 'gea-proof',
+    sessionId,
+    expected: { page: 'gea-proof', ...selection, resourceId: 'forecast' },
+  });
+  assert.equal(workbench.getSnapshot().selectedDocument.id, 'gea-proof');
+  assert.deepEqual(workbench.getSnapshot().selection, {
+    ...selection,
+    ownerScope: 'current-owner',
+  });
+  assert.equal(workbench.getSnapshot().restoredWithoutSession, undefined);
+});
+
+test('initial main Session observation keeps GEA identity checks on saved business Session recovery', async (t) => {
+  for (const state of ['unknown', 'signed-out'])
+    await t.test(state, async (t) => {
+      const sessionId = 'session-00000000-0000-0000-0000-000000000001';
+      const restored = [];
+      const identity =
+        state === 'unknown'
+          ? { state: 'unknown', scope: null, status: null }
+          : { state: 'confirmed', scope: null, subject: null, status: { authenticated: false } };
+      const { workbench, render } = await mountedMainConversation(t, {
+        account: {
+          getSnapshot: () => identity,
+          subscribe: () => () => {},
+        },
+        catalogue: {
+          phase: 'ready',
+          ids: [sessionId],
+          byId: { [sessionId]: { cwd: '/workspace' } },
+        },
+        memory: {
+          getSnapshot: () => ({
+            version: 2,
+            page: 'gea-proof',
+            selections: [
+              {
+                page: 'gea-proof',
+                active: true,
+                sessionId,
+                preset: 'forecast',
+                ownerScope: 'old-owner',
+                subject: 'old-subject',
+                cwd: '/workspace',
+              },
+            ],
+            views: [],
+          }),
+          set: () => {},
+        },
+        restorePageSession: async (...args) => restored.push(args),
+      });
+      workbench.registerFrame({
+        id: 'gea-proof',
+        kind: 'local',
+        resourceId: 'forecast',
+        body: () => null,
+      });
+      await render(undefined);
+      await render('session-a');
+      assert.deepEqual(restored, []);
+      assert.equal(workbench.getSnapshot().selectedDocument, undefined);
+      assert.equal(
+        workbench.recoveryTarget()?.sessionId,
+        state === 'unknown' ? sessionId : undefined,
+      );
+    });
+});
+
+test('public official and third-party panel rows keep order, icons, activation, live removal and the collapsed badge', async (t) => {
   const { root } = await mountedDom(t);
   const core = new SlotCore();
-  core.register({ name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } }, () => null);
-  core.register({ name: 'sidebar', children: {
-    'sidebar.panellist': { kind: 'list', scope: 'root' },
-    'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
-  } }, () => null);
-  const icon = props => React.createElement('svg', { 'data-actual-icon': true, 'data-active': props.active, 'data-size': props.size });
-  core.register({ name: 'sidebar.panellist', id: 'plugins', order: 20, label: () => '插件管理' }, icon);
-  const removeSchedule = core.register({ name: 'sidebar.panellist', id: 'schedules', order: 10, label: '定时任务' }, icon);
-  core.register({ name: 'sidebar.toggle.badge' }, () => React.createElement('span', { 'data-actual-badge': true }, '3'));
+  core.register(
+    { name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } },
+    () => null,
+  );
+  core.register(
+    {
+      name: 'sidebar',
+      children: {
+        'sidebar.panellist': { kind: 'list', scope: 'root' },
+        'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
+      },
+    },
+    () => null,
+  );
+  const icon = (props) =>
+    React.createElement('svg', {
+      'data-actual-icon': true,
+      'data-active': props.active,
+      'data-size': props.size,
+    });
+  core.register(
+    { name: 'sidebar.panellist', id: 'plugins', order: 20, label: () => '插件管理' },
+    icon,
+  );
+  const removeSchedule = core.register(
+    { name: 'sidebar.panellist', id: 'schedules', order: 10, label: '定时任务' },
+    icon,
+  );
+  core.register({ name: 'sidebar.toggle.badge' }, () =>
+    React.createElement('span', { 'data-actual-badge': true }, '3'),
+  );
   const { entries, calls, renderSlot, workbench } = fixture(undefined, core);
   workbench.registerFrame({ id: 'fixture-document', kind: 'html', src: '/fixture.html' });
   await workbench.open('fixture-document');
-  const sidebar = entries.find(entry => entry.options.name === 'sidebar');
-  const render = collapsed => React.act(async () => root.render(React.createElement(sidebar.component, {
-    collapsed, width: collapsed ? 56 : 280,
-    usePanelInfo: selector => selector({ activePanelId: 'schedules' }), renderSlot,
-  })));
+  const sidebar = entries.find((entry) => entry.options.name === 'sidebar');
+  const render = (collapsed) =>
+    React.act(async () =>
+      root.render(
+        React.createElement(sidebar.component, {
+          collapsed,
+          width: collapsed ? 56 : 280,
+          usePanelInfo: (selector) => selector({ activePanelId: 'schedules' }),
+          renderSlot,
+        }),
+      ),
+    );
   await render(false);
-  assert.deepEqual([...document.querySelectorAll('.gea-plugin-entry')].map(button => button.getAttribute('aria-label')), ['定时任务', '插件管理']);
-  assert.equal(document.querySelector('[aria-label="定时任务"]').getAttribute('aria-current'), 'page');
+  assert.deepEqual(
+    [...document.querySelectorAll('.gea-plugin-entry')].map((button) =>
+      button.getAttribute('aria-label'),
+    ),
+    ['定时任务', '插件管理'],
+  );
+  assert.equal(
+    document.querySelector('[aria-label="定时任务"]').getAttribute('aria-current'),
+    'page',
+  );
   assert.equal(document.querySelector('[aria-label="定时任务"] svg').dataset.active, 'true');
   await React.act(async () => document.querySelector('[aria-label="定时任务"]').click());
   assert.deepEqual(calls.at(-1), ['panel', 'schedules']);
   assert.equal(workbench.getSnapshot().selectedDocument, undefined);
-  const removeThird = await React.act(async () => core.register({ name: 'sidebar.panellist', id: 'third-party', order: -1, label: '第三方面板' }, icon));
-  assert.equal(document.querySelector('.gea-plugin-entry').getAttribute('aria-label'), '第三方面板');
+  const removeThird = await React.act(async () =>
+    core.register(
+      { name: 'sidebar.panellist', id: 'third-party', order: -1, label: '第三方面板' },
+      icon,
+    ),
+  );
+  assert.equal(
+    document.querySelector('.gea-plugin-entry').getAttribute('aria-label'),
+    '第三方面板',
+  );
   await render(true);
   assert.equal(document.querySelector('[aria-label="第三方面板"] svg').dataset.size, '18');
   assert.ok(document.querySelector('.gea-owned-sidebar-toggle [data-actual-badge]'));
   await React.act(async () => document.querySelector('.gea-owned-sidebar-toggle').click());
   assert.deepEqual(calls.at(-1), ['toggle']);
-  await React.act(async () => { removeSchedule(); removeThird(); });
+  await React.act(async () => {
+    removeSchedule();
+    removeThird();
+  });
   assert.equal(document.querySelector('[aria-label="定时任务"]'), null);
   assert.equal(document.querySelector('[aria-label="第三方面板"]'), null);
 });
 
-test('account QR login uses only GEA authority, refresh cancels the old challenge and Host subscription owns success', async t => {
+test('account QR login uses only GEA authority, refresh cancels the old challenge and Host subscription owns success', async (t) => {
   const { root, dom } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  let snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
-  const listeners = new Set(), starts = [], polls = [];
+  let snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
+  const listeners = new Set(),
+    starts = [],
+    polls = [];
   const delayedPoll = Promise.withResolvers();
   const authority = {
     getSnapshot: () => snapshot,
-    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-    startLogin: async signal => { starts.push(signal); return { loginId: 'challenge-' + starts.length, image: 'data:image/png;base64,AA==', expiresIn: 120 }; },
-    pollLogin: (id, signal) => { polls.push({ id, signal }); return delayedPoll.promise; },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    startLogin: async (signal) => {
+      starts.push(signal);
+      return {
+        loginId: 'challenge-' + starts.length,
+        image: 'data:image/png;base64,AA==',
+        expiresIn: 120,
+      };
+    },
+    pollLogin: (id, signal) => {
+      polls.push({ id, signal });
+      return delayedPoll.promise;
+    },
   };
   const { entries, calls } = fixture(authority);
-  const account = entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   const trigger = document.querySelector('[aria-label="账户菜单"]');
   await React.act(async () => trigger.click());
   assert.equal(starts.length, 0);
-  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '登录 GEA')
+      .click(),
+  );
   assert.equal(starts.length, 1);
   assert.ok(document.querySelector('[role="dialog"] img'));
   assert.deepEqual(calls, []);
   await React.act(async () => t.mock.timers.tick(500));
   assert.equal(polls[0].id, 'challenge-1');
-  await React.act(async () => [...document.querySelectorAll('[role="dialog"] button')].find(button => button.textContent === '刷新二维码').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="dialog"] button')]
+      .find((button) => button.textContent === '刷新二维码')
+      .click(),
+  );
   assert.equal(starts[0].aborted, true);
   assert.equal(polls[0].signal.aborted, true);
   assert.equal(starts.length, 2);
   await React.act(async () => delayedPoll.resolve(true));
-  assert.ok(document.querySelector('[role="dialog"]'), 'old poll cannot close a refreshed challenge');
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    'old poll cannot close a refreshed challenge',
+  );
   await React.act(async () => {
-    snapshot = { state: 'confirmed', scope: 'host-authenticated', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Host User' } } };
+    snapshot = {
+      state: 'confirmed',
+      scope: 'host-authenticated',
+      status: {
+        environment: 'test',
+        environments: ['production', 'test'],
+        authenticated: true,
+        user: { name: 'Host User' },
+      },
+    };
     for (const changed of listeners) changed();
   });
   assert.equal(document.querySelector('[role="dialog"]'), null);
@@ -779,145 +1228,379 @@ test('account QR login uses only GEA authority, refresh cancels the old challeng
   assert.equal(dom.window.localStorage.length, 0);
 });
 
-test('closing and unmounting account QR login abort actual requests and ignore late start responses', async t => {
+test('closing and unmounting account QR login abort actual requests and ignore late start responses', async (t) => {
   const { root, dom } = await mountedDom(t);
-  const delayed = Promise.withResolvers(), starts = [];
+  const delayed = Promise.withResolvers(),
+    starts = [];
   const authority = {
     getSnapshot: () => signedOutSnapshot,
     subscribe: () => () => {},
-    startLogin: signal => { starts.push(signal); return delayed.promise; },
-    pollLogin: () => { throw Error('A cancelled QR must never start polling'); },
+    startLogin: (signal) => {
+      starts.push(signal);
+      return delayed.promise;
+    },
+    pollLogin: () => {
+      throw Error('A cancelled QR must never start polling');
+    },
   };
-  const signedOutSnapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
+  const signedOutSnapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
   const { entries } = fixture(authority);
-  const account = entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   const open = async () => {
     await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-    await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+    await React.act(async () =>
+      [...document.querySelectorAll('[role="menuitem"]')]
+        .find((button) => button.textContent === '登录 GEA')
+        .click(),
+    );
   };
   await open();
-  await React.act(async () => document.querySelector('[role="dialog"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+  await React.act(async () =>
+    document
+      .querySelector('[role="dialog"]')
+      .dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+  );
   assert.equal(starts[0].aborted, true);
-  await React.act(async () => delayed.resolve({ loginId: 'late', image: 'data:image/png;base64,AA==', expiresIn: 120 }));
+  await React.act(async () =>
+    delayed.resolve({ loginId: 'late', image: 'data:image/png;base64,AA==', expiresIn: 120 }),
+  );
   assert.equal(document.querySelector('[role="dialog"]'), null);
   await open();
   await React.act(async () => root.render(null));
   assert.equal(starts[1].aborted, true);
 });
 
-
-test('account QR expiration stops polling and an unavailable GEA authority cannot initiate login', async t => {
+test('account QR expiration stops polling and an unavailable GEA authority cannot initiate login', async (t) => {
   const { root } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  const unavailable = fixture().entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(unavailable.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const unavailable = fixture().entries.find((row) => row.options.name === 'settings.launcher');
+  await React.act(async () =>
+    root.render(
+      React.createElement(unavailable.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-  assert.equal([...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').disabled, true);
-  const signedOut = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
+  assert.equal(
+    [...document.querySelectorAll('[role="menuitem"]')].find(
+      (button) => button.textContent === '登录 GEA',
+    ).disabled,
+    true,
+  );
+  const signedOut = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
   let polls = 0;
   const authority = {
-    getSnapshot: () => signedOut, subscribe: () => () => {},
-    startLogin: async () => ({ loginId: 'expiring', image: 'data:image/png;base64,AA==', expiresIn: 120 }),
-    pollLogin: async () => { polls++; return false; },
+    getSnapshot: () => signedOut,
+    subscribe: () => () => {},
+    startLogin: async () => ({
+      loginId: 'expiring',
+      image: 'data:image/png;base64,AA==',
+      expiresIn: 120,
+    }),
+    pollLogin: async () => {
+      polls++;
+      return false;
+    },
   };
-  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = fixture(authority).entries.find(
+    (row) => row.options.name === 'settings.launcher',
+  );
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '登录 GEA')
+      .click(),
+  );
   await React.act(async () => t.mock.timers.tick(120000));
   assert.ok(document.querySelector('[role="dialog"]').textContent.includes('二维码已过期'));
   assert.ok(document.querySelector('.gea-account-login-qr').classList.contains('is-expired'));
   assert.equal(polls, 0);
 });
 
-
-test('a current successful QR poll waits for the latest confirmed Host identity before closing', async t => {
+test('a current successful QR poll waits for the latest confirmed Host identity before closing', async (t) => {
   const { root } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  let snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
+  let snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
   const listeners = new Set();
   let polls = 0;
   const authority = {
     getSnapshot: () => snapshot,
-    subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); },
-    startLogin: async () => ({ loginId: 'current', image: 'data:image/png;base64,AA==', expiresIn: 120 }),
-    pollLogin: async () => { polls++; return true; },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    startLogin: async () => ({
+      loginId: 'current',
+      image: 'data:image/png;base64,AA==',
+      expiresIn: 120,
+    }),
+    pollLogin: async () => {
+      polls++;
+      return true;
+    },
   };
-  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = fixture(authority).entries.find(
+    (row) => row.options.name === 'settings.launcher',
+  );
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '登录 GEA')
+      .click(),
+  );
   await React.act(async () => t.mock.timers.tick(500));
   assert.equal(polls, 1);
-  assert.ok(document.querySelector('[role="dialog"]'), 'poll=true is not the current Host authentication projection');
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    'poll=true is not the current Host authentication projection',
+  );
   assert.equal(document.querySelector('.gea-account-login-qr').getAttribute('aria-busy'), 'false');
   await React.act(async () => t.mock.timers.tick(1000));
   assert.equal(polls, 1, 'a completed challenge does not busy-poll while awaiting Host identity');
-  const publish = next => React.act(async () => { snapshot = next; for (const changed of listeners) changed(); });
-  await publish({ state: 'unknown', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Unconfirmed' } } });
-  assert.ok(document.querySelector('[role="dialog"]'), 'an unconfirmed identity cannot close the dialog');
-  await publish({ state: 'confirmed', error: 'IDENTITY_READ_FAILED', scope: 'stale-host', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Stale Host User' } } });
-  assert.ok(document.querySelector('[role="dialog"]'), 'an observation error cannot turn a cached identity into current login confirmation');
-  await publish({ state: 'confirmed', scope: 'current-host', status: { environment: 'test', environments: ['production', 'test'], authenticated: true, user: { name: 'Confirmed Host User' } } });
+  const publish = (next) =>
+    React.act(async () => {
+      snapshot = next;
+      for (const changed of listeners) changed();
+    });
+  await publish({
+    state: 'unknown',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: true,
+      user: { name: 'Unconfirmed' },
+    },
+  });
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    'an unconfirmed identity cannot close the dialog',
+  );
+  await publish({
+    state: 'confirmed',
+    error: 'IDENTITY_READ_FAILED',
+    scope: 'stale-host',
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: true,
+      user: { name: 'Stale Host User' },
+    },
+  });
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    'an observation error cannot turn a cached identity into current login confirmation',
+  );
+  await publish({
+    state: 'confirmed',
+    scope: 'current-host',
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: true,
+      user: { name: 'Confirmed Host User' },
+    },
+  });
   assert.equal(document.querySelector('[role="dialog"]'), null);
-  assert.ok(document.querySelector('[aria-label="账户菜单"]').textContent.includes('Confirmed Host User'));
+  assert.ok(
+    document.querySelector('[aria-label="账户菜单"]').textContent.includes('Confirmed Host User'),
+  );
 });
 
-test('sidebar metadata and icons use the same winning slot projection with shadowed and abdicated owners', async t => {
+test('sidebar metadata and icons use the same winning slot projection with shadowed and abdicated owners', async (t) => {
   const { root } = await mountedDom(t);
   const core = new SlotCore();
-  core.register({ name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } }, () => null);
-  core.register({ name: 'sidebar', children: { 'sidebar.panellist': { kind: 'list', scope: 'root' } } }, () => null);
-  const icon = owner => () => React.createElement('svg', { 'data-panel-owner': owner });
-  core.register({ name: 'sidebar.panellist', id: 'schedules', priority: 10, order: 20, label: '原定时任务' }, icon('original'));
-  core.register({ name: 'sidebar.panellist', id: 'plugins', order: 10, label: '插件管理' }, icon('plugins'));
-  const removeWinner = core.register({ name: 'sidebar.panellist', id: 'schedules', priority: -10, order: -5, label: '新定时任务' }, icon('winner'));
-  core.register({ name: 'sidebar.panellist', id: 'schedules', priority: -20, order: -20, label: '退位定时任务' }, icon('abdicated'));
-  const abdicated = core.entries('sidebar.panellist').find(row => row.options.label === '退位定时任务');
-  core.reportEntryError('sidebar.panellist', abdicated, Error('fixture owner failed'), { abdicate: true });
+  core.register(
+    { name: 'root', children: { sidebar: { kind: 'single', scope: 'root' } } },
+    () => null,
+  );
+  core.register(
+    { name: 'sidebar', children: { 'sidebar.panellist': { kind: 'list', scope: 'root' } } },
+    () => null,
+  );
+  const icon = (owner) => () => React.createElement('svg', { 'data-panel-owner': owner });
+  core.register(
+    { name: 'sidebar.panellist', id: 'schedules', priority: 10, order: 20, label: '原定时任务' },
+    icon('original'),
+  );
+  core.register(
+    { name: 'sidebar.panellist', id: 'plugins', order: 10, label: '插件管理' },
+    icon('plugins'),
+  );
+  const removeWinner = core.register(
+    { name: 'sidebar.panellist', id: 'schedules', priority: -10, order: -5, label: '新定时任务' },
+    icon('winner'),
+  );
+  core.register(
+    {
+      name: 'sidebar.panellist',
+      id: 'schedules',
+      priority: -20,
+      order: -20,
+      label: '退位定时任务',
+    },
+    icon('abdicated'),
+  );
+  const abdicated = core
+    .entries('sidebar.panellist')
+    .find((row) => row.options.label === '退位定时任务');
+  core.reportEntryError('sidebar.panellist', abdicated, Error('fixture owner failed'), {
+    abdicate: true,
+  });
   const { ctx, entries, renderSlot } = fixture(undefined, core);
-  assert.equal(ctx.slots.entries('sidebar.panellist').length, 4, 'raw ledger retains shadowed and abdicated registrations');
-  assert.equal(ctx.slots.entriesOfSlot('sidebar.panellist').length, 2, 'rendered projection elects one non-abdicated owner per id');
-  const sidebar = entries.find(row => row.options.name === 'sidebar');
-  await React.act(async () => root.render(React.createElement(sidebar.component, {
-    collapsed: false, width: 280, usePanelInfo: selector => selector({ activePanelId: 'schedules' }), renderSlot,
-  })));
+  assert.equal(
+    ctx.slots.entries('sidebar.panellist').length,
+    4,
+    'raw ledger retains shadowed and abdicated registrations',
+  );
+  assert.equal(
+    ctx.slots.entriesOfSlot('sidebar.panellist').length,
+    2,
+    'rendered projection elects one non-abdicated owner per id',
+  );
+  const sidebar = entries.find((row) => row.options.name === 'sidebar');
+  await React.act(async () =>
+    root.render(
+      React.createElement(sidebar.component, {
+        collapsed: false,
+        width: 280,
+        usePanelInfo: (selector) => selector({ activePanelId: 'schedules' }),
+        renderSlot,
+      }),
+    ),
+  );
   const rows = () => [...document.querySelectorAll('.gea-plugin-entry')];
-  assert.deepEqual(rows().map(row => row.getAttribute('aria-label')), ['新定时任务', '插件管理']);
+  assert.deepEqual(
+    rows().map((row) => row.getAttribute('aria-label')),
+    ['新定时任务', '插件管理'],
+  );
   assert.equal(rows()[0].querySelector('svg').dataset.panelOwner, 'winner');
   assert.equal(document.querySelectorAll('[aria-label="新定时任务"]').length, 1);
   assert.equal(document.querySelector('[aria-label="原定时任务"]'), null);
   assert.equal(document.querySelector('[aria-label="退位定时任务"]'), null);
   await React.act(async () => removeWinner());
-  assert.deepEqual(rows().map(row => row.getAttribute('aria-label')), ['插件管理', '原定时任务']);
+  assert.deepEqual(
+    rows().map((row) => row.getAttribute('aria-label')),
+    ['插件管理', '原定时任务'],
+  );
   assert.equal(rows()[1].querySelector('svg').dataset.panelOwner, 'original');
   assert.equal(rows()[1].getAttribute('aria-current'), 'page');
 });
 
-
-test('login environment controls follow Host choices, replace QR and reject late responses from the previous environment', async t => {
+test('login environment controls follow Host choices, replace QR and reject late responses from the previous environment', async (t) => {
   const { root } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
-  const snapshot = { state: 'confirmed', scope: null, status: { environment: 'test', environments: ['production', 'test'], authenticated: false, user: null } };
-  const starts = [], polls = [];
+  const snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'test',
+      environments: ['production', 'test'],
+      authenticated: false,
+      user: null,
+    },
+  };
+  const starts = [],
+    polls = [];
   const oldPoll = Promise.withResolvers();
   const oldProduction = Promise.withResolvers();
   const authority = {
-    getSnapshot: () => snapshot, subscribe: () => () => {},
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
     startLogin: (signal, environment) => {
       starts.push({ signal, environment });
       if (environment === 'production') return oldProduction.promise;
-      return Promise.resolve({ loginId: 'test-' + starts.length, image: 'data:image/png;base64,VEVTVA==', expiresIn: 120 });
+      return Promise.resolve({
+        loginId: 'test-' + starts.length,
+        image: 'data:image/png;base64,VEVTVA==',
+        expiresIn: 120,
+      });
     },
-    pollLogin: (id, signal) => { polls.push({ id, signal }); return oldPoll.promise; },
+    pollLogin: (id, signal) => {
+      polls.push({ id, signal });
+      return oldPoll.promise;
+    },
   };
-  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = fixture(authority).entries.find(
+    (row) => row.options.name === 'settings.launcher',
+  );
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
-  const radio = value => document.querySelector('input[type="radio"][value="' + value + '"]');
-  assert.deepEqual([...document.querySelectorAll('fieldset label')].map(label => label.textContent), ['正式', '测试']);
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '登录 GEA')
+      .click(),
+  );
+  const radio = (value) => document.querySelector('input[type="radio"][value="' + value + '"]');
+  assert.deepEqual(
+    [...document.querySelectorAll('fieldset label')].map((label) => label.textContent),
+    ['正式', '测试'],
+  );
   assert.equal(radio('test').checked, true, 'initial choice is the current Host environment');
   assert.equal(starts[0].environment, 'test');
   await React.act(async () => t.mock.timers.tick(500));
@@ -926,32 +1609,78 @@ test('login environment controls follow Host choices, replace QR and reject late
   assert.equal(polls[0].signal.aborted, true);
   assert.equal(starts[1].environment, 'production');
   await React.act(async () => oldPoll.resolve(true));
-  assert.ok(document.querySelector('[role="dialog"]'), 'old successful poll cannot authenticate or close the new environment');
-  await React.act(async () => oldProduction.resolve({ loginId: 'production-current', image: 'data:image/png;base64,UFJPRA==', expiresIn: 120 }));
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    'old successful poll cannot authenticate or close the new environment',
+  );
+  await React.act(async () =>
+    oldProduction.resolve({
+      loginId: 'production-current',
+      image: 'data:image/png;base64,UFJPRA==',
+      expiresIn: 120,
+    }),
+  );
   assert.equal(radio('production').checked, true);
   await React.act(async () => radio('test').click());
   assert.equal(starts[1].signal.aborted, true);
   assert.equal(starts[2].environment, 'test');
-  assert.equal(document.querySelector('.gea-account-login-qr img').src, 'data:image/png;base64,VEVTVA==');
-  await React.act(async () => [...document.querySelectorAll('[role="dialog"] button')].find(button => button.textContent === '刷新二维码').click());
+  assert.equal(
+    document.querySelector('.gea-account-login-qr img').src,
+    'data:image/png;base64,VEVTVA==',
+  );
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="dialog"] button')]
+      .find((button) => button.textContent === '刷新二维码')
+      .click(),
+  );
   assert.equal(starts[2].signal.aborted, true);
   assert.equal(starts[3].environment, 'test', 'refresh keeps the requested environment');
   assert.equal(snapshot.status.authenticated, false, 'presentation does not create authentication');
 });
 
-test('login displays only configured Host environments', async t => {
+test('login displays only configured Host environments', async (t) => {
   const { root } = await mountedDom(t);
-  const snapshot = { state: 'confirmed', scope: null, status: { environment: 'production', environments: ['production'], authenticated: false, user: null } };
+  const snapshot = {
+    state: 'confirmed',
+    scope: null,
+    status: {
+      environment: 'production',
+      environments: ['production'],
+      authenticated: false,
+      user: null,
+    },
+  };
   const targets = [];
   const authority = {
-    getSnapshot: () => snapshot, subscribe: () => () => {},
-    startLogin: async (_signal, environment) => { targets.push(environment); return { loginId: 'formal', image: 'data:image/png;base64,AA==', expiresIn: 120 }; },
+    getSnapshot: () => snapshot,
+    subscribe: () => () => {},
+    startLogin: async (_signal, environment) => {
+      targets.push(environment);
+      return { loginId: 'formal', image: 'data:image/png;base64,AA==', expiresIn: 120 };
+    },
     pollLogin: async () => false,
   };
-  const account = fixture(authority).entries.find(row => row.options.name === 'settings.launcher');
-  await React.act(async () => root.render(React.createElement(account.component, { wide: true, settingsOpen: false, openSettings: () => {} })));
+  const account = fixture(authority).entries.find(
+    (row) => row.options.name === 'settings.launcher',
+  );
+  await React.act(async () =>
+    root.render(
+      React.createElement(account.component, {
+        wide: true,
+        settingsOpen: false,
+        openSettings: () => {},
+      }),
+    ),
+  );
   await React.act(async () => document.querySelector('[aria-label="账户菜单"]').click());
-  await React.act(async () => [...document.querySelectorAll('[role="menuitem"]')].find(button => button.textContent === '登录 GEA').click());
-  assert.deepEqual([...document.querySelectorAll('input[type="radio"]')].map(input => input.value), ['production']);
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitem"]')]
+      .find((button) => button.textContent === '登录 GEA')
+      .click(),
+  );
+  assert.deepEqual(
+    [...document.querySelectorAll('input[type="radio"]')].map((input) => input.value),
+    ['production'],
+  );
   assert.deepEqual(targets, ['production']);
 });

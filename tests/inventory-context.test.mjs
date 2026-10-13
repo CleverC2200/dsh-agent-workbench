@@ -1,56 +1,54 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { build } from "esbuild";
-test("an empty stock response clears stale facts while preserving the warehouse filter catalog", async () => {
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+test('an empty stock response clears stale facts while preserving the warehouse filter catalog', async () => {
   const built = await build({
-    entryPoints: [
-      "business/inventory-fc/source/inventory-light-plugins/src/native/context.ts",
-    ],
+    entryPoints: ['business/inventory-fc/source/inventory-light-plugins/src/native/context.ts'],
     bundle: true,
     write: false,
-    format: "esm",
-    platform: "node",
+    format: 'esm',
+    platform: 'node',
     define: { PLUGIN_ID: '"fc"' },
     plugins: [
       {
-        name: "context-transport",
+        name: 'context-transport',
         setup(api) {
           api.onResolve({ filter: /channel\.js$/ }, () => ({
-            path: "channel",
-            namespace: "fixture",
+            path: 'channel',
+            namespace: 'fixture',
           }));
-          api.onLoad({ filter: /.*/, namespace: "fixture" }, () => ({
-            contents: "export const publish=async()=>{};",
+          api.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
+            contents: 'export const publish=async()=>{};',
           }));
         },
       },
     ],
   });
   const context = await import(
-    "data:text/javascript;base64," +
-      Buffer.from(built.outputFiles[0].text).toString("base64")
+    'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
   );
-  globalThis.document = { getElementById: () => ({ innerText: "" }) };
+  globalThis.document = { getElementById: () => ({ innerText: '' }) };
   try {
-    context.updateContext("pageFilters", {
-      warehouseId: "changsha",
-      warehouses: ["changsha", "zhengzhou"],
+    context.updateContext('pageFilters', {
+      warehouseId: 'changsha',
+      warehouses: ['changsha', 'zhengzhou'],
     });
-    context.updateContext("data", { inventoryQty: 130 });
+    context.updateContext('data', { inventoryQty: 130 });
     context.clearContext({ keepPageFilters: true });
-    assert.deepEqual(Object.keys(context.pageContext().parts), ["pageFilters"]);
-    assert.deepEqual(context.pageContext().parts.pageFilters.warehouses, [
-      "changsha",
-      "zhengzhou",
-    ]);
-    globalThis.document = { getElementById: () => ({ innerText: "当前库存130件" }) };
+    assert.deepEqual(Object.keys(context.pageContext().parts), ['pageFilters']);
+    assert.deepEqual(context.pageContext().parts.pageFilters.warehouses, ['changsha', 'zhengzhou']);
+    globalThis.document = { getElementById: () => ({ innerText: '当前库存130件' }) };
     assert.equal(context.pageContext().visibleText, undefined);
-    for (const state of ["loading", "empty", "error"]) {
-      context.updateContext("queryState", { state, warehouseId: "changsha", message: state + "说明" });
-      assert.equal(context.pageContext().visibleText, state + "说明");
+    for (const state of ['loading', 'empty', 'error']) {
+      context.updateContext('queryState', {
+        state,
+        warehouseId: 'changsha',
+        message: state + '说明',
+      });
+      assert.equal(context.pageContext().visibleText, state + '说明');
     }
-    context.updateContext("queryState", { state: "ready", warehouseId: "changsha" });
-    assert.equal(context.pageContext().visibleText, "当前库存130件");
+    context.updateContext('queryState', { state: 'ready', warehouseId: 'changsha' });
+    assert.equal(context.pageContext().visibleText, '当前库存130件');
     context.clearContext();
     assert.deepEqual(context.pageContext().parts, {});
   } finally {

@@ -4,9 +4,7 @@
   "name": "订单工作台",
   "version": "0.1.0-preview.2-split.21",
   "html": "index.html",
-  "skills": [
-    "skills/orderworkbench/SKILL.md"
-  ],
+  "skills": ["skills/orderworkbench/SKILL.md"],
   "mcp": "mcp.json",
   "mode": "mock",
   "gea": {

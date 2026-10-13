@@ -420,7 +420,7 @@ export function Dropdown({ children, droplist }: any) {
   );
 }
 export type TableProps<_T = any> = { columns?: any[]; [key: string]: any };
-export function Table<T = any>({
+export function Table<_T = any>({
   columns = [],
   data = [],
   rowKey = 'key',
@@ -434,7 +434,7 @@ export function Table<T = any>({
   onExpand,
   renderChildFooter,
   scroll,
-}: TableProps<T>) {
+}: TableProps<_T>) {
   const [page, setPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
     [sort, setSort] = useState<any>(null),

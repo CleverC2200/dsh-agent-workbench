@@ -1,5 +1,14 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { Alert, Button, Input, InputNumber, Modal, Select, Tabs, Tag } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Tabs,
+  Tag,
+} from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useMemo, useState } from 'react';
 import { regionalApprovalSkuFixtures } from './regionalApprovalDetailFixture.ts';
@@ -60,9 +69,11 @@ const RegionalApprovalPlanDetail: React.FC<{
       categoryComparison
         ? [...APPROVAL_DIMENSIONS_BY_STAGE[approvalStage], 'category']
         : APPROVAL_DIMENSIONS_BY_STAGE[approvalStage],
-    [approvalStage, categoryComparison]
+    [approvalStage, categoryComparison],
   );
-  const [adjustmentDimension, setAdjustmentDimension] = useState<ApprovalAdjustmentDimension>(adjustmentDimensions[0]);
+  const [adjustmentDimension, setAdjustmentDimension] = useState<ApprovalAdjustmentDimension>(
+    adjustmentDimensions[0],
+  );
   const [saveAttempted, setSaveAttempted] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
   const plan = approvalPlan(store, row, version);
@@ -75,7 +86,7 @@ const RegionalApprovalPlanDetail: React.FC<{
       quantity: result.quantity + adjustment.editedQuantity,
       amount: result.amount + adjustment.editedAmount,
     }),
-    { quantity: 0, amount: 0 }
+    { quantity: 0, amount: 0 },
   );
   const reasons = [...new Set(Object.values(plan.working).map((adjustment) => adjustment.reason))];
   const businessReason = reasons.length === 1 ? reasons[0] : '';
@@ -86,7 +97,8 @@ const RegionalApprovalPlanDetail: React.FC<{
   }, [row.id, version]);
 
   useEffect(() => {
-    if (!adjustmentDimensions.includes(adjustmentDimension)) setAdjustmentDimension(adjustmentDimensions[0]);
+    if (!adjustmentDimensions.includes(adjustmentDimension))
+      setAdjustmentDimension(adjustmentDimensions[0]);
   }, [adjustmentDimension, adjustmentDimensions]);
 
   const applyAction = (action: ApprovalDetailAction) => {
@@ -137,7 +149,7 @@ const RegionalApprovalPlanDetail: React.FC<{
                 {t(
                   dirty
                     ? 'common.assistantSurface.regionalApproval.detail.dirty'
-                    : 'common.assistantSurface.regionalApproval.detail.saved'
+                    : 'common.assistantSurface.regionalApproval.detail.saved',
                 )}
               </Tag>
               <small>{t('common.assistantSurface.regionalApproval.detail.localBoundary')}</small>
@@ -146,15 +158,19 @@ const RegionalApprovalPlanDetail: React.FC<{
               <Button onClick={() => requestTransition({ type: 'close' })}>
                 {t('common.assistantSurface.regionalApproval.detail.close')}
               </Button>
-              <Button type='primary' disabled={!dirty || !canEdit} onClick={save}>
+              <Button type="primary" disabled={!dirty || !canEdit} onClick={save}>
                 {t('common.assistantSurface.regionalApproval.detail.save')}
               </Button>
             </span>
           </div>
         }
       >
-        <div className={styles.body} data-testid='regional-approval-plan-detail'>
-          <Alert type='info' showIcon content={t('common.assistantSurface.regionalApproval.detail.fixtureBoundary')} />
+        <div className={styles.body} data-testid="regional-approval-plan-detail">
+          <Alert
+            type="info"
+            showIcon
+            content={t('common.assistantSurface.regionalApproval.detail.fixtureBoundary')}
+          />
           <div className={styles.scopeControls}>
             <div>
               <span>{t('common.assistantSurface.regionalApproval.detail.organization')}</span>
@@ -165,7 +181,9 @@ const RegionalApprovalPlanDetail: React.FC<{
               >
                 {rows.map((candidate) => (
                   <Select.Option key={candidate.id} value={candidate.id}>
-                    {t(`common.assistantSurface.regionalApproval.organizations.${candidate.organizationKey}`)}
+                    {t(
+                      `common.assistantSurface.regionalApproval.organizations.${candidate.organizationKey}`,
+                    )}
                   </Select.Option>
                 ))}
               </Select>
@@ -175,7 +193,9 @@ const RegionalApprovalPlanDetail: React.FC<{
               <Select
                 value={version}
                 aria-label={t('common.assistantSurface.regionalApproval.detail.version')}
-                onChange={(next) => requestTransition({ type: 'version', version: next as ApprovalVersion })}
+                onChange={(next) =>
+                  requestTransition({ type: 'version', version: next as ApprovalVersion })
+                }
               >
                 {(['current', 'previous', 'initial'] as const).map((candidate) => (
                   <Select.Option key={candidate} value={candidate}>
@@ -191,23 +211,31 @@ const RegionalApprovalPlanDetail: React.FC<{
             </div>
           </div>
 
-          <Tabs defaultActiveTab='adjustment'>
-            <Tabs.TabPane key='adjustment' title={t('common.assistantSurface.regionalApproval.detail.tabs.adjustment')}>
+          <Tabs defaultActiveTab="adjustment">
+            <Tabs.TabPane
+              key="adjustment"
+              title={t('common.assistantSurface.regionalApproval.detail.tabs.adjustment')}
+            >
               {saveAttempted && validationErrors.length > 0 ? (
                 <Alert
-                  type='error'
+                  type="error"
                   content={t('common.assistantSurface.regionalApproval.detail.reasonError', {
                     count: validationErrors.length,
                   })}
                 />
               ) : null}
               {savedFeedback ? (
-                <Alert type='success' content={t('common.assistantSurface.regionalApproval.detail.savedFeedback')} />
+                <Alert
+                  type="success"
+                  content={t('common.assistantSurface.regionalApproval.detail.savedFeedback')}
+                />
               ) : null}
 
               <div className={styles.planSummary}>
                 <span>
-                  <small>{t('common.assistantSurface.regionalApproval.detail.totalQuantity')}</small>
+                  <small>
+                    {t('common.assistantSurface.regionalApproval.detail.totalQuantity')}
+                  </small>
                   <InputNumber
                     min={1}
                     precision={0}
@@ -215,7 +243,10 @@ const RegionalApprovalPlanDetail: React.FC<{
                     disabled={!canEdit}
                     aria-label={t('common.assistantSurface.regionalApproval.detail.planQuantity')}
                     onChange={(quantity) =>
-                      applyAction({ type: 'edit-plan-quantity', quantity: Number(quantity ?? totals.quantity) })
+                      applyAction({
+                        type: 'edit-plan-quantity',
+                        quantity: Number(quantity ?? totals.quantity),
+                      })
                     }
                   />
                 </span>
@@ -228,18 +259,26 @@ const RegionalApprovalPlanDetail: React.FC<{
                     disabled={!canEdit}
                     aria-label={t('common.assistantSurface.regionalApproval.detail.planAmount')}
                     onChange={(amount) =>
-                      applyAction({ type: 'edit-plan-amount', amount: Number(amount ?? totals.amount) })
+                      applyAction({
+                        type: 'edit-plan-amount',
+                        amount: Number(amount ?? totals.amount),
+                      })
                     }
                   />
                 </span>
-                <Button disabled={!canEdit} onClick={() => applyAction({ type: 'accept-all-suggestions' })}>
+                <Button
+                  disabled={!canEdit}
+                  onClick={() => applyAction({ type: 'accept-all-suggestions' })}
+                >
                   {t('common.assistantSurface.regionalApproval.detail.acceptAll')}
                 </Button>
               </div>
               <Tabs
                 activeTab={adjustmentDimension}
-                type='rounded'
-                onChange={(dimension) => setAdjustmentDimension(dimension as ApprovalAdjustmentDimension)}
+                type="rounded"
+                onChange={(dimension) =>
+                  setAdjustmentDimension(dimension as ApprovalAdjustmentDimension)
+                }
               >
                 {adjustmentDimensions.map((dimension) => (
                   <Tabs.TabPane
@@ -254,7 +293,9 @@ const RegionalApprovalPlanDetail: React.FC<{
                   value={businessReason}
                   disabled={!canEdit}
                   aria-label={t('common.assistantSurface.regionalApproval.detail.businessReason')}
-                  placeholder={t('common.assistantSurface.regionalApproval.detail.businessReasonPlaceholder')}
+                  placeholder={t(
+                    'common.assistantSurface.regionalApproval.detail.businessReasonPlaceholder',
+                  )}
                   autoSize={{ minRows: 2, maxRows: 3 }}
                   onChange={(reason) => applyAction({ type: 'reason-all', reason })}
                 />
@@ -265,12 +306,18 @@ const RegionalApprovalPlanDetail: React.FC<{
                   const delta = adjustment.editedQuantity - adjustment.initialQuantity;
                   const reasonInvalid = saveAttempted && validationErrors.includes(fixture.id);
                   return (
-                    <section className={styles.skuCard} key={fixture.id} data-testid={`approval-detail-${fixture.id}`}>
+                    <section
+                      className={styles.skuCard}
+                      key={fixture.id}
+                      data-testid={`approval-detail-${fixture.id}`}
+                    >
                       <header>
                         <span>
                           <strong>{fixture.id.split('-').at(-1)}</strong>
                           <small>
-                            {t(`common.assistantSurface.regionalApproval.detail.products.${fixture.productKey}`)}
+                            {t(
+                              `common.assistantSurface.regionalApproval.detail.products.${fixture.productKey}`,
+                            )}
                           </small>
                         </span>
                         <Tag color={delta === 0 ? 'gray' : 'orange'}>
@@ -279,83 +326,114 @@ const RegionalApprovalPlanDetail: React.FC<{
                       </header>
                       <div className={styles.quantityGrid}>
                         <span>
-                          <small>{t('common.assistantSurface.regionalApproval.detail.initialQuantity')}</small>
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.detail.initialQuantity')}
+                          </small>
                           <strong>{adjustment.initialQuantity.toLocaleString()}</strong>
                         </span>
                         <span>
-                          <small>{t('common.assistantSurface.regionalApproval.detail.editedQuantity')}</small>
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.detail.editedQuantity')}
+                          </small>
                           <InputNumber
                             min={0}
                             precision={0}
                             value={adjustment.editedQuantity}
                             disabled={!canEdit}
-                            aria-label={t('common.assistantSurface.regionalApproval.detail.editedQuantityFor', {
-                              sku: fixture.id.split('-').at(-1),
-                            })}
+                            aria-label={t(
+                              'common.assistantSurface.regionalApproval.detail.editedQuantityFor',
+                              {
+                                sku: fixture.id.split('-').at(-1),
+                              },
+                            )}
                             onChange={(quantity) =>
-                              applyAction({ type: 'edit', skuId: fixture.id, quantity: Number(quantity ?? 0) })
+                              applyAction({
+                                type: 'edit',
+                                skuId: fixture.id,
+                                quantity: Number(quantity ?? 0),
+                              })
                             }
                           />
                         </span>
                         <span>
-                          <small>{t('common.assistantSurface.regionalApproval.detail.amount')}</small>
+                          <small>
+                            {t('common.assistantSurface.regionalApproval.detail.amount')}
+                          </small>
                           <InputNumber
                             min={0}
                             precision={0}
                             value={adjustment.editedAmount}
                             disabled={!canEdit}
-                            aria-label={t('common.assistantSurface.regionalApproval.detail.editedAmountFor', {
-                              sku: fixture.id.split('-').at(-1),
-                            })}
+                            aria-label={t(
+                              'common.assistantSurface.regionalApproval.detail.editedAmountFor',
+                              {
+                                sku: fixture.id.split('-').at(-1),
+                              },
+                            )}
                             onChange={(amount) =>
-                              applyAction({ type: 'edit-amount', skuId: fixture.id, amount: Number(amount ?? 0) })
+                              applyAction({
+                                type: 'edit-amount',
+                                skuId: fixture.id,
+                                amount: Number(amount ?? 0),
+                              })
                             }
                           />
                         </span>
                       </div>
                       <Alert
                         className={styles.suggestion}
-                        type='info'
+                        type="info"
                         showIcon
                         content={
                           <div>
-                            <strong>{t('common.assistantSurface.regionalApproval.detail.aiSuggestion')}</strong>
-                            <Tag color='arcoblue'>
+                            <strong>
+                              {t('common.assistantSurface.regionalApproval.detail.aiSuggestion')}
+                            </strong>
+                            <Tag color="arcoblue">
                               {t('common.assistantSurface.regionalApproval.detail.fixtureSource')}
                             </Tag>
                             <p>
-                              {t(`common.assistantSurface.regionalApproval.detail.evidence.${fixture.evidenceKey}`, {
-                                quantity: adjustment.aiQuantity,
-                              })}
+                              {t(
+                                `common.assistantSurface.regionalApproval.detail.evidence.${fixture.evidenceKey}`,
+                                {
+                                  quantity: adjustment.aiQuantity,
+                                },
+                              )}
                             </p>
                           </div>
                         }
                         action={
                           <div className={styles.suggestionActions}>
                             <Button
-                              size='mini'
+                              size="mini"
                               disabled={!canEdit}
-                              onClick={() => applyAction({ type: 'accept-suggestion', skuId: fixture.id })}
+                              onClick={() =>
+                                applyAction({ type: 'accept-suggestion', skuId: fixture.id })
+                              }
                             >
                               {t('common.assistantSurface.regionalApproval.detail.accept')}
                             </Button>
                             <Button
-                              size='mini'
+                              size="mini"
                               disabled={!canEdit}
-                              onClick={() => applyAction({ type: 'ignore-suggestion', skuId: fixture.id })}
+                              onClick={() =>
+                                applyAction({ type: 'ignore-suggestion', skuId: fixture.id })
+                              }
                             >
                               {t('common.assistantSurface.regionalApproval.detail.ignore')}
                             </Button>
                             <Button
-                              size='mini'
+                              size="mini"
                               disabled={!canEdit}
-                              onClick={() => applyAction({ type: 'restore-suggestion', skuId: fixture.id })}
+                              onClick={() =>
+                                applyAction({ type: 'restore-suggestion', skuId: fixture.id })
+                              }
                             >
                               {t('common.assistantSurface.regionalApproval.detail.restore')}
                             </Button>
                             <Tag>
                               {t(
-                                `common.assistantSurface.regionalApproval.detail.suggestionState.${adjustment.suggestionDisposition}`
+                                `common.assistantSurface.regionalApproval.detail.suggestionState.${adjustment.suggestionDisposition}`,
                               )}
                             </Tag>
                           </div>
@@ -366,7 +444,7 @@ const RegionalApprovalPlanDetail: React.FC<{
                           {t(
                             adjustment.reasonRequirement === 'required'
                               ? 'common.assistantSurface.regionalApproval.detail.reasonRequired'
-                              : 'common.assistantSurface.regionalApproval.detail.reasonOptional'
+                              : 'common.assistantSurface.regionalApproval.detail.reasonOptional',
                           )}
                         </span>
                         <Input.TextArea
@@ -374,10 +452,15 @@ const RegionalApprovalPlanDetail: React.FC<{
                           status={reasonInvalid ? 'error' : undefined}
                           autoSize={{ minRows: 1, maxRows: 2 }}
                           disabled={!canEdit}
-                          aria-label={t('common.assistantSurface.regionalApproval.detail.reasonFor', {
-                            sku: fixture.id.split('-').at(-1),
-                          })}
-                          onChange={(reason) => applyAction({ type: 'reason', skuId: fixture.id, reason })}
+                          aria-label={t(
+                            'common.assistantSurface.regionalApproval.detail.reasonFor',
+                            {
+                              sku: fixture.id.split('-').at(-1),
+                            },
+                          )}
+                          onChange={(reason) =>
+                            applyAction({ type: 'reason', skuId: fixture.id, reason })
+                          }
                         />
                       </div>
                     </section>
@@ -385,11 +468,23 @@ const RegionalApprovalPlanDetail: React.FC<{
                 })}
               </div>
             </Tabs.TabPane>
-            <Tabs.TabPane key='customers' title={t('common.assistantSurface.regionalApproval.detail.tabs.customers')}>
-              <Alert type='info' content={t('common.assistantSurface.regionalApproval.detail.customerEvidence')} />
+            <Tabs.TabPane
+              key="customers"
+              title={t('common.assistantSurface.regionalApproval.detail.tabs.customers')}
+            >
+              <Alert
+                type="info"
+                content={t('common.assistantSurface.regionalApproval.detail.customerEvidence')}
+              />
             </Tabs.TabPane>
-            <Tabs.TabPane key='evidence' title={t('common.assistantSurface.regionalApproval.detail.tabs.evidence')}>
-              <Alert type='info' content={t('common.assistantSurface.regionalApproval.detail.versionEvidence')} />
+            <Tabs.TabPane
+              key="evidence"
+              title={t('common.assistantSurface.regionalApproval.detail.tabs.evidence')}
+            >
+              <Alert
+                type="info"
+                content={t('common.assistantSurface.regionalApproval.detail.versionEvidence')}
+              />
             </Tabs.TabPane>
           </Tabs>
         </div>
@@ -405,10 +500,10 @@ const RegionalApprovalPlanDetail: React.FC<{
             <Button onClick={() => pendingTransition && completeTransition(pendingTransition)}>
               {t('common.assistantSurface.regionalApproval.detail.retainAndContinue')}
             </Button>
-            <Button status='danger' onClick={discardAndContinue}>
+            <Button status="danger" onClick={discardAndContinue}>
               {t('common.assistantSurface.regionalApproval.detail.discardAndContinue')}
             </Button>
-            <Button type='primary' onClick={() => setPendingTransition(undefined)}>
+            <Button type="primary" onClick={() => setPendingTransition(undefined)}>
               {t('common.assistantSurface.regionalApproval.detail.cancelTransition')}
             </Button>
           </div>

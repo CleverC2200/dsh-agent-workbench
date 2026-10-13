@@ -46,12 +46,13 @@ const SKU_CATALOG = [
 
 export const regionalApprovalSkuFixtures = (
   row: RegionalApprovalRow,
-  version: ApprovalVersion
+  version: ApprovalVersion,
 ): RegionalApprovalSkuFixture[] => {
   const total = metricsForApprovalVersion(row, version).quantity;
   let allocated = 0;
   return SKU_CATALOG.map((sku, index) => {
-    const initialQuantity = index === SKU_CATALOG.length - 1 ? total - allocated : Math.round(total * sku.weight);
+    const initialQuantity =
+      index === SKU_CATALOG.length - 1 ? total - allocated : Math.round(total * sku.weight);
     allocated += initialQuantity;
     return {
       id: `${row.id}-${sku.id}`,

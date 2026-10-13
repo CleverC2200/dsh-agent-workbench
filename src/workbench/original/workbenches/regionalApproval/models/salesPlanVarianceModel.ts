@@ -8,7 +8,9 @@ const EXACT_DECIMAL = /^-?\d+(?:\.\d+)?$/;
 const EXACT_ZERO = /^-?0(?:\.0+)?$/;
 
 /** 只有合法的十进制差额才有符号；缺值（如「—」）不下结论，交给调用方保持中性。 */
-export const salesPlanVarianceSign = (value: string | null | undefined): SalesPlanVarianceSign | undefined => {
+export const salesPlanVarianceSign = (
+  value: string | null | undefined,
+): SalesPlanVarianceSign | undefined => {
   if (typeof value !== 'string') return undefined;
   const text = value.trim();
   if (!EXACT_DECIMAL.test(text)) return undefined;
@@ -20,7 +22,7 @@ export const salesPlanVarianceSign = (value: string | null | undefined): SalesPl
 export const salesPlanVarianceClass = (
   value: string | null | undefined,
   positiveClass: string,
-  negativeClass: string
+  negativeClass: string,
 ): string | undefined => {
   const sign = salesPlanVarianceSign(value);
   if (sign === 'positive') return positiveClass;

@@ -29,6 +29,8 @@ export interface WorkbenchSnapshot {
   readonly visitedDocuments: readonly WorkbenchFramePage[];
   readonly selectedDocument?: WorkbenchFramePage;
   readonly selection?: DocumentSession;
+  /** Runtime presentation intent. The presenter discovers resources but waits for explicit selection. */
+  readonly restoredWithoutSession?: boolean;
 }
 export interface WorkbenchPorts {
   panel(id: MainPanelId): void;
@@ -95,6 +97,7 @@ export class WorkbenchController implements AgentWorkbench {
   private rememberedPage: MainPanelId | undefined;
   private readonly htmlViews = new Map<MainPanelId, Map<string, HtmlViewState>>();
   private selectedDocument: WorkbenchFramePage | undefined;
+  private restoredWithoutSession = false;
   private readonly visited = new Set<MainPanelId>();
   private snapshot: WorkbenchSnapshot = { pages: [], visitedDocuments: [] };
   private disposed = false;
@@ -151,7 +154,10 @@ export class WorkbenchController implements AgentWorkbench {
       this.associations.delete(page.id);
       this.activePresets.delete(page.id);
       this.htmlViews.delete(page.id);
-      if (this.selectedDocument?.id === page.id) this.selectedDocument = undefined;
+      if (this.selectedDocument?.id === page.id) {
+        this.selectedDocument = undefined;
+        this.restoredWithoutSession = false;
+      }
       if (this.rememberedPage === page.id) this.rememberedPage = undefined;
       this.changed();
     };
@@ -164,6 +170,7 @@ export class WorkbenchController implements AgentWorkbench {
     const document = this.documents.get(id);
     if (document) {
       this.selectedDocument = document;
+      this.restoredWithoutSession = false;
       this.rememberedPage = undefined;
       this.visited.add(id);
       this.changed();
@@ -178,6 +185,13 @@ export class WorkbenchController implements AgentWorkbench {
     if (!this.ports.document) throw Error('WORKBENCH_DOCUMENT_UNAVAILABLE');
     const unregister = this.register(page);
     this.documents.set(page.id, page);
+    // A page with no Session association restores presentation only; Core navigation stays untouched.
+    if (this.rememberedPage === page.id && !this.associations.has(page.id)) {
+      this.selectedDocument = page;
+      this.restoredWithoutSession = true;
+      this.rememberedPage = undefined;
+      this.visited.add(page.id);
+    }
     this.changed();
     return unregister;
   }
@@ -190,6 +204,7 @@ export class WorkbenchController implements AgentWorkbench {
     }
     selections.set(selection.preset, selection);
     this.activePresets.set(page, selection.preset);
+    if (this.selectedDocument?.id === page) this.restoredWithoutSession = false;
     this.changed();
   }
   /** A hint for a declared interpretation; identity confirmation and authorization remain external. */
@@ -243,6 +258,7 @@ export class WorkbenchController implements AgentWorkbench {
     this.persist();
   }
   leaveDocument(): void {
+    this.restoredWithoutSession = false;
     this.cancelHistory();
     this.rememberedPage = undefined;
     if (!this.selectedDocument) {
@@ -340,6 +356,7 @@ export class WorkbenchController implements AgentWorkbench {
       pages: [...this.pages.values()],
       visitedDocuments: [...this.visited].map((id) => this.documents.get(id)!),
       selectedDocument: this.selectedDocument,
+      ...(this.restoredWithoutSession ? { restoredWithoutSession: true } : {}),
       selection: this.selectedDocument
         ? this.currentSelection(this.selectedDocument.id)
         : undefined,
@@ -378,6 +395,7 @@ export class WorkbenchController implements AgentWorkbench {
     this.htmlViews.clear();
     this.visited.clear();
     this.selectedDocument = undefined;
+    this.restoredWithoutSession = false;
     this.rememberedPage = undefined;
     this.changed();
   }

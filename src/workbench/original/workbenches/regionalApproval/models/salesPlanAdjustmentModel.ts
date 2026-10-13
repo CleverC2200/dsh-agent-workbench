@@ -1,7 +1,11 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { GeaSalesPlanSku } from '../../../bridge.ts';
 import type { ApprovalDimension } from '../regionalApprovalFixture.ts';
-import { addExactDecimals, subtractExactDecimals, type RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
+import {
+  addExactDecimals,
+  subtractExactDecimals,
+  type RegionalApprovalLiveRow,
+} from '../regionalApprovalQueryModel.ts';
 
 export type SalesPlanAdjustmentRecord = {
   recordId: string;
@@ -36,22 +40,36 @@ export type SalesPlanAdjustmentDraft = {
   amount: string;
 };
 
-const DIMENSION_ORDER: readonly ApprovalDimension[] = ['base', 'area', 'province', 'region', 'customer'];
+const DIMENSION_ORDER: readonly ApprovalDimension[] = [
+  'base',
+  'area',
+  'province',
+  'region',
+  'customer',
+];
 
 export const adjustmentDimensionsFrom = (dimension: ApprovalDimension): ApprovalDimension[] =>
   DIMENSION_ORDER.slice(Math.max(0, DIMENSION_ORDER.indexOf(dimension)));
 
-export const adjustmentDimensionName = (row: RegionalApprovalLiveRow, dimension: ApprovalDimension): string => {
+export const adjustmentDimensionName = (
+  row: RegionalApprovalLiveRow,
+  dimension: ApprovalDimension,
+): string => {
   if (dimension === 'area') return row.areaName?.trim() || row.regionName?.trim() || '';
-  if (dimension === 'province') return row.provinceName?.trim() || row.provinceRegionName?.trim() || '';
+  if (dimension === 'province')
+    return row.provinceName?.trim() || row.provinceRegionName?.trim() || '';
   if (dimension === 'region') return row.orgName?.trim() || row.salesGroupName?.trim() || '';
   if (dimension === 'base') return row.baseName?.trim() || '';
   return row.dealerName?.trim() || '';
 };
 
-export const adjustmentDimensionKey = (row: RegionalApprovalLiveRow, dimension: ApprovalDimension): string => {
+export const adjustmentDimensionKey = (
+  row: RegionalApprovalLiveRow,
+  dimension: ApprovalDimension,
+): string => {
   if (dimension === 'area') return row.areaCode?.trim() || adjustmentDimensionName(row, dimension);
-  if (dimension === 'province') return row.provinceCode?.trim() || adjustmentDimensionName(row, dimension);
+  if (dimension === 'province')
+    return row.provinceCode?.trim() || adjustmentDimensionName(row, dimension);
   if (dimension === 'region') return row.orgCode?.trim() || adjustmentDimensionName(row, dimension);
   if (dimension === 'base') return row.baseName?.trim() || adjustmentDimensionName(row, dimension);
   return row.dealerCode.trim();
@@ -60,14 +78,14 @@ export const adjustmentDimensionKey = (row: RegionalApprovalLiveRow, dimension: 
 export const adjustmentScopeRows = (
   rows: readonly RegionalApprovalLiveRow[],
   selected: RegionalApprovalLiveRow,
-  dimension: ApprovalDimension
+  dimension: ApprovalDimension,
 ): RegionalApprovalLiveRow[] => {
   const selectedKey = adjustmentDimensionKey(selected, dimension);
   return rows.filter((row) => adjustmentDimensionKey(row, dimension) === selectedKey);
 };
 
 export const createSalesPlanAdjustmentRecords = (
-  entries: readonly { plan: RegionalApprovalLiveRow; skus: readonly GeaSalesPlanSku[] }[]
+  entries: readonly { plan: RegionalApprovalLiveRow; skus: readonly GeaSalesPlanSku[] }[],
 ): SalesPlanAdjustmentRecord[] =>
   entries.flatMap(({ plan, skus }) =>
     skus.map((sku) => ({
@@ -76,12 +94,12 @@ export const createSalesPlanAdjustmentRecords = (
       sku,
       qty: String(sku.qty),
       amount: String(sku.amt),
-    }))
+    })),
   );
 
 export const groupSalesPlanAdjustmentRecords = (
   records: readonly SalesPlanAdjustmentRecord[],
-  dimension: ApprovalDimension
+  dimension: ApprovalDimension,
 ): SalesPlanAdjustmentGroup[] => {
   const grouped = new Map<string, SalesPlanAdjustmentRecord[]>();
   records.forEach((record) => {
@@ -100,8 +118,9 @@ export const groupSalesPlanAdjustmentRecords = (
       skuCode: String(items[0].sku.skuCode),
       categoryName: items[0].sku.productCategName,
       materialDescription:
-        [...new Set(items.map((item) => item.sku.materialDescription?.trim()).filter(Boolean))].join(' / ') ||
-        undefined,
+        [
+          ...new Set(items.map((item) => item.sku.materialDescription?.trim()).filter(Boolean)),
+        ].join(' / ') || undefined,
       records: items,
       baseQty,
       qty,
@@ -122,9 +141,10 @@ const rounded = (value: number) => String(Math.round(value));
  */
 export const distributeAggregateQuantity = (
   records: readonly SalesPlanAdjustmentRecord[],
-  desiredQuantity: number
+  desiredQuantity: number,
 ): SalesPlanAdjustmentRecord[] => {
-  if (!Number.isFinite(desiredQuantity) || desiredQuantity < 0 || records.length === 0) return [...records];
+  if (!Number.isFinite(desiredQuantity) || desiredQuantity < 0 || records.length === 0)
+    return [...records];
   const totalBase = records.reduce((sum, record) => sum + Number(record.sku.baseQty), 0);
   const price = Number(records[0].sku.price);
   if (!Number.isFinite(totalBase) || totalBase <= 0 || !Number.isFinite(price)) return [...records];
@@ -143,10 +163,13 @@ export const distributeAggregateQuantity = (
 export const updateAggregateQuantity = (
   records: readonly SalesPlanAdjustmentRecord[],
   group: SalesPlanAdjustmentGroup,
-  desiredQuantity: number
+  desiredQuantity: number,
 ): SalesPlanAdjustmentRecord[] => {
   const updated = new Map(
-    distributeAggregateQuantity(group.records, desiredQuantity).map((record) => [record.recordId, record])
+    distributeAggregateQuantity(group.records, desiredQuantity).map((record) => [
+      record.recordId,
+      record,
+    ]),
   );
   return records.map((record) => updated.get(record.recordId) ?? record);
 };
@@ -154,7 +177,7 @@ export const updateAggregateQuantity = (
 export const updateAggregateAmount = (
   records: readonly SalesPlanAdjustmentRecord[],
   group: SalesPlanAdjustmentGroup,
-  desiredAmount: number
+  desiredAmount: number,
 ): SalesPlanAdjustmentRecord[] => {
   const price = Number(group.price);
   if (!Number.isFinite(desiredAmount) || desiredAmount < 0 || !Number.isFinite(price) || price <= 0)
@@ -165,23 +188,28 @@ export const updateAggregateAmount = (
 export const updateCustomerQuantity = (
   records: readonly SalesPlanAdjustmentRecord[],
   group: SalesPlanAdjustmentGroup,
-  desiredQuantity: number
+  desiredQuantity: number,
 ): SalesPlanAdjustmentRecord[] => {
   const record = group.records[0];
   const price = Number(record?.sku.price);
-  if (!record || !Number.isFinite(desiredQuantity) || desiredQuantity < 0 || !Number.isFinite(price))
+  if (
+    !record ||
+    !Number.isFinite(desiredQuantity) ||
+    desiredQuantity < 0 ||
+    !Number.isFinite(price)
+  )
     return [...records];
   return records.map((candidate) =>
     candidate.recordId === record.recordId
       ? { ...candidate, qty: rounded(desiredQuantity), amount: rounded(desiredQuantity * price) }
-      : candidate
+      : candidate,
   );
 };
 
 export const updateCustomerAmount = (
   records: readonly SalesPlanAdjustmentRecord[],
   group: SalesPlanAdjustmentGroup,
-  desiredAmount: number
+  desiredAmount: number,
 ): SalesPlanAdjustmentRecord[] => {
   const price = Number(group.price);
   if (!Number.isFinite(desiredAmount) || desiredAmount < 0 || !Number.isFinite(price) || price <= 0)
@@ -189,7 +217,9 @@ export const updateCustomerAmount = (
   return updateCustomerQuantity(records, group, Math.round(desiredAmount / price));
 };
 
-export const adjustmentRecordDraft = (record: SalesPlanAdjustmentRecord): SalesPlanAdjustmentDraft => ({
+export const adjustmentRecordDraft = (
+  record: SalesPlanAdjustmentRecord,
+): SalesPlanAdjustmentDraft => ({
   versionId: record.plan.versionId,
   skuCode: String(record.sku.skuCode),
   sourceQty: String(record.sku.qty),

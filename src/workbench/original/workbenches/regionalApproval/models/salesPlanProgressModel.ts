@@ -24,7 +24,9 @@ export const salesPlanProgressBarColor = (percent: number | undefined): string =
       : 'rgb(var(--success-6))';
 
 /** 列表已由 GEA 限定范围；只聚合返回的标识，绝不虚构缺失客户。 */
-export const buildSalesPlanProgressTree = (records: readonly GeaSalesPlanListItem[]): SalesPlanProgressNode[] => {
+export const buildSalesPlanProgressTree = (
+  records: readonly GeaSalesPlanListItem[],
+): SalesPlanProgressNode[] => {
   const roots: SalesPlanProgressNode[] = [];
   const nodes = new Map<string, SalesPlanProgressNode>();
   for (const row of records) {

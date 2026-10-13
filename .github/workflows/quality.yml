@@ -1,0 +1,188 @@
+name: candidate-quality
+run-name: "${{ github.event_name == 'workflow_dispatch' && 'Joint frozen three-repository quality' || 'Source event quality' }} — ${{ github.sha }}"
+
+on:
+  push:
+    branches: [main, codex/quality-ci-maintenance-20261010]
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      gea_sha:
+        description: Frozen GEA full commit
+        required: true
+        type: string
+      workbench_sha:
+        description: Frozen Workbench full commit
+        required: true
+        type: string
+      manage_sha:
+        description: Frozen Manage full commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-quality-${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.ref }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  candidate-scope:
+    runs-on: ubuntu-latest
+    outputs:
+      cores: ${{ steps.cores.outputs.cores }}
+      gea-sha: ${{ steps.group.outputs.gea-sha }}
+      workbench-sha: ${{ steps.group.outputs.workbench-sha }}
+      manage-sha: ${{ steps.group.outputs.manage-sha }}
+      group-id: ${{ steps.group.outputs.group-id }}
+      source-kind: ${{ steps.group.outputs.source-kind }}
+      baseline-id: ${{ steps.group.outputs.baseline-id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Require supported same-repository event
+        env:
+          QUALITY_SCOPE_ALLOWED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        run: node scripts/run-quality-ci.mjs --phase scope
+      - name: Bind frozen peer source and actual own event
+        id: group
+        env:
+          QUALITY_SCOPE_ALLOWED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          QUALITY_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          QUALITY_GROUP_GEA: ${{ inputs.gea_sha }}
+          QUALITY_GROUP_WORKBENCH: ${{ inputs.workbench_sha }}
+          QUALITY_GROUP_MANAGE: ${{ inputs.manage_sha }}
+        run: node scripts/read-hosted-peer-input.mjs --repo dsh-agent-workbench
+      - name: Require explicit peer contents-read credential
+        env:
+          PEER_READ_TOKEN: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+        run: |
+          node -e "if (!process.env.PEER_READ_TOKEN) throw Error('CANDIDATE_PEER_REQUIRED: configure peer contents-read token')"
+      - uses: actions/checkout@v7
+        with:
+          repository: CleverC2200/dsh-gea-plugin
+          ref: ${{ steps.group.outputs.gea-sha }}
+          path: candidate/dsh-gea-plugin
+          fetch-depth: 0
+          token: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+          persist-credentials: false
+      - name: Read Core matrix from the registered authority
+        id: cores
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import { ciCores } from './candidate/dsh-gea-plugin/scripts/ci-core-policy.mjs';
+          const heads = ciCores('required').map(core => core.head);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'cores=' + JSON.stringify(heads) + '\n');
+          NODE
+
+  gates:
+    strategy:
+      fail-fast: false
+      matrix:
+        core: ${{ fromJSON(needs.candidate-scope.outputs.cores) }}
+    needs: candidate-scope
+    runs-on: ubuntu-latest
+    env:
+      QUALITY_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      QUALITY_CANDIDATE: ${{ github.workspace }}/candidate-input.json
+    defaults:
+      run:
+        working-directory: candidate/dsh-agent-workbench
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          path: candidate/dsh-agent-workbench
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Require explicit peer contents-read credential
+        env:
+          PEER_READ_TOKEN: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+        run: |
+          node -e "if (!process.env.PEER_READ_TOKEN) throw Error('CANDIDATE_PEER_REQUIRED: configure peer contents-read token')"
+      - uses: actions/checkout@v7
+        with:
+          repository: CleverC2200/dsh-agent-manage
+          ref: ${{ needs.candidate-scope.outputs.manage-sha }}
+          fetch-depth: 0
+          path: candidate/dsh-agent-manage
+          token: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: CleverC2200/dsh-gea-plugin
+          ref: ${{ needs.candidate-scope.outputs.gea-sha }}
+          fetch-depth: 0
+          path: candidate/dsh-gea-plugin
+          token: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: ${{ matrix.core }}
+          fetch-depth: 0
+          path: source/official-core
+          persist-credentials: false
+      - name: Enable declared package managers
+        run: |
+          npm install --global npm@11.11.0
+          corepack enable
+      - name: Bind admitted frozen source group
+        id: group
+        env:
+          QUALITY_GROUP_GEA: ${{ needs.candidate-scope.outputs.gea-sha }}
+          QUALITY_GROUP_WORKBENCH: ${{ needs.candidate-scope.outputs.workbench-sha }}
+          QUALITY_GROUP_MANAGE: ${{ needs.candidate-scope.outputs.manage-sha }}
+          QUALITY_GROUP_ID: ${{ needs.candidate-scope.outputs.group-id }}
+          QUALITY_SOURCE_KIND: ${{ needs.candidate-scope.outputs.source-kind }}
+          QUALITY_BASELINE_ID: ${{ needs.candidate-scope.outputs.baseline-id }}
+          CORE_HEAD: ${{ matrix.core }}
+        run: node scripts/write-hosted-group.mjs --repo dsh-agent-workbench --root "$GITHUB_WORKSPACE" --core-head "$CORE_HEAD"
+      - name: Prepare independent SDK and run all public quality gates
+        env:
+          INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
+          CORE_HEAD: ${{ matrix.core }}
+        run: npm run quality:ci -- --input "$QUALITY_CANDIDATE" --prepare-sdk --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256"
+      - name: Keep independent quality results including failure
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-results-${{ matrix.core }}
+          path: |
+            candidate-input.json
+            candidate-group.json
+            quality-source-*.json
+            quality-checks.json
+            candidate/dsh-agent-workbench/.runtime/quality-fast.json
+          if-no-files-found: warn
+
+  candidate-quality:
+    if: always()
+    needs: [candidate-scope, gates]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Reject failed, skipped, cancelled or absent gates
+        env:
+          QUALITY_SCOPE_RESULT: ${{ needs.candidate-scope.result }}
+          QUALITY_GATE_RESULT: ${{ needs.gates.result }}
+        run: node scripts/run-quality-ci.mjs --phase final

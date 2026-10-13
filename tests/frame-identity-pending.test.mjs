@@ -48,6 +48,7 @@ async function fixture(
     initialSession,
     initialPreset = null,
     restoredSelection,
+    restoredPage = false,
     nativeResourceSdk = false,
     declareSecondInterpreter = true,
   } = {},
@@ -163,13 +164,18 @@ async function fixture(
     waiting = [];
   let sessions = 0,
     listRequests = 0,
-    selectionRequests = 0;
+    selectionRequests = 0,
+    sessionOpenRequests = 0;
   let secondInstalled = secondInterpreter;
   const host = {
-    pickDirectory: async () => { calls.push(['directory-picker']); return null; },
+    pickDirectory: async () => {
+      calls.push(['directory-picker']);
+      return null;
+    },
     fetch: async (path, options) => {
       calls.push([path, options]);
-      if (path.endsWith('/config')) return Response.json(noWorkspace ? {} : { cwd: '/owned/workspace' });
+      if (path.endsWith('/config'))
+        return Response.json(noWorkspace ? {} : { cwd: '/owned/workspace' });
       if (path.includes('/resources?')) {
         listRequests++;
         if (delayList)
@@ -194,7 +200,10 @@ async function fixture(
         ]);
       }
       selectionRequests++;
-      if ((delayFirstSelection && selectionRequests === 1) || delaySelectionRequests.includes(selectionRequests))
+      if (
+        (delayFirstSelection && selectionRequests === 1) ||
+        delaySelectionRequests.includes(selectionRequests)
+      )
         return new Promise((resolve) =>
           waiting.push({ kind: 'select', resolve, signal: options.signal }),
         );
@@ -237,6 +246,7 @@ async function fixture(
     mainPreset = initialSession ? initialPreset : undefined;
   ctx.uiWorkspace = {
     openSession: (id) => {
+      sessionOpenRequests++;
       mainSession = id;
       for (const listener of sessionListeners) listener();
     },
@@ -310,11 +320,14 @@ async function fixture(
         if (id) ctx.uiWorkspace.openSession(id);
       },
     },
-    restoredSelection
+    restoredSelection || restoredPage
       ? {
           getSnapshot: () => ({
             version: 2,
-            selections: [{ page: 'native', active: true, ...restoredSelection }],
+            ...(restoredPage ? { page: 'native' } : {}),
+            selections: restoredSelection
+              ? [{ page: 'native', active: true, ...restoredSelection }]
+              : [],
             views: [],
           }),
           set() {},
@@ -360,7 +373,7 @@ async function fixture(
   }
   if (staticDocument) delete page.resourceId;
   workbench.registerFrame(page);
-  await workbench.open(page.id);
+  if (!restoredPage) await workbench.open(page.id);
   function Main() {
     const sessionId = useSyncExternalStore(
       (listener) => {
@@ -452,6 +465,7 @@ async function fixture(
     historyPage: () => workbench.takeHistoryTarget()?.page,
     restoreHistory: restorePageSession,
     currentSession: () => mainSession,
+    sessionOpenRequests: () => sessionOpenRequests,
     workbench,
     deferSessionReady: () => {
       sdkReadyGate = Promise.withResolvers();
@@ -514,10 +528,11 @@ async function fixture(
         chooser.value = id;
         chooser.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
       }),
-    selectHistory: async id => act(async () => {
-      await restorePageSession(page.id, id, new AbortController().signal);
-      await workbench.open(page.id);
-    }),
+    selectHistory: async (id) =>
+      act(async () => {
+        await restorePageSession(page.id, id, new AbortController().signal);
+        await workbench.open(page.id);
+      }),
     resolve: async (item, value) => act(async () => item.resolve(Response.json(value))),
   };
 }
@@ -682,6 +697,57 @@ for (const oldPreset of ['agent-resource-skill', null]) {
     );
   });
 }
+
+test('restoring an unbound resource Document reads Interpreter choices without creating or opening a Session', async (t) => {
+  const f = await fixture(t, {
+    restoredPage: true,
+    nativeResourceSdk: true,
+    secondInterpreter: true,
+  });
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+  assert.equal(f.sessionOpenRequests(), 0);
+  assert.equal(f.currentSession(), undefined);
+  assert.equal(f.selection(), undefined);
+  assert.deepEqual(
+    [...f.dom.window.document.querySelector('[aria-label="pageInterpreter"]').options].map(
+      (option) => option.value,
+    ),
+    ['original', 'other'],
+  );
+  assert.equal(
+    f.calls.some(([operation]) => ['core-create', 'core-select-preset'].includes(operation)),
+    false,
+  );
+  await f.load();
+  await act(async () => f.render());
+  assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+  assert.equal(f.sessionOpenRequests(), 0);
+});
+
+for (const action of ['Interpreter choice', 'explicit page reopen'])
+  test(`a restored unbound Document can create a Session after ${action}`, async (t) => {
+    const f = await fixture(t, {
+      restoredPage: true,
+      nativeResourceSdk: true,
+      secondInterpreter: true,
+    });
+    assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 0 });
+    assert.equal(f.sessionOpenRequests(), 0);
+    if (action === 'Interpreter choice') await f.selectInterpreter('other');
+    else await f.show();
+    assert.deepEqual(f.counts(), {
+      sessions: 1,
+      listRequests: action === 'Interpreter choice' ? 1 : 2,
+      selectionRequests: 1,
+    });
+    assert.equal(f.sessionOpenRequests(), 1);
+    assert.equal(f.currentSession(), 'session-1');
+    assert.equal(f.selection().preset, action === 'Interpreter choice' ? 'other' : 'original');
+    assert.equal(f.workbench.getSnapshot().restoredWithoutSession, undefined);
+    await act(async () => f.render());
+    assert.equal(f.counts().sessions, 1, 'a render cannot repeat the explicit resource action');
+    assert.equal(f.sessionOpenRequests(), 1);
+  });
 
 test('formal page navigation auto-prepares one actual native Session only for an authenticated enabled resource', async (t) => {
   const f = await fixture(t);
@@ -1163,7 +1229,13 @@ test('a cached Document releases cancelled selection busy state and a late old c
     secondInterpreter: true,
     initialSession: sessionId,
     initialPreset: 'original',
-    restoredSelection: { sessionId, preset: 'original', ownerScope: 'principal-a', subject: 'fixture-user-a', cwd: '/owned/workspace' },
+    restoredSelection: {
+      sessionId,
+      preset: 'original',
+      ownerScope: 'principal-a',
+      subject: 'fixture-user-a',
+      cwd: '/owned/workspace',
+    },
     delaySelectionRequests: [1, 2],
   });
   const document = f.dom.window.document;
@@ -1177,15 +1249,29 @@ test('a cached Document releases cancelled selection busy state and a late old c
   assert.equal(oldRequest.signal.aborted, true);
   await f.show();
   assert.equal(chooser().disabled, false, 'returning to the cached Document restores its selector');
-  assert.deepEqual(f.association(), association, 'cancellation preserves the real Session association');
-  assert.deepEqual([...chooser().options].map(option => option.value), ['original', 'other']);
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.deepEqual(
+    f.association(),
+    association,
+    'cancellation preserves the real Session association',
+  );
+  assert.deepEqual(
+    [...chooser().options].map((option) => option.value),
+    ['original', 'other'],
+  );
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
   assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 1 });
 
   await f.selectInterpreter('other');
   assert.equal(chooser().disabled, true);
   await f.resolve(oldRequest, { preset: 'other', interpreters: ['original', 'other'] });
-  assert.equal(chooser().disabled, true, 'the old finally cannot release the current request busy state');
+  assert.equal(
+    chooser().disabled,
+    true,
+    'the old finally cannot release the current request busy state',
+  );
   assert.deepEqual(f.association(), association);
   assert.equal(f.currentSession(), sessionId);
   assert.deepEqual(f.counts(), { sessions: 0, listRequests: 1, selectionRequests: 2 });
@@ -1194,15 +1280,25 @@ test('a cached Document releases cancelled selection busy state and a late old c
   assert.equal(chooser().disabled, false);
   assert.equal(f.association().preset, 'other');
   assert.equal(f.currentSession(), 'session-1');
-  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [['core-release', 'session-1']]);
+  assert.deepEqual(
+    f.calls.filter((row) => row[0] === 'core-release'),
+    [['core-release', 'session-1']],
+  );
   await f.selectInterpreter('original');
   assert.equal(f.currentSession(), sessionId);
-  assert.equal(document.querySelector('[aria-label="SDK draft fixture"]').value, '未发送的历史草稿');
+  assert.equal(
+    document.querySelector('[aria-label="SDK draft fixture"]').value,
+    '未发送的历史草稿',
+  );
   assert.equal(chooser().disabled, false);
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 2 });
-  assert.deepEqual(f.calls.filter(row => row[0] === 'core-release'), [
-    ['core-release', 'session-1'], ['core-release', sessionId],
-  ]);
+  assert.deepEqual(
+    f.calls.filter((row) => row[0] === 'core-release'),
+    [
+      ['core-release', 'session-1'],
+      ['core-release', sessionId],
+    ],
+  );
 });
 
 test('a failed Interpreter selection restores the cached Document selector and retains its existing Session', async (t) => {
@@ -1214,7 +1310,10 @@ test('a failed Interpreter selection restores the cached Document selector and r
   await f.resolve(f.waiting[0], { error: 'INTERPRETER_SELECTION_FAILED' });
   assert.equal(chooser().disabled, false);
   assert.deepEqual(f.association(), association);
-  assert.equal(f.dom.window.document.querySelector('[role="alert"]').title, 'INTERPRETER_SELECTION_FAILED');
+  assert.equal(
+    f.dom.window.document.querySelector('[role="alert"]').title,
+    'INTERPRETER_SELECTION_FAILED',
+  );
   await act(async () => f.render());
   await f.hide();
   await f.show();
@@ -1432,12 +1531,12 @@ test('successful deferred History navigation keeps its own owner and restores th
   await assert.rejects(f.workbench.completeHistory(target), /PAGE_HISTORY_CANCELLED/);
 });
 
- test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async t => {
-  const f = await fixture(t, {noWorkspace:true});
-  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 0);
+test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async (t) => {
+  const f = await fixture(t, { noWorkspace: true });
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 0);
   assert.equal(f.counts().sessions, 0);
   await f.newConversation();
-  assert.equal(f.calls.filter(row => row[0] === 'directory-picker').length, 1);
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 1);
   assert.equal(f.counts().sessions, 0);
   assert.equal(f.currentSession(), undefined);
- });
+});

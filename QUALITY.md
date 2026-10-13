@@ -20,7 +20,7 @@ npm run test:quality
 
 Oxlint 此版本没有 HTML 内联 JS 语义 parser。Oxfmt 检查 HTML/嵌入脚本格式，原 html-author 构建与 HTML/浏览器行为测试保留；这些能力不能称为 HTML lint 全覆盖。
 
-原迁移 golden 测试保留固定 Dealer `67e1007aa400a8a9c65c132f144dabd5168a49df` 和 Personal `15def488134527647a819812a4b6657ecf9772fe`。二者不在本仓历史中，使用显式 `WORKBENCH_DEALER_HISTORY_ROOT` / `WORKBENCH_PERSONAL_HISTORY_ROOT` Git 根，仅 `git show` 原对象，不运行旧插件或恢复 adapter。Personal 的四个输入与票26原 snapshot 字节一致，原 snapshot 保留。
+原迁移 golden 输入保留固定 Dealer `67e1007aa400a8a9c65c132f144dabd5168a49df` 和 Personal `15def488134527647a819812a4b6657ecf9772fe`，保存于 `tests/fixtures/migration-history.raw`。测试 helper 核每项 Git blob、SHA-256 及整份原始字节摘要，不执行旧插件或恢复 adapter。可选显式历史 Git 根只核 fixture 原字节相同；原业务断言保持。
 
 Node 全测并发2，浏览器全测并发1，原测试 scope 和超时预算保持。fixture 只在原公开边界提供 Core inputActions、离线固定业务输入与查询响应；实际 Core JSONL writer 锁断言仍须真实平台 flock addon，不能以 mock 或正常退出代替。
 
@@ -33,3 +33,6 @@ Browser 检查使用本仓锁定的 Playwright Chromium。已有浏览器缓存�
 固定质量 policy 来自 b42c62e72310d31a088b7394a964492efc1f217a 的 scripts/quality.mjs，原始 SHA256 为 4410fd6709c89064e955446665890fadc0df1e60f1f9932f7387830c29fdbfab。原字节保存在 scripts/fixtures/quality-policy-b42.raw，仅作为开发期只读数据核验，不执行、不进入插件包。缺失或修改会失败；旧债仍固定到 9814b3bcf1ae015a63fac9af864c165617791fc3，不随当前 HEAD 更新。
 
 本地 source/assets 分开的 browser fixture 可用 `WORKBENCH_BROWSER_ASSET_ROOT` 指向同任务已核源码对应的真实构建树；它只读取 lib 和三个既有生成的 static index。源码与资产 SHA、构建输入及只读范围须分别记录。
+
+
+CI 执行 `npm run quality:ci`，先核实际本仓事件、冻结 peers、包身份、HEAD、锁和 clean 源码，再复用 Manage 公共接口准备独立 SDK。CI 使用 `quality:fast -- --checks-only` 保留知识、lint、format 和官方类型结果，再执行 build:core、构建后的知识产物检查与 `test:ci`。`test:ci` 一次运行原 Node、FC、质量脚本反例及 APS 外部数据测试的完整集合，显式 browser 独立运行。开发默认 `quality:fast` 仍包含公开 CLI 反例，`test`、`test:quality`、`test:aps` 与 `test:browser` 可分别使用。结果失败仍上传，汇总拒绝失败、跳过、取消或缺失。源码与产物状态分别记录；这不证明 Native、业务、模型或发行验收。

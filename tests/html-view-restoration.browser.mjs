@@ -24,9 +24,9 @@ async function fixture(t, includedAssets) {
   const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
   const assetPaths = {
     sample: 'lib/samples/index.html',
-    regional: 'static/regional/index.html',
-    category: 'static/category/index.html',
-    mps: 'static/mps/index.html',
+    regional: 'lib/static/regional/index.html',
+    category: 'lib/static/category/index.html',
+    mps: 'lib/static/mps/index.html',
     customer: 'lib/business/inventory-customer/index.html',
     orderworkbench: 'lib/business/inventory-orderworkbench/index.html',
     fulfillment: 'lib/business/inventory-orderfulfillment/index.html',
@@ -335,9 +335,9 @@ test('regional visible filters use the current public catalog and cancellation l
   await expect
     .poll(() => page.evaluate(() => window.mockCatalogs['gea-regional-plan']?.length ?? 0))
     .toBeGreaterThan(0);
-  const apply = (id, target, value, cancel = false) =>
+  const apply = (id, target, value) =>
     page.evaluate(
-      ({ id, target, value, cancel }) => {
+      ({ id, target, value }) => {
         const port = window.mockChannels['gea-regional-plan'];
         port.postMessage({
           type: 'apply',
@@ -345,16 +345,49 @@ test('regional visible filters use the current public catalog and cancellation l
           toolCallId: id,
           args: { kind: 'setValue', target, value },
         });
-        if (cancel)
-          port.postMessage({ type: 'cancel', session: window.mockSession, toolCallId: id });
       },
-      { id, target, value, cancel },
+      { id, target, value },
+    );
+  const cancel = (id) =>
+    page.evaluate(
+      (id) =>
+        window.mockChannels['gea-regional-plan'].postMessage({
+          type: 'cancel',
+          session: window.mockSession,
+          toolCallId: id,
+        }),
+      id,
     );
   await apply('hidden-dimension', 'filter:dimension', 'province');
   await expect
     .poll(() => page.evaluate(() => window.mockReplies['hidden-dimension']?.applied))
     .toBe(false);
-  await apply('cancel-module', 'filter:module', 'follow', true);
+  const author = page.frames().find((frame) => frame.url().endsWith('/regional'));
+  assert.ok(author);
+  // Hold the author's application frame so cancellation reaches its actual pending task.
+  await author.evaluate(() => {
+    const requestFrame = window.requestAnimationFrame;
+    const checkAbort = AbortSignal.prototype.throwIfAborted;
+    AbortSignal.prototype.throwIfAborted = function () {
+      window.pendingApplicationSignal = this;
+      AbortSignal.prototype.throwIfAborted = checkAbort;
+      return checkAbort.call(this);
+    };
+    window.requestAnimationFrame = (callback) => {
+      window.requestAnimationFrame = requestFrame;
+      window.releaseApplicationFrame = () => requestFrame(callback);
+      return 0;
+    };
+  });
+  await apply('cancel-module', 'filter:module', 'follow');
+  await expect
+    .poll(() => author.evaluate(() => typeof window.releaseApplicationFrame))
+    .toBe('function');
+  await cancel('cancel-module');
+  await expect
+    .poll(() => author.evaluate(() => window.pendingApplicationSignal?.aborted))
+    .toBe(true);
+  await author.evaluate(() => window.releaseApplicationFrame());
   await expect
     .poll(() => page.evaluate(() => window.mockReplies['cancel-module']?.applied))
     .toBe(false);
@@ -368,6 +401,14 @@ test('regional visible filters use the current public catalog and cancellation l
   await expect
     .poll(() => page.evaluate(() => window.mockContexts['gea-regional-plan']?.filters.module))
     .toBe('follow');
+  await cancel('change-module');
+  await author.evaluate(() => new Promise(requestAnimationFrame));
+  assert.equal(
+    await page.evaluate(() => window.mockReplies['change-module'].applied),
+    true,
+    'cancellation after completion does not revoke the successful receipt',
+  );
+  await expect(page.frameLocator('iframe').locator('.modtab[data-mod="follow"]')).toHaveClass(/on/);
   await expect
     .poll(() =>
       page.evaluate(() => window.mockCatalogs['gea-regional-plan']?.map((row) => row.id) ?? []),

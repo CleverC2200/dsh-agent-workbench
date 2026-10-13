@@ -1,13 +1,16 @@
-import { numeric, type InventoryRiskEvidence } from "../../../../../../aqkc/web/src/lib/inventory-insight.ts";
+import {
+  numeric,
+  type InventoryRiskEvidence,
+} from '../../../../../../aqkc/web/src/lib/inventory-insight.ts';
 import {
   normalizeCurrentOrderBases,
   type CurrentOrderBase,
-} from "../../../../../../aqkc/web/src/lib/workbench-current-order.ts";
+} from '../../../../../../aqkc/web/src/lib/workbench-current-order.ts';
 export interface WorkspaceKpi {
   label: string;
   value: string;
   delta: string;
-  tone: "positive" | "neutral" | "negative";
+  tone: 'positive' | 'neutral' | 'negative';
 }
 
 export interface WorkspaceVersionSummary {
@@ -52,7 +55,7 @@ export interface WorkspaceRecord {
   lockedBy: string;
   lockedAt: string;
   remark: string;
-  riskLevel: "healthy" | "warning" | "critical";
+  riskLevel: 'healthy' | 'warning' | 'critical';
   gapToConfirmedTarget: number;
   deviationRate?: string;
   ltConfigured?: boolean;
@@ -96,15 +99,15 @@ export interface WorkspaceSurfaceBlock {
 }
 
 export type WorkspacePresentation =
-  | "chart"
-  | "bar"
-  | "pie"
-  | "table"
-  | "fixed_workbench"
-  | "fixed_workbench_no_data";
+  | 'chart'
+  | 'bar'
+  | 'pie'
+  | 'table'
+  | 'fixed_workbench'
+  | 'fixed_workbench_no_data';
 
 export interface FixedSafetyStockWorkbench {
-  status: "ready" | "no_data";
+  status: 'ready' | 'no_data';
   statusDescription: string;
   overallAnalysis: string;
   noData?: {
@@ -122,7 +125,7 @@ export interface FixedWorkbenchCard {
   title: string;
   value: string;
   helpers: { label: string; value: string }[];
-  tone: "neutral" | "red";
+  tone: 'neutral' | 'red';
 }
 
 export interface TargetStockReportMetricRow {
@@ -142,14 +145,14 @@ export interface TargetStockReportMetricRow {
 }
 
 export type TargetStockReportDimension =
-  | "base"
-  | "product_category"
-  | "product_label_abc_rus"
-  | "base_product_category"
-  | "base_product_label";
+  | 'base'
+  | 'product_category'
+  | 'product_label_abc_rus'
+  | 'base_product_category'
+  | 'base_product_label';
 
 export interface TargetStockAnalysisReport {
-  kind: "target_stock_analysis_report";
+  kind: 'target_stock_analysis_report';
   title: string;
   scope: {
     label: string;
@@ -159,7 +162,7 @@ export interface TargetStockAnalysisReport {
     refreshDate: string;
     selectionRule: string;
   };
-  overview: Omit<TargetStockReportMetricRow, "label" | "base" | "productLabel">;
+  overview: Omit<TargetStockReportMetricRow, 'label' | 'base' | 'productLabel'>;
   enabledDimensions: TargetStockReportDimension[];
   baseRows: TargetStockReportMetricRow[];
   category: { available: boolean; notice: string };
@@ -198,7 +201,7 @@ export interface TargetStockAnalysisReport {
   dataQualityNotes: string[];
   eventContext: { available: boolean; notice: string };
   findings: {
-    tone: "red" | "green" | "gray";
+    tone: 'red' | 'green' | 'gray';
     title: string;
     description: string;
   }[];
@@ -211,7 +214,7 @@ export interface TargetStockAnalysisReport {
 }
 
 export interface TargetStockReportAnalysisPoint {
-  tone: "red" | "green" | "gray";
+  tone: 'red' | 'green' | 'gray';
   title: string;
   description: string;
 }
@@ -238,10 +241,10 @@ export interface WorkspaceState {
   title: string;
   description: string;
   assistantBrief?: string;
-  chartType: "bar" | "pie";
+  chartType: 'bar' | 'pie';
   metric: string;
   groupBy: string;
-  viewMode: "detail" | "comparison" | "distribution";
+  viewMode: 'detail' | 'comparison' | 'distribution';
   filters: Record<string, string>;
   kpis: WorkspaceKpi[];
   chartData: { label: string; value: number }[];
@@ -261,50 +264,48 @@ export interface WorkspaceState {
 type WorkspaceLike = Partial<WorkspaceState> & Record<string, unknown>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
+  return typeof value === 'object' && value !== null;
 }
 
-function isWorkspaceLike(
-  value: Record<string, unknown>,
-): value is WorkspaceLike {
+function isWorkspaceLike(value: Record<string, unknown>): value is WorkspaceLike {
   return (
-    "title" in value ||
-    "description" in value ||
-    "assistantBrief" in value ||
-    "metric" in value ||
-    "groupBy" in value ||
-    "viewMode" in value ||
-    "filters" in value ||
-    "kpis" in value ||
-    "chartData" in value ||
-    "insights" in value ||
-    "chartType" in value ||
-    "versionSummary" in value ||
-    "record" in value ||
-    "comparison" in value ||
-    "table" in value ||
-    "actions" in value ||
-    "lastAction" in value ||
-    "surface" in value ||
-    "analysisReport" in value ||
-    "presentation" in value ||
-    "workbench" in value
+    'title' in value ||
+    'description' in value ||
+    'assistantBrief' in value ||
+    'metric' in value ||
+    'groupBy' in value ||
+    'viewMode' in value ||
+    'filters' in value ||
+    'kpis' in value ||
+    'chartData' in value ||
+    'insights' in value ||
+    'chartType' in value ||
+    'versionSummary' in value ||
+    'record' in value ||
+    'comparison' in value ||
+    'table' in value ||
+    'actions' in value ||
+    'lastAction' in value ||
+    'surface' in value ||
+    'analysisReport' in value ||
+    'presentation' in value ||
+    'workbench' in value
   );
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
+function asString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
 }
 
-function asChartType(value: unknown): "bar" | "pie" {
-  return value === "pie" ? "pie" : "bar";
+function asChartType(value: unknown): 'bar' | 'pie' {
+  return value === 'pie' ? 'pie' : 'bar';
 }
 
-function asViewMode(value: unknown): "detail" | "comparison" | "distribution" {
-  if (value === "comparison" || value === "distribution") {
+function asViewMode(value: unknown): 'detail' | 'comparison' | 'distribution' {
+  if (value === 'comparison' || value === 'distribution') {
     return value;
   }
-  return "detail";
+  return 'detail';
 }
 
 function normalizeFilters(value: unknown): Record<string, string> {
@@ -315,7 +316,7 @@ function normalizeFilters(value: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(value).map(([key, item]) => [
       key,
-      typeof item === "string" ? item : String(item ?? ""),
+      typeof item === 'string' ? item : String(item ?? ''),
     ]),
   );
 }
@@ -330,17 +331,13 @@ function normalizeKpis(value: unknown): WorkspaceKpi[] {
     value: asString(item.value),
     delta: asString(item.delta),
     tone:
-      item.tone === "negative" ||
-      item.tone === "neutral" ||
-      item.tone === "positive"
+      item.tone === 'negative' || item.tone === 'neutral' || item.tone === 'positive'
         ? item.tone
-        : "neutral",
+        : 'neutral',
   }));
 }
 
-function normalizeChartData(
-  value: unknown,
-): { label: string; value: number }[] {
+function normalizeChartData(value: unknown): { label: string; value: number }[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -349,8 +346,7 @@ function normalizeChartData(
     .filter(isRecord)
     .map((item) => ({
       label: asString(item.label),
-      value:
-        typeof item.value === "number" ? item.value : Number(item.value ?? 0),
+      value: typeof item.value === 'number' ? item.value : Number(item.value ?? 0),
     }))
     .filter((item) => Number.isFinite(item.value));
 }
@@ -364,15 +360,15 @@ function normalizeInsights(value: unknown): string[] {
 }
 
 function asNumber(value: unknown): number {
-  const numeric = typeof value === "number" ? value : Number(value ?? 0);
+  const numeric = typeof value === 'number' ? value : Number(value ?? 0);
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
 function asNullableNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") {
+  if (value === null || value === undefined || value === '') {
     return null;
   }
-  const numeric = typeof value === "number" ? value : Number(value);
+  const numeric = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numeric) ? numeric : null;
 }
 
@@ -424,9 +420,9 @@ function normalizeRecord(value: unknown): WorkspaceRecord {
     lockedAt: asString(record.lockedAt),
     remark: asString(record.remark),
     riskLevel:
-      record.riskLevel === "warning" || record.riskLevel === "critical"
+      record.riskLevel === 'warning' || record.riskLevel === 'critical'
         ? record.riskLevel
-        : "healthy",
+        : 'healthy',
     gapToConfirmedTarget: asNumber(record.gapToConfirmedTarget),
     deviationRate: asString(record.deviationRate),
     ltConfigured: Boolean(record.ltConfigured),
@@ -455,12 +451,10 @@ function normalizeTable(value: unknown): WorkspaceTable {
   }
 
   const columns = Array.isArray(value.columns)
-    ? value.columns
-        .filter(isRecord)
-        .map((item) => ({
-          key: asString(item.key),
-          label: asString(item.label),
-        }))
+    ? value.columns.filter(isRecord).map((item) => ({
+        key: asString(item.key),
+        label: asString(item.label),
+      }))
     : [];
 
   const rows = Array.isArray(value.rows)
@@ -470,7 +464,7 @@ function normalizeTable(value: unknown): WorkspaceTable {
           Object.fromEntries(
             Object.entries(item).map(([key, cell]) => [
               key,
-              typeof cell === "number" ? cell : asString(cell),
+              typeof cell === 'number' ? cell : asString(cell),
             ]),
           ),
         )
@@ -517,59 +511,83 @@ function normalizeSurface(value: unknown): WorkspaceSurfaceBlock[] {
 
   return value
     .filter(
-      (item): item is WorkspaceSurfaceBlock =>
-        isRecord(item) && typeof item.type === "string",
+      (item): item is WorkspaceSurfaceBlock => isRecord(item) && typeof item.type === 'string',
     )
     .map((item) => ({ ...item }));
 }
 
 function normalizePresentation(value: unknown): WorkspacePresentation {
   if (
-    value === "bar" ||
-    value === "pie" ||
-    value === "table" ||
-    value === "fixed_workbench" ||
-    value === "fixed_workbench_no_data"
+    value === 'bar' ||
+    value === 'pie' ||
+    value === 'table' ||
+    value === 'fixed_workbench' ||
+    value === 'fixed_workbench_no_data'
   ) {
     return value;
   }
-  return "chart";
+  return 'chart';
 }
 
 function normalizeInventoryRiskEvidence(value: unknown): InventoryRiskEvidence | undefined {
-  if (!isRecord(value) || !isRecord(value.metrics) || !isRecord(value.sources)
-      || value.sources.consumerCode !== "base-safety-stock") return undefined;
-  const metrics = value.metrics, sources = value.sources;
-  const strings = (items: unknown) => Array.isArray(items) ? items.filter((item): item is string => typeof item === "string") : [];
-  const top = Array.isArray(value.top) ? value.top.filter(isRecord).map(row => ({
-    base: asString(row.base), category: asString(row.category),
-    current: numeric(row.current), target: numeric(row.target), gap: numeric(row.gap),
-    shortage: numeric(row.shortage), age60: numeric(row.age60),
-    future7: numeric(row.future7), future14: numeric(row.future14),
-    dailyDemand: numeric(row.dailyDemand), last30d: numeric(row.last30d),
-  })) : [];
+  if (
+    !isRecord(value) ||
+    !isRecord(value.metrics) ||
+    !isRecord(value.sources) ||
+    value.sources.consumerCode !== 'base-safety-stock'
+  )
+    return undefined;
+  const metrics = value.metrics,
+    sources = value.sources;
+  const strings = (items: unknown) =>
+    Array.isArray(items) ? items.filter((item): item is string => typeof item === 'string') : [];
+  const top = Array.isArray(value.top)
+    ? value.top.filter(isRecord).map((row) => ({
+        base: asString(row.base),
+        category: asString(row.category),
+        current: numeric(row.current),
+        target: numeric(row.target),
+        gap: numeric(row.gap),
+        shortage: numeric(row.shortage),
+        age60: numeric(row.age60),
+        future7: numeric(row.future7),
+        future14: numeric(row.future14),
+        dailyDemand: numeric(row.dailyDemand),
+        last30d: numeric(row.last30d),
+      }))
+    : [];
   return {
-    text: asString(value.text), ranking: asString(value.ranking), top,
-    completeRanking: value.completeRanking === true, completeAge: value.completeAge === true,
+    text: asString(value.text),
+    ranking: asString(value.ranking),
+    top,
+    completeRanking: value.completeRanking === true,
+    completeAge: value.completeAge === true,
     missing: strings(value.missing),
     metrics: {
-      current: numeric(metrics.current), target: numeric(metrics.target), gap: numeric(metrics.gap),
-      shortage: numeric(metrics.shortage), age60: numeric(metrics.age60),
-      future7: numeric(metrics.future7), future14: numeric(metrics.future14),
-      fulfillment: numeric(metrics.fulfillment), dailyDemand: numeric(metrics.dailyDemand), last30d: numeric(metrics.last30d),
+      current: numeric(metrics.current),
+      target: numeric(metrics.target),
+      gap: numeric(metrics.gap),
+      shortage: numeric(metrics.shortage),
+      age60: numeric(metrics.age60),
+      future7: numeric(metrics.future7),
+      future14: numeric(metrics.future14),
+      fulfillment: numeric(metrics.fulfillment),
+      dailyDemand: numeric(metrics.dailyDemand),
+      last30d: numeric(metrics.last30d),
     },
     sources: {
-      consumerCode: "base-safety-stock", bases: strings(sources.bases),
-      targetMonth: asString(sources.targetMonth), targetVersions: strings(sources.targetVersions),
-      targetSnapshots: strings(sources.targetSnapshots), inventorySnapshots: strings(sources.inventorySnapshots),
+      consumerCode: 'base-safety-stock',
+      bases: strings(sources.bases),
+      targetMonth: asString(sources.targetMonth),
+      targetVersions: strings(sources.targetVersions),
+      targetSnapshots: strings(sources.targetSnapshots),
+      inventorySnapshots: strings(sources.inventorySnapshots),
       orderSnapshots: strings(sources.orderSnapshots),
     },
   };
 }
 
-function normalizeFixedWorkbench(
-  value: unknown,
-): FixedSafetyStockWorkbench | null {
+function normalizeFixedWorkbench(value: unknown): FixedSafetyStockWorkbench | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -591,11 +609,11 @@ function normalizeFixedWorkbench(
               value: asString(helper.value),
             }))
           : [],
-        tone: card.tone === "red" ? ("red" as const) : ("neutral" as const),
+        tone: card.tone === 'red' ? ('red' as const) : ('neutral' as const),
       }))
     : undefined;
   return {
-    status: value.status === "no_data" ? "no_data" : "ready",
+    status: value.status === 'no_data' ? 'no_data' : 'ready',
     statusDescription: asString(value.statusDescription),
     overallAnalysis: asString(value.overallAnalysis),
     inventoryInsight: normalizeInventoryRiskEvidence(value.inventoryInsight),
@@ -607,14 +625,12 @@ function normalizeFixedWorkbench(
   };
 }
 
-function normalizeReportMetricRow(
-  value: unknown,
-): TargetStockReportMetricRow | null {
+function normalizeReportMetricRow(value: unknown): TargetStockReportMetricRow | null {
   if (!isRecord(value)) {
     return null;
   }
   return {
-    label: asString(value.label, "未分类"),
+    label: asString(value.label, '未分类'),
     base: asString(value.base),
     productLabel: asString(value.productLabel),
     recordCount: asNumber(value.recordCount),
@@ -630,29 +646,19 @@ function normalizeReportMetricRow(
   };
 }
 
-function normalizeTargetStockAnalysisReport(
-  value: unknown,
-): TargetStockAnalysisReport | null {
-  if (!isRecord(value) || value.kind !== "target_stock_analysis_report") {
+function normalizeTargetStockAnalysisReport(value: unknown): TargetStockAnalysisReport | null {
+  if (!isRecord(value) || value.kind !== 'target_stock_analysis_report') {
     return null;
   }
   const overview = normalizeReportMetricRow(value.overview);
   const scope = isRecord(value.scope) ? value.scope : {};
   const category = isRecord(value.category) ? value.category : {};
-  const baseCategoryMatrix = isRecord(value.baseCategoryMatrix)
-    ? value.baseCategoryMatrix
-    : {};
+  const baseCategoryMatrix = isRecord(value.baseCategoryMatrix) ? value.baseCategoryMatrix : {};
   const eventContext = isRecord(value.eventContext) ? value.eventContext : {};
-  const sectionSummaries = isRecord(value.sectionSummaries)
-    ? value.sectionSummaries
-    : {};
-  const analysisPoints = isRecord(value.analysisPoints)
-    ? value.analysisPoints
-    : {};
+  const sectionSummaries = isRecord(value.sectionSummaries) ? value.sectionSummaries : {};
+  const analysisPoints = isRecord(value.analysisPoints) ? value.analysisPoints : {};
   const ageRisk = isRecord(value.ageRisk) ? value.ageRisk : {};
-  const orderFulfillment = isRecord(value.orderFulfillment)
-    ? value.orderFulfillment
-    : {};
+  const orderFulfillment = isRecord(value.orderFulfillment) ? value.orderFulfillment : {};
   if (!overview) {
     return null;
   }
@@ -687,38 +693,34 @@ function normalizeTargetStockAnalysisReport(
   const points = (items: unknown): TargetStockReportAnalysisPoint[] =>
     Array.isArray(items)
       ? items.filter(isRecord).map((item) => ({
-          tone:
-            item.tone === "green" || item.tone === "gray" ? item.tone : "red",
+          tone: item.tone === 'green' || item.tone === 'gray' ? item.tone : 'red',
           title: asString(item.title),
           description: asString(item.description),
         }))
       : [];
   const reportDimensions: TargetStockReportDimension[] = [
-    "base",
-    "product_category",
-    "product_label_abc_rus",
-    "base_product_category",
-    "base_product_label",
+    'base',
+    'product_category',
+    'product_label_abc_rus',
+    'base_product_category',
+    'base_product_label',
   ];
   const enabledDimensions = Array.isArray(value.enabledDimensions)
     ? value.enabledDimensions.filter(
         (dimension): dimension is TargetStockReportDimension =>
-          typeof dimension === "string" &&
+          typeof dimension === 'string' &&
           reportDimensions.includes(dimension as TargetStockReportDimension),
       )
     : reportDimensions;
   return {
-    kind: "target_stock_analysis_report",
+    kind: 'target_stock_analysis_report',
     title: asString(value.title),
     scope: {
       label: asString(scope.label),
       targetMonth: asString(scope.targetMonth),
       inventoryVersion: asString(scope.inventoryVersion),
-      planVersion: asString(
-        scope.planVersion,
-        asString(scope.inventoryVersion),
-      ),
-      refreshDate: asString(scope.refreshDate, "-"),
+      planVersion: asString(scope.planVersion, asString(scope.inventoryVersion)),
+      refreshDate: asString(scope.refreshDate, '-'),
       selectionRule: asString(scope.selectionRule),
     },
     enabledDimensions,
@@ -781,8 +783,7 @@ function normalizeTargetStockAnalysisReport(
     },
     findings: Array.isArray(value.findings)
       ? value.findings.filter(isRecord).map((item) => ({
-          tone:
-            item.tone === "green" || item.tone === "gray" ? item.tone : "red",
+          tone: item.tone === 'green' || item.tone === 'gray' ? item.tone : 'red',
           title: asString(item.title),
           description: asString(item.description),
         }))

@@ -27,14 +27,17 @@ export const summarizeGroupSkus = (
   approvalRole?: ApprovalStageId,
   pendingValues: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
 ): GroupSkuSummaryRow[] => {
-  const grouped = new Map<string, {
-    categories: Set<string>;
-    descriptions: Set<string>;
-    baseQty: string[];
-    qty: string[];
-    baseAmount: string[];
-    amount: string[];
-  }>();
+  const grouped = new Map<
+    string,
+    {
+      categories: Set<string>;
+      descriptions: Set<string>;
+      baseQty: string[];
+      qty: string[];
+      baseAmount: string[];
+      amount: string[];
+    }
+  >();
   for (const { plan, skus } of sources) {
     if (skus.length !== plan.skuCount || skus.some((sku) => sku.versionId !== plan.versionId))
       throw new Error('INCOMPLETE_GROUP_SKUS');
@@ -43,16 +46,22 @@ export const summarizeGroupSkus = (
       const code = String(sku.skuCode).trim();
       if (!code || codes.has(code)) throw new Error('INCOMPLETE_GROUP_SKUS');
       codes.add(code);
-      const qty = pendingValues[plan.planId]?.[code] ??
-        salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ?? String(sku.qty);
+      const qty =
+        pendingValues[plan.planId]?.[code] ??
+        salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ??
+        String(sku.qty);
       const baseQty = String(sku.baseQty);
       const baseAmount = String(sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));
       if (![qty, baseQty, baseAmount].every(decimal) || amount === undefined)
         throw new Error('INCOMPLETE_GROUP_SKUS');
       const item = grouped.get(code) ?? {
-        categories: new Set<string>(), descriptions: new Set<string>(),
-        baseQty: [], qty: [], baseAmount: [], amount: [],
+        categories: new Set<string>(),
+        descriptions: new Set<string>(),
+        baseQty: [],
+        qty: [],
+        baseAmount: [],
+        amount: [],
       };
       item.categories.add(sku.productCategName.trim() || '其他');
       const description = sku.materialDescription?.trim() || sku.skuName?.trim();
@@ -64,14 +73,19 @@ export const summarizeGroupSkus = (
       grouped.set(code, item);
     }
   }
-  return [...grouped].map(([skuCode, item]) => ({
-    skuCode,
-    categoryName: [...item.categories].join(' / '),
-    description: [...item.descriptions].join(' / '),
-    baseQty: addExactDecimals(item.baseQty),
-    qty: addExactDecimals(item.qty),
-    baseAmount: addExactDecimals(item.baseAmount),
-    amount: addExactDecimals(item.amount),
-  })).toSorted((left, right) =>
-    left.categoryName.localeCompare(right.categoryName, 'zh-CN') || left.skuCode.localeCompare(right.skuCode));
+  return [...grouped]
+    .map(([skuCode, item]) => ({
+      skuCode,
+      categoryName: [...item.categories].join(' / '),
+      description: [...item.descriptions].join(' / '),
+      baseQty: addExactDecimals(item.baseQty),
+      qty: addExactDecimals(item.qty),
+      baseAmount: addExactDecimals(item.baseAmount),
+      amount: addExactDecimals(item.amount),
+    }))
+    .toSorted(
+      (left, right) =>
+        left.categoryName.localeCompare(right.categoryName, 'zh-CN') ||
+        left.skuCode.localeCompare(right.skuCode),
+    );
 };

@@ -34,11 +34,13 @@ const empty = (key: string, status: AdviceStatus): SalesPlanAdviceState => ({
 
 /** 无状态推理：每批五行、同时运行两批，不创建聊天 Session。 */
 export const useSalesPlanAdvice = (scope: string | undefined, prompt: string) => {
-  const {modelInference}=useWorkbenchHost();
+  const { modelInference } = useWorkbenchHost();
   const key = JSON.stringify([scope, prompt]);
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<SalesPlanAdviceState>(empty('', 'idle'));
-  const completedAdvice = useRef<{ key: string; answers: Record<string, string> } | undefined>(undefined);
+  const completedAdvice = useRef<{ key: string; answers: Record<string, string> } | undefined>(
+    undefined,
+  );
   useEffect(() => {
     if (!scope) {
       completedAdvice.current = undefined;
@@ -140,14 +142,16 @@ export const useSalesPlanAdvice = (scope: string | undefined, prompt: string) =>
             .replace(/^```(?:json)?\s*/, '')
             .replace(/\s*```$/, '');
           const value: unknown = JSON.parse(raw);
-          if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid advice');
+          if (!value || typeof value !== 'object' || Array.isArray(value))
+            throw new Error('Invalid advice');
           finish(
             'ready',
             Object.fromEntries(
               Object.entries(value).filter(
-                (entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].trim().length > 0
-              )
-            )
+                (entry): entry is [string, string] =>
+                  typeof entry[1] === 'string' && entry[1].trim().length > 0,
+              ),
+            ),
           );
         })
         .catch((error: unknown) =>
@@ -155,16 +159,25 @@ export const useSalesPlanAdvice = (scope: string | undefined, prompt: string) =>
             error instanceof BackendHttpError
               ? /MODEL_NOT_SELECTED|GEA_ADVICE_MODEL_REQUIRED/.test(error.code)
                 ? 'noModel'
-                : error.status === 401 || error.code.includes('401') || error.code === 'LOGIN_REQUIRED'
+                : error.status === 401 ||
+                    error.code.includes('401') ||
+                    error.code === 'LOGIN_REQUIRED'
                   ? 'authentication'
-                  : error.status === 429 || /429|RATE_LIMIT|TOO_MANY_REQUESTS/.test(error.code) ? 'rateLimited'
-                  : error.code.includes('INCOMPLETE') ? 'noAnswer'
-                  : /TIMEOUT|TIMED_OUT/.test(error.code) ? 'timeout'
-                  : error.status === 404 || error.status >= 500 || /UNAVAILABLE|UPSTREAM/.test(error.code)
-                  ? 'unavailable'
-                  : 'failed'
-              : error instanceof SyntaxError ? 'invalidResponse' : 'failed'
-          )
+                  : error.status === 429 || /429|RATE_LIMIT|TOO_MANY_REQUESTS/.test(error.code)
+                    ? 'rateLimited'
+                    : error.code.includes('INCOMPLETE')
+                      ? 'noAnswer'
+                      : /TIMEOUT|TIMED_OUT/.test(error.code)
+                        ? 'timeout'
+                        : error.status === 404 ||
+                            error.status >= 500 ||
+                            /UNAVAILABLE|UPSTREAM/.test(error.code)
+                          ? 'unavailable'
+                          : 'failed'
+              : error instanceof SyntaxError
+                ? 'invalidResponse'
+                : 'failed',
+          ),
         );
     };
     for (let index = 0; index < Math.min(2, batches.length); index++) launch();

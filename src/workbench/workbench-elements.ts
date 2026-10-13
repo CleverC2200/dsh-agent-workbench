@@ -4,10 +4,7 @@
  * 只描述屏幕上看得见、人能操作的东西：行、控件、可编辑字段。
  * 内部状态、缓存、接口都不进清单，所以模型也调不到。
  */
-import {
-  PAGE_CATALOG_LIMITS,
-  type PageElement,
-} from "../page-bridge/catalog.ts";
+import { PAGE_CATALOG_LIMITS, type PageElement } from '../page-bridge/catalog.ts';
 
 export type WorkbenchElementInput = {
   /** 当前可见的计划行。 */
@@ -43,7 +40,7 @@ export type WorkbenchElementInput = {
     value?: string;
     actions: string[];
     /** 通过/退回这类会落审批状态的元素，标记为 approve，必须用户明确要求才执行。 */
-    effect?: "submit" | "approve";
+    effect?: 'submit' | 'approve';
   }>;
   /** 打开中的审批对话框：确认/取消 + 它自己的输入项（例如退回理由）。 */
   dialog?: {
@@ -83,41 +80,35 @@ const withCount = (label: string, total: number) =>
   `${label}（共 ${total} 项，只列出前 ${MAX_OPTIONS} 项，也可直接填名称或编码）`;
 /** 空串不是合法 value（宿主按"要么没有、要么有内容"处理）。 */
 const optionalValue = (value: string | undefined) => {
-  const text = (value ?? "").slice(0, 200);
+  const text = (value ?? '').slice(0, 200);
   return text.length === 0 ? {} : { value: text };
 };
 const text = (value: string, max: number) => value.slice(0, max);
 
-export function buildWorkbenchElements(
-  input: WorkbenchElementInput,
-): PageElement[] {
+export function buildWorkbenchElements(input: WorkbenchElementInput): PageElement[] {
   const elements: PageElement[] = [];
   for (const row of input.rows) {
     elements.push({
       id: `row:${row.planId}`,
-      role: "row",
+      role: 'row',
       label: text(row.label || row.planId, 200),
       ...optionalValue(row.value),
-      actions: [
-        row.expanded ? "collapse" : "expand",
-        "openDetail",
-        "select",
-      ],
+      actions: [row.expanded ? 'collapse' : 'expand', 'openDetail', 'select'],
     });
   }
   if (input.detail)
     elements.push({
-      id: "detail",
-      role: "control",
+      id: 'detail',
+      role: 'control',
       label: text(`详情抽屉（${input.detail.label}）`, 200),
       ...optionalValue(input.detail.planId),
-      actions: ["close"],
+      actions: ['close'],
     });
   const stage = withOptions(input.stageOptions);
   elements.push({
-    id: "stage",
-    role: "control",
-    label: "审批阶段",
+    id: 'stage',
+    role: 'control',
+    label: '审批阶段',
     ...optionalValue(input.stage),
     ...(stage.listed.length === 0 ? {} : { options: stage.listed }),
     editable: true,
@@ -126,7 +117,7 @@ export function buildWorkbenchElements(
     const options = withOptions(filter.options);
     elements.push({
       id: `filter:${filter.field}`,
-      role: "control",
+      role: 'control',
       label:
         options.truncated === 0
           ? text(filter.label || filter.field, 200)
@@ -137,14 +128,14 @@ export function buildWorkbenchElements(
     });
   }
   elements.push({
-    id: "filters",
-    role: "control",
-    label: "筛选",
-    actions: ["reset"],
+    id: 'filters',
+    role: 'control',
+    label: '筛选',
+    actions: ['reset'],
   });
   elements.push({
-    id: "pager",
-    role: "control",
+    id: 'pager',
+    role: 'control',
     label: text(`分页（共 ${input.pages} 页）`, 200),
     value: String(input.page),
     editable: true,
@@ -152,7 +143,7 @@ export function buildWorkbenchElements(
   for (const field of input.fields)
     elements.push({
       id: field.id,
-      role: "field",
+      role: 'field',
       label: text(field.label || field.id, 200),
       ...optionalValue(field.value),
       ...(field.editable ? { editable: true } : {}),
@@ -160,14 +151,14 @@ export function buildWorkbenchElements(
   for (const collection of input.collections)
     elements.push({
       id: collection.id,
-      role: "collection",
+      role: 'collection',
       label: text(collection.label || collection.id, 200),
       members: collection.members,
     });
   for (const action of input.actionElements ?? [])
     elements.push({
       id: action.id,
-      role: "control",
+      role: 'control',
       label: text(action.label || action.id, 200),
       ...optionalValue(action.value),
       actions: action.actions,
@@ -175,17 +166,15 @@ export function buildWorkbenchElements(
     });
   if (input.dialog) {
     elements.push({
-      id: "dialog:approval",
-      role: "control",
-      label: text(input.dialog.label || "审批对话框", 200),
-      ...(input.dialog.actions.length === 0
-        ? {}
-        : { actions: input.dialog.actions }),
+      id: 'dialog:approval',
+      role: 'control',
+      label: text(input.dialog.label || '审批对话框', 200),
+      ...(input.dialog.actions.length === 0 ? {} : { actions: input.dialog.actions }),
     });
     for (const field of input.dialog.fields ?? [])
       elements.push({
         id: field.id,
-        role: "field",
+        role: 'field',
         label: text(field.label || field.id, 200),
         ...optionalValue(field.value),
         ...(field.editable ? { editable: true } : {}),
@@ -196,11 +185,11 @@ export function buildWorkbenchElements(
   if (elements.length <= PAGE_CATALOG_LIMITS.maxElements) return elements;
   const keep = new Set<string>();
   for (const element of elements)
-    if (element.role === "control" || element.role === "row") keep.add(element.id);
+    if (element.role === 'control' || element.role === 'row') keep.add(element.id);
   for (const element of elements)
     if (
       keep.size < PAGE_CATALOG_LIMITS.maxElements &&
-      (element.role === "collection" || element.role === "field")
+      (element.role === 'collection' || element.role === 'field')
     )
       keep.add(element.id);
   return elements

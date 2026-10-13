@@ -19,16 +19,36 @@ export interface Config {
 /** 通过 DSH 的标准认证连接发布配置；请求只返回配置，不写入业务数据，响应禁止缓存以避免跨用户复用。 */
 export async function apply(ctx: Context, config: Config = {}): Promise<void> {
   // Fail before publishing configuration if the explicit workspace path is invalid.
-  if (config.cwd !== undefined && (typeof config.cwd !== "string" || !isAbsolute(config.cwd)))
-    throw new Error("agent-workbench: cwd must be absolute");
-  const htmlStyles = (await Promise.all(["tokens.css", "html-defaults.css"].map(name => readFile(new URL(`./theme/${name}`, import.meta.url), "utf8")))).join("\n");
-  const pages = new HtmlPages(ctx, htmlStyles,()=>readFile(new URL("./page-picker.js",import.meta.url),"utf8"));
-  if (config.htmlRoots?.some(root => typeof root !== "string" || !isAbsolute(root))) throw Error("INVALID_WORKBENCH_HTML_ROOTS");
+  if (config.cwd !== undefined && (typeof config.cwd !== 'string' || !isAbsolute(config.cwd)))
+    throw new Error('agent-workbench: cwd must be absolute');
+  const htmlStyles = (
+    await Promise.all(
+      ['tokens.css', 'html-defaults.css'].map((name) =>
+        readFile(new URL(`./theme/${name}`, import.meta.url), 'utf8'),
+      ),
+    )
+  ).join('\n');
+  const pages = new HtmlPages(ctx, htmlStyles, () =>
+    readFile(new URL('./page-picker.js', import.meta.url), 'utf8'),
+  );
+  if (config.htmlRoots?.some((root) => typeof root !== 'string' || !isAbsolute(root)))
+    throw Error('INVALID_WORKBENCH_HTML_ROOTS');
   await pages.registerHtml([
     fileURLToPath(new URL('./samples/', import.meta.url)),
     ...(config.htmlRoots ?? [
-      ...["regional", "category", "mps"].map(id => fileURLToPath(new URL(`./static/${id}/`, import.meta.url))),
-      ...["fc", "aqkc", "dealer", "qll", "customer", "orderworkbench", "orderfulfillment", "apsplan"].map(id => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url))),
+      ...['regional', 'category', 'mps'].map((id) =>
+        fileURLToPath(new URL(`./static/${id}/`, import.meta.url)),
+      ),
+      ...[
+        'fc',
+        'aqkc',
+        'dealer',
+        'qll',
+        'customer',
+        'orderworkbench',
+        'orderfulfillment',
+        'apsplan',
+      ].map((id) => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url))),
     ]),
   ]);
   ctx.provide('workbenchPages', pages);

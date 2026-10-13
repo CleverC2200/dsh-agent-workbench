@@ -237,23 +237,38 @@ export function apply(ctx: Context): void {
         },
         t('resourcesRefresh'),
       ),
-      React.createElement('button', {
-        type: 'button', disabled: Boolean(busy) || Boolean(currentCwd?.trim()),
-        onClick: async () => {
-          try {
-            const directory = await nativeResources?.pickDirectory?.();
-            if (directory) setChosenCwd(directory);
-          } catch (failure) { setError(String(failure)); }
+      React.createElement(
+        'button',
+        {
+          type: 'button',
+          disabled: Boolean(busy) || Boolean(currentCwd?.trim()),
+          onClick: async () => {
+            try {
+              const directory = await nativeResources?.pickDirectory?.();
+              if (directory) setChosenCwd(directory);
+            } catch (failure) {
+              setError(String(failure));
+            }
+          },
         },
-      }, t('workspaceSelect')),
+        t('workspaceSelect'),
+      ),
       cwd
-        ? React.createElement('p', null, t(currentCwd ? 'workspaceCurrent' : 'workspaceChosen') + ': ' + cwd)
+        ? React.createElement(
+            'p',
+            null,
+            t(currentCwd ? 'workspaceCurrent' : 'workspaceChosen') + ': ' + cwd,
+          )
         : null,
       error
         ? React.createElement(
             'p',
             { role: 'alert' },
-            error.includes('WORKBENCH_WORKSPACE_REQUIRED') ? t('workspaceRequired') : selectionError ? t('selectionFailed') : t('resourcesFailed'),
+            error.includes('WORKBENCH_WORKSPACE_REQUIRED')
+              ? t('workspaceRequired')
+              : selectionError
+                ? t('selectionFailed')
+                : t('resourcesFailed'),
           )
         : null,
       ...rows.map((row) =>

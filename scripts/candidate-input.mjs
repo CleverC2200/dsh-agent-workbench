@@ -4,7 +4,15 @@ import { dirname, isAbsolute, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-const coreCommit = '8ff14441ac932b55cf1f14b1715128eaa162b1ec';
+export function verifyRegisteredCore(
+  head,
+  gea = resolve(import.meta.dirname, '../../dsh-gea-plugin'),
+) {
+  const supportedCores = JSON.parse(readFileSync(resolve(gea, 'scripts/supported-cores.json')));
+  if (!supportedCores.some((core) => core.head === head))
+    throw Error('CANDIDATE_CORE: registered official Core required');
+  return head;
+}
 export const candidatePackageNames = Object.freeze({
   'dsh-agent-workbench': '@cleverc2200/dsh-agent-workbench',
   'dsh-agent-manage': 'dsh-agent-manage',
@@ -13,6 +21,19 @@ export const candidatePackageNames = Object.freeze({
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 function refuse(code, detail) {
   throw Error(`${code}: ${detail}`);
+}
+
+export function verifyCandidatePackageIdentity({ repo, path }) {
+  if (!Object.hasOwn(candidatePackageNames, repo))
+    refuse('CANDIDATE_PEER_REQUIRED', `${repo}: unknown repository`);
+  const file = resolve(path, 'package.json');
+  const actual = JSON.parse(readFileSync(file)).name;
+  const expected = candidatePackageNames[repo];
+  if (actual !== expected)
+    refuse(
+      'CANDIDATE_PACKAGE_IDENTITY',
+      `${repo} expects package.json.name=${expected}; observed ${JSON.stringify(actual)} in ${file}`,
+    );
 }
 
 /** Admit an explicitly frozen group as source only; it grants no compatibility or runtime authority. */
@@ -40,7 +61,6 @@ export async function readFinalGroup({
   }
   if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest))
     refuse('CANDIDATE_INPUT_INVALID', input);
-  if (manifest.core !== coreCommit) refuse('CANDIDATE_CORE', 'fixed registered Core');
   if (!Array.isArray(manifest.repositories) || manifest.repositories.length !== 3)
     refuse('CANDIDATE_PEER_REQUIRED', 'exactly three repositories');
   const paths = new Set();
@@ -80,11 +100,7 @@ export async function readFinalGroup({
     const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
     for (const file of ['package.json', lock])
       if (!existsSync(resolve(entry.path, file))) refuse('CANDIDATE_MATERIAL_REQUIRED', file);
-    if (
-      JSON.parse(readFileSync(resolve(entry.path, 'package.json'))).name !==
-      candidatePackageNames[entry.repo]
-    )
-      refuse('CANDIDATE_PEER_REQUIRED', `${entry.repo}: package identity`);
+    verifyCandidatePackageIdentity(entry);
     const committed = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`]);
     if (!committed.equals(readFileSync(resolve(entry.path, lock))))
       refuse('CANDIDATE_LOCK', entry.repo);
@@ -92,6 +108,11 @@ export async function readFinalGroup({
       refuse('CANDIDATE_DIRTY', entry.repo);
     return { ...entry, tree: git('rev-parse', 'HEAD^{tree}'), lockSha256: digest(committed) };
   });
+  // The validated frozen GEA owns the registry, regardless of the source/prepared layout.
+  verifyRegisteredCore(
+    manifest.core,
+    repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
+  );
   const workbench = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
   const manage = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-manage');
   if (realpathSync(workbench.path) !== realpathSync(resolve(import.meta.dirname, '..')))
@@ -110,7 +131,7 @@ export async function readFinalGroup({
   const sdk = await import(pathToFileURL(resolve(manage.path, 'scripts/prepare-official-sdk.mjs')));
   if (typeof sdk.verifyOfficialSource !== 'function')
     refuse('CANDIDATE_INTERFACE_REQUIRED', 'Manage verifyOfficialSource');
-  const official = sdk.verifyOfficialSource(resolve(core));
+  const official = sdk.verifyOfficialSource(resolve(core), { coreHead: manifest.core });
   const verifyUnchanged = () => {
     if (!bytes.equals(readFileSync(resolve(input)))) refuse('CANDIDATE_INPUT_CHANGED', input);
   };

@@ -8,99 +8,103 @@
       content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <title>DMS 模拟回写验收</title>
-    <style>/* SHARED_THEME_RESOURCE */
-/* DMS_STYLE */</style>
+    <style>
+      /* SHARED_THEME_RESOURCE */
+      /* DMS_STYLE */
+    </style>
   </head>
   <body>
     <div id="app">
-    <main class="dms-demo">
-      <header>
-        <span class="badge" data-page-target="field:dms:origin">仅 MOCK · 无外部连接</span>
-        <h1>DMS 两段式回写（模拟）</h1>
-        <p class="sub">
-          终审停在 5，全部报文收到成功回执后进入
-          10。页面仅使用合成样本，不读取或修改真实计划。
-        </p>
-      </header>
-      <section class="controls" aria-label="模拟场景">
-        <label
-          >计划类型
-          <select id="type">
-            <option>Y</option>
-            <option>XN</option>
-            <option>DC</option>
-            <option>FC</option>
-            <option>JD</option>
-            <option>TM</option>
-          </select></label
-        ><label
-          >单据类型
-          <select id="order">
-            <option value="M">M 月初计划</option>
-            <option value="Z">Z 纠偏（追加／追减）</option>
-          </select></label
-        ><button id="reset">重置模拟</button
-        ><span class="sub">刷新、重置或切换类型会清空内存样本。</span>
-      </section>
-      <section class="panel" aria-label="模拟状态">
-        <div class="stats">
-          <div>
-            <div class="label">计划状态</div>
-            <div id="status" data-page-target="field:dms:status" class="value"></div>
-          </div>
-          <div>
-            <div class="label">同步状态</div>
-            <div id="sync" data-page-target="field:dms:sync" class="value"></div>
-          </div>
-          <div>
-            <div class="label">完成时间</div>
-            <div id="finished" data-page-target="field:dms:finished" class="value"></div>
-          </div>
-        </div>
-        <p>源计划：<span id="source" data-page-target="field:dms:source"></span></p>
-        <p>
-          投递尝试 <strong id="attempts" data-page-target="field:dms:attempts">0</strong> 次 · 模拟接收方实际入库
-          <strong id="deliveries" data-page-target="field:dms:deliveries">0</strong> 笔
-        </p>
-        <p id="notice" role="status"></p>
-        <div class="actions">
-          <button id="approve" class="primary">模拟品类终审</button
-          ><label
-            >回写场景
-            <select id="outcome">
-              <option value="success">成功</option>
-              <option value="failure">明确失败</option>
-              <option value="timeout-before">接收前超时</option>
-              <option value="lost-receipt">已接收但回执丢失</option>
-              <option value="partial">Z 单仅追加已接收</option>
-            </select></label
-          ><button id="send" class="primary">模拟回写／原键重试</button
-          ><button id="reconcile">查询回执对账</button
-          ><button id="duplicate">模拟重复回执</button>
-        </div>
-        <p id="error" role="alert"></p>
-        <p id="bridge-status" class="sub" role="status">请从工作台原型区打开；正在关联页面会话。</p>
-      </section>
-      <div class="grid">
-        <section class="panel">
-          <h2>模拟报文</h2>
+      <main class="dms-demo">
+        <header>
+          <span class="badge" data-page-target="field:dms:origin">仅 MOCK · 无外部连接</span>
+          <h1>DMS 两段式回写（模拟）</h1>
           <p class="sub">
-            PLANE_NUM 对应源 plan_id；其余字段为模拟结构，非正式 DMS 协议。
+            终审停在 5，全部报文收到成功回执后进入 10。页面仅使用合成样本，不读取或修改真实计划。
           </p>
-          <pre id="packets" data-page-target="field:dms:packets"></pre>
+        </header>
+        <section class="controls" aria-label="模拟场景">
+          <label
+            >计划类型
+            <select id="type">
+              <option>Y</option>
+              <option>XN</option>
+              <option>DC</option>
+              <option>FC</option>
+              <option>JD</option>
+              <option>TM</option>
+            </select></label
+          ><label
+            >单据类型
+            <select id="order">
+              <option value="M">M 月初计划</option>
+              <option value="Z">Z 纠偏（追加／追减）</option>
+            </select></label
+          ><button id="reset">重置模拟</button
+          ><span class="sub">刷新、重置或切换类型会清空内存样本。</span>
         </section>
+        <section class="panel" aria-label="模拟状态">
+          <div class="stats">
+            <div>
+              <div class="label">计划状态</div>
+              <div id="status" data-page-target="field:dms:status" class="value"></div>
+            </div>
+            <div>
+              <div class="label">同步状态</div>
+              <div id="sync" data-page-target="field:dms:sync" class="value"></div>
+            </div>
+            <div>
+              <div class="label">完成时间</div>
+              <div id="finished" data-page-target="field:dms:finished" class="value"></div>
+            </div>
+          </div>
+          <p>源计划：<span id="source" data-page-target="field:dms:source"></span></p>
+          <p>
+            投递尝试 <strong id="attempts" data-page-target="field:dms:attempts">0</strong> 次 ·
+            模拟接收方实际入库
+            <strong id="deliveries" data-page-target="field:dms:deliveries">0</strong> 笔
+          </p>
+          <p id="notice" role="status"></p>
+          <div class="actions">
+            <button id="approve" class="primary">模拟品类终审</button
+            ><label
+              >回写场景
+              <select id="outcome">
+                <option value="success">成功</option>
+                <option value="failure">明确失败</option>
+                <option value="timeout-before">接收前超时</option>
+                <option value="lost-receipt">已接收但回执丢失</option>
+                <option value="partial">Z 单仅追加已接收</option>
+              </select></label
+            ><button id="send" class="primary">模拟回写／原键重试</button
+            ><button id="reconcile">查询回执对账</button
+            ><button id="duplicate">模拟重复回执</button>
+          </div>
+          <p id="error" role="alert"></p>
+          <p id="bridge-status" class="sub" role="status">
+            请从工作台原型区打开；正在关联页面会话。
+          </p>
+        </section>
+        <div class="grid">
+          <section class="panel">
+            <h2>模拟报文</h2>
+            <p class="sub">PLANE_NUM 对应源 plan_id；其余字段为模拟结构，非正式 DMS 协议。</p>
+            <pre id="packets" data-page-target="field:dms:packets"></pre>
+          </section>
+          <section class="panel">
+            <h2>回执与源单对应</h2>
+            <p class="sub">DMS 自有 ID 与源计划、版本、分笔幂等键分别保存。</p>
+            <pre id="receipts" data-page-target="field:dms:receipts"></pre>
+          </section>
+        </div>
         <section class="panel">
-          <h2>回执与源单对应</h2>
-          <p class="sub">DMS 自有 ID 与源计划、版本、分笔幂等键分别保存。</p>
-          <pre id="receipts" data-page-target="field:dms:receipts"></pre>
+          <h2>状态与操作日志</h2>
+          <pre id="logs" aria-label="操作日志"></pre>
         </section>
-      </div>
-      <section class="panel">
-        <h2>状态与操作日志</h2>
-        <pre id="logs" aria-label="操作日志"></pre>
-      </section>
-    </main>
+      </main>
     </div>
-    <script>/* DMS_SCRIPT */</script>
+    <script>
+      /* DMS_SCRIPT */
+    </script>
   </body>
 </html>
