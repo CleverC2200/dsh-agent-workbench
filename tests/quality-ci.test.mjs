@@ -133,7 +133,13 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
     (workflow.match(/persist-credentials: false/g) ?? []).length,
     (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
   );
-  assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/supported-cores\.json/);
+  assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/ci-core-policy\.mjs/);
+  assert.match(workflow, /ciCores\(["']required["']\)/);
+  assert.doesNotMatch(workflow, /ciCores\(["']compatibility["']\)/);
+  const compatibility = readFileSync('.github/workflows/compatibility.yml', 'utf8');
+  assert.match(compatibility, /^name: candidate-compatibility$/m);
+  assert.match(compatibility, /ciCores\(["']compatibility["']\)/);
+  assert.doesNotMatch(compatibility, /^ {2}(push|pull_request):/m);
   assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
   assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE" --prepare-sdk/);
   assert.doesNotMatch(workflow, /PLUGIN_SPLIT_.*_HISTORY_SOURCE/);
