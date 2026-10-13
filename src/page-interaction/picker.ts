@@ -155,6 +155,7 @@ export function mountPicker(options: PickerOptions = {}): () => void {
   ui.setAttribute('data-react-grab-ignore', '');
   ui.setAttribute('data-gea-ignore', '');
   const style = document.createElement('style');
+  style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
   style.textContent = `
 .dspi{position:fixed;right:16px;bottom:64px;z-index:2147483646}.dspi[hidden],.dspi button[hidden]{display:none}
 .dspi-pointer{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid #dfe4eb;border-radius:7px;background:white;color:#606977;cursor:pointer}.dspi-pointer:hover,.dspi-pointer[aria-pressed=true]{color:#df1d28;background:#fff1f1}.dspi-pointer:focus-visible{outline:2px solid #d0132c;outline-offset:2px}

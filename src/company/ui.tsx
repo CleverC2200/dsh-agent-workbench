@@ -131,6 +131,8 @@ export function mountCompanyUI(
     | undefined;
   ctx.effect(() => {
     const style = document.createElement('style');
+    // Loader must not claim this effect-owned sheet for a later materializing plugin.
+    style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.companyWorkbench = 'formal-508feea';
     style.textContent = staticControlsCss + '\n' + css + '\n' + layoutCss + '\n' + loginCss;
     document.head.append(style);

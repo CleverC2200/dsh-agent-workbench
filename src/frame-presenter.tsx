@@ -89,6 +89,7 @@ export function mountFramePresentation(
 ) => Promise<void> {
   ctx.effect(() => {
     const style = document.createElement('style');
+    style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.workbenchDocument = 'layout';
     style.textContent = layoutCss;
     document.head.append(style);
