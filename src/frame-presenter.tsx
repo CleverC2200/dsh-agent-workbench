@@ -159,7 +159,7 @@ export function mountFramePresentation(
       identity.status?.authenticated === true;
     const frame = useRef<HTMLIFrameElement>(null);
     const documentElement = useRef<HTMLElement>(null);
-    const [preferredWidth, setPreferredWidth] = useState(() => rememberedConversationWidth ?? 440);
+    const [preferredWidth, setPreferredWidth] = useState(() => rememberedConversationWidth ?? 520);
     const [space, setSpace] = useState({ viewport: window.innerWidth, document: 0 });
     const maximumWidth = Math.max(
       300,
@@ -849,6 +849,15 @@ export function mountFramePresentation(
           { '--workbench-ai-preferred-width': conversationWidth + 'px' } as React.CSSProperties
         }
       >
+        <header
+          className={'agent-workbench-document-chrome view-' + view}
+          data-workbench-window-chrome
+          data-window-drag
+          aria-label="工作台标题栏"
+        >
+          <span className="agent-workbench-document-title">{title}</span>
+          {toolbar}
+        </header>
         {page.resourceId && identity.error !== undefined && (
           <p className="agent-workbench-page-status" role="alert" title={identity.error}>
             {t('pageIdentityFailed')}
@@ -856,7 +865,6 @@ export function mountFramePresentation(
         )}
         <div className={'agent-workbench-document-body view-' + view}>
           <div className="agent-workbench-business" hidden={view === 'chat'}>
-            {view === 'center' && toolbar}
             {Body ? (
               <div className="agent-workbench-html">
                 <Body />
@@ -913,7 +921,6 @@ export function mountFramePresentation(
             aria-label="AI对话"
             hidden={view === 'center'}
           >
-            {view !== 'center' && toolbar}
             {associated && session?.openState === 'open' ? (
               renderSlot('agent-workbench.conversation', { page: page.id })
             ) : (

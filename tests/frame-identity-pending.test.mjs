@@ -966,9 +966,9 @@ test('the Document consumes native tab kinds from public metadata, keeps its dra
   draft.value = '同一真实Session的未发送草稿';
   const open = async () =>
     act(async () => {
-      const menu = document.querySelector('[aria-label="原生工具"]');
-      menu.value = 'files';
-      menu.dispatchEvent(new f.dom.window.Event('change', { bubbles: true }));
+      const button = document.querySelector('[aria-label="打开原生工具"]');
+      assert.equal(document.querySelector('select[aria-label="原生工具"]'), null);
+      button.click();
     });
   await open();
   assert.ok(document.querySelector('.view-center'));
@@ -993,7 +993,7 @@ test('the Document consumes native tab kinds from public metadata, keeps its dra
   );
   await f.removeTools();
   assert.equal(
-    document.querySelector('[aria-label="原生工具"]'),
+    document.querySelector('[aria-label="打开原生工具"]'),
     null,
     'unloaded providers cease to be selectable',
   );

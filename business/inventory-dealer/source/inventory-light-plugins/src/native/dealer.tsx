@@ -1016,8 +1016,10 @@ export default function Dealer() {
               }
               columns={columns}
               data={shown}
+              emptyText={error && !data ? '数据未读取成功，暂时无法显示。' : undefined}
               scroll={{ x: 1100 }}
               pagination={
+                !(error && !data) &&
                 ['customer', 'sku', 'shortage', 'expiry', 'catalog'].includes(tab)
                   ? {
                       current: page,
