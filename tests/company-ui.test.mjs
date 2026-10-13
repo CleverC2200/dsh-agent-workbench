@@ -444,25 +444,55 @@ test('formal registrations use the fixed public declaration ledger without takin
 });
 test('Core keeps the native header owner while Workbench takes only the selected business Document', () => {
   const core = new SlotCore();
-  core.register({ name: 'root', children: {
-    sidebar: { kind: 'single', scope: 'root' },
-    main: { kind: 'keyed', scope: 'root' },
-    'shell.overlay': { kind: 'list', scope: 'root' },
-    'shell.leading': { kind: 'single', scope: 'root' },
-  } }, () => null);
-  core.register({ name: 'main', key: 'conversation', children: {
-    'main.conversation': { kind: 'single', scope: 'session-maybe' },
-  } }, () => null);
+  core.register(
+    {
+      name: 'root',
+      children: {
+        sidebar: { kind: 'single', scope: 'root' },
+        main: { kind: 'keyed', scope: 'root' },
+        'shell.overlay': { kind: 'list', scope: 'root' },
+        'shell.leading': { kind: 'single', scope: 'root' },
+      },
+    },
+    () => null,
+  );
+  core.register(
+    {
+      name: 'main',
+      key: 'conversation',
+      children: {
+        'main.conversation': { kind: 'single', scope: 'session-maybe' },
+      },
+    },
+    () => null,
+  );
   const Native = () => null;
-  core.register({ name: 'main.conversation', children: {
-    'conversation.header': { kind: 'single', scope: 'session-maybe' },
-  } }, Native);
-  core.register({ name: 'conversation.header', children: {
-    'settings.launcher': { kind: 'single', scope: 'root' },
-  } }, () => null);
+  core.register(
+    {
+      name: 'main.conversation',
+      children: {
+        'conversation.header': { kind: 'single', scope: 'session-maybe' },
+      },
+    },
+    Native,
+  );
+  core.register(
+    {
+      name: 'conversation.header',
+      children: {
+        'settings.launcher': { kind: 'single', scope: 'root' },
+      },
+    },
+    () => null,
+  );
   const { workbench } = fixture(undefined, undefined, { slotCore: core });
   assert.equal(core.entriesOfSlot('main.conversation')[0].component, Native);
-  workbench.registerFrame({ id: 'header-test-page', kind: 'local', label: '业务页面', body: () => null });
+  workbench.registerFrame({
+    id: 'header-test-page',
+    kind: 'local',
+    label: '业务页面',
+    body: () => null,
+  });
   workbench.open('header-test-page');
   assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority, -20);
   assert.equal(core.entriesOfSlot('conversation.header').length, 1);

@@ -219,9 +219,7 @@ export function mountFramePresentation(
       documentState.restoredWithoutSession === true;
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
-    const currentCwd = useSessions((value) =>
-      sessionId ? value.byId[sessionId]?.cwd : undefined,
-    );
+    const currentCwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
     const associated =
       active &&
       selection?.sessionId === sessionId &&

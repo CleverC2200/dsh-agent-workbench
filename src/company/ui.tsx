@@ -136,8 +136,9 @@ export function mountCompanyUI(
       const observe = () => {
         if (workbench.getSnapshot().selectedDocument) return;
         const key = current.getSnapshot().key;
-        const sessionId = Object.values(scope.sessions.list.getSnapshot().byId)
-          .find((summary) => summary.id === key)?.id;
+        const sessionId = Object.values(scope.sessions.list.getSnapshot().byId).find(
+          (summary) => summary.id === key,
+        )?.id;
         mainSessionObservation = {
           sessionId,
           hasObservedSession: !!sessionId || mainSessionObservation?.hasObservedSession === true,
@@ -147,7 +148,11 @@ export function mountCompanyUI(
       const stopCurrent = current.subscribe(observe);
       const stopList = scope.sessions.list.subscribe(observe);
       const stopWorkbench = workbench.subscribe(observe);
-      return () => { stopCurrent(); stopList(); stopWorkbench(); };
+      return () => {
+        stopCurrent();
+        stopList();
+        stopWorkbench();
+      };
     });
   });
   ctx.effect(() => {
@@ -1213,19 +1218,26 @@ export function mountCompanyUI(
     )),
   );
   ctx.slots.inject('main.conversation', () => {
-    const register = () => ctx.slots.register(
-      { name: 'main.conversation', priority: -20, locale: 'companyWorkbench' },
-      Conversation,
-    );
+    const register = () =>
+      ctx.slots.register(
+        { name: 'main.conversation', priority: -20, locale: 'companyWorkbench' },
+        Conversation,
+      );
     // Core keeps its authorized header and native controls outside business Documents.
     let dispose: (() => void) | undefined = register();
     const sync = () => {
       if (workbench.getSnapshot().selectedDocument) dispose ??= register();
-      else { dispose?.(); dispose = undefined; }
+      else {
+        dispose?.();
+        dispose = undefined;
+      }
     };
     sync();
     const unsubscribe = workbench.subscribe(sync);
-    return () => { unsubscribe(); dispose?.(); };
+    return () => {
+      unsubscribe();
+      dispose?.();
+    };
   });
   ctx.slots.inject('main', () => {
     const dispose = ctx.slots.register(

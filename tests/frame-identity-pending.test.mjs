@@ -1552,7 +1552,10 @@ test('an explicit business page inherits the current Core workspace and prepares
   assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
   assert.equal(f.currentSession(), 'session-1');
   assert.equal(f.selection().cwd, '/owned/workspace');
-  assert.equal(f.dom.window.document.body.textContent.includes('WORKBENCH_WORKSPACE_REQUIRED'), false);
+  assert.equal(
+    f.dom.window.document.body.textContent.includes('WORKBENCH_WORKSPACE_REQUIRED'),
+    false,
+  );
   await f.hide();
   await f.show();
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });

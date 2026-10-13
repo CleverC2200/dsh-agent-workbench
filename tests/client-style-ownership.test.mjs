@@ -22,7 +22,9 @@ const bundle = await build({
 });
 const module = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
-  module, module.exports, createRequire(import.meta.url),
+  module,
+  module.exports,
+  createRequire(import.meta.url),
 );
 const { mountCompanyUI, ClientModuleSystem, removeOwnedStyles } = module.exports;
 
@@ -30,28 +32,49 @@ test('a later plugin replacement preserves the mounted company sidebar styleshee
   const dom = new JSDOM('<!doctype html><head></head><body></body>');
   const previous = globalThis.document;
   globalThis.document = dom.window.document;
-  t.after(() => { globalThis.document = previous; dom.window.close(); });
+  t.after(() => {
+    globalThis.document = previous;
+    dom.window.close();
+  });
   const cleanups = [];
   const ctx = {
-    effect(callback) { const cleanup = callback(); if (typeof cleanup === 'function') cleanups.push(cleanup); },
-    locale: { register() {}, bind: () => key => key },
+    effect(callback) {
+      const cleanup = callback();
+      if (typeof cleanup === 'function') cleanups.push(cleanup);
+    },
+    locale: { register() {}, bind: () => (key) => key },
     inject() {},
     slots: { inject: (_name, callback) => callback(), register: () => () => {} },
   };
   const sibling = '@cleverc2200/gea-dsh-prototype';
   const target = { mode: 'queue', pendingQueue: [] };
   const loader = new ClientModuleSystem({
-    manifest: { modules: [{ id: sibling, url: `plugins/??${sibling}/client.js&rev=0`, initialUrl: `plugins/??${sibling}/client.js&rev=0`, rev: '0', inject: [], external: [] }] },
+    manifest: {
+      modules: [
+        {
+          id: sibling,
+          url: `plugins/??${sibling}/client.js&rev=0`,
+          initialUrl: `plugins/??${sibling}/client.js&rev=0`,
+          rev: '0',
+          inject: [],
+          external: [],
+        },
+      ],
+    },
     staticModules: {},
     bootstrapModule: { id: '@deepseek-ai/dsh-client-modules', exports: {} },
     registrationTarget: target,
     loadBundle: async () => target.load({ id: sibling, factory: () => ({}) }),
   });
-  mountCompanyUI(ctx, {
-    register: () => () => {},
-    getSnapshot: () => ({}),
-    subscribe: () => () => {},
-  }, () => null);
+  mountCompanyUI(
+    ctx,
+    {
+      register: () => () => {},
+      getSnapshot: () => ({}),
+      subscribe: () => () => {},
+    },
+    () => null,
+  );
   const style = document.querySelector('style[data-company-workbench]');
   assert.ok(style?.textContent.includes('.gea-sidebar-owned'));
   await loader.import(sibling, '', {});
