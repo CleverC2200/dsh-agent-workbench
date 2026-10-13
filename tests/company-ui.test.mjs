@@ -32,7 +32,7 @@ const { mountCompanyUI, WorkbenchController } = module.exports;
 function fixture(
   account,
   panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
-  { memory, restorePageSession } = {},
+  { memory, restorePageSession, slotCore } = {},
 ) {
   const entries = [],
     calls = [];
@@ -68,11 +68,11 @@ function fixture(
       inject: (_name, fn) => fn(),
       register: (options, component) => {
         entries.push({ options, component });
-        return () => {};
+        return slotCore ? slotCore.register(options, component) : () => {};
       },
     },
-    inject: (_names, fn) => {
-      if (account) fn({ ...ctx, businessAccount: account });
+    inject: (names, fn) => {
+      if (account && names.includes('businessAccount')) fn({ ...ctx, businessAccount: account });
     },
     effect: () => {},
   };
@@ -441,6 +441,34 @@ test('formal registrations use the fixed public declaration ledger without takin
     assert.doesNotThrow(() => core.register(entry.options, entry.component));
   assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority, -20);
   assert.equal(core.entriesOfSlot('sidebar').length, 1);
+});
+test('Core keeps the native header owner while Workbench takes only the selected business Document', () => {
+  const core = new SlotCore();
+  core.register({ name: 'root', children: {
+    sidebar: { kind: 'single', scope: 'root' },
+    main: { kind: 'keyed', scope: 'root' },
+    'shell.overlay': { kind: 'list', scope: 'root' },
+    'shell.leading': { kind: 'single', scope: 'root' },
+  } }, () => null);
+  core.register({ name: 'main', key: 'conversation', children: {
+    'main.conversation': { kind: 'single', scope: 'session-maybe' },
+  } }, () => null);
+  const Native = () => null;
+  core.register({ name: 'main.conversation', children: {
+    'conversation.header': { kind: 'single', scope: 'session-maybe' },
+  } }, Native);
+  core.register({ name: 'conversation.header', children: {
+    'settings.launcher': { kind: 'single', scope: 'root' },
+  } }, () => null);
+  const { workbench } = fixture(undefined, undefined, { slotCore: core });
+  assert.equal(core.entriesOfSlot('main.conversation')[0].component, Native);
+  workbench.registerFrame({ id: 'header-test-page', kind: 'local', label: '业务页面', body: () => null });
+  workbench.open('header-test-page');
+  assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority, -20);
+  assert.equal(core.entriesOfSlot('conversation.header').length, 1);
+  workbench.leaveDocument();
+  assert.equal(core.entriesOfSlot('main.conversation')[0].component, Native);
+  assert.equal(core.entriesOfSlot('conversation.header').length, 1);
 });
 test('formal account menu preserves keyboard focus and dismissal while ignoring a late logout UI completion', async (t) => {
   const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true });

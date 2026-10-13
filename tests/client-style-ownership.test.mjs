@@ -47,7 +47,11 @@ test('a later plugin replacement preserves the mounted company sidebar styleshee
     registrationTarget: target,
     loadBundle: async () => target.load({ id: sibling, factory: () => ({}) }),
   });
-  mountCompanyUI(ctx, { register: () => () => {} }, () => null);
+  mountCompanyUI(ctx, {
+    register: () => () => {},
+    getSnapshot: () => ({}),
+    subscribe: () => () => {},
+  }, () => null);
   const style = document.querySelector('style[data-company-workbench]');
   assert.ok(style?.textContent.includes('.gea-sidebar-owned'));
   await loader.import(sibling, '', {});

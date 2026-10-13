@@ -24,6 +24,7 @@ import type {
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
+import type {} from '@deepseek-ai/dsh-client-ui-session/client';
 import type { WorkbenchController, DocumentSession } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
 import { LoginDialog } from './login-dialog.tsx';
@@ -129,6 +130,26 @@ export function mountCompanyUI(
   let mainSessionObservation:
     | { sessionId: SessionId | undefined; hasObservedSession: boolean }
     | undefined;
+  ctx.inject(['uiSession'], (scope) => {
+    scope.effect(() => {
+      const current = scope.uiSession.adapter.current;
+      const observe = () => {
+        if (workbench.getSnapshot().selectedDocument) return;
+        const key = current.getSnapshot().key;
+        const sessionId = Object.values(scope.sessions.list.getSnapshot().byId)
+          .find((summary) => summary.id === key)?.id;
+        mainSessionObservation = {
+          sessionId,
+          hasObservedSession: !!sessionId || mainSessionObservation?.hasObservedSession === true,
+        };
+      };
+      observe();
+      const stopCurrent = current.subscribe(observe);
+      const stopList = scope.sessions.list.subscribe(observe);
+      const stopWorkbench = workbench.subscribe(observe);
+      return () => { stopCurrent(); stopList(); stopWorkbench(); };
+    });
+  });
   ctx.effect(() => {
     const style = document.createElement('style');
     // Loader must not claim this effect-owned sheet for a later materializing plugin.
@@ -1191,12 +1212,21 @@ export function mountCompanyUI(
       </div>
     )),
   );
-  ctx.slots.inject('main.conversation', () =>
-    ctx.slots.register(
+  ctx.slots.inject('main.conversation', () => {
+    const register = () => ctx.slots.register(
       { name: 'main.conversation', priority: -20, locale: 'companyWorkbench' },
       Conversation,
-    ),
-  );
+    );
+    // Core keeps its authorized header and native controls outside business Documents.
+    let dispose: (() => void) | undefined = register();
+    const sync = () => {
+      if (workbench.getSnapshot().selectedDocument) dispose ??= register();
+      else { dispose?.(); dispose = undefined; }
+    };
+    sync();
+    const unsubscribe = workbench.subscribe(sync);
+    return () => { unsubscribe(); dispose?.(); };
+  });
   ctx.slots.inject('main', () => {
     const dispose = ctx.slots.register(
       {
