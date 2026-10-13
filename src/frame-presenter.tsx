@@ -1,4 +1,5 @@
 import { insertPageFeedbackDraft } from './page-feedback-draft.ts';
+import { notificationProducer } from './notification-producer-observer.ts';
 import React, {
   useEffect,
   useLayoutEffect,
@@ -210,6 +211,32 @@ export function mountFramePresentation(
       () => pageViews.get(page.id) ?? 'split',
     );
     const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
+    const diagnosticInstance = useRef<string>();
+    if (!diagnosticInstance.current) diagnosticInstance.current = crypto.randomUUID();
+    useEffect(() => {
+      notificationProducer('document-mounted', {
+        instance: diagnosticInstance.current,
+        page: page.id,
+        sessionId,
+      });
+      return () =>
+        notificationProducer('document-unmounted', {
+          instance: diagnosticInstance.current,
+          page: page.id,
+          sessionId,
+        });
+    }, []);
+    useEffect(() => {
+      notificationProducer('document-state', {
+        instance: diagnosticInstance.current,
+        page: page.id,
+        active,
+        sessionId,
+        selectedPage: documentState.selectedDocument?.id,
+        selectionSessionId: documentState.selection?.sessionId,
+        restoredWithoutSession: documentState.restoredWithoutSession === true,
+      });
+    }, [active, sessionId, documentState]);
     const selection =
       documentState.selectedDocument?.id === page.id ? documentState.selection : undefined;
     const restoredWithoutSession =
@@ -608,10 +635,18 @@ export function mountFramePresentation(
                   choices.includes(row.id) && row.kind === 'prompt' && row.installed && row.enabled,
               ),
             );
+          notificationProducer('associate-session-start', {
+            page: page.id,
+            sessionId: selected.sessionId,
+          });
           workbench.associateSession(page.id, {
             ...projection,
             ownerScope: identity.scope,
             ...(identity.subject ? { subject: identity.subject } : {}),
+          });
+          notificationProducer('associate-session-returned', {
+            page: page.id,
+            sessionId: selected.sessionId,
           });
         };
         let cached = reuse

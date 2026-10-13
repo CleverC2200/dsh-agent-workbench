@@ -1,5 +1,6 @@
 /** GEA 消息待办：服务端掌握状态，页面只提交当前版本和幂等键。 */
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { notificationProducer } from '../notification-producer-observer.ts';
 import type { CopyKey } from './locales.ts';
 import type { NotificationItem } from '../shared/notifications.ts';
 import type { PageNavigation } from './desktop-navigation.tsx';
@@ -33,6 +34,12 @@ export function Inbox({
   onViewChange: (view: InboxViewState) => void;
 }) {
   const { pageNo, readState: state } = view;
+  const diagnosticInstance = useRef<string>();
+  if (!diagnosticInstance.current) diagnosticInstance.current = crypto.randomUUID();
+  useEffect(() => {
+    notificationProducer('inbox-mounted', { instance: diagnosticInstance.current });
+    return () => notificationProducer('inbox-unmounted', { instance: diagnosticInstance.current });
+  }, []);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
   // 每次唤醒独立读取详情；手动选择不继续受上一条导航约束。

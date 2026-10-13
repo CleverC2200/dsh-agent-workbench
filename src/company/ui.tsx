@@ -1,4 +1,5 @@
 import { PageUnsentHistory } from './unsent-history.tsx';
+import { notificationProducer } from '../notification-producer-observer.ts';
 import React, {
   useCallback,
   useEffect,
@@ -851,17 +852,32 @@ export function mountCompanyUI(
       const previous = mainSessionObservation;
       const changed = previous !== undefined && previous.sessionId !== sessionId;
       const firstSession = !!sessionId && !previous?.hasObservedSession;
+      const diagnosticState = workbench.getSnapshot();
+      notificationProducer('main-session-effect', {
+        sessionId,
+        previousSessionId: previous?.sessionId,
+        changed,
+        firstSession,
+        recovery: !!recovery,
+        selectedPage: diagnosticState.selectedDocument?.id,
+        selectionSessionId: diagnosticState.selection?.sessionId,
+        restoredWithoutSession: diagnosticState.restoredWithoutSession === true,
+      });
       mainSessionObservation = {
         sessionId,
         hasObservedSession: !!sessionId || previous?.hasObservedSession === true,
       };
       if (!sessionId) {
-        if (changed) workbench.leaveDocument();
+        if (changed) {
+          notificationProducer('leave-document', { reason: 'main-session-empty', sessionId });
+          workbench.leaveDocument();
+        }
         return;
       }
       if (changed && !recovery) setHistoryError('');
       const target = workbench.takeHistoryTarget(sessionId);
       const page = target?.page;
+      notificationProducer('main-session-history-target', { sessionId, page });
       if (!page) {
         const state = workbench.getSnapshot();
         if (
@@ -870,8 +886,15 @@ export function mountCompanyUI(
             state.selectedDocument &&
             !state.selection &&
             !(firstSession && state.restoredWithoutSession))
-        )
+        ) {
+          notificationProducer('leave-document', {
+            reason: state.selection ? 'selection-session-mismatch' : 'unassociated-session-change',
+            sessionId,
+            selectionSessionId: state.selection?.sessionId,
+            selectedPage: state.selectedDocument?.id,
+          });
           workbench.leaveDocument();
+        }
         return;
       }
       const controller = new AbortController();

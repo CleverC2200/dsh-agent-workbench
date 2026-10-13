@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis';
+import { notificationProducer } from './notification-producer-observer.ts';
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
@@ -150,13 +151,16 @@ export function mountNativeResourceSelection(
             if (preset !== null && (typeof preset !== 'string' || !preset))
               throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
             const cwd = scope.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
+            notificationProducer('resource-before-association', { sessionId: reference.sessionId });
             beforeOpen?.({
               sessionId: reference.sessionId,
               preset,
               ...(typeof cwd === 'string' ? { cwd } : {}),
             });
             signal.throwIfAborted();
+            notificationProducer('resource-open-session-start', { sessionId: id });
             scope.uiWorkspace.openSession(id as SessionId);
+            notificationProducer('resource-open-session-returned', { sessionId: id });
           } finally {
             reference.release();
           }
