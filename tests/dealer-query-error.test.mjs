@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { sqlQueryError } from '../business/inventory-dealer/source/inventory-light-plugins/src/query-error.js';
+import { sqlQueryError } from '../business/shared/query-error.js';
 
 test('a missing tenant dataset stays an unavailable source, with the original failure preserved', () => {
   const original = Error(

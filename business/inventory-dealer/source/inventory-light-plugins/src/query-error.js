@@ -13,15 +13,12 @@ export function sqlQueryError(cause) {
     /(?:SESSION_(?:EXPIRED|REJECTED|NOT_FOUND|MAX_LIFETIME_EXCEEDED)|会话已失效)/.test(
       code + ' ' + message,
     );
-  const unavailable = /RESOURCE_NOT_IN_DATASET/.test(code + ' ' + message);
   const error = new Error(
     denied
       ? DATA_PERMISSION_MESSAGE
       : expired
         ? '数据会话已失效，请刷新页面重试'
-        : unavailable
-          ? '当前环境未开通所需数据源，请联系管理员核对授权；暂时无法读取，不能判断数据是否为空。'
-          : '数据读取失败，请刷新重试；若仍失败，请查看接口错误详情',
+        : '数据读取失败，请刷新重试；若仍失败，请查看接口错误详情',
     { cause },
   );
   error.code = 'GEA_SQL_DISPLAY_ERROR';
