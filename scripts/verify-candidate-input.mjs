@@ -29,60 +29,68 @@ if (values['final-group-sha256'] !== undefined) {
   });
 }
 const manifest = finalGroup?.manifest ?? JSON.parse(readFileSync(resolve(values.input), 'utf8'));
-for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin']) {
-  const entries = manifest.repositories?.filter((entry) => entry.repo === repo);
-  if (entries?.length !== 1 || !entries[0].path || !entries[0].head)
-    throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
-}
-if (
-  !finalGroup &&
-  !manifest.repositories?.some((entry) => resolve(entry.path) === resolve(values.checkout))
-) {
-  throw Error('CANDIDATE_CHECKOUT: use a checkout registered in the input set');
-}
+let repositories;
+if (finalGroup) {
+  // Source admission already observed identities, HEADs, clean trees and committed locks.
+  repositories = finalGroup.receipt.repositories.map(({ repo, path, head }) => ({
+    repo,
+    path,
+    head,
+  }));
+} else {
+  for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin']) {
+    const entries = manifest.repositories?.filter((entry) => entry.repo === repo);
+    if (entries?.length !== 1 || !entries[0].path || !entries[0].head)
+      throw Error(`CANDIDATE_PEER_REQUIRED: ${repo}`);
+  }
+  if (!manifest.repositories?.some((entry) => resolve(entry.path) === resolve(values.checkout))) {
+    throw Error('CANDIDATE_CHECKOUT: use a checkout registered in the input set');
+  }
 
-const repositories = manifest.repositories.map((entry) => {
-  let head;
-  try {
-    head = execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-  } catch {
-    throw Error(`CANDIDATE_PEER_REQUIRED: ${entry.repo} checkout ${entry.path}`);
-  }
-  return { repo: entry.repo, path: entry.path, head };
-});
-for (const entry of repositories) {
-  for (const file of [
-    'package.json',
-    entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml',
-  ]) {
+  repositories = manifest.repositories.map((entry) => {
+    let head;
     try {
-      accessSync(resolve(entry.path, file), constants.R_OK);
+      head = execFileSync('git', ['-C', entry.path, 'rev-parse', 'HEAD'], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
     } catch {
-      throw Error(`CANDIDATE_MATERIAL_REQUIRED: ${entry.repo}/${file}`);
+      throw Error(`CANDIDATE_PEER_REQUIRED: ${entry.repo} checkout ${entry.path}`);
     }
+    return { repo: entry.repo, path: entry.path, head };
+  });
+  for (const entry of repositories) {
+    for (const file of [
+      'package.json',
+      entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml',
+    ]) {
+      try {
+        accessSync(resolve(entry.path, file), constants.R_OK);
+      } catch {
+        throw Error(`CANDIDATE_MATERIAL_REQUIRED: ${entry.repo}/${file}`);
+      }
+    }
+    const dirty = execFileSync(
+      'git',
+      ['-C', entry.path, 'status', '--porcelain', '--untracked-files=all'],
+      { encoding: 'utf8' },
+    ).trim();
+    if (dirty) throw Error(`CANDIDATE_DIRTY: ${entry.repo}\n${dirty}`);
+    verifyCandidatePackageIdentity(entry);
+    const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
+    try {
+      const frozen = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      if (!frozen.equals(readFileSync(resolve(entry.path, lock)))) throw Error('changed lock');
+    } catch {
+      throw Error(`CANDIDATE_LOCK: ${entry.repo}/${lock} must match its commit`);
+    }
+    if (entry.head !== manifest.repositories.find((expected) => expected.repo === entry.repo).head)
+      throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
   }
-  const dirty = execFileSync(
-    'git',
-    ['-C', entry.path, 'status', '--porcelain', '--untracked-files=all'],
-    { encoding: 'utf8' },
-  ).trim();
-  if (dirty) throw Error(`CANDIDATE_DIRTY: ${entry.repo}\n${dirty}`);
-  verifyCandidatePackageIdentity(entry);
-  const lock = entry.repo === 'dsh-agent-workbench' ? 'package-lock.json' : 'pnpm-lock.yaml';
-  try {
-    const frozen = execFileSync('git', ['-C', entry.path, 'show', `HEAD:${lock}`], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    if (!frozen.equals(readFileSync(resolve(entry.path, lock)))) throw Error('changed lock');
-  } catch {
-    throw Error(`CANDIDATE_LOCK: ${entry.repo}/${lock} must match its commit`);
-  }
-  if (entry.head !== manifest.repositories.find((expected) => expected.repo === entry.repo).head)
-    throw Error(`CANDIDATE_HEAD: ${entry.repo}`);
 }
+// Declaration availability is checked after SDK preparation; source admission cannot prove it.
 const core = verifyOfficialInput(
   manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
 );

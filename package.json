@@ -114,6 +114,7 @@
     "lint:audit": "node scripts/quality.mjs lint-audit",
     "format:check": "node scripts/quality.mjs format",
     "format:audit": "node scripts/quality.mjs format-audit",
+    "test:ci": "node --test --test-concurrency=2 tests/*.test.mjs business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs scripts/run-quality-checks.test.mjs business/inventory-apsplan/source/tests/data/*.test.mjs",
     "test:quality": "node --test scripts/run-quality-checks.test.mjs tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/hosted-peer-input.test.mjs tests/quality-knowledge.test.mjs tests/candidate-input.test.mjs tests/migration-history-input.test.mjs",
     "test:final-group": "node --test tests/final-group-input.contract.mjs",
     "quality:fast": "node scripts/run-quality-fast.mjs",

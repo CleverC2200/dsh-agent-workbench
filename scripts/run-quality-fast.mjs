@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
+import { parseArgs } from 'node:util';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { runQualityChecks } from './run-quality-checks.mjs';
+const { values } = parseArgs({ options: { 'checks-only': { type: 'boolean' } } });
 const check = (name) => ({
   name,
   execute() {
@@ -17,7 +19,14 @@ const check = (name) => ({
 const checks = runQualityChecks([check('check:knowledge')]);
 if (checks[0].status === 'passed')
   checks.push(
-    ...runQualityChecks(['lint', 'format:check', 'typecheck:official', 'test:quality'].map(check)),
+    ...runQualityChecks(
+      [
+        'lint',
+        'format:check',
+        'typecheck:official',
+        ...(!values['checks-only'] ? ['test:quality'] : []),
+      ].map(check),
+    ),
   );
 mkdirSync('.runtime', { recursive: true });
 writeFileSync('.runtime/quality-fast.json', JSON.stringify(checks, null, 2) + '\n');

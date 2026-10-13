@@ -193,7 +193,7 @@ try {
     );
     const checks = runQualityChecks([
       { name: 'final-group', execute: () => run('npm', ['run', 'test:final-group']) },
-      { name: 'fast', execute: () => run('npm', ['run', 'quality:fast']) },
+      { name: 'fast', execute: () => run('npm', ['run', 'quality:fast', '--', '--checks-only']) },
       {
         name: 'build',
         execute: () => {
@@ -208,8 +208,7 @@ try {
         },
       },
       { name: 'knowledge', execute: () => run('npm', ['run', 'check:knowledge']) },
-      { name: 'aps', execute: () => run('npm', ['run', 'test:aps']) },
-      { name: 'full', execute: () => run('npm', ['test']) },
+      { name: 'full', execute: () => run('npm', ['run', 'test:ci']) },
       ...(values.browser
         ? [{ name: 'browser', execute: () => run('npm', ['run', 'test:browser']) }]
         : []),

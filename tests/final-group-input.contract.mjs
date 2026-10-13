@@ -62,11 +62,13 @@ test('public final-group admission binds real source only and rejects invalid in
       command(fixture, 'git', ['clone', '--quiet', '--no-hardlinks', source, root]);
       if (name === 'dsh-agent-workbench') {
         // Exercise the current public runner before its delivery commit exists.
-        copyFileSync(
-          join(source, 'scripts/run-quality-ci.mjs'),
-          join(root, 'scripts/run-quality-ci.mjs'),
-        );
-        command(root, 'git', ['add', 'scripts/run-quality-ci.mjs']);
+        for (const file of ['run-quality-ci.mjs', 'verify-candidate-input.mjs'])
+          copyFileSync(join(source, 'scripts', file), join(root, 'scripts', file));
+        command(root, 'git', [
+          'add',
+          'scripts/run-quality-ci.mjs',
+          'scripts/verify-candidate-input.mjs',
+        ]);
         command(root, 'git', [
           '-c',
           'user.name=Fixture',
