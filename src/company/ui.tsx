@@ -1,5 +1,9 @@
 import { PageUnsentHistory } from './unsent-history.tsx';
 import { createConversationStarter } from './new-conversation.ts';
+import {
+  createPageSessionNavigation,
+  type PageSessionRestore,
+} from '../page-session-coordination.ts';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
@@ -8,7 +12,6 @@ import {
   IconNewChatOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
-import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type {
   PropsRuntime,
   PropsRenderSlots,
@@ -17,7 +20,7 @@ import type {
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
-import type { WorkbenchController, DocumentSession } from '../workbench.ts';
+import type { WorkbenchController } from '../workbench.ts';
 import type { BusinessAccount } from './account.ts';
 import { LoginDialog } from './login-dialog.tsx';
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
@@ -101,12 +104,7 @@ export function mountCompanyUI(
   ctx: Context,
   workbench: WorkbenchController,
   Resources: React.ComponentType<{ cwd?: string }>,
-  restorePageSession: (
-    page: MainPanelId,
-    sessionId: SessionId,
-    signal: AbortSignal,
-    expected?: Pick<DocumentSession, 'preset' | 'cwd'>,
-  ) => Promise<void> = async () => {},
+  restorePageSession: PageSessionRestore = async () => {},
 ): void {
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
   const t = ctx.locale.bind('companyWorkbench');
@@ -144,13 +142,6 @@ export function mountCompanyUI(
     ),
   );
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
-  // Core's Session-optional Documents seat remounts on later Session changes.
-  // Keep its observation for this UI lifetime; the first nonempty value consumes
-  // the bootstrap allowance even when no presentation was restored.
-  // These public props carry no navigation intent or same-Session reveal revision.
-  let mainSessionObservation:
-    | { sessionId: SessionId | undefined; hasObservedSession: boolean }
-    | undefined;
   ctx.effect(() => {
     const style = document.createElement('style');
     // Loader must not claim this effect-owned sheet for a later materializing plugin.
@@ -161,6 +152,12 @@ export function mountCompanyUI(
     return () => style.remove();
   });
   let account: BusinessAccount | undefined;
+  const pageSessions = createPageSessionNavigation({
+    workbench,
+    restore: restorePageSession,
+    identity: () => account?.getSnapshot(),
+    openSession: (id) => ctx.uiWorkspace.openSession(id),
+  });
   const accountListeners = new Set<() => void>();
   ctx.inject(['businessAccount'], (scope) => {
     account = scope.businessAccount;
@@ -767,8 +764,7 @@ export function mountCompanyUI(
                   request={fetch}
                   language={ctx.locale.getSnapshot().active}
                   onChoose={(id, preset, cwd) => {
-                    workbench.selectHistorySession(documentState.historyPage!, id, { preset, cwd });
-                    ctx.uiWorkspace.openSession(id);
+                    pageSessions.chooseHistory(documentState.historyPage!, id, { preset, cwd });
                   }}
                 />
               )}
@@ -823,97 +819,22 @@ export function mountCompanyUI(
     const directoryReady = catalogue.phase === 'ready';
     const savedListed = recovery ? catalogue.ids.includes(recovery.sessionId) : false;
     const savedCwd = recovery ? catalogue.byId[recovery.sessionId]?.cwd : undefined;
-    useEffect(() => {
-      if (!recovery) return;
-      if (catalogue.phase !== 'ready') return;
-      const savedSession = catalogue.byId[recovery.sessionId];
-      if (!catalogue.ids.includes(recovery.sessionId) || !savedSession) {
-        setHistoryError(`Session unavailable: ${recovery.sessionId}`);
-        return;
-      }
-      if (recovery.cwd && savedSession.cwd !== recovery.cwd) {
-        setHistoryError('PAGE_SESSION_WORKSPACE_MISMATCH');
-        return;
-      }
-      if (recovery.resourceId) {
-        // A browser hint is neither a login flag nor a grant. Wait for GEA's current projection.
-        if (identity.state !== 'confirmed' || identity.error) return;
-        if (
-          identity.status?.authenticated !== true ||
-          !recovery.subject ||
-          identity.subject !== recovery.subject
-        ) {
-          workbench.forgetSession(recovery.page);
-          workbench.leaveDocument();
-          return;
-        }
-      }
-      const controller = new AbortController();
-      setHistoryError('');
-      void restorePageSession(recovery.page, recovery.sessionId, controller.signal, recovery)
-        .then(() => {
-          controller.signal.throwIfAborted();
-          if (recovery.resourceId && authority?.getSnapshot().subject !== recovery.subject)
-            throw Error('PAGE_IDENTITY_CHANGED');
-          return workbench.open(recovery.page);
-        })
-        .catch((error) => {
-          if (!controller.signal.aborted)
-            setHistoryError(error instanceof Error ? error.message : String(error));
-        });
-      return () => controller.abort();
-    }, [
-      recoveryKey,
-      directoryReady,
-      savedListed,
-      savedCwd,
-      identity.state,
-      identity.scope,
-      identity.subject,
-      identity.status?.authenticated,
-      identity.error,
-      authority,
-    ]);
-    useEffect(() => {
-      const previous = mainSessionObservation;
-      const changed = previous !== undefined && previous.sessionId !== sessionId;
-      const firstSession = !!sessionId && !previous?.hasObservedSession;
-      mainSessionObservation = {
-        sessionId,
-        hasObservedSession: !!sessionId || previous?.hasObservedSession === true,
-      };
-      if (!sessionId) {
-        if (changed) workbench.leaveDocument();
-        return;
-      }
-      if (changed && !recovery) setHistoryError('');
-      const target = workbench.takeHistoryTarget(sessionId);
-      const page = target?.page;
-      if (!page) {
-        const state = workbench.getSnapshot();
-        if (
-          (state.selection && state.selection.sessionId !== sessionId) ||
-          (changed &&
-            state.selectedDocument &&
-            !state.selection &&
-            !(firstSession && state.restoredWithoutSession))
-        )
-          workbench.leaveDocument();
-        return;
-      }
-      const controller = new AbortController();
-      const signal = AbortSignal.any([controller.signal, target!.signal]);
-      void restorePageSession(page, sessionId, signal, target?.expected)
-        .then(() => {
-          signal.throwIfAborted();
-          return workbench.completeHistory(target!);
-        })
-        .catch((error) => {
-          if (!signal.aborted)
-            setHistoryError(error instanceof Error ? error.message : String(error));
-        });
-      return () => controller.abort();
-    }, [sessionId]);
+    useEffect(
+      () => pageSessions.recover(recovery, catalogue, setHistoryError),
+      [
+        recoveryKey,
+        directoryReady,
+        savedListed,
+        savedCwd,
+        identity.state,
+        identity.scope,
+        identity.subject,
+        identity.status?.authenticated,
+        identity.error,
+        authority,
+      ],
+    );
+    useEffect(() => pageSessions.observeMainSession(sessionId, setHistoryError), [sessionId]);
     const documents = documentState.visitedDocuments.map((page) => (
       <div
         key={page.id}

@@ -8,7 +8,7 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { selectResource } = await import(
+const { selectResource, mountNativeResourceSelection } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].text).toString('base64')
 );
 test('resource selection creates a new native session in the explicit workspace and stages a Skill without sending or replacing another session', async () => {
@@ -191,4 +191,58 @@ test('resource action uses the official directory picker when neither a current 
     /WORKBENCH_WORKSPACE_REQUIRED/,
   );
   assert.deepEqual(calls, ['pick', '/selected/project']);
+});
+
+test('resource opening rejects a real Session in another workspace before associating or navigating', async () => {
+  const calls = [];
+  const host = {
+    fetch: async () => Response.json({ preset: 'gea-readonly' }),
+    workspace: async () => ({ workspaceId: 'owned', path: '/canonical/project' }),
+    create: async () => 'created-session',
+    select: async () => {},
+    open: async (sessionId, _skill, _signal, beforeOpen) => {
+      await beforeOpen({ sessionId, preset: 'gea-readonly', cwd: '/different/project' });
+      calls.push('navigate');
+    },
+  };
+  await assert.rejects(
+    selectResource(host, 'gea-readonly', new AbortController().signal, '/project', () => {
+      calls.push('associate');
+    }),
+    /PAGE_SESSION_RECOVERY_MISMATCH/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('native navigation hands off to Core without treating its new navigation as a failed resource opening', async () => {
+  const controller = new AbortController();
+  const calls = [];
+  const reference = {
+    sessionId: 'new-session',
+    ready: Promise.resolve(),
+    release: () => calls.push('release'),
+    binding: {
+      session: { projections: { faceOf: () => ({ getSnapshot: () => 'gea-readonly' }) } },
+    },
+  };
+  let host;
+  const scope = {
+    sessions: {
+      retain: () => reference,
+      list: { getSnapshot: () => ({ byId: { 'new-session': { cwd: '/project' } } }) },
+    },
+    uiWorkspace: {
+      openSession: () => {
+        calls.push('native-navigation');
+        // Core's accepted main-view navigation invalidates the prior layout intent.
+        controller.abort();
+      },
+    },
+    effect: () => {},
+  };
+  mountNativeResourceSelection({ inject: (_names, mount) => mount(scope) }, (ready) => {
+    host = ready;
+  });
+  await host.open('new-session', undefined, controller.signal, () => calls.push('associate'));
+  assert.deepEqual(calls, ['associate', 'native-navigation', 'release']);
 });

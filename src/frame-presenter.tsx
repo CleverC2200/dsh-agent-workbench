@@ -9,7 +9,6 @@ import React, {
 } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client';
-import type { SessionId } from '@deepseek-ai/dsh-session/types';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {
   FactoryComponentPropsOf,
@@ -20,16 +19,15 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-slots';
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client';
-import type { WorkbenchController, DocumentSession } from './workbench.ts';
+import type { WorkbenchController } from './workbench.ts';
+import type { NativeResourceSelection } from './resource-selection.ts';
 import {
-  selectResource,
-  resourceWorkspace,
-  type ResourceSummary,
-  type NativeResourceSelection,
-} from './resource-selection.ts';
+  createPageSessionRestorer,
+  usePageSessionCoordination,
+  type PageSessionRestore,
+} from './page-session-coordination.ts';
 import type {
   PageExecutionConnection,
-  PageIdentitySnapshot,
   WorkbenchFramePage,
   WorkbenchPageExecution,
 } from './frame.ts';
@@ -57,7 +55,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     };
   }
 }
-const unknownIdentity: PageIdentitySnapshot = { state: 'unknown', scope: null, status: null };
 const noSubscribe = () => () => {};
 const emptyGuide: readonly import('@deepseek-ai/dsh-client-ui-sidebar-right/client').SidebarRightGuideBox[] =
   [];
@@ -81,12 +78,7 @@ export function mountFramePresentation(
   resources: () => NativeResourceSelection | undefined,
   t: (key: FrameCopyKey) => string,
   workbench: WorkbenchController,
-): (
-  page: MainPanelId,
-  sessionId: SessionId,
-  signal: AbortSignal,
-  expected?: Pick<DocumentSession, 'preset' | 'cwd' | 'subject'>,
-) => Promise<void> {
+): PageSessionRestore {
   ctx.effect(() => {
     const style = document.createElement('style');
     style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
@@ -149,14 +141,6 @@ export function mountFramePresentation(
       },
       () => execution,
     );
-    const identity = useSyncExternalStore(
-      currentExecution?.identity.subscribe ?? noSubscribe,
-      currentExecution?.identity.getSnapshot ?? (() => unknownIdentity),
-    );
-    const identityReady =
-      identity.state === 'confirmed' &&
-      identity.error === undefined &&
-      identity.status?.authenticated === true;
     const frame = useRef<HTMLIFrameElement>(null);
     const documentElement = useRef<HTMLElement>(null);
     const [preferredWidth, setPreferredWidth] = useState(() => rememberedConversationWidth ?? 520);
@@ -195,31 +179,37 @@ export function mountFramePresentation(
       rememberedConversationWidth = width;
       setPreferredWidth(width);
     };
-    const [loaded, setLoaded] = useState(0),
-      [busy, setBusy] = useState(false),
-      [error, setError] = useState('');
-    const [interpreters, setInterpreters] = useState<ResourceSummary[]>([]);
-    const resourceRows = useRef<ResourceSummary[]>([]);
-    const resourceRowsOwner = useRef<{
-      pageId: MainPanelId;
-      resourceId: string;
-      scope: string;
-      execution: WorkbenchPageExecution;
-      host: NativeResourceSelection;
-    }>();
-    const resourceHost = resources();
+    const [loaded, setLoaded] = useState(0);
     const [view, setView] = useState<'center' | 'split' | 'chat'>(
       () => pageViews.get(page.id) ?? 'split',
     );
-    const documentState = useSyncExternalStore(workbench.subscribe, workbench.getSnapshot);
-    const selection =
-      documentState.selectedDocument?.id === page.id ? documentState.selection : undefined;
-    const restoredWithoutSession =
-      documentState.selectedDocument?.id === page.id &&
-      documentState.restoredWithoutSession === true;
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const currentCwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
+    const {
+      identity,
+      identityReady,
+      selection,
+      busy,
+      error,
+      setError,
+      interpreters,
+      selectInterpreter,
+      newConversation,
+      associateCurrent,
+    } = usePageSessionCoordination({
+      ctx,
+      workbench,
+      page,
+      active,
+      sessionId,
+      sessionOpen: session?.openState === 'open',
+      currentPreset,
+      currentCwd,
+      currentExecution,
+      resources,
+      t,
+    });
     const associated =
       active &&
       selection?.sessionId === sessionId &&
@@ -309,9 +299,6 @@ export function mountFramePresentation(
     useLayoutEffect(() => {
       syncToolPresentation.current?.();
     }, [associated, currentTools]);
-    const pending = useRef<{ controller: AbortController; scope: string | null }>();
-    const preparationOwner = useRef<string>();
-    const preparation = useRef<AbortController>();
     const connectionTransition = useRef<Promise<void>>(Promise.resolve());
     const title = typeof page.label === 'function' ? page.label() : (page.label ?? page.id);
     const src = typeof page.src === 'function' ? page.src() : page.src;
@@ -348,50 +335,6 @@ export function mountFramePresentation(
       window.addEventListener('message', ready);
       return () => window.removeEventListener('message', ready);
     }, []);
-    useEffect(
-      () => () => {
-        const flight = pending.current;
-        if (flight) {
-          flight.controller.abort();
-          if (pending.current === flight) {
-            pending.current = undefined;
-            setBusy(false);
-          }
-        }
-        preparation.current?.abort();
-      },
-      [active],
-    );
-    useEffect(() => {
-      const flight = pending.current;
-      if (page.resourceId && flight && (flight.scope !== identity.scope || !identityReady)) {
-        flight.controller.abort();
-        if (pending.current === flight) {
-          pending.current = undefined;
-          setBusy(false);
-        }
-      }
-      if (
-        selection &&
-        page.resourceId &&
-        identity.state === 'confirmed' &&
-        !identity.error &&
-        (!identity.status?.authenticated ||
-          !identity.subject ||
-          identity.subject !== selection.subject)
-      ) {
-        workbench.forgetSession(page.id);
-        setError(t('pageChanged'));
-      }
-    }, [
-      identity.scope,
-      identity.subject,
-      identity.state,
-      identity.error,
-      identity.status?.authenticated,
-      identityReady,
-      selection,
-    ]);
     useEffect(() => {
       if (!active || page.kind !== 'native' || !frame.current) return;
       frame.current.contentWindow?.postMessage(
@@ -560,259 +503,13 @@ export function mountFramePresentation(
         reference.release();
       };
     }, [page.resourceId, associated, session?.openState, selection, inputActions, loaded, title]);
-    const interpreter =
-      interpreters.find((row) => row.id === selection?.preset)?.id ?? page.resourceId;
-    const connect = async (
-      cwd?: string,
-      ownerSignal?: AbortSignal,
-      interpreterId: string | null | undefined = interpreter,
-      reuse = true,
-    ) => {
-      if (!ownerSignal) preparation.current?.abort();
-      const host = resources();
-      if (!host || !currentExecution || !page.resourceId) {
-        setError(t('pageWait'));
-        return;
-      }
-      if (!identityReady) {
-        setError(identity.error ?? t('pageLogin'));
-        return;
-      }
-      pending.current?.controller.abort();
-      const controller = new AbortController();
-      const flight = { controller, scope: identity.scope };
-      pending.current = flight;
-      setBusy(true);
-      setError('');
-      const signal = ownerSignal
-        ? AbortSignal.any([controller.signal, ownerSignal])
-        : controller.signal;
-      try {
-        const requested = await resourceWorkspace(
-          host.fetch,
-          signal,
-          cwd ?? selection?.cwd ?? currentCwd,
-          host.pickDirectory,
-        );
-        const { path: directory } = await host.workspace(requested);
-        signal.throwIfAborted();
-        const associated = (selected: {
-          sessionId: SessionId;
-          preset: string | null;
-          cwd?: string;
-          interpreters?: readonly string[];
-        }) => {
-          signal.throwIfAborted();
-          if (
-            identity.scope !== currentExecution.identity.getSnapshot().scope ||
-            workbench.getSnapshot().selectedDocument?.id !== page.id
-          )
-            throw Error(t('pageChanged'));
-          const { interpreters: choices, ...projection } = selected;
-          if (choices)
-            setInterpreters(
-              resourceRows.current.filter(
-                (row) =>
-                  choices.includes(row.id) && row.kind === 'prompt' && row.installed && row.enabled,
-              ),
-            );
-          workbench.associateSession(page.id, {
-            ...projection,
-            ownerScope: identity.scope,
-            ...(identity.subject ? { subject: identity.subject } : {}),
-          });
-        };
-        let cached = reuse
-          ? workbench.selectionFor(page.id, interpreterId ?? null, identity.scope, directory)
-          : undefined;
-        // Host scope changes across restarts. Reopen the same subject's retained
-        // Session through the public owner, which validates its preset and cwd.
-        if (
-          !cached &&
-          reuse &&
-          selection &&
-          identity.subject &&
-          selection.subject === identity.subject &&
-          selection.preset === (interpreterId ?? null) &&
-          selection.cwd === directory
-        )
-          cached = selection;
-        if (cached)
-          await host.open(cached.sessionId, undefined, signal, (selected) => {
-            if (selected.preset !== cached.preset || selected.cwd !== directory)
-              throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
-            associated(selected);
-          });
-        else {
-          if (
-            interpreterId !== page.resourceId &&
-            !interpreters.some((row) => row.id === interpreterId)
-          )
-            throw Error('PAGE_INTERPRETER_UNAVAILABLE');
-          await selectResource(host, interpreterId!, signal, directory, associated);
-        }
-      } catch (failure) {
-        if (!signal.aborted) setError(failure instanceof Error ? failure.message : String(failure));
-      } finally {
-        if (pending.current === flight) {
-          pending.current = undefined;
-          setBusy(false);
-        }
-      }
-    };
-    const newPlainConversation = async () => {
-      const host = resources();
-      if (!host) {
-        setError(t('pageWait'));
-        return;
-      }
-      pending.current?.controller.abort();
-      const controller = new AbortController();
-      const flight = { controller, scope: null };
-      pending.current = flight;
-      setBusy(true);
-      setError('');
-      try {
-        // Borrow the current Core Workspace before requesting another directory.
-        const cwd = await resourceWorkspace(
-          host.fetch,
-          controller.signal,
-          selection?.cwd ?? currentCwd,
-          host.pickDirectory,
-        );
-        const { workspaceId } = await host.workspace(cwd);
-        controller.signal.throwIfAborted();
-        const id = await host.create({ workspaceId });
-        controller.signal.throwIfAborted();
-        await host.open(id, undefined, controller.signal, (selected) => {
-          controller.signal.throwIfAborted();
-          if (workbench.getSnapshot().selectedDocument?.id !== page.id)
-            throw Error(t('pageChanged'));
-          workbench.associateSession(page.id, {
-            ...selected,
-            ownerScope: identity.scope,
-            subject: identity.subject,
-          });
-        });
-      } catch (failure) {
-        if (!controller.signal.aborted)
-          setError(failure instanceof Error ? failure.message : String(failure));
-      } finally {
-        if (pending.current === flight) {
-          pending.current = undefined;
-          setBusy(false);
-        }
-      }
-    };
-    const associateCurrent = () => {
-      if (!sessionId || session?.openState !== 'open' || currentPreset === undefined) return;
-      workbench.associateSession(page.id, {
-        sessionId,
-        preset: currentPreset,
-        ownerScope: identity.scope,
-        subject: identity.subject,
-        cwd: ctx.sessions.list.getSnapshot().byId[sessionId]?.cwd,
-      });
-      setError('');
-    };
-    useEffect(() => {
-      const host = resourceHost;
-      if (
-        !active ||
-        !host ||
-        !currentExecution ||
-        !page.resourceId ||
-        !identity.scope ||
-        !identityReady
-      )
-        return;
-      const catalogOwner = resourceRowsOwner.current;
-      if (
-        selection &&
-        catalogOwner?.scope === identity.scope &&
-        catalogOwner.pageId === page.id &&
-        catalogOwner.resourceId === page.resourceId &&
-        catalogOwner.execution === currentExecution &&
-        catalogOwner.host === host
-      )
-        return;
-      setInterpreters([]);
-      resourceRows.current = [];
-      resourceRowsOwner.current = undefined;
-      const owner = identity.scope + '\0' + page.resourceId;
-      // Restored presentation discovers choices; an explicit page/resource action starts its Session.
-      const prepare =
-        ((!selection && !restoredWithoutSession) ||
-          (selection &&
-            selection.ownerScope !== identity.scope &&
-            selection.subject === identity.subject)) &&
-        preparationOwner.current !== owner;
-      if (prepare) preparationOwner.current = owner;
-      const controller = new AbortController();
-      preparation.current = controller;
-      void (async () => {
-        const cwd = await resourceWorkspace(
-          host.fetch,
-          controller.signal,
-          selection?.cwd ?? currentCwd,
-          prepare ? host.pickDirectory : undefined,
-        );
-        const response = await host.fetch(
-          '/api/agent-manage/resources?' + new URLSearchParams({ cwd }),
-          { signal: controller.signal, cache: 'no-store' },
-        );
-        if (!response.ok) throw Error('RESOURCE_LIST_UNAVAILABLE');
-        const rows = (await response.json()) as ResourceSummary[];
-        controller.signal.throwIfAborted();
-        resourceRows.current = rows;
-        resourceRowsOwner.current = {
-          pageId: page.id,
-          resourceId: page.resourceId!,
-          scope: identity.scope!,
-          execution: currentExecution,
-          host,
-        };
-        const resource = rows.find((row) => row.id === page.resourceId);
-        const allowed = resource?.interpreters ?? [page.resourceId];
-        setInterpreters(
-          rows.filter(
-            (row) =>
-              allowed.includes(row.id) && row.kind === 'prompt' && row.installed && row.enabled,
-          ),
-        );
-        if (prepare && resource?.installed && resource.enabled)
-          await connect(cwd, controller.signal, selection ? selection.preset : page.resourceId);
-      })().catch((failure) => {
-        if (!controller.signal.aborted)
-          setError(failure instanceof Error ? failure.message : String(failure));
-      });
-      return () => {
-        controller.abort();
-        if (preparation.current === controller) preparation.current = undefined;
-        if (preparationOwner.current === owner) preparationOwner.current = undefined;
-      };
-    }, [
-      active,
-      identity.scope,
-      identityReady,
-      currentExecution,
-      resourceHost,
-      page.id,
-      page.resourceId,
-      restoredWithoutSession,
-      currentCwd,
-    ]);
     const toolbar = (
       <div className="gea-page-toolbar-seat">
         <ConversationToolbar
           view={view}
           onViewChange={changeView}
           onHistory={() => workbench.showHistory(page.id)}
-          onNewConversation={() => {
-            workbench.cancelHistory();
-            if (page.resourceId) void connect(undefined, undefined, interpreter, false);
-            else void newPlainConversation();
-          }}
+          onNewConversation={() => void newConversation()}
           onAssociateCurrent={!page.resourceId ? associateCurrent : undefined}
           associateDisabled={
             !sessionId || session?.openState !== 'open' || currentPreset === undefined
@@ -829,7 +526,7 @@ export function mountFramePresentation(
               aria-label={t('pageInterpreter')}
               disabled={busy}
               value={currentPreset ?? selection?.preset ?? page.resourceId}
-              onChange={(event) => void connect(undefined, undefined, event.target.value)}
+              onChange={(event) => void selectInterpreter(event.target.value)}
             >
               {interpreters.map((resource) => (
                 <option key={resource.id} value={resource.id}>
@@ -1009,31 +706,11 @@ export function mountFramePresentation(
       },
     ),
   );
-  return async (page, id, signal, expected) => {
-    const reference = ctx.sessions.retain(id, { source: 'agentResourceSelection', signal });
-    try {
-      await reference.ready;
-      signal.throwIfAborted();
-      const preset = reference.binding.session.projections.faceOf('agentPreset').getSnapshot();
-      if (preset !== null && (typeof preset !== 'string' || !preset))
-        throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
-      const cwd = ctx.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
-      if (expected && (preset !== expected.preset || cwd !== expected.cwd))
-        throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
-      const account = execution?.identity.getSnapshot();
-      if (expected?.subject && account?.subject !== expected.subject)
-        throw Error('PAGE_SESSION_IDENTITY_MISMATCH');
-      workbench.associateSession(page, {
-        sessionId: id,
-        preset,
-        ownerScope: account?.scope ?? null,
-        ...(account?.subject ? { subject: account.subject } : {}),
-        ...(typeof cwd === 'string' ? { cwd } : {}),
-      });
-    } finally {
-      reference.release();
-    }
-  };
+  return createPageSessionRestorer({
+    ctx,
+    workbench,
+    identity: () => execution?.identity.getSnapshot(),
+  });
 }
 
 function createExecution(
