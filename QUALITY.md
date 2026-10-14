@@ -35,3 +35,9 @@ Browser 检查使用本仓锁定的 Playwright Chromium。已有浏览器缓存�
 本地 source/assets 分开的 browser fixture 可用 `WORKBENCH_BROWSER_ASSET_ROOT` 指向同任务已核源码对应的真实构建树；它只读取 lib 和三个既有生成的 static index。源码与资产 SHA、构建输入及只读范围须分别记录。
 
 CI 通过同一公开 quality CLI 执行必需检查与受影响测试，GitHub 全量集合已按本轮授权移除。选择、缓存、失败汇总及十分钟目标见[当前 CI 规则](docs/ci-required-and-affected.md)。独立完整测试命令仍保留为显式工具；源码与产物状态分别记录。
+
+## Frozen business repair exception
+
+The user authorized merging the 2026-10-14 business repair group without full tests. The `business-profile` lane is limited to the reviewed product commits declared in `scripts/business-profile-ci.mjs`, plus the listed CI and evidence files. It validates all three actual source checkouts against those commits. A different product source rejects this lane; other PR branches keep the normal gates. Same-tree main and explicit main dispatch can use the targeted lane. The existing final aggregate still rejects failed, cancelled, skipped or missing jobs, and branch protection is unchanged.
+
+Targeted checks retain static gates and builds. Workbench runs the new-conversation/inventory/company/version cases and the sidebar browser file. Manage runs business resources, raw MCP scope, bundled tools and the real Core business-admission file; existing Windows archive and security lanes remain. GEA runs reasoning, history, identity/budgets, Cube-New, HTTP errors and plugin-update regressions. This is source acceptance, not real model, business, Native or release acceptance. The separate CI optimization and new query direct-return work are excluded.

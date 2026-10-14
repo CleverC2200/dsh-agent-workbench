@@ -48,7 +48,7 @@ try {
       !/^[a-f0-9]{64}$/.test(values['final-group-sha256'])
     )
       refuse('CANDIDATE_FINAL_GROUP_REQUIRED', 'original bytes SHA256 required');
-    if (!['quality', 'verify-input'].includes(values.phase))
+    if (!['quality', 'business-profile', 'verify-input'].includes(values.phase))
       refuse('CANDIDATE_FINAL_GROUP_PHASE', values.phase);
   }
   if (values.phase === 'scope') {
@@ -65,7 +65,7 @@ try {
       'retired input writer; use the shared hosted group writer with the complete tuple',
     );
   } else {
-    if (!['quality', 'verify-input'].includes(values.phase))
+    if (!['quality', 'business-profile', 'verify-input'].includes(values.phase))
       refuse('QUALITY_PHASE_REQUIRED', values.phase);
     if (!values['final-group-sha256'])
       refuse(
@@ -91,15 +91,35 @@ try {
       process.exit(0);
     }
     const own = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
+    if (values.phase === 'business-profile')
+      (await import('./business-profile-ci.mjs')).validateBusinessProfileGroup(
+        manifest.repositories,
+      );
     const { selectCiTests } = await import('./ci-test-plan.mjs');
     const baseline = JSON.parse(readFileSync('scripts/quality-peer-baseline.json'));
-    const plan = selectCiTests({
-      repositories: manifest.repositories,
-      repo: 'dsh-agent-workbench',
-      base:
-        process.env.QUALITY_BASE_SHA ||
-        baseline.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').head,
-    });
+    const plan =
+      values.phase === 'business-profile'
+        ? {
+            lane: 'business-profile',
+            runtime: false,
+            browser: true,
+            files: [
+              'tests/new-conversation.test.mjs',
+              'tests/business-conversation.test.mjs',
+              'tests/inventory-entry.test.mjs',
+              'tests/company-ui.test.mjs',
+              'tests/plugin-package-version.test.mjs',
+              'scripts/business-profile-ci.test.mjs',
+              'tests/sidebar-reopen.browser.mjs',
+            ],
+          }
+        : selectCiTests({
+            repositories: manifest.repositories,
+            repo: 'dsh-agent-workbench',
+            base:
+              process.env.QUALITY_BASE_SHA ||
+              baseline.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').head,
+          });
     writeFileSync(
       resolve(dirname(resolve(input)), 'quality-test-plan.json'),
       JSON.stringify(plan, null, 2) + '\n',
