@@ -1,12 +1,6 @@
 import { PageUnsentHistory } from './unsent-history.tsx';
 import { createConversationStarter } from './new-conversation.ts';
-import React, {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
