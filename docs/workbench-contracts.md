@@ -13,7 +13,7 @@ await ctx.agentWorkbench.open(panelId);
 // 卸载时释放 disposePage 和 disposeTitle。
 ```
 
-原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。Document 目录进入自己的 main.conversation 呈现，Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记。表格样板固定登记；省略 `htmlRoots` 时使用 [Host 中的默认根](../src/host.ts)。显式配置只装载所列根；撤回来源时从配置排除该根，其它页面与用户 Session 保留。已有 profile 的配置调整是安装前的独立操作，不使用运行时旧配置回退。启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
+原生业务文档通过 `ctx.agentWorkbench.registerFrame({id, label, src, kind: 'native', resourceId})` 贡献，由 Workbench 持有页面选择、frame 与桥的呈现生命周期。普通聊天沿用官方首页与标题栏，公司品牌通过公开 `conversation.hero.brand.mark` 贡献。Document 在公开 `shell.overlay` 的自有 `agent-workbench.documents` Session-optional 席位常驻，业务选择时通过自己的 `main.conversation` 占位与 CSS anchor 定位；Core 的 activePanelId 保持 null；关联主 Session 只沿 uiWorkspace.openSession 选择，不另注册同 ID 的 main panel。Inbox 原 React 页面通过同一入口的 `{id, label, kind: 'local', body: InboxPage, resourceId: 'gea-readonly'}` 共享对话呈现；它不创建 iframe 或页面业务 grant，列表权限、通知回执和取消仍沿原协议。包内 HTML 由 Workbench Host 配置 `htmlRoots` 登记。表格样板固定登记；省略 `htmlRoots` 时使用 [Host 中的默认根](../src/host.ts)。显式配置只装载所列根；撤回来源时从配置排除该根，其它页面与用户 Session 保留。已有 profile 的配置调整是安装前的独立操作，不使用运行时旧配置回退。启动仅登记轻量声明，选页才读取原 HTML，不进入 GEA client bundle。它读取 `plugin.json` 的页面元数据、检查路径归属，并在被选用时读取 `index.html`；不读取提示词、Skill 或业务认证。`workbenchPages.packages()` 提供已登记的原声明供 GEA 检查 Consumer 等业务约定；GEA 不再控制 HTML 根配置或扫描 HTML 正文。
 
 Host 公开认证 Fetch：
 
@@ -28,16 +28,18 @@ Host 公开认证 Fetch：
 
 ## 按行为读取
 
-| 修改范围 | 权威入口 |
-|---|---|
-| 页面通道、动作、取消、回执、草稿插入与引用预算 | [页面能力与受控桥](page-interaction.md) |
-| 呈现记忆、历史恢复、解释者地址与 Session sidecar | [恢复合同](presentation-recovery.md) |
-| 作者模块、固定资源摘要与生成页边界 | [HTML 作者源](html-authoring.md) |
-| 资源来源、真实读取或模拟范围、未完成业务验收 | [业务页面导航](business-pages.md) |
-| 共享主题、字号和样式归属 | [共享视觉资源](../theme/README.md) |
-| 工具链、固定官方输入、构建与定向检查 | [本地开发](local-development.md) |
+| 修改范围                                         | 权威入口                                |
+| ------------------------------------------------ | --------------------------------------- |
+| 页面通道、动作、取消、回执、草稿插入与引用预算   | [页面能力与受控桥](page-interaction.md) |
+| 呈现记忆、历史恢复、解释者地址与 Session sidecar | [恢复合同](presentation-recovery.md)    |
+| 作者模块、固定资源摘要与生成页边界               | [HTML 作者源](html-authoring.md)        |
+| 资源来源、真实读取或模拟范围、未完成业务验收     | [业务页面导航](business-pages.md)       |
+| 共享主题、字号和样式归属                         | [共享视觉资源](../theme/README.md)      |
+| 工具链、固定官方输入、构建与定向检查             | [本地开发](local-development.md)        |
 
 ## 官方呈现与 Native 文档
+
+同一真实 Session 中切回首页只隐藏已访问 Document，保留其 Native DOM 与 iframe；隐藏时 `active=false`，停止当前业务能力与页面捕获。页面恢复协调位于常驻 Documents 席位，冷启动不依赖已选中的页面。真实 Session 切换继续遵守 Core `session-maybe` 的重挂语义，状态恢复沿既有持久存储与身份核对，不以 DOM 保留代替恢复。CSS anchor 只引用 Workbench 自己的占位，窗口控制区使用 Core 公开的 `--dsh-frame-leading-clearance` 保留点击空间，不读取壳层私有 DOM 或复制栏宽状态。
 
 [cordis.patch.yml](../cordis.patch.yml) 插入本插件并禁用默认 `ui-sidebar`；Workbench 贡献公开侧栏席位，继续消费官方工作区浏览器与设置。官方 `ui-layout` 和 `ui-conversation` 服务与 Factory 保持启用。macOS 品牌行位于独立窗口控制行下方；两种侧栏状态使用官方公共图标，收起后整列退出布局。
 

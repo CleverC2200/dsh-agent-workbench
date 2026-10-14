@@ -143,3 +143,42 @@ html[data-fullscreen] .gea-sidebar-window-row {
 .gea-sidebar-owned[data-sidebar-collapsed] .gea-sidebar-brand-row {
   flex-direction: column;
 }
+
+/* Geometry belongs to this placeholder, never a queried Core shell element. */
+.gea-workbench-document-viewport {
+  anchor-name: --agent-workbench-document-viewport;
+  height: 100%;
+  min-height: 0;
+}
+.gea-workbench-documents {
+  position: fixed;
+  position-anchor: --agent-workbench-document-viewport;
+  left: anchor(left);
+  top: anchor(top);
+  width: anchor-size(width);
+  height: anchor-size(height);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+  /* The frame's published band remains click-through for native window controls. */
+  clip-path: polygon(
+    var(--dsh-frame-leading-clearance, 0px) 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 48px,
+    var(--dsh-frame-leading-clearance, 0px) 48px
+  );
+}
+.gea-workbench-documents[hidden] {
+  display: none;
+}
+.gea-workbench-recovery {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  max-width: min(440px, 80vw);
+  padding: 12px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-text-primary);
+}

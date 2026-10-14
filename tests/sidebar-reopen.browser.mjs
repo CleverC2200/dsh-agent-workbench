@@ -17,6 +17,8 @@ const bundle = await build({
  import React from 'react';import{Context}from ${JSON.stringify(resolve(core, 'vendor/cordis/lib/index.js'))};
  import{apply as rendererApply}from ${JSON.stringify(resolve(core, 'packages/client/ui-renderer/src/client/index.ts'))};
  import{apply as layoutApply,inject as layoutInject}from ${JSON.stringify(resolve(core, 'packages/client/ui-layout/src/client/index.ts'))};
+ import{ConversationMainPanel}from ${JSON.stringify(resolve(core, 'packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx'))};
+ import{HeroShell}from ${JSON.stringify(resolve(core, 'packages/client/ui-conversation/src/client/skeleton/EmptyHero.tsx'))};
  import{mountCompanyUI}from'./src/company/ui.tsx';import{WorkbenchController}from'./src/workbench.ts';
  import{mountFramePresentation}from'./src/frame-presenter.tsx';
  (async()=>{const source=value=>({getSnapshot:()=>value,subscribe:()=>()=>{}});
@@ -31,10 +33,12 @@ const bundle = await build({
  ctx.slots.installScope('session',{current:absent,bindingSource:()=>absent,renderArea:(_binding,{children})=>children});
  ctx.slots.provideRoot({hooks:{sessions:source({byId:{}}),workspaces:source({items:[]})},props:{selectWorkspace:()=>{},inputActions:{}}});
  await ctx.plugin({inject:layoutInject,apply:layoutApply}).await();
- ctx.slots.registerFactory({name:'conversation.content',scope:'session-maybe',locale:'companyWorkbench',children:{'conversation.hero.workspace':{kind:'single',scope:'root'},'conversation.hero.agentPreset':{kind:'single',scope:'session-maybe'}},slots:{views:{scope:'session-maybe'},widthControls:{scope:'session-maybe'}}},({useFactorySlot})=>{
-   const ColdStart=useFactorySlot('widthControls',()=>null);return <div style={{height:'100%',display:'flex',flexDirection:'column'}}><ColdStart/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></div>;
+ ctx.slots.registerFactory({name:'conversation.content',scope:'session-maybe',locale:'companyWorkbench',children:{'conversation.hero.brand.mark':{kind:'single',scope:'root'},'conversation.hero.workspace':{kind:'single',scope:'root'},'conversation.hero.agentPreset':{kind:'single',scope:'session-maybe'}},slots:{views:{scope:'session-maybe'},widthControls:{scope:'session-maybe'}}},({renderSlot})=>{
+   return <div data-core-content style={{height:'100%',display:'flex',flexDirection:'column'}}><HeroShell t={key=>key==='hero.headline'?'探索未至之境':key} renderSlot={renderSlot}/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></div>;
  });
  ctx.slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},({renderSlot})=>renderSlot('main.conversation',{}));
+ ctx.slots.register({name:'main.conversation',children:{'conversation.header':{kind:'single',scope:'session-maybe'}}},ConversationMainPanel);
+ ctx.slots.register({name:'conversation.header',children:{'settings.launcher':{kind:'single',scope:'root'}}},({renderSlot})=><header data-core-header style={{height:48,flexShrink:0}}>{renderSlot('settings.launcher',{})}</header>);
  const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),document:()=>ctx.layout.selectPanel(null),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
  mountCompanyUI(ctx,workbench,()=>null);
  ctx.provide('inputTriggers',{registerSource:()=>()=>{}});ctx.provide('conversation',{input:{for:()=>({})}});
@@ -176,8 +180,23 @@ for (const target of ['home', 'business'])
     const page = await fixture(t);
     if (target === 'business') {
       await page.evaluate(() => window.selectBusiness());
+      const geometry = await page.evaluate(() => {
+        const viewport = document.querySelector('.gea-workbench-document-viewport');
+        const docs = document.querySelector('.gea-workbench-documents');
+        return {
+          viewport: viewport.getBoundingClientRect().toJSON(),
+          docs: docs.getBoundingClientRect().toJSON(),
+          anchor: getComputedStyle(docs).positionAnchor,
+        };
+      });
+      assert.ok(Math.abs(geometry.docs.x - geometry.viewport.x) < 1, JSON.stringify(geometry));
+      assert.ok(Math.abs(geometry.docs.y - geometry.viewport.y) < 1, JSON.stringify(geometry));
+      assert.ok(
+        Math.abs(geometry.docs.width - geometry.viewport.width) < 1,
+        JSON.stringify(geometry),
+      );
       await expect(page.getByRole('textbox', { name: '业务筛选' })).toHaveValue('保留业务筛选');
-    } else await expect(page.getByText('让 AI 进入工作流程')).toBeVisible();
+    } else await expect(page.getByText('探索未至之境')).toBeVisible();
     const content = page.getByRole('textbox', {
       name: target === 'home' ? '首页草稿' : '业务筛选',
     });

@@ -850,7 +850,8 @@ export function mountFramePresentation(
         }
       >
         <header
-          className={'agent-workbench-document-chrome view-' + view}
+          className="agent-workbench-document-chrome"
+          data-workbench-view={view}
           data-workbench-window-chrome
           data-window-drag
           aria-label="工作台标题栏"

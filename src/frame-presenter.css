@@ -19,14 +19,15 @@
   box-sizing: border-box;
   -webkit-app-region: drag;
 }
-.agent-workbench-document-chrome.view-center,
-.agent-workbench-document-chrome.view-chat {
+.agent-workbench-document-chrome[data-workbench-view='center'],
+.agent-workbench-document-chrome[data-workbench-view='chat'] {
   grid-template-columns: minmax(0, 1fr) minmax(280px, max-content);
 }
 .agent-workbench-document-title {
   align-self: center;
   min-width: 0;
   padding-inline: 24px;
+  padding-inline-start: max(24px, var(--dsh-frame-leading-clearance, 0px));
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
