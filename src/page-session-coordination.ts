@@ -158,7 +158,6 @@ export function usePageSessionCoordination({
         !identity.subject ||
         identity.subject !== selection.subject)
     ) {
-      workbench.forgetSession(page.id);
       setError(t('pageChanged'));
     }
   }, [

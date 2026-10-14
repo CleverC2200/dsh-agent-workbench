@@ -1,6 +1,6 @@
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
-import type { WorkbenchFramePage } from './frame.ts';
+import type { PageIdentitySnapshot, WorkbenchFramePage } from './frame.ts';
 import { isBusinessViewPage, validHtmlViewState, type HtmlViewState } from './html-view-state.ts';
 
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
@@ -235,6 +235,23 @@ export class WorkbenchController implements AgentWorkbench {
     this.associations.delete(page);
     this.activePresets.delete(page);
     this.changed();
+  }
+  /** Revoke business presentation hints only after GEA has confirmed its current identity. */
+  reconcileBusinessIdentity(identity: PageIdentitySnapshot): void {
+    if (identity.state !== 'confirmed' || identity.error) return;
+    const subject = identity.status?.authenticated ? identity.subject : undefined;
+    let changed = false;
+    for (const [page, selections] of this.associations) {
+      if (!this.documents.get(page)?.resourceId) continue;
+      for (const [preset, selection] of selections) {
+        if (subject && selection.subject === subject) continue;
+        selections.delete(preset);
+        if (this.activePresets.get(page) === preset) this.activePresets.delete(page);
+        changed = true;
+      }
+      if (!selections.size) this.associations.delete(page);
+    }
+    if (changed) this.changed();
   }
   readHtmlViewState(page: string, scope?: string): HtmlViewState | undefined {
     if (!this.documents.has(page as MainPanelId)) return undefined;
