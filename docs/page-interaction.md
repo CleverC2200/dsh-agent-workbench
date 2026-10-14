@@ -20,6 +20,8 @@
 
 GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter 经 `workbenchPages.registerBusinessPage(page, authorize)` 提供实际业务 grant，凭据与权限仍由 GEA 管控。Workbench 的 PageRuntime 持有受控 open/call/close、HTML MessageChannel、owned lease 的使用/关闭、self-report/catalog/apply/cancel、主题及页面引用，提示词提交沿官方 Session API。端口、引用代际和请求都在页面释放/身份变化时撤旧，旧结果不恢复。Native 审批文档保留原呈现与规则，不强制使用 HTML lease。
 
+HTML 的 context、动作登记、lease 续期、待执行队列、回执与取消由 [html-sessions](../src/html-sessions.ts) 集中维护，PageRuntime 只调用其操作接口，不持有可变会话 record。Native 的 context 继续交给业务 grant 的观察回调，不进入 HTML 动作队列。
+
 公共页面选择与引用实现位于 [src/page-interaction](../src/page-interaction)，公开导出查 package.json。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。
 
 ## 载荷与取消

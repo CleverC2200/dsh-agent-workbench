@@ -348,7 +348,7 @@ export class PageRuntime {
       off: () => {},
     };
     if (owner.page.kind === 'html')
-      owner.htmlLease = this.html.open(owner.page.id, sessionId, grant.access, token);
+      owner.htmlLease = this.html.open(owner.page.id, sessionId, token);
     this.owners.set(token, owner);
     const revoke = () => this.close(token);
     grant.signal.addEventListener('abort', revoke, { once: true });
@@ -387,8 +387,6 @@ export class PageRuntime {
           value = await owner.grant.workspace(input.parameters, signal);
           break;
         case 'context': {
-          if (JSON.stringify(input.parameters).length > 100000)
-            throw Error('PAGE_CONTEXT_TOO_LARGE');
           if (
             input.parameters !== null &&
             (!input.parameters ||
@@ -396,26 +394,26 @@ export class PageRuntime {
               Array.isArray(input.parameters))
           )
             throw Error('INVALID_PAGE_CONTEXT');
-          if (owner.htmlLease) this.html.get(owner.htmlLease).context = input.parameters;
+          if (JSON.stringify(input.parameters).length > 100000)
+            throw Error('PAGE_CONTEXT_TOO_LARGE');
+          if (owner.htmlLease) this.html.syncContext(owner.htmlLease, input.parameters);
           if (input.parameters !== null) owner.grant.observe?.(input.parameters);
           value = { synced: true };
           break;
         }
         case 'register': {
-          if (!owner.htmlLease || !['refresh', 'filter', 'draft'].includes(input.parameters?.name))
-            throw Error('ACTION_NOT_ALLOWED');
-          const page = this.html.get(owner.htmlLease);
-          page.actions = page.actions.filter((a: any) => a.name !== input.parameters.name);
-          page.actions.push({
-            name: input.parameters.name,
-            description: String(input.parameters.description).slice(0, 300),
-          });
+          if (!owner.htmlLease) throw Error('ACTION_NOT_ALLOWED');
+          this.html.registerAction(
+            owner.htmlLease,
+            input.parameters?.name,
+            input.parameters?.description,
+          );
           value = { registered: true };
           break;
         }
         case 'events':
           if (!owner.htmlLease) throw Error('HTML_PAGE_REQUIRED');
-          value = this.html.get(owner.htmlLease).queue.splice(0);
+          value = this.html.consume(owner.htmlLease);
           break;
         case 'reply':
           if (!owner.htmlLease) throw Error('HTML_PAGE_REQUIRED');

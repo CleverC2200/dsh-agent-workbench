@@ -108,6 +108,7 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     ),
   );
   const identity = new AbortController();
+  const observations = [];
   let releases = 0;
   let referenceScope = 'fixture-principal';
   const grant = {
@@ -116,6 +117,7 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
       return referenceScope;
     },
     access: { mode: 'test' },
+    observe: (context) => observations.push(context),
     allowsEffect: (effect) => enabled && (effect === 'view' || (!viewOnly && effect === 'draft')),
     release: () => {
       releases++;
@@ -188,6 +190,7 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     call,
     open,
     identity,
+    observations,
     id,
     releases: () => releases,
     execute,
@@ -582,6 +585,31 @@ test('a saved reference survives normal page reopen but requires its current vie
 });
 
 // Migrated from GEA's retired html-sessions tests: exercise the owned fetch/tool interface.
+test('invalid context is rejected without replacing the current HTML observation', async (t) => {
+  const h = await mount(t);
+  const owner = (await h.open()).value.owner;
+  await h.call('context', { owner, parameters: { warehouse: 'A' } });
+  const invalid = await h.call('context', { owner });
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.value.error, 'INVALID_PAGE_CONTEXT');
+  assert.equal(
+    JSON.parse((await h.execute('gea_page', { action: 'context' })).value).context.warehouse,
+    'A',
+  );
+});
+
+test('Native observations reach their business grant without acquiring an HTML action channel', async (t) => {
+  const h = await mount(t, 'native');
+  const owner = (await h.open()).value.owner;
+  assert.equal((await h.call('context', { owner, parameters: { warehouse: 'A' } })).status, 200);
+  assert.deepEqual(h.observations, [{ warehouse: 'A' }]);
+  assert.equal(
+    (await h.call('register', { owner, parameters: { name: 'refresh' } })).value.error,
+    'ACTION_NOT_ALLOWED',
+  );
+  assert.equal((await h.call('events', { owner })).value.error, 'HTML_PAGE_REQUIRED');
+});
+
 test('active HTML page requests renew its idle lease while an idle page expires', async (t) => {
   const h = await mount(t);
   const originalNow = Date.now;
@@ -649,6 +677,18 @@ test('correlated HTML replies resolve only the matching action and cancellation 
   await new Promise((resolve) => setImmediate(resolve));
   abort.abort();
   assert.equal((await cancelled).isError, true);
+  assert.deepEqual((await h.call('events', { owner })).value, []);
+});
+
+test('an HTML action timeout clears undelivered work', async (t) => {
+  const h = await mount(t);
+  const owner = (await h.open()).value.owner;
+  await h.call('register', { owner, parameters: { name: 'refresh', description: 'Refresh' } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pending = h.execute('gea_page', { action: 'refresh' });
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(55000);
+  assert.match(JSON.stringify(await pending), /PAGE_ACTION_TIMEOUT/);
   assert.deepEqual((await h.call('events', { owner })).value, []);
 });
 
