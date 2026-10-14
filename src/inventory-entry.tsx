@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import type { Context } from '@deepseek-ai/cordis';
 import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
@@ -19,9 +19,10 @@ export function mountInventoryEntry(
 ): void {
   let businessAccount: BusinessAccount | undefined;
   ctx.inject(['businessAccount'], (scope) => {
-    businessAccount = scope.businessAccount;
+    const owned = scope.businessAccount;
+    businessAccount = owned;
     scope.effect(() => () => {
-      if (businessAccount === scope.businessAccount) businessAccount = undefined;
+      if (businessAccount === owned) businessAccount = undefined;
     });
   });
   const inventoryEntryState = createSnapshotStore<
@@ -38,10 +39,10 @@ export function mountInventoryEntry(
     cwd?: string;
     question?: string;
   }) {
-    const [state, setState] = useState(inventoryEntryState.getSnapshot);
-    useEffect(
-      () => inventoryEntryState.subscribe(() => setState(inventoryEntryState.getSnapshot())),
-      [],
+    const state = useSyncExternalStore(
+      inventoryEntryState.subscribe,
+      inventoryEntryState.getSnapshot,
+      inventoryEntryState.getSnapshot,
     );
     const start = async () => {
       if (inventoryEntryState.getSnapshot().kind === 'creating') return;
