@@ -51,7 +51,9 @@ const bundle = await build({
  window.sidebarProbe=()=>({main:ctx.layout.panelInfo.getSnapshot().activePanelId,document:workbench.getSnapshot().selectedDocument?.id,leadingEntries:ctx.slots.entries('shell.leading').length});
  window.selectBusiness=()=>workbench.open(page.id);
  window.selectSecond=()=>workbench.open(second.id);
- window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel(null);};
+ window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel('conversation');};
+ // A recording conversation body isolates shell controls from Session restoration.
+ window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:-30},()=> <section><CompanyWelcome/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
  `,
     resolveDir: process.cwd(),
@@ -85,8 +87,11 @@ const bundle = await build({
   ],
 });
 
-async function fixture(t) {
-  const browser = await chromium.launch({ headless: true });
+async function fixture(t, platform = 'darwin', conversation = false) {
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+  });
   const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
   const requests = [];
   t.after(async () => {
@@ -124,15 +129,93 @@ async function fixture(t) {
       officialCss +
       '\nhtml,body,#root{margin:0;height:100%}</style><div id="root"></div>',
   );
-  await page.evaluate(() => (document.documentElement.dataset.platform = 'darwin'));
+  await page.evaluate((platform) => {
+    document.documentElement.dataset.platform = platform;
+    if (platform === 'win32') {
+      document.documentElement.setAttribute('data-windows-titlebar', '');
+      document.documentElement.style.setProperty('--dsh-windows-titlebar-height', '40px');
+    }
+  }, platform);
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
   await expect
     .poll(() => page.evaluate(() => window.fixtureReady ?? window.fixtureFailure))
     .toBe(true);
+  await page.evaluate(() => window.selectHome());
+  if (conversation) await page.evaluate(() => window.useConversationFixture());
   return page;
 }
+
+for (const target of ['home', 'business'])
+  test(
+    'Windows ' + target + ' retains a clickable caption toggle after zero-width collapse',
+    async (t) => {
+      const page = await fixture(t, 'win32', target === 'home');
+      if (target === 'business') await page.evaluate(() => window.selectBusiness());
+      const content = page.getByRole('textbox', {
+        name: target === 'home' ? '首页草稿' : '业务筛选',
+      });
+      await content.fill('Windows 收起展开保留原输入');
+      for (let cycle = 0; cycle < 3; cycle++) {
+        await page.getByRole('button', { name: '收起侧边栏', exact: true }).click();
+        const reopen = page.getByRole('button', { name: '展开业务菜单', exact: true });
+        try {
+          await expect(reopen).toBeVisible({ timeout: 1000 });
+          await reopen.click({ trial: true, timeout: 1000 });
+          const box = await reopen.boundingBox();
+          assert.ok(
+            box.x >= 0 && box.x + box.width <= 48 && box.y >= 0 && box.y + box.height <= 40,
+            'caption control stays before the native menu and inside the 40px titlebar',
+          );
+          assert.equal(
+            await reopen.evaluate((node) => {
+              const r = node.getBoundingClientRect();
+              return node.contains(
+                document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+              );
+            }),
+            true,
+            'caption control owns its hit area',
+          );
+          await reopen.click();
+          await expect(content).toHaveValue('Windows 收起展开保留原输入');
+        } catch (error) {
+          const evidence = process.env.SIDEBAR_REOPEN_EVIDENCE;
+          if (evidence) {
+            await page.screenshot({ path: resolve(evidence, 'windows-' + target + '-red.png') });
+            await writeFile(
+              resolve(evidence, 'windows-' + target + '-probe.json'),
+              JSON.stringify(
+                await page.evaluate(() => ({
+                  probe: window.sidebarProbe(),
+                  buttons: [...document.querySelectorAll('.gea-owned-sidebar-toggle')].map(
+                    (node) => ({
+                      label: node.getAttribute('aria-label'),
+                      rect: node.getBoundingClientRect().toJSON(),
+                      position: getComputedStyle(node).position,
+                      display: getComputedStyle(node).display,
+                      styles: [...document.querySelectorAll('style')].map((s) =>
+                        s.textContent.includes(
+                          'html[data-windows-titlebar] .gea-owned-sidebar-toggle',
+                        ),
+                      ),
+                    }),
+                  ),
+                })),
+                null,
+                2,
+              ),
+            );
+          }
+          throw error;
+        }
+      }
+      const evidence = process.env.SIDEBAR_REOPEN_EVIDENCE;
+      if (evidence)
+        await page.screenshot({ path: resolve(evidence, 'windows-' + target + '-green.png') });
+    },
+  );
 
 test('macOS window controls stay above company identity with one consistent panel glyph', async (t) => {
   const page = await fixture(t);
@@ -177,7 +260,7 @@ test('macOS window controls stay above company identity with one consistent pane
 
 for (const target of ['home', 'business'])
   test('Darwin ' + target + ' can reopen its sidebar after every collapse', async (t) => {
-    const page = await fixture(t);
+    const page = await fixture(t, 'darwin', target === 'home');
     if (target === 'business') {
       await page.evaluate(() => window.selectBusiness());
       const geometry = await page.evaluate(() => {
@@ -196,7 +279,10 @@ for (const target of ['home', 'business'])
         JSON.stringify(geometry),
       );
       await expect(page.getByRole('textbox', { name: '业务筛选' })).toHaveValue('保留业务筛选');
-    } else await expect(page.getByText('探索未至之境')).toBeVisible();
+    } else {
+      await expect(page.getByText('探索未至之境')).toBeVisible();
+      await expect(page.getByRole('textbox', { name: '首页草稿' })).toBeVisible();
+    }
     const content = page.getByRole('textbox', {
       name: target === 'home' ? '首页草稿' : '业务筛选',
     });

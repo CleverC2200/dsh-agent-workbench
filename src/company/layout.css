@@ -136,6 +136,15 @@ html[data-fullscreen] .gea-sidebar-window-row {
   align-items: center;
   gap: 8px;
 }
+html[data-windows-titlebar] .gea-owned-sidebar-toggle {
+  /* The caption control stays visible when the collapsed column hides quick actions. */
+  display: inline-flex;
+  position: fixed;
+  top: calc((var(--dsh-windows-titlebar-height) - 28px) / 2);
+  left: 12px;
+  z-index: 30;
+  -webkit-app-region: no-drag;
+}
 .gea-plugin-entry {
   flex: none;
   margin-bottom: 8px;
