@@ -91,6 +91,20 @@ try {
       process.exit(0);
     }
     const own = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
+    const { selectCiTests } = await import('./ci-test-plan.mjs');
+    const baseline = JSON.parse(readFileSync('scripts/quality-peer-baseline.json'));
+    const plan = selectCiTests({
+      repositories: manifest.repositories,
+      repo: 'dsh-agent-workbench',
+      base:
+        process.env.QUALITY_BASE_SHA ||
+        baseline.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').head,
+    });
+    writeFileSync(
+      resolve(dirname(resolve(input)), 'quality-test-plan.json'),
+      JSON.stringify(plan, null, 2) + '\n',
+    );
+
     const sourceSnapshot = manifest.repositories.map((entry) => ({
       repo: entry.repo,
       root: entry.path,
@@ -145,7 +159,11 @@ try {
       withFlock: true,
     };
     finalGroup.verifyUnchanged();
-    if (values['prepare-sdk']) sdk.prepareOfficialSDK(options);
+    if (values['prepare-sdk'])
+      sdk.prepareOfficialSDK({
+        ...options,
+        reusePrepared: process.env.QUALITY_REUSE_SDK === 'true',
+      });
     else sdk.verifyOfficialSDK(options);
     run(process.execPath, [
       'scripts/verify-candidate-input.mjs',
@@ -168,7 +186,7 @@ try {
       dirname(dirname(own.path)),
       'playwright-browsers',
     );
-    if (values['prepare-browser'])
+    if (values['prepare-browser'] && plan.browser)
       run('npm', ['exec', '--', 'playwright', 'install', '--with-deps', 'chromium']);
     run(
       'corepack',
@@ -208,9 +226,30 @@ try {
         },
       },
       { name: 'knowledge', execute: () => run('npm', ['run', 'check:knowledge']) },
-      { name: 'full', execute: () => run('npm', ['run', 'test:ci']) },
-      ...(values.browser
-        ? [{ name: 'browser', execute: () => run('npm', ['run', 'test:browser']) }]
+      {
+        name: 'required-and-affected',
+        execute: () =>
+          run(process.execPath, [
+            '--test',
+            '--test-concurrency=2',
+            ...plan.files.filter((file) => !file.endsWith('.browser.mjs')),
+          ]),
+      },
+      ...(plan.browser
+        ? [
+            {
+              name: 'affected-browser',
+              execute: () => {
+                if (!values.browser)
+                  refuse('QUALITY_BROWSER_REQUIRED', 'selected browser tests require --browser');
+                run(process.execPath, [
+                  '--test',
+                  '--test-concurrency=1',
+                  ...plan.files.filter((file) => file.endsWith('.browser.mjs')),
+                ]);
+              },
+            },
+          ]
         : []),
     ]);
     writeFileSync(
