@@ -42,7 +42,6 @@ export function selectCiTests({
   repo,
   base,
   root = repositories.find((entry) => entry.repo === repo)?.path,
-  alwaysRunTests = [],
 }) {
   if (!root || !/^[a-f0-9]{40}$/.test(base ?? ''))
     throw Error('CI_TEST_BASE_REQUIRED: explicit full base commit');
@@ -74,7 +73,6 @@ export function selectCiTests({
     ].sort();
   const required = expand(policy.required),
     pool = expand(policy.tests);
-  const fixed = new Set(alwaysRunTests.length ? expand(alwaysRunTests) : []);
   const own = repositories.find((entry) => entry.repo === repo);
   const diffBase = git(root, 'merge-base', base, own.head).trim();
   const baselineBytes = git(root, 'show', 'HEAD:scripts/quality-peer-baseline.json');
@@ -151,8 +149,7 @@ export function selectCiTests({
     for (const file of files) selected.add(file);
     reasons[`${change.repo}/${change.file}`] = files;
   }
-  const files = [...selected].filter((file) => !fixed.has(file)).sort();
-  if (!files.length) throw Error('CI_TEST_RUN_REQUIRED');
+  const files = [...selected].sort();
   const profileEntry = repositories.find((entry) => entry.repo === 'dsh-gea-plugin');
   const runtimeFiles =
     repo === 'dsh-gea-plugin'
@@ -185,7 +182,6 @@ export function selectCiTests({
     changes: changes.map(({ repo, file }) => ({ repo, file })),
     required,
     files,
-    coveredByMandatoryChecks: [...selected].filter((file) => fixed.has(file)).sort(),
     reasons,
     runtimeFiles,
     runtime,

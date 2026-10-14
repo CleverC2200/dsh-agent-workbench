@@ -19,8 +19,6 @@ GEA 仅在选中 Profile 测试时准备真实 flock、Workbench 页面构建和
 
 Workbench 和 Manage 使用同一选择记录。Manage 的固定资源能力与 Windows 归档合同、安全审计保持独立结果。浏览器只为选中的浏览器集合准备。
 
-Manage 的标准资源、客户端、GEA 三组固定能力测试在独立进程中同时执行，各自保存报告并核全部 71 项断言；组内文件仍保持原顺序。选中而已由这些必跑测试覆盖的文件记入 `coveredByMandatoryChecks`，普通 Vitest 不重复执行，也不会把其配置中排除的客户端/GEA 文件记成已运行。
-
 GEA 的选中测试最多同时执行两个文件；文件运行在独立进程中，Profile 与窗口 fixture 使用独立临时目录、Home 和随机 loopback 端口。每个文件内部的用例顺序与断言保持原样，避免一次启动过多真实 Profile。
 
 ## 结果与十分钟目标
