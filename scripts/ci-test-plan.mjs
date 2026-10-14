@@ -11,7 +11,7 @@ const git = (root, ...args) =>
     env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
   });
 const sourceFile = /\.(?:[cm]?[jt]sx?|css|html|json|ya?ml)$/;
-const testFile = /\.(?:test\.[cm]?[jt]sx?|browser\.mjs)$/;
+const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
 function references(file, roots, known, importsOnly = false) {
   const result = new Set();

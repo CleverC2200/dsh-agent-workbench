@@ -137,3 +137,17 @@ test('an empty required policy cannot invoke a runner with no file arguments', (
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   assert.throws(f.plan, /CI_TEST_POLICY_REQUIRED/);
 });
+
+test('an affected public contract file remains selectable alongside ordinary tests', (t) => {
+  const f = fixture(t);
+  f.policy.tests.push('tests/*.contract.mjs');
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/loader.contract.mjs', 'import "../src/value.js";');
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/loader.contract.mjs',
+    'tests/required.test.mjs',
+  ]);
+});
