@@ -59,7 +59,7 @@ function fixture(t, repo = 'dsh-agent-workbench') {
     policy,
     put,
     commit,
-    plan: () => selectCiTests({ repositories, repo: own.repo, base }),
+    plan: (options = {}) => selectCiTests({ repositories, repo: own.repo, base, ...options }),
   };
 }
 
@@ -150,4 +150,18 @@ test('an affected public contract file remains selectable alongside ordinary tes
     'tests/loader.contract.mjs',
     'tests/required.test.mjs',
   ]);
+});
+
+test('a file covered by a mandatory lane is recorded without rerunning it in another runner', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ alwaysRunTests: ['tests/affected.test.mjs'] });
+  assert.deepEqual(plan.files, ['tests/required.test.mjs']);
+  assert.deepEqual(plan.coveredByMandatoryChecks, ['tests/affected.test.mjs']);
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.ts'], ['tests/affected.test.mjs']);
+  assert.throws(
+    () => f.plan({ alwaysRunTests: ['tests/missing.test.mjs'] }),
+    /CI_TEST_FILE_REQUIRED/,
+  );
 });
