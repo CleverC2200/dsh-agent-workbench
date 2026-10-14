@@ -196,6 +196,7 @@ declare const copy: {
     readonly businessNavigation: readonly ["业务导航", "Business navigation"];
     readonly openBusinessNavigation: readonly ["展开业务菜单", "Expand business menu"];
     readonly newConversation: readonly ["新会话", "New conversation"];
+    readonly newConversationFailed: readonly ["新会话创建失败。", "Unable to create a new conversation."];
     readonly geaBusiness: readonly ["Synear GEA", "Synear GEA"];
     readonly brandSubtitle: readonly ["智能体工作台", "Agent workspace"];
     readonly functionArea: readonly ["业务工作台", "Business workbenches"];

@@ -13,6 +13,10 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
             kind: 'single';
             scope: 'session-maybe';
         };
+        'agent-workbench.documents': {
+            kind: 'single';
+            scope: 'session-maybe';
+        };
     }
 }
 /** Formal AgentWelcome/GeaHomeHero JSX; only the input action comes from the current public scope. */
