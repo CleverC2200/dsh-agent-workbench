@@ -28,6 +28,8 @@ export interface WorkbenchSnapshot {
     readonly visitedDocuments: readonly WorkbenchFramePage[];
     readonly selectedDocument?: WorkbenchFramePage;
     readonly selection?: DocumentSession;
+    /** Runtime presentation intent. The presenter discovers resources but waits for explicit selection. */
+    readonly restoredWithoutSession?: boolean;
 }
 export interface WorkbenchPorts {
     panel(id: MainPanelId): void;
@@ -64,6 +66,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private rememberedPage;
     private readonly htmlViews;
     private selectedDocument;
+    private restoredWithoutSession;
     private readonly visited;
     private snapshot;
     private disposed;

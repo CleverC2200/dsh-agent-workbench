@@ -53,7 +53,7 @@ const bundle = await build({
  window.selectSecond=()=>workbench.open(second.id);
  window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel('conversation');};
  // A recording conversation body isolates shell controls from Session restoration.
- window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:0},()=> <section><CompanyWelcome/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
+ window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:-1},()=> <section><HeroShell t={key=>key==='hero.headline'?'探索未至之境':key} renderSlot={()=>null}/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
  `,
     resolveDir: process.cwd(),

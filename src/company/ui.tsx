@@ -3,7 +3,6 @@ import { createConversationStarter } from './new-conversation.ts';
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   useSyncExternalStore,

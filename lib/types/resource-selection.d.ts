@@ -12,11 +12,12 @@ export interface NativeResourceSelection {
         workspaceId: string;
     }): Promise<string>;
     select(sessionId: string, preset: string): Promise<void>;
+    question?(sessionId: SessionId, signal: AbortSignal): Promise<string | undefined>;
     open(sessionId: string, skill: string | undefined, signal: AbortSignal, beforeOpen?: (session: {
         sessionId: SessionId;
         preset: string | null;
         cwd?: string;
-    }) => void): Promise<void>;
+    }) => void | Promise<void>, draft?: string): Promise<void>;
 }
 export interface ResourceSummary {
     id: string;
@@ -37,7 +38,7 @@ export declare function selectResource(host: NativeResourceSelection, id: string
     preset: string;
     cwd?: string;
     interpreters?: readonly string[];
-}) => void): Promise<{
+}) => void | Promise<void>, draft?: string): Promise<{
     sessionId: string;
     preset: string;
 }>;
