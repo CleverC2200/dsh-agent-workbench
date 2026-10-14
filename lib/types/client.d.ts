@@ -55,3 +55,4 @@ declare module '@deepseek-ai/dsh-api-session-controller/client' {
 export type { WorkbenchFramePage } from './frame.ts';
 export type { BusinessAccount } from './company/account.ts';
 export type { NavigationView } from './client/desktop-navigation.tsx';
+export { pluginPackageVersion } from './plugin-package-version.ts';

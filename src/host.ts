@@ -7,6 +7,7 @@ import type {} from '@deepseek-ai/dsh-api-session-controller';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { HtmlPages, type WorkbenchPages } from './html-pages.ts';
+export { pluginPackageVersion } from './plugin-package-version.ts';
 export const inject = ['connection', 'agents', 'tools', 'sessionController', 'storageDomain'];
 /** The workspace directory used for new business Sessions. */
 /** 新业务 Session 使用的工作区目录；必须是绝对路径，避免部署环境中的相对路径歧义。 */
