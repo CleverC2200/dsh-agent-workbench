@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const { values } = parseArgs({ options: { target: { type: 'string' } } });
 if (values.target && values.target !== 'core') throw Error('Unsupported build target');
+execFileSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], { stdio: 'inherit' });
 (await import('./verify-official-input.mjs')).verifyOfficialInput();
 await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
