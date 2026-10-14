@@ -819,6 +819,7 @@ export function mountCompanyUI(
     const directoryReady = catalogue.phase === 'ready';
     const savedListed = recovery ? catalogue.ids.includes(recovery.sessionId) : false;
     const savedCwd = recovery ? catalogue.byId[recovery.sessionId]?.cwd : undefined;
+    useEffect(() => workbench.reconcileBusinessIdentity(identity), [identity, documentState.pages]);
     useEffect(
       () => pageSessions.recover(recovery, catalogue, setHistoryError),
       [

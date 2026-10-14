@@ -46,6 +46,75 @@ function controller(store) {
   return { owner, navigated };
 }
 
+test('confirmed identity invalidates inactive business associations before a page can navigate Core', async (t) => {
+  const store = memory();
+  const { owner, navigated } = controller(store);
+  t.after(() => owner.dispose());
+  const native = { id: 'gea-proof', kind: 'native', src: '/native', resourceId: 'gea-readonly' };
+  const ordinary = { id: 'ordinary', kind: 'local', body: () => null };
+  owner.registerFrame(native);
+  owner.registerFrame(ordinary);
+  owner.associateSession(native.id, first);
+  owner.associateSession(fc.id, second);
+  owner.associateSession(ordinary.id, first);
+  await owner.open(native.id);
+  owner.leaveDocument();
+  navigated.length = 0;
+
+  // Initialization and observation errors are not logout receipts.
+  for (const identity of [
+    { state: 'unknown', scope: null, status: null },
+    { state: 'confirmed', scope: 'new-generation', status: null, error: 'unavailable' },
+    {
+      state: 'confirmed',
+      scope: 'new-generation',
+      subject: first.subject,
+      status: { authenticated: true },
+    },
+  ]) {
+    owner.reconcileBusinessIdentity(identity);
+    assert.deepEqual(owner.selectionFor(native.id, first.preset, first.ownerScope), first);
+    assert.deepEqual(owner.selectionFor(fc.id, second.preset, second.ownerScope), second);
+  }
+  owner.reconcileBusinessIdentity({
+    state: 'confirmed',
+    scope: 'new-generation',
+    subject: 'subject-b',
+    status: { authenticated: true },
+  });
+  assert.equal(owner.selectionFor(native.id, first.preset, first.ownerScope), undefined);
+  assert.equal(owner.selectionFor(fc.id, second.preset, second.ownerScope), undefined);
+  assert.deepEqual(owner.selectionFor(ordinary.id, first.preset, first.ownerScope), first);
+  assert.deepEqual(navigated, [], 'identity observation must not navigate Core');
+  await owner.open(native.id);
+  assert.deepEqual(navigated, [undefined], 'reopening cannot restore the old subject Session');
+  assert.equal(owner.getSnapshot().selectedDocument, native);
+  assert.equal(owner.getSnapshot().selection, undefined);
+  assert.deepEqual(store.getSnapshot().selections, [{ page: ordinary.id, ...first, active: true }]);
+});
+
+test('logout clears every business interpretation while same-subject refresh retains current interpretations', (t) => {
+  const { owner } = controller(memory());
+  t.after(() => owner.dispose());
+  const current = { ...first, subject: 'subject-b', preset: 'current' };
+  owner.associateSession(fc.id, first);
+  owner.associateSession(fc.id, current);
+  owner.reconcileBusinessIdentity({
+    state: 'confirmed',
+    scope: 'new-generation',
+    subject: current.subject,
+    status: { authenticated: true },
+  });
+  assert.equal(owner.selectionFor(fc.id, first.preset, first.ownerScope), undefined);
+  assert.deepEqual(owner.selectionFor(fc.id, current.preset, current.ownerScope), current);
+  owner.reconcileBusinessIdentity({
+    state: 'confirmed',
+    scope: null,
+    status: { authenticated: false },
+  });
+  assert.equal(owner.selectionFor(fc.id, current.preset, current.ownerScope), undefined);
+});
+
 test('unregistering the History page revokes a pending restore before the same id is registered again', async (t) => {
   const navigated = [];
   const owner = new WorkbenchController({ panel: () => {}, document: (id) => navigated.push(id) });
