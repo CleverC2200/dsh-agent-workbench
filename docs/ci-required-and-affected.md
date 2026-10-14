@@ -15,7 +15,7 @@
 
 Core 下载内容与产物缓存分别保存。下载缓存只恢复；SDK缓存保存为最多一分钟的可选步骤，上传失败不影响实际检查判定。恢复产物后仍核 Core、原锁、Node、平台、架构、构建脚本和完整产物清单，冻结安装仍执行。缓存改变、缺文件、额外文件或链接替换不能获得通过；缓存不持有用户 Home、登录、Session 或凭据。
 
-GEA 仅在选中 Profile 测试时准备 Core Web、真实 flock、Workbench 页面构建和冻结 source Profile 输入。纯静态与权限、取消、窗口输入合同不触发这些准备。原锁所需的 GenUI/Sidebar 固定依赖仍独立准备，不能通过跳过 link 输入改变锁的消费协议。每个实际 Profile 的 Home、Session、登录、进程、窗口预算与完整复核仍独立保留。
+GEA 仅在选中 Profile 测试时准备真实 flock、Workbench 页面构建和冻结 source Profile 输入。窗口准入合同会遍历 Core 的完整依赖树，因此它仍需要 Core Web 产物，但无需真实 Profile 和浏览器。纯静态与权限、取消合同不触发 Profile 准备。原锁所需的 GenUI/Sidebar 固定依赖仍独立准备，不能通过跳过 link 输入改变锁的消费协议。每个实际 Profile 的 Home、Session、登录、进程、窗口预算与完整复核仍独立保留。
 
 Workbench 和 Manage 使用同一选择记录。Manage 的固定资源能力与 Windows 归档合同、安全审计保持独立结果。浏览器只为选中的浏览器集合准备。
 
