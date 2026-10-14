@@ -162,12 +162,12 @@ html[data-fullscreen] .gea-sidebar-window-row {
   background: var(--dsw-alias-bg-base);
   /* The frame's published band remains click-through for native window controls. */
   clip-path: polygon(
-    var(--dsh-frame-leading-clearance, 0px) 0,
-    100% 0,
-    100% 100%,
-    0 100%,
-    0 48px,
-    var(--dsh-frame-leading-clearance, 0px) 48px
+    max(4px, var(--dsh-frame-leading-clearance, 0px)) 0,
+    calc(100% - 4px) 0,
+    calc(100% - 4px) 100%,
+    4px 100%,
+    4px 48px,
+    max(4px, var(--dsh-frame-leading-clearance, 0px)) 48px
   );
 }
 .gea-workbench-documents[hidden] {
