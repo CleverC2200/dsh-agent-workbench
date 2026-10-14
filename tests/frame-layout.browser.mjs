@@ -12,8 +12,8 @@ const bundle = await build({
  const documents=new DocumentWorkbench({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,documents);
  const root=createRoot(document.getElementById('root'));const page={id:'business',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
  documents.registerFrame(page);documents.open(page.id);
- window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
- root.render(React.createElement(Document,{page,active:true,useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,
+ window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSessions:fn=>fn({byId:{}}),useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
+ root.render(React.createElement(Document,{page,active:true,useSessions:fn=>fn({byId:{}}),useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -43,7 +43,7 @@ async function documentFixture(t) {
 test('business Document uses the formal wide default beside the unchanged left column', async (t) => {
   const page = await documentFixture(t);
   const ai = page.getByRole('complementary', { name: 'AI对话' });
-  assert.equal((await ai.boundingBox()).width, 440);
+  assert.equal((await ai.boundingBox()).width, 520);
   const business = page.getByRole('textbox', { name: '业务筛选' });
   await business.fill('保留筛选');
   await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
@@ -55,7 +55,7 @@ test('business Document uses the formal wide default beside the unchanged left c
   await page.getByRole('button', { name: '同时显示中间区域和会话区' }).click();
   await expect(business).toHaveValue('保留筛选');
   await expect(ai).toBeVisible();
-  assert.equal((await ai.boundingBox()).width, 440);
+  assert.equal((await ai.boundingBox()).width, 520);
 });
 test('wide drag obeys the formal range and plugin lifetime memory while narrow breakpoints take priority', async (t) => {
   const page = await documentFixture(t);
@@ -65,7 +65,7 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
   const box = await handle.boundingBox();
   await page.mouse.move(box.x + box.width / 2, 200);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 - 160, 200);
+  await page.mouse.move(box.x + box.width / 2 - 80, 200);
   await page.mouse.up();
   assert.equal((await ai.boundingBox()).width, 600);
   await page.evaluate(() => window.remount());
@@ -76,12 +76,12 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
     .toBe(600);
   for (const [viewport, width] of [
     [1201, 521],
-    [1200, 360],
-    [1025, 360],
-    [1024, 320],
-    [861, 320],
-    [860, 300],
-    [859, 300],
+    [1200, 440],
+    [1025, 440],
+    [1024, 360],
+    [861, 360],
+    [860, 320],
+    [859, 320],
     [1600, 600],
   ]) {
     await page.setViewportSize({ width: viewport, height: 700 });
@@ -127,4 +127,29 @@ test('wide drag obeys the formal range and plugin lifetime memory while narrow b
     1120,
     'the original whole-frame 70% maximum also applies',
   );
+});
+
+test('the shared Document title row reserves safe space and window drag above both business and AI panes', async (t) => {
+  const page = await documentFixture(t);
+  const chrome = page.locator('[data-workbench-window-chrome]');
+  await expect(chrome).toBeVisible();
+  assert.notEqual(await chrome.getAttribute('data-window-drag'), null);
+  assert.equal(
+    await chrome.evaluate((node) => getComputedStyle(node).getPropertyValue('-webkit-app-region')),
+    'drag',
+  );
+  const title = await chrome.boundingBox();
+  assert.equal(title.y, 0);
+  assert.equal(title.height, 58);
+  for (const view of [
+    '同时显示中间区域和会话区',
+    '中间区域最大，隐藏会话区',
+    '会话区最大，隐藏中间区域',
+  ]) {
+    await page.getByRole('button', { name: view }).click();
+    assert.equal(await page.getByRole('toolbar', { name: '对话区视图与会话操作' }).count(), 1);
+    const body = await page.locator('.agent-workbench-document-body').boundingBox();
+    assert.ok(body.y >= title.y + title.height, 'page content starts beneath window controls');
+    assert.notEqual(await chrome.getAttribute('data-window-drag'), null);
+  }
 });

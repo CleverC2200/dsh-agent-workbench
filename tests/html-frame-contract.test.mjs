@@ -52,7 +52,7 @@ const inputActions={captureInsertion:()=>({start:0,end:0,draftRev:0}),insertText
 function Main(){
  const sessionId=useSyncExternalStore(listener=>{sessionListeners.add(listener);return()=>sessionListeners.delete(listener);},()=>mainSession);
  const state=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot);
- return <Document page={page} active={true} sessionId={sessionId} inputActions={inputActions} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} renderSlot={()=> <textarea aria-label="public draft fixture" defaultValue=""/>}/>;
+ return <Document page={page} active={true} useSessions={select=>select({byId:{}})} sessionId={sessionId} inputActions={inputActions} useProjection={()=>'original'} useSession={select=>select({openState:'open'})} renderSlot={()=> <textarea aria-label="public draft fixture" defaultValue=""/>}/>;
 }
 window.unmount=()=>{root.unmount();effects.reverse().forEach(off=>off());};
 root.render(<Main/>);window.bind('session-1');

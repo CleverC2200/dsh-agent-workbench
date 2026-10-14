@@ -387,6 +387,7 @@ async function fixture(
       page,
       active: state.selectedDocument?.id === page.id,
       sessionId,
+      useSessions: (select) => select(ctx.sessions.list.getSnapshot()),
       useProjection: () => mainPreset,
       useSession: (selector) =>
         sessionId
@@ -965,9 +966,9 @@ test('the Document consumes native tab kinds from public metadata, keeps its dra
   draft.value = '同一真实Session的未发送草稿';
   const open = async () =>
     act(async () => {
-      const menu = document.querySelector('[aria-label="原生工具"]');
-      menu.value = 'files';
-      menu.dispatchEvent(new f.dom.window.Event('change', { bubbles: true }));
+      const button = document.querySelector('[aria-label="打开原生工具"]');
+      assert.equal(document.querySelector('select[aria-label="原生工具"]'), null);
+      button.click();
     });
   await open();
   assert.ok(document.querySelector('.view-center'));
@@ -992,7 +993,7 @@ test('the Document consumes native tab kinds from public metadata, keeps its dra
   );
   await f.removeTools();
   assert.equal(
-    document.querySelector('[aria-label="原生工具"]'),
+    document.querySelector('[aria-label="打开原生工具"]'),
     null,
     'unloaded providers cease to be selectable',
   );
@@ -1531,12 +1532,43 @@ test('successful deferred History navigation keeps its own owner and restores th
   await assert.rejects(f.workbench.completeHistory(target), /PAGE_HISTORY_CANCELLED/);
 });
 
-test('opening an unconfigured business page waits for an explicit Workspace action and picker cancellation creates no Session', async (t) => {
+test('explicitly opening an unconfigured business page offers the official picker and cancellation creates no Session', async (t) => {
   const f = await fixture(t, { noWorkspace: true });
-  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 0);
-  assert.equal(f.counts().sessions, 0);
-  await f.newConversation();
   assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 1);
   assert.equal(f.counts().sessions, 0);
+  await f.newConversation();
+  assert.equal(f.calls.filter((row) => row[0] === 'directory-picker').length, 2);
+  assert.equal(f.counts().sessions, 0);
   assert.equal(f.currentSession(), undefined);
+});
+
+test('an explicit business page inherits the current Core workspace and prepares once without a new-conversation click', async (t) => {
+  const f = await fixture(t, {
+    noWorkspace: true,
+    initialSession: 'history-session',
+    nativeResourceSdk: true,
+  });
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
+  assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
+  assert.equal(f.currentSession(), 'session-1');
+  assert.equal(f.selection().cwd, '/owned/workspace');
+  assert.equal(
+    f.dom.window.document.body.textContent.includes('WORKBENCH_WORKSPACE_REQUIRED'),
+    false,
+  );
+  await f.hide();
+  await f.show();
+  assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
+});
+
+test('creating a plain page conversation inherits the real current Core workspace', async (t) => {
+  const f = await fixture(t, {
+    staticDocument: true,
+    noWorkspace: true,
+    initialSession: 'history-session',
+  });
+  await f.newConversation();
+  assert.equal(f.counts().sessions, 1);
+  assert.equal(f.calls.filter(([kind]) => kind === 'directory-picker').length, 0);
+  assert.equal(f.selection().cwd, '/owned/workspace');
 });

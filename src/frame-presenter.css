@@ -5,7 +5,40 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  --workbench-ai-width: var(--workbench-ai-preferred-width, 440px);
+  --workbench-ai-width: var(--workbench-ai-preferred-width, 520px);
+}
+.agent-workbench-document-chrome {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--workbench-ai-width);
+  flex: none;
+  height: 58px;
+  min-width: 0;
+  background: var(--workbench-surface);
+  color: var(--workbench-text);
+  border-bottom: 1px solid var(--workbench-border);
+  box-sizing: border-box;
+  -webkit-app-region: drag;
+}
+.agent-workbench-document-chrome[data-workbench-view='center'],
+.agent-workbench-document-chrome[data-workbench-view='chat'] {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, max-content);
+}
+.agent-workbench-document-title {
+  align-self: center;
+  min-width: 0;
+  padding-inline: 24px;
+  padding-inline-start: max(24px, var(--dsh-frame-leading-clearance, 0px));
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.agent-workbench-document-chrome button,
+.agent-workbench-document-chrome select {
+  -webkit-app-region: no-drag;
+}
+.agent-workbench-document-chrome .gea-conversation-toolbar {
+  border-bottom: 0;
 }
 .agent-workbench-business {
   display: flex;
@@ -31,6 +64,7 @@
   grid-template-columns: minmax(0, 1fr) var(--workbench-ai-width);
 }
 .agent-workbench-native-conversation {
+  --dsh-composer-side-clearance: 12px;
   background: var(--workbench-surface);
   color: var(--workbench-body);
   display: flex;
@@ -81,7 +115,7 @@
 }
 @media (max-width: 1200px) {
   .agent-workbench-document {
-    --workbench-ai-width: 360px;
+    --workbench-ai-width: 440px;
   }
   .agent-workbench-column-handle {
     display: none;
@@ -89,12 +123,12 @@
 }
 @media (max-width: 1024px) {
   .agent-workbench-document {
-    --workbench-ai-width: 320px;
+    --workbench-ai-width: 360px;
   }
 }
 @media (max-width: 860px) {
   .agent-workbench-document {
-    --workbench-ai-width: 300px;
+    --workbench-ai-width: 320px;
   }
 }
 

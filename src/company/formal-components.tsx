@@ -208,32 +208,29 @@ export function ConversationToolbar({
       )}
       {children}
       {tools.length > 0 && (
-        <select
-          className="gea-conversation-toolbar-tool"
-          aria-label="原生工具"
-          value=""
-          onChange={(event) => {
-            if (event.target.value) onOpenTool?.(event.target.value);
-          }}
-        >
-          <option value="" disabled>
-            工具
-          </option>
-          {tools.map((tool) => (
-            <option key={tool.providerId + ':' + tool.id} value={tool.kind}>
-              {tool.title()}
-            </option>
-          ))}
-        </select>
-      )}
-      {toolsExpanded && (
         <button
           type="button"
           className="gea-conversation-toolbar-action"
-          aria-label="关闭原生工具并恢复视图"
-          onClick={onCloseTools}
+          aria-label={toolsExpanded ? '关闭原生工具并恢复视图' : '打开原生工具'}
+          title={toolsExpanded ? '关闭右侧边栏' : '打开右侧边栏'}
+          aria-pressed={toolsExpanded}
+          onClick={() => {
+            if (toolsExpanded) onCloseTools?.();
+            else onOpenTool?.(tools[0].kind);
+          }}
         >
-          ×
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <path d="M16 3v18" />
+          </svg>
         </button>
       )}
       {error && (

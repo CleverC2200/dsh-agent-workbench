@@ -122,6 +122,7 @@ export function apply(ctx: Context): void {
   const t = ctx.locale.bind('agentWorkbench');
   ctx.effect(() => {
     const style = document.createElement('style');
+    style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.agentWorkbenchTheme = '1.1.1';
     style.textContent =
       css +

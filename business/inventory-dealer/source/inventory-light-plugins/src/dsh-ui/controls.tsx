@@ -431,6 +431,7 @@ export function Table<_T = any>({
   onExpand,
   renderChildFooter,
   scroll,
+  emptyText = '暂无符合条件的数据',
 }: TableProps<_T>) {
   const [page, setPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
@@ -538,7 +539,7 @@ export function Table<_T = any>({
             </thead>
             <tbody>{rows.map((r: any, i: number) => render(r, i))}</tbody>
           </table>
-          {!rows.length && !loading && <p>暂无符合条件的数据</p>}
+          {!rows.length && !loading && <p>{emptyText}</p>}
         </div>
       </div>
       {pagination && (

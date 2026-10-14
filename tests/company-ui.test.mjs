@@ -7,20 +7,35 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { JSDOM } from 'jsdom';
 import { zh } from '../src/company/locales.ts';
 import { readFileSync } from 'node:fs';
-import { SlotCore } from '../../../official-latest-standard/packages/client/ui-slots/lib/index.js';
+import { resolve } from 'node:path';
+import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
+const corePath = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
+verifyOfficialCore(corePath);
+const { SlotCore } = await import(resolve(corePath, 'packages/client/ui-slots/lib/index.js'));
 const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {
-    contents:
-      "export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';",
+    contents: `export {ConversationContent} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx'))};export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,
   write: false,
   format: 'cjs',
+  jsx: 'automatic',
   platform: 'node',
   external: ['react', 'react/jsx-runtime', 'react-dom'],
   loader: { '.png': 'dataurl', '.css': 'text' },
+  plugins: [
+    {
+      name: 'node-css-modules',
+      setup(build) {
+        build.onLoad({ filter: /\.module\.css$/ }, (args) => ({
+          contents: readFileSync(args.path, 'utf8'),
+          loader: 'text',
+        }));
+      },
+    },
+  ],
 });
 const module = { exports: {} };
 new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
@@ -28,11 +43,11 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
   module.exports,
   require,
 );
-const { mountCompanyUI, WorkbenchController } = module.exports;
+const { mountCompanyUI, WorkbenchController, ConversationContent } = module.exports;
 function fixture(
   account,
   panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
-  { memory, restorePageSession } = {},
+  { memory, restorePageSession, slotCore } = {},
 ) {
   const entries = [],
     calls = [];
@@ -68,11 +83,11 @@ function fixture(
       inject: (_name, fn) => fn(),
       register: (options, component) => {
         entries.push({ options, component });
-        return () => {};
+        return slotCore ? slotCore.register(options, component) : () => {};
       },
     },
-    inject: (_names, fn) => {
-      if (account) fn({ ...ctx, businessAccount: account });
+    inject: (names, fn) => {
+      if (account && names.includes('businessAccount')) fn({ ...ctx, businessAccount: account });
     },
     effect: () => {},
   };
@@ -273,108 +288,74 @@ function nativeFactory(_name, options, extension, sessionId) {
     ),
   );
 }
-test('formal Home retains its original hero and native Workspace/Agent/composer contract without Home resource redesign', () => {
+function officialContentProps(overrides = {}) {
+  return {
+    phase: 'hero',
+    variant: 'main',
+    hero: true,
+    useSession: () => undefined,
+    useSessions: (select) => select({ byId: {} }),
+    useSessionStatus: (select) => select({ get: () => undefined }),
+    useWorkspaces: (select) => select({ items: [] }),
+    useInput: () => undefined,
+    useComposerBlock: () => undefined,
+    useFactorySlot: (_name, fallback) => fallback,
+    t: (key) => (key === 'hero.chooseWorkspace' ? '选择工作区' : key),
+    selectWorkspace: () => Promise.resolve(),
+    renderSlot: (name) => React.createElement('article', { 'data-native-seat': name }),
+    renderSlotChain: (_name, _owner, options) => options.fallback,
+    ...overrides,
+  };
+}
+test('official Home remains Core-owned while the company brand and retained resources stay available', () => {
   const { entries } = fixture();
-  const entry = entries.find((e) => e.options.name === 'main.conversation');
-  const markup = renderToStaticMarkup(
-    React.createElement(entry.component, {
-      useSession: () => undefined,
-      useConversation: () => undefined,
-      useSessions: (fn) => fn({ byId: {} }),
-      renderFactorySlot: (...args) => nativeFactory(...args, undefined),
-    }),
+  assert.equal(entries.filter((e) => e.options.name === 'main.conversation').length, 0);
+  const brand = entries.find((e) => e.options.name === 'conversation.hero.brand.mark');
+  const markup = renderToStaticMarkup(React.createElement(brand.component, { size: 34 }));
+  assert.match(markup, /<img/);
+  assert.equal(new JSDOM(markup).window.document.querySelector('img').alt, zh.geaBusiness);
+  assert.match(markup, /width="34"/);
+  assert.equal(
+    entries.some((e) => e.options.name === 'main' && e.options.key === 'agent-workbench'),
+    true,
   );
-  for (const text of [
-    '思念企业 AI 协作伙伴',
-    '让 AI 进入工作流程',
-    'gea-home-title',
-    'gea-home-logo',
+});
+test('official blank Home keeps its native workspace, Agent and composer seats without company overrides', () => {
+  const markup = renderToStaticMarkup(
+    React.createElement(ConversationContent, officialContentProps()),
+  );
+  for (const seat of [
+    'conversation.hero.brand.mark',
     'conversation.hero.workspace',
     'conversation.hero.agentPreset',
-    'data-native-content="embedded"',
+    'conversation.composer.bar',
   ])
-    assert.ok(markup.includes(text), text);
-  assert.ok(
-    !markup.includes('data-resource-selection'),
-    'resource selection belongs to the retained Workbench module',
-  );
+    assert.ok(markup.includes(seat), seat);
+  assert.match(markup, /data-conversation-content/);
+  assert.equal(markup.includes('gea-home-hero'), false);
+  assert.equal(markup.includes('data-resource-selection'), false);
 });
-test('selected native Session keeps formal welcome inside native views while preserving the official Session seat', (t) => {
+test('business Documents have a persistent independent Session seat and retain the original resource module', () => {
   const { entries } = fixture();
-  const entry = entries.find((row) => row.options.name === 'main.conversation');
-  const session = { blank: true, running: false, promptAttempted: false, openState: 'open' };
-  const markup = renderToStaticMarkup(
-    React.createElement(entry.component, {
-      sessionId: 'selected-native-session',
-      useSession: (selector) => selector(session),
-      useConversation: (selector) => selector({ activeTargets: new Set() }),
-      useSessions: (selector) =>
-        selector({ byId: { 'selected-native-session': { cwd: '/native/project' } } }),
-      renderFactorySlot: (...args) => nativeFactory(...args, 'selected-native-session'),
-    }),
+  const overlay = entries.find(
+    (e) => e.options.name === 'shell.overlay' && e.options.id === 'agent-workbench.documents',
   );
-  const dom = new JSDOM(markup);
-  t.after(() => dom.window.close());
-  const document = dom.window.document;
-  assert.ok(document.querySelector('[data-native-flow] .gea-home-hero'));
-  assert.equal(document.querySelector('[data-root-controls] .gea-home-hero'), null);
-  assert.ok(
-    document.querySelector('[data-native-flow] .gea-native-selectors'),
-    'Workspace and Agent controls share the content position before the native composer',
+  assert.deepEqual(overlay.options.children, {
+    'agent-workbench.documents': { kind: 'single', scope: 'session-maybe' },
+  });
+  assert.equal(entries.filter((e) => e.options.name === 'agent-workbench.documents').length, 1);
+  assert.equal(
+    entries.some((e) => e.options.name === 'conversation.header'),
+    false,
   );
   assert.equal(
-    document.querySelector('[data-root-controls] .gea-native-selectors'),
-    null,
-    'selected-session controls do not sit after the composer in root width controls',
+    entries.some((e) => e.options.name === 'conversation.hero.workspace'),
+    false,
   );
-  assert.ok(
-    document.querySelector('.gea-native-history[hidden]'),
-    'only the proven blank transcript is hidden; its actual Session seat remains mounted',
+  assert.equal(
+    entries.some((e) => e.options.name === 'conversation.hero.agentPreset'),
+    false,
   );
-  assert.ok(document.querySelector('[data-native-flow] [data-native-seat="conversation.session"]'));
-});
-test('blank-session controls inherit the official composer width and pass their actual picker anchor', (t) => {
-  const { entries } = fixture();
-  const entry = entries.find((row) => row.options.name === 'main.conversation');
-  let pickerProps;
-  const shares = {
-    t: (key) => key,
-    sessionId: 'blank',
-    useWorkspaces: (selector) => selector({ items: [] }),
-    selectWorkspace: () => {},
-    renderSlot: (name, props) => {
-      if (name === 'conversation.hero.workspace') pickerProps = props;
-      return React.createElement('article', { 'data-native-seat': name });
-    },
-  };
-  const markup = renderToStaticMarkup(
-    React.createElement(entry.component, {
-      sessionId: 'blank',
-      useSession: (selector) => selector({ blank: true }),
-      useConversation: (selector) => selector({ activeTargets: new Set() }),
-      useSessions: (selector) => selector({ phase: 'ready', ids: [], byId: {} }),
-      renderFactorySlot: (_name, _options, extension) =>
-        React.createElement(extension.slots.views, shares),
-    }),
-  );
-  const dom = new JSDOM(
-    '<style>' + readFileSync('src/company/layout.css', 'utf8') + '</style>' + markup,
-  );
-  t.after(() => dom.window.close());
-  const style = dom.window.getComputedStyle(
-    dom.window.document.querySelector('.gea-native-selectors'),
-  );
-  assert.ok(
-    style.width.includes('--dsh-composer-side-clearance'),
-    'same inherited side clearance as the resident native card',
-  );
-  assert.ok(
-    style.maxWidth.includes('--dsh-composer-card-max-width'),
-    'same inherited width cap as the resident native card',
-  );
-  assert.equal(style.marginLeft, 'auto');
-  assert.equal(style.marginRight, 'auto');
-  assert.ok(pickerProps.anchorRef, 'the public picker receives the actual owned trigger ref');
 });
 test('retained Workbench directory reads current official workspace facts and provides native Conversation plus resource selection', () => {
   const { entries } = fixture();
@@ -423,6 +404,7 @@ test('formal registrations use the fixed public declaration ledger without takin
       name: 'conversation.content',
       scope: 'session-maybe',
       children: {
+        'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
         'conversation.hero.workspace': { kind: 'single', scope: 'root' },
         'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' },
       },
@@ -439,8 +421,74 @@ test('formal registrations use the fixed public declaration ledger without takin
   const { entries } = fixture();
   for (const entry of entries)
     assert.doesNotThrow(() => core.register(entry.options, entry.component));
-  assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority, -20);
+  assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority ?? 0, 0);
   assert.equal(core.entriesOfSlot('sidebar').length, 1);
+});
+test('Core keeps the native header owner while Workbench takes only the selected business Document', () => {
+  const core = new SlotCore();
+  core.register(
+    {
+      name: 'root',
+      children: {
+        sidebar: { kind: 'single', scope: 'root' },
+        main: { kind: 'keyed', scope: 'root' },
+        'shell.overlay': { kind: 'list', scope: 'root' },
+        'shell.leading': { kind: 'single', scope: 'root' },
+      },
+    },
+    () => null,
+  );
+  core.register(
+    {
+      name: 'main',
+      key: 'conversation',
+      children: {
+        'main.conversation': { kind: 'single', scope: 'session-maybe' },
+      },
+    },
+    () => null,
+  );
+  const Native = () => null;
+  core.register(
+    {
+      name: 'main.conversation',
+      children: {
+        'conversation.header': { kind: 'single', scope: 'session-maybe' },
+      },
+    },
+    Native,
+  );
+  core.register(
+    {
+      name: 'conversation.header',
+      children: {
+        'settings.launcher': { kind: 'single', scope: 'root' },
+      },
+    },
+    () => null,
+  );
+  core.registerFactory(
+    {
+      name: 'conversation.content',
+      scope: 'session-maybe',
+      children: { 'conversation.hero.brand.mark': { kind: 'single', scope: 'root' } },
+    },
+    () => null,
+  );
+  const { workbench } = fixture(undefined, undefined, { slotCore: core });
+  assert.equal(core.entriesOfSlot('main.conversation')[0].component, Native);
+  workbench.registerFrame({
+    id: 'header-test-page',
+    kind: 'local',
+    label: '业务页面',
+    body: () => null,
+  });
+  workbench.open('header-test-page');
+  assert.equal(core.entriesOfSlot('main.conversation')[0].options.priority, -20);
+  assert.equal(core.entriesOfSlot('conversation.header').length, 1);
+  workbench.leaveDocument();
+  assert.equal(core.entriesOfSlot('main.conversation')[0].component, Native);
+  assert.equal(core.entriesOfSlot('conversation.header').length, 1);
 });
 test('formal account menu preserves keyboard focus and dismissal while ignoring a late logout UI completion', async (t) => {
   const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true });
@@ -525,21 +573,36 @@ test('formal account menu preserves keyboard focus and dismissal while ignoring 
 });
 test('formal Workspace trigger anchors the public menu and delegates selection through the official action', async (t) => {
   const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true });
-  const saved = ['window', 'document', 'Node', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map(
-    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
-  );
+  const saved = [
+    'window',
+    'document',
+    'Node',
+    'navigator',
+    'IS_REACT_ACT_ENVIRONMENT',
+    'ResizeObserver',
+  ].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
   for (const [key, value] of [
     ['window', dom.window],
     ['document', dom.window.document],
     ['Node', dom.window.Node],
     ['navigator', dom.window.navigator],
     ['IS_REACT_ACT_ENVIRONMENT', true],
+    [
+      'ResizeObserver',
+      class {
+        constructor(callback) {
+          this.callback = callback;
+        }
+        observe(target) {
+          this.callback([{ target }]);
+        }
+        disconnect() {}
+      },
+    ],
   ])
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
   const { createRoot } = await import('react-dom/client');
   const { act } = React;
-  const { entries } = fixture();
-  const entry = entries.find((row) => row.options.name === 'main.conversation');
   const root = createRoot(document.getElementById('root'));
   let menu;
   const picks = [];
@@ -566,17 +629,20 @@ test('formal Workspace trigger anchors the public menu and delegates selection t
   };
   await act(async () =>
     root.render(
-      React.createElement(entry.component, {
-        sessionId: 'blank',
-        useSession: (selector) => selector({ blank: true }),
-        useConversation: (selector) => selector({ activeTargets: new Set() }),
-        useSessions: (selector) => selector({ phase: 'ready', ids: [], byId: {} }),
-        renderFactorySlot: (_name, _options, extension) =>
-          React.createElement(extension.slots.views, shares),
-      }),
+      React.createElement(
+        ConversationContent,
+        officialContentProps({
+          sessionId: 'blank',
+          useSession: () => ({ blank: true }),
+          selectWorkspace: shares.selectWorkspace,
+          renderSlot: shares.renderSlot,
+          useFactorySlot: (name, fallback) =>
+            name === 'views' ? () => shares.renderSlot('conversation.session', {}) : fallback,
+        }),
+      ),
     ),
   );
-  const trigger = document.querySelector('.gea-formal-workspace');
+  const trigger = document.querySelector('button[aria-label="选择工作区"]');
   assert.equal(menu.anchorRef.current, trigger);
   assert.equal(trigger.querySelector('svg').getAttribute('viewBox'), '0 0 16 16');
   assert.equal(trigger.getAttribute('aria-expanded'), 'false');
@@ -663,7 +729,7 @@ test('opening real history from a static Document returns to native Conversation
   const { createRoot } = await import('react-dom/client');
   const { act } = React;
   const { entries, workbench } = fixture();
-  const entry = entries.find((row) => row.options.name === 'main.conversation');
+  const entry = entries.find((row) => row.options.name === 'agent-workbench.documents');
   const root = createRoot(document.getElementById('root'));
   t.after(async () => {
     await act(async () => root.unmount());
@@ -699,7 +765,7 @@ test('opening real history from a static Document returns to native Conversation
     undefined,
     'the changed real main Session belongs to the native history view',
   );
-  assert.ok(document.querySelector('.gea-company-main'));
+  assert.ok(document.querySelector('.gea-workbench-documents[hidden]'));
 });
 
 async function mountedDom(t) {
@@ -739,7 +805,7 @@ async function mountedDom(t) {
 async function mountedMainConversation(t, options = {}) {
   const { root } = await mountedDom(t);
   const { entries, workbench } = fixture(options.account, undefined, options);
-  const entry = entries.find((row) => row.options.name === 'main.conversation');
+  const entry = entries.find((row) => row.options.name === 'agent-workbench.documents');
   const render = (sessionId, epoch = 0) =>
     React.act(async () =>
       root.render(
@@ -802,7 +868,7 @@ test('a later main Session remount leaves the restored unbound Document', async 
     document.querySelector('[data-restored-document]').parentElement.style.display,
     'none',
   );
-  assert.ok(document.querySelector('.gea-company-main'));
+  assert.ok(document.querySelector('.gea-workbench-documents[hidden]'));
 });
 
 test('closing the main Session consumes the initial allowance before another Session is adopted', async (t) => {

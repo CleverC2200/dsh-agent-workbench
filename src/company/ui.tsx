@@ -1,12 +1,5 @@
 import { PageUnsentHistory } from './unsent-history.tsx';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
@@ -19,7 +12,6 @@ import type {
   PropsRuntime,
   PropsRenderSlots,
   PropsRenderFactories,
-  FactoryLocalComponentPropsOf,
 } from '@deepseek-ai/dsh-client-ui-slots';
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
@@ -37,12 +29,7 @@ import css from './shell.css';
 import layoutCss from './layout.css';
 import loginCss from './login.css';
 import staticControlsCss from './formal-static-controls.css';
-import {
-  IconNewChatOutline16,
-  IconFolderClose16,
-  IconFolderOpen16,
-  IconChevronDownOutline14,
-} from './formal-static-icons.tsx';
+import { IconNewChatOutline16 } from './formal-static-icons.tsx';
 
 const DIRECTORY = 'agent-workbench' as MainPanelId;
 const INBOX = 'gea-inbox' as MainPanelId;
@@ -79,6 +66,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
   interface SlotMap {
     'agent-workbench.directory': { kind: 'single'; scope: 'session-maybe' };
+    'agent-workbench.documents': { kind: 'single'; scope: 'session-maybe' };
   }
 }
 /** Formal AgentWelcome/GeaHomeHero JSX; only the input action comes from the current public scope. */
@@ -122,7 +110,7 @@ export function mountCompanyUI(
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
   const t = ctx.locale.bind('companyWorkbench');
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
-  // Core's single main.conversation outlet remounts on later Session changes.
+  // Core's Session-optional Documents seat remounts on later Session changes.
   // Keep its observation for this UI lifetime; the first nonempty value consumes
   // the bootstrap allowance even when no presentation was restored.
   // These public props carry no navigation intent or same-Session reveal revision.
@@ -131,6 +119,8 @@ export function mountCompanyUI(
     | undefined;
   ctx.effect(() => {
     const style = document.createElement('style');
+    // Loader must not claim this effect-owned sheet for a later materializing plugin.
+    style.dataset.plugin = '@cleverc2200/dsh-agent-workbench';
     style.dataset.companyWorkbench = 'formal-508feea';
     style.textContent = staticControlsCss + '\n' + css + '\n' + layoutCss + '\n' + loginCss;
     document.head.append(style);
@@ -751,20 +741,16 @@ export function mountCompanyUI(
       </aside>
     );
   }
-  function Conversation({
+  function Documents({
     sessionId,
-    useSession,
-    useConversation,
     useSessions,
     renderFactorySlot,
-  }: PropsRuntime<'main.conversation'> & PropsRenderFactories) {
+  }: PropsRuntime<'agent-workbench.documents'> & PropsRenderFactories) {
     useSyncExternalStore(
       (listener) => ctx.locale.subscribe(listener),
       () => ctx.locale.getSnapshot().active,
       () => ctx.locale.getSnapshot().active,
     );
-    const session = useSession((value) => value),
-      conversation = useConversation((value) => value);
     const catalogue = useSessions((value) => value);
     const documentState = useSyncExternalStore(
       workbench.subscribe,
@@ -887,107 +873,6 @@ export function mountCompanyUI(
         });
       return () => controller.abort();
     }, [sessionId]);
-    const blank =
-      !session ||
-      !conversation ||
-      (conversation.activeTargets.size === 0 &&
-        session.blank &&
-        !session.running &&
-        !session.promptAttempted);
-    const loading = session?.openState === 'loading' && !blank;
-    const positions = useMemo(() => {
-      function Home() {
-        return (
-          <GeaHomeHero
-            copy={{
-              label: t('geaBusiness'),
-              eyebrow: t('homeEyebrow'),
-              title: t('homeTitle'),
-              description: t('homeDescription'),
-            }}
-          />
-        );
-      }
-      function Choices({
-        useWorkspaces,
-        renderSlot,
-        selectWorkspace,
-        t,
-      }: Pick<
-        FactoryLocalComponentPropsOf<'conversation.content', 'widthControls'>,
-        'useWorkspaces' | 'renderSlot' | 'selectWorkspace' | 't'
-      >) {
-        const workspaces = useWorkspaces((value) => value.items),
-          current = workspaces.find((workspace) => workspace.sessionIds.includes(sessionId!));
-        const [open, setOpen] = useState(false);
-        const anchorRef = useRef<HTMLButtonElement>(null);
-        return (
-          <div className="gea-native-selectors">
-            <button
-              ref={anchorRef}
-              type="button"
-              className="gea-formal-workspace"
-              aria-label={t('hero.chooseWorkspace')}
-              aria-haspopup="menu"
-              onClick={() => setOpen((value) => !value)}
-              aria-expanded={open}
-            >
-              {current?.title === undefined ? (
-                <IconFolderClose16 className="gea-formal-folder" size={16} />
-              ) : (
-                <IconFolderOpen16 className="gea-formal-folder" size={16} />
-              )}
-              <span className="gea-formal-workspace-label">
-                {current?.title ?? t('hero.chooseWorkspace')}
-              </span>
-              <IconChevronDownOutline14 className="gea-formal-workspace-chevron" size={12} />
-            </button>
-            {renderSlot('conversation.hero.workspace', {
-              open,
-              anchorRef,
-              selectedId: current?.workspaceId,
-              onPick: (id) => {
-                setOpen(false);
-                void selectWorkspace(id);
-              },
-              onClose: () => setOpen(false),
-            })}
-            {renderSlot('conversation.hero.agentPreset', {})}
-          </div>
-        );
-      }
-      return {
-        views: function MainViews(
-          props: FactoryLocalComponentPropsOf<'conversation.content', 'views'>,
-        ) {
-          return (
-            <div className="gea-main-views">
-              {blank && (
-                <div className="gea-home-position">
-                  <Home />
-                </div>
-              )}
-              <div className="gea-native-history" hidden={blank}>
-                {props.renderSlot('conversation.session', {})}
-              </div>
-              {blank && <Choices {...props} />}
-            </div>
-          );
-        },
-        widthControls: function ColdStart(
-          props: FactoryLocalComponentPropsOf<'conversation.content', 'widthControls'>,
-        ) {
-          return sessionId === undefined ? (
-            <div className="gea-cold-start">
-              <div className="gea-home-position">
-                <Home />
-              </div>
-              <Choices {...props} />
-            </div>
-          ) : null;
-        },
-      };
-    }, [blank, sessionId, ctx.locale.getSnapshot().active]);
     const documents = documentState.visitedDocuments.map((page) => (
       <div
         key={page.id}
@@ -1008,27 +893,19 @@ export function mountCompanyUI(
     ));
     return (
       <>
-        {documents}
-        {!documentState.selectedDocument && (
-          <section className="gea-company-main">
-            {recovery && !historyError && (
-              <p role={identity.error ? 'alert' : 'status'}>
-                {
-                  (ctx.locale.getSnapshot().active === 'en' ? en : zh)[
-                    identity.error ? 'pageRecoveryIdentityUnavailable' : 'pageRecoveryPending'
-                  ]
-                }
-              </p>
-            )}
-            {historyError && <p role="alert">{historyError}</p>}
-            <div className="gea-native-content">
-              {renderFactorySlot(
-                'conversation.content',
-                { variant: 'embedded', phase: loading ? 'settling' : 'active', hero: false },
-                { slots: positions },
-              )}
-            </div>
-          </section>
+        <div className="gea-workbench-documents" hidden={!documentState.selectedDocument}>
+          {documents}
+        </div>
+        {!documentState.selectedDocument && (historyError || recovery) && (
+          <div
+            className="gea-workbench-recovery"
+            role={historyError || identity.error ? 'alert' : 'status'}
+          >
+            {historyError ||
+              (ctx.locale.getSnapshot().active === 'en' ? en : zh)[
+                identity.error ? 'pageRecoveryIdentityUnavailable' : 'pageRecoveryPending'
+              ]}
+          </div>
         )}
       </>
     );
@@ -1189,12 +1066,63 @@ export function mountCompanyUI(
       </div>
     )),
   );
-  ctx.slots.inject('main.conversation', () =>
+  ctx.slots.inject('conversation.hero.brand.mark', () =>
     ctx.slots.register(
-      { name: 'main.conversation', priority: -20, locale: 'companyWorkbench' },
-      Conversation,
+      { name: 'conversation.hero.brand.mark', priority: -10, locale: 'companyWorkbench' },
+      function HeroBrand({ size, className }: PropsRuntime<'conversation.hero.brand.mark'>) {
+        return (
+          <img
+            data-company-hero-brand
+            src={brandLogo}
+            width={size}
+            height={size}
+            className={className}
+            alt={t('geaBusiness')}
+          />
+        );
+      },
     ),
   );
+  // The public overlay keeps page DOM and recovery mounted while Core owns ordinary chats.
+  ctx.slots.inject('shell.overlay', () =>
+    ctx.slots.register(
+      {
+        name: 'shell.overlay',
+        id: 'agent-workbench.documents',
+        children: { 'agent-workbench.documents': { kind: 'single', scope: 'session-maybe' } },
+      },
+      ({
+        renderSlot,
+      }: PropsRuntime<'shell.overlay'> & PropsRenderSlots<'agent-workbench.documents'>) =>
+        renderSlot('agent-workbench.documents', {}),
+    ),
+  );
+  ctx.slots.inject('agent-workbench.documents', () =>
+    ctx.slots.register(
+      { name: 'agent-workbench.documents', locale: 'companyWorkbench' },
+      Documents,
+    ),
+  );
+  ctx.slots.inject('main.conversation', () => {
+    const register = () =>
+      ctx.slots.register({ name: 'main.conversation', priority: -20 }, () => (
+        <div className="gea-workbench-document-viewport" />
+      ));
+    let dispose: (() => void) | undefined;
+    const sync = () => {
+      if (workbench.getSnapshot().selectedDocument) dispose ??= register();
+      else {
+        dispose?.();
+        dispose = undefined;
+      }
+    };
+    sync();
+    const unsubscribe = workbench.subscribe(sync);
+    return () => {
+      unsubscribe();
+      dispose?.();
+    };
+  });
   ctx.slots.inject('main', () => {
     const dispose = ctx.slots.register(
       {
