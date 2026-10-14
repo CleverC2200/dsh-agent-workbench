@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -51,7 +51,7 @@ function fixture(t, repo = 'dsh-agent-workbench') {
   put(root, 'src/consumer.ts', 'import "./value.js";');
   put(root, 'tests/peer.test.mjs', 'import "../../dsh-agent-manage/src/value.js";');
   put(root, 'tests/unrelated.test.mjs', 'export const unrelated = true;');
-  const base = commit(root);
+  let base = commit(root);
   own.head = base;
   return {
     root,
@@ -59,6 +59,10 @@ function fixture(t, repo = 'dsh-agent-workbench') {
     policy,
     put,
     commit,
+    checkpoint: () => {
+      base = commit(root);
+      own.head = base;
+    },
     plan: () => selectCiTests({ repositories, repo: own.repo, base }),
   };
 }
@@ -150,4 +154,40 @@ test('an affected public contract file remains selectable alongside ordinary tes
     'tests/loader.contract.mjs',
     'tests/required.test.mjs',
   ]);
+});
+
+test('script-only source policy changes select their direct public consumers', async (t) => {
+  const production = JSON.parse(
+    readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
+  );
+  for (const [source, consumer] of [
+    ['scripts/ci-source-policy.mjs', 'scripts/business-profile-ci.test.mjs'],
+    ['scripts/business-profile-ci.mjs', 'scripts/business-profile-ci.test.mjs'],
+  ])
+    await t.test(source, (t) => {
+      const f = fixture(t);
+      f.policy.rules = production.rules;
+      f.policy.tests.push('scripts/*.test.mjs');
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      for (const file of [
+        consumer,
+        'scripts/business-profile-ci.test.mjs',
+        'tests/quality-ci.test.mjs',
+        'tests/candidate-input.test.mjs',
+      ])
+        f.put(f.root, file, 'export const fixture = true;');
+      f.put(f.root, source, 'export const revision = 1;');
+      f.checkpoint();
+      f.put(f.root, source, 'export const revision = 2;');
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.deepEqual(plan.changes, [{ repo: 'dsh-agent-workbench', file: source }]);
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + source].includes(consumer),
+        JSON.stringify(plan),
+      );
+      assert.ok(plan.files.includes('tests/required.test.mjs'));
+      assert.ok(plan.files.includes('tests/quality-ci.test.mjs'));
+      assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+    });
 });

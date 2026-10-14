@@ -20,6 +20,11 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:ci-source-policy|business-profile-ci)\\.mjs$",
+      "tests": ["scripts/business-profile-ci.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/|scripts/)",
       "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"],
       "exclusive": true
