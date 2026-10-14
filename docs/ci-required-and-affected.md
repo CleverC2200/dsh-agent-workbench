@@ -19,6 +19,8 @@ GEA 仅在选中 Profile 测试时准备真实 flock、Workbench 页面构建和
 
 Workbench 和 Manage 使用同一选择记录。Manage 的固定资源能力与 Windows 归档合同、安全审计保持独立结果。浏览器只为选中的浏览器集合准备。
 
+GEA 的选中测试最多同时执行两个文件；文件运行在独立进程中，Profile 与窗口 fixture 使用独立临时目录、Home 和随机 loopback 端口。每个文件内部的用例顺序与断言保持原样，避免一次启动过多真实 Profile。
+
 ## 结果与十分钟目标
 
 质量汇总继续拒绝失败、取消、缺失和必需任务跳过。普通 source 事件按 PR/分支取消过期运行；手动冻结运行按 run ID 隔离。原失败和原输入保留。
