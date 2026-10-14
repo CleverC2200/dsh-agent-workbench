@@ -120,6 +120,9 @@ await import('./build-inventory-qll.mjs');
 if (values.target !== 'core') {
   await import('./build-inventory-fc.mjs');
   await import('./build-inventory-aqkc.mjs');
+} else {
+  const { assembleInventoryAgentResources } = await import('./build-inventory.mjs');
+  for (const id of ['fc', 'aqkc']) await assembleInventoryAgentResources(id);
 }
 
 await import('./build-inventory-dealer.mjs');
