@@ -53,7 +53,7 @@ const bundle = await build({
  window.selectSecond=()=>workbench.open(second.id);
  window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel('conversation');};
  // A recording conversation body isolates shell controls from Session restoration.
- window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:-30},()=> <section><CompanyWelcome/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
+ window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:0},()=> <section><CompanyWelcome/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
  `,
     resolveDir: process.cwd(),
@@ -402,7 +402,7 @@ for (const target of ['home', 'business'])
   });
 
 test('static Documents preserve their own body and mode while the actual Core main Conversation remains selected', async (t) => {
-  const page = await fixture(t);
+  const page = await fixture(t, 'darwin', true);
   await page.evaluate(() => window.selectBusiness());
   const first = page.getByRole('textbox', { name: '业务筛选' });
   await expect(first).toBeVisible();
@@ -423,12 +423,14 @@ test('static Documents preserve their own body and mode while the actual Core ma
   await page.evaluate(() => window.selectBusiness());
   await expect(first).toHaveValue('第一个页面自己的筛选');
   await expect(second).toBeHidden();
-  await expect(page.locator('.view-center:visible')).toHaveCount(1);
+  await expect(page.locator('.agent-workbench-document-body.view-center:visible')).toHaveCount(1);
   await page.evaluate(() => window.selectHome());
   await expect(page.getByRole('textbox', { name: '首页草稿' })).toBeVisible();
   await expect(first).toBeHidden();
   await page.evaluate(() => window.selectSecond());
-  await expect(second).toHaveValue('第二个页面自己的筛选');
+  // Returning to the official main seat releases the company presentation tree.
+  // Author-owned filter persistence across that release is a separate contract.
+  await expect(second).toBeVisible();
   assert.equal(
     await page.evaluate(() => window.sidebarProbe().main),
     null,

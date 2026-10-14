@@ -39,3 +39,9 @@ WorkbenchController 持有 History intent 与对应页面登记的有效期。�
 固定 Core 输入由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 维护。使用的公开能力为 Core `packages/client/store` 的浏览器快照、`packages/api/session-controller` 的目录/retain/projection 和 `packages/client/ui-workspace` 的导航。
 
 [workbench-recovery.test.mjs](../tests/workbench-recovery.test.mjs) 覆盖无 Session 副作用重建、解释者与范围隔离、UI 意图、格式拒绝、注销再登记、异步迟到和取消。测试文件是验证入口，不表示本轮已运行；真实浏览器 reload、普通 Host restart 和业务授权仍需对应窗口与环境回执。
+
+## 基地库存业务入口
+
+主会话提供明确的“使用基地库存 Agent 分析”按钮。用户选择后沿 Manage 资源选择与 Core 新 Session 接口选用 `gea-html-inventory-aqkc`，保留默认预设和原会话。输入框问题优先复制到新草稿；为空时读取当前 Core 事件窗口最近一条真实用户文本。不会复制工具输出、系统消息或完整历史，也不会自动请求模型。
+
+入口在创建前确认基地库存页面与 GEA 当前身份已就绪；关联前再次核对同一身份 scope/subject 与实际预设。复用已有页面关联 owner，再打开新会话和页面。登录状态只是入口条件，服务端权限仍由 GEA 执行时检查。取消、资源禁用、身份变化、目标草稿已被编辑或实际预设不匹配时保留失败，阻止关联与导航，不切换到其它预设重试。已创建的 Session 仍由 Core 保存。
