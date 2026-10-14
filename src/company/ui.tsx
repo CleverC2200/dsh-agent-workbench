@@ -1,5 +1,13 @@
 import { PageUnsentHistory } from './unsent-history.tsx';
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createConversationStarter } from './new-conversation.ts';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { createPortal } from 'react-dom';
 import type { Context } from '@deepseek-ai/cordis';
 import {
@@ -109,6 +117,39 @@ export function mountCompanyUI(
 ): void {
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
   const t = ctx.locale.bind('companyWorkbench');
+  const conversationStarter = createConversationStarter(ctx, () => workbench.leaveDocument());
+  function ConversationCreationWarning() {
+    const state = useSyncExternalStore(
+      conversationStarter.state.subscribe,
+      conversationStarter.state.getSnapshot,
+      conversationStarter.state.getSnapshot,
+    );
+    useSyncExternalStore(
+      (listener) => ctx.locale.subscribe(listener),
+      () => ctx.locale.getSnapshot().active,
+      () => ctx.locale.getSnapshot().active,
+    );
+    return state.kind === 'failed' ? (
+      <div role="alert" className="agent-workbench-ui gea-identity-warning">
+        <p>
+          {t('newConversationFailed')} {state.message}
+        </p>
+        <button type="button" onClick={() => conversationStarter.state.set({ kind: 'idle' })}>
+          {t('close')}
+        </button>
+      </div>
+    ) : null;
+  }
+  ctx.slots.inject('shell.overlay', () =>
+    ctx.slots.register(
+      {
+        name: 'shell.overlay',
+        id: 'gea-conversation-creation-warning',
+        locale: 'companyWorkbench',
+      },
+      ConversationCreationWarning,
+    ),
+  );
   const SidebarGeometry = React.createContext({ collapsed: false, expand: () => {} });
   // Core's Session-optional Documents seat remounts on later Session changes.
   // Keep its observation for this UI lifetime; the first nonempty value consumes
@@ -429,6 +470,11 @@ export function mountCompanyUI(
       | 'sidebar.settings'
       | 'sidebar.footer.action'
     >) {
+    const creation = useSyncExternalStore(
+      conversationStarter.state.subscribe,
+      conversationStarter.state.getSnapshot,
+      conversationStarter.state.getSnapshot,
+    );
     useSyncExternalStore(
       (listener) => ctx.locale.subscribe(listener),
       () => ctx.locale.getSnapshot().active,
@@ -504,10 +550,9 @@ export function mountCompanyUI(
       [collapsed],
     );
     const newConversation = () => {
-      workbench.leaveDocument();
       setDrawer('workspace');
       expandSidebar();
-      ctx.uiWorkspace.startSession();
+      void conversationStarter.start();
     };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
@@ -556,6 +601,8 @@ export function mountCompanyUI(
             type="button"
             className="gea-formal-new-session gea-new-session"
             aria-label={t('newConversation')}
+            disabled={creation.kind === 'creating'}
+            aria-busy={creation.kind === 'creating'}
             onClick={newConversation}
           >
             <IconNewChatOutline16 size={14} />
@@ -616,6 +663,7 @@ export function mountCompanyUI(
                 title={label}
                 aria-label={label}
                 aria-current={selected ? 'page' : undefined}
+                disabled={kind === 'newChat' && creation.kind === 'creating'}
                 onClick={action}
               >
                 <NavIcon kind={kind} />
@@ -1041,8 +1089,13 @@ export function mountCompanyUI(
       },
     ),
   );
-  ctx.slots.inject('shell.leading', () =>
-    ctx.slots.register({ name: 'shell.leading', priority: -20, locale: 'companyWorkbench' }, () => (
+  function ShellLeading() {
+    const creation = useSyncExternalStore(
+      conversationStarter.state.subscribe,
+      conversationStarter.state.getSnapshot,
+      conversationStarter.state.getSnapshot,
+    );
+    return (
       <div className="gea-shell-leading">
         <button
           type="button"
@@ -1056,15 +1109,20 @@ export function mountCompanyUI(
           type="button"
           className="gea-inbox-quick-action"
           aria-label={t('newConversation')}
-          onClick={() => {
-            workbench.leaveDocument();
-            ctx.uiWorkspace.startSession();
-          }}
+          disabled={creation.kind === 'creating'}
+          aria-busy={creation.kind === 'creating'}
+          onClick={() => void conversationStarter.start()}
         >
           <IconNewChatOutlineRegular size={16} />
         </button>
       </div>
-    )),
+    );
+  }
+  ctx.slots.inject('shell.leading', () =>
+    ctx.slots.register(
+      { name: 'shell.leading', priority: -20, locale: 'companyWorkbench' },
+      ShellLeading,
+    ),
   );
   ctx.slots.inject('conversation.hero.brand.mark', () =>
     ctx.slots.register(

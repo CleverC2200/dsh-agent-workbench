@@ -274,6 +274,7 @@ const copy = {
   businessNavigation: ['业务导航', 'Business navigation'],
   openBusinessNavigation: ['展开业务菜单', 'Expand business menu'],
   newConversation: ['新会话', 'New conversation'],
+  newConversationFailed: ['新会话创建失败。', 'Unable to create a new conversation.'],
   geaBusiness: ['Synear GEA', 'Synear GEA'],
   brandSubtitle: ['智能体工作台', 'Agent workspace'],
   functionArea: ['业务工作台', 'Business workbenches'],

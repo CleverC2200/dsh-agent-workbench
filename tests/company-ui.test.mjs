@@ -47,7 +47,7 @@ const { mountCompanyUI, WorkbenchController, ConversationContent } = module.expo
 function fixture(
   account,
   panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
-  { memory, restorePageSession, slotCore } = {},
+  { memory, restorePageSession, slotCore, navigation } = {},
 ) {
   const entries = [],
     calls = [];
@@ -90,6 +90,7 @@ function fixture(
       if (account && names.includes('businessAccount')) fn({ ...ctx, businessAccount: account });
     },
     effect: () => {},
+    ...navigation,
   };
   const workbench = new WorkbenchController(
     {
@@ -129,6 +130,116 @@ function fixture(
   };
   return { ctx, entries, calls, workbench, renderSlot };
 }
+
+test('company new-conversation buttons create through Core without adopting a stale blank Session', async (t) => {
+  const dom = new JSDOM('<main id="root"></main>', { pretendToBeVisual: true });
+  const saved = ['window', 'document', 'Node', 'navigator', 'IS_REACT_ACT_ENVIRONMENT'].map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)],
+  );
+  for (const [key, value] of [
+    ['window', dom.window],
+    ['document', dom.window.document],
+    ['Node', dom.window.Node],
+    ['navigator', dom.window.navigator],
+    ['IS_REACT_ACT_ENVIRONMENT', true],
+  ])
+    Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  t.after(async () => {
+    await React.act(() => root.unmount());
+    dom.window.close();
+    for (const [key, descriptor] of saved) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else delete globalThis[key];
+    }
+  });
+  const calls = [],
+    legacy = {
+      id: 'blank-old',
+      blank: true,
+      cwd: '/user-project',
+      retainedBy: { mainView: 1 },
+      updatedAt: 1,
+      projectionValues: { agentPreset: 'custom-removed' },
+    };
+  const navigation = {
+    layout: { beginNavigation: () => new AbortController().signal, toggleSidebar() {} },
+    sessions: {
+      list: {
+        getSnapshot: () => ({ phase: 'ready', ids: [legacy.id], byId: { [legacy.id]: legacy } }),
+      },
+      create: async (options) => {
+        calls.push(['create', options]);
+        return 'fresh';
+      },
+    },
+    workspaces: {
+      list: {
+        getSnapshot: () => ({
+          phase: 'ready',
+          items: [
+            { workspaceId: 'user-workspace', path: '/user-project', sessionIds: [legacy.id] },
+          ],
+        }),
+      },
+    },
+    uiWorkspace: {
+      startSession() {
+        throw Error('agent-preset/not-found: custom-removed');
+      },
+      openSession(id) {
+        calls.push(['open', id]);
+      },
+    },
+  };
+  const { entries, renderSlot } = fixture(undefined, undefined, { navigation });
+  for (const name of ['sidebar', 'shell.leading']) {
+    const entry = entries.find((row) => row.options.name === name);
+    await React.act(() =>
+      root.render(
+        React.createElement(entry.component, {
+          collapsed: false,
+          width: 280,
+          usePanelInfo: (fn) => fn({ activePanelId: null }),
+          renderSlot,
+        }),
+      ),
+    );
+    for (const button of document.querySelectorAll('button[aria-label="新会话"]')) {
+      await React.act(async () => {
+        button.click();
+      });
+    }
+  }
+  assert.equal(calls.length, 6, 'all three plugin controls create and open a fresh Session');
+  for (let i = 0; i < calls.length; i += 2) {
+    assert.deepEqual(calls[i], ['create', { workspaceId: 'user-workspace' }]);
+    assert.deepEqual(calls[i + 1], ['open', 'fresh']);
+  }
+  assert.equal(legacy.projectionValues.agentPreset, 'custom-removed');
+  navigation.sessions.create = async () => {
+    throw Error('Unknown agent preset: user-default');
+  };
+  const warning = entries.find((row) => row.options.id === 'gea-conversation-creation-warning');
+  const leading = entries.find((row) => row.options.name === 'shell.leading');
+  await React.act(() =>
+    root.render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(leading.component),
+        React.createElement(warning.component),
+      ),
+    ),
+  );
+  await React.act(async () => document.querySelector('button[aria-label="新会话"]').click());
+  assert.match(
+    document.querySelector('[role="alert"]').textContent,
+    /新会话创建失败.*user-default/,
+  );
+  assert.equal(calls.length, 6, 'failure must not replace the current Session');
+});
 test('formal sidebar renders original button/icon hierarchy and the actual workspace/settings seats without details redesign', () => {
   const { entries, renderSlot } = fixture();
   const entry = entries.find((e) => e.options.name === 'sidebar');
