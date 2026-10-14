@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "required": [
+    "tests/quality-ci.test.mjs",
+    "tests/hosted-peer-input.test.mjs",
+    "tests/quality-knowledge.test.mjs",
+    "tests/candidate-input.test.mjs",
+    "tests/migration-history-input.test.mjs",
+    "scripts/run-quality-checks.test.mjs",
+    "tests/ci-test-plan.test.mjs",
+    "tests/quality-cli.test.mjs"
+  ],
+  "tests": [
+    "tests/*.test.mjs",
+    "tests/*.browser.mjs",
+    "scripts/*.test.mjs",
+    "business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",
+    "business/inventory-apsplan/source/tests/data/*.test.mjs"
+  ],
+  "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/|scripts/)",
+      "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"],
+      "exclusive": true
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/",
+      "tests": ["tests/inventory-storage-build.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:static|theme|src/company)/",
+      "tests": ["tests/frame-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-gea-plugin",
+      "pattern": "^(?:src|scripts|presets|default-presets)/",
+      "tests": ["tests/hosted-peer-input.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-manage",
+      "pattern": "^(?:src|scripts|business-resources)/",
+      "tests": ["tests/candidate-input.test.mjs"]
+    }
+  ]
+}

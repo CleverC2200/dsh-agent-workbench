@@ -197,7 +197,7 @@ test('hosted events and local execution share the admitted frozen group contract
   assert.doesNotMatch(workflow, /--phase input/);
 });
 
-test('CI executes the complete former test union once and retains standalone commands', () => {
+test('standalone full commands retain their union while CI runs required and affected tests', () => {
   const scripts = JSON.parse(readFileSync('package.json')).scripts;
   const files = (command) => {
     assert.equal(typeof command, 'string');
@@ -219,7 +219,9 @@ test('CI executes the complete former test union once and retains standalone com
   assert.ok(after.some((file) => file.endsWith('.browser.mjs')));
   const ci = readFileSync('scripts/run-quality-ci.mjs', 'utf8');
   assert.match(ci, /run\('npm', \['run', 'quality:fast', '--', '--checks-only'\]\)/);
-  assert.match(ci, /run\('npm', \['run', 'test:ci'\]\)/);
+  assert.doesNotMatch(ci, /run\('npm', \['run', 'test:ci'\]\)/);
+  assert.match(ci, /name: 'required-and-affected'/);
+  assert.match(ci, /selectCiTests/);
   assert.doesNotMatch(ci, /run\('npm', \[(?:'test'|'run', 'test:aps'|'run', 'test:quality')\]\)/);
 });
 
