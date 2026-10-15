@@ -80,8 +80,9 @@ try {
       !nonempty(manifest.task) ||
       execution.inputSha256 !== inputSha256 ||
       !nonempty(execution.owner) ||
-      !nonempty(execution.authorization) ||
-      !nonempty(execution.handoff) ||
+      ![execution.authorization, execution.handoff].every(
+        (source) => nonempty(source?.path) && /^[a-f0-9]{64}$/.test(source?.sha256 ?? ''),
+      ) ||
       !Array.isArray(execution.stopMarkers) ||
       !execution.stopMarkers.length ||
       !execution.stopMarkers.every(nonempty) ||
@@ -90,18 +91,23 @@ try {
       throw Error(
         'EXECUTION_INVALID: task-bound current owner, source pointers, stop markers and PR array required',
       );
-    const sources = [execution.authorization, execution.handoff].map((file) => {
-      const path = resolve(dirname(executionFile), file);
-      let source;
-      try {
-        source = readFileSync(path);
-      } catch {
-        throw Error(`EXECUTION_INVALID: unreadable source ${path}`);
-      }
-      if (!source.length) throw Error(`EXECUTION_INVALID: empty source ${path}`);
-      return { path, sha256: createHash('sha256').update(source).digest('hex') };
-    });
     const reasons = [];
+    const sources = [execution.authorization, execution.handoff].map(
+      ({ path: file, sha256: expectedSha256 }) => {
+        const path = resolve(dirname(executionFile), file);
+        let source;
+        try {
+          source = readFileSync(path);
+        } catch {
+          throw Error(`EXECUTION_INVALID: unreadable source ${path}`);
+        }
+        if (!source.length) throw Error(`EXECUTION_INVALID: empty source ${path}`);
+        const sha256 = createHash('sha256').update(source).digest('hex');
+        const matches = sha256 === expectedSha256;
+        if (!matches) reasons.push(`SOURCE_VERSION_MISMATCH: ${path}`);
+        return { path, expectedSha256, sha256, matches };
+      },
+    );
     if (!values.owner || execution.owner !== values.owner) reasons.push('OWNER_MISMATCH');
     if (execution.state !== 'in-progress') reasons.push('EXECUTION_INACTIVE');
     const readMarkers = () =>
@@ -135,7 +141,7 @@ try {
     }
     const pullRequests = execution.pullRequests.map((pr) => {
       try {
-        const actual = JSON.parse(
+        const response = JSON.parse(
           execFileSync(
             'gh',
             ['api', '--method', 'GET', `repos/${pr.repository}/pulls/${pr.number}`],
@@ -146,14 +152,28 @@ try {
             },
           ),
         );
+        const actual = {
+          number: response?.number,
+          state: response?.state,
+          head: {
+            sha: response?.head?.sha,
+            ref: response?.head?.ref,
+            repository: response?.head?.repo?.full_name,
+          },
+          base: {
+            sha: response?.base?.sha,
+            ref: response?.base?.ref,
+            repository: response?.base?.repo?.full_name,
+          },
+        };
         const matches =
-          actual?.state === 'open' &&
+          actual.state === 'open' &&
           actual.number === pr.number &&
-          actual.head?.sha === pr.head &&
-          actual.base?.sha === pr.base &&
-          actual.head?.ref === pr.headRef &&
-          actual.base?.ref === pr.baseRef &&
-          actual.base?.repo?.full_name === pr.repository;
+          actual.head.sha === pr.head &&
+          actual.base.sha === pr.base &&
+          actual.head.ref === pr.headRef &&
+          actual.base.ref === pr.baseRef &&
+          actual.base.repository === pr.repository;
         if (!matches) reasons.push(`PR_MISMATCH: ${pr.repository}#${pr.number}`);
         return { ...pr, actual, matches, observedAt: new Date().toISOString() };
       } catch (error) {

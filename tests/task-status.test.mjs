@@ -113,8 +113,14 @@ function resumeFixture(t) {
     owner: 'current-owner',
     state: 'in-progress',
     inputSha256: createHash('sha256').update(inputBytes).digest('hex'),
-    authorization: './human-authorization.md',
-    handoff: './handoff.md',
+    authorization: {
+      path: './human-authorization.md',
+      sha256: createHash('sha256').update('Fixture human authorization').digest('hex'),
+    },
+    handoff: {
+      path: './handoff.md',
+      sha256: createHash('sha256').update('Fixture current task handoff').digest('hex'),
+    },
     stopMarkers: ['./STOP', './HANDED_OFF'],
     pullRequests: [
       {
@@ -230,8 +236,10 @@ test('resume check requires a current task-bound execution projection and tracea
   for (const [field, value] of [
     ['inputSha256', 'b'.repeat(64)],
     ['task', 'other-task'],
-    ['authorization', './missing.md'],
-    ['handoff', './missing.md'],
+    ['authorization', { ...fixture.execution.authorization, path: './missing.md' }],
+    ['handoff', { ...fixture.execution.handoff, path: './missing.md' }],
+    ['authorization', { path: './human-authorization.md' }],
+    ['handoff', { path: './handoff.md', sha256: 'invalid' }],
     ['stopMarkers', []],
     ['pullRequests', undefined],
   ]) {
@@ -402,4 +410,46 @@ test('resume check refuses local source changes made during a PR query', (t) => 
   const result = fixture.check();
   assert.notEqual(result.status, 0);
   assert.match(result.stdout, /SOURCE_DIRTY/);
+});
+
+test('resume check refuses sources changed before invocation without refreshing execution', (t) => {
+  const fixture = resumeFixture(t);
+  const executionBytes = readFileSync(fixture.executionFile);
+  for (const file of ['handoff.md', 'human-authorization.md']) {
+    const path = join(fixture.directory, file);
+    const original = readFileSync(path);
+    writeFileSync(path, 'Changed source version before resume');
+    const result = fixture.check();
+    assert.notEqual(result.status, 0, file);
+    assert.match(result.stdout, /SOURCE_VERSION_MISMATCH/);
+    assert.equal(JSON.parse(result.stdout).resume.allowed, false);
+    assert.deepEqual(readFileSync(fixture.executionFile), executionBytes);
+    writeFileSync(path, original);
+  }
+});
+
+test('resume check reports only the PR identity and revision fields needed for diagnosis', (t) => {
+  const fixture = resumeFixture(t);
+  fixture.remote.body = 'Unrelated PR body';
+  fixture.remote.user = { login: 'Unrelated user', details: 'Omitted profile' };
+  fixture.remote.head.repo = {
+    full_name: 'fixture/dsh-agent-workbench',
+    owner: fixture.remote.user,
+  };
+  fixture.remote.base.repo.owner = fixture.remote.user;
+  fixture.save();
+  const result = fixture.check();
+  assert.equal(result.status, 0, result.stderr);
+  const observed = JSON.parse(result.stdout).resume.pullRequests[0];
+  assert.deepEqual(observed.actual, {
+    number: 12,
+    state: 'open',
+    head: {
+      sha: fixture.repositories[0].head,
+      ref: 'fixture-branch',
+      repository: 'fixture/dsh-agent-workbench',
+    },
+    base: { sha: 'a'.repeat(40), ref: 'main', repository: 'fixture/dsh-agent-workbench' },
+  });
+  assert.ok(Number.isFinite(Date.parse(observed.observedAt)));
 });
