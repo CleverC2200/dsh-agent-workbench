@@ -56,22 +56,115 @@ function references(file, roots, known, importsOnly = false) {
     if (!bindings.has(name)) bindings.set(name, []);
     bindings.get(name).push({ start, end: end - 1, scope: scopes[index] });
   }
+  const argumentsOf = (open) => {
+    const ranges = [];
+    const close = endOf(open);
+    let start = open + 1;
+    for (let cursor = start; cursor <= close; cursor++) {
+      if (cursor === close || tokens[cursor] === ',') {
+        if (start < cursor) ranges.push({ start, end: cursor - 1 });
+        start = cursor + 1;
+      } else if (['(', '[', '{'].includes(tokens[cursor])) cursor = endOf(cursor);
+    }
+    return ranges;
+  };
+  const functions = [];
+  for (let index = 0; index < tokens.length; index++) {
+    let open, body, bindingStart;
+    if (tokens[index] === 'function' && tokens[index + 2] === '(') {
+      open = index + 2;
+      body = endOf(open) + 1;
+    } else if (['const', 'let'].includes(tokens[index]) && tokens[index + 2] === '=') {
+      bindingStart = index + 3;
+      open = bindingStart + (tokens[bindingStart] === 'async' ? 1 : 0);
+      if (
+        tokens[open] !== '(' ||
+        tokens[endOf(open) + 1] !== '=' ||
+        tokens[endOf(open) + 2] !== '>'
+      )
+        continue;
+      body = endOf(open) + 3;
+    } else continue;
+    if (tokens[body] !== '{') continue;
+    functions.push({
+      name: tokens[index + 1],
+      nameIndex: index + 1,
+      scope: scopes[index],
+      body,
+      bindingStart,
+      end: endOf(body),
+      parameters: argumentsOf(open).map(({ start, end }) => (start === end ? tokens[start] : null)),
+    });
+  }
   const pathNames = (start, end, visited = new Set()) => {
     const names = [];
     for (let cursor = start; cursor <= end; cursor++) {
       const token = tokens[cursor];
       if (literal(token)) names.push(token.slice(1, -1));
-      else if (bindings.has(token) && !visited.has(token)) {
+      else {
         const binding = bindings
           .get(token)
-          .findLast(
+          ?.findLast(
             (entry) =>
               entry.start < cursor &&
               entry.scope.every((block, index) => scopes[cursor][index] === block),
           );
-        if (!binding) continue;
-        visited.add(token);
-        names.push(...pathNames(binding.start, binding.end, visited));
+        const owner = functions.findLast(
+          (entry) => entry.body < cursor && cursor < entry.end && entry.parameters.includes(token),
+        );
+        if (binding && (!owner || binding.scope.length > owner.scope.length)) {
+          const key = 'binding:' + binding.start;
+          if (visited.has(key)) continue;
+          names.push(...pathNames(binding.start, binding.end, new Set([...visited, key])));
+        } else if (owner) {
+          const parameter = owner.parameters.indexOf(token);
+          const key = `parameter:${owner.body}:${parameter}`;
+          if (visited.has(key)) continue;
+          for (let call = 0; call < tokens.length; call++) {
+            if (
+              tokens[call] !== owner.name ||
+              tokens[call + 1] !== '(' ||
+              tokens[call - 1] === '.' ||
+              functions.some((entry) => entry.nameIndex === call)
+            )
+              continue;
+            const declaration = functions
+              .filter(
+                (entry) =>
+                  entry.name === owner.name &&
+                  entry.scope.every((block, index) => scopes[call][index] === block),
+              )
+              .sort((a, b) => a.scope.length - b.scope.length || a.nameIndex - b.nameIndex)
+              .at(-1);
+            if (declaration !== owner) continue;
+            const shadow = bindings
+              .get(owner.name)
+              ?.findLast(
+                (entry) =>
+                  entry.start < call &&
+                  entry.scope.every((block, index) => scopes[call][index] === block),
+              );
+            if (
+              shadow &&
+              shadow.scope.length >= owner.scope.length &&
+              shadow.start !== owner.bindingStart
+            )
+              continue;
+            if (
+              functions.some(
+                (entry) =>
+                  entry.body < call &&
+                  call < entry.end &&
+                  entry.parameters.includes(owner.name) &&
+                  entry.scope.length >= owner.scope.length,
+              )
+            )
+              continue;
+            const argument = argumentsOf(call + 1)[parameter];
+            if (argument)
+              names.push(...pathNames(argument.start, argument.end, new Set([...visited, key])));
+          }
+        }
       }
     }
     return names;
