@@ -42,3 +42,48 @@ node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs test
 [候选输入检查源码](../tests/candidate-input.test.mjs) 的 rc.2 分支默认读取同组 `../../official-0.2.0-rc.2`；checkout 布局不同则用 `DSH_RC2_CORE_CHECKOUT` 显式指定已登记的官方源码绝对路径。检查要求与支持清单匹配的 rc.2 固定提交，不会把 alpha 输入作为 rc.2 通过。
 
 需要快速核对本票源码时，运行 `node scripts/task-status.mjs --input <本票integration-set.json绝对路径>`。命令只读显式输入和登记 checkout，输出来源文件摘要、实际 HEAD、与输入是否一致、tracked/untracked 改动和观察时间；失败的 checkout 保留错误，其余仓继续观察。它不修改输入、安装依赖或证明候选准入、装载及业务授权，冻结验证仍使用原 `candidate:verify` 合同。
+
+## 恢复开发前检查当前执行记录
+
+在恢复派工、构建或写远端前，显式运行同一只读 CLI 的恢复模式：
+
+```sh
+node scripts/task-status.mjs --input <本票三仓输入JSON绝对路径> --check-resume --owner <当前执行者标识>
+```
+
+`--input` 继续使用包含三仓 `repo`、绝对 `path` 和完整 `head` 的本票输入。恢复模式额外要求输入内有 `task` 标识和 `execution` 文件指针，例如 `"execution": "./execution.json"`。该指针相对输入文件解析；不要另复制一份旧执行快照充当当前记录。未传 `--check-resume` 时仍只观察源码，dirty/HEAD 不同继续正常输出，也不读取执行记录或联网。
+
+当前 owner 在本票专属输出中维护一份小型 execution 记录。它投影已有的人类授权与交接，不是新的授权依据；指针文件可读只证明来源可追溯，CLI 不判断授权内容的真实性或范围。不能用 owner 自报替换当前记录，也不能用本工具替代已有业务交付检查。
+
+```json
+{
+  "task": "本票标识，与输入相同",
+  "owner": "当前执行者标识",
+  "state": "in-progress",
+  "inputSha256": "本票输入原始字节的64位SHA256",
+  "authorization": "./human-authorization.md",
+  "handoff": "./handoff.md",
+  "stopMarkers": ["./STOP", "./HANDED_OFF"],
+  "pullRequests": []
+}
+```
+
+记录内的文件指针相对 execution 文件解析。`authorization`、`handoff` 指向已有来源，不由检查命令生成。`stopMarkers` 必须显式列出本票停止/交接标记，任何一个存在都拒绝。只有当前 owner 相同且 `state` 为 `in-progress` 才能通过；已转交、暂停、完成、缺失或未知状态均拒绝。输入原始字节 SHA256 变化后，由 owner 依据有效任务输入更新投影，检查命令不会自动重绑。
+
+`pullRequests` 必须显式提供数组，建 PR 前可为空。空数组只表示本票没有登记 PR，不说明仓库不存在其他 PR。有登记时每项为：
+
+```json
+{
+  "repo": "dsh-agent-workbench",
+  "repository": "CleverC2200/dsh-agent-workbench",
+  "number": 123,
+  "head": "与本票对应仓head相同的40位SHA",
+  "base": "登记PR预期base的40位SHA",
+  "headRef": "本票分支名",
+  "baseRef": "main"
+}
+```
+
+CLI 核三仓实际包名、完整 HEAD 和 tracked/untracked dirty；对每个登记 PR 仅调用 `gh api --method GET`，逐项核实时 PR 编号、open 状态、head/base SHA、分支和目标仓。它不 fetch、不更新远端、不派发或重跑 CI。缺少 `gh`、查询失败、返回缺字段或漂移都拒绝。查询结束后重新观察三仓源码；执行期间发生的 input、execution、依据或 handoff 字节变化，以及查询结束前新出现的停止标记也会拒绝。
+
+退出码 0 表示本次观察通过，非 0 表示拒绝或输入/查询未知。JSON 含观察时间、输入和执行记录摘要、逐仓结果、PR 结果及拒绝原因。该检查不创建锁，也不会自动拦截 Codex。通过只描述本次观察；后续写入仍须遵守既有授权、交接与原写入口的 expected-head 校验，不能把旧回执当作未来写入许可。
