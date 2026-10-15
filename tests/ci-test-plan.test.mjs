@@ -186,6 +186,21 @@ test('wrapper arguments keep lexical ownership, parameter positions and byte-rea
   assert.ok(plan.files.includes('tests/position.test.mjs'));
   assert.ok(!plan.files.includes('tests/wrapper.test.mjs'), JSON.stringify(plan));
 });
+test('repeated local binding references still produce a finite real consumer plan', (t) => {
+  const f = fixture(t);
+  const declarations = ["const edge0 = '../src/value.ts';"];
+  for (let index = 1; index <= 20; index++)
+    declarations.push(`const edge${index} = [edge${index - 1}, edge${index - 1}];`);
+  f.put(
+    f.root,
+    'tests/repeated.test.mjs',
+    declarations.join('\n') + '\nbuild({entryPoints:[edge20]});',
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.ok(f.plan().files.includes('tests/repeated.test.mjs'));
+});
 test('reading policy and package metadata does not execute the source paths listed in them', (t) => {
   const f = fixture(t);
   f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });

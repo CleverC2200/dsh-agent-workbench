@@ -115,11 +115,13 @@ function references(file, roots, known, importsOnly = false) {
         if (binding && (!owner || binding.scope.length > owner.scope.length)) {
           const key = 'binding:' + binding.start;
           if (visited.has(key)) continue;
-          names.push(...pathNames(binding.start, binding.end, new Set([...visited, key])));
+          visited.add(key);
+          names.push(...pathNames(binding.start, binding.end, visited));
         } else if (owner) {
           const parameter = owner.parameters.indexOf(token);
           const key = `parameter:${owner.body}:${parameter}`;
           if (visited.has(key)) continue;
+          visited.add(key);
           for (let call = 0; call < tokens.length; call++) {
             if (
               tokens[call] !== owner.name ||
@@ -161,8 +163,7 @@ function references(file, roots, known, importsOnly = false) {
             )
               continue;
             const argument = argumentsOf(call + 1)[parameter];
-            if (argument)
-              names.push(...pathNames(argument.start, argument.end, new Set([...visited, key])));
+            if (argument) names.push(...pathNames(argument.start, argument.end, visited));
           }
         }
       }
