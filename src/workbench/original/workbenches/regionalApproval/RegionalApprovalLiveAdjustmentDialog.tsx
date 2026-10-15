@@ -37,7 +37,7 @@ import {
   formatExactDecimal,
   type RegionalApprovalLiveRow,
 } from './regionalApprovalQueryModel.ts';
-import type { ApprovalDimension } from './regionalApprovalFixture.ts';
+import type { ApprovalDimension } from './salesPlanDomain.ts';
 import styles from './RegionalApprovalLiveAdjustmentDialog.module.css';
 import { useSalesPlanAdvice } from './hooks/useSalesPlanAdvice.ts';
 

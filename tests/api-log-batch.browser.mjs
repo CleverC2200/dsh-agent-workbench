@@ -382,6 +382,6 @@ test('Native identity scope changes cancel the old batch even when the user stay
   await f.page.getByRole('button', { name: '批量', exact: true }).click();
   await expect(f.page.getByRole('combobox', { name: '选择重发批次', exact: true })).toHaveCount(0);
   assert.deepEqual(f.business.apiLogBatchRead({}), []);
-  await expect.poll(() => f.business.apiLogSnapshot({}).records[0].outcome).toBe('error');
+  await expect.poll(() => f.business.apiLogSnapshot({}).records).toEqual([]);
   assert.equal(f.requests.length, 2);
 });

@@ -9,6 +9,27 @@ type LoginPresentation =
   | { state: 'expired'; image: string }
   | { state: 'error'; message: string };
 
+type LoginCopyKey = Extract<
+  CopyKey,
+  | 'close'
+  | 'login'
+  | 'welcomeLogin'
+  | 'scanInstructions'
+  | 'qrUnavailable'
+  | 'qrPreparing'
+  | 'qrExpired'
+  | 'qrWaiting'
+  | 'qrExpiredHint'
+  | 'environment'
+  | 'production'
+  | 'test'
+  | 'refreshQr'
+  | 'failure'
+  | 'loginTipTitle'
+  | 'loginTip'
+  | 'loginFooter'
+>;
+
 /** Presentation only; the GEA Host owns the QR challenge and authenticated identity. */
 export function LoginDialog({
   account,
@@ -19,13 +40,27 @@ export function LoginDialog({
   t: (key: CopyKey) => string;
   onClose: () => void;
 }) {
-  const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
-  const [revision, setRevision] = useState(0);
   const identity = useSyncExternalStore(
     account.subscribe,
     account.getSnapshot,
     account.getSnapshot,
   );
+  return <LoginSurface identity={identity} account={account} t={t} onClose={onClose} />;
+}
+
+export function LoginSurface({
+  account,
+  identity,
+  t,
+  onClose,
+}: {
+  account: Pick<BusinessAccount, 'startLogin' | 'pollLogin'>;
+  identity: ReturnType<BusinessAccount['getSnapshot']>;
+  t: (key: LoginCopyKey) => string;
+  onClose?: () => void;
+}) {
+  const [presentation, setPresentation] = useState<LoginPresentation>({ state: 'preparing' });
+  const [revision, setRevision] = useState(0);
   // This is the user's requested QR environment, not a client-owned authentication state.
   const [requestedEnvironment, setRequestedEnvironment] = useState<BusinessEnvironment>();
   const environment = requestedEnvironment ?? identity.status?.environment;
@@ -96,24 +131,25 @@ export function LoginDialog({
     presentation.state === 'waiting' || presentation.state === 'expired'
       ? presentation.image
       : undefined;
+  const Container = onClose ? 'div' : 'main';
   return (
-    <div
+    <Container
       className="gea-account-login-backdrop gea-login-page"
       onClick={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) onClose?.();
       }}
     >
       <section
-        role="dialog"
-        aria-modal="true"
+        role={onClose ? 'dialog' : undefined}
+        aria-modal={onClose ? true : undefined}
         aria-label={t('login')}
         className="gea-account-login-dialog gea-login-card"
         onKeyDown={(event) => {
           if (event.key === 'Escape') {
             event.preventDefault();
-            onClose();
+            onClose?.();
           }
-          if (event.key === 'Tab') {
+          if (onClose && event.key === 'Tab') {
             const controls = Array.from(
               event.currentTarget.querySelectorAll<HTMLElement>(
                 'button:not(:disabled), input:not(:disabled)',
@@ -135,24 +171,26 @@ export function LoginDialog({
           }
         }}
       >
-        <button
-          ref={close}
-          type="button"
-          className="gea-account-login-close"
-          aria-label={t('close')}
-          title={t('close')}
-          onClick={onClose}
-        >
-          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
-            <path
-              d="m4 4 8 8M12 4l-8 8"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
+        {onClose && (
+          <button
+            ref={close}
+            type="button"
+            className="gea-account-login-close"
+            aria-label={t('close')}
+            title={t('close')}
+            onClick={onClose}
+          >
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+              <path
+                d="m4 4 8 8M12 4l-8 8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        )}
         <img className="gea-login-logo" src={logo} alt="GEA" width="56" height="56" />
         <h2>{t('welcomeLogin')}</h2>
         <p>{t('scanInstructions')}</p>
@@ -220,6 +258,6 @@ export function LoginDialog({
         </aside>
         <footer>{t('loginFooter')}</footer>
       </section>
-    </div>
+    </Container>
   );
 }

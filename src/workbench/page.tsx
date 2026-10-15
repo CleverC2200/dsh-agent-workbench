@@ -16,13 +16,10 @@ import commonEn from './original/en-US.json' with { type: 'json' };
 import commonZh from './original/zh-CN.json' with { type: 'json' };
 
 import { salesPlanStagesForRoles } from './original/workbenches/regionalApproval/models/salesPlanAccessModel.ts';
-import type {
-  NativeBusinessStatus as Status,
-  NativePreview as Preview,
-} from './business-contract.ts';
+import type { NativeBusinessStatus as Status } from './business-contract.ts';
 import type { CopyKey } from '../client/locales.ts';
 import './workbench.css';
-import logo from './gea-logo.png';
+import { LoginSurface } from '../company/login-dialog.tsx';
 import { mountPicker } from '../page-interaction/picker.ts';
 import { ApiLogCenter } from './api-log-center.tsx';
 import './api-log.css';
@@ -33,17 +30,7 @@ import {
   type PageBridgeApplyResult,
 } from '../page-interaction/page-bridge/client.ts';
 
-/** 宿主按能力契约给出的模块索引：页面用它把 pageId 映射到受管 consumerCode。 */
-type _ModuleInfo = {
-  id: string;
-  label: string;
-  surface?: string;
-  consumerCode?: string;
-  pageIds: string[];
-};
-
 type Translate = (key: CopyKey) => string;
-type AnalysisScope = 'summary' | 'details';
 type VisibleWorkbenchContext = {
   format: 'gea-workbench-visible-v1';
   sequence: number;
@@ -199,9 +186,6 @@ function query<T>(kind: string, input: { signal?: AbortSignal } = {}): Promise<T
   const { signal, ...fields } = input;
   return rpc<T>('workbench/query', { kind, query: fields }, signal);
 }
-const _unavailable = async (): Promise<never> => {
-  throw new Error('GEA_WRITE_ADAPTER_NOT_CONNECTED');
-};
 const loadWorkflow = createWorkflowLoader((signal) => rpc('workflow/config', {}, signal));
 export const workbenchHost: WorkbenchHost = {
   salesPlan: {
@@ -227,7 +211,6 @@ export const workbenchHost: WorkbenchHost = {
   },
 };
 const host = workbenchHost;
-const salesPlan = host.salesPlan;
 const resubmitClient = {
   detail: host.salesPlan.detail,
   versionSkus: host.salesPlan.versionSkus,
@@ -238,6 +221,20 @@ const resubmitClient = {
       if (!state.user) throw new Error('LOGIN_REQUIRED');
       return { id: state.user.id, username: state.user.username };
     },
+  },
+};
+
+const nativeLogin = {
+  startLogin: (signal: AbortSignal, environment: Status['environment']) =>
+    rpc<{ image: string; loginId: string; expiresIn: number }>(
+      'login/start',
+      { environment },
+      signal,
+    ),
+  pollLogin: async (loginId: string, signal: AbortSignal) => {
+    const result = await rpc<{ status: string }>('login/poll', { loginId }, signal);
+    if (result.status === 'expired') throw Error('二维码已过期，请重新登录。');
+    return result.status === 'authenticated';
   },
 };
 
@@ -275,7 +272,6 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     scope: string | null;
     status: Status | null;
   }>();
-  const [loginEnvironment, setLoginEnvironment] = useState<Status['environment']>();
   const status: Status | undefined =
     identity?.state === 'confirmed' && identity.status && businessStatus?.scope === identity.scope
       ? {
@@ -299,15 +295,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     setResubmit(undefined);
     if (!directApiLog) setApiLogOpen(false);
   }, [directApiLog, status?.environment, status?.user?.id]);
-  const [qr, setQr] = useState<{ image: string; loginId: string }>();
-  const [expired, setExpired] = useState(false);
-  const [qrRefresh, setQrRefresh] = useState(0);
-  const [_modelState, setModelState] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [_selection, setSelection] = useState<string[]>([]);
-  const [_analysisScope, _setAnalysisScope] = useState<AnalysisScope>('summary');
-  const [_preview, setPreview] = useState<Preview>();
+  const [statusError, setError] = useState('');
   const [pageConnection, setPageConnection] = useState<{ sessionId: string; owner: string } | null>(
     null,
   );
@@ -354,8 +342,6 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       window.removeEventListener('message', onMessage);
     };
   }, []);
-  const request = useRef<AbortController>();
-  const selectionRef = useRef('');
   const contextSequence = useRef(0);
   const contextRef = useRef('');
   const [conversationContext, setConversationContext] = useState<VisibleWorkbenchContext>();
@@ -391,31 +377,6 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       contextRef.current = nextKey;
       contextSequence.current = nextSequence;
       setConversationContext(nextContext);
-    }
-    const ids =
-      context.evidence.source === 'gea-user-session' && context.evidence.queryState === 'success'
-        ? context.selectedEntities
-            .filter((entity) => entity.source === 'gea')
-            .map((entity) => entity.id)
-        : [];
-    const selectedIds = [...new Set(ids)].sort();
-    const key = JSON.stringify({
-      selectedIds,
-      scope: context.scope,
-      evidence: context.evidence,
-      selectedVersions: context.selectedEntities.map((entity) => [
-        entity.id,
-        entity.versionId,
-        entity.seq,
-        entity.status,
-      ]),
-    });
-    if (key !== selectionRef.current) {
-      selectionRef.current = key;
-      setSelection(selectedIds);
-      setPreview(undefined);
-      request.current?.abort();
-      setBusy(false);
     }
   }, []);
   useEffect(() => {
@@ -497,114 +458,14 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       });
     return () => {
       controller.abort();
-      request.current?.abort();
     };
   }, [identity?.state, identity?.scope]);
-  useEffect(() => {
-    if (!qr) return;
-    const controller = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    const poll = async () => {
-      try {
-        const value = await rpc<Status & { status: string }>(
-          'login/poll',
-          { loginId: qr.loginId },
-          controller.signal,
-        );
-        if (controller.signal.aborted) return;
-        if (value.status === 'authenticated') {
-          setStatus(value);
-          setQr(undefined);
-          return;
-        }
-        if (value.status === 'expired') {
-          setExpired(true);
-          return;
-        }
-        timer = setTimeout(poll, 1000);
-      } catch (error) {
-        if (!controller.signal.aborted) setError(requestErrorMessage(error, t));
-      }
-    };
-    timer = setTimeout(poll, 500);
-    return () => {
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [qr]);
-  const _run = async (work: (signal: AbortSignal) => Promise<void>) => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setBusy(true);
-    setError('');
-    try {
-      await work(controller.signal);
-    } catch (error) {
-      if (!controller.signal.aborted) {
-        setError(requestErrorMessage(error, t));
-        if (error instanceof BackendHttpError && error.status === 401)
-          window.parent.postMessage({ type: 'gea:identity' }, window.location.origin);
-      }
-    } finally {
-      if (request.current === controller) setBusy(false);
-    }
-  };
-  useEffect(() => {
-    if (!status || status.authenticated) return;
-    const controller = new AbortController();
-    request.current?.abort();
-    request.current = controller;
-    setBusy(true);
-    setError('');
-    setQr(undefined);
-    setExpired(false);
-    void rpc<{ image: string; loginId: string }>(
-      'login/start',
-      { environment: loginEnvironment ?? status.environment },
-      controller.signal,
-    )
-      .then((value) => {
-        if (!controller.signal.aborted) setQr(value);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setError(requestErrorMessage(error, t));
-      })
-      .finally(() => {
-        if (request.current === controller) setBusy(false);
-      });
-    return () => controller.abort();
-  }, [status?.authenticated, status?.environment, loginEnvironment, qrRefresh]);
-  useEffect(() => {
-    setModelState('');
-    if (!status?.authenticated || status.mode !== 'model') return;
-    const controller = new AbortController();
-    setModelState(t('modelDiscovering'));
-    void rpc<{ models: string[]; selected: string; selectedName: string }>(
-      'model/discover',
-      {},
-      controller.signal,
-    )
-      .then((value) => {
-        if (!controller.signal.aborted) setModelState(t('modelDiscovered') + value.selectedName);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) {
-          const code = error instanceof BackendHttpError ? error.code : '';
-          setModelState(
-            code === 'LOGIN_REQUIRED'
-              ? '请先登录 GEA 后再使用个人模型'
-              : t('modelFailed') + (code || requestErrorMessage(error, t)),
-          );
-        }
-      });
-    return () => controller.abort();
-  }, [status?.authenticated, status?.environment]);
   // 面板切换会重建本文档：首次 status 返回前先显示中性加载态，
   // 避免刚切进业务面板时闪出「扫码登录」页面。
   if (!status)
     return (
       <main className="gea-workbench-boot" aria-busy="true" aria-label={t('loading')}>
+        {statusError && <p role="alert">{statusError}</p>}
         <span className="gea-wait-dots" aria-hidden="true">
           <i />
           <i />
@@ -613,79 +474,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       </main>
     );
   if (!status.authenticated)
-    return (
-      <main className="gea-login-page">
-        <section className="gea-login-card" aria-label="GEA">
-          <img className="gea-login-logo" src={logo} alt="GEA" width="56" height="56" />
-          <h2>{t('welcomeLogin')}</h2>
-          <p>{t('scanInstructions')}</p>
-          <div
-            className={`gea-login-qr${expired ? ' is-expired' : ''}`}
-            aria-busy={busy || (!status && !error)}
-          >
-            {qr ? (
-              <img src={qr.image} alt={t('login')} width="220" height="220" />
-            ) : (
-              <div className="gea-qr-placeholder" role="status">
-                {!error && (
-                  <span className="gea-wait-dots" aria-hidden="true">
-                    <i />
-                    <i />
-                    <i />
-                  </span>
-                )}
-                <span>{t(error ? 'qrUnavailable' : 'qrPreparing')}</span>
-              </div>
-            )}
-            {expired && (
-              <div className="gea-qr-expired">
-                <p>{t('qrExpired')}</p>
-              </div>
-            )}
-          </div>
-          <p className="gea-login-status" role="status" aria-live="polite">
-            {qr && !expired && !error && <span className="gea-ready-dot" aria-hidden="true" />}
-            {qr && !error ? t(expired ? 'qrExpiredHint' : 'qrWaiting') : null}
-          </p>
-          <fieldset disabled={busy || !status} className="gea-environments">
-            <legend>{t('environment')}</legend>
-            {(status?.environments ?? ['production', 'test']).map((environment) => (
-              <label key={environment}>
-                <input
-                  type="radio"
-                  name="environment"
-                  value={environment}
-                  checked={(loginEnvironment ?? status?.environment) === environment}
-                  onChange={() => {
-                    setLoginEnvironment(environment as Status['environment']);
-                    setQr(undefined);
-                    setExpired(false);
-                    setPreview(undefined);
-                    setSelection([]);
-                    setPageConnection(null);
-                  }}
-                />
-                <span>{t(environment === 'production' ? 'production' : 'test')}</span>
-              </label>
-            ))}
-          </fieldset>
-          <button
-            type="button"
-            className="gea-login-submit"
-            disabled={busy || !status}
-            onClick={() => setQrRefresh((value) => value + 1)}
-          >
-            {busy ? t('qrPreparing') : t('refreshQr')}
-          </button>
-          {error && <p role="alert">{error}</p>}
-          <aside className="gea-login-tip">
-            <strong>{t('loginTipTitle')}</strong>
-            <p>{t('loginTip')}</p>
-          </aside>
-          <footer>{t('loginFooter')}</footer>
-        </section>
-      </main>
-    );
+    return <LoginSurface identity={identity!} account={nativeLogin} t={t} />;
   return (
     <div className="gea-workbench-document">
       {apiLogOpen ? (
@@ -704,13 +493,8 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}
                 onContextChange={onContextChange}
-                queryClient={salesPlan}
-                detailClient={salesPlan}
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
-                liveActionClient={{
-                  action: { invoke: (input) => rpc('sales-plan/action', input) },
-                }}
                 onResubmit={(planId, versionId, period) =>
                   setResubmit({ planId, versionId, period })
                 }
@@ -736,7 +520,6 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 t={locale.t.bind(locale)}
                 onClose={() => setResubmit(undefined)}
                 onSucceeded={() => {
-                  setSelection([]);
                   setWorkbenchRevision((value) => value + 1);
                 }}
               />

@@ -7,7 +7,7 @@ import type {
   GeaSalesPlanPeriod,
   GeaSalesPlanSku,
 } from '../../bridge.ts';
-import type { ApprovalDimension, ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalDimension, ApprovalStageId } from './salesPlanDomain.ts';
 
 // Y 链的待处理状态投影；其他链通过 salesPlanWorkflow 解析。
 export const SALES_PLAN_STATUS_BY_STAGE: Record<ApprovalStageId, number> = {

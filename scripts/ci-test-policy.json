@@ -63,6 +63,16 @@
       "repo": "dsh-agent-manage",
       "pattern": "^(?:src|scripts|business-resources)/",
       "tests": ["tests/candidate-input.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^src/workbench/original/workbenches/regionalApproval/(?:RegionalApproval(?:ActionDialog|LiveAdjustmentDialog)\\.tsx|RegionalApprovalPlanDetail\\.(?:tsx|module\\.css)|regionalApproval(?:ActionModel|DetailFixture|DetailModel|Fixture|Model)\\.ts|models/salesPlanAdjustmentModel\\.ts)$",
+      "tests": [
+        "tests/sales-plan-detail.browser.mjs",
+        "tests/role-approval.test.mjs",
+        "tests/approval-visibility.test.mjs",
+        "tests/regional-state-restore.test.mjs"
+      ]
     }
   ]
 }

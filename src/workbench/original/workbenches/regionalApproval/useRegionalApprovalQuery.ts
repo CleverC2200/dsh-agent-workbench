@@ -23,8 +23,8 @@ import {
   type RegionalApprovalQueryScope,
   type SalesPlanStageTally,
 } from './regionalApprovalQueryModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
-import { REGIONAL_PLAN_EVALUATION_STATUSES } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
+import { REGIONAL_PLAN_EVALUATION_STATUSES } from './salesPlanDomain.ts';
 import type { SalesPlanApprovalRole } from './models/salesPlanAccessModel.ts';
 
 const QUERY_TIMEOUT_MS = 15_000;
@@ -116,7 +116,7 @@ export const useRegionalApprovalQuery = ({
   stage,
   roles,
 }: {
-  client?: SalesPlanQueryClient | null;
+  client?: SalesPlanQueryClient;
   page: number;
   pageSize: number;
   scope?: RegionalApprovalQueryScope;
@@ -127,7 +127,7 @@ export const useRegionalApprovalQuery = ({
   roles?: readonly ApprovalStageId[];
 }) => {
   const host = useWorkbenchHost();
-  const client = suppliedClient === undefined ? host.salesPlan : suppliedClient;
+  const client = suppliedClient ?? host.salesPlan;
   const [analysisResult, setAnalysisResult] =
     useState<QueryState<{ summary: SalesPlanAnalysisSummary; records: GeaSalesPlanListItem[] }>>(
       idle,
@@ -573,7 +573,6 @@ export const useRegionalApprovalQuery = ({
   return {
     analysisSummary,
     analysisRecords: analysisResult.status === 'success' ? analysisResult.data.records : undefined,
-    enabled: client !== null,
     periodsState,
     queueState,
     progressState,

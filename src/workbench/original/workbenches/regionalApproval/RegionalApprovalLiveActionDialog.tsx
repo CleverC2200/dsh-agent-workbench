@@ -30,7 +30,7 @@ import {
   formatExactDecimal,
   type RegionalApprovalLiveRow,
 } from './regionalApprovalQueryModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';

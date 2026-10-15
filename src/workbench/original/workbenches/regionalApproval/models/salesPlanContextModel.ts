@@ -1,13 +1,10 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { GeaSalesPlanActionReceipt, GeaSalesPlanListItem } from '../../../bridge.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export type SalesPlanContextApprovalStage = ApprovalStageId | 'all';
 
-export type SalesPlanContextSource =
-  | 'fixture'
-  | 'gea-user-session-query'
-  | 'gea-user-session-action';
+export type SalesPlanContextSource = 'gea-user-session-query' | 'gea-user-session-action';
 
 export type SalesPlanContextFilterSummary = {
   periodMonth?: string;
@@ -64,13 +61,6 @@ export const buildSalesPlanFilterSummary = ({
   organizationFilterCount: Object.values(appliedFilters).filter(
     (value) => typeof value === 'string' && value.length > 0 && value !== 'all',
   ).length,
-});
-
-export const projectFixtureSalesPlanContext = (
-  filterSummary: SalesPlanContextFilterSummary,
-): SalesPlanAuthorityContext => ({
-  source: 'fixture',
-  filterSummary,
 });
 
 export const projectSalesPlanQueryContext = (

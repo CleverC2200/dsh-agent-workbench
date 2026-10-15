@@ -42,7 +42,12 @@ function fixture(t, repo = 'dsh-agent-workbench') {
     schemaVersion: 1,
     required: ['tests/required.test.mjs'],
     tests: ['tests/*.test.mjs'],
-    rules: [{ pattern: '^scripts/ci-test-policy\\.json$', tests: ['tests/required.test.mjs'] }],
+    rules: [
+      {
+        pattern: '^scripts/ci-test-policy\\.json$',
+        tests: ['tests/required.test.mjs'],
+      },
+    ],
   };
   put(root, 'scripts/ci-test-policy.json', JSON.stringify(policy));
   put(root, 'scripts/quality-peer-baseline.json', JSON.stringify({ repositories }));
@@ -103,7 +108,10 @@ test('unmapped runtime source refuses before preparation; no full-suite fallback
 });
 test('explicit dynamic-consumer rules select real files and missing required files refuse', (t) => {
   const f = fixture(t);
-  f.policy.rules.push({ pattern: '^src/dynamic\\.ts$', tests: ['tests/peer.test.mjs'] });
+  f.policy.rules.push({
+    pattern: '^src/dynamic\\.ts$',
+    tests: ['tests/peer.test.mjs'],
+  });
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   f.put(f.root, 'src/dynamic.ts', 'export const dynamic = true;');
   f.repositories[0].head = f.commit(f.root);
@@ -115,7 +123,11 @@ test('invalid base commits and policy paths refuse rather than interpreting refs
   const f = fixture(t);
   assert.throws(
     () =>
-      selectCiTests({ repositories: f.repositories, repo: 'dsh-agent-workbench', base: 'main' }),
+      selectCiTests({
+        repositories: f.repositories,
+        repo: 'dsh-agent-workbench',
+        base: 'main',
+      }),
     /CI_TEST_BASE_REQUIRED/,
   );
   f.policy.required = ['../other.test.mjs'];
@@ -244,3 +256,44 @@ for (const repo of ['dsh-agent-workbench', 'dsh-gea-plugin']) {
     assert.equal(plan.fullSuite, 'not-run');
   });
 }
+test('approval retirement and retained domain-type migration select current behavioral contracts', async (t) => {
+  const production = JSON.parse(
+    readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
+  );
+  const consumers = [
+    'tests/sales-plan-detail.browser.mjs',
+    'tests/role-approval.test.mjs',
+    'tests/approval-visibility.test.mjs',
+    'tests/regional-state-restore.test.mjs',
+  ];
+  for (const name of [
+    'RegionalApprovalActionDialog.tsx',
+    'RegionalApprovalLiveAdjustmentDialog.tsx',
+    'models/salesPlanAdjustmentModel.ts',
+    'RegionalApprovalPlanDetail.module.css',
+    'RegionalApprovalPlanDetail.tsx',
+    'regionalApprovalActionModel.ts',
+    'regionalApprovalDetailFixture.ts',
+    'regionalApprovalDetailModel.ts',
+    'regionalApprovalFixture.ts',
+    'regionalApprovalModel.ts',
+  ])
+    await t.test(name, (t) => {
+      const f = fixture(t);
+      const source = 'src/workbench/original/workbenches/regionalApproval/' + name;
+      f.policy.rules = production.rules;
+      f.policy.tests.push('tests/*.browser.mjs');
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      for (const file of consumers) f.put(f.root, file, 'export const fixture = true;');
+      f.put(f.root, source, 'export const retired = true;');
+      f.checkpoint();
+      unlinkSync(join(f.root, source));
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.deepEqual(plan.reasons['dsh-agent-workbench/' + source], [...consumers].sort());
+      assert.ok(plan.files.includes('tests/required.test.mjs'));
+      assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+      assert.equal(plan.browser, true);
+      assert.equal(plan.fullSuite, 'not-run');
+    });
+});
