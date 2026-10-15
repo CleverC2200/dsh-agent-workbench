@@ -14,13 +14,114 @@ const sourceFile = /\.(?:[cm]?[jt]sx?|css|html|json|ya?ml)$/;
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
 function references(file, roots, known, importsOnly = false) {
-  const result = new Set();
+  const result = new Map();
+  if (/\.(?:json|ya?ml)$/.test(file)) return result;
   const text = readFileSync(file, 'utf8');
-  const pattern = importsOnly
-    ? /(?:\b(?:from|import)\s*|\b(?:import|require)\s*\()\s*["']([^"'\n]+)["']/g
-    : /["'`]([^"'`\n]+)["'`]/g;
-  for (const [, name] of text.matchAll(pattern)) {
-    if (name.includes('${') || !sourceFile.test(name) || name.length > 300) continue;
+  // Keep comments and quoted examples out of the executable syntax we inspect.
+  const tokens = (
+    text.match(
+      /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s]/g,
+    ) ?? []
+  ).filter((token) => !token.startsWith('//') && !token.startsWith('/*'));
+  const literal = (token) => /^["'`]/.test(token ?? '');
+  const endOf = (start) => {
+    const closers = [];
+    for (let end = start; end < tokens.length; end++) {
+      const token = tokens[end];
+      if (['(', '[', '{'].includes(token)) closers.push({ '(': ')', '[': ']', '{': '}' }[token]);
+      else if (token === closers.at(-1)) {
+        closers.pop();
+        if (!closers.length) return end;
+      }
+    }
+    return start;
+  };
+  const bindings = new Map();
+  const scopes = [];
+  const scope = [];
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index] === '}') scope.pop();
+    scopes[index] = [...scope];
+    if (tokens[index] === '{') scope.push(index);
+  }
+  for (let index = 0; index < tokens.length; index++) {
+    if (!['const', 'let'].includes(tokens[index]) || tokens[index + 2] !== '=') continue;
+    const start = index + 3;
+    let end = start;
+    while (end < tokens.length && ![';', ','].includes(tokens[end])) {
+      if (['(', '[', '{'].includes(tokens[end])) end = endOf(end);
+      end++;
+    }
+    const name = tokens[index + 1];
+    if (!bindings.has(name)) bindings.set(name, []);
+    bindings.get(name).push({ start, end: end - 1, scope: scopes[index] });
+  }
+  const pathNames = (start, end, visited = new Set()) => {
+    const names = [];
+    for (let cursor = start; cursor <= end; cursor++) {
+      const token = tokens[cursor];
+      if (literal(token)) names.push(token.slice(1, -1));
+      else if (bindings.has(token) && !visited.has(token)) {
+        const binding = bindings
+          .get(token)
+          .findLast(
+            (entry) =>
+              entry.start < cursor &&
+              entry.scope.every((block, index) => scopes[cursor][index] === block),
+          );
+        if (!binding) continue;
+        visited.add(token);
+        names.push(...pathNames(binding.start, binding.end, visited));
+      }
+    }
+    return names;
+  };
+  const names = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index];
+    if (['from', 'import'].includes(token) && literal(tokens[index + 1]))
+      names.push([tokens[index + 1].slice(1, -1), true]);
+    if (
+      ['import', 'require'].includes(token) &&
+      tokens[index + 1] === '(' &&
+      literal(tokens[index + 2])
+    )
+      names.push([tokens[index + 2].slice(1, -1), true]);
+    if (importsOnly) continue;
+    let start;
+    let recursive;
+    if (token === 'entryPoints' && tokens[index + 1] === ':' && tokens[index + 2] === '[') {
+      start = index + 2;
+      recursive = true;
+    } else if (['readFile', 'readFileSync'].includes(token) && tokens[index + 1] === '(') {
+      start = index + 1;
+      recursive = false;
+    } else if (
+      ['spawn', 'spawnSync', 'execFile', 'execFileSync', 'fork'].includes(token) &&
+      tokens[index + 1] === '('
+    ) {
+      start = index + 1;
+      recursive = true;
+    } else if (
+      token === 'name' &&
+      tokens[index + 1] === ':' &&
+      ['resolve', 'join'].includes(tokens[index + 2]) &&
+      tokens[index + 3] === '('
+    ) {
+      // Cordis plugin entries execute the named module, including lib -> src inputs.
+      start = index + 3;
+      recursive = true;
+    }
+    if (start === undefined) continue;
+    for (const name of pathNames(start, endOf(start))) names.push([name, recursive]);
+  }
+  for (const [name, recursive] of names) {
+    if (
+      name.includes('${') ||
+      (!sourceFile.test(name) && !(recursive && name.startsWith('.'))) ||
+      name.length > 300
+    )
+      continue;
     const owner = roots.find((root) => file.startsWith(root + '/'));
     for (const base of [dirname(file), owner].filter(Boolean)) {
       const target = resolve(base, name);
@@ -30,8 +131,11 @@ function references(file, roots, known, importsOnly = false) {
         target.replace(/\.js$/, '.tsx'),
         target.replace(/\/lib\//, '/src/').replace(/\.js$/, '.ts'),
         target.replace(/\/lib\//, '/src/').replace(/\.js$/, '.tsx'),
+        ...['.ts', '.tsx', '.js', '.mjs', '/index.ts', '/index.tsx', '/index.js', '/index.mjs'].map(
+          (extension) => target + extension,
+        ),
       ])
-        if (known.has(candidate)) result.add(candidate);
+        if (known.has(candidate)) result.set(candidate, result.get(candidate) || recursive);
     }
   }
   return result;
@@ -112,7 +216,7 @@ export function selectCiTests({
         key,
         existsSync(file) && sourceFile.test(file)
           ? references(file, roots, known, importsOnly)
-          : new Set(),
+          : new Map(),
       );
     return graph.get(key);
   };
@@ -120,8 +224,9 @@ export function selectCiTests({
     if (start === target) return true;
     if (visited.has(start)) return false;
     visited.add(start);
-    return [...dependencies(start, importsOnly)].some((next) =>
-      reaches(next, target, visited, importsOnly),
+    return [...dependencies(start, importsOnly)].some(
+      ([next, recursive]) =>
+        next === target || (recursive && reaches(next, target, visited, importsOnly)),
     );
   };
   const selected = new Set(required),
