@@ -5,4 +5,4 @@ export * from './workbench/original/workbenches/regionalApproval/models/salesPla
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanAccessModel.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanActionModel.ts';
 export * from './workbench/original/workbenches/regionalApproval/models/salesPlanSubmitModel.ts';
-export type { ApprovalStageId } from './workbench/original/workbenches/regionalApproval/regionalApprovalFixture.ts';
+export type { ApprovalStageId } from './workbench/original/workbenches/regionalApproval/salesPlanDomain.ts';

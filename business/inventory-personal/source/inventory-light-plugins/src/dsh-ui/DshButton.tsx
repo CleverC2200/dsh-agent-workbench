@@ -22,13 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 */
-// Button: token-styled button atom. Variants map to the --dsw-alias-button-*
-// fill families; no framework imports, all behavior via props.
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import css from './Button.module.css';
 
-/** Visual variant, each backed by its --dsw-alias-button-* token family. */
 export type ButtonVariant = 'primary' | 'ghost' | 'outline' | 'toolbar';
 
 /**

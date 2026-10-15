@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import { useWorkbenchHost, type GeaSalesPlanSku } from '../../bridge.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 import { formatExactDecimal } from './regionalApprovalQueryModel.ts';
 import { summarizeGroupSkus, type GroupSkuSummaryRow } from './models/salesPlanGroupSkuModel.ts';
