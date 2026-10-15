@@ -15,7 +15,6 @@ import {
   type NativeResourceSelection,
 } from './resource-selection.ts';
 import { mountCompanyUI } from './company/ui.tsx';
-import { mountInventoryEntry } from './inventory-entry.tsx';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import {
@@ -62,10 +61,6 @@ const zh = {
   selectionFailed: '资源选用失败，请重试。',
   resourceWorking: '正在装载',
   resourcesRefresh: '刷新资源',
-  inventoryEntry: '使用基地库存 Agent 分析',
-  inventoryEntryHint:
-    '创建业务会话并复制输入框中的问题；输入框为空时使用最近一条用户问题。保留原会话，页面连接完成后由你发送。',
-  inventoryEntryFailed: '基地库存业务会话创建失败。请核对资源、登录状态和工作区后重试。',
   pageConnect: '连接页面与原生对话',
   pageNewChat: '开始新的页面对话',
   pageWorking: '正在连接…',
@@ -99,11 +94,6 @@ const en = {
   selectionFailed: 'Unable to select this resource. Please retry.',
   resourceWorking: 'Loading',
   resourcesRefresh: 'Refresh resources',
-  inventoryEntry: 'Analyze with Base Inventory Agent',
-  inventoryEntryHint:
-    'Copy your input, or the latest user question when the input is empty, into a new business conversation. Your original conversation is retained. Send after the page connects.',
-  inventoryEntryFailed:
-    'Unable to create the base inventory conversation. Check the resource, sign-in and workspace, then retry.',
   pageConnect: 'Connect page and Conversation',
   pageNewChat: 'Start a new page chat',
   pageWorking: 'Connecting…',
@@ -141,9 +131,35 @@ export function apply(ctx: Context): void {
     document.head.append(style);
     return () => style.remove();
   });
+  const agentLifetime = new AbortController();
+  ctx.effect(() => () => agentLifetime.abort());
   const workbench = new WorkbenchController(
     {
       panel: (id) => ctx.layout.selectPanel(id),
+      startAgent: async (preset) => {
+        const host = nativeResources;
+        if (!host) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
+        const signal = AbortSignal.any([ctx.layout.beginNavigation(), agentLifetime.signal]);
+        signal.throwIfAborted();
+        const sessions = ctx.sessions.list.getSnapshot();
+        if (sessions.phase !== 'ready') throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
+        const current = Object.values(sessions.byId).find(
+          (row) => (row.retainedBy.mainView ?? 0) > 0,
+        );
+        const cwd = await resourceWorkspace(host.fetch, signal, current?.cwd, host.pickDirectory);
+        signal.throwIfAborted();
+        const { workspaceId, path } = await host.workspace(cwd);
+        signal.throwIfAborted();
+        const sessionId = await host.create({ workspaceId });
+        signal.throwIfAborted();
+        await host.select(sessionId, preset);
+        signal.throwIfAborted();
+        await host.open(sessionId, undefined, signal, (projection) => {
+          if (projection.preset !== preset) throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+          if (projection.cwd !== path) throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
+          workbench.leaveDocument();
+        });
+      },
       hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
       document: (id) => {
         if (id) ctx.uiWorkspace.openSession(id);
@@ -313,7 +329,6 @@ export function apply(ctx: Context): void {
       ),
     );
   }
-  mountInventoryEntry(ctx, workbench, () => nativeResources, restorePageSession, t);
   mountCompanyUI(ctx, workbench, Resources, restorePageSession);
   mountBusinessViews(ctx);
   let discoveryError = '';
