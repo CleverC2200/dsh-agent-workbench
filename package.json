@@ -118,7 +118,8 @@
     "test:quality": "node --test scripts/run-quality-checks.test.mjs tests/quality-cli.test.mjs tests/quality-ci.test.mjs tests/hosted-peer-input.test.mjs tests/quality-knowledge.test.mjs tests/candidate-input.test.mjs tests/migration-history-input.test.mjs",
     "test:final-group": "node --test tests/final-group-input.contract.mjs",
     "quality:fast": "node scripts/run-quality-fast.mjs",
-    "quality:ci": "node scripts/run-quality-ci.mjs"
+    "quality:ci": "node scripts/run-quality-ci.mjs",
+    "test:api-log": "node --test --test-concurrency=1 tests/api-log-center.browser.mjs tests/api-log-batch.browser.mjs"
   },
   "repository": {
     "type": "git",

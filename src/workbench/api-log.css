@@ -1,0 +1,836 @@
+/* GEA debugging uses the shared workbench typography and state colors. */
+.gea-api-log-center {
+  --api-accent: #df1732;
+  --api-accent-soft: #fff0f2;
+  --api-ink: #20232a;
+  --api-muted: #858c96;
+  --api-line: #e3e6ea;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  font:
+    12px/1.7 'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    Arial,
+    sans-serif;
+  color: #555d68;
+  background: #fff;
+}
+.gea-api-log-center *,
+.gea-api-log-center *::before,
+.gea-api-log-center *::after {
+  box-sizing: border-box;
+}
+.gea-api-log-center button,
+.gea-api-log-center input {
+  font: inherit;
+}
+.gea-api-log-center button:focus-visible,
+.gea-api-log-center input:focus-visible,
+.gea-api-log-center summary:focus-visible,
+.gea-api-log-center pre:focus-visible {
+  outline: 2px solid var(--api-accent);
+  outline-offset: 2px;
+}
+.AppFrame_frame.gea-api-fullscreen {
+  grid-template-columns: minmax(0, 1fr) 0 0 !important;
+}
+.AppFrame_frame.gea-api-fullscreen .AppFrame_sidebarCol,
+.AppFrame_frame.gea-api-fullscreen .AppFrame_rightbarCol {
+  display: none !important;
+}
+.gea-api-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.gea-api-panel[hidden],
+.gea-api-placeholder[hidden] {
+  display: none;
+}
+.gea-api-main-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 16px;
+  gap: 12px;
+  border-bottom: 1px solid var(--api-line);
+  background: #fff;
+}
+.gea-api-main-tabs {
+  align-self: stretch;
+  display: flex;
+  gap: 8px;
+}
+.gea-api-main-tabs button {
+  position: relative;
+  min-width: 90px;
+  padding: 0 12px;
+  border: 0;
+  background: #fff;
+  color: #555d68;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gea-api-main-tabs button:hover {
+  background: #fffafb;
+  color: var(--api-accent);
+}
+.gea-api-main-tabs button[aria-selected='true'] {
+  color: var(--api-accent);
+  font-weight: 800;
+}
+.gea-api-main-tabs button[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--api-accent);
+}
+.gea-api-context {
+  margin-left: auto;
+  color: var(--api-muted);
+  font-size: 10px;
+}
+.gea-api-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: var(--api-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+}
+.gea-api-placeholder p + p {
+  font-size: 11px;
+}
+.gea-api-log-header {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--api-line);
+  background: #fff;
+}
+.gea-api-log-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.gea-api-log-actions > button,
+.gea-api-main-header > button,
+.gea-api-detail-actions button,
+.gea-api-code-heading button,
+.gea-api-write-confirm button,
+.gea-api-inline-confirm button {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  color: #555d68;
+  background: #fff;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gea-api-log-actions > button:hover:not(:disabled),
+.gea-api-main-header > button:hover,
+.gea-api-code-heading button:hover,
+.gea-api-write-confirm button:hover:not(:disabled),
+.gea-api-inline-confirm button:hover:not(:disabled) {
+  color: var(--api-accent);
+  border-color: #efabb4;
+  background: #fffafb;
+}
+.gea-api-log-center button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.gea-api-log-actions > button.is-active {
+  color: #168e58;
+  border-color: #badcc8;
+  background: #eaf7ef;
+}
+.gea-api-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.gea-api-detail-actions button {
+  color: #fff;
+  background: var(--api-accent);
+  border-color: var(--api-accent);
+}
+.gea-api-detail-actions button:hover:not(:disabled) {
+  background: #c91029;
+  border-color: #c91029;
+}
+.gea-api-search {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 10px;
+  gap: 8px;
+  border: 1px solid #d9dde3;
+  border-radius: 8px;
+  background: #fff;
+}
+.gea-api-search label {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+.gea-api-search:focus-within {
+  outline: 2px solid var(--api-accent);
+  outline-offset: 2px;
+}
+.gea-api-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--api-ink);
+  background: transparent;
+  font-size: 11px;
+}
+.gea-api-search input::placeholder {
+  color: var(--api-muted);
+}
+.gea-api-search button {
+  padding: 2px;
+  border: 0;
+  color: var(--api-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.gea-api-filter-tabs {
+  display: flex;
+  border: 1px solid #d9dde3;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gea-api-filter-tabs button {
+  padding: 4px 9px;
+  border: 0;
+  color: #555d68;
+  background: #fff;
+  font-size: 10px;
+  cursor: pointer;
+}
+.gea-api-filter-tabs button.is-active {
+  background: #f5f6f8;
+  color: var(--api-ink);
+  font-weight: 600;
+}
+.gea-api-filter-tabs button:hover {
+  color: var(--api-accent);
+  background: #fffafb;
+}
+.gea-api-inline-confirm,
+.gea-api-error {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  color: #956900;
+  background: #fff4d9;
+  font-size: 11px;
+}
+.gea-api-inline-confirm span {
+  flex: 1;
+}
+.gea-api-error {
+  color: #c8112a;
+  background: #ffe9ec;
+}
+.gea-api-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 212px minmax(340px, 1fr) 420px;
+}
+.gea-api-catalog,
+.gea-api-call-list,
+.gea-api-detail {
+  min-width: 0;
+  min-height: 0;
+}
+.gea-api-catalog,
+.gea-api-call-list {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--api-line);
+}
+.gea-api-catalog {
+  background: #fafafa;
+}
+.gea-api-pane-heading {
+  flex: 0 0 auto;
+  min-height: 58px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-bottom: 1px solid var(--api-line);
+  background: #fff;
+}
+.gea-api-pane-heading h2 {
+  margin: 0;
+  color: var(--api-ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.gea-api-pane-heading span {
+  color: var(--api-muted);
+  font-size: 10px;
+}
+.gea-api-catalog > .gea-api-log-center .gea-api-catalog-item {
+  flex: 0 0 auto;
+  margin-top: 8px;
+}
+.gea-api-catalog-scroll,
+.gea-api-call-scroll,
+.gea-api-detail {
+  overflow: auto;
+  scrollbar-color: #a0a4ac transparent;
+  scrollbar-width: thin;
+}
+.gea-api-catalog-scroll {
+  padding: 8px 0 16px;
+}
+.gea-api-catalog-scroll section + section {
+  margin-top: 12px;
+}
+.gea-api-catalog-scroll h3 {
+  margin: 0 16px 4px;
+  color: var(--api-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+.gea-api-log-center .gea-api-catalog-item {
+  width: calc(100% - 16px);
+  min-height: 36px;
+  margin: 2px 8px;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #555d68;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  cursor: pointer;
+}
+.gea-api-catalog-item:hover {
+  background: #fffafb;
+  color: var(--api-accent);
+  border-color: #efabb4;
+}
+.gea-api-catalog-item.is-selected {
+  color: var(--api-accent);
+  background: var(--api-accent-soft);
+  border-color: #efabb4;
+}
+.gea-api-catalog-item > span:nth-last-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gea-api-catalog-item strong {
+  color: var(--api-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.gea-api-method {
+  display: inline-flex;
+  align-items: center;
+  min-width: 28px;
+  color: #667085;
+  font:
+    600 9px/1.5 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+.gea-api-method.is-get {
+  color: #168e58;
+}
+.gea-api-method.is-post {
+  color: var(--api-accent);
+}
+.gea-api-call-columns,
+.gea-api-call-row {
+  min-width: 360px;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 60px minmax(130px, 1fr) 68px 60px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+.gea-api-call-columns {
+  min-height: 38px;
+  background: #f5f6f8;
+  color: var(--api-muted);
+  font-size: 9px;
+  font-weight: 800;
+}
+.gea-api-call-row {
+  min-height: 64px;
+  border: 0;
+  border-bottom: 1px solid #eceef1;
+  color: #555d68;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.gea-api-call-row:hover {
+  background: #fffafb;
+}
+.gea-api-call-row.is-selected {
+  background: #fff2f4;
+  box-shadow: inset 3px 0 0 var(--api-accent);
+}
+.gea-api-call-time,
+.gea-api-call-duration {
+  color: var(--api-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.gea-api-call-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gea-api-call-main strong {
+  color: var(--api-ink);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.gea-api-call-main small {
+  color: var(--api-muted);
+  font:
+    9px/1.7 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  overflow-wrap: anywhere;
+}
+.gea-api-replayed {
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #956900;
+  background: #fff4d9;
+  font-size: 8px;
+}
+.gea-api-outcome {
+  display: inline-flex;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.gea-api-outcome.is-success {
+  color: #168e58;
+  background: #eaf7ef;
+}
+.gea-api-outcome.is-error {
+  color: #c8112a;
+  background: #ffe9ec;
+}
+.gea-api-outcome.is-pending {
+  color: #956900;
+  background: #fff4d9;
+}
+.gea-api-detail {
+  padding: 16px;
+  background: #fafafa;
+}
+.gea-api-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.gea-api-detail-heading > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.gea-api-detail-heading h2 {
+  margin: 3px 0 4px;
+  color: var(--api-ink);
+  font-size: 16px;
+  line-height: 1.5;
+}
+.gea-api-detail-heading code {
+  display: block;
+  color: var(--api-muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.gea-api-detail-group {
+  color: var(--api-muted);
+  font-size: 10px;
+}
+.gea-api-facts {
+  margin: 12px 0;
+  display: grid;
+  gap: 4px;
+  font-size: 10px;
+}
+.gea-api-facts div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+}
+.gea-api-facts dt {
+  color: var(--api-muted);
+}
+.gea-api-facts dd {
+  margin: 0;
+  color: #555d68;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.gea-api-write-confirm {
+  margin-top: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: 6px;
+  color: #956900;
+  background: #fff4d9;
+  font-size: 11px;
+}
+.gea-api-write-confirm > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.gea-api-origin {
+  margin: 8px 0;
+  color: #956900;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.gea-api-request-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 1px solid var(--api-line);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 10px;
+}
+.gea-api-request-line code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.gea-api-payload-details {
+  margin-top: 8px;
+}
+.gea-api-payload-details summary {
+  color: var(--api-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.gea-api-code-heading h3 {
+  margin: 0;
+  color: var(--api-ink);
+  font-size: 12px;
+}
+.gea-api-code-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--api-line);
+}
+.gea-api-code-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.gea-api-code-heading button {
+  border: 0;
+  background: transparent;
+  color: var(--api-muted);
+}
+.gea-api-code-section pre {
+  max-height: 260px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 6px;
+  color: #555d68;
+  background: #f5f6f8;
+  font:
+    11px/1.75 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.gea-api-empty {
+  min-height: 180px;
+  height: 100%;
+  padding: 24px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--api-muted);
+  text-align: center;
+  font-size: 11px;
+}
+.gea-api-empty strong {
+  color: var(--api-ink);
+  font-size: 12px;
+}
+.gea-api-empty span {
+  max-width: 280px;
+  line-height: 1.7;
+}
+.gea-api-empty.is-compact {
+  height: auto;
+  min-height: 150px;
+  margin-top: 12px;
+  border-top: 1px solid var(--api-line);
+}
+.gea-api-copy-status {
+  position: fixed;
+  z-index: 40;
+  right: 20px;
+  bottom: 16px;
+  color: #168e58;
+  font-size: 11px;
+  pointer-events: none;
+}
+.gea-api-log-center ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.gea-api-log-center ::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background: #a0a4ac;
+}
+.gea-api-log-center ::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@media (max-width: 1000px) {
+  .gea-api-layout {
+    grid-template-columns: 200px minmax(360px, 1fr);
+    grid-template-rows: minmax(280px, 45%) minmax(0, 1fr);
+  }
+  .gea-api-detail {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--api-line);
+  }
+}
+@media (max-width: 680px) {
+  .gea-api-log-center {
+    overflow: auto;
+  }
+  .gea-api-main-header {
+    flex-wrap: wrap;
+    padding: 0 8px 8px;
+    gap: 4px;
+  }
+  .gea-api-main-tabs {
+    height: 46px;
+  }
+  .gea-api-main-tabs button {
+    min-width: 70px;
+    padding: 0 8px;
+  }
+  .gea-api-main-header > button {
+    margin-left: auto;
+  }
+  .gea-api-context {
+    width: 100%;
+    margin-left: 0;
+    order: 1;
+  }
+  .gea-api-log-header {
+    padding: 8px;
+  }
+  .gea-api-search {
+    flex-basis: 100%;
+  }
+  .gea-api-panel {
+    flex: none;
+  }
+  .gea-api-layout {
+    display: flex;
+    flex-direction: column;
+  }
+  .gea-api-catalog {
+    max-height: 38vh;
+    min-height: 240px;
+    border-right: 0;
+    border-bottom: 1px solid var(--api-line);
+  }
+  .gea-api-call-list {
+    max-height: 52vh;
+    min-height: 280px;
+    border-right: 0;
+    border-bottom: 1px solid var(--api-line);
+  }
+  .gea-api-detail {
+    min-height: 420px;
+    overflow: visible;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gea-api-log-center svg {
+    animation: none !important;
+  }
+}
+
+.gea-api-catalog-selection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.gea-api-catalog-selection > .gea-api-catalog-item {
+  flex: 1;
+  min-width: 0;
+}
+.gea-api-catalog-selection > input {
+  margin-left: 10px;
+  accent-color: var(--api-accent);
+}
+.gea-api-batch-select {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.gea-api-batch {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--api-line);
+  font-size: 12px;
+  max-height: 45vh;
+  overflow: auto;
+}
+.gea-api-batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.gea-api-batch button,
+.gea-api-batch select,
+.gea-api-log-actions > select,
+.gea-api-pane-heading > button {
+  border: 1px solid var(--api-line);
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.gea-api-batch button:hover,
+.gea-api-pane-heading > button:hover {
+  background: var(--api-accent-soft);
+}
+.gea-api-batch-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.gea-api-batch-confirm > div {
+  overflow-wrap: anywhere;
+}
+.gea-api-batch-confirm label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.gea-api-batch ul {
+  padding-left: 18px;
+}
+.gea-api-batch li {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.gea-api-batch button:focus-visible,
+.gea-api-pane-heading > button:focus-visible,
+.gea-api-log-actions > select:focus-visible {
+  outline: 2px solid var(--api-accent);
+  outline-offset: 2px;
+}
+.gea-api-batch button:disabled,
+.gea-api-batch select:disabled,
+.gea-api-pane-heading > button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.gea-api-log-center .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.gea-api-log-center .gea-api-contract {
+  border-block: 1px solid var(--api-line);
+  padding: 10px 0;
+  margin-bottom: 10px;
+}
+.gea-api-log-center .gea-api-contract summary {
+  cursor: pointer;
+}
+.gea-api-log-center .gea-api-field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gea-api-log-center .gea-api-field-list code {
+  padding: 2px 6px;
+  background: var(--api-accent-soft);
+  border-radius: 4px;
+}
