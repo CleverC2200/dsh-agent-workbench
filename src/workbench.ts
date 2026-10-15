@@ -10,6 +10,8 @@ export interface WorkbenchPage {
 }
 export interface AgentWorkbench {
   register(page: WorkbenchPage): () => void;
+  /** Start a fresh native Conversation with this preset; preserve defaults and existing Sessions. */
+  startAgent(preset: string): Promise<void>;
   /** Open a page; a Document restores its associated Core Session without creating one. */
   open(id: MainPanelId): Promise<boolean>;
   /** Contribute a Document inside the actual main Conversation. */
@@ -34,6 +36,7 @@ export interface WorkbenchSnapshot {
 }
 export interface WorkbenchPorts {
   panel(id: MainPanelId): void;
+  startAgent?(preset: string): Promise<void>;
   hasPanel?(id: MainPanelId): boolean;
   document?(sessionId?: SessionId): void;
 }
@@ -161,6 +164,11 @@ export class WorkbenchController implements AgentWorkbench {
       if (this.rememberedPage === page.id) this.rememberedPage = undefined;
       this.changed();
     };
+  }
+  async startAgent(preset: string): Promise<void> {
+    if (this.disposed) throw Error('WORKBENCH_DISPOSED');
+    if (!this.ports.startAgent) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
+    await this.ports.startAgent(preset);
   }
   async open(id: MainPanelId): Promise<boolean> {
     if (this.disposed) return false;

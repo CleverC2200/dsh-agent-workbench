@@ -141,9 +141,35 @@ export function apply(ctx: Context): void {
     document.head.append(style);
     return () => style.remove();
   });
+  const agentLifetime = new AbortController();
+  ctx.effect(() => () => agentLifetime.abort());
   const workbench = new WorkbenchController(
     {
       panel: (id) => ctx.layout.selectPanel(id),
+      startAgent: async (preset) => {
+        const host = nativeResources;
+        if (!host) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
+        const signal = AbortSignal.any([ctx.layout.beginNavigation(), agentLifetime.signal]);
+        signal.throwIfAborted();
+        const sessions = ctx.sessions.list.getSnapshot();
+        if (sessions.phase !== 'ready') throw Error('WORKBENCH_WORKSPACE_UNAVAILABLE');
+        const current = Object.values(sessions.byId).find(
+          (row) => (row.retainedBy.mainView ?? 0) > 0,
+        );
+        const cwd = await resourceWorkspace(host.fetch, signal, current?.cwd, host.pickDirectory);
+        signal.throwIfAborted();
+        const { workspaceId, path } = await host.workspace(cwd);
+        signal.throwIfAborted();
+        const sessionId = await host.create({ workspaceId });
+        signal.throwIfAborted();
+        await host.select(sessionId, preset);
+        signal.throwIfAborted();
+        await host.open(sessionId, undefined, signal, (projection) => {
+          if (projection.preset !== preset) throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+          if (projection.cwd !== path) throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
+          workbench.leaveDocument();
+        });
+      },
       hasPanel: (id) => ctx.slots.entries('main').some((entry) => entry.options.key === id),
       document: (id) => {
         if (id) ctx.uiWorkspace.openSession(id);
