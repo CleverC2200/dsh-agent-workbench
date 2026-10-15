@@ -202,6 +202,8 @@ try {
     run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund']);
     if (values['prepare-browser'] && !values.browser)
       refuse('QUALITY_BROWSER_REQUIRED', '--prepare-browser requires --browser');
+    if (plan.browser && !values.browser)
+      refuse('QUALITY_BROWSER_REQUIRED', 'selected tests require --browser');
     process.env.PLAYWRIGHT_BROWSERS_PATH ??= resolve(
       dirname(dirname(own.path)),
       'playwright-browsers',
@@ -229,6 +231,7 @@ try {
       ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
       resolve('business/inventory-apsplan/source'),
     );
+    const browserFiles = plan.files.filter((file) => file.endsWith('.browser.mjs'));
     const checks = runQualityChecks([
       { name: 'final-group', execute: () => run('npm', ['run', 'test:final-group']) },
       { name: 'fast', execute: () => run('npm', ['run', 'quality:fast', '--', '--checks-only']) },
@@ -255,18 +258,12 @@ try {
             ...plan.files.filter((file) => !file.endsWith('.browser.mjs')),
           ]),
       },
-      ...(plan.browser
+      ...(browserFiles.length
         ? [
             {
               name: 'affected-browser',
               execute: () => {
-                if (!values.browser)
-                  refuse('QUALITY_BROWSER_REQUIRED', 'selected browser tests require --browser');
-                run(process.execPath, [
-                  '--test',
-                  '--test-concurrency=1',
-                  ...plan.files.filter((file) => file.endsWith('.browser.mjs')),
-                ]);
+                run(process.execPath, ['--test', '--test-concurrency=1', ...browserFiles]);
               },
             },
           ]
