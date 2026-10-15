@@ -87,6 +87,115 @@ test('transitive authored imports select the affected file and exclude unrelated
   f.repositories[0].head = f.commit(f.root);
   assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
 });
+test('reading policy and package metadata does not execute the source paths listed in them', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'package.json', JSON.stringify({ main: 'src/value.ts' }));
+  f.put(
+    f.root,
+    'tests/metadata.test.mjs',
+    `
+    import { readFileSync } from 'node:fs';
+    readFileSync('scripts/ci-test-policy.json');
+    readFileSync('package.json');
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
+});
+test('ordinary source path literals do not select tests that never consume the file', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/path-only.test.mjs',
+    `
+    export const fixture = 'src/value.ts';
+    // import '../src/value.js';
+    export const example = "import '../src/value.js'";
+  `,
+  );
+  f.put(f.root, 'tests/build.test.mjs', `build({ entryPoints: ['src/consumer.ts'] });`);
+  f.put(
+    f.root,
+    'tests/read.test.mjs',
+    `readFileSync(new URL('../src/value.ts', import.meta.url));`,
+  );
+  f.put(f.root, 'tests/process.test.mjs', `spawn(process.execPath, ['src/consumer.ts']);`);
+  f.put(
+    f.root,
+    'tests/plugin.test.mjs',
+    `export const plugin = { name: resolve(root, 'lib/consumer.js') };`,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/build.test.mjs',
+    'tests/plugin.test.mjs',
+    'tests/process.test.mjs',
+    'tests/read.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+});
+test('a file path assigned before a byte read selects that consumer without executing the read module', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 1;`);
+  f.put(
+    f.root,
+    'tests/reader.test.mjs',
+    `
+    const source = new URL('../src/inspection.mjs', import.meta.url);
+    readFileSync(source, 'utf8');
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 2;`);
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/reader.test.mjs', 'tests/required.test.mjs']);
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 1;`);
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
+});
+test('extensionless authored module imports keep their transitive source consumers', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/extensionless.test.mjs', `import '../src/consumer';`);
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/extensionless.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+});
+test('a same-named path in another scope cannot replace the actual reader input', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/scoped-reader.test.mjs',
+    `
+    function consume() {
+      const source = new URL('../src/value.ts', import.meta.url);
+      readFileSync(source);
+    }
+    function metadata() { const source = 'scripts/ci-test-policy.json'; }
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/required.test.mjs',
+    'tests/scoped-reader.test.mjs',
+  ]);
+});
 test('deleted source remains an affected dependency, and peer changes are bound to the committed baseline', (t) => {
   const f = fixture(t);
   unlinkSync(join(f.root, 'src/value.ts'));
