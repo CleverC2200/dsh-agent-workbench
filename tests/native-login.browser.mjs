@@ -26,7 +26,7 @@ createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value=
   define: { 'process.env.NODE_ENV': '"test"' },
   loader: { '.svg': 'dataurl', '.png': 'dataurl' },
 });
-async function open(t, authenticated) {
+async function open(t, authenticated, { pollStatus = 'authenticated', clock = false } = {}) {
   const assets = new Map(bundle.outputFiles.map((x) => [x.path.split('/').at(-1), x.text]));
   const server = createServer((req, res) => {
     const name = req.url.slice(1);
@@ -51,6 +51,7 @@ async function open(t, authenticated) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
+  if (clock) await page.clock.install();
   const calls = [];
   const errors = [];
   let external = 0;
@@ -77,7 +78,7 @@ async function open(t, authenticated) {
     let value = status;
     if (url.pathname.endsWith('login/start'))
       value = { image: 'data:image/png;base64,AA==', loginId: 'qr', expiresIn: 120 };
-    if (url.pathname.endsWith('login/poll')) value = { ...status, status: 'authenticated' };
+    if (url.pathname.endsWith('login/poll')) value = { ...status, status: pollStatus };
     if (url.pathname.endsWith('workflow/config')) value = [];
     if (url.pathname.endsWith('workbench/query'))
       value = { records: [], total: 0, size: 100, current: 1, pages: 0 };
@@ -153,6 +154,33 @@ test(
     f.status.user = { id: 'host-user', username: 'Host' };
     await f.publish({ state: 'confirmed', scope: f.status.pageScope, status: f.status });
     await expect(f.page.locator('.gea-original-workbench')).toBeVisible();
+    assert.equal(
+      f.calls.filter((c) => /action|submit|model\/advice|model\/discover/.test(c.path)).length,
+      0,
+    );
+    assert.deepEqual(f.errors, []);
+    assert.equal(f.external(), 0);
+  },
+);
+
+test(
+  'Native respects early Host challenge expiration, stops polling and permits refresh',
+  { timeout: 30000 },
+  async (t) => {
+    const f = await open(t, false, { pollStatus: 'expired', clock: true });
+    await expect(f.page.getByRole('alert')).toHaveText('二维码已过期，请重新登录。');
+    const pollCount = () => f.calls.filter((c) => c.path.endsWith('login/poll')).length;
+    assert.equal(pollCount(), 1);
+    await f.page.clock.fastForward(5000);
+    assert.equal(pollCount(), 1, 'a Host-expired challenge must not be polled again');
+    await expect(f.page.locator('.gea-original-workbench')).toHaveCount(0);
+    await expect(f.page.getByRole('button', { name: '刷新二维码', exact: true })).toBeEnabled();
+    await f.page.getByRole('button', { name: '刷新二维码', exact: true }).click();
+    await expect.poll(() => f.calls.filter((c) => c.path.endsWith('login/start')).length).toBe(2);
+    assert.equal(
+      f.calls.filter((c) => c.path.endsWith('login/start')).at(-1).payload.environment,
+      'test',
+    );
     assert.equal(
       f.calls.filter((c) => /action|submit|model\/advice|model\/discover/.test(c.path)).length,
       0,
