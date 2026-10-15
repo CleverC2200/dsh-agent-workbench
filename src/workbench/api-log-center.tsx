@@ -97,6 +97,24 @@ function CodeBlock({
   );
 }
 
+function ApiDefinition({ entry }: { entry: ApiCatalogEntry }) {
+  return (
+    <details className="gea-api-contract">
+      <summary>查看接口定义与请求字段</summary>
+      <p>{entry.description}</p>
+      {entry.requestFields.length ? (
+        <div className="gea-api-field-list">
+          {entry.requestFields.map((field) => (
+            <code key={field}>{field}</code>
+          ))}
+        </div>
+      ) : (
+        <p>无业务请求字段</p>
+      )}
+    </details>
+  );
+}
+
 export function ApiLogCenter({ environment, onClose, request }: Props) {
   const [activeTab, setActiveTab] = useState<MainTab>('api');
   const [snapshot, setSnapshot] = useState<ApiLogSnapshot>();
@@ -638,6 +656,7 @@ export function ApiLogCenter({ environment, onClose, request }: Props) {
                     </button>
                   </div>
                 </div>
+                {activeCatalog ? <ApiDefinition entry={activeCatalog} /> : null}
                 {!activeRecord.replayAvailable && (
                   <p className="gea-api-origin">
                     {activeRecord.replayUnavailableReason ??
@@ -756,6 +775,7 @@ export function ApiLogCenter({ environment, onClose, request }: Props) {
                     {selectedCatalogEntry.method}
                   </span>
                 </div>
+                <ApiDefinition entry={selectedCatalogEntry} />
                 <div className="gea-api-empty is-compact">
                   <Api size={30} />
                   <strong>当前筛选下没有调用样本</strong>

@@ -373,3 +373,23 @@ test('API catalog batch freezes samples and confirms concrete writes on the same
   await page.getByRole('button', { name: '开始批量重发', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '确认批量重发' })).toContainText('没有已捕获样本');
 });
+
+test('interface definitions stay available for captured calls and catalog entries without samples', async (t) => {
+  const { page, center, upstream } = await openCenter(t);
+  const detail = page.getByRole('complementary', { name: '调用详情' });
+  await detail.getByText('查看接口定义与请求字段', { exact: true }).click();
+  await expect(detail.locator('.gea-api-contract')).toContainText('用户');
+  await detail.getByText('查看接口定义与请求字段', { exact: true }).click();
+  const entry = center
+    .snapshot()
+    .catalog.find((value) => value.requestFields.length && value.id !== 'identity.profile');
+  assert.ok(entry);
+  await page.locator('.gea-api-catalog-item').filter({ hasText: entry.name }).click();
+  await detail.getByText('查看接口定义与请求字段', { exact: true }).click();
+  await expect(detail.locator('.gea-api-contract')).toContainText(entry.description);
+  for (const field of entry.requestFields)
+    await expect(
+      detail.locator('.gea-api-field-list').getByText(field, { exact: true }),
+    ).toBeVisible();
+  assert.equal(upstream.length, 1);
+});
