@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, writeFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -25,9 +25,9 @@ const { outputFiles } = await build({
     },
   ],
 });
-await mkdir('.scratch', { recursive: true });
-await writeFile('.scratch/html-pages-test.mjs', outputFiles[0].text);
-const { HtmlPages } = await import(pathToFileURL(resolve('.scratch/html-pages-test.mjs')).href);
+const { HtmlPages } = await import(
+  'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
+);
 
 function context(t) {
   const cleanups = [];
