@@ -57,7 +57,7 @@ function App(){
   action:{invoke:forbid},submit:{invoke:forbid}
  }),[mode]);
  const host=useMemo(()=>({salesPlan,modelInference:{invoke:async()=>{window.coverageCalls.model++;throw Error('fixture model forbidden')}}}),[salesPlan]);
- return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><WorkbenchHostProvider value={host}><Workbench stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} queryClient={salesPlan} detailClient={salesPlan} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider></>;
+ return <><button onClick={()=>setMode('complete')}>切换到完整读取的测试上下文</button><button onClick={()=>setMode('pending')}>切换到等待中的测试上下文</button><WorkbenchHostProvider value={host}><Workbench stateScope="coverage-test" t={i18n.t.bind(i18n)} onContextChange={noop} approvalStages={['region']} liveActionsEnabled={new URL(location.href).searchParams.has('fixtureAccess')}/></WorkbenchHostProvider></>;
 }
 createRoot(document.getElementById('root')).render(<App/>);
 `,
@@ -293,5 +293,41 @@ test(
       })),
       { model: 0, write: 0 },
     );
+  },
+);
+
+test(
+  'the shipped dashboard, filter toggle, progress and row selection work through Host responses',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, pageErrors, externalRequests } = await openWorkbench(t, 3, true);
+    await page.getByRole('button', { name: '切换到完整读取的测试上下文' }).click();
+    await expect(page.getByRole('region', { name: '当前页明细汇总', exact: true })).toContainText(
+      '¥600',
+    );
+    const filters = page.getByRole('button', { name: '筛选条件', exact: true });
+    await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    await filters.click();
+    await expect(filters).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByLabel('大区', { exact: true })).toBeVisible();
+    await filters.click();
+    await expect(filters).toHaveAttribute('aria-expanded', 'false');
+    await page.getByRole('button', { name: '查看提报进度', exact: true }).click();
+    await expect(page.getByTestId('regional-approval-progress-results')).toBeVisible();
+    await page.getByRole('button', { name: '关闭', exact: true }).last().click();
+    const checks = page.locator('tbody input[type="checkbox"]:not(:disabled)');
+    await expect(checks.first()).toBeEnabled();
+    await checks.first().check();
+    await expect(checks.first()).toBeChecked();
+    await expect(page.getByRole('button', { name: /通过/ }).first()).toBeEnabled();
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        model: window.coverageCalls.model,
+        write: window.coverageCalls.write,
+      })),
+      { model: 0, write: 0 },
+    );
+    assert.deepEqual(pageErrors, []);
+    assert.equal(externalRequests(), 0);
   },
 );

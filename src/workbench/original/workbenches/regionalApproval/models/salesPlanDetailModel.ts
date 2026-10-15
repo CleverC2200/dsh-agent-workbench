@@ -6,7 +6,7 @@ import type {
   GeaSalesPlanSkuDiff,
   GeaSalesPlanVersion,
 } from '../../../bridge.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { subtractExactDecimals } from '../regionalApprovalQueryModel.ts';
 
 export type SalesPlanSkuNodeComparison = {

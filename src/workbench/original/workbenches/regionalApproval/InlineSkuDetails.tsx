@@ -15,7 +15,7 @@ import {
   type SalesPlanLocalDraft,
 } from './models/salesPlanLocalDraftModel.ts';
 import { salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 
 const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
 const quantityText = (value: string) => formatExactDecimal(value).replace(/\.0+$/, '');

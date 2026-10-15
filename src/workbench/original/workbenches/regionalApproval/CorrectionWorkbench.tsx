@@ -25,7 +25,7 @@ import {
   verifyCorrectionAction,
 } from './models/salesPlanCorrectionModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import {
   salesPlanVisibleStatuses,
   chooseInitialSalesPlanPeriod,

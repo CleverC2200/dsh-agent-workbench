@@ -192,3 +192,45 @@ test('script-only source policy and task status changes select their direct publ
       assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
     });
 });
+
+test('approval retirement and retained domain-type migration select current behavioral contracts', async (t) => {
+  const production = JSON.parse(
+    readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
+  );
+  const consumers = [
+    'tests/sales-plan-detail.browser.mjs',
+    'tests/role-approval.test.mjs',
+    'tests/approval-visibility.test.mjs',
+    'tests/regional-state-restore.test.mjs',
+  ];
+  for (const name of [
+    'RegionalApprovalActionDialog.tsx',
+    'RegionalApprovalLiveAdjustmentDialog.tsx',
+    'models/salesPlanAdjustmentModel.ts',
+    'RegionalApprovalPlanDetail.module.css',
+    'RegionalApprovalPlanDetail.tsx',
+    'regionalApprovalActionModel.ts',
+    'regionalApprovalDetailFixture.ts',
+    'regionalApprovalDetailModel.ts',
+    'regionalApprovalFixture.ts',
+    'regionalApprovalModel.ts',
+  ])
+    await t.test(name, (t) => {
+      const f = fixture(t);
+      const source = 'src/workbench/original/workbenches/regionalApproval/' + name;
+      f.policy.rules = production.rules;
+      f.policy.tests.push('tests/*.browser.mjs');
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      for (const file of consumers) f.put(f.root, file, 'export const fixture = true;');
+      f.put(f.root, source, 'export const retired = true;');
+      f.checkpoint();
+      unlinkSync(join(f.root, source));
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.deepEqual(plan.reasons['dsh-agent-workbench/' + source], [...consumers].sort());
+      assert.ok(plan.files.includes('tests/required.test.mjs'));
+      assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+      assert.equal(plan.browser, true);
+      assert.equal(plan.fullSuite, 'not-run');
+    });
+});
