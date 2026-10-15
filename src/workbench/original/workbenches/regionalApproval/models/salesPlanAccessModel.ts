@@ -15,7 +15,7 @@ import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQuer
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
 import { salesPlanApprovalNodeForStatus } from './salesPlanActionModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanQuantityModel.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 export { salesPlanEditableQuantity };
 
 /**

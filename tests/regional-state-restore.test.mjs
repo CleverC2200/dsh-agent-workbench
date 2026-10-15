@@ -441,8 +441,6 @@ test('opening an original plan name publishes the same displayed inline SKU fiel
           React.createElement(RegionalApprovalWorkbench, {
             stateScope: 'fixture-account',
             approvalStages: ['area'],
-            queryClient: host.salesPlan,
-            detailClient: host.salesPlan,
             t: translate,
             onContextChange: (value) => contexts.push(value),
             onCatalogChange: (value) => {
@@ -618,7 +616,6 @@ test('RegionalApproval restores scoped live filter intent through its actual que
           React.createElement(RegionalApprovalWorkbench, {
             stateScope: 'own-tenant-account',
             approvalStages: ['area'],
-            queryClient: host.salesPlan,
             t: (key) => key,
             onContextChange: () => {},
             liveActionsEnabled: false,

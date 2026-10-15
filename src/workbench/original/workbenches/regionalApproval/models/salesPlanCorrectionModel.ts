@@ -114,7 +114,7 @@ import type {
   GeaSalesPlanActionReceipt,
 } from '../../../contracts.ts';
 
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export function correctionAccess(
   detail: GeaSalesPlanDetail,

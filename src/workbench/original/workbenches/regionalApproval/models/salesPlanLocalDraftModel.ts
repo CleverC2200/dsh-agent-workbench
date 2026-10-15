@@ -7,7 +7,7 @@ import type {
 import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 
 export type SalesPlanLocalDraft = {
   planId: string;
