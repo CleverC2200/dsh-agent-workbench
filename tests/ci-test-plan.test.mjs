@@ -87,6 +87,120 @@ test('transitive authored imports select the affected file and exclude unrelated
   f.repositories[0].head = f.commit(f.root);
   assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
 });
+test('actual named esbuild loaders retain direct and transitive business consumers', (t) => {
+  for (const [source, consumer] of [
+    ['aqkc/web/src/lib/inventory-insight.ts', 'base-stock-risk'],
+    ['aqkc/web/src/lib/workbench-current-order.ts', 'base-stock-risk'],
+    ['aqkc/web/src/lib/workbench-current-order-sql.ts', 'base-stock-scope'],
+  ]) {
+    const f = fixture(t);
+    f.policy.rules.push({
+      pattern: '^business/',
+      tests: ['tests/inventory-storage-build.test.mjs'],
+    });
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    for (const name of ['base-stock-risk', 'base-stock-scope', 'inventory-storage-build'])
+      f.put(
+        f.root,
+        `tests/${name}.test.mjs`,
+        readFileSync(new URL(`./${name}.test.mjs`, import.meta.url), 'utf8'),
+      );
+    for (const file of [
+      'aqkc/web/src/lib/inventory-insight.ts',
+      'aqkc/web/src/lib/workbench-current-order.ts',
+      'aqkc/web/src/lib/workbench-current-order-sql.ts',
+      'aqkc/web/src/lib/workbench-sql.ts',
+      'inventory-light-plugins/src/pages/aqkc/components/analytics/workspace-normalizer.ts',
+    ]) {
+      const path = 'business/inventory-aqkc/source/' + file;
+      f.put(f.root, path, readFileSync(new URL('../' + path, import.meta.url), 'utf8'));
+    }
+    f.checkpoint();
+    const path = 'business/inventory-aqkc/source/' + source;
+    f.put(f.root, path, readFileSync(join(f.root, path), 'utf8') + '\n// selection probe\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(
+      plan.reasons['dsh-agent-workbench/' + path].includes(`tests/${consumer}.test.mjs`),
+      JSON.stringify(plan),
+    );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+test('actual arrow esbuild loaders retain both shipped channel and HTML bridge consumers', (t) => {
+  for (const source of ['src/html-bridge.ts', 'business/shared/channel.js']) {
+    const f = fixture(t);
+    for (const name of ['html-business-theme', 'html-request-cancel'])
+      f.put(
+        f.root,
+        `tests/${name}.test.mjs`,
+        readFileSync(new URL(`./${name}.test.mjs`, import.meta.url), 'utf8'),
+      );
+    for (const path of ['src/html-bridge.ts', 'business/shared/channel.js'])
+      f.put(f.root, path, readFileSync(new URL('../' + path, import.meta.url), 'utf8'));
+    f.checkpoint();
+    f.put(f.root, source, readFileSync(join(f.root, source), 'utf8') + '\n// selection probe\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    for (const name of ['html-business-theme', 'html-request-cancel'])
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + source].includes(`tests/${name}.test.mjs`),
+        JSON.stringify(plan),
+      );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+test('wrapper arguments keep lexical ownership, parameter positions and byte-read boundaries', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'src/inspection.mjs', 'import "./value.ts";');
+  f.put(f.root, 'src/other.ts', 'export const other = true;');
+  f.put(
+    f.root,
+    'tests/wrapper.test.mjs',
+    `
+    function load(entry) { build({entryPoints: [entry]}); }
+    function log(value) { console.log(value); }
+    function unrelated() { const load = log; load('../src/value.ts'); }
+    function overridden(load) { load('../src/value.ts'); }
+    function inspect(entry) { readFileSync(entry); }
+    inspect('../src/inspection.mjs');
+    function buildNamed(label, entry) { build({entryPoints: [entry]}); }
+    buildNamed('../src/value.ts', '../src/other.ts');
+  `,
+  );
+  f.put(
+    f.root,
+    'tests/position.test.mjs',
+    `
+    async function bundled(label, entry) { build({entryPoints: [entry]}); }
+    const entry = '../src/value.ts';
+    bundled('not a path', entry);
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.ok(plan.files.includes('tests/position.test.mjs'));
+  assert.ok(!plan.files.includes('tests/wrapper.test.mjs'), JSON.stringify(plan));
+});
+test('repeated local binding references still produce a finite real consumer plan', (t) => {
+  const f = fixture(t);
+  const declarations = ["const edge0 = '../src/value.ts';"];
+  for (let index = 1; index <= 20; index++)
+    declarations.push(`const edge${index} = [edge${index - 1}, edge${index - 1}];`);
+  f.put(
+    f.root,
+    'tests/repeated.test.mjs',
+    declarations.join('\n') + '\nbuild({entryPoints:[edge20]});',
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.ok(f.plan().files.includes('tests/repeated.test.mjs'));
+});
 test('reading policy and package metadata does not execute the source paths listed in them', (t) => {
   const f = fixture(t);
   f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });
