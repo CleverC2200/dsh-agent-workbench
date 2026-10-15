@@ -15,7 +15,6 @@ import {
   type NativeResourceSelection,
 } from './resource-selection.ts';
 import { mountCompanyUI } from './company/ui.tsx';
-import { mountInventoryEntry } from './inventory-entry.tsx';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import {
@@ -62,10 +61,6 @@ const zh = {
   selectionFailed: '资源选用失败，请重试。',
   resourceWorking: '正在装载',
   resourcesRefresh: '刷新资源',
-  inventoryEntry: '使用基地库存 Agent 分析',
-  inventoryEntryHint:
-    '创建业务会话并复制输入框中的问题；输入框为空时使用最近一条用户问题。保留原会话，页面连接完成后由你发送。',
-  inventoryEntryFailed: '基地库存业务会话创建失败。请核对资源、登录状态和工作区后重试。',
   pageConnect: '连接页面与原生对话',
   pageNewChat: '开始新的页面对话',
   pageWorking: '正在连接…',
@@ -99,11 +94,6 @@ const en = {
   selectionFailed: 'Unable to select this resource. Please retry.',
   resourceWorking: 'Loading',
   resourcesRefresh: 'Refresh resources',
-  inventoryEntry: 'Analyze with Base Inventory Agent',
-  inventoryEntryHint:
-    'Copy your input, or the latest user question when the input is empty, into a new business conversation. Your original conversation is retained. Send after the page connects.',
-  inventoryEntryFailed:
-    'Unable to create the base inventory conversation. Check the resource, sign-in and workspace, then retry.',
   pageConnect: 'Connect page and Conversation',
   pageNewChat: 'Start a new page chat',
   pageWorking: 'Connecting…',
@@ -339,7 +329,6 @@ export function apply(ctx: Context): void {
       ),
     );
   }
-  mountInventoryEntry(ctx, workbench, () => nativeResources, restorePageSession, t);
   mountCompanyUI(ctx, workbench, Resources, restorePageSession);
   mountBusinessViews(ctx);
   let discoveryError = '';
