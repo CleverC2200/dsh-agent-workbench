@@ -232,6 +232,7 @@ const nativeLogin = {
     ),
   pollLogin: async (loginId: string, signal: AbortSignal) => {
     const result = await rpc<{ status: string }>('login/poll', { loginId }, signal);
+    if (result.status === 'expired') throw Error('二维码已过期，请重新登录。');
     return result.status === 'authenticated';
   },
 };
