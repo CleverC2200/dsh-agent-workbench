@@ -23,11 +23,8 @@ SOFTWARE.
 
 */
 
-
-
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import css from './Button.module.css';
-
 
 export type ButtonVariant = 'primary' | 'ghost' | 'outline' | 'toolbar';
 
