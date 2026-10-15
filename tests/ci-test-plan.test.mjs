@@ -192,3 +192,55 @@ test('script-only source policy and task status changes select their direct publ
       assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
     });
 });
+
+for (const repo of ['dsh-agent-workbench', 'dsh-gea-plugin']) {
+  test(`API debug policy selects current browser and Host regressions for ${repo}`, (t) => {
+    const f = fixture(t, repo);
+    const policyPath =
+      repo === 'dsh-agent-workbench'
+        ? new URL('../scripts/ci-test-policy.json', import.meta.url)
+        : new URL('../../dsh-gea-plugin/scripts/ci-test-policy.json', import.meta.url);
+    const actual = JSON.parse(readFileSync(policyPath));
+    const apiRules = actual.rules.filter((rule) =>
+      rule.tests.some((file) => file.includes('api-log')),
+    );
+    const expected = [...new Set(apiRules.flatMap((rule) => rule.tests))].sort();
+    assert.ok(expected.length >= 2);
+    f.policy.rules = apiRules;
+    f.policy.tests =
+      repo === 'dsh-agent-workbench'
+        ? ['tests/*.test.mjs', 'tests/*.browser.mjs']
+        : ['tests/*.test.mjs'];
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    for (const file of expected)
+      f.put(
+        f.root,
+        file,
+        file === 'tests/api-log-web.test.mjs'
+          ? "import './profile.mjs'; import {chromium} from '@playwright/test';"
+          : 'export const api = true;',
+      );
+    if (repo === 'dsh-gea-plugin')
+      f.put(f.root, 'tests/profile.mjs', 'export const profile = true;');
+    f.put(f.root, 'src/host.ts', 'export const endpoint = 1;');
+    f.put(f.root, 'src/workbench/api-log-center.tsx', 'export const page = 1;');
+    f.checkpoint();
+    const source =
+      repo === 'dsh-agent-workbench' ? 'src/workbench/api-log-center.tsx' : 'src/host.ts';
+    f.put(f.root, source, 'export const changed = true;');
+    const own = f.repositories.find((entry) => entry.repo === repo);
+    own.head = f.commit(f.root);
+    const peerName = repo === 'dsh-agent-workbench' ? 'dsh-gea-plugin' : 'dsh-agent-workbench';
+    const peer = f.repositories.find((entry) => entry.repo === peerName);
+    const peerSource =
+      repo === 'dsh-agent-workbench' ? 'src/host/api-log.ts' : 'src/workbench/api-log-contract.ts';
+    f.put(peer.path, peerSource, 'export const changedContract = true;');
+    peer.head = f.commit(peer.path);
+    const plan = f.plan();
+    assert.deepEqual(plan.reasons[`${repo}/${source}`], expected);
+    assert.deepEqual(plan.reasons[`${peerName}/${peerSource}`], expected);
+    assert.equal(plan.browser, true);
+    assert.equal(plan.runtime, repo === 'dsh-gea-plugin');
+    assert.equal(plan.fullSuite, 'not-run');
+  });
+}

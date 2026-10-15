@@ -25,6 +25,7 @@ import './workbench.css';
 import logo from './gea-logo.png';
 import { mountPicker } from '../page-interaction/picker.ts';
 import { ApiLogCenter } from './api-log-center.tsx';
+import './api-log.css';
 import type { PageElement } from '../page-bridge/catalog.ts';
 import { workbenchCatalog } from '../shared/workbench-actions.ts';
 import {
@@ -689,6 +690,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     <div className="gea-workbench-document">
       {apiLogOpen ? (
         <ApiLogCenter
+          key={status.pageScope ?? 'unconfirmed'}
           environment={status.environment}
           request={rpc}
           onClose={() => setApiLogOpen(false)}

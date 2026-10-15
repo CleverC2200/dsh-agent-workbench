@@ -20,6 +20,16 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^src/(?:workbench/api-log|business-views|workbench/page)|^tests/api-log",
+      "tests": ["tests/api-log-center.browser.mjs", "tests/api-log-batch.browser.mjs"]
+    },
+    {
+      "repo": "dsh-gea-plugin",
+      "pattern": "^src/(?:host\\.ts|host/(?:api-log|business|debug-run))",
+      "tests": ["tests/api-log-center.browser.mjs", "tests/api-log-batch.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^scripts/(?:ci-source-policy|business-profile-ci)\\.mjs$",
       "tests": ["scripts/business-profile-ci.test.mjs"]
     },

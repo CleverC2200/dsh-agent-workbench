@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis';
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useSyncExternalStore } from 'react';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import { zh, en } from './client/locales.ts';
 import { Inbox, type InboxViewState } from './client/inbox.tsx';
@@ -10,6 +10,7 @@ import {
 } from './client/desktop-navigation.tsx';
 import { ApiLogCenter } from './workbench/api-log-center.tsx';
 import nativeCss from './client/native-pages.css';
+import apiLogCss from './workbench/api-log.css';
 const PANEL = 'gea-proof' as MainPanelId,
   INBOX = 'gea-inbox' as MainPanelId,
   API_LOG_PANEL = 'gea-api-log' as MainPanelId;
@@ -61,20 +62,21 @@ export function mountBusinessViews(ctx: Context) {
       );
     }
     function LogPage() {
-      const [environment, setEnvironment] = useState<'production' | 'test'>('production');
-      useEffect(() => {
-        const controller = new AbortController();
-        void request<{ environment: 'production' | 'test' }>('status', {}, controller.signal)
-          .then((status) => {
-            if (!controller.signal.aborted) setEnvironment(status.environment);
-          })
-          .catch(() => {});
-        return () => controller.abort();
-      }, []);
+      const account = useSyncExternalStore(identity.subscribe, identity.getSnapshot);
+      const environment = account.status?.environment;
+      if (!environment || !account.scope || !account.status?.authenticated)
+        return (
+          <section className="agent-workbench-ui gea-native-page">
+            {account.error ?? t('loginTip')}
+          </section>
+        );
       return (
         <section className="agent-workbench-ui gea-native-page" style={{ height: '100%' }}>
           <style>{nativeCss}</style>
+          <style>{apiLogCss}</style>
+          {account.error ? <p role="alert">{account.error}</p> : null}
           <ApiLogCenter
+            key={account.scope ?? 'unconfirmed'}
             environment={environment}
             request={request}
             onClose={() => void ctx.agentWorkbench.open(PANEL)}
@@ -82,6 +84,7 @@ export function mountBusinessViews(ctx: Context) {
         </section>
       );
     }
+
     for (const [id, label, component] of [[API_LOG_PANEL, 'apiLog', LogPage]] as const)
       ctx.slots.inject('main', () => {
         const unregister = ctx.agentWorkbench.register({ id, label: () => t(label) });
