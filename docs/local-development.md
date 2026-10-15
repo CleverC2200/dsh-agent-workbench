@@ -40,3 +40,5 @@ node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs test
 ## rc.2 定向检查输入
 
 [候选输入检查源码](../tests/candidate-input.test.mjs) 的 rc.2 分支默认读取同组 `../../official-0.2.0-rc.2`；checkout 布局不同则用 `DSH_RC2_CORE_CHECKOUT` 显式指定已登记的官方源码绝对路径。检查要求与支持清单匹配的 rc.2 固定提交，不会把 alpha 输入作为 rc.2 通过。
+
+需要快速核对本票源码时，运行 `node scripts/task-status.mjs --input <本票integration-set.json绝对路径>`。命令只读显式输入和登记 checkout，输出来源文件摘要、实际 HEAD、与输入是否一致、tracked/untracked 改动和观察时间；失败的 checkout 保留错误，其余仓继续观察。它不修改输入、安装依赖或证明候选准入、装载及业务授权，冻结验证仍使用原 `candidate:verify` 合同。

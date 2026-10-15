@@ -156,13 +156,14 @@ test('an affected public contract file remains selectable alongside ordinary tes
   ]);
 });
 
-test('script-only source policy changes select their direct public consumers', async (t) => {
+test('script-only source policy and task status changes select their direct public consumers', async (t) => {
   const production = JSON.parse(
     readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
   );
   for (const [source, consumer] of [
     ['scripts/ci-source-policy.mjs', 'scripts/business-profile-ci.test.mjs'],
     ['scripts/business-profile-ci.mjs', 'scripts/business-profile-ci.test.mjs'],
+    ['scripts/task-status.mjs', 'tests/task-status.test.mjs'],
   ])
     await t.test(source, (t) => {
       const f = fixture(t);
