@@ -6,6 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client';
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
 import type {} from '@deepseek-ai/dsh-api-remotes/client';
+import { withReadyPageSession } from './page-session-core.ts';
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
   fetch: typeof fetch;
@@ -87,7 +88,7 @@ export async function selectResource(
   if (!response.ok || typeof resource.preset !== 'string')
     throw Error(resource.error ?? 'RESOURCE_SELECTION_FAILED');
   signal.throwIfAborted();
-  const { workspaceId } = await host.workspace(cwd);
+  const { workspaceId, path } = await host.workspace(cwd);
   signal.throwIfAborted();
   const sessionId = await host.create({ workspaceId });
   signal.throwIfAborted();
@@ -100,6 +101,7 @@ export async function selectResource(
     async (projection) => {
       if (typeof projection.preset !== 'string' || projection.preset !== resource.preset)
         throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+      if (projection.cwd !== path) throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
       await beforeOpen?.({
         sessionId: projection.sessionId,
         preset: projection.preset,
@@ -156,42 +158,29 @@ export function mountNativeResourceSelection(
           }
         },
         open: async (id, skill, signal, beforeOpen, draft) => {
-          const reference = scope.sessions.retain(id as SessionId, {
-            source: 'agentResourceSelection',
+          await withReadyPageSession(
+            scope,
+            id as SessionId,
             signal,
-          });
-          try {
-            await reference.ready;
-            signal.throwIfAborted();
-            if (skill || draft) {
-              const input = scope.conversation.input.for(reference.binding.ctx);
-              const state = input.state.getSnapshot();
-              if (
-                state.draft ||
-                reference.binding.ctx.bail('slash/input-insert-text', {
-                  text: `${skill ? `/${skill} ` : ''}${draft ?? ''}`,
-                  span: { start: 0, end: 0, draftRev: state.draftRev },
-                }) !== true
-              )
-                throw Error('RESOURCE_DRAFT_CHANGED');
-            }
-            signal.throwIfAborted();
-            const preset = reference.binding.session.projections
-              .faceOf('agentPreset')
-              .getSnapshot();
-            if (preset !== null && (typeof preset !== 'string' || !preset))
-              throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
-            const cwd = scope.sessions.list.getSnapshot().byId[reference.sessionId]?.cwd;
-            await beforeOpen?.({
-              sessionId: reference.sessionId,
-              preset,
-              ...(typeof cwd === 'string' ? { cwd } : {}),
-            });
-            signal.throwIfAborted();
-            scope.uiWorkspace.openSession(id as SessionId);
-          } finally {
-            reference.release();
-          }
+            async ({ reference, projection }) => {
+              if (skill || draft) {
+                const input = scope.conversation.input.for(reference.binding.ctx);
+                const state = input.state.getSnapshot();
+                if (
+                  state.draft ||
+                  reference.binding.ctx.bail('slash/input-insert-text', {
+                    text: `${skill ? `/${skill} ` : ''}${draft ?? ''}`,
+                    span: { start: 0, end: 0, draftRev: state.draftRev },
+                  }) !== true
+                )
+                  throw Error('RESOURCE_DRAFT_CHANGED');
+              }
+              signal.throwIfAborted();
+              await beforeOpen?.(projection);
+              signal.throwIfAborted();
+              scope.uiWorkspace.openSession(id as SessionId);
+            },
+          );
         },
       };
       active = host;

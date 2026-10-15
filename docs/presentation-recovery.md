@@ -36,6 +36,10 @@ WorkbenchController 持有 History intent 与对应页面登记的有效期。�
 
 ## 实现与证据入口
 
+修改选用解释者、页面新建、自动准备或恢复时，从 [页面 Session 协调](../src/page-session-coordination.ts) 进入。它集中资源发现、关联检查、在途意图、冷恢复与 History 导航。呈现层提交新建、选择或关联意图，并订阅结果；Native/HTML 的连接与页面动作仍由各自呈现通道处理。
+
+资源打开与恢复共用 [Core Session 借用次序](../src/page-session-core.ts)：等待 `retain.ready`，读取真实 preset/cwd，完成关联或导航后释放引用。资源新建必须核对 Core 返回的 cwd 与工作区标准路径一致，失败不关联、不导航；已经创建的 Core Session 保留。显式新建撤销自动准备，旧意图的迟到完成不能清除下一次选择的 busy 状态。
+
 固定 Core 输入由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 维护。使用的公开能力为 Core `packages/client/store` 的浏览器快照、`packages/api/session-controller` 的目录/retain/projection 和 `packages/client/ui-workspace` 的导航。
 
 [workbench-recovery.test.mjs](../tests/workbench-recovery.test.mjs) 覆盖无 Session 副作用重建、解释者与范围隔离、UI 意图、格式拒绝、注销再登记、异步迟到和取消。测试文件是验证入口，不表示本轮已运行；真实浏览器 reload、普通 Host restart 和业务授权仍需对应窗口与环境回执。
