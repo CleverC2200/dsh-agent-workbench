@@ -4,7 +4,15 @@
   "name": "基地库存",
   "version": "0.2.6-preview.16-split.12",
   "html": "index.html",
-  "skills": ["skills/aqkc/SKILL.md"],
+  "skills": [
+    "skills/aqkc/SKILL.md",
+    "skills/aging-stagnation-monitoring/SKILL.md",
+    "skills/future-aging-projection/SKILL.md",
+    "skills/inventory-deviation-monitoring/SKILL.md",
+    "skills/inventory-policy/SKILL.md",
+    "skills/report-templates/SKILL.md",
+    "skills/shortage-monitoring/SKILL.md"
+  ],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "base-safety-stock",
