@@ -87,6 +87,235 @@ test('transitive authored imports select the affected file and exclude unrelated
   f.repositories[0].head = f.commit(f.root);
   assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
 });
+test('actual named esbuild loaders retain direct and transitive business consumers', (t) => {
+  for (const [source, consumer] of [
+    ['aqkc/web/src/lib/inventory-insight.ts', 'base-stock-risk'],
+    ['aqkc/web/src/lib/workbench-current-order.ts', 'base-stock-risk'],
+    ['aqkc/web/src/lib/workbench-current-order-sql.ts', 'base-stock-scope'],
+  ]) {
+    const f = fixture(t);
+    f.policy.rules.push({
+      pattern: '^business/',
+      tests: ['tests/inventory-storage-build.test.mjs'],
+    });
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    for (const name of ['base-stock-risk', 'base-stock-scope', 'inventory-storage-build'])
+      f.put(
+        f.root,
+        `tests/${name}.test.mjs`,
+        readFileSync(new URL(`./${name}.test.mjs`, import.meta.url), 'utf8'),
+      );
+    for (const file of [
+      'aqkc/web/src/lib/inventory-insight.ts',
+      'aqkc/web/src/lib/workbench-current-order.ts',
+      'aqkc/web/src/lib/workbench-current-order-sql.ts',
+      'aqkc/web/src/lib/workbench-sql.ts',
+      'inventory-light-plugins/src/pages/aqkc/components/analytics/workspace-normalizer.ts',
+    ]) {
+      const path = 'business/inventory-aqkc/source/' + file;
+      f.put(f.root, path, readFileSync(new URL('../' + path, import.meta.url), 'utf8'));
+    }
+    f.checkpoint();
+    const path = 'business/inventory-aqkc/source/' + source;
+    f.put(f.root, path, readFileSync(join(f.root, path), 'utf8') + '\n// selection probe\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(
+      plan.reasons['dsh-agent-workbench/' + path].includes(`tests/${consumer}.test.mjs`),
+      JSON.stringify(plan),
+    );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+test('actual arrow esbuild loaders retain both shipped channel and HTML bridge consumers', (t) => {
+  for (const source of ['src/html-bridge.ts', 'business/shared/channel.js']) {
+    const f = fixture(t);
+    for (const name of ['html-business-theme', 'html-request-cancel'])
+      f.put(
+        f.root,
+        `tests/${name}.test.mjs`,
+        readFileSync(new URL(`./${name}.test.mjs`, import.meta.url), 'utf8'),
+      );
+    for (const path of ['src/html-bridge.ts', 'business/shared/channel.js'])
+      f.put(f.root, path, readFileSync(new URL('../' + path, import.meta.url), 'utf8'));
+    f.checkpoint();
+    f.put(f.root, source, readFileSync(join(f.root, source), 'utf8') + '\n// selection probe\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    for (const name of ['html-business-theme', 'html-request-cancel'])
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + source].includes(`tests/${name}.test.mjs`),
+        JSON.stringify(plan),
+      );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+test('wrapper arguments keep lexical ownership, parameter positions and byte-read boundaries', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs'],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'src/inspection.mjs', 'import "./value.ts";');
+  f.put(f.root, 'src/other.ts', 'export const other = true;');
+  f.put(
+    f.root,
+    'tests/wrapper.test.mjs',
+    `
+    function load(entry) { build({entryPoints: [entry]}); }
+    function log(value) { console.log(value); }
+    function unrelated() { const load = log; load('../src/value.ts'); }
+    function overridden(load) { load('../src/value.ts'); }
+    function inspect(entry) { readFileSync(entry); }
+    inspect('../src/inspection.mjs');
+    function buildNamed(label, entry) { build({entryPoints: [entry]}); }
+    buildNamed('../src/value.ts', '../src/other.ts');
+  `,
+  );
+  f.put(
+    f.root,
+    'tests/position.test.mjs',
+    `
+    async function bundled(label, entry) { build({entryPoints: [entry]}); }
+    const entry = '../src/value.ts';
+    bundled('not a path', entry);
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.ok(plan.files.includes('tests/position.test.mjs'));
+  assert.ok(!plan.files.includes('tests/wrapper.test.mjs'), JSON.stringify(plan));
+});
+test('repeated local binding references still produce a finite real consumer plan', (t) => {
+  const f = fixture(t);
+  const declarations = ["const edge0 = '../src/value.ts';"];
+  for (let index = 1; index <= 20; index++)
+    declarations.push(`const edge${index} = [edge${index - 1}, edge${index - 1}];`);
+  f.put(
+    f.root,
+    'tests/repeated.test.mjs',
+    declarations.join('\n') + '\nbuild({entryPoints:[edge20]});',
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.ok(f.plan().files.includes('tests/repeated.test.mjs'));
+});
+test('reading policy and package metadata does not execute the source paths listed in them', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs'],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'package.json', JSON.stringify({ main: 'src/value.ts' }));
+  f.put(
+    f.root,
+    'tests/metadata.test.mjs',
+    `
+    import { readFileSync } from 'node:fs';
+    readFileSync('scripts/ci-test-policy.json');
+    readFileSync('package.json');
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
+});
+test('ordinary source path literals do not select tests that never consume the file', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/path-only.test.mjs',
+    `
+    export const fixture = 'src/value.ts';
+    // import '../src/value.js';
+    export const example = "import '../src/value.js'";
+  `,
+  );
+  f.put(f.root, 'tests/build.test.mjs', `build({ entryPoints: ['src/consumer.ts'] });`);
+  f.put(
+    f.root,
+    'tests/read.test.mjs',
+    `readFileSync(new URL('../src/value.ts', import.meta.url));`,
+  );
+  f.put(f.root, 'tests/process.test.mjs', `spawn(process.execPath, ['src/consumer.ts']);`);
+  f.put(
+    f.root,
+    'tests/plugin.test.mjs',
+    `export const plugin = { name: resolve(root, 'lib/consumer.js') };`,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/build.test.mjs',
+    'tests/plugin.test.mjs',
+    'tests/process.test.mjs',
+    'tests/read.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+});
+test('a file path assigned before a byte read selects that consumer without executing the read module', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 1;`);
+  f.put(
+    f.root,
+    'tests/reader.test.mjs',
+    `
+    const source = new URL('../src/inspection.mjs', import.meta.url);
+    readFileSync(source, 'utf8');
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 2;`);
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/reader.test.mjs', 'tests/required.test.mjs']);
+  f.put(f.root, 'src/inspection.mjs', `import './value.js'; export const inspected = 1;`);
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
+});
+test('extensionless authored module imports keep their transitive source consumers', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/extensionless.test.mjs', `import '../src/consumer';`);
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/extensionless.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+});
+test('a same-named path in another scope cannot replace the actual reader input', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/scoped-reader.test.mjs',
+    `
+    function consume() {
+      const source = new URL('../src/value.ts', import.meta.url);
+      readFileSync(source);
+    }
+    function metadata() { const source = 'scripts/ci-test-policy.json'; }
+  `,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan().files, [
+    'tests/affected.test.mjs',
+    'tests/required.test.mjs',
+    'tests/scoped-reader.test.mjs',
+  ]);
+});
 test('deleted source remains an affected dependency, and peer changes are bound to the committed baseline', (t) => {
   const f = fixture(t);
   unlinkSync(join(f.root, 'src/value.ts'));
@@ -296,4 +525,77 @@ test('approval retirement and retained domain-type migration select current beha
       assert.equal(plan.browser, true);
       assert.equal(plan.fullSuite, 'not-run');
     });
+});
+
+test('actual esbuild stdin imports and mapped CSS reads retain both frame browser consumers', (t) => {
+  for (const changed of ['src/frame-presenter.tsx', 'src/workbench.ts', 'src/company/layout.css']) {
+    const f = fixture(t);
+    f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    for (const file of [
+      'tests/frame-layout.browser.mjs',
+      'tests/frame-conversation-space.browser.mjs',
+    ])
+      f.put(f.root, file, readFileSync(new URL('./' + file.slice(6), import.meta.url), 'utf8'));
+    f.put(f.root, changed, '/* initial authored input */');
+    f.checkpoint();
+    f.put(f.root, changed, '/* changed authored input */');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(plan.files.includes('tests/frame-layout.browser.mjs'), JSON.stringify(plan));
+    assert.ok(
+      plan.files.includes('tests/frame-conversation-space.browser.mjs'),
+      JSON.stringify(plan),
+    );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+
+test('stdin shorthand and named wrapper parameters retain compiled source imports', (t) => {
+  for (const file of [
+    'fc-repository-view.browser.mjs',
+    'page-bridge-cancel.test.mjs',
+    'dms-reception.test.mjs',
+    'html-author-layout.browser.mjs',
+  ]) {
+    const f = fixture(t);
+    if (file.endsWith('.browser.mjs')) f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    const source =
+      file === 'page-bridge-cancel.test.mjs'
+        ? 'src/page-bridge/host.ts'
+        : file === 'dms-reception.test.mjs'
+          ? 'src/workbench.ts'
+          : file === 'html-author-layout.browser.mjs'
+            ? 'src/workbench.ts'
+            : 'src/workbench.ts';
+    f.put(f.root, 'tests/' + file, readFileSync(new URL('./' + file, import.meta.url), 'utf8'));
+    f.put(f.root, source, '/* initial */');
+    f.checkpoint();
+    f.put(f.root, source, '/* changed */');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(f.plan().files.includes('tests/' + file), file + ': ' + JSON.stringify(f.plan()));
+  }
+});
+
+test('mapped read parameters shadow outer bindings and named wrapper parameters', (t) => {
+  for (const source of [
+    `const file='../src/other.ts'; ['../src/value.ts'].map(file => readFileSync(file));`,
+    `function inspect(file) { ['../src/value.ts'].map(file => readFileSync(file)); } inspect('../src/other.ts');`,
+  ]) {
+    const f = fixture(t);
+    f.policy.rules.push({ pattern: '^src/other\\.ts$', tests: ['tests/required.test.mjs'] });
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.put(f.root, 'tests/mapped.test.mjs', source);
+    f.put(f.root, 'src/other.ts', 'export const other=1;');
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value=2;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(f.plan().files.includes('tests/mapped.test.mjs'), source);
+    f.put(f.root, 'README.md', 'advance baseline');
+    f.checkpoint();
+    f.put(f.root, 'src/other.ts', 'export const other=2;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(!f.plan().files.includes('tests/mapped.test.mjs'), source);
+  }
 });
