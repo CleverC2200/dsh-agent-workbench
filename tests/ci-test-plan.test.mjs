@@ -364,6 +364,106 @@ test('invalid base commits and policy paths refuse rather than interpreting refs
   assert.throws(f.plan, /CI_TEST_PATH_REJECTED/);
 });
 
+test('browser installer fixtures do not request a real browser', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    `
+    import { writeFileSync } from 'node:fs';
+    const executable = 'fake-playwright';
+    writeFileSync(executable, "export const chromium = { launch() {} };", { mode: 0o755 });
+    export const example = "import { chromium } from '@playwright/test';";
+    // import { chromium } from '@playwright/test';
+  `,
+  );
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan().browser, false);
+});
+
+test('a computed Playwright import requests a browser through its executing helper', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/required.test.mjs', "import './helpers/browser.mjs';");
+  f.put(
+    f.root,
+    'tests/helpers/browser.mjs',
+    "const packageName = 'playwright'; const { chromium } = await import(packageName); await chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, true);
+  assert.deepEqual(plan.browserFiles, ['tests/required.test.mjs']);
+});
+
+test('an explicit installer fixture uses its own browser substitute across imported preparation code', (t) => {
+  const f = fixture(t);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/required.test.mjs', "import './helpers/prepare.mjs';");
+  f.put(
+    f.root,
+    'tests/helpers/prepare.mjs',
+    "import { chromium } from '@playwright/test'; export const probe = () => chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, false);
+  assert.deepEqual(plan.browserFixtures, ['tests/required.test.mjs']);
+  assert.deepEqual(plan.browserFiles, []);
+});
+
+test('a fixture declaration cannot suppress a direct browser consumer', (t) => {
+  const f = fixture(t);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    "import { chromium } from '@playwright/test'; await chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
+});
+
+test('browser fixture declarations reject missing, unknown and wildcard test paths', (t) => {
+  const f = fixture(t);
+  for (const files of [
+    ['tests/missing.test.mjs'],
+    ['tests/*.test.mjs'],
+    ['../tests/required.test.mjs'],
+    ['src/value.ts'],
+    'tests/required.test.mjs',
+  ]) {
+    f.policy.browserFixtures = files;
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
+  }
+});
+
+test('direct and spawned browser consumers request preparation while byte reads and suffixes do not', (t) => {
+  const f = fixture(t);
+  f.policy.required.push('tests/process.test.mjs', 'tests/read.test.mjs', 'tests/name.browser.mjs');
+  f.policy.tests.push('tests/*.browser.mjs');
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'src/browser.mjs',
+    "const { chromium } = require('playwright-core'); chromium.launch();",
+  );
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    "import { chromium } from '@playwright/test'; await chromium.launch();",
+  );
+  f.put(f.root, 'tests/process.test.mjs', "spawn(process.execPath, ['src/browser.mjs']);");
+  f.put(f.root, 'tests/read.test.mjs', "readFileSync('src/browser.mjs');");
+  f.put(f.root, 'tests/name.browser.mjs', 'export const fixture = true;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, true);
+  assert.deepEqual(plan.browserFiles, ['tests/process.test.mjs', 'tests/required.test.mjs']);
+});
+
 test('a fixed file reference does not request a Profile, while an actual imported Profile does', (t) => {
   const f = fixture(t, 'dsh-gea-plugin');
   f.put(f.root, 'tests/profile.mjs', 'export const profile = true;');
@@ -371,9 +471,14 @@ test('a fixed file reference does not request a Profile, while an actual importe
   const own = f.repositories.find((entry) => entry.repo === 'dsh-gea-plugin');
   own.head = f.commit(f.root);
   assert.equal(f.plan().runtime, false);
+  assert.equal(f.plan().browser, false);
   f.put(f.root, 'tests/required.test.mjs', "import './profile.mjs';");
   own.head = f.commit(f.root);
   assert.equal(f.plan().runtime, true);
+  assert.equal(f.plan().browser, true);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
 });
 
 test('an empty required policy cannot invoke a runner with no file arguments', (t) => {
@@ -459,7 +564,9 @@ for (const repo of ['dsh-agent-workbench', 'dsh-gea-plugin']) {
         file,
         file === 'tests/api-log-web.test.mjs'
           ? "import './profile.mjs'; import {chromium} from '@playwright/test';"
-          : 'export const api = true;',
+          : file.endsWith('.browser.mjs')
+            ? "import { chromium } from '@playwright/test'; await chromium.launch();"
+            : 'export const api = true;',
       );
     if (repo === 'dsh-gea-plugin')
       f.put(f.root, 'tests/profile.mjs', 'export const profile = true;');
@@ -513,7 +620,14 @@ test('approval retirement and retained domain-type migration select current beha
       f.policy.rules = production.rules;
       f.policy.tests.push('tests/*.browser.mjs');
       f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
-      for (const file of consumers) f.put(f.root, file, 'export const fixture = true;');
+      for (const file of consumers)
+        f.put(
+          f.root,
+          file,
+          file.endsWith('.browser.mjs')
+            ? "import { chromium } from '@playwright/test'; await chromium.launch();"
+            : 'export const fixture = true;',
+        );
       f.put(f.root, source, 'export const retired = true;');
       f.checkpoint();
       unlinkSync(join(f.root, source));
