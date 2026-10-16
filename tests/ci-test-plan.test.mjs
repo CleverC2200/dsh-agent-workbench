@@ -68,7 +68,7 @@ function fixture(t, repo = 'dsh-agent-workbench') {
       base = commit(root);
       own.head = base;
     },
-    plan: () => selectCiTests({ repositories, repo: own.repo, base }),
+    plan: (testOwners) => selectCiTests({ repositories, repo: own.repo, base, testOwners }),
   };
 }
 
@@ -364,6 +364,106 @@ test('invalid base commits and policy paths refuse rather than interpreting refs
   assert.throws(f.plan, /CI_TEST_PATH_REJECTED/);
 });
 
+test('browser installer fixtures do not request a real browser', (t) => {
+  const f = fixture(t);
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    `
+    import { writeFileSync } from 'node:fs';
+    const executable = 'fake-playwright';
+    writeFileSync(executable, "export const chromium = { launch() {} };", { mode: 0o755 });
+    export const example = "import { chromium } from '@playwright/test';";
+    // import { chromium } from '@playwright/test';
+  `,
+  );
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan().browser, false);
+});
+
+test('a computed Playwright import requests a browser through its executing helper', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/required.test.mjs', "import './helpers/browser.mjs';");
+  f.put(
+    f.root,
+    'tests/helpers/browser.mjs',
+    "const packageName = 'playwright'; const { chromium } = await import(packageName); await chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, true);
+  assert.deepEqual(plan.browserFiles, ['tests/required.test.mjs']);
+});
+
+test('an explicit installer fixture uses its own browser substitute across imported preparation code', (t) => {
+  const f = fixture(t);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/required.test.mjs', "import './helpers/prepare.mjs';");
+  f.put(
+    f.root,
+    'tests/helpers/prepare.mjs',
+    "import { chromium } from '@playwright/test'; export const probe = () => chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, false);
+  assert.deepEqual(plan.browserFixtures, ['tests/required.test.mjs']);
+  assert.deepEqual(plan.browserFiles, []);
+});
+
+test('a fixture declaration cannot suppress a direct browser consumer', (t) => {
+  const f = fixture(t);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    "import { chromium } from '@playwright/test'; await chromium.launch();",
+  );
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
+});
+
+test('browser fixture declarations reject missing, unknown and wildcard test paths', (t) => {
+  const f = fixture(t);
+  for (const files of [
+    ['tests/missing.test.mjs'],
+    ['tests/*.test.mjs'],
+    ['../tests/required.test.mjs'],
+    ['src/value.ts'],
+    'tests/required.test.mjs',
+  ]) {
+    f.policy.browserFixtures = files;
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
+  }
+});
+
+test('direct and spawned browser consumers request preparation while byte reads and suffixes do not', (t) => {
+  const f = fixture(t);
+  f.policy.required.push('tests/process.test.mjs', 'tests/read.test.mjs', 'tests/name.browser.mjs');
+  f.policy.tests.push('tests/*.browser.mjs');
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'src/browser.mjs',
+    "const { chromium } = require('playwright-core'); chromium.launch();",
+  );
+  f.put(
+    f.root,
+    'tests/required.test.mjs',
+    "import { chromium } from '@playwright/test'; await chromium.launch();",
+  );
+  f.put(f.root, 'tests/process.test.mjs', "spawn(process.execPath, ['src/browser.mjs']);");
+  f.put(f.root, 'tests/read.test.mjs', "readFileSync('src/browser.mjs');");
+  f.put(f.root, 'tests/name.browser.mjs', 'export const fixture = true;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.browser, true);
+  assert.deepEqual(plan.browserFiles, ['tests/process.test.mjs', 'tests/required.test.mjs']);
+});
+
 test('a fixed file reference does not request a Profile, while an actual imported Profile does', (t) => {
   const f = fixture(t, 'dsh-gea-plugin');
   f.put(f.root, 'tests/profile.mjs', 'export const profile = true;');
@@ -371,9 +471,14 @@ test('a fixed file reference does not request a Profile, while an actual importe
   const own = f.repositories.find((entry) => entry.repo === 'dsh-gea-plugin');
   own.head = f.commit(f.root);
   assert.equal(f.plan().runtime, false);
+  assert.equal(f.plan().browser, false);
   f.put(f.root, 'tests/required.test.mjs', "import './profile.mjs';");
   own.head = f.commit(f.root);
   assert.equal(f.plan().runtime, true);
+  assert.equal(f.plan().browser, true);
+  f.policy.browserFixtures = ['tests/required.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  assert.throws(f.plan, /CI_TEST_BROWSER_FIXTURE_REJECTED/);
 });
 
 test('an empty required policy cannot invoke a runner with no file arguments', (t) => {
@@ -459,7 +564,9 @@ for (const repo of ['dsh-agent-workbench', 'dsh-gea-plugin']) {
         file,
         file === 'tests/api-log-web.test.mjs'
           ? "import './profile.mjs'; import {chromium} from '@playwright/test';"
-          : 'export const api = true;',
+          : file.endsWith('.browser.mjs')
+            ? "import { chromium } from '@playwright/test'; await chromium.launch();"
+            : 'export const api = true;',
       );
     if (repo === 'dsh-gea-plugin')
       f.put(f.root, 'tests/profile.mjs', 'export const profile = true;');
@@ -513,7 +620,14 @@ test('approval retirement and retained domain-type migration select current beha
       f.policy.rules = production.rules;
       f.policy.tests.push('tests/*.browser.mjs');
       f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
-      for (const file of consumers) f.put(f.root, file, 'export const fixture = true;');
+      for (const file of consumers)
+        f.put(
+          f.root,
+          file,
+          file.endsWith('.browser.mjs')
+            ? "import { chromium } from '@playwright/test'; await chromium.launch();"
+            : 'export const fixture = true;',
+        );
       f.put(f.root, source, 'export const retired = true;');
       f.checkpoint();
       unlinkSync(join(f.root, source));
@@ -551,6 +665,37 @@ test('actual esbuild stdin imports and mapped CSS reads retain both frame browse
   }
 });
 
+test('sales plan presentation keeps actual workbench rendering and stylesheet consumers', (t) => {
+  const sources = [
+    'src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx',
+    'src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.tsx',
+    'src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.module.css',
+    'src/workbench/workbench.css',
+    'src/workbench/original/theme.css',
+  ];
+  for (const changed of sources) {
+    const f = fixture(t);
+    f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    const renderer = 'tests/sales-plan-presentation.browser.mjs';
+    f.put(
+      f.root,
+      renderer,
+      readFileSync(new URL('./sales-plan-presentation.browser.mjs', import.meta.url), 'utf8'),
+    );
+    for (const file of sources)
+      f.put(f.root, file, readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
+    f.checkpoint();
+    f.put(f.root, changed, readFileSync(join(f.root, changed), 'utf8') + '\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(plan.files.includes(renderer), JSON.stringify(plan));
+    assert.equal(plan.browser, true);
+    assert.equal(plan.runtime, false);
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+
 test('stdin shorthand and named wrapper parameters retain compiled source imports', (t) => {
   for (const file of [
     'fc-repository-view.browser.mjs',
@@ -584,7 +729,10 @@ test('mapped read parameters shadow outer bindings and named wrapper parameters'
     `function inspect(file) { ['../src/value.ts'].map(file => readFileSync(file)); } inspect('../src/other.ts');`,
   ]) {
     const f = fixture(t);
-    f.policy.rules.push({ pattern: '^src/other\\.ts$', tests: ['tests/required.test.mjs'] });
+    f.policy.rules.push({
+      pattern: '^src/other\\.ts$',
+      tests: ['tests/required.test.mjs'],
+    });
     f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
     f.put(f.root, 'tests/mapped.test.mjs', source);
     f.put(f.root, 'src/other.ts', 'export const other=1;');
@@ -598,4 +746,46 @@ test('mapped read parameters shadow outer bindings and named wrapper parameters'
     f.repositories[0].head = f.commit(f.root);
     assert.ok(!f.plan().files.includes('tests/mapped.test.mjs'), source);
   }
+});
+
+test('declared child execution carries transitive implementation changes to one direct owner', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/host.test.mjs', 'import "../src/consumer.js";');
+  f.put(f.root, 'tests/client.test.mjs', 'export const client = true;');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ 'tests/host.test.mjs': 'tests/client.test.mjs' });
+  assert.deepEqual(plan.files, [
+    'tests/affected.test.mjs',
+    'tests/client.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+  assert.deepEqual(plan.executedBy, {
+    'tests/host.test.mjs': 'tests/client.test.mjs',
+  });
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.ts'], [
+    'tests/affected.test.mjs',
+    'tests/client.test.mjs',
+  ]);
+});
+
+test('execution ownership rejects unknown, missing, self-referencing and cyclic test mappings', (t) => {
+  const f = fixture(t);
+  for (const testOwners of [
+    null,
+    { 'tests/missing.test.mjs': 'tests/affected.test.mjs' },
+    { 'tests/affected.test.mjs': 'tests/missing.test.mjs' },
+    { 'tests/affected.test.mjs': 'tests/affected.test.mjs' },
+    {
+      'tests/affected.test.mjs': 'tests/peer.test.mjs',
+      'tests/peer.test.mjs': 'tests/affected.test.mjs',
+    },
+  ])
+    assert.throws(() => f.plan(testOwners), /CI_TEST_OWNER_REQUIRED/);
+  unlinkSync(join(f.root, 'tests/peer.test.mjs'));
+  assert.throws(
+    () => f.plan({ 'tests/affected.test.mjs': 'tests/peer.test.mjs' }),
+    /CI_TEST_OWNER_REQUIRED/,
+  );
 });
