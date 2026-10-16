@@ -18,11 +18,13 @@ function references(file, roots, known, importsOnly = false) {
   if (/\.(?:json|ya?ml)$/.test(file)) return result;
   const text = readFileSync(file, 'utf8');
   // Keep comments and quoted examples out of the executable syntax we inspect.
-  const tokens = (
-    text.match(
-      /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s]/g,
-    ) ?? []
-  ).filter((token) => !token.startsWith('//') && !token.startsWith('/*'));
+  const tokenize = (source) =>
+    (
+      source.match(
+        /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s]/g,
+      ) ?? []
+    ).filter((token) => !token.startsWith('//') && !token.startsWith('/*'));
+  const tokens = tokenize(text);
   const literal = (token) => /^["'`]/.test(token ?? '');
   const endOf = (start) => {
     const closers = [];
@@ -85,15 +87,46 @@ function references(file, roots, known, importsOnly = false) {
         continue;
       body = endOf(open) + 3;
     } else continue;
-    if (tokens[body] !== '{') continue;
+    const end =
+      tokens[body] === '{'
+        ? endOf(body)
+        : bindingStart === undefined
+          ? undefined
+          : bindings.get(tokens[index + 1])?.find((entry) => entry.start === bindingStart)?.end;
+    if (end === undefined) continue;
     functions.push({
       name: tokens[index + 1],
       nameIndex: index + 1,
       scope: scopes[index],
       body,
       bindingStart,
-      end: endOf(body),
+      end,
       parameters: argumentsOf(open).map(({ start, end }) => (start === end ? tokens[start] : null)),
+    });
+  }
+  // Array callbacks consume the receiver's values; declaration text alone is not a dependency.
+  const mappedValues = [];
+  for (let index = 2; index < tokens.length; index++) {
+    if (tokens[index] !== 'map' || tokens[index - 1] !== '.' || tokens[index + 1] !== '(') continue;
+    let parameter = index + 2;
+    let arrow = parameter + 1;
+    if (tokens[parameter] === '(') {
+      arrow = endOf(parameter) + 1;
+      if (arrow !== parameter + 3) continue;
+      parameter++;
+    }
+    if (tokens[arrow] !== '=' || tokens[arrow + 1] !== '>') continue;
+    let start = index - 2;
+    if (tokens[start] === ']') {
+      start = tokens.findIndex((token, cursor) => token === '[' && endOf(cursor) === index - 2);
+      if (start < 0) continue;
+    }
+    mappedValues.push({
+      name: tokens[parameter],
+      body: arrow + 2,
+      end: endOf(index + 1),
+      start,
+      valueEnd: index - 2,
     });
   }
   const pathNames = (start, end, visited = new Set()) => {
@@ -112,11 +145,24 @@ function references(file, roots, known, importsOnly = false) {
         const owner = functions.findLast(
           (entry) => entry.body < cursor && cursor < entry.end && entry.parameters.includes(token),
         );
-        if (binding && (!owner || binding.scope.length > owner.scope.length)) {
+        const callback = mappedValues.findLast(
+          (entry) => entry.name === token && entry.body <= cursor && cursor < entry.end,
+        );
+        if (
+          binding &&
+          (!owner || binding.scope.length > owner.scope.length) &&
+          (!callback || binding.start > callback.body)
+        ) {
           const key = 'binding:' + binding.start;
           if (visited.has(key)) continue;
           visited.add(key);
           names.push(...pathNames(binding.start, binding.end, visited));
+        } else if (callback && (!owner || callback.body > owner.body)) {
+          const entry = callback;
+          const key = 'mapped:' + entry.body;
+          if (visited.has(key)) continue;
+          visited.add(key);
+          names.push(...pathNames(entry.start, entry.valueEnd, visited));
         } else if (owner) {
           const parameter = owner.parameters.indexOf(token);
           const key = `parameter:${owner.body}:${parameter}`;
@@ -171,6 +217,32 @@ function references(file, roots, known, importsOnly = false) {
     return names;
   };
   const names = [];
+  // esbuild executes stdin.contents as source, so its imports are real dependency edges.
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index] !== 'stdin' || tokens[index + 1] !== ':' || tokens[index + 2] !== '{')
+      continue;
+    const end = endOf(index + 2);
+    for (let cursor = index + 3; cursor < end; cursor++) {
+      if (tokens[cursor] !== 'contents') continue;
+      const start = tokens[cursor + 1] === ':' ? cursor + 2 : cursor;
+      let valueEnd = start;
+      while (valueEnd + 1 < end && ![',', '}'].includes(tokens[valueEnd + 1])) {
+        if (['(', '[', '{'].includes(tokens[valueEnd])) valueEnd = endOf(valueEnd);
+        else valueEnd++;
+      }
+      const source = pathNames(start, valueEnd).flatMap(tokenize);
+      for (let offset = 0; offset < source.length; offset++) {
+        if (['from', 'import'].includes(source[offset]) && literal(source[offset + 1]))
+          names.push([source[offset + 1].slice(1, -1), true]);
+        else if (
+          ['import', 'require'].includes(source[offset]) &&
+          source[offset + 1] === '(' &&
+          literal(source[offset + 2])
+        )
+          names.push([source[offset + 2].slice(1, -1), true]);
+      }
+    }
+  }
   for (let index = 0; index < tokens.length; index++) {
     const token = tokens[index];
     if (['from', 'import'].includes(token) && literal(tokens[index + 1]))
@@ -284,7 +356,11 @@ export function selectCiTests({
     return git(entry.path, 'diff', '--name-only', '--no-renames', '-z', before, entry.head)
       .split('\0')
       .filter(Boolean)
-      .map((file) => ({ repo: entry.repo, file, path: resolve(entry.path, file) }));
+      .map((file) => ({
+        repo: entry.repo,
+        file,
+        path: resolve(entry.path, file),
+      }));
   });
   const roots = repositories.map((entry) => entry.path);
   const known = new Set(

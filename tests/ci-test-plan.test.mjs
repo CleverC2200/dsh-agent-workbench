@@ -152,7 +152,10 @@ test('actual arrow esbuild loaders retain both shipped channel and HTML bridge c
 });
 test('wrapper arguments keep lexical ownership, parameter positions and byte-read boundaries', (t) => {
   const f = fixture(t);
-  f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs'],
+  });
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   f.put(f.root, 'src/inspection.mjs', 'import "./value.ts";');
   f.put(f.root, 'src/other.ts', 'export const other = true;');
@@ -203,7 +206,10 @@ test('repeated local binding references still produce a finite real consumer pla
 });
 test('reading policy and package metadata does not execute the source paths listed in them', (t) => {
   const f = fixture(t);
-  f.policy.rules.push({ pattern: '^src/value\\.ts$', tests: ['tests/affected.test.mjs'] });
+  f.policy.rules.push({
+    pattern: '^src/value\\.ts$',
+    tests: ['tests/affected.test.mjs'],
+  });
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   f.put(f.root, 'package.json', JSON.stringify({ main: 'src/value.ts' }));
   f.put(
@@ -519,4 +525,77 @@ test('approval retirement and retained domain-type migration select current beha
       assert.equal(plan.browser, true);
       assert.equal(plan.fullSuite, 'not-run');
     });
+});
+
+test('actual esbuild stdin imports and mapped CSS reads retain both frame browser consumers', (t) => {
+  for (const changed of ['src/frame-presenter.tsx', 'src/workbench.ts', 'src/company/layout.css']) {
+    const f = fixture(t);
+    f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    for (const file of [
+      'tests/frame-layout.browser.mjs',
+      'tests/frame-conversation-space.browser.mjs',
+    ])
+      f.put(f.root, file, readFileSync(new URL('./' + file.slice(6), import.meta.url), 'utf8'));
+    f.put(f.root, changed, '/* initial authored input */');
+    f.checkpoint();
+    f.put(f.root, changed, '/* changed authored input */');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(plan.files.includes('tests/frame-layout.browser.mjs'), JSON.stringify(plan));
+    assert.ok(
+      plan.files.includes('tests/frame-conversation-space.browser.mjs'),
+      JSON.stringify(plan),
+    );
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+
+test('stdin shorthand and named wrapper parameters retain compiled source imports', (t) => {
+  for (const file of [
+    'fc-repository-view.browser.mjs',
+    'page-bridge-cancel.test.mjs',
+    'dms-reception.test.mjs',
+    'html-author-layout.browser.mjs',
+  ]) {
+    const f = fixture(t);
+    if (file.endsWith('.browser.mjs')) f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    const source =
+      file === 'page-bridge-cancel.test.mjs'
+        ? 'src/page-bridge/host.ts'
+        : file === 'dms-reception.test.mjs'
+          ? 'src/workbench.ts'
+          : file === 'html-author-layout.browser.mjs'
+            ? 'src/workbench.ts'
+            : 'src/workbench.ts';
+    f.put(f.root, 'tests/' + file, readFileSync(new URL('./' + file, import.meta.url), 'utf8'));
+    f.put(f.root, source, '/* initial */');
+    f.checkpoint();
+    f.put(f.root, source, '/* changed */');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(f.plan().files.includes('tests/' + file), file + ': ' + JSON.stringify(f.plan()));
+  }
+});
+
+test('mapped read parameters shadow outer bindings and named wrapper parameters', (t) => {
+  for (const source of [
+    `const file='../src/other.ts'; ['../src/value.ts'].map(file => readFileSync(file));`,
+    `function inspect(file) { ['../src/value.ts'].map(file => readFileSync(file)); } inspect('../src/other.ts');`,
+  ]) {
+    const f = fixture(t);
+    f.policy.rules.push({ pattern: '^src/other\\.ts$', tests: ['tests/required.test.mjs'] });
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.put(f.root, 'tests/mapped.test.mjs', source);
+    f.put(f.root, 'src/other.ts', 'export const other=1;');
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value=2;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(f.plan().files.includes('tests/mapped.test.mjs'), source);
+    f.put(f.root, 'README.md', 'advance baseline');
+    f.checkpoint();
+    f.put(f.root, 'src/other.ts', 'export const other=2;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.ok(!f.plan().files.includes('tests/mapped.test.mjs'), source);
+  }
 });
