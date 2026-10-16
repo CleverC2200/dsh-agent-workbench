@@ -145,6 +145,7 @@ export function usePageSessionCoordination({
     [active],
   );
   useEffect(() => {
+    workbench.reconcileBusinessIdentity(identity);
     const flight = pending.current;
     if (page.resourceId && flight && (flight.scope !== identity.scope || !identityReady)) {
       cancelSelection();
