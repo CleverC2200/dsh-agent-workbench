@@ -665,6 +665,37 @@ test('actual esbuild stdin imports and mapped CSS reads retain both frame browse
   }
 });
 
+test('sales plan presentation keeps actual workbench rendering and stylesheet consumers', (t) => {
+  const sources = [
+    'src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx',
+    'src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.tsx',
+    'src/workbench/original/workbenches/regionalApproval/InlineSkuDetails.module.css',
+    'src/workbench/workbench.css',
+    'src/workbench/original/theme.css',
+  ];
+  for (const changed of sources) {
+    const f = fixture(t);
+    f.policy.tests.push('tests/*.browser.mjs');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    const renderer = 'tests/sales-plan-presentation.browser.mjs';
+    f.put(
+      f.root,
+      renderer,
+      readFileSync(new URL('./sales-plan-presentation.browser.mjs', import.meta.url), 'utf8'),
+    );
+    for (const file of sources)
+      f.put(f.root, file, readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
+    f.checkpoint();
+    f.put(f.root, changed, readFileSync(join(f.root, changed), 'utf8') + '\n');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan();
+    assert.ok(plan.files.includes(renderer), JSON.stringify(plan));
+    assert.equal(plan.browser, true);
+    assert.equal(plan.runtime, false);
+    assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+  }
+});
+
 test('stdin shorthand and named wrapper parameters retain compiled source imports', (t) => {
   for (const file of [
     'fc-repository-view.browser.mjs',
