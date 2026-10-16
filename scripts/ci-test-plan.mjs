@@ -315,6 +315,7 @@ export function selectCiTests({
   repositories,
   repo,
   base,
+  testOwners = {},
   root = repositories.find((entry) => entry.repo === repo)?.path,
 }) {
   if (!root || !/^[a-f0-9]{40}$/.test(base ?? ''))
@@ -345,8 +346,26 @@ export function selectCiTests({
         }),
       ),
     ].sort();
-  const required = expand(policy.required),
-    pool = expand(policy.tests);
+  const pool = expand(policy.tests);
+  if (!testOwners || typeof testOwners !== 'object' || Array.isArray(testOwners))
+    throw Error('CI_TEST_OWNER_REQUIRED: explicit test-pool files required');
+  const ownership = Object.entries(testOwners);
+  for (const [child, owner] of ownership) {
+    if (
+      !pool.includes(child) ||
+      typeof owner !== 'string' ||
+      !pool.includes(owner) ||
+      Object.hasOwn(testOwners, owner)
+    )
+      throw Error(`CI_TEST_OWNER_REQUIRED: ${child} -> ${owner}`);
+  }
+  const executedBy = {};
+  const directFile = (file) => {
+    if (!Object.hasOwn(testOwners, file)) return file;
+    executedBy[file] = testOwners[file];
+    return testOwners[file];
+  };
+  const required = [...new Set(expand(policy.required).map(directFile))].sort();
   if (
     policy.browserFixtures !== undefined &&
     (!Array.isArray(policy.browserFixtures) ||
@@ -389,16 +408,21 @@ export function selectCiTests({
     ),
   );
   for (const change of changes) known.add(change.path);
+  const ownedPaths = ownership.map(([child, owner]) => [
+    resolve(root, child),
+    resolve(root, owner),
+  ]);
   const graph = new Map();
   const dependencies = (file, importsOnly) => {
     const key = `${importsOnly}:${file}`;
-    if (!graph.has(key))
-      graph.set(
-        key,
+    if (!graph.has(key)) {
+      const edges =
         existsSync(file) && sourceFile.test(file)
           ? references(file, roots, known, importsOnly)
-          : new Map(),
-      );
+          : new Map();
+      for (const [child, owner] of ownedPaths) if (file === owner) edges.set(child, true);
+      graph.set(key, edges);
+    }
     return graph.get(key);
   };
   const reaches = (start, target, visited = new Set(), importsOnly = false) => {
@@ -421,7 +445,7 @@ export function selectCiTests({
     const matched = rules.some((rule) => rule.exclusive === true)
       ? mapped
       : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
-    const files = [...new Set(matched)].sort();
+    const files = [...new Set(matched.map(directFile))].sort();
     // Source with no known consumer must be mapped explicitly, rather than silently receiving a green result.
     if (
       !files.length &&
@@ -473,6 +497,7 @@ export function selectCiTests({
     changes: changes.map(({ repo, file }) => ({ repo, file })),
     required,
     files,
+    executedBy,
     reasons,
     runtimeFiles,
     browserFiles,
