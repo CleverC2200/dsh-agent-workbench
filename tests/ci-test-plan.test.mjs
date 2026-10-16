@@ -68,7 +68,7 @@ function fixture(t, repo = 'dsh-agent-workbench') {
       base = commit(root);
       own.head = base;
     },
-    plan: () => selectCiTests({ repositories, repo: own.repo, base }),
+    plan: (testOwners) => selectCiTests({ repositories, repo: own.repo, base, testOwners }),
   };
 }
 
@@ -729,7 +729,10 @@ test('mapped read parameters shadow outer bindings and named wrapper parameters'
     `function inspect(file) { ['../src/value.ts'].map(file => readFileSync(file)); } inspect('../src/other.ts');`,
   ]) {
     const f = fixture(t);
-    f.policy.rules.push({ pattern: '^src/other\\.ts$', tests: ['tests/required.test.mjs'] });
+    f.policy.rules.push({
+      pattern: '^src/other\\.ts$',
+      tests: ['tests/required.test.mjs'],
+    });
     f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
     f.put(f.root, 'tests/mapped.test.mjs', source);
     f.put(f.root, 'src/other.ts', 'export const other=1;');
@@ -743,4 +746,46 @@ test('mapped read parameters shadow outer bindings and named wrapper parameters'
     f.repositories[0].head = f.commit(f.root);
     assert.ok(!f.plan().files.includes('tests/mapped.test.mjs'), source);
   }
+});
+
+test('declared child execution carries transitive implementation changes to one direct owner', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/host.test.mjs', 'import "../src/consumer.js";');
+  f.put(f.root, 'tests/client.test.mjs', 'export const client = true;');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ 'tests/host.test.mjs': 'tests/client.test.mjs' });
+  assert.deepEqual(plan.files, [
+    'tests/affected.test.mjs',
+    'tests/client.test.mjs',
+    'tests/required.test.mjs',
+  ]);
+  assert.deepEqual(plan.executedBy, {
+    'tests/host.test.mjs': 'tests/client.test.mjs',
+  });
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.ts'], [
+    'tests/affected.test.mjs',
+    'tests/client.test.mjs',
+  ]);
+});
+
+test('execution ownership rejects unknown, missing, self-referencing and cyclic test mappings', (t) => {
+  const f = fixture(t);
+  for (const testOwners of [
+    null,
+    { 'tests/missing.test.mjs': 'tests/affected.test.mjs' },
+    { 'tests/affected.test.mjs': 'tests/missing.test.mjs' },
+    { 'tests/affected.test.mjs': 'tests/affected.test.mjs' },
+    {
+      'tests/affected.test.mjs': 'tests/peer.test.mjs',
+      'tests/peer.test.mjs': 'tests/affected.test.mjs',
+    },
+  ])
+    assert.throws(() => f.plan(testOwners), /CI_TEST_OWNER_REQUIRED/);
+  unlinkSync(join(f.root, 'tests/peer.test.mjs'));
+  assert.throws(
+    () => f.plan({ 'tests/affected.test.mjs': 'tests/peer.test.mjs' }),
+    /CI_TEST_OWNER_REQUIRED/,
+  );
 });

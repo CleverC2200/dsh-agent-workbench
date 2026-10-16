@@ -41,6 +41,6 @@
     "test:quality"
   ],
   "exports": true,
-  "peers": ["../dsh-gea-plugin"],
+  "peers": ["../dsh-gea-plugin", "../dsh-agent-manage"],
   "history": ["docs/history", "UPSTREAM.md", "src/workbench/original/SOURCE.md"]
 }
