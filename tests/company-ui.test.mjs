@@ -1313,6 +1313,70 @@ test('public official and third-party panel rows keep order, icons, activation, 
   assert.equal(document.querySelector('[aria-label="第三方面板"]'), null);
 });
 
+test('desktop opens company login once only after GEA confirms signed out', async (t) => {
+  const { root, dom } = await mountedDom(t);
+  dom.window.dshDesktop = {};
+  let snapshot = { state: 'unknown', scope: null, status: null };
+  const listeners = new Set(),
+    starts = [];
+  const authority = {
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    startLogin: async (signal) => {
+      starts.push(signal);
+      return { loginId: 'desktop', image: 'data:image/png;base64,AA==', expiresIn: 120 };
+    },
+    pollLogin: async () => false,
+  };
+  const { entries } = fixture(authority);
+  const account = entries.find((row) => row.options.name === 'settings.launcher');
+  const render = () =>
+    React.act(async () =>
+      root.render(
+        React.createElement(account.component, {
+          wide: true,
+          settingsOpen: false,
+          openSettings() {},
+        }),
+      ),
+    );
+  const update = async (next) =>
+    React.act(async () => {
+      snapshot = next;
+      for (const changed of listeners) changed();
+    });
+  const status = {
+    environment: 'production',
+    environments: ['production'],
+    authenticated: false,
+    user: null,
+  };
+  await render();
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await update({ state: 'confirmed', scope: null, error: 'offline', status });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await update({
+    state: 'confirmed',
+    scope: 'signed-in',
+    status: { ...status, authenticated: true, user: { name: 'Host User' } },
+  });
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  await update({ state: 'confirmed', scope: null, status });
+  assert.ok(document.querySelector('[role="dialog"] .gea-account-login-qr img'));
+  assert.equal(starts.length, 1);
+  await React.act(async () => document.querySelector('.gea-account-login-close').click());
+  assert.equal(starts[0].aborted, true);
+  await update({ state: 'confirmed', scope: null, status: { ...status } });
+  await React.act(async () => root.render(null));
+  await render();
+  assert.equal(document.querySelector('[role="dialog"]'), null);
+  assert.equal(starts.length, 1);
+  assert.equal(dom.window.localStorage.length, 0);
+});
+
 test('account QR login uses only GEA authority, refresh cancels the old challenge and Host subscription owns success', async (t) => {
   const { root, dom } = await mountedDom(t);
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });

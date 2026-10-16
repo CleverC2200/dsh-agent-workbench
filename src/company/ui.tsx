@@ -152,6 +152,7 @@ export function mountCompanyUI(
     return () => style.remove();
   });
   let account: BusinessAccount | undefined;
+  let desktopLoginPresented = false;
   const pageSessions = createPageSessionNavigation({
     workbench,
     restore: restorePageSession,
@@ -243,6 +244,18 @@ export function mountCompanyUI(
       trigger = useRef<HTMLButtonElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number } | null>(null);
     const [loginOpen, setLoginOpen] = useState(false);
+    useEffect(() => {
+      if (
+        !desktopLoginPresented &&
+        'dshDesktop' in window &&
+        identity.state === 'confirmed' &&
+        identity.error === undefined &&
+        identity.status?.authenticated === false
+      ) {
+        desktopLoginPresented = true;
+        setLoginOpen(true);
+      }
+    }, [identity]);
     const closeLogin = useCallback(() => {
       setLoginOpen(false);
       trigger.current?.focus();
