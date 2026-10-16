@@ -19,7 +19,7 @@ Core 下载内容与产物缓存分别保存。下载缓存只恢复；SDK 缓�
 
 GEA 仅在选中 Profile 测试时准备真实 flock、Workbench 页面构建和冻结 source Profile 输入。窗口准入合同会遍历 Core 的完整依赖树，因此它仍需要 Core Web 产物，但无需真实 Profile 和浏览器。纯静态与权限、取消合同不触发 Profile 准备。原锁所需的 GenUI/Sidebar 固定依赖仍独立准备，不能通过跳过 link 输入改变锁的消费协议。每个实际 Profile 的 Home、Session、登录、进程、窗口预算与完整复核仍独立保留。
 
-Workbench 和 Manage 使用同一选择记录。Manage 能力入口消费同一份选中文件，普通批次排除能力文件；完整独立能力验收入口保留。Windows 归档与安全审计保持独立结果，归档的源码准入与准备范围见 [Manage 干净 CI](../../dsh-agent-manage/docs/clean-ci.md)。
+Workbench 和 Manage 使用同一选择记录。Manage 能力入口消费同一份选中文件，普通批次排除能力文件；完整独立能力验收入口保留。Windows 归档与安全审计保持独立结果。
 
 浏览器需求沿实际 import、require 和执行依赖确定，普通文本或文件后缀不触发安装。policy 的 browserFixtures 仅登记使用自有替身的明确测试文件，文件缺失、直接消费真实浏览器或 Profile 时拒绝豁免。没有浏览器消费者时不恢复浏览器缓存。
 
