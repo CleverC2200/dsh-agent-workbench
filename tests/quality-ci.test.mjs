@@ -10,7 +10,7 @@ import {
   readdirSync,
   globSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
@@ -323,5 +323,82 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
     ]);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('public fast modes propagate real TypeScript errors and the build mode emits declarations', (t) => {
+  const fixture = mkdtempSync(join(tmpdir(), 'workbench-real-typecheck-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  mkdirSync(join(fixture, 'scripts'));
+  mkdirSync(join(fixture, 'src'));
+  for (const file of [
+    'run-quality-fast.mjs',
+    'run-quality-checks.mjs',
+    'generate-plugin-package-version.mjs',
+  ])
+    copyFileSync(join('scripts', file), join(fixture, 'scripts', file));
+  copyFileSync('package.json', join(fixture, 'package.json'));
+  copyFileSync('tsconfig.official.json', join(fixture, 'tsconfig.official.json'));
+  const stamp = spawnSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], {
+    cwd: fixture,
+    encoding: 'utf8',
+  });
+  assert.equal(stamp.status, 0, stamp.stdout + stamp.stderr);
+  const tsc = process.env.WORKBENCH_TEST_TSC ?? resolve('node_modules/typescript/bin/tsc');
+  const version = spawnSync(process.execPath, [tsc, '--version'], { encoding: 'utf8' });
+  assert.equal(version.status, 0, version.stderr);
+  assert.equal(
+    version.stdout.trim(),
+    'Version ' + JSON.parse(readFileSync('package.json')).devDependencies.typescript,
+  );
+  t.diagnostic(version.stdout.trim());
+  const hook = join(fixture, 'command-boundary.mjs');
+  writeFileSync(
+    hook,
+    `
+import commands from 'node:child_process';
+import {syncBuiltinESMExports} from 'node:module';
+const spawn=commands.spawnSync;
+commands.spawnSync=function(command,args,options){
+ if(!['npm','npm.cmd'].includes(command))return spawn.call(this,command,args,options);
+ const name=args[1];
+ if(name==='build:core'||name==='typecheck:official')return spawn.call(this,${JSON.stringify(process.execPath)},[${JSON.stringify(tsc)},'-p','tsconfig.official.json','--noEmit',String(name!=='build:core'),'--emitDeclarationOnly',String(name==='build:core')],options);
+ if(['check:knowledge','lint','format:check'].includes(name))return {status:0};
+ throw Error('UNEXPECTED_QUALITY_COMMAND: '+name);
+};
+syncBuiltinESMExports();
+`,
+  );
+  const source = join(fixture, 'src/typed-entry.ts');
+  for (const build of [true, false]) {
+    const args = ['--checks-only', ...(build ? ['--build'] : [])];
+    const execute = () =>
+      spawnSync(process.execPath, ['--import', hook, 'scripts/run-quality-fast.mjs', ...args], {
+        cwd: fixture,
+        encoding: 'utf8',
+      });
+    writeFileSync(source, 'export const count: number = 42;\n');
+    const accepted = execute();
+    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    if (build)
+      assert.equal(
+        readFileSync(join(fixture, 'lib/types/typed-entry.d.ts'), 'utf8').trim(),
+        'export declare const count: number;',
+      );
+    writeFileSync(source, 'export const count: number = "wrong";\n');
+    const rejected = execute();
+    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    assert.match(
+      rejected.stdout + rejected.stderr,
+      /TS2322.*Type 'string' is not assignable to type 'number'/,
+    );
+    t.diagnostic(
+      `${build ? 'build:core' : 'typecheck:official'}: ${(rejected.stdout + rejected.stderr).match(/[^\n]*TS2322[^\n]*/)[0]}`,
+    );
+    const receipt = JSON.parse(readFileSync(join(fixture, '.runtime/quality-fast.json')));
+    assert.equal(
+      receipt.find(({ name }) => name === (build ? 'build:core' : 'typecheck:official')).status,
+      'failed',
+    );
   }
 });
