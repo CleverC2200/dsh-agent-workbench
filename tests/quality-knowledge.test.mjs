@@ -41,7 +41,11 @@ test('public fast quality checks its active documentation, declarations and actu
     assert.equal(peer.status, 0, peer.stderr);
     // Source only; the gate must diagnose missing references before requiring dependency installation.
     cpSync('package.json', join(fixture, 'package.json'));
-    for (const file of ['run-quality-fast.mjs', 'run-quality-checks.mjs'])
+    for (const file of [
+      'run-quality-fast.mjs',
+      'run-quality-checks.mjs',
+      'check-agent-knowledge.mjs',
+    ])
       cpSync(join('scripts', file), join(fixture, 'scripts', file));
     const good = run(fixture, 'check:knowledge');
     assert.equal(good.status, 0, good.stdout + good.stderr);
@@ -66,6 +70,18 @@ test('public fast quality checks its active documentation, declarations and actu
     );
     writeFileSync(join(fixture, 'agent-knowledge.json'), configuration);
     const manifest = JSON.parse(readFileSync(join(fixture, 'package.json')));
+    mkdirSync(join(fixture, 'locale'), { recursive: true });
+    writeFileSync(join(fixture, 'locale/en.json'), '{}');
+    manifest.exports['./locale/*.json'] = './locale/*.json';
+    writeFileSync(join(fixture, 'package.json'), JSON.stringify(manifest));
+    result = run(fixture, 'check:knowledge');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    manifest.exports['./locale/*.json'] = './locale/missing-*.json';
+    writeFileSync(join(fixture, 'package.json'), JSON.stringify(manifest));
+    result = run(fixture, 'check:knowledge');
+    assert.notEqual(result.status, 0);
+    assert.match(result.stdout + result.stderr, /AGENT_REFERENCE_MISSING: export/);
+    manifest.exports['./locale/*.json'] = './locale/*.json';
     manifest.exports['./quality-missing'] = './lib/quality-export-missing.js';
     writeFileSync(join(fixture, 'package.json'), JSON.stringify(manifest));
     result = run(fixture, 'quality:fast');
