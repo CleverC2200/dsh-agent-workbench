@@ -234,21 +234,10 @@ try {
     const browserFiles = plan.files.filter((file) => file.endsWith('.browser.mjs'));
     const checks = runQualityChecks([
       { name: 'final-group', execute: () => run('npm', ['run', 'test:final-group']) },
-      { name: 'fast', execute: () => run('npm', ['run', 'quality:fast', '--', '--checks-only']) },
       {
-        name: 'build',
-        execute: () => {
-          const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
-          process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
-          try {
-            run('npm', ['run', 'build:core']);
-          } finally {
-            if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
-            else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
-          }
-        },
+        name: 'fast-and-build',
+        execute: () => run('npm', ['run', 'quality:fast', '--', '--checks-only', '--build']),
       },
-      { name: 'knowledge', execute: () => run('npm', ['run', 'check:knowledge']) },
       {
         name: 'required-and-affected',
         execute: () =>

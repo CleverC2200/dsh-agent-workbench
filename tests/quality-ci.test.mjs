@@ -218,7 +218,7 @@ test('standalone full commands retain their union while CI runs required and aff
   assert.ok(after.some((file) => file.startsWith('business/inventory-apsplan/source/tests/data/')));
   assert.ok(after.some((file) => file.endsWith('.browser.mjs')));
   const ci = readFileSync('scripts/run-quality-ci.mjs', 'utf8');
-  assert.match(ci, /run\('npm', \['run', 'quality:fast', '--', '--checks-only'\]\)/);
+  assert.match(ci, /run\('npm', \['run', 'quality:fast', '--', '--checks-only', '--build'\]\)/);
   assert.doesNotMatch(ci, /run\('npm', \['run', 'test:ci'\]\)/);
   assert.match(ci, /name: 'required-and-affected'/);
   assert.match(ci, /selectCiTests/);
@@ -229,12 +229,17 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
   const fixture = mkdtempSync(join(tmpdir(), 'workbench-fast-'));
   try {
     mkdirSync(join(fixture, 'scripts'));
-    for (const file of ['run-quality-fast.mjs', 'run-quality-checks.mjs'])
+    for (const file of [
+      'run-quality-fast.mjs',
+      'run-quality-checks.mjs',
+      'generate-plugin-package-version.mjs',
+    ])
       copyFileSync(join('scripts', file), join(fixture, 'scripts', file));
     writeFileSync(
       join(fixture, 'record.mjs'),
       `
       import { appendFileSync } from 'node:fs';
+      if (process.env.FAIL_COMMAND === process.argv[2]) process.exitCode = 7;
       appendFileSync('calls.jsonl', JSON.stringify(process.argv[2]) + '\\n');
     `,
     );
@@ -249,9 +254,19 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
       join(fixture, 'package.json'),
       JSON.stringify({
         private: true,
-        scripts: Object.fromEntries(commands.map((name) => [name, 'node record.mjs ' + name])),
+        name: 'quality-fixture',
+        version: '1.0.0',
+        scripts: Object.fromEntries(
+          [...commands, 'build:core'].map((name) => [name, 'node record.mjs ' + name]),
+        ),
       }),
     );
+    mkdirSync(join(fixture, 'src'));
+    const stamp = spawnSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], {
+      cwd: fixture,
+      encoding: 'utf8',
+    });
+    assert.equal(stamp.status, 0, stamp.stdout + stamp.stderr);
     const call = (...args) => {
       writeFileSync(join(fixture, 'calls.jsonl'), '');
       const result = spawnSync(process.execPath, ['scripts/run-quality-fast.mjs', ...args], {
@@ -273,6 +288,39 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
     };
     assert.deepEqual(call(), commands);
     assert.deepEqual(call('--checks-only'), commands.slice(0, -1));
+    assert.deepEqual(call('--checks-only', '--build'), [
+      'check:knowledge',
+      'lint',
+      'format:check',
+      'build:core',
+    ]);
+    const reject = (environment, pattern) => {
+      writeFileSync(join(fixture, 'calls.jsonl'), '');
+      const result = spawnSync(
+        process.execPath,
+        ['scripts/run-quality-fast.mjs', '--checks-only', '--build'],
+        { cwd: fixture, encoding: 'utf8', env: { ...process.env, ...environment } },
+      );
+      assert.notEqual(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, pattern);
+      const receipt = JSON.parse(readFileSync(join(fixture, '.runtime/quality-fast.json')));
+      assert.ok(receipt.some((entry) => entry.status === 'failed'));
+      return readFileSync(join(fixture, 'calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
+    };
+    const manifestFile = join(fixture, 'package.json');
+    const manifestBytes = readFileSync(manifestFile);
+    writeFileSync(manifestFile, JSON.stringify({ ...JSON.parse(manifestBytes), version: '1.0.1' }));
+    const staleStamp = readFileSync(join(fixture, 'src/plugin-package-version.ts'));
+    assert.deepEqual(reject({}, /PLUGIN_PACKAGE_VERSION_STALE/), commands.slice(0, 3));
+    assert.deepEqual(readFileSync(join(fixture, 'src/plugin-package-version.ts')), staleStamp);
+    writeFileSync(manifestFile, manifestBytes);
+    assert.deepEqual(reject({ FAIL_COMMAND: 'check:knowledge' }, /failed/), ['check:knowledge']);
+    assert.deepEqual(reject({ FAIL_COMMAND: 'build:core' }, /failed/), [
+      'check:knowledge',
+      'lint',
+      'format:check',
+      'build:core',
+    ]);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
