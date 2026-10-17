@@ -28,13 +28,11 @@ const official = values.build
 const checks = runQualityChecks([check('check:knowledge')]);
 if (checks[0].status === 'passed')
   checks.push(
-    ...runQualityChecks(
-      [
-        ...['lint', 'format:check'].map(check),
-        official,
-        ...(!values['checks-only'] ? [check('test:quality')] : []),
-      ],
-    ),
+    ...runQualityChecks([
+      ...['lint', 'format:check'].map(check),
+      official,
+      ...(!values['checks-only'] ? [check('test:quality')] : []),
+    ]),
   );
 mkdirSync('.runtime', { recursive: true });
 writeFileSync('.runtime/quality-fast.json', JSON.stringify(checks, null, 2) + '\n');
