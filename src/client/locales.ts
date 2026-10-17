@@ -303,6 +303,7 @@ const copy = {
   categoryPlanWorkbench: ['品类计划工作台', 'Category plan workbench'],
   mpsPlanWorkbench: ['主生产计划(MPS)', 'MPS workbench'],
   apiLog: ['接口日志', 'API logs'],
+  geaApiLog: ['GEA 接口日志', 'GEA API logs'],
   inboxNotConnected: ['消息待办接口尚未接入', 'Message inbox service is not connected'],
   messageInbox: ['消息待办', 'Message inbox'],
   agentPanel: ['需求预测', 'Demand forecast'],
