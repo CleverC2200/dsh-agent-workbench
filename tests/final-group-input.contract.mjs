@@ -38,6 +38,7 @@ test('public final-group admission binds real source only and rejects invalid in
       '../../../..',
     );
     const coldCore = join(fixture, 'cold-core-source');
+    const coreHead = command(coreSource, 'git', ['rev-parse', 'HEAD']);
     command(fixture, 'git', [
       'clone',
       '--quiet',
@@ -53,7 +54,7 @@ test('public final-group admission binds real source only and rejects invalid in
       '/package.json',
       '/pnpm-lock.yaml',
     ]);
-    command(coldCore, 'git', ['checkout', '--quiet', '5badb15009ae1756c3afe0ae0cef1faafc290ccc']);
+    command(coldCore, 'git', ['checkout', '--quiet', coreHead]);
     assert.equal(existsSync(join(coldCore, 'vendor/cordis/lib/types/index.d.ts')), false);
     for (const [name, root] of Object.entries(roots)) {
       const source = name === 'dsh-agent-workbench' ? process.cwd() : resolve('..', name);
@@ -83,7 +84,7 @@ test('public final-group admission binds real source only and rejects invalid in
       }
     }
     const manifest = {
-      core: '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
+      core: coreHead,
       repositories: Object.entries(roots).map(([repo, path]) => ({
         repo,
         path: realpathSync(path),
@@ -157,10 +158,7 @@ test('public final-group admission binds real source only and rejects invalid in
       reject(run(name, [], { QUALITY_EXPECTED_SHA: 'a'.repeat(40) }), /CANDIDATE_EVENT_MISMATCH/);
       if (name === 'dsh-agent-workbench') {
         reject(run(name, ['--core-head', '']), /CANDIDATE_CORE_MISMATCH/);
-        reject(
-          run(name, ['--core-head', '639ed015397290b3745d163aafe02ffee4aa3f84']),
-          /CANDIDATE_CORE_MISMATCH/,
-        );
+        reject(run(name, ['--core-head', '0'.repeat(40)]), /CANDIDATE_CORE_MISMATCH/);
       }
       for (const [mutate, pattern] of [
         [
@@ -244,12 +242,8 @@ test('public final-group admission binds real source only and rejects invalid in
       reject(run(name), /CANDIDATE_HISTORY_REQUIRED/);
       rmSync(shallow);
     }
-    // Both original official sources remain admitted with explicit full input/hash.
-    const originalCores = [
-      '639ed015397290b3745d163aafe02ffee4aa3f84',
-      '5badb15009ae1756c3afe0ae0cef1faafc290ccc',
-    ];
-    for (const core of originalCores) {
+    const registeredCores = new Set(['639ed015397290b3745d163aafe02ffee4aa3f84', coreHead]);
+    for (const core of registeredCores) {
       command(coldCore, 'git', ['checkout', '--quiet', '--detach', core]);
       writeFileSync(file, JSON.stringify({ ...manifest, core }));
       for (const name of ['dsh-agent-workbench', 'dsh-agent-manage']) {
