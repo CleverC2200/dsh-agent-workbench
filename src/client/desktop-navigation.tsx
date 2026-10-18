@@ -28,7 +28,10 @@ type NavigationStage = z.infer<typeof navigationStage>;
 type NavigationObservation = { deadline: number; ended: boolean };
 
 export type ReadyNavigation = Extract<NavigationView, { state: 'ready' }>;
-export type PageNavigation = ReadyNavigation & { visible(): void; failed(error: Error): void };
+export type PageNavigation = ReadyNavigation & {
+  visible(): void;
+  failed(error: Error): void;
+};
 
 /** 业务页面订阅当前导航；以实际渲染回执完成等待。 */
 export function createNavigationSelection() {
@@ -182,7 +185,6 @@ export function DesktopNavigation({
     let identityRevision: number | undefined;
     const consume = (next: NavigationView) => {
       if (controller.signal.aborted) return;
-      actionEpoch.current++;
       if (
         identityRevision !== undefined &&
         next.identityRevision !== undefined &&
@@ -192,6 +194,13 @@ export function DesktopNavigation({
         active.current = undefined;
       }
       if (next.identityRevision !== undefined) identityRevision = next.identityRevision;
+      if (
+        active.current?.done &&
+        active.current.failed &&
+        (next.state === 'idle' || next.state === 'ready')
+      )
+        return;
+      actionEpoch.current++;
       if (
         next.state !== 'error' ||
         next.receipt ||
@@ -271,6 +280,7 @@ export function DesktopNavigation({
         consume(await request('poll', {}, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
+          if (active.current?.done && active.current.failed) return;
           const failure: Extract<NavigationView, { state: 'error' }> = {
             state: 'error',
             stage: 'poll',
@@ -327,9 +337,13 @@ export function DesktopNavigation({
     const controller = owner.current;
     const epoch = ++actionEpoch.current;
     setBusy(true);
+    const task = active.current;
+    const finishVisible =
+      !dismiss && view.state === 'error' && task?.done && view.receipt === task.receipt;
     try {
-      const next =
-        dismiss && view.state === 'error' && view.receipt
+      const next = finishVisible
+        ? await request('finish', { receipt: task.receipt, outcome: 'visible' }, controller.signal)
+        : dismiss && view.state === 'error' && view.receipt
           ? await request(
               'finish',
               { receipt: view.receipt, outcome: 'dismissed' },
@@ -337,6 +351,11 @@ export function DesktopNavigation({
             )
           : await request('retry', {}, controller.signal);
       if (controller.signal.aborted || epoch !== actionEpoch.current) return;
+      if (finishVisible) {
+        task.failed = next.state === 'error';
+        setView(next);
+        return;
+      }
       active.current?.controller.abort();
       active.current = undefined;
       setView(next);
@@ -346,7 +365,7 @@ export function DesktopNavigation({
       setView({
         state: 'error',
         code: error instanceof NavigationRequestError ? error.code : 'NAVIGATION_REQUEST_FAILED',
-        stage: dismiss ? 'dismiss' : 'retry',
+        stage: dismiss ? 'dismiss' : finishVisible ? 'finish' : 'retry',
         ...(view.state === 'error' && view.receipt ? { receipt: view.receipt } : {}),
       });
     } finally {
