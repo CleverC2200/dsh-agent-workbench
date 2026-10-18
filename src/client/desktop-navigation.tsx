@@ -197,7 +197,9 @@ export function DesktopNavigation({
       if (
         active.current?.done &&
         active.current.failed &&
-        (next.state === 'idle' || next.state === 'ready')
+        (next.state === 'idle' ||
+          next.state === 'ready' ||
+          (next.state === 'error' && next.stage === 'poll'))
       )
         return;
       actionEpoch.current++;
@@ -254,7 +256,10 @@ export function DesktopNavigation({
             { receipt: next.receipt, outcome: 'visible' },
             controller.signal,
           );
-          if (!controller.signal.aborted && active.current === task) setView(completed);
+          if (!controller.signal.aborted && active.current === task) {
+            task.failed = completed.state === 'error';
+            setView(completed);
+          }
         })
         .catch((error: unknown) => {
           if (

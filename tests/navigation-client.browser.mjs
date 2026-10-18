@@ -429,9 +429,14 @@ test(
   },
 );
 
-for (const lostAt of ['before-host', 'after-ack']) {
+for (const lostAt of [
+  'before-host',
+  'after-ack',
+  'business-finish-http-poll',
+  'business-finish-host-poll',
+]) {
   test(
-    `finish ${lostAt} 传输失败后保留原 receipt 并重试，不重新打开`,
+    `finish ${lostAt} 失败后保留原 receipt 并重试，不重新打开`,
     { timeout: 30000 },
     async (t) => {
       const { createDesktopNavigation } =
@@ -455,7 +460,9 @@ for (const lostAt of ['before-host', 'after-ack']) {
       };
       let acknowledgements = 0,
         resolutions = 0,
-        retries = 0;
+        retries = 0,
+        ackAttempts = 0,
+        hostPollFailures = 0;
       const finishes = [];
       const epoch = new AbortController();
       const nav = createDesktopNavigation(
@@ -472,11 +479,19 @@ for (const lostAt of ['before-host', 'after-ack']) {
             };
           },
           acknowledgeClientNavigation: async () => {
+            if (lostAt.startsWith('business-finish') && ackAttempts++ === 0)
+              throw Error('NAVIGATION_ACK_FAILED');
             acknowledgements++;
           },
         },
         async (path) => {
-          if (path === '/navigation/pending') return pending;
+          if (path === '/navigation/pending') {
+            if (lostAt === 'business-finish-host-poll' && finishes.length === 1) {
+              hostPollFailures++;
+              throw Error('NAVIGATION_CONTROL_UNAVAILABLE');
+            }
+            return pending;
+          }
           pending = null;
         },
       );
@@ -497,7 +512,10 @@ for (const lostAt of ['before-host', 'after-ack']) {
         try {
           let value;
           if (req.url.endsWith('/poll')) {
-            if (lostAt === 'before-host' && finishes.length === 1) {
+            if (
+              (lostAt === 'before-host' || lostAt === 'business-finish-http-poll') &&
+              finishes.length === 1
+            ) {
               res.statusCode = 503;
               res.end();
               return;
@@ -543,6 +561,7 @@ for (const lostAt of ['before-host', 'after-ack']) {
       await page.goto('http://127.0.0.1:' + server.address().port);
       await expect(page.getByRole('alert')).toHaveAttribute('data-navigation-stage', 'finish');
       await page.waitForTimeout(1800);
+      if (lostAt === 'business-finish-host-poll') assert.ok(hostPollFailures > 0);
       await expect(page.getByRole('alert')).toHaveAttribute('data-navigation-stage', 'finish');
       await page.getByRole('alert').getByRole('button').first().click();
       await expect.poll(() => finishes.length).toBe(2);
