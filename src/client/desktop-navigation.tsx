@@ -66,6 +66,26 @@ async function request(
   body: object = {},
   signal?: AbortSignal,
 ): Promise<NavigationView> {
+  if (action !== 'poll') return readNavigationResponse(action, body, signal);
+  const timeout = AbortSignal.timeout(5000);
+  try {
+    return await readNavigationResponse(
+      action,
+      body,
+      signal ? AbortSignal.any([signal, timeout]) : timeout,
+    );
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (timeout.aborted) throw new NavigationRequestError('NAVIGATION_TIMEOUT', action, true);
+    throw error;
+  }
+}
+
+async function readNavigationResponse(
+  action: 'poll' | 'finish' | 'retry',
+  body: object,
+  signal?: AbortSignal,
+): Promise<NavigationView> {
   let response: Response;
   try {
     response = await fetch('/api/gea-proof/navigation/' + action, {
@@ -280,14 +300,7 @@ export function DesktopNavigation({
       startupTimer = setTimeout(
         () => {
           startup.ended = true;
-          if (!controller.signal.aborted)
-            setView(
-              initialFailure ?? {
-                state: 'error',
-                code: 'NAVIGATION_STARTUP_TIMEOUT',
-                stage: 'poll',
-              },
-            );
+          if (!controller.signal.aborted && initialFailure) setView(initialFailure);
         },
         Math.max(0, startup.deadline - Date.now()),
       );

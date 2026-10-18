@@ -257,3 +257,52 @@ test('invalid navigation responses and explicit business denial remain immediate
     'NAVIGATION_HTTP_401',
   );
 });
+
+test('a genuinely pending navigation request times out after five seconds and remains retryable', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  t.mock.method(AbortSignal, 'timeout', (delay) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), delay);
+    return controller.signal;
+  });
+  let requests = 0;
+  const pending = (_path, options) => {
+    requests++;
+    return new Promise((_resolve, reject) =>
+      options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }),
+    );
+  };
+  await mount(t, pending, confirmed);
+  await tick(t, 4999);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await tick(t, 1);
+  assert.equal(
+    document.querySelector('[role="alert"]').dataset.navigationCode,
+    'NAVIGATION_TIMEOUT',
+  );
+  assert.equal(document.querySelector('[role="alert"] button').disabled, false);
+  await tick(t, 1500);
+  assert.equal(requests, 2);
+});
+
+test('a first real navigation failure after identity recovery uses the original startup deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+  let polls = 0;
+  const ui = await mount(
+    t,
+    async () => {
+      polls++;
+      return Response.json({}, { status: 503 });
+    },
+    { state: 'unknown', scope: null, subject: null, status: null },
+  );
+  await tick(t, 5500);
+  assert.equal(polls, 0);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  await ui.update(confirmed);
+  assert.equal(polls, 1);
+  assert.equal(
+    document.querySelector('[role="alert"]').dataset.navigationCode,
+    'NAVIGATION_HTTP_503',
+  );
+});

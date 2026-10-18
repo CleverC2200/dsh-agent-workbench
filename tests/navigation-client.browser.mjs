@@ -295,3 +295,114 @@ test(
     assert.deepEqual(await page.evaluate(() => window.alerts), []);
   },
 );
+
+test(
+  'identity recovery after the startup deadline never flashes an independent navigation error',
+  { timeout: 30000 },
+  async (t) => {
+    const output = await build({
+      stdin: {
+        contents: `import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{createBusinessIdentityReader}from'../dsh-gea-plugin/src/business-identity-client.ts';import{zh}from'./src/client/locales.ts';
+      const identity=createBusinessIdentityReader();window.identity=identity;window.recover=()=>identity.refresh();void identity.refresh().catch(()=>{});
+      const open=async()=>{window.opens=(window.opens||0)+1};
+      function IdentityMarker(){const value=React.useSyncExternalStore(identity.subscribe,identity.getSnapshot);return value.error?<p data-identity-error="">identity service unavailable</p>:null;}
+      createRoot(document.getElementById('root')).render(<><IdentityMarker/><DesktopNavigation identity={identity} t={key=>zh[key]} open={open} login={()=>{}}/></>);`,
+        resolveDir: process.cwd(),
+        loader: 'tsx',
+      },
+      bundle: true,
+      write: false,
+      platform: 'browser',
+    });
+    let identityAvailable = false,
+      polls = 0,
+      finished = 0,
+      releasePoll;
+    const server = createServer((req, res) => {
+      if (req.url === '/app.js') {
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(output.outputFiles[0].text);
+        return;
+      }
+      if (req.url === '/api/gea-html/identity') {
+        res.setHeader('Content-Type', 'application/json');
+        res.statusCode = identityAvailable ? 200 : 503;
+        res.end(
+          JSON.stringify(
+            identityAvailable
+              ? {
+                  scope: 'A',
+                  subject: 'user-A',
+                  status: {
+                    environment: 'test',
+                    environments: ['test'],
+                    authenticated: true,
+                    loginState: 'authenticated',
+                    user: null,
+                  },
+                }
+              : {},
+          ),
+        );
+        return;
+      }
+      if (req.url?.endsWith('/navigation/poll')) {
+        polls++;
+        releasePoll = () => {
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({ ok: true, value: { state: 'unavailable' } }));
+        };
+        return;
+      }
+      if (req.url?.endsWith('/navigation/finish')) finished++;
+      res.setHeader('Content-Type', 'text/html');
+      res.end('<div id="root"></div><script src="/app.js"></script>');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => {
+      server.closeAllConnections();
+      server.close();
+    });
+    const browser = await chromium.launch({
+      headless: true,
+      channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+    });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.clock.install();
+    await page.addInitScript(() => {
+      window.timeline = [];
+      new MutationObserver(() =>
+        window.timeline.push({
+          at: Date.now(),
+          identityError: Boolean(document.querySelector('[data-identity-error]')),
+          navigationError: Boolean(document.querySelector('[data-navigation-code]')),
+        }),
+      ).observe(document, { subtree: true, childList: true, characterData: true });
+    });
+    await page.goto('http://127.0.0.1:' + server.address().port);
+    await expect
+      .poll(() => page.evaluate(() => window.identity?.getSnapshot().state))
+      .toBe('unknown');
+    await page.clock.runFor(5500);
+    await expect(page.locator('[data-identity-error]')).toHaveCount(1);
+    assert.equal(polls, 0);
+    identityAvailable = true;
+    await page.evaluate(() => window.recover());
+    await expect.poll(() => polls).toBe(1);
+    await page.clock.runFor(1);
+    await expect(page.locator('[data-identity-error]')).toHaveCount(0);
+    releasePoll();
+    await expect(page.locator('[data-navigation-code]')).toHaveCount(0);
+    const timeline = await page.evaluate(() => window.timeline);
+    t.diagnostic(JSON.stringify({ scenario: 'identity-deadline-recovery', timeline }));
+    assert.ok(timeline.some((value) => value.identityError));
+    assert.deepEqual(
+      timeline.filter((value) => value.navigationError),
+      [],
+      JSON.stringify(timeline),
+    );
+    assert.equal(finished, 0);
+    assert.equal(await page.evaluate(() => window.opens || 0), 0);
+  },
+);
