@@ -6,6 +6,8 @@ Workbench 在本仓固定的官方 DSH 输入上提供公司品牌、账户投�
 
 原生页面注册官方 `main` keyed slot，再登记标题元数据。`main` 的注册事实决定目录是否显示；`register` 只补充标题，不建立第二份安装或授权清单。
 
+`agentWorkbench.openAgentSession({sessionId,preset,cwd,draft})` 打开由资源 owner 已创建的原生 Session。Workbench 核实际预设与工作目录，再通过官方草稿入口插入目标说明并导航；已有草稿冲突时拒绝替换。Manage 的 Skill 编辑使用此入口。Session 创建、文件权限和应用目标由 Manage/官方 Host 负责，设置 modal 由其 section 的官方 close 动作关闭。
+
 ```ts
 const disposePage = ctx.slots.register({ name: 'main', key: panelId }, Page);
 const disposeTitle = ctx.agentWorkbench.register({ id: panelId, label: () => title });

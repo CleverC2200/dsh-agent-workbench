@@ -7,6 +7,26 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client';
 import type {} from '@deepseek-ai/dsh-agent-preset-registry/types';
 import type {} from '@deepseek-ai/dsh-api-remotes/client';
 import { withReadyPageSession } from './page-session-core.ts';
+import type { NativeAgentSession } from './workbench.ts';
+export async function openNativeAgentSession(
+  host: Pick<NativeResourceSelection, 'open'>,
+  session: NativeAgentSession,
+  signal: AbortSignal,
+  beforeOpen?: () => void,
+): Promise<void> {
+  signal.throwIfAborted();
+  await host.open(
+    session.sessionId,
+    undefined,
+    signal,
+    (projection) => {
+      if (projection.preset !== session.preset) throw Error('PAGE_SESSION_PRESET_UNAVAILABLE');
+      if (projection.cwd !== session.cwd) throw Error('PAGE_SESSION_RECOVERY_MISMATCH');
+      beforeOpen?.();
+    },
+    session.draft,
+  );
+}
 /** Resource selection borrows the host Session/Conversation; it owns no current Session. */
 export interface NativeResourceSelection {
   fetch: typeof fetch;
