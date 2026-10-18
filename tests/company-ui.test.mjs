@@ -296,7 +296,7 @@ test('formal static controls restore original card and SVG structure without old
   );
   dom.window.close();
 });
-test('formal account contribution renders the GEA read-only avatar and signed-out label', () => {
+test('formal account contribution renders the GEA read-only avatar and pending label', () => {
   const { entries } = fixture();
   const entry = entries.find((e) => e.options.name === 'settings.launcher');
   const markup = renderToStaticMarkup(
@@ -307,7 +307,7 @@ test('formal account contribution renders the GEA read-only avatar and signed-ou
     }),
   );
   assert.ok(markup.includes('账户菜单'));
-  assert.ok(markup.includes('未登录'));
+  assert.ok(markup.includes('正在确认 GEA 身份'));
   assert.ok(markup.includes('gea-user-avatar'));
   assert.ok(!markup.includes('workbench-avatar'));
 });
@@ -1352,6 +1352,7 @@ test('desktop opens company login once only after GEA confirms signed out', asyn
     environment: 'production',
     environments: ['production'],
     authenticated: false,
+    loginState: 'signed-out',
     user: null,
   };
   await render();
@@ -1924,4 +1925,38 @@ test('login displays only configured Host environments', async (t) => {
     ['production'],
   );
   assert.deepEqual(targets, ['production']);
+});
+
+test('account distinguishes pending identity, service failure and authenticated users without a name', () => {
+  const snapshots = [
+    [{ state: 'unknown', scope: null, status: null }, '正在确认 GEA 身份'],
+    [{ state: 'error', scope: null, status: null, error: 'offline' }, '身份服务暂不可用'],
+    [{ state: 'confirmed', scope: 'A', status: { authenticated: true, user: null } }, '已登录 GEA'],
+    [
+      {
+        state: 'confirmed',
+        scope: null,
+        status: { authenticated: false, loginState: 'expired', user: null },
+      },
+      '登录已过期',
+    ],
+    [
+      {
+        state: 'confirmed',
+        scope: 'A',
+        error: 'offline',
+        status: { authenticated: true, user: { name: 'Alice' } },
+      },
+      '身份确认异常',
+    ],
+  ];
+  for (const [snapshot, expected] of snapshots) {
+    const { entries } = fixture({ getSnapshot: () => snapshot, subscribe: () => () => {} });
+    const Account = entries.find((row) => row.options.name === 'settings.launcher').component;
+    const html = renderToStaticMarkup(
+      React.createElement(Account, { wide: true, settingsOpen: false, openSettings() {} }),
+    );
+    assert.ok(html.includes(expected), html);
+    assert.equal(html.includes('尚未登录 GEA'), false);
+  }
 });

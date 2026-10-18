@@ -21,6 +21,7 @@ export function mountBusinessViews(ctx: Context) {
     const ctx = scope;
     const identity = scope.businessAccount;
     const incoming = createNavigationSelection();
+    const navigationObservation = { deadline: Date.now() + 5000, ended: false };
     const inboxViews = new Map<string | null, InboxViewState>();
     const inboxViewListeners = new Set<() => void>();
     const initialInboxView: InboxViewState = { pageNo: 1, readState: '' };
@@ -160,6 +161,8 @@ export function mountBusinessViews(ctx: Context) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register({ name: 'shell.overlay', id: 'gea-desktop-navigation' }, () => (
         <DesktopNavigation
+          identity={identity}
+          observation={navigationObservation}
           t={t}
           open={openNavigation}
           login={() => void ctx.agentWorkbench.open(PANEL)}

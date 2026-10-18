@@ -192,14 +192,25 @@ export function mountCompanyUI(
       authority?.getSnapshot ?? (() => unavailableAccount),
       authority?.getSnapshot ?? (() => unavailableAccount),
     );
+    const pending = useRef<AbortController>();
+    useEffect(() => () => pending.current?.abort(), [authority]);
+    const retry = () => {
+      pending.current?.abort();
+      const controller = new AbortController();
+      pending.current = controller;
+      void authority?.refreshIdentity(controller.signal).catch(() => {});
+    };
     return identity.error ? (
-      <p
+      <div
         role="alert"
         data-gea-identity-error=""
         className="agent-workbench-ui gea-identity-warning"
       >
-        {t('identityObservationFailed')}
-      </p>
+        <span>{t('identityObservationFailed')}</span>
+        <button type="button" onClick={retry}>
+          {t('retry')}
+        </button>
+      </div>
     ) : null;
   }
   ctx.slots.inject('shell.overlay', () =>
@@ -233,7 +244,16 @@ export function mountCompanyUI(
       identity.state === 'confirmed' &&
       identity.error === undefined &&
       identity.status?.authenticated === true;
-    const user = authenticated ? identity.status?.user : null;
+    const user = identity.status?.authenticated ? identity.status.user : null;
+    const accountLabel = identity.error
+      ? t(identity.status ? 'identityUncertain' : 'identityUnavailable')
+      : identity.state !== 'confirmed'
+        ? t('identityPending')
+        : identity.status?.loginState === 'expired'
+          ? t('identityExpired')
+          : identity.status?.authenticated
+            ? user?.name || t('accountSignedIn')
+            : t('signedOut');
     const name = user?.name ?? '',
       avatarUrl = user?.avatar ?? '';
     const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
@@ -250,7 +270,8 @@ export function mountCompanyUI(
         'dshDesktop' in window &&
         identity.state === 'confirmed' &&
         identity.error === undefined &&
-        identity.status?.authenticated === false
+        identity.status?.authenticated === false &&
+        identity.status.loginState === 'signed-out'
       ) {
         desktopLoginPresented = true;
         setLoginOpen(true);
@@ -355,7 +376,7 @@ export function mountCompanyUI(
               name.slice(0, 1) || 'G'
             )}
           </span>
-          {wide && <span>{name || t('signedOut')}</span>}
+          {wide && <span>{accountLabel}</span>}
         </button>
         {position &&
           createPortal(

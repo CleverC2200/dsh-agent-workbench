@@ -1,5 +1,10 @@
 /** 独立销售计划页面使用的本地化文案。 */
 const copy = {
+  identityPending: ['正在确认 GEA 身份', 'Confirming GEA identity'],
+  identityUnavailable: ['身份服务暂不可用', 'Identity service is temporarily unavailable'],
+  identityUncertain: ['身份确认异常', 'Identity confirmation failed'],
+  identityExpired: ['登录已过期', 'Sign-in expired'],
+  accountSignedIn: ['已登录 GEA', 'Signed in to GEA'],
   identityObservationFailed: [
     '无法确认 GEA 身份，请稍后重试。',
     'Unable to confirm the GEA identity. Please try again later.',
@@ -23,6 +28,10 @@ const copy = {
   navigationUnavailable: [
     '暂时无法定位消息目标，请确认对应功能已安装，或在消息待办中查看。',
     'The destination could not be located. Check that its feature is installed or open the inbox.',
+  ],
+  navigationServiceUnavailable: [
+    '消息服务暂不可用，请重试。',
+    'Message service is temporarily unavailable. Retry.',
   ],
   navigationFailed: [
     '消息打开或回执未完成，请重试。',

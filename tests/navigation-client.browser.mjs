@@ -10,7 +10,7 @@ test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍�
     stdin: {
       contents: `import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{zh}from'./src/client/locales.ts';
     const open=async()=>{window.opens=(window.opens||0)+1};
-    createRoot(document.getElementById('root')).render(<DesktopNavigation t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/>);`,
+    createRoot(document.getElementById('root')).render(<DesktopNavigation identity={{getSnapshot:()=>window.identitySnapshot||(window.identitySnapshot={state:"confirmed",scope:"A",status:{authenticated:true}}),subscribe:()=>()=>{}}} t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/>);`,
       resolveDir: process.cwd(),
       loader: 'tsx',
     },
@@ -70,7 +70,10 @@ test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍�
     server.closeAllConnections();
     server.close();
   });
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.goto('http://127.0.0.1:' + server.address().port);
@@ -97,7 +100,8 @@ test('只读门禁拒绝轮询时暂不可用，其他错误和回执拒绝仍�
   mode = 'readonly';
   await expect(page.getByRole('alert')).toHaveCount(0);
   releaseRetry();
-  await expect(page.getByRole('alert')).toBeVisible();
+  await page.waitForTimeout(100);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 test(
@@ -114,7 +118,7 @@ test(
     const listeners=new Set();let target=null;
     function App(){const [view,setView]=React.useState({pageNo:1,readState:''});const [item,setItem]=React.useState(null);React.useEffect(()=>{listeners.add(setItem);return()=>listeners.delete(setItem)},[]);
       const open=React.useCallback((value,signal)=>new Promise((resolve,reject)=>{window.opens=(window.opens||0)+1;target={...value,visible:resolve,failed:reject};listeners.forEach(fn=>fn(target));signal.addEventListener('abort',()=>{target=null;listeners.forEach(fn=>fn(null));reject(Error('cancelled'))},{once:true})}),[]);
-      return <><DesktopNavigation t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/><Inbox t={key=>zh[key]} navigation={item} view={view} onViewChange={setView}/></>}
+      return <><DesktopNavigation identity={{getSnapshot:()=>window.identitySnapshot||(window.identitySnapshot={state:"confirmed",scope:"A",status:{authenticated:true}}),subscribe:()=>()=>{}}} t={key=>zh[key]} open={open} login={()=>{window.loginClicked=true}}/><Inbox t={key=>zh[key]} navigation={item} view={view} onViewChange={setView}/></>}
     createRoot(document.getElementById('root')).render(<App/>);`,
         resolveDir: process.cwd(),
         loader: 'tsx',
@@ -193,7 +197,10 @@ test(
       server.closeAllConnections();
       server.close();
     });
-    const browser = await chromium.launch({ headless: true });
+    const browser = await chromium.launch({
+      headless: true,
+      channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+    });
     t.after(() => browser.close());
     const page = await browser.newPage();
     await page.goto('http://127.0.0.1:' + server.address().port);
@@ -225,5 +232,66 @@ test(
     await expect(page.getByRole('dialog')).not.toBeVisible();
     release();
     assert.equal(finished, 0);
+  },
+);
+
+test(
+  'startup service recovery never reports an unclaimed message as an open or receipt failure',
+  { timeout: 30000 },
+  async (t) => {
+    const output = await build({
+      stdin: {
+        contents: `import React from 'react';import{createRoot}from'react-dom/client';import{DesktopNavigation}from'./src/client/desktop-navigation.tsx';import{zh}from'./src/client/locales.ts';const open=async()=>{window.opens=(window.opens||0)+1};createRoot(document.getElementById('root')).render(<DesktopNavigation identity={{getSnapshot:()=>window.identitySnapshot||(window.identitySnapshot={state:"confirmed",scope:"A",status:{authenticated:true}}),subscribe:()=>()=>{}}} t={key=>zh[key]} open={open} login={()=>{}}/>);`,
+        resolveDir: process.cwd(),
+        loader: 'tsx',
+      },
+      bundle: true,
+      write: false,
+      platform: 'browser',
+    });
+    let polls = 0;
+    const server = createServer((req, res) => {
+      if (req.url === '/app.js') {
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(output.outputFiles[0].text);
+        return;
+      }
+      if (req.url?.endsWith('/poll')) {
+        polls++;
+        res.setHeader('Content-Type', 'application/json');
+        if (polls === 1) {
+          res.statusCode = 503;
+          res.end('{}');
+        } else res.end(JSON.stringify({ ok: true, value: { state: 'idle' } }));
+        return;
+      }
+      res.setHeader('Content-Type', 'text/html');
+      res.end('<div id="root"></div><script src="/app.js"></script>');
+    });
+    await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => {
+      server.closeAllConnections();
+      server.close();
+    });
+    const browser = await chromium.launch({
+      headless: true,
+      channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+    });
+    t.after(() => browser.close());
+    const page = await browser.newPage();
+    await page.addInitScript(() => {
+      window.alerts = [];
+      new MutationObserver(() => {
+        for (const alert of document.querySelectorAll('[role="alert"]'))
+          window.alerts.push(alert.textContent);
+      }).observe(document, { subtree: true, childList: true, characterData: true });
+    });
+    await page.goto('http://127.0.0.1:' + server.address().port);
+    await expect.poll(() => polls).toBe(1);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect.poll(() => polls).toBeGreaterThanOrEqual(2);
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    assert.equal(await page.evaluate(() => window.opens || 0), 0);
+    assert.deepEqual(await page.evaluate(() => window.alerts), []);
   },
 );

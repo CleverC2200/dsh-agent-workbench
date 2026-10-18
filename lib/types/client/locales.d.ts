@@ -10,6 +10,7 @@ declare const copy: {
     readonly navigationExpired: readonly ["消息链接已过期或撤销，请重新获取通知。", "This message link has expired or was revoked. Request a new notification."];
     readonly navigationForbidden: readonly ["当前账号无权查看此消息，请核对登录账号。", "This account cannot view the message. Check your signed-in account."];
     readonly navigationUnavailable: readonly ["暂时无法定位消息目标，请确认对应功能已安装，或在消息待办中查看。", "The destination could not be located. Check that its feature is installed or open the inbox."];
+    readonly navigationServiceUnavailable: readonly ["消息服务暂不可用，请重试。", "Message service is temporarily unavailable. Retry."];
     readonly navigationFailed: readonly ["消息打开或回执未完成，请重试。", "Opening the message or confirming arrival did not finish. Retry."];
     readonly accountMenu: readonly ["账户菜单", "Account menu"];
     readonly settings: readonly ["设置", "Settings"];
