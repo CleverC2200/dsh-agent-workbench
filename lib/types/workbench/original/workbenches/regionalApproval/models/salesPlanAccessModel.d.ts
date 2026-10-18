@@ -2,7 +2,7 @@
 import { type SalesPlanWorkflowRow } from '../../../salesPlanWorkflow.ts';
 import type { GeaSalesPlanActionContext, GeaSalesPlanActionReceipt, GeaSalesPlanActionRequest, GeaSalesPlanDetail, GeaSalesPlanListItem } from '../../../bridge.ts';
 import { salesPlanEditableQuantity } from './salesPlanQuantityModel.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 export { salesPlanEditableQuantity };
 export type SalesPlanApprovalRole = {
     code?: string | null;

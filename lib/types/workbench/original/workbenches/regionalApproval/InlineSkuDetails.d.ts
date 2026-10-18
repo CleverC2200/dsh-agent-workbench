@@ -2,7 +2,7 @@ import React from 'react';
 import type { TFunction } from 'i18next';
 import { type GeaSalesPlanDetail } from '../../bridge.ts';
 import { type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 export declare function InlineSkuDetails({ row, t, detail, canEdit, approvalRole, categoryName, onMetricsChange, onPendingValuesChange, draftPatch, onElementsChange, initialInputValues, onInputChange, }: {
     row: RegionalApprovalLiveRow;
     t: TFunction;

@@ -1,6 +1,6 @@
 /** Select required and affected tests from the admitted source group, never a full-suite fallback. */
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, globSync } from 'node:fs';
+import { existsSync, readFileSync, globSync, lstatSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -286,12 +286,7 @@ function references(file, roots, known, importsOnly = false) {
       result.set(browserDependency, true);
       continue;
     }
-    if (
-      name.includes('${') ||
-      (!sourceFile.test(name) && !(recursive && name.startsWith('.'))) ||
-      name.length > 300
-    )
-      continue;
+    if (name.includes('${') || name.length > 300) continue;
     const owner = roots.find((root) => file.startsWith(root + '/'));
     for (const base of [dirname(file), owner].filter(Boolean)) {
       const target = resolve(base, name);
@@ -316,6 +311,7 @@ export function selectCiTests({
   repo,
   base,
   testOwners = {},
+  alwaysRunScripts = [],
   root = repositories.find((entry) => entry.repo === repo)?.path,
 }) {
   if (!root || !/^[a-f0-9]{40}$/.test(base ?? ''))
@@ -347,6 +343,40 @@ export function selectCiTests({
       ),
     ].sort();
   const pool = expand(policy.tests);
+  // These explicit Node files belong to mandatory checks executed by the caller, not its test pool.
+  if (
+    !Array.isArray(alwaysRunScripts) ||
+    new Set(alwaysRunScripts).size !== alwaysRunScripts.length ||
+    alwaysRunScripts.some((name) => typeof name !== 'string' || !/^[\w][\w:.-]*$/.test(name))
+  )
+    throw Error('CI_TEST_ALWAYS_RUN_REQUIRED: explicit package script names required');
+  const alwaysRun = {};
+  const packageScripts = alwaysRunScripts.length
+    ? JSON.parse(readFileSync(resolve(root, 'package.json'))).scripts
+    : {};
+  for (const name of alwaysRunScripts) {
+    const command = packageScripts?.[name];
+    const args = typeof command === 'string' ? command.trim().split(/[ \t]+/) : [];
+    const files = args.slice(2);
+    if (
+      /[\r\n]/.test(command ?? '') ||
+      args[0] !== 'node' ||
+      args[1] !== '--test' ||
+      !files.length ||
+      new Set(files).size !== files.length ||
+      files.some(
+        (file) =>
+          !/^(?:tests|scripts)\/[\w./-]+$/.test(file) ||
+          file.split('/').some((part) => !part || part === '.' || part === '..') ||
+          !testFile.test(file) ||
+          pool.includes(file) ||
+          !existsSync(resolve(root, file)) ||
+          !lstatSync(resolve(root, file)).isFile(),
+      )
+    )
+      throw Error(`CI_TEST_ALWAYS_RUN_REQUIRED: ${name} must list existing Node test files`);
+    alwaysRun[name] = files;
+  }
   if (!testOwners || typeof testOwners !== 'object' || Array.isArray(testOwners))
     throw Error('CI_TEST_OWNER_REQUIRED: explicit test-pool files required');
   const ownership = Object.entries(testOwners);
@@ -398,11 +428,7 @@ export function selectCiTests({
       git(entry.path, 'ls-files', '-z')
         .split('\0')
         .filter(
-          (file) =>
-            file &&
-            sourceFile.test(file) &&
-            !file.startsWith('lib/') &&
-            !/\/(?:vendor|data)\.[cm]?js$/.test(file),
+          (file) => file && !file.startsWith('lib/') && !/\/(?:vendor|data)\.[cm]?js$/.test(file),
         )
         .map((file) => resolve(entry.path, file)),
     ),
@@ -435,24 +461,42 @@ export function selectCiTests({
     );
   };
   const selected = new Set(required),
-    reasons = {};
+    reasons = {},
+    alwaysRunReasons = {};
   for (const change of changes) {
+    const checked = Object.fromEntries(
+      Object.entries(alwaysRun)
+        .map(([name, files]) => [
+          name,
+          files.filter((file) => reaches(resolve(root, file), change.path)),
+        ])
+        .filter(([, files]) => files.length),
+    );
+    const checkedByCaller = Object.keys(checked).length > 0;
+    if (checkedByCaller) alwaysRunReasons[`${change.repo}/${change.file}`] = checked;
     const rules = policy.rules.filter(
       (rule) =>
         (!rule.repo || rule.repo === change.repo) && new RegExp(rule.pattern).test(change.file),
     );
     const mapped = rules.flatMap((rule) => expand(rule.tests));
-    const matched = rules.some((rule) => rule.exclusive === true)
-      ? mapped
-      : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
+    // Engineering shortcuts cannot hide changes to executable tests or their fixed inputs.
+    const ownTestInput =
+      change.repo === repo &&
+      (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
+    const matched =
+      rules.some((rule) => rule.exclusive === true) && !ownTestInput
+        ? mapped
+        : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
     const files = [...new Set(matched.map(directFile))].sort();
     // Source with no known consumer must be mapped explicitly, rather than silently receiving a green result.
     if (
       !files.length &&
       !rules.length &&
-      /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
-        change.file,
-      ) &&
+      !checkedByCaller &&
+      ((ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
+        /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
+          change.file,
+        )) &&
       !change.file.endsWith('.md')
     )
       throw Error(`CI_TEST_IMPACT_UNMAPPED: ${change.repo}/${change.file}`);
@@ -499,6 +543,7 @@ export function selectCiTests({
     files,
     executedBy,
     reasons,
+    ...(alwaysRunScripts.length ? { alwaysRun, alwaysRunReasons } : {}),
     runtimeFiles,
     browserFiles,
     browserFixtures: browserFixtures.filter((file) => selected.has(file)),

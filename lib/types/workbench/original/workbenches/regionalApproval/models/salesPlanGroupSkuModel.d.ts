@@ -1,5 +1,5 @@
 import type { GeaSalesPlanSku } from '../../../bridge.ts';
-import type { ApprovalStageId } from '../regionalApprovalFixture.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from '../regionalApprovalQueryModel.ts';
 type GroupSkuSource = {
     plan: RegionalApprovalLiveRow;

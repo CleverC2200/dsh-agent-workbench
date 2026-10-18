@@ -4,7 +4,7 @@
  * 只描述屏幕上看得见、人能操作的东西：行、控件、可编辑字段。
  * 内部状态、缓存、接口都不进清单，所以模型也调不到。
  */
-import { type PageElement } from "../page-bridge/catalog.ts";
+import { type PageElement } from '../page-bridge/catalog.ts';
 export type WorkbenchElementInput = {
     /** 当前可见的计划行。 */
     rows: Array<{
@@ -57,7 +57,7 @@ export type WorkbenchElementInput = {
         value?: string;
         actions: string[];
         /** 通过/退回这类会落审批状态的元素，标记为 approve，必须用户明确要求才执行。 */
-        effect?: "submit" | "approve";
+        effect?: 'submit' | 'approve';
     }>;
     /** 打开中的审批对话框：确认/取消 + 它自己的输入项（例如退回理由）。 */
     dialog?: {

@@ -3,6 +3,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { syncAgentResources } from './build-output.mjs';
 const root = resolve(import.meta.dirname, '..'),
   source = resolve(root, 'prototypes/inventory-customer'),
   out = resolve(root, 'lib/business/inventory-customer');
@@ -41,8 +42,7 @@ await writeFile(
 for (const name of ['plugin.json', 'page.json'])
   await cp(resolve(source, name), resolve(out, name));
 const resources = resolve(root, '../dsh-agent-manage/business-resources/inventory-customer');
-for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
-  await cp(resolve(resources, name), resolve(out, name), { recursive: true });
+await syncAgentResources(resources, out);
 const inputs = {};
 for (const input of Object.keys(result.metafile.inputs)) {
   const file = resolve(input);

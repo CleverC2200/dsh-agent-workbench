@@ -1,8 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis';
-import type { SessionId } from '@deepseek-ai/dsh-session/types';
-import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
-import type { WorkbenchController, DocumentSession } from './workbench.ts';
-import { type NativeResourceSelection } from './resource-selection.ts';
+import type { WorkbenchController } from './workbench.ts';
+import type { NativeResourceSelection } from './resource-selection.ts';
+import { type PageSessionRestore } from './page-session-coordination.ts';
 import type { WorkbenchFramePage } from './frame.ts';
 declare module '@deepseek-ai/dsh-client-ui-slots' {
     interface SlotFactoryMap {
@@ -33,4 +32,4 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 }
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey = 'pageConnect' | 'pageNewChat' | 'pageWorking' | 'pageChanged' | 'pageHint' | 'pageWait' | 'pageLogin' | 'pageSessionUnavailable' | 'pageStaticHint' | 'pageCreating' | 'pageInterpreter' | 'pageIdentityFailed';
-export declare function mountFramePresentation(ctx: Context, resources: () => NativeResourceSelection | undefined, t: (key: FrameCopyKey) => string, workbench: WorkbenchController): (page: MainPanelId, sessionId: SessionId, signal: AbortSignal, expected?: Pick<DocumentSession, 'preset' | 'cwd' | 'subject'>) => Promise<void>;
+export declare function mountFramePresentation(ctx: Context, resources: () => NativeResourceSelection | undefined, t: (key: FrameCopyKey) => string, workbench: WorkbenchController): PageSessionRestore;

@@ -1,24 +1,17 @@
 import type { GeaSalesPlanPeriod } from '../../contracts.ts';
 import type { TFunction } from 'i18next';
 import React from 'react';
-import { type ApprovalHealth, type ApprovalDimension, type ApprovalStageId, type ApprovalState, type ApprovalVersion, type RegionalApprovalRow } from './regionalApprovalFixture.ts';
-import { type ApprovalOrganizationFilters } from './regionalApprovalModel.ts';
-import { regionalApprovalFixtureResults, type RegionalApprovalActionExecutor } from './regionalApprovalActionModel.ts';
-import { savedApprovalAdjustments } from './regionalApprovalDetailModel.ts';
-import { useRegionalApprovalQuery, type RegionalApprovalQueryError, type SalesPlanQueryClient } from './useRegionalApprovalQuery.ts';
-import type { SalesPlanDetailClient } from './hooks/useSalesPlanDetail.ts';
-import { type SalesPlanActionClient } from './models/salesPlanActionModel.ts';
+import { type ApprovalDimension, type ApprovalStageId, type ApprovalState, type ApprovalVersion } from './salesPlanDomain.ts';
+import { useRegionalApprovalQuery, type RegionalApprovalQueryError } from './useRegionalApprovalQuery.ts';
 import type { PageElement } from '../../../../page-bridge/catalog.ts';
 import { type SalesPlanAuthorityContext, type SalesPlanContextApprovalStage } from './models/salesPlanContextModel.ts';
-type ApprovalContextFilters = {
-    [Field in keyof ApprovalOrganizationFilters]: string;
-};
+type ApprovalContextFilters = Record<'area' | 'branch' | 'department' | 'customer' | 'approval' | 'health', string>;
 export type RegionalApprovalContextEntity = {
-    source: 'gea' | 'fixture';
+    source: 'gea';
     id: string;
     organizationKey: string;
     approvalState: ApprovalState | 'returned';
-    health: ApprovalHealth | 'unknown';
+    health: 'unknown';
     versionId?: string;
     seq?: number;
     status?: number;
@@ -35,7 +28,6 @@ export type RegionalApprovalContextEntity = {
     submitter?: string;
     returnReason?: string;
     customerCode?: string;
-    category?: RegionalApprovalRow['category'];
     quantity?: string;
     amount?: string;
     previousQuantity?: string;
@@ -46,7 +38,6 @@ export type RegionalApprovalContextEntity = {
 export type RegionalApprovalWorkbenchContext = {
     analysisSummary?: ReturnType<typeof useRegionalApprovalQuery>['analysisSummary'];
     view: 'regional-approval';
-    fixtureState: 'ready' | 'live' | 'mixed';
     scope: {
         dimension?: ApprovalDimension;
         categoryComparison?: boolean;
@@ -73,8 +64,6 @@ export type RegionalApprovalWorkbenchContext = {
         value: string;
         editable: boolean;
     }>;
-    changes: ReturnType<typeof savedApprovalAdjustments>;
-    localApprovalResults: ReturnType<typeof regionalApprovalFixtureResults>;
     metrics: {
         visibleCount: number;
         pendingCount: number;
@@ -92,10 +81,10 @@ export type RegionalApprovalWorkbenchContext = {
         total: number;
     };
     evidence: {
-        source: 'fixture' | 'gea-user-session' | 'unverified';
+        source: 'gea-user-session' | 'unverified';
         permission: 'read-only' | 'user-session-action';
         completeness: 'skeleton' | 'periods-only' | 'paged-queue' | 'none';
-        queryState: 'fixture' | 'loading' | 'error' | 'empty-periods' | 'empty' | 'success' | 'refreshing' | 'stale-error';
+        queryState: 'loading' | 'error' | 'empty-periods' | 'empty' | 'success' | 'refreshing' | 'stale-error';
         error?: RegionalApprovalQueryError;
         dataVersion: string;
     };
@@ -106,10 +95,6 @@ declare const RegionalApprovalWorkbench: React.FC<{
     stateScope: string;
     t: TFunction;
     onContextChange: (context: RegionalApprovalWorkbenchContext, conversationId: string | null) => void;
-    actionExecutor?: RegionalApprovalActionExecutor;
-    queryClient?: SalesPlanQueryClient | null;
-    detailClient?: SalesPlanDetailClient;
-    liveActionClient?: SalesPlanActionClient;
     liveActionsEnabled?: boolean;
     automaticAnalysisEnabled?: boolean;
     onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;

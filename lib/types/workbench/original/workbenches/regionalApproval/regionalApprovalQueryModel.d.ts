@@ -1,7 +1,7 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { TFunction } from 'i18next';
 import type { GeaSalesPlanListItem, GeaSalesPlanPageQuery, GeaSalesPlanPeriod, GeaSalesPlanSku } from '../../bridge.ts';
-import type { ApprovalDimension, ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalDimension, ApprovalStageId } from './salesPlanDomain.ts';
 export declare const SALES_PLAN_STATUS_BY_STAGE: Record<ApprovalStageId, number>;
 export declare const approvalStageForSalesPlanStatus: (status: number, typeCode?: string) => ApprovalStageId | undefined;
 export declare const VISIBLE_SALES_PLAN_STATUSES_BY_STAGE: Record<ApprovalStageId, number[]>;

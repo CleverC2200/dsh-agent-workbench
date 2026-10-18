@@ -1,6 +1,6 @@
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type { SessionId } from '@deepseek-ai/dsh-session/types';
-import type { WorkbenchFramePage } from './frame.ts';
+import type { PageIdentitySnapshot, WorkbenchFramePage } from './frame.ts';
 import { type HtmlViewState } from './html-view-state.ts';
 /** Presentation metadata only. Resource selection and authorization have their own owners. */
 export interface WorkbenchPage {
@@ -9,6 +9,8 @@ export interface WorkbenchPage {
 }
 export interface AgentWorkbench {
     register(page: WorkbenchPage): () => void;
+    /** Start a fresh native Conversation with this preset; preserve defaults and existing Sessions. */
+    startAgent(preset: string): Promise<void>;
     /** Open a page; a Document restores its associated Core Session without creating one. */
     open(id: MainPanelId): Promise<boolean>;
     /** Contribute a Document inside the actual main Conversation. */
@@ -33,6 +35,7 @@ export interface WorkbenchSnapshot {
 }
 export interface WorkbenchPorts {
     panel(id: MainPanelId): void;
+    startAgent?(preset: string): Promise<void>;
     hasPanel?(id: MainPanelId): boolean;
     document?(sessionId?: SessionId): void;
 }
@@ -77,6 +80,7 @@ export declare class WorkbenchController implements AgentWorkbench {
     private historyIntent?;
     constructor(ports: WorkbenchPorts, memory?: WorkbenchPresentationMemory | undefined);
     register(page: WorkbenchPage): () => void;
+    startAgent(preset: string): Promise<void>;
     open(id: MainPanelId): Promise<boolean>;
     registerFrame(page: WorkbenchFramePage): () => void;
     associateSession(page: MainPanelId, selection: DocumentSession): void;
@@ -88,6 +92,8 @@ export declare class WorkbenchController implements AgentWorkbench {
         resourceId?: string;
     }) | undefined;
     forgetSession(page: MainPanelId): void;
+    /** Revoke business presentation hints only after GEA has confirmed its current identity. */
+    reconcileBusinessIdentity(identity: PageIdentitySnapshot): void;
     readHtmlViewState(page: string, scope?: string): HtmlViewState | undefined;
     saveHtmlViewState(page: string, scope: string | undefined, value: unknown): void;
     leaveDocument(): void;

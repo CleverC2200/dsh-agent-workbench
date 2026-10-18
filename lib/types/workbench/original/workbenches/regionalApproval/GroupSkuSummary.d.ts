@@ -1,7 +1,7 @@
 import React from 'react';
 import type { TFunction } from 'i18next';
 import { type GeaSalesPlanSku } from '../../bridge.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 type SkuReader = {
     versionSkus: {
@@ -11,7 +11,7 @@ type SkuReader = {
         }) => Promise<GeaSalesPlanSku[]>;
     };
 };
-export declare function GroupSkuSummary({ members, approvalRole, pendingValues, client: suppliedClient, t }: {
+export declare function GroupSkuSummary({ members, approvalRole, pendingValues, client: suppliedClient, t, }: {
     members: readonly RegionalApprovalLiveRow[];
     approvalRole?: ApprovalStageId;
     pendingValues?: Readonly<Record<string, Readonly<Record<string, string>>>>;

@@ -31,6 +31,8 @@ node --test tests/official-entry.test.mjs tests/workbench-recovery.test.mjs test
 
 构建调用 package.json 的 `build:core` 或 `build`。具体装配顺序由 [build.mjs](../scripts/build.mjs) 维护。`build:core` 仅跳过 FC/AQKC 的独立构建，其余已接收页面仍参与，不能把它当成纯壳或单一样板构建；两种构建均需本票登记的相邻 Manage 资源及各参与作者源的固定依赖。构建写本仓 lib，应由当前工作树单独串行执行。构建先显式核固定官方 Core，声明编译统一使用 `tsconfig.official.json`，避免本地 file 依赖复制出的 SDK 类型和宿主公开声明分离。
 
+[产物目录装配](../scripts/build-output.mjs) 从空目录生成并替换 `lib/types` 及每个作者资源的 `skills` 子树，使已删除模块和 Skill 不残留。生成失败时保留该子树的原输出；发布前将旧目录移到同级备份，发布失败则恢复，成功后才删除备份。若文件系统连恢复也拒绝，错误会保留并指出原输出的备份路径。此步骤不清空整个 lib，也不改写 `build:core` 保留的 FC/AQKC 预编译页面。业务 Prompt、声明和 Skill 仍从 Manage 作者源同步。
+
 共享开发 CLI 位于 [check-agent-knowledge.mjs](../scripts/check-agent-knowledge.mjs)。Manage/GEA 传自己的 `--root` 和 `--config`，不会复制一份同义规则。配置字段是 entries、paths、scripts、exports、peers、history 与可选 commandRoots。peers 为允许引用的外部 checkout 根；其链接只核存在，不递归把 peer 命令当本仓命令。history 为本仓历史文件或目录。commandRoots 按本仓文档相对路径登记允许使用的外部命令根，并读取其真实 package.json scripts；未登记命令拒绝。npm/pnpm 的 run 与紧凑脚本写法均检查，install/exec 等包管理器内置动作保留自身语义。此检查不运行文档中的命令、不安装依赖、不访问业务，也不判断全部自然语言真伪。
 
 浏览器、Native、真实业务/模型和发布验证按原票范围及有效窗口办理。离线检查不证明这些阶段已完成。

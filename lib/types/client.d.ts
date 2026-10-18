@@ -21,9 +21,6 @@ declare const zh: {
     selectionFailed: string;
     resourceWorking: string;
     resourcesRefresh: string;
-    inventoryEntry: string;
-    inventoryEntryHint: string;
-    inventoryEntryFailed: string;
     pageConnect: string;
     pageNewChat: string;
     pageWorking: string;

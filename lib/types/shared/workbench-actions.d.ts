@@ -5,7 +5,7 @@
  * 工具名、参数表与说明全部由通用桥按这份目录 + 元素清单生成（src/page-bridge/catalog.ts）。
  * 新增页面元素只需要页面多声明一个元素，这里和桥都不用改。
  */
-import type { PageElement } from "../page-bridge/catalog.ts";
+import type { PageElement } from '../page-bridge/catalog.ts';
 export declare const WORKBENCH_SURFACE: "gea-workbench";
 export declare const WORKBENCH_TOOL_NAME: "gea_workbench_apply";
 export declare const WORKBENCH_CATALOG: {

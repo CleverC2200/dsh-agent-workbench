@@ -30,7 +30,7 @@ export type GeaSalesPlanPeriodQuery = {
     signal?: AbortSignal;
 };
 export type GeaSalesPlanListItem = {
-    orderType?: "M" | "Z";
+    orderType?: 'M' | 'Z';
     monthlyApproved?: boolean;
     hasCorrection?: boolean;
     mPlanAmount?: string;
@@ -70,7 +70,7 @@ export type GeaSalesPlanListItem = {
     updatedAt?: string | null;
 };
 export type GeaSalesPlanPageQuery = {
-    orderType?: "M" | "Z";
+    orderType?: 'M' | 'Z';
     periodId?: GeaSalesPlanId;
     planTypeCode?: string;
     dealerCode?: GeaSalesPlanId;
@@ -218,7 +218,7 @@ export type GeaSalesPlanSubmitItem = {
     price: GeaSalesPlanDecimal;
 };
 export type GeaSalesPlanSubmitRequest = {
-    adjustmentMode?: "ABSOLUTE_NET";
+    adjustmentMode?: 'ABSOLUTE_NET';
     orderType: 'M' | 'Z';
     status: number;
     periodId: GeaSalesPlanId;
@@ -264,7 +264,7 @@ export type GeaSalesPlanSkuAdjustment = {
 export type GeaSalesPlanActionRequest = {
     approvalPolicy?: 'role-visible-v1';
     approvalRole?: GeaSalesPlanApprovalRole;
-    adjustmentMode?: "ABSOLUTE_NET";
+    adjustmentMode?: 'ABSOLUTE_NET';
     expectedSnapshot?: string;
     action: GeaSalesPlanAction;
     expectedStatus: number;

@@ -40,9 +40,19 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/|scripts/)",
+      "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/)",
       "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"],
       "exclusive": true
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/",
+      "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:build|build-inventory|build-output)\\.mjs$",
+      "tests": ["tests/core-resource-build.test.mjs", "tests/inventory-storage-build.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",

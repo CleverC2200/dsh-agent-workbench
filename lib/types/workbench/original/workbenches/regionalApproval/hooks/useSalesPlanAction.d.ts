@@ -12,7 +12,7 @@ export type SalesPlanActionState = {
     status: 'error';
     error: SalesPlanActionError;
 };
-export declare const useSalesPlanAction: ({ client: suppliedClient }: {
+export declare const useSalesPlanAction: ({ client: suppliedClient, }: {
     client?: SalesPlanActionClient;
 }) => {
     state: SalesPlanActionState;

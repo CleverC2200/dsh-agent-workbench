@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next';
 import React from 'react';
 import { type SalesPlanActionClient, type SalesPlanActionError } from './models/salesPlanActionModel.ts';
 import { type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 export type LiveActionKind = 'APPROVE' | 'REJECT' | 'SAVE';
 /**
  * V1.8 #12：失败提示只给业务语言。后端原文只有在像业务话术时才透出；

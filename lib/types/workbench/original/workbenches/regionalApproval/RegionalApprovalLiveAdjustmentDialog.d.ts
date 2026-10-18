@@ -3,7 +3,7 @@ import React from 'react';
 import type { SalesPlanDetailClient } from './hooks/useSalesPlanDetail.ts';
 import { type SalesPlanAdjustmentDraft } from './models/salesPlanAdjustmentModel.ts';
 import { type RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
-import type { ApprovalDimension } from './regionalApprovalFixture.ts';
+import type { ApprovalDimension } from './salesPlanDomain.ts';
 declare const RegionalApprovalLiveAdjustmentDialog: React.FC<{
     visible: boolean;
     readOnly?: boolean;

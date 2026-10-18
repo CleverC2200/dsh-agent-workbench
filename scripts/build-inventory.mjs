@@ -4,15 +4,14 @@ import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import { syncAgentResources } from './build-output.mjs';
 const root = resolve(import.meta.dirname, '..');
 
 /** Assemble each page's Agent declaration from its owning Manage resource, independently of page compilation. */
 export async function assembleInventoryAgentResources(id) {
   const author = resolve(root, `../dsh-agent-manage/business-resources/inventory-${id}`);
   const output = resolve(root, `lib/business/inventory-${id}`);
-  await mkdir(output, { recursive: true });
-  for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-    await cp(resolve(author, file), resolve(output, file), { recursive: true });
+  await syncAgentResources(author, output);
 }
 
 export async function buildInventory(id, sourceCommit) {

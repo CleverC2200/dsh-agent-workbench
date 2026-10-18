@@ -1,6 +1,6 @@
 import { type GeaSalesPlanListItem, type GeaSalesPlanPage, type GeaSalesPlanPageQuery, type GeaSalesPlanPeriod, type GeaSalesPlanPeriodQuery } from '../../bridge.ts';
 import { type RegionalApprovalQueryScope, type SalesPlanStageTally } from './regionalApprovalQueryModel.ts';
-import type { ApprovalStageId } from './regionalApprovalFixture.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import type { SalesPlanApprovalRole } from './models/salesPlanAccessModel.ts';
 /** 查询状态按“周期→队列→进度/分析”分层；请求序号和 AbortSignal 防止晚到结果覆盖新选择。 */
 export type SalesPlanQueryClient = {
@@ -48,7 +48,7 @@ export type SalesPlanAnalysisSummary = {
 };
 export declare const classifyRegionalApprovalQueryError: (error: unknown, timedOut?: boolean) => RegionalApprovalQueryError;
 export declare const useRegionalApprovalQuery: ({ client: suppliedClient, page, pageSize, scope, loadStageProgress, loadAnalysisSummary, stageStatuses, stage, roles, }: {
-    client?: SalesPlanQueryClient | null;
+    client?: SalesPlanQueryClient;
     page: number;
     pageSize: number;
     scope?: RegionalApprovalQueryScope;
@@ -60,7 +60,6 @@ export declare const useRegionalApprovalQuery: ({ client: suppliedClient, page, 
 }) => {
     analysisSummary: QueryState<SalesPlanAnalysisSummary>;
     analysisRecords: GeaSalesPlanListItem[] | undefined;
-    enabled: boolean;
     periodsState: QueryState<GeaSalesPlanPeriod[]>;
     queueState: QueryState<GeaSalesPlanPage<GeaSalesPlanListItem>>;
     progressState: QueryState<Record<ApprovalStageId, number>> & {

@@ -3,6 +3,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { syncAgentResources } from './build-output.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/inventory-orderfulfillment');
@@ -45,8 +46,7 @@ await mkdir(out, { recursive: true });
 await writeFile(resolve(out, 'index.html'), html);
 for (const file of ['plugin.json', 'page.json'])
   await cp(resolve(source, file), resolve(out, file));
-for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-  await cp(resolve(agent, file), resolve(out, file), { recursive: true });
+await syncAgentResources(agent, out);
 await writeFile(
   resolve(out, 'build-inputs.json'),
   JSON.stringify(

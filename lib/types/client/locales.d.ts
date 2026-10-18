@@ -222,6 +222,7 @@ declare const copy: {
     readonly categoryPlanWorkbench: readonly ["品类计划工作台", "Category plan workbench"];
     readonly mpsPlanWorkbench: readonly ["主生产计划(MPS)", "MPS workbench"];
     readonly apiLog: readonly ["接口日志", "API logs"];
+    readonly geaApiLog: readonly ["GEA 接口日志", "GEA API logs"];
     readonly inboxNotConnected: readonly ["消息待办接口尚未接入", "Message inbox service is not connected"];
     readonly messageInbox: readonly ["消息待办", "Message inbox"];
     readonly agentPanel: readonly ["需求预测", "Demand forecast"];

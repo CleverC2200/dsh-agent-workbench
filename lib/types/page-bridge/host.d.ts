@@ -1,4 +1,4 @@
-import { type AgUiEvent, type AgUiToolMessage } from "../page-interaction/page-bridge/protocol.ts";
+import { type AgUiEvent, type AgUiToolMessage } from '../page-interaction/page-bridge/protocol.ts';
 export type PageBridgeOptions = {
     /** 命令在页面取走前的最长存活时间。 */
     ttlMs?: number;

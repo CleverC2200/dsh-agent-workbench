@@ -195,17 +195,13 @@ jobs:
         with:
           path: ${{ steps.sdk-paths.outputs.paths }}
           key: sdk-${{ github.repository }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ matrix.core }}-${{ hashFiles('candidate/dsh-agent-manage/scripts/prepare-official-sdk.mjs', 'candidate/dsh-agent-manage/scripts/sdk-artifact-cache.mjs', 'candidate/dsh-gea-plugin/scripts/supported-cores.json', 'source/official-core/pnpm-lock.yaml') }}
-      - uses: actions/cache/restore@v4
-        with:
-          path: playwright-browsers
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/dsh-agent-workbench/package-lock.json') }}
-      - name: Prepare independent SDK and run all public quality gates
+      - name: Prepare and verify reusable SDK before product checks
+        id: sdk-prepare
+        if: needs.candidate-scope.outputs.business-lane != 'business-profile'
         env:
-          INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
           CORE_HEAD: ${{ matrix.core }}
-          QUALITY_PHASE: ${{ needs.candidate-scope.outputs.business-lane == 'business-profile' && 'business-profile' || 'quality' }}
-        run: npm run quality:ci -- --input "$QUALITY_CANDIDATE" --prepare-sdk --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256" --phase "$QUALITY_PHASE"
-      - name: Save verified SDK cache without delaying required checks
+        run: node "$GITHUB_WORKSPACE/candidate/dsh-agent-manage/scripts/prepare-official-sdk.mjs" --prepare --reuse-prepared --with-flock --core "$GITHUB_WORKSPACE/official-latest-standard" --core-head "$CORE_HEAD" --source "$GITHUB_WORKSPACE/source/official-core"
+      - name: Save verified SDK before unrelated product checks
         if: success() && needs.candidate-scope.outputs.business-lane != 'business-profile' && steps.sdk-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         timeout-minutes: 1
@@ -213,6 +209,20 @@ jobs:
         with:
           path: ${{ steps.sdk-paths.outputs.paths }}
           key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+      - uses: actions/cache/restore@v4
+        with:
+          path: playwright-browsers
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/dsh-agent-workbench/package-lock.json') }}
+      - name: Verify prepared SDK and run all public quality gates
+        env:
+          INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
+          CORE_HEAD: ${{ matrix.core }}
+          QUALITY_PHASE: ${{ needs.candidate-scope.outputs.business-lane == 'business-profile' && 'business-profile' || 'quality' }}
+        shell: bash
+        run: |
+          workbench_sdk_args=()
+          if [[ "$QUALITY_PHASE" == business-profile ]]; then workbench_sdk_args+=(--prepare-sdk); fi
+          npm run quality:ci -- --input "$QUALITY_CANDIDATE" "${workbench_sdk_args[@]}" --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256" --phase "$QUALITY_PHASE"
       - name: Keep independent quality results including failure
         if: always()
         uses: actions/upload-artifact@v7
@@ -224,6 +234,7 @@ jobs:
             quality-source-*.json
             quality-checks.json
             quality-test-plan.json
+            quality-prepared.json
             candidate/dsh-agent-workbench/.runtime/quality-fast.json
           if-no-files-found: warn
 
@@ -235,7 +246,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - uses: actions/setup-node@v7
         id: node

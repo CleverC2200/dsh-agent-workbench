@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { syncAgentResources } from './build-output.mjs';
 const root = resolve(import.meta.dirname, '..'),
   resource = join(root, 'business/inventory-apsplan'),
   ui = join(resource, 'source'),
@@ -78,8 +79,7 @@ await mkdir(out, { recursive: true });
 await writeFile(join(out, 'index.html'), html);
 for (const file of ['plugin.json', 'page.json']) await cp(join(resource, file), join(out, file));
 const agent = join(root, '../dsh-agent-manage/business-resources/inventory-apsplan');
-for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-  await cp(join(agent, file), join(out, file), { recursive: true });
+await syncAgentResources(agent, out);
 if (mock) {
   const plugin = JSON.parse(await readFile(join(out, 'plugin.json'), 'utf8'));
   plugin.mode = 'mock';

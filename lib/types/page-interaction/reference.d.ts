@@ -3,7 +3,7 @@ export declare const REFERENCE_SOURCE = "page-content";
 export declare const REFERENCE_TEXT_LIMIT = 6000;
 export type PageReference = {
     page: string;
-    kind?: "row" | "table" | "block";
+    kind?: 'row' | 'table' | 'block';
     label: string;
     text: string;
     row?: string;

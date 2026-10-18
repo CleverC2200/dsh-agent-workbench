@@ -126,10 +126,12 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
     /QUALITY_EXPECTED_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/,
   );
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
+  const [historyStages, finalStage] = workflow.split('\n  candidate-quality:');
   assert.equal(
-    (workflow.match(/fetch-depth: 0/g) ?? []).length,
-    (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
+    (historyStages.match(/fetch-depth: 0/g) ?? []).length,
+    (historyStages.match(/uses: actions\/checkout@v7/g) ?? []).length,
   );
+  assert.match(finalStage, /fetch-depth: 1/);
   assert.equal(
     (workflow.match(/persist-credentials: false/g) ?? []).length,
     (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
@@ -142,7 +144,9 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   assert.match(compatibility, /ciCores\(["']compatibility["']\)/);
   assert.doesNotMatch(compatibility, /^ {2}(push|pull_request):/m);
   assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
-  assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE" --prepare-sdk/);
+  assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE"/);
+  assert.match(workflow, /--prepare --reuse-prepared --with-flock/);
+  assert.match(workflow, /workbench_sdk_args\+=\(--prepare-sdk\)/);
   assert.doesNotMatch(workflow, /PLUGIN_SPLIT_.*_HISTORY_SOURCE/);
   assert.match(workflow, /if: always\(\)/);
   assert.match(workflow, /needs: \[candidate-scope, gates\]/);

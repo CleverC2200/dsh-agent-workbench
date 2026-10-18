@@ -1,9 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import {
+  globSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+} from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { selectCiTests } from '../scripts/ci-test-plan.mjs';
 
 function fixture(t, repo = 'dsh-agent-workbench') {
@@ -68,7 +77,8 @@ function fixture(t, repo = 'dsh-agent-workbench') {
       base = commit(root);
       own.head = base;
     },
-    plan: (testOwners) => selectCiTests({ repositories, repo: own.repo, base, testOwners }),
+    plan: (testOwners, alwaysRunScripts) =>
+      selectCiTests({ repositories, repo: own.repo, base, testOwners, alwaysRunScripts }),
   };
 }
 
@@ -788,4 +798,212 @@ test('execution ownership rejects unknown, missing, self-referencing and cyclic 
     () => f.plan({ 'tests/affected.test.mjs': 'tests/peer.test.mjs' }),
     /CI_TEST_OWNER_REQUIRED/,
   );
+});
+
+function productionFixture(t) {
+  const f = fixture(t);
+  Object.assign(
+    f.policy,
+    JSON.parse(readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url))),
+  );
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  for (const file of new Set([
+    ...f.policy.required,
+    ...f.policy.rules.flatMap((rule) => rule.tests),
+  ]))
+    f.put(f.root, file, 'export const fixture = true;');
+  for (const file of [
+    'business/inventory-fc/source/inventory-light-plugins/tests/fixture.test.mjs',
+    'business/inventory-apsplan/source/tests/data/fixture.test.mjs',
+  ])
+    f.put(f.root, file, 'export const fixture = true;');
+  return f;
+}
+
+test('production policy preserves actual build and provenance regression consumers', async (t) => {
+  for (const [source, consumer] of [
+    ['scripts/static-author-provenance.mjs', 'tests/static-author-provenance.test.mjs'],
+    ['scripts/html-author.mjs', 'tests/html-sample-resource.test.mjs'],
+    ['scripts/build-inventory.mjs', 'tests/inventory-storage-build.test.mjs'],
+    ['scripts/build.mjs', 'tests/core-resource-build.test.mjs'],
+    ['scripts/build-output.mjs', 'tests/build-output.test.mjs'],
+  ])
+    await t.test(source, (t) => {
+      const f = productionFixture(t);
+      for (const file of [source, consumer, 'scripts/build-html-sample.mjs'])
+        f.put(f.root, file, readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
+      f.checkpoint();
+      f.put(f.root, source, readFileSync(join(f.root, source), 'utf8') + '\n// impact probe\n');
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + source].includes(consumer),
+        JSON.stringify(plan),
+      );
+      assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+      assert.equal(plan.fullSuite, 'not-run');
+    });
+});
+
+test('test files and consumed raw fixtures remain selectable with production policy', async (t) => {
+  for (const changed of ['scripts/business-profile-ci.test.mjs', 'tests/fixtures/input.raw'])
+    await t.test(changed, (t) => {
+      const f = productionFixture(t);
+      const consumer = 'scripts/business-profile-ci.test.mjs';
+      f.put(f.root, consumer, "readFileSync('../tests/fixtures/input.raw');");
+      f.put(f.root, 'tests/fixtures/input.raw', 'original bytes');
+      f.checkpoint();
+      f.put(f.root, changed, readFileSync(join(f.root, changed), 'utf8') + '\n');
+      f.repositories[0].head = f.commit(f.root);
+      assert.ok(f.plan().reasons['dsh-agent-workbench/' + changed].includes(consumer));
+    });
+});
+
+test('exclusive engineering rules cannot suppress a changed test or a consumed fixture', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^tests/',
+    tests: ['tests/required.test.mjs'],
+    exclusive: true,
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/affected.test.mjs', "readFileSync('tests/fixtures/input.raw');");
+  f.put(f.root, 'tests/fixtures/input.raw', 'original bytes');
+  f.checkpoint();
+  f.put(f.root, 'tests/affected.test.mjs', "readFileSync('tests/fixtures/input.raw');\n");
+  f.put(f.root, 'tests/fixtures/input.raw', 'updated bytes');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  for (const file of ['tests/affected.test.mjs', 'tests/fixtures/input.raw'])
+    assert.ok(plan.reasons['dsh-agent-workbench/' + file].includes('tests/affected.test.mjs'));
+});
+
+test('an unmapped own test fixture is rejected instead of silently receiving a green plan', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/fixtures/unmapped.raw', 'unmapped bytes');
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(f.plan, /CI_TEST_IMPACT_UNMAPPED/);
+});
+
+function nodeCheckFixture(t) {
+  const f = fixture(t, 'dsh-agent-manage');
+  Object.assign(f.policy, {
+    required: ['tests/required.test.ts'],
+    tests: ['tests/*.test.ts'],
+    rules: [],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/required.test.ts', 'export {};');
+  f.put(f.root, 'tests/check.test.mjs', "readFileSync('tests/fixtures/input.raw');");
+  f.put(f.root, 'tests/fixtures/input.raw', 'original bytes');
+  f.put(
+    f.root,
+    'package.json',
+    JSON.stringify({ scripts: { 'test:checks': 'node --test tests/check.test.mjs' } }),
+  );
+  f.checkpoint();
+  return f;
+}
+
+test('mandatory Node checks cover only their explicit files and actual fixture dependencies', async (t) => {
+  for (const file of ['tests/check.test.mjs', 'tests/fixtures/input.raw'])
+    await t.test(file, (t) => {
+      const f = nodeCheckFixture(t);
+      f.put(f.root, file, readFileSync(join(f.root, file), 'utf8') + '\n');
+      f.repositories[1].head = f.commit(f.root);
+      const plan = f.plan(undefined, ['test:checks']);
+      assert.deepEqual(plan.files, ['tests/required.test.ts']);
+      assert.deepEqual(plan.alwaysRun, { 'test:checks': ['tests/check.test.mjs'] });
+      assert.deepEqual(plan.alwaysRunReasons['dsh-agent-manage/' + file], {
+        'test:checks': ['tests/check.test.mjs'],
+      });
+      assert.throws(f.plan, /CI_TEST_IMPACT_UNMAPPED/);
+      f.put(f.root, 'tests/fixtures/unmapped.raw', 'unmapped bytes');
+      f.repositories[1].head = f.commit(f.root);
+      assert.throws(() => f.plan(undefined, ['test:checks']), /CI_TEST_IMPACT_UNMAPPED/);
+    });
+});
+
+test('mandatory-check declarations reject dynamic, missing, duplicate or pool-owned Node inputs', (t) => {
+  const f = nodeCheckFixture(t);
+  for (const declaration of [null, 'test:checks', ['missing'], ['test:checks', 'test:checks']])
+    assert.throws(() => f.plan(undefined, declaration), /CI_TEST_ALWAYS_RUN_REQUIRED/);
+  for (const command of [
+    'node --test',
+    'node --test tests/*.test.mjs',
+    'node --test tests/check.test.mjs && echo success',
+    'node --test tests/check.test.mjs\nnode other.mjs',
+    'node --test tests/$NAME.test.mjs',
+    'node --test tests/check.test.mjs --test-name-pattern partial',
+    'node --test tests/../tests/check.test.mjs',
+    'node --test tests/check.test.mjs tests/check.test.mjs',
+    'node --test tests/missing.test.mjs',
+    'node --test tests/required.test.ts',
+    'corepack pnpm test:checks',
+  ]) {
+    f.put(f.root, 'package.json', JSON.stringify({ scripts: { 'test:checks': command } }));
+    assert.throws(() => f.plan(undefined, ['test:checks']), /CI_TEST_ALWAYS_RUN_REQUIRED/, command);
+  }
+});
+
+test('a new mandatory Node test is covered only after explicit package registration', (t) => {
+  const f = nodeCheckFixture(t);
+  const file = 'tests/new-check.test.mjs';
+  f.put(f.root, file, 'export {};');
+  f.repositories[1].head = f.commit(f.root);
+  assert.throws(() => f.plan(undefined, ['test:checks']), /CI_TEST_IMPACT_UNMAPPED/);
+  const manifest = JSON.parse(readFileSync(join(f.root, 'package.json'), 'utf8'));
+  manifest.scripts['test:checks'] += ' ' + file;
+  f.put(f.root, 'package.json', JSON.stringify(manifest));
+  f.repositories[1].head = f.commit(f.root);
+  const plan = f.plan(undefined, ['test:checks']);
+  assert.deepEqual(plan.files, ['tests/required.test.ts']);
+  assert.deepEqual(plan.alwaysRun['test:checks'], ['tests/check.test.mjs', file]);
+  assert.deepEqual(plan.alwaysRunReasons['dsh-agent-manage/' + file], {
+    'test:checks': [file],
+  });
+});
+
+test('the actual three-repository policies retain Manage Node checks outside its Vitest pool', (t) => {
+  const f = fixture(t, 'dsh-agent-manage');
+  const scripts = ['test:knowledge', 'test:ci-inputs'];
+  let managePackage;
+  for (const entry of f.repositories) {
+    const actual = new URL('../../' + entry.repo + '/', import.meta.url);
+    const policyBytes = readFileSync(new URL('scripts/ci-test-policy.json', actual));
+    const policy = JSON.parse(policyBytes);
+    f.put(entry.path, 'scripts/ci-test-policy.json', policyBytes);
+    f.put(entry.path, 'package.json', readFileSync(new URL('package.json', actual)));
+    for (const pattern of policy.tests)
+      for (const file of globSync(pattern, { cwd: fileURLToPath(actual) }))
+        f.put(entry.path, file, 'export {};');
+    if (entry.repo === 'dsh-agent-manage') {
+      managePackage = JSON.parse(readFileSync(new URL('package.json', actual)));
+      for (const name of scripts) {
+        assert.ok(managePackage.scripts['check:static'].includes('pnpm run ' + name));
+        const args = managePackage.scripts[name].split(' ');
+        assert.deepEqual(args.slice(0, 2), ['node', '--test']);
+        for (const file of args.slice(2))
+          f.put(entry.path, file, readFileSync(new URL(file, actual)));
+      }
+    }
+    entry.head = f.commit(entry.path);
+  }
+  f.put(
+    f.root,
+    'scripts/quality-peer-baseline.json',
+    JSON.stringify({ repositories: f.repositories }),
+  );
+  f.checkpoint();
+  const file = 'tests/quality-ci-cli.test.mjs';
+  assert.ok(managePackage.scripts['test:ci-inputs'].split(' ').includes(file));
+  f.put(f.root, file, readFileSync(join(f.root, file), 'utf8') + '\n');
+  f.repositories[1].head = f.commit(f.root);
+  const plan = f.plan(undefined, scripts);
+  assert.deepEqual(plan.required, ['tests/agent-mcp.test.ts', 'tests/routes.test.ts']);
+  assert.ok(plan.files.every((file) => file.endsWith('.test.ts')));
+  assert.deepEqual(plan.alwaysRunReasons['dsh-agent-manage/' + file], {
+    'test:ci-inputs': [file],
+  });
+  assert.throws(f.plan, /CI_TEST_IMPACT_UNMAPPED/);
 });
