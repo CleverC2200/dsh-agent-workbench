@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, globSync, readFileSync } from 'node:fs';
 import { dirname, resolve, sep, relative } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -206,7 +206,11 @@ if (config.exports) {
   const targets = (value) =>
     typeof value === 'string' ? [value] : Object.values(value ?? {}).flatMap(targets);
   for (const target of targets(pkg.exports)) {
-    if (!existsSync(resolve(root, target)))
+    if (
+      target.includes('*')
+        ? globSync(target, { cwd: root }).length === 0
+        : !existsSync(resolve(root, target))
+    )
       throw Error(`AGENT_REFERENCE_MISSING: export ${target}`);
   }
 }
