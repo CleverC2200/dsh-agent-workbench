@@ -108,7 +108,7 @@ jobs:
           repository: CleverC2200/deepseek-harness
           ref: ${{ fromJSON(steps.cores.outputs.cores)[0] }}
           path: source/official-core
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - name: Bind source-only planning inputs
         id: planning-group
@@ -184,7 +184,7 @@ jobs:
         with:
           repository: CleverC2200/deepseek-harness
           ref: ${{ matrix.core }}
-          fetch-depth: 0
+          fetch-depth: ${{ needs.candidate-scope.outputs.applicability == 'docs' && 1 || 0 }}
           path: source/official-core
           persist-credentials: false
       - name: Enable declared package managers
