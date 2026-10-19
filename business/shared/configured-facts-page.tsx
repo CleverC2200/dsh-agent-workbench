@@ -72,6 +72,7 @@ export function ConfiguredFactsPage({
     [customerDraft, setCustomerDraft] = useState(customerCode ?? '');
   const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
   const [draft, setDraft] = useState<Record<string, string>>(initialFilters);
+  const [columnChoices, setColumnChoices] = useState<Record<string, string[]>>({});
   const [localPage, setLocalPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
     [revision, refresh] = useState(0);
@@ -90,6 +91,9 @@ export function ConfiguredFactsPage({
     [error, setError] = useState<any>(null),
     [loading, setLoading] = useState(false);
   const view = definition.views.find((v: any) => v.id === viewId);
+  const chosenColumns =
+    columnChoices[viewId] ?? view.defaultColumns ?? view.columns.map((c: any) => c.field);
+  const columns = view.columns.filter((c: any) => chosenColumns.includes(c.field));
   const snapshot = useRef<{ key: string; context: any } | undefined>(undefined);
   const scopeKey = JSON.stringify([config.agentId, viewId, asOf, customer, filters, revision]);
   useEffect(() => {
@@ -230,17 +234,56 @@ export function ConfiguredFactsPage({
       <section className={css.panel} aria-labelledby="source-view-title">
         <div className={css.heading}>
           <h2 id="source-view-title">{view.title}</h2>
-          <span>
-            {view.timeMode === 'current'
-              ? '当前源记录 · 不应用日期筛选'
-              : view.timeMode === 'month'
-                ? '所属月份：' + asOf.slice(0, 7)
-                : result?.snapshotDate
-                  ? '快照日：' + result.snapshotDate
-                  : asOf.slice(0, 7) + '-01 至 ' + asOf}
-          </span>
+          <div className={css.tableActions}>
+            <span>
+              {view.timeMode === 'current'
+                ? '当前源记录 · 不应用日期筛选'
+                : view.timeMode === 'month'
+                  ? '所属月份：' + asOf.slice(0, 7)
+                  : result?.snapshotDate
+                    ? '快照日：' + result.snapshotDate
+                    : asOf.slice(0, 7) + '-01 至 ' + asOf}
+            </span>
+            <details className={css.columnPicker}>
+              <summary>显示列（{columns.length}）</summary>
+              <div className={css.columnOptions}>
+                {view.columns.map((c: any) => (
+                  <label key={c.field}>
+                    <input
+                      type="checkbox"
+                      checked={chosenColumns.includes(c.field)}
+                      disabled={columns.length === 1 && chosenColumns.includes(c.field)}
+                      onChange={(event) =>
+                        setColumnChoices((old) => ({
+                          ...old,
+                          [viewId]: event.target.checked
+                            ? [...chosenColumns, c.field]
+                            : chosenColumns.filter((field: string) => field !== c.field),
+                        }))
+                      }
+                    />
+                    {c.label}
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setColumnChoices((old) => ({
+                      ...old,
+                      [viewId]: view.columns.map((c: any) => c.field),
+                    }))
+                  }
+                >
+                  显示全部
+                </button>
+              </div>
+            </details>
+            <details className={css.definition}>
+              <summary>统计口径</summary>
+              <p>{view.description}</p>
+            </details>
+          </div>
         </div>
-        <p className={css.description}>{view.description}</p>
         {view.filters.length > 0 && (
           <LocalQueryForm
             className={css.filters}
@@ -295,7 +338,7 @@ export function ConfiguredFactsPage({
                 <caption className={css.caption}>{view.title}明细</caption>
                 <thead>
                   <tr>
-                    {view.columns.map((c: any) => (
+                    {columns.map((c: any) => (
                       <th key={c.field} title={c.reason} scope="col">
                         {c.label}
                       </th>
@@ -304,7 +347,7 @@ export function ConfiguredFactsPage({
                 </thead>
                 <tbody>
                   <tr>
-                    <td colSpan={view.columns.length}>
+                    <td colSpan={columns.length}>
                       <p role="status" className={css.empty}>
                         {view.description}
                       </p>
@@ -356,7 +399,7 @@ export function ConfiguredFactsPage({
                     <caption className={css.caption}>{view.title}明细</caption>
                     <thead>
                       <tr>
-                        {view.columns.map((c: any) => (
+                        {columns.map((c: any) => (
                           <th
                             key={c.field}
                             title={c.reason}
@@ -375,7 +418,7 @@ export function ConfiguredFactsPage({
                     <tbody>
                       {result.rows.map((row: any, i: number) => (
                         <tr key={i}>
-                          {view.columns.map((c: any) => (
+                          {columns.map((c: any) => (
                             <td
                               key={c.field}
                               className={
