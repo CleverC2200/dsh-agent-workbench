@@ -11,13 +11,13 @@
 | 全链分布 | [公司只读来源、历史范围与未完成验收](../business/inventory-qll/SOURCE.md) |
 | 个人库存 | [独立 Consumer、隐藏入口和反馈边界](../business/inventory-personal/SOURCE.md) |
 | APS 产销协同 | [真实生成链、显式 mock 构建与遗留验收](../business/inventory-apsplan/SOURCE.md) |
-| 客户库存 | [固定 HTML 来源和模拟范围](../prototypes/inventory-customer/SOURCE.md) |
+| 客户库存 | [固定 HTML 来源和受控读取范围](../prototypes/inventory-customer/SOURCE.md) |
 | 订单履约 | [固定输入与模拟范围](../prototypes/inventory-orderfulfillment/README.md) |
 | DMS | [来源、内存模拟和真实写入边界](../prototypes/dms/README.md) |
 
 ## 区域、品类与 MPS 模拟页面
 
-客户库存、订单工作台与订单履约由 Workbench 打包原展示和模拟交互。Manage 持有其原 Prompt、Skill 与零业务能力声明；GEA 登记 view 范围的页面 grant 并拒绝 SQL 读取。资源选用关联实际 Core Session，不发送模型请求。订单工作台的本地演示任务在冷刷新后清空。其固定作者输入和边界见 `prototypes/inventory-orderworkbench` 下的 SOURCE.json。
+客户库存由 Workbench 保留原展示并通过 GEA 受控 SQL 读取最新客户库存快照；Manage 声明其 Prompt、Skill、表和 `governed-sql-read` 能力，身份、凭据、行列权限仍归 GEA Host。订单工作台与订单履约仍是模拟交互和零业务能力声明。资源选用关联实际 Core Session，不自行创建 Session。订单工作台的本地演示任务在冷刷新后清空。其固定作者输入和边界见 `prototypes/inventory-orderworkbench` 下的 SOURCE.json。
 
 区域计划复用静态作者页与 `plan-regional` 资源。模块、模拟日期、提报维度、节奏草稿和未保存节奏编辑按实际 Session 恢复，重新派生模拟上下文。品类计划复用静态作者页、`category-plan` Prompt、Skill 和空 MCP 声明；指标、事件、建议和任务由作者状态发布为模拟快照。临时模拟任务不落库。
 
