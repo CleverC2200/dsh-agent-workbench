@@ -163,6 +163,7 @@ test('Z resubmit keeps the fixed baseline and carries submission corrections rat
   z.skus[0] = {
     ...z.skus[0],
     qty: '30',
+    amt: '370.20',
     adjAddQty: '2',
     adjCutQty: '0',
     regionAdjAddQty: '8',

@@ -1,8 +1,18 @@
 import type { TFunction } from 'i18next';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Input, Modal, Pagination, Select, Table } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Table,
+  Tag,
+} from '@arco-design/web-react';
 import type {
   GeaSalesPlanListItem,
+  GeaSalesPlanPage,
   GeaSalesPlanPeriod,
   GeaSalesPlanDetail,
   GeaSalesPlanActionRequest,
@@ -18,13 +28,13 @@ import {
 import {
   correctionAccess,
   correctionAdjustments,
-  correctionDecision,
   correctionLine,
-  correctionMetrics,
+  correctionDisplay,
   correctionDecimal,
   verifyCorrectionAction,
 } from './models/salesPlanCorrectionModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
+import { salesPlanProgressBarColor } from './models/salesPlanProgressModel.ts';
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import {
   salesPlanVisibleStatuses,
@@ -32,24 +42,20 @@ import {
 } from './regionalApprovalQueryModel.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import { salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
-import { formatExactDecimal, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
+import {
+  aggregateRegionalApprovalLiveCategories,
+  salesPlanStatusText,
+} from './regionalApprovalQueryModel.ts';
 import styles from './CorrectionWorkbench.module.css';
 
 const roles = ['region', 'province', 'area', 'category'] as const;
-const money = (v?: string) => (v == null ? '—' : `¥${formatExactDecimal(v)}`);
-const percent = (v?: string) => (v == null ? '—' : `${v}%`);
-const sum = (
-  rows: GeaSalesPlanListItem[],
-  field: 'targetAmount' | 'corrPlanAmount' | 'mPlanAmount' | 'mPlanQty' | 'corrPlanQty',
-) => {
-  try {
-    return rows
-      .reduce((total, row) => total.plus(correctionDecimal(row[field])), correctionDecimal('0'))
-      .toFixed(2);
-  } catch {
-    return undefined;
-  }
+const formatted = (value: string | undefined, kind: 'money' | 'quantity') => {
+  const number = correctionDisplay(value, kind);
+  return <span title={number.exact}>{number.display}</span>;
 };
+const money = (value?: string) => formatted(value, 'money');
+const quantity = (value?: string) => formatted(value, 'quantity');
+const percent = (v?: string) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
 /** 纠偏是现有工作台中的一个视图，使用已认证的客户端能力。 */
 export function CorrectionWorkbench({
@@ -71,6 +77,7 @@ export function CorrectionWorkbench({
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`common.correction.${key}`, values);
+  const [summary, setSummary] = useState<GeaSalesPlanPage<GeaSalesPlanListItem>['summary']>();
   const [periods, setPeriods] = useState<GeaSalesPlanPeriod[]>([]);
   const [periodId, setPeriodId] = useState('');
   const [rows, setRows] = useState<GeaSalesPlanListItem[]>([]);
@@ -120,6 +127,7 @@ export function CorrectionWorkbench({
     if (!periodId || !queryClient) return;
     const controller = new AbortController();
     setRows([]);
+    setSummary(undefined);
     setSelected(undefined);
     setLoading(true);
     setError('');
@@ -148,7 +156,11 @@ export function CorrectionWorkbench({
                 queryClient.list.invoke({ ...base, status, pageNo: i + 2, pageSize: first.size }),
             ),
           );
-          return { total: first.total, records: [first, ...rest].flatMap((p) => p.records) };
+          return {
+            total: first.total,
+            summary: first.summary,
+            records: [first, ...rest].flatMap((p) => p.records),
+          };
         }),
       );
       const records = pages
@@ -159,6 +171,22 @@ export function CorrectionWorkbench({
       return {
         records: records.slice((page - 1) * 20, page * 20),
         total: pages.reduce((n, p) => n + p.total, 0),
+        summary: pages.every((p) => p.summary)
+          ? {
+              targetAmount: pages
+                .reduce((n, p) => n.plus(p.summary!.targetAmount), correctionDecimal('0'))
+                .toFixed(2),
+              planAmount: pages
+                .reduce((n, p) => n.plus(p.summary!.planAmount), correctionDecimal('0'))
+                .toFixed(2),
+              diffAmount: pages
+                .reduce((n, p) => n.plus(p.summary!.diffAmount), correctionDecimal('0'))
+                .toFixed(2),
+              planQty: pages
+                .reduce((n, p) => n.plus(p.summary!.planQty), correctionDecimal('0'))
+                .toFixed(3),
+            }
+          : undefined,
       };
     };
     void load()
@@ -170,6 +198,7 @@ export function CorrectionWorkbench({
           )
         )
           throw new Error('CORRECTION_SCOPE_MISMATCH');
+        setSummary(result.summary);
         setRows(result.records);
         setTotal(result.total);
       })
@@ -199,7 +228,11 @@ export function CorrectionWorkbench({
   const timeProgress =
     month === currentMonth
       ? (now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) * 100
-      : undefined;
+      : month && /^\d{4}-\d{2}$/.test(month)
+        ? month < currentMonth
+          ? 100
+          : 0
+        : undefined;
   return (
     <main className={styles.page}>
       <div className={styles.toolbar}>
@@ -246,23 +279,67 @@ export function CorrectionWorkbench({
           {tr('refresh')}
         </Button>
       </div>
-      <p>
-        {tr('summary', {
-          target: error || loading ? '—' : money(sum(rows, 'targetAmount')),
-          qty: error || loading ? '—' : (sum(rows, 'corrPlanQty') ?? '—'),
-          amount: error || loading ? '—' : money(sum(rows, 'corrPlanAmount')),
-          count: total,
-        })}
-      </p>
+      <div className={styles.summary} data-testid="correction-summary">
+        {[
+          ['目标金额', money(summary?.targetAmount)],
+          ['计划金额', money(summary?.planAmount)],
+          ['差额', money(summary?.diffAmount)],
+          ['计划数量', quantity(summary?.planQty)],
+        ].map(([label, value]) => (
+          <div key={String(label)}>
+            <span>{label}</span>
+            <strong
+              className={
+                label === '差额'
+                  ? salesPlanVarianceClass(summary?.diffAmount, styles.positive, styles.negative)
+                  : undefined
+              }
+            >
+              {error || loading ? '—' : value}
+            </strong>
+          </div>
+        ))}
+      </div>
       {error && <Alert type="error" content={error} />}
       <Table
         rowKey="planId"
+        rowClassName={(row) => (row.monthlyApproved !== true ? styles.inactive : '')}
         data={rows}
         loading={loading}
         pagination={false}
         scroll={{ x: 1000 }}
         columns={[
-          { title: tr('customer'), render: (_, r) => r.dealerName ?? r.orgName ?? r.dealerCode },
+          {
+            title: tr('customer'),
+            render: (_, r) => (
+              <div className={styles.organization}>
+                <Button
+                  type="text"
+                  disabled={loading || r.monthlyApproved !== true || !detailClient}
+                  onClick={() => setSelected(r)}
+                >
+                  {r.dealerName ?? r.orgName ?? r.dealerCode}
+                </Button>
+                <Tag size="small">
+                  {r.monthlyApproved !== true
+                    ? tr('notApproved')
+                    : r.hasCorrection === false
+                      ? tr('absent')
+                      : salesPlanStatusText(r.status, r.planTypeCode, t)}
+                </Tag>
+                <small>
+                  {[r.channelName ?? r.channelCode, r.orgName, r.provinceName, r.areaName]
+                    .filter(Boolean)
+                    .join(' / ')}
+                </small>
+                {r.status >= 6 && r.status <= 9 && onResubmit && (
+                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
+                    {tr('resubmit')}
+                  </Button>
+                )}
+              </div>
+            ),
+          },
           { title: tr('target'), render: (_, r) => money(r.targetAmount) },
           {
             title: tr('plan'),
@@ -270,80 +347,91 @@ export function CorrectionWorkbench({
               <>
                 {money(r.mPlanAmount)}
                 <br />
-                {r.mPlanQty ?? '—'} 件
+                {quantity(r.mPlanQty)}
               </>
             ),
           },
           {
             title: tr('progress'),
-            render: (_, r) => {
-              const m = correctionMetrics(r);
-              return (
-                <>
-                  <div>{tr('amountProgress', { value: percent(m.amountProgress) })}</div>
-                  <div>{tr('qtyProgress', { value: percent(m.qtyProgress) })}</div>
-                  {m.amountProgress != null && (
-                    <div
-                      className={styles.progress}
-                      role="img"
-                      aria-label={`金额进度 ${m.amountProgress}%${timeProgress == null ? '' : `，时间进度 ${timeProgress.toFixed(2)}%`}`}
-                    >
-                      <span
-                        style={{
-                          width: `${Math.max(0, Math.min(100, Number(m.amountProgress)))}%`,
-                        }}
-                      />
-                      {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
-                    </div>
-                  )}
-                  {timeProgress != null &&
-                  m.amountProgress != null &&
-                  Number(m.amountProgress) < timeProgress ? (
-                    <small>{tr('behind')}</small>
-                  ) : null}
-                </>
-              );
-            },
+            render: (_, r) => (
+              <div title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}>
+                <strong>{percent(r.amountProgress)}</strong>
+                <small>
+                  {money(r.shipAmount)} / {quantity(r.shipQty)}
+                </small>
+                {r.amountProgress != null && (
+                  <div
+                    className={styles.progress}
+                    role="img"
+                    aria-label={`月达成进度 ${r.amountProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                  >
+                    <span
+                      style={{
+                        width: `${Math.max(0, Math.min(100, Number(r.amountProgress)))}%`,
+                        background: salesPlanProgressBarColor(Number(r.amountProgress)),
+                      }}
+                    />
+                    {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                  </div>
+                )}
+                {timeProgress != null &&
+                  r.amountProgress != null &&
+                  Number(r.amountProgress) < timeProgress && <small>{tr('behind')}</small>}
+              </div>
+            ),
+          },
+          {
+            title: tr('adjustment'),
+            render: (_, r) =>
+              r.hasCorrection === false ||
+              r.prevAdjAddQty == null ||
+              r.prevAdjCutQty == null ||
+              (correctionDecimal(r.prevAdjAddQty).isZero() &&
+                correctionDecimal(r.prevAdjCutQty).isZero()) ? (
+                '—'
+              ) : (
+                <span>
+                  <span
+                    className={
+                      correctionDecimal(r.prevAdjAddQty).isZero() ? styles.zero : styles.positive
+                    }
+                    title={correctionDisplay(r.prevAdjAddQty, 'quantity').exact}
+                  >
+                    +{correctionDisplay(r.prevAdjAddQty, 'quantity').display.replace('件', '')}
+                  </span>{' '}
+                  /{' '}
+                  <span
+                    className={
+                      correctionDecimal(r.prevAdjCutQty).isZero() ? styles.zero : styles.negative
+                    }
+                    title={correctionDisplay(r.prevAdjCutQty, 'quantity').exact}
+                  >
+                    −{correctionDisplay(r.prevAdjCutQty, 'quantity').display.replace('件', '')}
+                  </span>
+                </span>
+              ),
           },
           {
             title: tr('correctedProgress'),
-            render: (_, r) => {
-              const m = correctionMetrics(r);
-              return r.hasCorrection === false ? (
-                '—'
-              ) : (
-                <>
-                  <div>{percent(m.correctionProgress)}</div>
-                  <small>{tr('net', { value: money(m.netAmount) })}</small>
-                </>
-              );
-            },
-          },
-          {
-            title: tr('status'),
-            render: (_, r) =>
-              r.monthlyApproved === false
-                ? tr('notApproved')
-                : r.hasCorrection === false
-                  ? tr('absent')
-                  : salesPlanStatusText(r.status, r.planTypeCode, t),
-          },
-          {
-            title: tr('actions'),
             render: (_, r) => (
-              <>
-                <Button
-                  disabled={loading || r.monthlyApproved !== true || !detailClient}
-                  onClick={() => setSelected(r)}
-                >
-                  {tr('detail')}
-                </Button>
-                {r.status >= 6 && r.status <= 9 && onResubmit && (
-                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
-                    {tr('resubmit')}
-                  </Button>
+              <div title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}>
+                <strong>{r.hasCorrection === false ? '—' : percent(r.correctionProgress)}</strong>
+                {r.hasCorrection !== false && r.correctionProgress != null && (
+                  <div
+                    className={styles.progress}
+                    role="img"
+                    aria-label={`纠偏后进度 ${r.correctionProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                  >
+                    <span
+                      style={{
+                        width: `${Math.max(0, Math.min(100, Number(r.correctionProgress)))}%`,
+                        background: salesPlanProgressBarColor(Number(r.correctionProgress)),
+                      }}
+                    />
+                    {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                  </div>
                 )}
-              </>
+              </div>
             ),
           },
         ]}
@@ -398,6 +486,8 @@ function CorrectionDetail({
     t(`common.correction.${key}`, values);
   const [detail, setDetail] = useState<GeaSalesPlanDetail>();
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [editing, setEditing] = useState<string>();
   const [reason, setReason] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
@@ -440,7 +530,7 @@ function CorrectionDetail({
       approvalStages,
     );
   const writable = Boolean(
-    access && actionClient && (access.roleContractSupported || access.approvalRole === actor),
+    access && actionClient && access.allowedActions.length > 0 && access.approvalRole === actor,
   );
   const lines = useMemo(
     () =>
@@ -449,22 +539,9 @@ function CorrectionDetail({
           const delta =
             edits[sku.skuCode] ??
             (detail.currentVersion.orderType === 'Z'
-              ? correctionDecision(
-                  sku,
-                  stage === 'current'
-                    ? detail.currentVersion.status === 5
-                      ? 10
-                      : detail.currentVersion.status
-                    : (salesPlanWorkflow(detail.currentVersion.planTypeCode).pending(
-                        stage as (typeof roles)[number],
-                      ) ?? -1),
-                  detail.currentVersion.planTypeCode,
-                  true,
-                  undefined,
-                  stage === 'current'
-                    ? access?.approvalRole
-                    : (stage as 'region' | 'province' | 'area' | 'category'),
-                )
+              ? correctionDecimal(sku.nodeAdjAddQty)
+                  .minus(correctionDecimal(sku.nodeAdjCutQty))
+                  .toFixed()
               : '0');
           return { sku, line: correctionLine(sku, delta), input: delta, error: '' };
         } catch (e) {
@@ -477,6 +554,14 @@ function CorrectionDetail({
       }) ?? [],
     [detail, edits, stage],
   );
+  const groups = detail
+    ? aggregateRegionalApprovalLiveCategories(detail.skus).map((category) => ({
+        name: category.categoryName,
+        lines: lines.filter(
+          (line) => (line.sku.productCategName.trim() || '其他') === category.categoryName,
+        ),
+      }))
+    : [];
   const invalid = lines.some((x) => x.error);
   const total = invalid
     ? '—'
@@ -602,69 +687,118 @@ function CorrectionDetail({
           </p>
           {!access && <Alert type="info" content={tr('unavailable')} />}
           <p className={salesPlanVarianceClass(total, styles.positive, styles.negative)}>
-            {tr('difference', { value: total })}
+            净纠偏数量 {quantity(total)}
           </p>
           <div className={styles.scroll}>
             <table className={styles.detail}>
               <thead>
                 <tr>
-                  {[
-                    'SKU',
-                    'baseQty',
-                    'newQty',
-                    'baseAmount',
-                    'newAmount',
-                    'delta',
-                    'deltaAmount',
-                    'ai',
-                  ].map((x) => (
-                    <th key={x}>{x === 'SKU' ? x : tr(x)}</th>
+                  {['SKU 编码 / 物料描述', '月初计划量 / 金额', '纠偏量 / 金额'].map((label) => (
+                    <th key={label}>{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {lines.map(({ sku, line, input, error: lineError }) => (
-                  <tr
-                    key={sku.skuCode}
-                    className={line && !line.participates ? styles.inactive : undefined}
-                  >
-                    <td>
-                      {sku.skuCode}
-                      <br />
-                      {sku.productCategName}
-                    </td>
-                    <td>{sku.qty}</td>
-                    <td>{line?.qty ?? '—'}</td>
-                    <td>{money(sku.amt)}</td>
-                    <td>{money(line?.amount)}</td>
-                    <td>
-                      <Input
-                        aria-label={`${tr('delta')} ${sku.skuCode}`}
-                        aria-invalid={Boolean(lineError)}
-                        value={input}
-                        disabled={!writable || busy || Boolean(pending)}
-                        onChange={(value) =>
-                          setEdits((current) => ({ ...current, [sku.skuCode]: value }))
-                        }
-                      />
-                      {lineError ? (
-                        <small role="alert">{lineError}</small>
-                      ) : line && !line.participates ? (
-                        <small>{tr('zero')}</small>
-                      ) : null}
-                    </td>
-                    <td
-                      className={salesPlanVarianceClass(
-                        line?.delta,
-                        styles.positive,
-                        styles.negative,
-                      )}
-                    >
-                      {money(line?.deltaAmount)}
-                    </td>
-                    <td>{tr('noAi')}</td>
-                  </tr>
-                ))}
+                {groups.map((group) => {
+                  const sum = (field: 'baseQty' | 'delta' | 'deltaAmount') =>
+                    group.lines.every((item) => item.line)
+                      ? group.lines
+                          .reduce((n, item) => n.plus(item.line![field]), correctionDecimal('0'))
+                          .toFixed()
+                      : undefined;
+                  const baseAmount = group.lines
+                    .reduce((n, item) => n.plus(item.sku.amt), correctionDecimal('0'))
+                    .toFixed(2);
+                  return (
+                    <React.Fragment key={group.name}>
+                      <tr className={styles.group}>
+                        <td>
+                          <Button
+                            type="text"
+                            aria-expanded={!collapsed.includes(group.name)}
+                            onClick={() =>
+                              setCollapsed((current) =>
+                                current.includes(group.name)
+                                  ? current.filter((name) => name !== group.name)
+                                  : [...current, group.name],
+                              )
+                            }
+                          >
+                            {group.name} · {group.lines.length} 项
+                          </Button>
+                        </td>
+                        <td>
+                          {quantity(sum('baseQty'))}
+                          <small>{money(baseAmount)}</small>
+                        </td>
+                        <td
+                          className={
+                            salesPlanVarianceClass(
+                              sum('delta'),
+                              styles.positive,
+                              styles.negative,
+                            ) ?? styles.zero
+                          }
+                        >
+                          {quantity(sum('delta'))}
+                          <small>{money(sum('deltaAmount'))}</small>
+                        </td>
+                      </tr>
+                      {!collapsed.includes(group.name) &&
+                        group.lines.map(({ sku, line, input, error: lineError }) => (
+                          <tr
+                            key={sku.skuCode}
+                            className={line && !line.participates ? styles.inactive : undefined}
+                          >
+                            <td>
+                              {sku.skuCode}
+                              <small>{sku.skuName ?? sku.materialDescription ?? '—'}</small>
+                            </td>
+                            <td>
+                              {quantity(sku.corrBaseQty ?? sku.qty)}
+                              <small>{money(sku.amt)}</small>
+                            </td>
+                            <td
+                              className={
+                                salesPlanVarianceClass(
+                                  line?.delta,
+                                  styles.positive,
+                                  styles.negative,
+                                ) ?? styles.zero
+                              }
+                            >
+                              <Input
+                                aria-label={`${tr('delta')} ${sku.skuCode}`}
+                                aria-invalid={Boolean(lineError)}
+                                title={correctionDisplay(input, 'quantity').exact}
+                                value={
+                                  editing === sku.skuCode ||
+                                  !/^[+-]?\d+(?:\.\d+)?$/.test(input) ||
+                                  correctionDecimal(input).abs().lt(10000)
+                                    ? input
+                                    : correctionDisplay(input, 'quantity').display.replace('件', '')
+                                }
+                                onFocus={() => setEditing(sku.skuCode)}
+                                onBlur={() => setEditing(undefined)}
+                                disabled={
+                                  !writable || sku.editable !== true || busy || Boolean(pending)
+                                }
+                                onChange={(value) =>
+                                  setEdits((current) => ({ ...current, [sku.skuCode]: value }))
+                                }
+                              />
+                              <small>{money(line?.deltaAmount)}</small>
+                              {lineError ? (
+                                <small role="alert">{lineError}</small>
+                              ) : line && !line.participates ? (
+                                <small>{tr('zero')}</small>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
