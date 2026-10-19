@@ -278,8 +278,8 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
   assert.ok(detail, '找不到 SKU 明细表头');
   const queueColumnNames = queue.head.map((cell) => cell.text);
   assert.ok(
-    queueColumnNames.includes('计划金额 / 目标金额'),
-    `队列表头缺少金额口径列名，实际 ${JSON.stringify(queueColumnNames)}`,
+    queueColumnNames.includes('月达成进度'),
+    `队列表头缺少月达成进度列名，实际 ${JSON.stringify(queueColumnNames)}`,
   );
   assert.ok(!queueColumnNames.includes('计划/目标'), '不要再用「计划/目标」这种含糊列名');
   for (const table of [queue, detail]) {

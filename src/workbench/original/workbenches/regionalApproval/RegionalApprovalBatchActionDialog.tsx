@@ -1,5 +1,5 @@
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { Alert, Button, Checkbox, Input, Modal, Spin } from '@arco-design/web-react';
+import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useRef, useState } from 'react';
 import type { GeaSalesPlanActionRequest } from '../../bridge.ts';
@@ -61,7 +61,6 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   onClose: () => void;
 }> = ({ visible, kind, items, t, client, onPermissionDenied, onCompleted, onClose }) => {
   const [remark, setRemark] = useState('');
-  const [confirmed, setConfirmed] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [outcomes, setOutcomes] = useState<BatchActionOutcome[]>();
@@ -102,7 +101,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   const skipped = outcomes?.filter((outcome) => outcome.status === 'skipped').length ?? 0;
   const unsuccessful = outcomes?.filter((outcome) => outcome.status !== 'success') ?? [];
   const locked = busy || outcomes !== undefined;
-  const invalid = !submittable.length || !confirmed || (kind === 'REJECT' && !remark.trim());
+  const invalid = !submittable.length || (kind === 'REJECT' && !remark.trim());
 
   const skipText = (item: BatchActionItem) =>
     item.skipReason
@@ -258,11 +257,6 @@ const RegionalApprovalBatchActionDialog: React.FC<{
             onChange={setRemark}
           />
         </label>
-        <Checkbox checked={confirmed} disabled={locked} onChange={setConfirmed}>
-          {t('common.assistantSurface.regionalApproval.liveBatch.confirmation', {
-            count: submittable.length,
-          })}
-        </Checkbox>
         {attempted && invalid && !locked ? (
           <Alert
             type="error"

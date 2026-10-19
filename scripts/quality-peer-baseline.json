@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "repositories": [
     {
-      "repo": "dsh-agent-manage",
-      "head": "3cd1cf9589bf11ae73994860bafc21da06ef25a7"
+      "repo": "dsh-agent-workbench",
+      "head": "56831bf364388e92384d2e0717ae02cf8047be70"
     },
     {
-      "repo": "dsh-agent-workbench",
-      "head": "a367c1e60c5c9b35e9524b4a63f019843f469327"
+      "repo": "dsh-agent-manage",
+      "head": "dc822ed6da51b4417e258370735f4ae6e9bd7277"
     },
     {
       "repo": "dsh-gea-plugin",
-      "head": "dd2959d31385b1f0e5566f3be800e4a5b8d5102f"
+      "head": "350d94369c07c52ba6e63c956be549ce832b7026"
     }
   ]
 }

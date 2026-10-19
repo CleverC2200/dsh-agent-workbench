@@ -1,9 +1,13 @@
 /** Workbench Native 业务文档中的审批页面；GEA 保留认证与业务授权。 */
-import { RegionalApprovalResubmitDialog } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
-import type { GeaSalesPlanPeriod } from './original/contracts.ts';
+import {
+  RegionalApprovalResubmitDialog,
+  type SalesPlanSubmissionItem,
+  type SalesPlanSubmissionOutcome,
+} from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { createWorkflowLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Button } from '@arco-design/web-react';
 import i18next from 'i18next';
 import {
   RegionalApprovalWorkbench,
@@ -212,6 +216,8 @@ export const workbenchHost: WorkbenchHost = {
 };
 const host = workbenchHost;
 const resubmitClient = {
+  action: host.salesPlan.action,
+  draft: host.salesPlan.draft,
   detail: host.salesPlan.detail,
   versionSkus: host.salesPlan.versionSkus,
   submit: host.salesPlan.submit,
@@ -285,16 +291,29 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       : undefined;
   const directApiLog = new URLSearchParams(window.location.search).get('view') === 'api-log';
   const [apiLogOpen, setApiLogOpen] = useState(directApiLog);
-  const [workbenchRevision, setWorkbenchRevision] = useState(0);
+  const [submissionOutcomes, setSubmissionOutcomes] =
+    useState<readonly SalesPlanSubmissionOutcome[]>();
   const [resubmit, setResubmit] = useState<{
-    planId: string;
-    versionId: string;
-    period: GeaSalesPlanPeriod;
+    items: readonly SalesPlanSubmissionItem[];
+    visible: boolean;
+    pending: boolean;
   }>();
+  const updateResubmitPending = useCallback((pending: boolean) => {
+    setResubmit((current) =>
+      current && current.pending !== pending ? { ...current, pending } : current,
+    );
+  }, []);
   useEffect(() => {
     setResubmit(undefined);
+    setSubmissionOutcomes(undefined);
     if (!directApiLog) setApiLogOpen(false);
-  }, [directApiLog, status?.environment, status?.user?.id]);
+  }, [
+    directApiLog,
+    status?.environment,
+    status?.user?.id,
+    status?.user?.tenantId,
+    status?.pageScope,
+  ]);
   const [statusError, setError] = useState('');
   const [pageConnection, setPageConnection] = useState<{ sessionId: string; owner: string } | null>(
     null,
@@ -488,15 +507,52 @@ export function WorkbenchPage({ t }: { t: Translate }) {
         <section className="gea-center-surface" aria-label="插件内容">
           <WorkbenchSessionProvider value={{ conversationId: sessionId }}>
             <div className="gea-original-workbench">
+              {resubmit?.pending && !resubmit.visible && (
+                <Alert
+                  type="warning"
+                  style={{ flexShrink: 0 }}
+                  content={locale.t(
+                    'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
+                    { plan: resubmit.items.map((item) => item.label).join('、') },
+                  )}
+                  action={
+                    <Button
+                      onClick={() =>
+                        setResubmit((current) =>
+                          current ? { ...current, visible: true } : current,
+                        )
+                      }
+                    >
+                      {locale.t('common.assistantSurface.regionalApproval.liveSubmit.resume')}
+                    </Button>
+                  }
+                />
+              )}
               <RegionalApprovalWorkbench
-                key={workbenchRevision}
+                submissionOutcomes={submissionOutcomes}
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}
                 onContextChange={onContextChange}
+                currentUserId={status.user?.id}
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
-                onResubmit={(planId, versionId, period) =>
-                  setResubmit({ planId, versionId, period })
+                onResubmit={(planId, versionId, period, label = '') =>
+                  setResubmit((current) =>
+                    current?.pending
+                      ? { ...current, visible: true }
+                      : {
+                          items: [{ kind: 'resubmit', planId, versionId, period, label }],
+                          visible: true,
+                          pending: false,
+                        },
+                  )
+                }
+                onSubmitBatch={(items) =>
+                  setResubmit((current) =>
+                    current?.pending
+                      ? { ...current, visible: true }
+                      : { items, visible: true, pending: false },
+                  )
                 }
                 automaticAnalysisEnabled={true}
                 onCatalogChange={(elements) => {
@@ -511,21 +567,25 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 }}
               />
             </div>
-            {resubmit && (
-              <RegionalApprovalResubmitDialog
-                key={resubmit.versionId}
-                {...resubmit}
-                client={resubmitClient}
-                connected={status?.resubmitConnected === true}
-                t={locale.t.bind(locale)}
-                onClose={() => setResubmit(undefined)}
-                onSucceeded={() => {
-                  setWorkbenchRevision((value) => value + 1);
-                }}
-              />
-            )}
           </WorkbenchSessionProvider>
         </section>
+      )}
+      {resubmit && (
+        <RegionalApprovalResubmitDialog
+          key={resubmit.items.map((item) => item.versionId).join(':')}
+          {...resubmit}
+          visible={resubmit.visible && !apiLogOpen}
+          onPendingChange={updateResubmitPending}
+          client={resubmitClient}
+          connected={status?.resubmitConnected === true}
+          t={locale.t.bind(locale)}
+          onClose={(pending) =>
+            setResubmit((current) =>
+              pending && current ? { ...current, pending, visible: false } : undefined,
+            )
+          }
+          onCompleted={setSubmissionOutcomes}
+        />
       )}
     </div>
   );

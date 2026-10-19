@@ -100,7 +100,7 @@ export const projectSalesPlanActionContext = (
     typeof receipt.replayed !== 'boolean' ||
     !safeOpaqueId(receipt.requestId) ||
     !safeOpaqueId(receipt.traceId) ||
-    !safeOpaqueId(receipt.auditId)
+    (receipt.auditId != null && !safeOpaqueId(receipt.auditId))
   ) {
     return undefined;
   }

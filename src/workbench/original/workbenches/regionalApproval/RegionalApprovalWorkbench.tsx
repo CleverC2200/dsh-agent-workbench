@@ -1,3 +1,8 @@
+import type {
+  SalesPlanSubmissionItem,
+  SalesPlanSubmissionOutcome,
+} from './RegionalApprovalResubmitDialog.tsx';
+import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
 import { CorrectionWorkbench } from './CorrectionWorkbench.tsx';
@@ -82,14 +87,13 @@ import {
   clampSalesPlanPageNumber,
   formatExactDecimal,
   projectRegionalApprovalLiveDimension,
-  regionalApprovalLiveProgress,
   salesPlanPeriodOptionLabel,
   subtractExactDecimals,
   toRegionalApprovalLiveRow,
   type RegionalApprovalLiveCategorySummary,
   type RegionalApprovalLiveRow,
 } from './regionalApprovalQueryModel.ts';
-import { readableMoney } from './models/readableMoney.ts';
+import { correctionDisplay } from './models/salesPlanCorrectionModel.ts';
 import {
   useRegionalApprovalQuery,
   type RegionalApprovalQueryError,
@@ -204,8 +208,13 @@ export type RegionalApprovalWorkbenchContext = {
 const stageLabelKey = (stage: ApprovalStageId) =>
   `common.assistantSurface.regionalApproval.stages.${stage}` as const;
 
-const exactMoney = (value: string) => `¥${formatExactDecimal(value)}`;
-const quantityText = (value: string) => formatExactDecimal(value).replace(/\.0+$/, '');
+const exactMoney = (value: string) => (
+  <span title={correctionDisplay(value, 'money').exact}>
+    {correctionDisplay(value, 'money').display}
+  </span>
+);
+const quantityText = (value: string) =>
+  correctionDisplay(value, 'quantity').display.replace('件', '');
 const exactSignedMoney = (value: string) => {
   const formatted = formatExactDecimal(value);
   return formatted.startsWith('-') ? `−¥${formatted.slice(1)}` : `¥${formatted}`;
@@ -319,7 +328,7 @@ const normalizeLiveActionReceipts = (value: unknown): Record<string, GeaSalesPla
         typeof candidate.replayed === 'boolean' &&
         typeof candidate.requestId === 'string' &&
         typeof candidate.traceId === 'string' &&
-        typeof candidate.auditId === 'string'
+        (candidate.auditId == null || typeof candidate.auditId === 'string')
       );
     }),
   ) as Record<string, GeaSalesPlanActionReceipt>;
@@ -344,7 +353,15 @@ const RegionalApprovalWorkbench: React.FC<{
   ) => void;
   liveActionsEnabled?: boolean;
   automaticAnalysisEnabled?: boolean;
-  onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;
+  currentUserId?: string;
+  onResubmit?: (
+    planId: string,
+    versionId: string,
+    period: GeaSalesPlanPeriod,
+    label?: string,
+  ) => void;
+  onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
+  submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
   /** AG-UI 前端工具调用：agent 让页面改这一屏怎么看。 */
@@ -359,6 +376,10 @@ const RegionalApprovalWorkbench: React.FC<{
   onContextChange,
   liveActionsEnabled = false,
   automaticAnalysisEnabled = false,
+  onResubmit,
+  onSubmitBatch,
+  submissionOutcomes,
+  currentUserId,
   approvalStages,
   toolCall,
   onToolResult,
@@ -606,8 +627,14 @@ const RegionalApprovalWorkbench: React.FC<{
         const next = metrics
           ? {
               ...row,
-              mPlanQty: metrics.baseQty,
-              mPlanAmount: metrics.baseAmount,
+              mPlanQty:
+                metrics.versionId === row.versionId
+                  ? (row.mPlanQty ?? metrics.baseQty)
+                  : metrics.baseQty,
+              mPlanAmount:
+                metrics.versionId === row.versionId
+                  ? (row.mPlanAmount ?? metrics.baseAmount)
+                  : metrics.baseAmount,
               currentQty: metrics.qty,
               currentAmount: metrics.amount,
               targetQty: metrics.targetQty,
@@ -763,7 +790,11 @@ const RegionalApprovalWorkbench: React.FC<{
       level: number,
       parent = '',
     ): RegionalApprovalLiveTableRow[] =>
-      groupRegionalApprovalLiveRows(plans, levels[level]).flatMap((group) => {
+      groupRegionalApprovalLiveRows(
+        plans,
+        levels[level],
+        liveQuery.queueState.data?.groupMetrics,
+      ).flatMap((group) => {
         if (level === levels.length - 1) return planRows(group.members, true);
         if (!parent && group.members.length === 1) return planRows(group.members);
         const id = `${parent}/group:${group.key}`;
@@ -779,7 +810,13 @@ const RegionalApprovalWorkbench: React.FC<{
         ];
       });
     return build(draftedLiveRows, levels.indexOf(dimension));
-  }, [categoryComparison, draftedLiveRows, liveCategorySummaries, dimension]);
+  }, [
+    categoryComparison,
+    draftedLiveRows,
+    liveCategorySummaries,
+    dimension,
+    liveQuery.queueState.data?.groupMetrics,
+  ]);
   const liveTableRowById = useMemo(() => {
     const rows = new Map<string, RegionalApprovalLiveTableRow>();
     const visit = (tableRows: RegionalApprovalLiveTableRow[]) => {
@@ -1021,6 +1058,33 @@ const RegionalApprovalWorkbench: React.FC<{
     liveQuery.retryQueue();
     void refreshApprovalStages();
   };
+  useEffect(() => {
+    if (!submissionOutcomes?.length) return;
+    const attempted = new Set(submissionOutcomes.map((outcome) => outcome.planId));
+    const succeeded = new Set(
+      submissionOutcomes
+        .filter((outcome) => outcome.status === 'success')
+        .map((outcome) => outcome.planId),
+    );
+    setSelectedRowIds((current) => current.filter((id) => !attempted.has(id)));
+    setPermissionDeniedVersions(
+      (current) =>
+        new Set([
+          ...current,
+          ...submissionOutcomes
+            .filter((outcome) => outcome.permissionDenied)
+            .map((outcome) => outcome.versionId),
+        ]),
+    );
+    if (succeeded.size) {
+      setLivePendingValues((current) =>
+        Object.fromEntries(Object.entries(current).filter(([id]) => !succeeded.has(id))),
+      );
+      liveAccess.refresh();
+      liveQuery.retryQueue();
+      void refreshApprovalStages();
+    }
+  }, [submissionOutcomes]);
   const activeLiveActionRow = liveRows.find((row) => row.planId === liveActionPlanId);
 
   const contextFilterSummary = useMemo(
@@ -1135,13 +1199,25 @@ const RegionalApprovalWorkbench: React.FC<{
         : { row, skipReason: liveActionDisabledReason(row, kind) ?? 'missingAuthority' };
     });
   /** 分组内有可按角色审批或退回的成员时允许勾选。 */
+  const resubmitAllowed = (row: RegionalApprovalLiveRow) => {
+    const detail = liveAccess.entries[row.versionId];
+    return Boolean(
+      onResubmit &&
+      liveQuery.queueState.status === 'success' &&
+      detail &&
+      detail.currentVersion.id === row.versionId &&
+      detail.currentVersion.status === row.status &&
+      salesPlanCanResubmit(detail.currentVersion, roleStages, currentUserId),
+    );
+  };
   const liveRowSelectable = (row: RegionalApprovalLiveTableRow) => {
     if (row.kind !== 'plan') return false;
     const plans = row.members?.length ? row.members : [row.plan];
     return plans.some(
       (plan) =>
         liveActionDisabledReason(plan, 'APPROVE') === undefined ||
-        liveActionDisabledReason(plan, 'REJECT') === undefined,
+        liveActionDisabledReason(plan, 'REJECT') === undefined ||
+        resubmitAllowed(plan),
     );
   };
   // 分组选择会包含待回写/已回写成员；这两类终态在批次中明确跳过。
@@ -1166,32 +1242,46 @@ const RegionalApprovalWorkbench: React.FC<{
           /^-?\d+(?:\.\d+)?$/.test(detail.baseQty) &&
           /^-?\d+(?:\.\d+)?$/.test(detail.baseAmount),
       );
+    const serverSummary = historicalSummaryUnavailable
+      ? undefined
+      : liveQuery.queueState.data?.summary;
     return {
       visibleCount: liveRows.length,
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
       // 汇总读展示行（含版本汇总与本节点调整），和表格里看到的数保持一致。
-      quantity:
-        draftedLiveRows.length === 0
+      quantity: serverSummary
+        ? (serverSummary.planQty ?? '—')
+        : draftedLiveRows.length === 0
           ? '0'
           : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
             ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
             : hasCompleteDetailMetrics
               ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
               : '—',
-      amount:
-        draftedLiveRows.length === 0
+      amount: serverSummary
+        ? (serverSummary.planAmount ?? '—')
+        : draftedLiveRows.length === 0
           ? '0'
           : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
             ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
             : hasCompleteDetailMetrics
               ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
               : '—',
-      targetAmount: addExactDecimals(draftedLiveRows.map((row) => row.targetAmount)),
+      targetAmount:
+        serverSummary?.targetAmount ??
+        addExactDecimals(draftedLiveRows.map((row) => row.targetAmount)),
       savedAdjustmentCount: 0,
       localApprovalResultCount: 0,
     };
-  }, [scopeSummary, draftedLiveRows, liveRows, versionMetrics]);
+  }, [
+    scopeSummary,
+    draftedLiveRows,
+    liveRows,
+    versionMetrics,
+    historicalSummaryUnavailable,
+    liveQuery.queueState.data?.summary,
+  ]);
   const dashboardReady = liveQuery.queueState.status === 'success' && !liveCategoriesLoading;
   const amountVariance =
     metrics.targetAmount !== undefined && metrics.amount !== '—'
@@ -2217,6 +2307,21 @@ const RegionalApprovalWorkbench: React.FC<{
                     ))
                   : '—'}
             </span>
+            {!liveRowSelectable(tableRow) &&
+              (tableRow.members ?? [row]).some((plan) => {
+                const version = liveAccess.entries[plan.versionId]?.currentVersion;
+                return (
+                  plan.status === 6 &&
+                  version?.status === 6 &&
+                  !salesPlanCanResubmit(version, roleStages, currentUserId)
+                );
+              }) && (
+                <div role="note" className={styles.resubmitUnavailable}>
+                  {t(
+                    'common.assistantSurface.regionalApproval.liveSubmit.disabled.unconfirmedSubmitter',
+                  )}
+                </div>
+              )}
           </div>
         );
       },
@@ -2282,7 +2387,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 ? exactMoney(tableRow.plan.mPlanAmount!)
                 : '—'}
             </span>
-            <small>
+            <small title={correctionDisplay(tableRow.plan.mPlanQty, 'quantity').exact}>
               {/^-?\d+(?:\.\d+)?$/.test(tableRow.plan.mPlanQty ?? '')
                 ? `${quantityText(tableRow.plan.mPlanQty!)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`
                 : '—'}
@@ -2291,26 +2396,44 @@ const RegionalApprovalWorkbench: React.FC<{
         ),
     },
     {
-      title: categoryComparison
-        ? t('common.assistantSurface.regionalApproval.columns.categoryProgress')
-        : t('common.assistantSurface.regionalApproval.columns.progress'),
+      title: t('common.correction.progress'),
       width: liveColumnWidths[3],
       render: (_, tableRow) => {
         if (tableRow.kind === 'plan') {
-          const progress = regionalApprovalLiveProgress({
-            ...tableRow.plan,
-            currentAmount: tableRow.plan.mPlanAmount ?? '—',
-          });
+          const progress = {
+            amount:
+              tableRow.plan.amountProgress == null
+                ? undefined
+                : Number(tableRow.plan.amountProgress),
+          };
           return (
             <div className={styles.categoryProgressCell}>
               {/* V1.8 #09：达成率用进度条 + 百分比，百分比前不再带「金额」。 */}
-              <strong>{formattedProgress(progress.amount)}</strong>
+              <strong
+                title={
+                  Number(tableRow.plan.targetAmount) === 0
+                    ? t('common.correction.noTarget')
+                    : undefined
+                }
+              >
+                {formattedProgress(progress.amount)}
+              </strong>
               <Progress
                 percent={Math.min(Math.max(progress.amount ?? 0, 0), 100)}
                 showText={false}
                 size="small"
                 color={salesPlanProgressBarColor(progress.amount)}
               />
+              <small>
+                {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)} /{' '}
+                {tableRow.plan.shipQty == null ? (
+                  '—'
+                ) : (
+                  <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
+                    {quantityText(tableRow.plan.shipQty)}件
+                  </span>
+                )}
+              </small>
             </div>
           );
         }
@@ -2343,7 +2466,49 @@ const RegionalApprovalWorkbench: React.FC<{
     },
   ];
 
-  const primaryActionDisabledReason = batchDisabledReason('APPROVE');
+  const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
+  const submissionItems = (): SalesPlanSubmissionItem[] =>
+    selectedPendingActionRows.flatMap((row): SalesPlanSubmissionItem[] => {
+      const label =
+        projectRegionalApprovalLiveDimension(row, dimension).name ?? row.dealerName ?? row.planId;
+      const period = liveQuery.periods.find(
+        (period) => period.periodId === row.periodId && period.planTypeCode === row.planTypeCode,
+      );
+      if (!period) return [];
+      if (row.status >= 6 && row.status <= 9) {
+        return resubmitAllowed(row)
+          ? [{ kind: 'resubmit', planId: row.planId, versionId: row.versionId, label, period }]
+          : [];
+      }
+      const access = liveActionAccessFor(row, 'APPROVE');
+      return access && !liveActionDisabledReason(row, 'APPROVE')
+        ? [
+            {
+              kind: 'approve',
+              planId: row.planId,
+              versionId: row.versionId,
+              label,
+              row,
+              period,
+              access,
+              pendingValues: livePendingValues[row.planId],
+            },
+          ]
+        : [];
+    });
+  const selectedSubmissionItems = submissionItems();
+  const resubmitDisabledReason =
+    selectedSubmissionItems.length !== selectedPendingActionRows.length ||
+    (!onSubmitBatch && selectedLiveRows.length !== 1)
+      ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
+      : undefined;
+  const primaryActionDisabledReason =
+    batchDisabledReason('APPROVE') ??
+    (onSubmitBatch &&
+    selectedLiveRows.length > 1 &&
+    selectedSubmissionItems.length !== selectedPendingActionRows.length
+      ? 'missingAuthority'
+      : undefined);
   const approvalActionButtons = (
     <>
       {liveActionsEnabled ? (
@@ -2377,7 +2542,27 @@ const RegionalApprovalWorkbench: React.FC<{
           {t('common.assistantSurface.regionalApproval.liveAction.reject')}
         </Button>
       ) : null}
-      {liveActionsEnabled ? (
+      {liveActionsEnabled && hasReturnedSelection ? (
+        <Button
+          type="primary"
+          size="small"
+          disabled={Boolean(resubmitDisabledReason) || liveActionPlanId !== undefined}
+          title={resubmitDisabledReason}
+          onClick={() => {
+            if (resubmitDisabledReason) return;
+            if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
+            else {
+              const item = selectedSubmissionItems[0];
+              if (item?.kind === 'resubmit')
+                onResubmit?.(item.planId, item.versionId, item.period, item.label);
+            }
+          }}
+        >
+          {t(
+            `common.assistantSurface.regionalApproval.liveSubmit.${selectedLiveRows.length > 1 ? 'openBatch' : 'open'}`,
+          )}
+        </Button>
+      ) : liveActionsEnabled ? (
         <Button
           type="primary"
           size="small"
@@ -2403,7 +2588,12 @@ const RegionalApprovalWorkbench: React.FC<{
               setLiveActionPlanId(row.planId);
               return;
             }
-            setBatchAction({ kind: 'APPROVE', items: batchItemsFor(selectedLiveRows, 'APPROVE') });
+            if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
+            else
+              setBatchAction({
+                kind: 'APPROVE',
+                items: batchItemsFor(selectedLiveRows, 'APPROVE'),
+              });
           }}
         >
           {t('common.assistantSurface.regionalApproval.liveAction.approve')}
@@ -2724,20 +2914,24 @@ const RegionalApprovalWorkbench: React.FC<{
                   title={
                     !dashboardReady || metrics.targetAmount === undefined
                       ? undefined
-                      : readableMoney(metrics.targetAmount).exact
+                      : correctionDisplay(metrics.targetAmount, 'money').exact
                   }
                 >
                   {!dashboardReady || metrics.targetAmount === undefined
                     ? '—'
-                    : readableMoney(metrics.targetAmount).display}
+                    : correctionDisplay(metrics.targetAmount, 'money').display}
                 </strong>
               </span>
               <span>
                 <small>
                   {t('common.assistantSurface.regionalApproval.scopeTotals.planAmount')}
                 </small>
-                <strong title={!dashboardReady ? undefined : readableMoney(metrics.amount).exact}>
-                  {!dashboardReady ? '—' : readableMoney(metrics.amount).display}
+                <strong
+                  title={
+                    !dashboardReady ? undefined : correctionDisplay(metrics.amount, 'money').exact
+                  }
+                >
+                  {!dashboardReady ? '—' : correctionDisplay(metrics.amount, 'money').display}
                 </strong>
               </span>
               <span>
@@ -2758,15 +2952,21 @@ const RegionalApprovalWorkbench: React.FC<{
                 >
                   {!dashboardReady || amountVariance === undefined
                     ? '—'
-                    : readableMoney(amountVariance).display}
+                    : correctionDisplay(amountVariance, 'money').display}
                 </strong>
               </span>
               <span>
                 <small>
                   {t('common.assistantSurface.regionalApproval.scopeTotals.planQuantity')}
                 </small>
-                <strong>
-                  {!dashboardReady
+                <strong
+                  title={
+                    !dashboardReady || metrics.quantity === '—'
+                      ? undefined
+                      : correctionDisplay(metrics.quantity, 'quantity').exact
+                  }
+                >
+                  {!dashboardReady || metrics.quantity === '—'
                     ? '—'
                     : `${quantityText(metrics.quantity)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
                 </strong>

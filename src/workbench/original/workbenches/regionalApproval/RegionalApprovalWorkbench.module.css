@@ -804,6 +804,13 @@
   overflow-wrap: anywhere;
 }
 
+.organizationCell > .resubmitUnavailable {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .organizationCell > small {
   color: var(--text-secondary);
   font-size: 10px;
