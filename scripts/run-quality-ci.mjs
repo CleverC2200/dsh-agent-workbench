@@ -324,7 +324,14 @@ try {
                 {
                   name: 'build',
                   execute: () => {
-                    run('npm', ['run', buildAllPages ? 'build' : 'build:core']);
+                    const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
+                    process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
+                    try {
+                      run('npm', ['run', buildAllPages ? 'build' : 'build:core']);
+                    } finally {
+                      if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
+                      else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
+                    }
                   },
                 },
               ]
