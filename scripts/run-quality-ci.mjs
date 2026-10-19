@@ -1,6 +1,6 @@
 import { runQualityChecks } from './run-quality-checks.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, appendFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -48,7 +48,7 @@ try {
       !/^[a-f0-9]{64}$/.test(values['final-group-sha256'])
     )
       refuse('CANDIDATE_FINAL_GROUP_REQUIRED', 'original bytes SHA256 required');
-    if (!['quality', 'business-profile', 'verify-input'].includes(values.phase))
+    if (!['quality', 'verify-input', 'plan'].includes(values.phase))
       refuse('CANDIDATE_FINAL_GROUP_PHASE', values.phase);
   }
   if (values.phase === 'scope') {
@@ -59,13 +59,23 @@ try {
       if (process.env[key] !== 'success')
         refuse('QUALITY_REQUIRED', `${key}=${process.env[key] ?? 'missing'}`);
     }
+    const dependencyReview = process.env.QUALITY_DEPENDENCY_REVIEW_REQUIRED;
+    if (dependencyReview !== undefined) {
+      if (!['true', 'false'].includes(dependencyReview))
+        refuse('QUALITY_APPLICABILITY_REQUIRED', 'dependency review');
+      if (dependencyReview === 'true' && process.env.QUALITY_DEPENDENCY_REVIEW_RESULT !== 'success')
+        refuse(
+          'QUALITY_REQUIRED',
+          'dependency review=' + (process.env.QUALITY_DEPENDENCY_REVIEW_RESULT ?? 'missing'),
+        );
+    }
   } else if (values.phase === 'input') {
     refuse(
       'CANDIDATE_FINAL_GROUP_REQUIRED',
       'retired input writer; use the shared hosted group writer with the complete tuple',
     );
   } else {
-    if (!['quality', 'business-profile', 'verify-input'].includes(values.phase))
+    if (!['quality', 'verify-input', 'plan'].includes(values.phase))
       refuse('QUALITY_PHASE_REQUIRED', values.phase);
     if (!values['final-group-sha256'])
       refuse(
@@ -74,7 +84,7 @@ try {
       );
     const input = values.input;
     if (!input) refuse('CANDIDATE_INPUT_REQUIRED', '--input <frozen group JSON>');
-    finalGroup = await readFinalGroup({
+    const groupOptions = {
       input,
       sha256: values['final-group-sha256'],
       checkout: process.cwd(),
@@ -82,7 +92,8 @@ try {
       coreSource: values['core-source'],
       expectedSha: process.env.QUALITY_EXPECTED_SHA,
       ci: process.env.CI,
-    });
+    };
+    finalGroup = await readFinalGroup(groupOptions);
     const manifest = finalGroup.manifest;
     if (values['core-head'] !== undefined && values['core-head'] !== manifest.core)
       refuse('CANDIDATE_CORE_MISMATCH', 'selected Core must match the admitted group');
@@ -91,40 +102,50 @@ try {
       process.exit(0);
     }
     const own = manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench');
-    if (values.phase === 'business-profile')
-      (await import('./business-profile-ci.mjs')).validateBusinessProfileGroup(
-        manifest.repositories,
-      );
     const { selectCiTests } = await import('./ci-test-plan.mjs');
     const baseline = JSON.parse(readFileSync('scripts/quality-peer-baseline.json'));
-    const plan =
-      values.phase === 'business-profile'
-        ? {
-            lane: 'business-profile',
-            runtime: false,
-            browser: true,
-            files: [
-              'tests/new-conversation.test.mjs',
-              'tests/business-conversation.test.mjs',
-              'tests/inventory-entry.test.mjs',
-              'tests/company-ui.test.mjs',
-              'tests/plugin-package-version.test.mjs',
-              'scripts/business-profile-ci.test.mjs',
-              'tests/sidebar-reopen.browser.mjs',
-            ],
-          }
-        : selectCiTests({
-            repositories: manifest.repositories,
-            repo: 'dsh-agent-workbench',
-            base:
-              process.env.QUALITY_BASE_SHA ||
-              baseline.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').head,
-          });
+    const plan = selectCiTests({
+      repositories: manifest.repositories,
+      repo: 'dsh-agent-workbench',
+      base:
+        process.env.QUALITY_BASE_SHA ||
+        baseline.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').head,
+    });
     writeFileSync(
       resolve(dirname(resolve(input)), 'quality-test-plan.json'),
       JSON.stringify(plan, null, 2) + '\n',
     );
 
+    if (values.phase === 'plan') {
+      const dependencyReview =
+        process.env.GITHUB_EVENT_NAME === 'pull_request' &&
+        plan.changes.some(
+          (change) =>
+            change.repo === own.repo && ['package.json', 'package-lock.json'].includes(change.file),
+        );
+      finalGroup.verifyUnchanged();
+      if (process.env.GITHUB_OUTPUT)
+        appendFileSync(
+          process.env.GITHUB_OUTPUT,
+          'applicability=' +
+            plan.applicability +
+            '\n' +
+            'browser=' +
+            plan.browser +
+            '\n' +
+            'build=' +
+            plan.build +
+            '\n' +
+            'python-sql=' +
+            plan.files.includes('tests/agent-sql-direct.test.mjs') +
+            '\n' +
+            'dependency-review=' +
+            dependencyReview +
+            '\n',
+        );
+      console.log(JSON.stringify(plan));
+      process.exit(0);
+    }
     const sourceSnapshot = manifest.repositories.map((entry) => ({
       repo: entry.repo,
       root: entry.path,
@@ -159,6 +180,41 @@ try {
       ) + '\n',
       { flag: 'wx' },
     );
+    if (plan.applicability === 'docs') {
+      const checks = runQualityChecks([
+        {
+          name: 'knowledge',
+          execute: () =>
+            run(process.execPath, [
+              'scripts/check-agent-knowledge.mjs',
+              '--root',
+              '.',
+              '--config',
+              'agent-knowledge.json',
+            ]),
+        },
+        {
+          name: 'whitespace',
+          execute: () => run('git', ['diff', '--check', plan.diffBase, own.head]),
+        },
+      ]);
+      writeFileSync(
+        resolve(dirname(resolve(input)), 'quality-checks.json'),
+        JSON.stringify(checks, null, 2) + '\n',
+      );
+      if (checks.some((check) => check.status !== 'passed'))
+        refuse('QUALITY_CHECKS_FAILED', JSON.stringify(checks));
+      await readFinalGroup(groupOptions);
+      console.log(
+        JSON.stringify({
+          status: 'passed',
+          phase: values.phase,
+          applicability: 'docs',
+          runtime: 'not-observed',
+        }),
+      );
+      process.exit(0);
+    }
     const { migrationHistory } = await import('../tests/helpers/migration-history.mjs');
     for (const name of ['dealer', 'personal']) {
       const env = `WORKBENCH_${name.toUpperCase()}_HISTORY_ROOT`;
@@ -220,56 +276,103 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       manifest.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
     );
-    // Browser acceptance must use freshly compiled FC and AQKC pages, not tracked historical HTML.
-    for (const id of ['fc', 'aqkc'])
+    const buildAllPages = plan.files.includes('tests/agent-authored-layout.browser.mjs');
+    const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
+    if (
+      buildAllPages ||
+      plan.files.some((file) =>
+        /^(?:business\/inventory-fc\/|tests\/(?:fc-|inventory-storage-build))/.test(file),
+      )
+    )
       run(
         'corepack',
         ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
-        resolve(`business/inventory-${id}/source/inventory-light-plugins`),
+        leaf,
       );
-    run(
-      'npm',
-      ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
-      resolve('business/inventory-apsplan/source'),
-    );
+    if (buildAllPages)
+      run(
+        'corepack',
+        ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
+        resolve('business/inventory-aqkc/source/inventory-light-plugins'),
+      );
+    if (plan.build || plan.files.some((file) => file.startsWith('business/inventory-apsplan/')))
+      run(
+        'npm',
+        ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
+        resolve('business/inventory-apsplan/source'),
+      );
+    process.env.QUALITY_BASE_SHA = plan.diffBase;
     const browserFiles = plan.files.filter((file) => file.endsWith('.browser.mjs'));
     const checks = runQualityChecks([
-      { name: 'final-group', execute: () => run('npm', ['run', 'test:final-group']) },
-      { name: 'fast', execute: () => run('npm', ['run', 'quality:fast', '--', '--checks-only']) },
       {
-        name: 'build',
-        execute: () => {
-          const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
-          process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
-          try {
-            run('npm', ['run', 'build']);
-          } finally {
-            if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
-            else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
-          }
-        },
-      },
-      { name: 'knowledge', execute: () => run('npm', ['run', 'check:knowledge']) },
-      {
-        name: 'required-and-affected',
+        name: 'fast',
         execute: () =>
-          run(process.execPath, [
-            '--test',
-            '--test-concurrency=2',
-            ...plan.files.filter((file) => !file.endsWith('.browser.mjs')),
+          run('npm', [
+            'run',
+            'quality:fast',
+            '--',
+            '--checks-only',
+            ...(plan.build ? ['--declarations-in-build'] : []),
           ]),
       },
-      ...(browserFiles.length
-        ? [
-            {
-              name: 'affected-browser',
-              execute: () => {
-                run(process.execPath, ['--test', '--test-concurrency=1', ...browserFiles]);
-              },
-            },
-          ]
-        : []),
     ]);
+    if (checks.every((check) => check.status === 'passed'))
+      checks.push(
+        ...runQualityChecks([
+          ...(plan.build
+            ? [
+                {
+                  name: 'build',
+                  execute: () => {
+                    const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
+                    process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
+                    try {
+                      run('npm', ['run', buildAllPages ? 'build' : 'build:core']);
+                    } finally {
+                      if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
+                      else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
+                    }
+                  },
+                },
+              ]
+            : []),
+          ...(plan.build
+            ? [
+                {
+                  name: 'exports',
+                  execute: () =>
+                    run(process.execPath, [
+                      'scripts/check-agent-knowledge.mjs',
+                      '--root',
+                      '.',
+                      '--config',
+                      'agent-knowledge.json',
+                      '--exports-only',
+                    ]),
+                },
+              ]
+            : []),
+          {
+            name: 'required-and-affected',
+            execute: () =>
+              run(process.execPath, [
+                '--test',
+                '--test-concurrency=2',
+                ...plan.files.filter((file) => !file.endsWith('.browser.mjs')),
+              ]),
+          },
+          ...(browserFiles.length
+            ? [
+                {
+                  name: 'affected-browser',
+                  execute: () => {
+                    run(process.execPath, ['--test', '--test-concurrency=1', ...browserFiles]);
+                  },
+                },
+              ]
+            : []),
+        ]),
+      );
     writeFileSync(
       resolve(dirname(resolve(input)), 'quality-checks.json'),
       JSON.stringify(checks, null, 2) + '\n',
@@ -308,6 +411,31 @@ try {
         refuse('QUALITY_PEER_SOURCE_CHANGED', entry.repo);
     }
     sdk.verifyOfficialSDK(options);
+    if (!plan.build) {
+      finalGroup.verifyUnchanged();
+      writeFileSync(
+        resolve(dirname(resolve(input)), 'quality-prepared.json'),
+        JSON.stringify(
+          {
+            source: { head: own.head, receipt: sourceReceipt },
+            build: 'not-applicable',
+            runtime: 'not-observed',
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+      console.log(
+        JSON.stringify({
+          status: 'passed',
+          phase: values.phase,
+          applicability: 'source',
+          build: 'not-applicable',
+          runtime: 'not-observed',
+        }),
+      );
+      process.exit(0);
+    }
     const artifacts = {};
     function collect(directory) {
       for (const entry of readdirSync(directory, { withFileTypes: true })) {

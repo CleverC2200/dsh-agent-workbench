@@ -10,7 +10,7 @@ npm run format:audit
 npm run test:quality
 ```
 
-`quality:fast` 串行运行 lint、format:check、typecheck:official 和公开 CLI 反例，可检查未提交修改。原 Node、浏览器、类型和构建命令保留。全量 audit 包含旧债，返回真实非零；增量通过不表示全仓没有债务。
+`quality:fast` 可检查未提交修改。开发检查、候选构建及测试选择的适用范围见[当前 CI 规则](docs/ci-required-and-affected.md)。原 Node、浏览器、类型和构建命令保留。全量 audit 包含旧债，返回真实非零；增量通过不表示全仓没有债务。
 
 旧债仅在文件字节匹配固定 Git 提交 `9814b3bcf1ae015a63fac9af864c165617791fc3` 的 blob 时豁免。Q1 原始 policy `b42c62e72310d31a088b7394a964492efc1f217a:scripts/quality.mjs` 以固定原字节 fixture 读取；其 SHA-256、原配置 hash 和已安装工具版本必须一致。缺固定输入、改基线、弱化配置、工具错误都拒绝。没有更新基线的命令。新文件或修改后的旧债必须通过真实工具。
 
@@ -36,8 +36,8 @@ Browser 检查使用本仓锁定的 Playwright Chromium。已有浏览器缓存�
 
 CI 通过同一公开 quality CLI 执行必需检查与受影响测试，GitHub 全量集合已按本轮授权移除。选择、缓存、失败汇总及十分钟目标见[当前 CI 规则](docs/ci-required-and-affected.md)。独立完整测试命令仍保留为显式工具；源码与产物状态分别记录。
 
-## Frozen business repair exception
+## 历史业务修复例外
 
-The user authorized merging the 2026-10-14 business repair group without full tests. The `business-profile` lane is limited to the reviewed product commits declared in `scripts/business-profile-ci.mjs`, plus the listed CI and evidence files. It validates all three actual source checkouts against those commits. A different product source rejects this lane; other PR branches keep the normal gates. Same-tree main and explicit main dispatch can use the targeted lane. The existing final aggregate still rejects failed, cancelled, skipped or missing jobs, and branch protection is unchanged.
+2026-10-14 的业务修复组曾按用户授权使用固定源码的定向验收。该次授权、输入和失败记录保留在 Git 历史中，仅供追溯。对应固定分支分派已退场，当前候选统一使用必需检查与受影响测试。
 
-Targeted checks retain static gates and builds. Workbench runs the new-conversation/inventory/company/version cases and the sidebar browser file. Manage runs business resources, raw MCP scope, bundled tools and the real Core business-admission file; existing Windows archive and security lanes remain. GEA runs reasoning, history, identity/budgets, Cube-New, HTTP errors and plugin-update regressions. This is source acceptance, not real model, business, Native or release acceptance. The separate CI optimization and new query direct-return work are excluded.
+当时的源码验收不证明真实模型、业务、Native 或发行验收；现有业务断言及显式手动验收入口继续保留。

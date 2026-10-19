@@ -12,6 +12,7 @@ const git = (root, ...args) =>
   });
 const sourceFile = /\.(?:[cm]?[jt]sx?|css|html|json|ya?ml)$/;
 const browserDependency = '@ci/playwright';
+const workbenchBuildDependency = '@ci/workbench-build';
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
 function references(file, roots, known, importsOnly = false) {
@@ -286,15 +287,20 @@ function references(file, roots, known, importsOnly = false) {
       result.set(browserDependency, true);
       continue;
     }
-    if (
-      name.includes('${') ||
-      (!sourceFile.test(name) && !(recursive && name.startsWith('.'))) ||
-      name.length > 300
-    )
-      continue;
+    if (name.length > 300) continue;
     const owner = roots.find((root) => file.startsWith(root + '/'));
     for (const base of [dirname(file), owner].filter(Boolean)) {
-      const target = resolve(base, name);
+      const target = resolve(base, name.split('${')[0]);
+      const workbench = roots.find((root) => root.endsWith('/dsh-agent-workbench'));
+      if (
+        workbench &&
+        (target.startsWith(workbench + '/lib/') ||
+          ['category', 'mps', 'regional'].some(
+            (page) => target === resolve(workbench, 'static', page, 'index.html'),
+          ))
+      )
+        result.set(workbenchBuildDependency, true);
+      if (name.includes('${')) continue;
       for (const candidate of [
         target,
         target.replace(/\.js$/, '.ts'),
@@ -375,7 +381,12 @@ export function selectCiTests({
   const browserFixtures = [...new Set(policy.browserFixtures ?? [])].sort();
   const own = repositories.find((entry) => entry.repo === repo);
   const diffBase = git(root, 'merge-base', base, own.head).trim();
-  const baselineBytes = git(root, 'show', 'HEAD:scripts/quality-peer-baseline.json');
+  let baselineBytes;
+  try {
+    baselineBytes = git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
+  } catch {
+    throw Error('CI_TEST_PEER_BASE_REQUIRED: committed peer baseline at comparison base');
+  }
   const baseline = JSON.parse(baselineBytes);
   const changes = repositories.flatMap((entry) => {
     const before =
@@ -398,11 +409,7 @@ export function selectCiTests({
       git(entry.path, 'ls-files', '-z')
         .split('\0')
         .filter(
-          (file) =>
-            file &&
-            sourceFile.test(file) &&
-            !file.startsWith('lib/') &&
-            !/\/(?:vendor|data)\.[cm]?js$/.test(file),
+          (file) => file && !file.startsWith('lib/') && !/\/(?:vendor|data)\.[cm]?js$/.test(file),
         )
         .map((file) => resolve(entry.path, file)),
     ),
@@ -434,7 +441,20 @@ export function selectCiTests({
         next === target || (recursive && reaches(next, target, visited, importsOnly)),
     );
   };
-  const selected = new Set(required),
+  const ordinaryDocument = (file) =>
+    /^(?:(?:README|AGENTS|QUALITY|UPSTREAM|CHANGELOG|CONTRIBUTING|SECURITY)\.md|docs\/.+\.md)$/.test(
+      file,
+    ) && !/(?:^|\/)(?:prompts?|skills?|presets?|resources?)(?:\/|\.|$)/i.test(file);
+  const docsOnly =
+    changes.length > 0 &&
+    changes.every((change) => ordinaryDocument(change.file)) &&
+    ![...known].some(
+      (file) =>
+        sourceFile.test(file) &&
+        changes.some((change) => dependencies(file, false).has(change.path)),
+    );
+  const applicability = docsOnly ? 'docs' : 'source';
+  const selected = new Set(docsOnly ? [] : required),
     reasons = {};
   for (const change of changes) {
     const rules = policy.rules.filter(
@@ -442,21 +462,27 @@ export function selectCiTests({
         (!rule.repo || rule.repo === change.repo) && new RegExp(rule.pattern).test(change.file),
     );
     const mapped = rules.flatMap((rule) => expand(rule.tests));
-    const matched = rules.some((rule) => rule.exclusive === true)
-      ? mapped
-      : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
+    const ownTestInput =
+      change.repo === repo &&
+      (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
+    const matched =
+      rules.some((rule) => rule.exclusive === true) && !ownTestInput
+        ? mapped
+        : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
     const files = [...new Set(matched.map(directFile))].sort();
     // Source with no known consumer must be mapped explicitly, rather than silently receiving a green result.
     if (
       !files.length &&
       !rules.length &&
-      /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
-        change.file,
-      ) &&
+      existsSync(change.path) &&
+      ((ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
+        /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
+          change.file,
+        )) &&
       !change.file.endsWith('.md')
     )
       throw Error(`CI_TEST_IMPACT_UNMAPPED: ${change.repo}/${change.file}`);
-    for (const file of files) selected.add(file);
+    if (!docsOnly) for (const file of files) selected.add(file);
     reasons[`${change.repo}/${change.file}`] = files;
   }
   const files = [...selected].sort();
@@ -488,6 +514,7 @@ export function selectCiTests({
   return {
     schemaVersion: 1,
     mode: 'required-and-affected',
+    applicability,
     repo,
     head: own.head,
     base,
@@ -504,6 +531,7 @@ export function selectCiTests({
     browserFixtures: browserFixtures.filter((file) => selected.has(file)),
     runtime,
     browser,
+    build: files.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
     fullSuite: 'not-run',
   };
 }
