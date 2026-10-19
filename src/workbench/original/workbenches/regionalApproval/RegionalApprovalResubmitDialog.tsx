@@ -125,6 +125,14 @@ export function RegionalApprovalResubmitDialog({
     );
   const batch = items.length > 1 || items.some((item) => item.kind === 'approve');
   const needsService = items.some((item) => item.kind === 'resubmit');
+  const serviceBlocked =
+    !connected &&
+    (rows
+      ? rows.some(
+          (row) =>
+            row.item.kind === 'resubmit' && (row.status === 'ready' || row.status === 'unknown'),
+        )
+      : needsService);
   useEffect(() => onPendingChange?.(pending), [pending, onPendingChange]);
   useEffect(() => {
     const controller = new AbortController();
@@ -280,14 +288,7 @@ export function RegionalApprovalResubmitDialog({
       ),
     );
   const submit = async () => {
-    if (
-      !rows ||
-      submitting.current ||
-      (needsService && !connected) ||
-      !actionable ||
-      (initial && !valid)
-    )
-      return;
+    if (!rows || submitting.current || serviceBlocked || !actionable || (initial && !valid)) return;
     submitting.current = true;
     setAttempted(true);
     setBusy(true);
@@ -468,7 +469,7 @@ export function RegionalApprovalResubmitDialog({
           <Button
             type="primary"
             loading={busy}
-            disabled={(needsService && !connected) || !rows || (initial && !valid) || !actionable}
+            disabled={serviceBlocked || !rows || (initial && !valid) || !actionable}
             onClick={() => void submit()}
           >
             {tr(
@@ -497,9 +498,7 @@ export function RegionalApprovalResubmitDialog({
             })}
           />
         )}
-        {needsService && !connected && (
-          <Alert type="warning" content={tr('disabled.serviceBoundary')} />
-        )}
+        {serviceBlocked && <Alert type="warning" content={tr('disabled.serviceBoundary')} />}
         {!rows ? <Spin /> : null}
         {rows?.some(
           (row) =>
