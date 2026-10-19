@@ -1,0 +1,144 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+const out = await build({
+  entryPoints: ['business/inventory-apsplan/source/app/data/gea-workspace.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  write: false,
+  plugins: [
+    {
+      name: 'source-seam',
+      setup(api) {
+        api.onResolve({ filter: /\/workspace-query$/ }, () => ({
+          path: 'workspace-query',
+          namespace: 'fixture',
+        }));
+        api.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
+          contents:
+            'export const readWorkspaceQuery=(config,name,values,options)=>globalThis.__apsSourceRead(name,values,options);',
+          loader: 'js',
+        }));
+      },
+    },
+  ],
+});
+const { createGeaWorkspace } = await import(
+  'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
+);
+test('direct initial metrics omit unused forecast SKU details; an explicit details request still reads them', async (t) => {
+  const before = new Map(
+    ['document', '__apsSourceRead'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]),
+  );
+  t.after(() => {
+    for (const [k, v] of before) v ? Object.defineProperty(globalThis, k, v) : delete globalThis[k];
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  const calls = [];
+  globalThis.__apsSourceRead = async (name) => {
+    calls.push(name);
+    return name === 'forecast-products' ? [{ material: 'A', predicted: 12 }] : [];
+  };
+  const run = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const input = { date: '2026-10-15', granularity: 'month', version: '滚动', orderType: 'M' };
+  const initial = await run(input);
+  assert.ok(!calls.includes('forecast-products'));
+  assert.equal(initial.sections.find((s) => s.id === 'forecast-products').status, 'deferred');
+  assert.ok(calls.includes('stock'));
+  assert.ok(calls.includes('production'));
+  const mark = calls.length;
+  const detail = await run({ ...input, stage: 'details' });
+  assert.deepEqual(calls.slice(mark), ['forecast-products']);
+  assert.equal(detail.sections.find((s) => s.id === 'forecast-products').rows[0].predicted, 12);
+});
+
+test('direct stock and shippable reuse one snapshot within a load, but a refresh reads again', async (t) => {
+  const before = new Map(
+    ['document', '__apsSourceRead'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]),
+  );
+  t.after(() => {
+    for (const [k, v] of before) v ? Object.defineProperty(globalThis, k, v) : delete globalThis[k];
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  const calls = [];
+  globalThis.__apsSourceRead = async (name) => {
+    calls.push(name);
+    return ['stock', 'shippable'].includes(name)
+      ? [
+          {
+            base: '郑州',
+            inventory: '100',
+            target: '80',
+            available: '70',
+            demand: '10',
+            invalid: 0,
+          },
+        ]
+      : [];
+  };
+  const run = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const input = { date: '2026-10-15', granularity: 'month', version: '滚动', orderType: 'M' };
+  const initial = await run(input);
+  assert.equal(calls.filter((n) => ['stock', 'shippable'].includes(n)).length, 1);
+  const stock = initial.sections.find((s) => s.id === 'stock').rows[0],
+    ship = initial.sections.find((s) => s.id === 'shippable').rows[0];
+  assert.equal(stock.inventory, 100);
+  assert.equal(ship.available, 70);
+  assert.equal(ship.demand, 10);
+  stock.available = 0;
+  assert.equal(ship.available, 70, 'consumers must not share mutable rows');
+  await run({ ...input, refresh: true });
+  assert.equal(
+    calls.filter((n) => ['stock', 'shippable'].includes(n)).length,
+    2,
+    'no cross-load cache',
+  );
+});
+
+test('annual order and production queries overlap a slow stock query within three source slots', async (t) => {
+  const before = new Map(
+    ['document', '__apsSourceRead'].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]),
+  );
+  t.after(() => {
+    for (const [k, v] of before) v ? Object.defineProperty(globalThis, k, v) : delete globalThis[k];
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  let release,
+    active = 0,
+    peak = 0;
+  const annual = [];
+  globalThis.__apsSourceRead = async (name, values) => {
+    active++;
+    peak = Math.max(peak, active);
+    try {
+      if (values.start.startsWith('2025')) {
+        annual.push(name);
+        if (name === 'stock') await new Promise((r) => (release = r));
+      }
+      return [];
+    } finally {
+      active--;
+    }
+  };
+  const run = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const job = run({
+    date: '2026-10-15',
+    granularity: 'month',
+    version: '滚动',
+    orderType: 'M',
+    comparison: true,
+  });
+  await new Promise(setImmediate);
+  const overlap = annual.includes('orders-month') && annual.includes('production');
+  release();
+  await job;
+  assert.ok(overlap, 'annual comparisons must not serialize behind the slow stock source');
+  assert.ok(peak <= 3);
+});

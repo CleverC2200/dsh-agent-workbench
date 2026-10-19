@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../../../shared/sql-config.ts';
 import type { WarehouseSnapshot } from '../domain.ts';
 import type { BaseStockBatch, TransferOrderDetail } from '../replenishment-detail.ts';
 import { loadBaseResourceSnapshot } from './base-resources.ts';
@@ -31,23 +33,12 @@ export async function loadReplenishmentDetail(
     );
     if (!warehouse) throw new DetailNotFoundError('分仓不存在');
     const published = await db.query(
-      `/* branch:transfer-publication */ SELECT snapshot_time::text FROM data_service.agent_branch_detail_publication ORDER BY snapshot_time DESC LIMIT 1`,
+      configuredSql(sqlConfiguration, 'fc.src.lib.server.replenishment-detail.1'),
     );
     const sourceDate = String(published.rows[0]?.snapshot_time ?? '');
     if (!sourceDate) throw new Error('调拨订单明细尚未同步，请完成明细同步后重试');
     const result = await db.query(
-      `/* branch:transfer-details */
-      SELECT executeorderno, order_status,
-        CASE WHEN COUNT(demand_qty)=COUNT(*) THEN SUM(demand_qty) END AS demand_qty,
-        CASE WHEN COUNT(allocated_qty)=COUNT(*) THEN SUM(allocated_qty) END AS allocated_qty,
-        CASE WHEN COUNT(shipped_qty)=COUNT(*) THEN SUM(shipped_qty) END AS shipped_qty,
-        CASE WHEN COUNT(pending_qty)=COUNT(*) THEN SUM(pending_qty) END AS pending_qty,
-        CASE WHEN COUNT(in_transit_qty)=COUNT(*) THEN SUM(in_transit_qty) END AS in_transit_qty
-      FROM data_service.agents_scm_branch_transfer_detail
-      WHERE snapshot_time=$1::timestamptz AND pickup_point=$2 AND material_code=$3
-        AND (pending_qty > 0 OR in_transit_qty > 0 OR pending_qty IS NULL OR in_transit_qty IS NULL)
-      GROUP BY executeorderno, order_status ORDER BY executeorderno, order_status
-    `,
+      configuredSql(sqlConfiguration, 'fc.src.lib.server.replenishment-detail.2'),
       [sourceDate, warehouse.pickupPointCode, input.sku],
     );
     const transfers: TransferOrderDetail[] = result.rows.map((item) => ({
@@ -80,12 +71,7 @@ export async function loadReplenishmentDetail(
   // Match the last published batch date at or before the summary date. Never present
   // an older batch snapshot as today's stock, or select an unpublished ingestion.
   const published = await db.query(
-    `/* branch:base-stock-publication */
-    SELECT CAST(p.snapshot_time AS TEXT) AS snapshot_time,
-      CAST(p.stock_snapshot_date AS TEXT) AS stock_snapshot_date
-    FROM agent_branch_detail_publication AS p
-    WHERE p.stock_snapshot_date <= CAST($1 AS DATE)
-    ORDER BY p.stock_snapshot_date DESC, p.snapshot_time DESC LIMIT 1`,
+    configuredSql(sqlConfiguration, 'fc.src.lib.server.replenishment-detail.3'),
     [base.stockDate],
   );
   const batchSnapshot = String(published.rows[0]?.snapshot_time ?? '');
@@ -93,17 +79,7 @@ export async function loadReplenishmentDetail(
   if (!batchSnapshot || !stockDate)
     throw new Error('当前没有已同步的基地库存批次，请完成明细同步后重试');
   const result = await db.query(
-    `/* branch:base-stock-batches */
-    SELECT i.warehouse_name AS warehouse_name, CAST(i.prod_date AS TEXT) AS production_date,
-      CASE WHEN COUNT(i.live_qty)=COUNT(*) THEN SUM(i.live_qty) END AS quantity,
-      CASE WHEN COUNT(i.available_qty)=COUNT(*) THEN SUM(i.available_qty) END AS available_qty,
-      CASE WHEN i.prod_date IS NULL THEN NULL ELSE GREATEST(0, CAST(i.snapshot_date AS DATE)-CAST(i.prod_date AS DATE)) END AS age_days
-    FROM agents_scm_base_stock_batch AS i
-    WHERE i.snapshot_date=CAST($1 AS DATE) AND i.material_code=$2 AND i.base_name=$3 AND i.snapshot_time=CAST($4 AS TIMESTAMPTZ)
-    GROUP BY i.snapshot_date, i.warehouse_name, i.prod_date
-    HAVING SUM(i.live_qty) <> 0 OR SUM(i.available_qty) <> 0 OR COUNT(i.available_qty)<>COUNT(*) OR COUNT(i.live_qty)<>COUNT(*)
-    ORDER BY i.prod_date, i.warehouse_name
-  `,
+    configuredSql(sqlConfiguration, 'fc.src.lib.server.replenishment-detail.4'),
     [stockDate, input.sku, base.baseName, batchSnapshot],
   );
   const batches: BaseStockBatch[] = result.rows.map((item) => ({

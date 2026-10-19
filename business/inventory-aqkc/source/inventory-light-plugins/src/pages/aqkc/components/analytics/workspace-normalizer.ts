@@ -55,7 +55,7 @@ export interface WorkspaceRecord {
   lockedBy: string;
   lockedAt: string;
   remark: string;
-  riskLevel: 'healthy' | 'warning' | 'critical';
+  riskLevel: 'healthy' | 'warning' | 'critical' | 'unknown';
   gapToConfirmedTarget: number;
   deviationRate?: string;
   ltConfigured?: boolean;
@@ -123,6 +123,7 @@ export interface FixedSafetyStockWorkbench {
 
 export interface FixedWorkbenchCard {
   title: string;
+  coverage?: string;
   value: string;
   helpers: { label: string; value: string }[];
   tone: 'neutral' | 'red';
@@ -420,7 +421,9 @@ function normalizeRecord(value: unknown): WorkspaceRecord {
     lockedAt: asString(record.lockedAt),
     remark: asString(record.remark),
     riskLevel:
-      record.riskLevel === 'warning' || record.riskLevel === 'critical'
+      record.riskLevel === 'warning' ||
+      record.riskLevel === 'critical' ||
+      record.riskLevel === 'unknown'
         ? record.riskLevel
         : 'healthy',
     gapToConfirmedTarget: asNumber(record.gapToConfirmedTarget),
@@ -602,6 +605,7 @@ function normalizeFixedWorkbench(value: unknown): FixedSafetyStockWorkbench | nu
   const cards = Array.isArray(value.cards)
     ? value.cards.filter(isRecord).map((card) => ({
         title: asString(card.title),
+        coverage: asString(card.coverage),
         value: asString(card.value),
         helpers: Array.isArray(card.helpers)
           ? card.helpers.filter(isRecord).map((helper) => ({

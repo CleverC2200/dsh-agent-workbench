@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Page from '@business-page';
 import { mountBusinessFetch, clearBusinessCache } from './api';
-import { action } from '../channel.js';
+import { action, ready } from '../channel.js';
 import { updateContext, clearContext } from './context';
 import '@business-style';
 
@@ -57,6 +57,7 @@ function App() {
   );
 }
 async function mount() {
+  await ready;
   await mountBusinessFetch();
   const root = createRoot(document.getElementById('app')!);
   root.render(<App />);
@@ -66,6 +67,7 @@ async function mount() {
     refreshPage();
     return { refreshing: true };
   });
+  window.addEventListener('gea-session-changing', () => refreshPage());
   window.addEventListener('gea-identity-changed', () => {
     clearBusinessCache(true);
     clearContext();

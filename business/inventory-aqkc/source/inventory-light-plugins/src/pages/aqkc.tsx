@@ -1,3 +1,7 @@
+import healthSqlConfig from '../../../../sql.config.json';
+import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
+import { usesConfiguredSql } from '../../../../../shared/sql-config';
+import { stockPageSortFields } from '../configured-stock';
 import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-current-order.ts';
 import { createPageViewState } from '../../../../../shared/view-state.js';
 const aqkcView = createPageViewState('inventory-aqkc');
@@ -400,7 +404,12 @@ export function InventoryOperationsWorkbench() {
     [paths],
   );
   useEffect(() => {
-    if (activeBoardTab === '基地结构' || dashboardTabs?.[activeBoardTab]) return;
+    if (
+      activeBoardTab === '基地结构' ||
+      (usesConfiguredSql() && activeBoardTab === '货龄结构') ||
+      dashboardTabs?.[activeBoardTab]
+    )
+      return;
     void loadDashboardTab(activeBoardTab, true);
   }, [activeBoardTab, dashboardTabs, loadDashboardTab]);
   useEffect(
@@ -563,6 +572,18 @@ export function InventoryOperationsWorkbench() {
         return;
       }
       const requestSequence = ++hierarchySkuRequestRef.current;
+      if (usesConfiguredSql()) {
+        setExpandedSkuDetail({
+          focusMaterial,
+          base,
+          category,
+          tab,
+          table: null,
+          loading: false,
+          error: null,
+        });
+        return;
+      }
       setExpandedSkuDetail({
         focusMaterial,
         base,
@@ -973,6 +994,7 @@ export function InventoryOperationsWorkbench() {
                       value={card.value}
                       tone={card.tone}
                       helpers={card.helpers}
+                      coverage={'coverage' in card ? card.coverage : undefined}
                     />
                   ))}
                 </div>
@@ -1018,10 +1040,12 @@ export function InventoryOperationsWorkbench() {
                   aria-controls="inventory-table-content"
                   aria-busy={tab !== '基地结构' && dashboardTabsLoading === tab}
                   onPointerEnter={() => {
-                    if (tab !== '基地结构') void loadDashboardTab(tab, false);
+                    if (tab !== '基地结构' && !(usesConfiguredSql() && tab === '货龄结构'))
+                      void loadDashboardTab(tab, false);
                   }}
                   onFocus={() => {
-                    if (tab !== '基地结构') void loadDashboardTab(tab, false);
+                    if (tab !== '基地结构' && !(usesConfiguredSql() && tab === '货龄结构'))
+                      void loadDashboardTab(tab, false);
                   }}
                   onKeyDown={(event) =>
                     moveTabFocus(event, boardTabs, activeBoardTab, (nextTab) => {
@@ -1059,7 +1083,23 @@ export function InventoryOperationsWorkbench() {
               aria-labelledby={`inventory-tab-${activeBoardTab}`}
               aria-busy={activeTabLoading}
             >
-              {activeTable && (activeBoardTab === '基地结构' || activeTable.rows.length > 0) ? (
+              {usesConfiguredSql() && activeBoardTab === '货龄结构' ? (
+                paths.length === 0 ? (
+                  <p>请选择基地后查看仓库货龄。</p>
+                ) : (
+                  <ConfiguredFactsPage
+                    key={paths.join(',')}
+                    config={healthSqlConfig}
+                    embedded
+                    viewIds={['age-structure', 'health']}
+                    initialFilters={
+                      paths.length
+                        ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
+                        : {}
+                    }
+                  />
+                )
+              ) : activeTable && (activeBoardTab === '基地结构' || activeTable.rows.length > 0) ? (
                 <div className={styles.tableCard}>
                   <table>
                     <thead>
@@ -1182,12 +1222,14 @@ export function InventoryOperationsWorkbench() {
 }
 
 function Kpi({
+  coverage,
   title,
   tone,
   value,
   helpers,
 }: {
   title: string;
+  coverage?: string;
   tone: 'neutral' | 'red';
   value: string;
   helpers: { label: string; value: string }[];
@@ -1215,6 +1257,7 @@ function Kpi({
           <small className={styles.kpiUnit}>件</small>
         ) : null}
       </strong>
+      {coverage && <p className={styles.metricCoverage}>{coverage}</p>}
       <dl>
         {helpers.slice(0, 2).map((item) => (
           <div key={item.label}>
@@ -1222,9 +1265,11 @@ function Kpi({
             <dd
               title={
                 title === '当前订单'
-                  ? item.label === '备单量'
-                    ? currentOrderMetricScopes.preparingQuantity
-                    : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
+                  ? item.label.startsWith('快照')
+                    ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
+                    : item.label === '备单量'
+                      ? currentOrderMetricScopes.preparingQuantity
+                      : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
                   : title === '订单满足率'
                     ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
                     : undefined
@@ -1297,7 +1342,9 @@ function BoardRow({
             )
           ) : index === 1 ? (
             <>
-              <span className={`${styles.dot} ${styles[tone]}`} aria-hidden="true" />
+              {value !== '-' && (
+                <span className={`${styles.dot} ${styles[tone]}`} aria-hidden="true" />
+              )}
               {value}
             </>
           ) : (
@@ -1312,7 +1359,7 @@ function BoardRow({
 function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSpan: number }) {
   const age = detail.tab === '货龄结构';
   const [risks, setRisks] = useState<string[]>(() =>
-    detail.focusMaterial ? [] : defaultSkuRisks(age),
+    detail.focusMaterial || (usesConfiguredSql() && age) ? [] : defaultSkuRisks(age),
   );
   const [query, setQuery] = useState(detail.focusMaterial ?? '');
   const [page, setPage] = useState(1);
@@ -1322,16 +1369,97 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     setRisks(values);
     setPage(1);
   };
-  const result = skuDetailPage(detail.table?.rows ?? [], risks, query, page, pageSize, sort);
+  const remote = usesConfiguredSql();
+  const [remotePage, setRemotePage] = useState<any>(null);
+  const remoteContext = useRef<any>(undefined);
+  const [remoteLoading, setRemoteLoading] = useState(remote);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!remote) return;
+    const controller = new AbortController();
+    setRemoteLoading(true);
+    setRemoteError(null);
+    setRemotePage(null);
+    // Coalesce typing; a changed filter cancels both timer and in-flight request.
+    const timer = setTimeout(
+      () => {
+        void fetch(withAppBasePath('/api/inventory/sku-page'), {
+          method: 'POST',
+          signal: controller.signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            readContext: remoteContext.current,
+            base: detail.base,
+            category: detail.category,
+            tab: detail.tab,
+            query,
+            risks,
+            page,
+            pageSize,
+            sort,
+          }),
+        })
+          .then(async (response) => {
+            const value = await response.json();
+            if (!response.ok)
+              throw Object.assign(Error(value.message || value.error || 'SKU读取失败'), value);
+            return value;
+          })
+          .then((value) => {
+            if (!controller.signal.aborted) {
+              remoteContext.current = value.readContext;
+              setRemotePage(value);
+            }
+          })
+          .catch((error) => {
+            if (!controller.signal.aborted) {
+              if (error.code === 'QUERY_CONFIG_CHANGED') remoteContext.current = undefined;
+              setRemoteError(error.code ? `${error.message}（${error.code}）` : error.message);
+            }
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) setRemoteLoading(false);
+          });
+      },
+      query ? 200 : 0,
+    );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    remote,
+    detail.base,
+    detail.category,
+    detail.tab,
+    query,
+    JSON.stringify(risks),
+    page,
+    pageSize,
+    sort?.key,
+    sort?.direction,
+  ]);
+  const table = remote ? remotePage?.table : detail.table;
+  const loading = remote ? remoteLoading : detail.loading;
+  const error = remote ? remoteError : detail.error;
+  const result = remote
+    ? {
+        rows: table?.rows ?? [],
+        total: remotePage?.total ?? 0,
+        page,
+        pageSize,
+        pages: Math.max(1, Math.ceil((remotePage?.total ?? 0) / pageSize)),
+      }
+    : skuDetailPage(detail.table?.rows ?? [], risks, query, page, pageSize, sort);
   useEffect(() => {
     const group = 'sku-detail';
-    const ready = !detail.loading && !detail.error;
+    const ready = !loading && !error;
     updateContext('stockDetail', {
       base: detail.base,
       category: detail.category,
       tab: detail.tab,
-      state: detail.loading ? 'loading' : detail.error ? 'error' : 'ready',
-      error: detail.error,
+      state: loading ? 'loading' : error ? 'error' : 'ready',
+      error,
       query,
       risks,
       page,
@@ -1374,8 +1502,8 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
       unregister();
       removeContextPart('stockDetail');
     };
-  }, [detail, query, risks, page, pageSize, sort]);
-  if (detail.loading) {
+  }, [detail, query, risks, page, pageSize, sort, remotePage, loading, error]);
+  if (loading && !remote) {
     return (
       <tr className={styles.skuExpandedRow}>
         <td colSpan={colSpan}>
@@ -1386,18 +1514,18 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
       </tr>
     );
   }
-  if (detail.error) {
+  if (error && !remote) {
     return (
       <tr className={styles.skuExpandedRow}>
         <td colSpan={colSpan}>
           <div className={styles.inlineDetailState} role="alert">
-            {readFailureText(detail.error)}
+            {readFailureText(error)}
           </div>
         </td>
       </tr>
     );
   }
-  const columns = detail.table?.columns.filter((column) => column.key !== 'skuCount') ?? [];
+  const columns = table?.columns.filter((column) => column.key !== 'skuCount') ?? [];
   return (
     <tr className={styles.skuExpandedRow}>
       <td colSpan={colSpan}>
@@ -1411,6 +1539,8 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
                 风险
                 <select
                   aria-label="货龄风险"
+                  disabled={remote}
+                  title={remote ? '缺少批次生产日期和货龄，暂不能判断预警或正常' : undefined}
                   value={risks[0] ?? '全部'}
                   onChange={(event) =>
                     changeRisks(event.target.value === '全部' ? [] : [event.target.value])
@@ -1466,7 +1596,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
             <button
               type="button"
               onClick={() => {
-                changeRisks(defaultSkuRisks(age));
+                changeRisks(remote && age ? [] : defaultSkuRisks(age));
                 setQuery('');
                 setSort(undefined);
               }}
@@ -1477,13 +1607,20 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
               {detail.base} / {detail.category} · SKU 明细
             </span>
           </div>
+          {remote && age && (
+            <p className={styles.skuNotice}>
+              批次货龄缺失，暂不能按预警或正常筛选；可查看实存与超60天库存。
+            </p>
+          )}
           {result.rows.length ? (
             <div className={`${styles.inlineDetailTable} ${styles.skuPagedTable}`}>
               <table>
                 <thead>
                   <tr>
                     {columns.map((column) => {
-                      const numeric = !['level', 'risk', 'warning'].includes(column.key);
+                      const numeric =
+                        !['level', 'risk', 'warning'].includes(column.key) &&
+                        (!remote || !!stockPageSortFields[column.key]);
                       return (
                         <th
                           scope="col"
@@ -1543,24 +1680,30 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
             </div>
           ) : (
             <div className={styles.inlineDetailState} role="status">
-              {detail.table?.notice || '没有符合当前筛选条件的 SKU。'}
+              {loading
+                ? '正在加载 SKU 数据…'
+                : error
+                  ? readFailureText(error)
+                  : table?.notice || '没有符合当前筛选条件的 SKU。'}
             </div>
           )}
-          <DataPagination
-            ariaLabel="SKU 明细分页"
-            itemLabel="SKU"
-            itemUnit="个"
-            pageNumber={result.page}
-            pageSize={result.pageSize}
-            pageSizeOptions={[10, 20, 50]}
-            totalCount={result.total}
-            statusLabel={`第 ${result.page} / ${result.pages} 页，共 ${result.total} 个 SKU`}
-            onPageChange={setPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-          />
+          {!loading && !error && (
+            <DataPagination
+              ariaLabel="SKU 明细分页"
+              itemLabel="SKU"
+              itemUnit="个"
+              pageNumber={result.page}
+              pageSize={result.pageSize}
+              pageSizeOptions={[10, 20, 50]}
+              totalCount={result.total}
+              statusLabel={`第 ${result.page} / ${result.pages} 页，共 ${result.total} 个 SKU`}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
+          )}
         </section>
       </td>
     </tr>

@@ -1,7 +1,16 @@
+import { usesConfiguredSql } from '../../../shared/sql-config';
+import sqlSourceConfiguration from '../../sql.config.json';
+import { ConfiguredFactsPage } from '../../../shared/configured-facts-page';
+import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
 import { action, reportElements } from '../../../shared/channel.js';
 import * as React from 'react';
 import { createPageViewState, usePageViewField } from '../../../shared/view-state.js';
 const apsView = createPageViewState('inventory-apsplan');
+import {
+  classifiedStockObservation,
+  stockCoverageObservation,
+} from 'dsh-agent-manage/aps-compute/classified-stock';
+import { productHierarchy, sourceDateLabel as readSourceDateLabel } from './data/product-hierarchy';
 import { scopedData } from 'dsh-agent-manage/aps-compute/adapter';
 void 'use client';
 
@@ -152,7 +161,9 @@ type ProductionDrillMetricName =
   | '可发货天数'
   | '订单缺货量'
   | '订单满足率';
-type ProductionDrillValues = Record<ProductionDrillMetricName, number>;
+type ProductionDrillValues = Record<ProductionDrillMetricName, number> & {
+  __observedStock?: ReturnType<typeof classifiedStockObservation>;
+};
 type AssignedTask = {
   id: string;
   scopeType: TaskScope;
@@ -477,14 +488,14 @@ const metricHelp: Record<OverviewMetricName, string> = {
   需求预测达成率:
     '月度截止日实际发货量 ÷ 月底需求预测量 × 100%。健康线为（截止日−1）÷当月自然天数−3个百分点，预警线为−5个百分点。',
   生产计划达成率:
-    '一定周期内实际生产产出量 ÷ 同期计划生产产出量 × 100%；跨周期先汇总数量再计算。健康 >99%，预警为 95%<x≤99%，严重 ≤95%。当前生产实绩源尚未接入。',
+    '一定周期内实际生产产出量 ÷ 同期计划生产产出量 × 100%；跨周期先汇总数量再计算。健康 >99%，预警为 95%<x≤99%，严重 ≤95%。仅对同期间、同数量口径的计划与实绩计算，MES口径仅覆盖已返回产线。',
   订单满足率:
     '指标定义：计划可满足订单需求量占订单需求总量的比例。公式：可满足订单需求量 ÷ 订单需求总量 × 100%。目标值：> 95%。',
   订单缺货量:
     '指标定义：统计周期内因可用库存不足而无法满足订单的商品数量。常见公式：订单需求量 - 可满足订单量，最低为0。演示目标值：0万件，正式口径需按企业订单行与缺货认定规则确认。',
   可发货天数:
     '指标定义：当前可用库存按照计划日均需求可支撑的天数。公式：可用库存量 ÷ 计划日均需求量。目标值：< 12天。',
-  库存量: '指标定义：统计时点全部可用库存的实物数量。单位：万件。该指标用于观察库存规模，不设置统一目标；正式使用时需确认是否包含冻结、质检、临期及在途库存。',
+  库存量: '基地日库存实存数量，按库存来源的实际快照汇总。可用库存单独用于可发货天数，不与在途量相加；该指标观察库存规模，不设置统一目标。',
 };
 
 const metricHelpIdentity: Record<OverviewMetricName, { helpId: string; storageKey?: string }> = {
@@ -2378,9 +2389,34 @@ function IntelligentWorkbenchPage({
     () => deriveWorkbenchInsights(live?.data, live?.previous),
     [live?.data, live?.previous],
   );
+  const sourceDateLabel = (id: string) => readSourceDateLabel(live?.data, id);
+  const stockSnapshotLabel = sourceDateLabel('stock');
+  const productionSourceDate = sourceDateLabel('production');
+  const productionSection = live?.data?.sections.find((section) => section.id === 'production');
+  const productionObservation =
+    productionSection?.status === 'ready'
+      ? productionOutputObservation(productionSection.rows)
+      : null;
   const businessMetrics = metricTemplates.map((item) => {
     if (!comparison) return item;
     const datum = comparison[item.name as OverviewMetricName];
+    if (item.name === '生产计划达成率' && !Number.isFinite(datum.current) && productionObservation)
+      return {
+        ...item,
+        value: formatNumber(productionObservation.value),
+        unit: '%',
+        previous: '-',
+        same: '-',
+        delta: '-',
+        yoy: '-',
+        target: '仅作观察',
+        gap: `${productionObservation.count}/${productionObservation.total} 条有效记录，排除 ${productionObservation.excluded} 条异常`,
+        status: '有效范围',
+        tone: 'neutral',
+        period: `本期累计 · 源截至${productionSourceDate}`,
+        deltaDirection: 'none',
+        yoyDirection: 'none',
+      };
     const value = datum.current;
     const present = Number.isFinite(value);
     const delta = (n: number | null) =>
@@ -2412,7 +2448,7 @@ function IntelligentWorkbenchPage({
               ? '正在读取业务数据'
               : present
                 ? '指标已计算'
-                : '待配置目标',
+                : '数据不足，暂不计算',
       status: present
         ? item.name === '库存量'
           ? '已更新'
@@ -2423,10 +2459,14 @@ function IntelligentWorkbenchPage({
             : '已更新'
         : live?.busy
           ? '读取中'
-          : '开发中',
+          : '暂不可用',
       tone: hasTarget && present ? (met ? 'good' : 'critical') : 'neutral',
       period:
-        item.statistic === '快照指标' ? `最新快照 · 截至${live?.data?.end || '-'}` : '本期累计',
+        item.statistic === '快照指标'
+          ? `最新快照 · 截至${stockSnapshotLabel}`
+          : item.name === '生产计划达成率' && productionSourceDate !== '-'
+            ? `本期累计 · 源截至${productionSourceDate}`
+            : '本期累计',
       deltaDirection: Number.isFinite(datum.change) ? (datum.change < 0 ? 'down' : 'up') : 'none',
       yoyDirection: datum.yoy === null ? 'none' : datum.yoy < 0 ? 'down' : 'up',
     };
@@ -4447,10 +4487,29 @@ export default function Home({
     timeGranularityOptions.find((item) => item.key === timeGranularity)?.label || periodMeta.label;
   const _overviewPeriodLabel = activeAnalysisPeriod;
   const liveDate = effectiveEnd.iso;
+  const [sourceSupplementOpen, setSourceSupplementOpen] = useState(false);
   const live = useWorkspace(
     liveData && ['intelligent', 'plan'].includes(activeWorkspace),
     liveDate,
     timeGranularity,
+    activeWorkspace === 'intelligent' ||
+      (analysisScope === 'overview' && overviewRiskPerspective === 'production'),
+    analysisScope === 'production' ? 'product' : 'organization',
+    analysisScope !== 'production'
+      ? undefined
+      : productionDimension === 'base'
+        ? {
+            mode: 'base',
+            categories: expandedBaseCategoryRows.filter((key) =>
+              expandedBaseRows.includes(key.split('::')[0]),
+            ),
+            items: expandedBaseItemRows,
+          }
+        : {
+            mode: 'category',
+            categories: productionDimension === 'category' ? expandedCategoryListCategories : [],
+            items: productionDimension === 'category' ? expandedCategoryListItems : [],
+          },
   );
   const attainmentTarget =
     timeGranularity === 'month' ? ((effectiveEnd.day - 1) / daysInSelectedMonth) * 100 - 3 : null;
@@ -4485,18 +4544,49 @@ export default function Home({
       )
     : metricMetaWithDynamicTargets;
   const liveMetricNotes = useMemo(() => (live.data ? deriveMetrics(live.data) : {}), [live.data]);
+  const stockObservation = stockCoverageObservation(
+    live.data,
+    selectedBase === '全部基地' ? undefined : selectedBase,
+  );
+  const planProductionSection = live.data?.sections.find((section) => section.id === 'production');
+  const planProductionObservation =
+    planProductionSection?.status === 'ready'
+      ? productionOutputObservation(
+          planProductionSection.rows.filter(
+            (row) => selectedBase === '全部基地' || row.base === selectedBase,
+          ),
+        )
+      : null;
   const liveScope = selectedBase === '全部基地' ? {} : { base: selectedBase };
   const scopedLiveValues = useMemo(
     () => createMetricReader(live.data, live.previous, live.annual),
     [live.data, live.previous, live.annual],
   );
+  const liveProductHierarchy = useMemo(
+    () => productHierarchy(live.data, selectedBase === '全部基地' ? undefined : selectedBase),
+    [live.data, selectedBase],
+  );
+  const activeProductHierarchy = liveData ? liveProductHierarchy : baseProductHierarchy;
+  const liveBaseHierarchies = useMemo(
+    () =>
+      Object.fromEntries(
+        base830.map((base) => [base.name, productHierarchy(live.data, base.name)]),
+      ),
+    [live.data],
+  );
+  const drillLiveValues = (
+    scope: NonNullable<Parameters<typeof scopedLiveValues>[0]>,
+  ): ProductionDrillValues => ({
+    ...scopedLiveValues(scope),
+    __observedStock: classifiedStockObservation(live.data, scope),
+  });
   const categoryDrillMetrics = (
     category: string,
     item?: string,
     material?: string,
   ): ProductionDrillValues =>
     liveData
-      ? scopedLiveValues({ ...liveScope, category, item, material })
+      ? drillLiveValues({ ...liveScope, category, item, material })
       : demoCategoryDrillMetrics(category, item, material);
   const baseDrillMetrics = (
     base: string,
@@ -4505,21 +4595,25 @@ export default function Home({
     material?: string,
   ): ProductionDrillValues =>
     liveData
-      ? scopedLiveValues({
-          base,
-          item: category,
-          category: item?.endsWith('系列') ? item.slice(0, -2) : undefined,
-          material,
-        })
+      ? drillLiveValues({ base, category, item, material })
       : demoBaseDrillMetrics(base, category, item, material);
-  const baseCategoryProductItems = (name: string): BaseProductItem[] =>
+  const baseCategoryProductItems = (name: string, base: string): BaseProductItem[] =>
     liveData
-      ? baseProductHierarchy.flatMap((category) =>
-          category.items
-            .filter((item) => item.name === name)
-            .map((item) => ({ name: `${category.name}系列`, materials: item.materials })),
-        )
+      ? (liveBaseHierarchies[base]?.find((category) => category.name === name)?.items ?? [])
       : demoBaseCategoryProductItems(name);
+  const drillMetricDisplay = (
+    name: ProductionDrillMetricName,
+    value: number,
+    values: ProductionDrillValues,
+  ) =>
+    productionMetricDisplay(name, value) +
+    (name === '库存量' && values.__observedStock ? '（已分类）' : '');
+  const drillStatisticType = (name: string) =>
+    liveData && name === '订单缺货量' ? '累计指标' : metricStatisticType(name);
+  const snapshotDateLabel = (name: string) =>
+    liveData && ['库存量', '可发货天数'].includes(name)
+      ? readSourceDateLabel(live.data, 'stock')
+      : dataCutoff;
   const salesOrgMetrics = (path: string) => {
     if (!liveData) return demoSalesOrgMetrics(path);
     const [region, second, third] = path.split(' / ');
@@ -4580,6 +4674,14 @@ export default function Home({
     name: ProductionDrillMetricName,
     values: ProductionDrillValues,
   ): ComparisonDatum => {
+    if (liveData && name === '库存量' && values.__observedStock)
+      return {
+        current: values.__observedStock.value,
+        previous: NaN,
+        change: NaN,
+        same: null,
+        yoy: null,
+      };
     if (liveData)
       return (
         (values as ProductionDrillValues & { __comparison?: Record<string, ComparisonDatum> })
@@ -4939,7 +5041,7 @@ export default function Home({
           className={`achievement-status ${kpi.ok === null ? 'status-neutral' : kpi.ok ? 'status-ok' : 'status-bad'}`}
         >
           {!Number.isFinite(kpi.value)
-            ? '开发中'
+            ? '数据不足'
             : kpi.ok === null
               ? liveData
                 ? '已更新'
@@ -4950,17 +5052,26 @@ export default function Home({
         </i>
       </div>
       <div
-        className={`kpi-period-label ${metricStatisticType(kpi.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
+        className={`kpi-period-label ${drillStatisticType(kpi.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
       >
-        <span>{metricStatisticType(kpi.name)}</span>
-        {metricStatisticType(kpi.name) === '快照指标'
-          ? `最新快照 · 截至${dataCutoff}`
+        <span>{drillStatisticType(kpi.name)}</span>
+        {drillStatisticType(kpi.name) === '快照指标'
+          ? `最新快照 · 截至${snapshotDateLabel(kpi.name)}`
           : periodMeta.current}
       </div>
       <div className="kpi-value">
         <strong>{formatNumber(kpi.value, 2)}</strong>
         <span>{kpi.unit}</span>
       </div>
+      {kpi.name === '生产计划达成率' &&
+        !Number.isFinite(kpi.value) &&
+        planProductionObservation && (
+          <p className="kpi-source-note">
+            有效记录达成率 {formatNumber(planProductionObservation.value, 2)}%；
+            {planProductionObservation.count}/{planProductionObservation.total} 条记录，排除{' '}
+            {planProductionObservation.excluded} 条异常，仅作观察。
+          </p>
+        )}
       <div className="kpi-comparison-head">
         <span>{'对比指标'}</span>
         <span>{'变化量'}</span>
@@ -5018,10 +5129,12 @@ export default function Home({
     </article>
   );
   const selectCategory = (name: string, metric?: OverviewMetricName) => {
-    const directCategory = baseProductHierarchy.find((category) => category.name === name);
+    const directCategory = activeProductHierarchy.find((category) => category.name === name);
     const itemCategory = directCategory
       ? undefined
-      : baseProductHierarchy.find((category) => category.items.some((item) => item.name === name));
+      : activeProductHierarchy.find((category) =>
+          category.items.some((item) => item.name === name),
+        );
     const parentCategory = directCategory || itemCategory;
     const rowKey = directCategory
       ? directCategory.name
@@ -5146,7 +5259,7 @@ export default function Home({
     const previous = salesMetricTab === 'budget' ? values.budgetPrevious : values.reportingPrevious;
     return (
       <>
-        <span role="gridcell">{liveData ? '待接入' : '≥ 100%'}</span>
+        <span role="gridcell">{liveData ? '目标待确认' : '≥ 100%'}</span>
         <span
           role="gridcell"
           className={`achievement-status ${liveData ? 'status-neutral' : current >= 100 ? 'status-ok' : 'status-bad'}`}
@@ -5207,12 +5320,12 @@ export default function Home({
           <em
             className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[risk]}`}`}
           >
-            {liveData ? '待接入' : risk}
+            {liveData ? '未判定' : risk}
           </em>
         </span>
         <span role="gridcell" className="sales-org-task">
           {risk === '健康' ? (
-            <span className="no-task-needed">{liveData ? '待接入' : '无需派发'}</span>
+            <span className="no-task-needed">{liveData ? '待判定' : '无需派发'}</span>
           ) : (
             renderTaskDispatch('销售组织', taskScope, [active.name], risk, false)
           )}
@@ -5283,7 +5396,7 @@ export default function Home({
       : undefined;
     const taskPeriodMeta = {
       analysisPeriod: activeAnalysisPeriod,
-      statisticType: metricStatisticType(taskDraft.metric),
+      statisticType: drillStatisticType(taskDraft.metric),
       dataCutoff,
     } as const;
     const nextTask: AssignedTask = existingTask
@@ -5348,18 +5461,18 @@ export default function Home({
           <em
             className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
           >
-            {liveData ? '待接入' : riskLevel}
+            {liveData ? '未判定' : riskLevel}
           </em>
         )}
         <button
           className={`dispatch-task-button ${taskStateClass}`}
-          title={`${riskLevel} · ${taskActionLabel}`}
+          title={`${liveData ? '风险未判定' : riskLevel} · ${taskActionLabel}`}
           aria-label={
             isCompleted
               ? `查看${scope}${existingTask.metric}任务的完成结果`
               : existingTask
                 ? `查看并修改${scope}${existingTask.metric}任务，当前责任人${existingTask.owner}`
-                : `${scope}当前为${riskLevel}，${taskActionLabel}`
+                : `${scope}${liveData ? '风险未判定' : `当前为${riskLevel}`}，${taskActionLabel}`
           }
           onClick={() => {
             if (isCompleted) {
@@ -5437,7 +5550,7 @@ export default function Home({
           <em
             className={`task-risk-indicator ${liveData ? 'status-neutral' : `level-${riskLevelClass[riskLevel]}`}`}
           >
-            {liveData ? '待接入' : riskLevel}
+            {liveData ? '未判定' : riskLevel}
           </em>
         </span>
         <span role="gridcell" className="category-drill-action">
@@ -5458,7 +5571,7 @@ export default function Home({
         const datum = categoryPeriodDatum(name, values);
         return (
           <b role="gridcell" className={productionMetricState(name, datum.current)} key={name}>
-            {productionMetricDisplay(name, datum.current)}
+            {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
       });
@@ -5485,7 +5598,7 @@ export default function Home({
           {!Number.isFinite(datum.current)
             ? '无数据'
             : liveData
-              ? '待接入'
+              ? '已更新'
               : periodOk === null
                 ? '无目标'
                 : periodOk
@@ -5493,7 +5606,7 @@ export default function Home({
                   : '未达'}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
-          {productionMetricDisplay(activeCategoryMetric, datum.current)}
+          {drillMetricDisplay(activeCategoryMetric, datum.current, values)}
         </b>
         <span role="gridcell">{productionMetricDisplay(activeCategoryMetric, datum.previous)}</span>
         <span role="gridcell" className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}>
@@ -5527,7 +5640,7 @@ export default function Home({
         const datum = categoryPeriodDatum(name, values);
         return (
           <b role="gridcell" className={productionMetricState(name, datum.current)} key={name}>
-            {productionMetricDisplay(name, datum.current)}
+            {drillMetricDisplay(name, datum.current, values)}
           </b>
         );
       });
@@ -5554,7 +5667,7 @@ export default function Home({
           {!Number.isFinite(datum.current)
             ? '无数据'
             : liveData
-              ? '待接入'
+              ? '已更新'
               : periodOk === null
                 ? '无目标'
                 : periodOk
@@ -5562,7 +5675,7 @@ export default function Home({
                   : '未达'}
         </span>
         <b role="gridcell" className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
-          {productionMetricDisplay(activeBaseMetric, datum.current)}
+          {drillMetricDisplay(activeBaseMetric, datum.current, values)}
         </b>
         <span role="gridcell">{productionMetricDisplay(activeBaseMetric, datum.previous)}</span>
         <span role="gridcell" className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}>
@@ -5608,18 +5721,20 @@ export default function Home({
             : 'bad';
     const gap =
       liveData && !Number.isFinite(datum.current)
-        ? '开发中'
-        : meta.target === null
-          ? name === '库存量'
-            ? '无目标 · 数量观察项'
-            : '目标待确认'
-          : `目标差距 ${formatDelta(datum.current - meta.target, meta.unit)}`;
+        ? '缺少完整同口径数据'
+        : name === '库存量' && values.__observedStock
+          ? `已分类分组 ${values.__observedStock.matchedRows}；另有 ${values.__observedStock.unknownRows} 组归属未确认，不计算对比`
+          : meta.target === null
+            ? name === '库存量'
+              ? '无目标 · 数量观察项'
+              : '目标待确认'
+            : `目标差距 ${formatDelta(datum.current - meta.target, meta.unit)}`;
     return {
       name,
-      value: productionMetricDisplay(name, datum.current),
+      value: drillMetricDisplay(name, datum.current, values),
       state,
       gap,
-      statisticType: metricStatisticType(name),
+      statisticType: drillStatisticType(name),
     };
   };
   const productionOverviewRowStyle = {
@@ -6018,7 +6133,7 @@ export default function Home({
         ...task,
         metric,
         analysisPeriod: task.analysisPeriod || '月度视角',
-        statisticType: metricStatisticType(metric),
+        statisticType: drillStatisticType(metric),
         dataCutoff: task.dataCutoff || '2026.08.30',
       };
     };
@@ -6138,7 +6253,7 @@ export default function Home({
       jump: () => jump(top.metric),
     };
   };
-  const categoryDiagnosticItems = baseProductHierarchy
+  const categoryDiagnosticItems = activeProductHierarchy
     .map((category) =>
       buildProductionDiagnosticItem(
         '品类',
@@ -6574,7 +6689,9 @@ export default function Home({
               {liveDate}
               {' · '}
               {selectedBase}
-              {' · GEA 授权只读'}
+              {typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
+                ? ' · 本地数据库只读直连'
+                : ' · GEA 授权只读'}
               {live.data
                 ? ' · 读取时间 ' +
                   new Date(live.data.readAt).toLocaleString('zh-CN', {
@@ -6583,7 +6700,39 @@ export default function Home({
                   })
                 : ''}
             </span>
-            {live.error && <p>{live.error}</p>}
+            {live.error && (
+              <p>
+                {live.data?.sections.some((section) => section.status === 'error')
+                  ? `${live.data.sections.filter((section) => section.status === 'error').length} 项来源未齐，详见“来源与缺失说明”。`
+                  : live.error}
+              </p>
+            )}
+            {stockObservation && (
+              <p>
+                {(
+                  [
+                    ['support', '计划库存支撑'],
+                    ['shippable', '可发货'],
+                  ] as const
+                ).map(([key, label]) => {
+                  const observation = stockObservation[key];
+                  return observation ? (
+                    <span key={key}>
+                      {label} {observation.days == null ? '-' : formatNumber(observation.days)} 天（
+                      {observation.count}/{observation.total} 个库存基地SKU；同范围
+                      {key === 'support' ? '现存' : '可用'}{' '}
+                      {formatNumber(observation.quantity / 10000)} 万件 / 计划日均需求{' '}
+                      {formatNumber(observation.demand)} 件）。{' '}
+                    </span>
+                  ) : null;
+                })}
+                {'部分覆盖量仅作观察，不计算达标及同比环比；快照 ' +
+                  readSourceDateLabel(live.data, 'stock') +
+                  '，目标版本 ' +
+                  (live.data?.version ?? '按当前选择') +
+                  '。'}
+              </p>
+            )}
             <details>
               <summary>{'来源与缺失说明'}</summary>
               <ul>
@@ -6595,13 +6744,16 @@ export default function Home({
                     {' · 当前范围 '}
                     {source.groups}
                     {' 组'}
+                    {source.note ? ' · ' + source.note : ''}
                     {source.error ? ' · ' + source.error.message : ''}
                   </li>
                 ))}
               </ul>
               <p>
                 {'缺失指标：'}
-                {apsEvidence.missing.join('、') || '当前展示指标均有数值'}
+                {apsEvidence.missing
+                  .map((name) => `${name}（${apsViewMetrics[name]?.note || '当前范围无完整事实'}）`)
+                  .join('；') || '当前展示指标均有数值'}
                 {'。查询截止时间不等同于各来源实际快照；未返回的来源快照日期保持未知。'}
               </p>
               <p>{'任务及编辑属于本页预览，未保存或提交业务系统。'}</p>
@@ -6627,6 +6779,46 @@ export default function Home({
             </button>
           </div>
         )}
+        {embedMode && ['intelligent', 'plan'].includes(activeWorkspace) && (
+          <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
+            <button
+              className={activeWorkspace === 'intelligent' ? 'selected' : ''}
+              aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
+              onClick={() => setActiveWorkspace('intelligent')}
+            >
+              智能工作台
+            </button>
+            <button
+              className={activeWorkspace === 'plan' ? 'selected' : ''}
+              aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
+              onClick={() => {
+                setAnalysisScope('overview');
+                setActiveWorkspace('plan');
+              }}
+            >
+              产销协同看板
+            </button>
+          </nav>
+        )}
+        {embedMode && liveData && usesConfiguredSql() && (
+          <details
+            className="plugin-source-supplement"
+            onToggle={(event) => setSourceSupplementOpen(event.currentTarget.open)}
+          >
+            <summary>销售目标源表明细</summary>
+            {sourceSupplementOpen && (
+              <ConfiguredFactsPage
+                key={'targets:' + liveDate + ':' + selectedBase}
+                config={sqlSourceConfiguration}
+                embedded
+                viewIds={['monthly-targets']}
+                date={liveDate}
+                initialFilters={selectedBase === '全部基地' ? {} : { base: selectedBase }}
+              />
+            )}
+          </details>
+        )}
+
         {activeWorkspace === 'intelligent' ? (
           <IntelligentWorkbenchPage
             live={liveData ? apsScopedLive : undefined}
@@ -7076,12 +7268,12 @@ export default function Home({
                         <strong>{meta.name}</strong>
                         {analysisScope === 'overview' && (
                           <span
-                            className={`statistic-type-cell ${metricStatisticType(meta.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
+                            className={`statistic-type-cell ${drillStatisticType(meta.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
                           >
-                            {metricStatisticType(meta.name)}
+                            {drillStatisticType(meta.name)}
                             <small>
-                              {metricStatisticType(meta.name) === '快照指标'
-                                ? `截至${dataCutoff}`
+                              {drillStatisticType(meta.name) === '快照指标'
+                                ? `截至${snapshotDateLabel(meta.name)}`
                                 : periodMeta.current}
                             </small>
                           </span>
@@ -7407,12 +7599,12 @@ export default function Home({
                   <p>
                     {'数据范围：'}
                     {periodMeta.range}
-                    {' · 快照指标截至'}
-                    {dataCutoff}
+                    {' · 库存快照截至'}
+                    {snapshotDateLabel('库存量')}
                   </p>
                 </div>
                 <div className="category-health-grid">
-                  {categorySatisfaction830.map((item) => {
+                  {(liveData ? activeProductHierarchy : categorySatisfaction830).map((item) => {
                     const values = categoryDrillMetrics(item.name);
                     const categoryMetrics = activeProductionMetricNames.map((name) =>
                       productionMetricCardData(name, values),
@@ -7436,7 +7628,7 @@ export default function Home({
                                   Number.isFinite(values[name]),
                                 )
                                 ? '已更新'
-                                : '开发中'
+                                : '数据不足'
                               : risk}
                           </em>
                         </button>
@@ -7455,7 +7647,7 @@ export default function Home({
                               {metric.name}
                               <small>
                                 {metric.statisticType === '快照指标'
-                                  ? `最新快照 · 截至${dataCutoff}`
+                                  ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
                                   : periodMeta.current}
                               </small>
                             </span>
@@ -7518,12 +7710,14 @@ export default function Home({
                     <p>
                       {'数据范围：'}
                       {periodMeta.range}
-                      {' · 快照截至'}
-                      {dataCutoff}
+                      {' · 库存快照截至'}
+                      {snapshotDateLabel('库存量')}
                     </p>
                   </div>
                   <div className="category-drill-note" role="note">
-                    {'品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。'}
+                    {liveData
+                      ? '品项、物料组按来源字段与唯一SKU分类读取；分类缺失或有冲突时保留未知，不按比例拆分。'
+                      : '品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。'}
                   </div>
                   <div
                     className="category-table-content category-drill-table"
@@ -7546,7 +7740,7 @@ export default function Home({
                         activeProductionMetricNames.map((name) => (
                           <span role="columnheader" key={name}>
                             {name}
-                            {metricStatisticType(name) === '快照指标' ? (
+                            {drillStatisticType(name) === '快照指标' ? (
                               <small>{'快照'}</small>
                             ) : null}
                           </span>
@@ -7556,7 +7750,7 @@ export default function Home({
                           <span role="columnheader">{'目标'}</span>
                           <span role="columnheader">{'达成状态'}</span>
                           <span role="columnheader">
-                            {metricStatisticType(activeCategoryMetric || '') === '快照指标'
+                            {drillStatisticType(activeCategoryMetric || '') === '快照指标'
                               ? '当前值'
                               : periodMeta.current}
                           </span>
@@ -7569,7 +7763,7 @@ export default function Home({
                       <span role="columnheader">{'风险状态'}</span>
                       <span role="columnheader">{'任务派发'}</span>
                     </div>
-                    {baseProductHierarchy.map((category) => {
+                    {activeProductHierarchy.map((category) => {
                       const categoryOpen = expandedCategoryListCategories.includes(category.name);
                       const categoryValues = categoryDrillMetrics(category.name);
                       return (
@@ -7691,8 +7885,8 @@ export default function Home({
                   <p>
                     {'数据范围：'}
                     {periodMeta.range}
-                    {' · 快照指标截至'}
-                    {dataCutoff}
+                    {' · 库存快照截至'}
+                    {snapshotDateLabel('库存量')}
                   </p>
                 </div>
                 <div className="base-health-grid">
@@ -7715,7 +7909,7 @@ export default function Home({
                           <em
                             className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
                           >
-                            {liveData ? '待接入' : risk}
+                            {liveData ? '未判定' : risk}
                           </em>
                         </button>
                         {baseMetrics.map((metric) => (
@@ -7733,7 +7927,7 @@ export default function Home({
                               {metric.name}
                               <small>
                                 {metric.statisticType === '快照指标'
-                                  ? `最新快照 · 截至${dataCutoff}`
+                                  ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
                                   : periodMeta.current}
                               </small>
                             </span>
@@ -8037,14 +8231,14 @@ export default function Home({
                     <p>
                       {'数据范围：'}
                       {periodMeta.range}
-                      {' · 快照截至'}
-                      {dataCutoff}
+                      {' · 库存快照截至'}
+                      {snapshotDateLabel('库存量')}
                     </p>
                   </div>
                   <div className="category-drill-note" role="note">
-                    {
-                      '按“基地 → 品类 → 品项 → 物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。'
-                    }
+                    {liveData
+                      ? '按“基地 → 品类 → 品项 → 物料组”四层展开；仅使用已接来源的唯一分类，缺失分类不推算。'
+                      : '按“基地 → 品类 → 品项 → 物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。'}
                   </div>
                   <div
                     className="category-table-content category-drill-table base-drill-table"
@@ -8066,7 +8260,7 @@ export default function Home({
                         activeProductionMetricNames.map((name) => (
                           <span role="columnheader" key={name}>
                             {name}
-                            {metricStatisticType(name) === '快照指标' ? (
+                            {drillStatisticType(name) === '快照指标' ? (
                               <small>{'快照'}</small>
                             ) : null}
                           </span>
@@ -8076,7 +8270,7 @@ export default function Home({
                           <span role="columnheader">{'目标'}</span>
                           <span role="columnheader">{'达成状态'}</span>
                           <span role="columnheader">
-                            {metricStatisticType(activeBaseMetric || '') === '快照指标'
+                            {drillStatisticType(activeBaseMetric || '') === '快照指标'
                               ? '当前值'
                               : periodMeta.current}
                           </span>
@@ -8120,11 +8314,14 @@ export default function Home({
                             )}
                           </div>
                           {baseOpen &&
-                            categories.map((category) => {
+                            (liveData
+                              ? liveBaseHierarchies[base.name].map((item) => item.name)
+                              : categories
+                            ).map((category) => {
                               const categoryKey = `${base.name}::${category}`;
                               const categoryOpen = expandedBaseCategoryRows.includes(categoryKey);
                               const categoryValues = baseDrillMetrics(base.name, category);
-                              const productItems = baseCategoryProductItems(category);
+                              const productItems = baseCategoryProductItems(category, base.name);
                               return (
                                 <div
                                   className="category-drill-group"
@@ -8402,7 +8599,7 @@ export default function Home({
                           {liveData
                             ? liveOrdersAvailable && activeRiskPerspective === 'production'
                               ? '当前可判定数据未检出风险项'
-                              : '风险数据开发中'
+                              : '风险数据不足'
                             : '当前维度暂无风险项'}
                         </strong>
                         <span>
@@ -8944,7 +9141,7 @@ export default function Home({
                 <span>{'分析周期'}</span>
                 <b>{activeAnalysisPeriod}</b>
                 <span>{'统计口径'}</span>
-                <b>{metricStatisticType(taskDraft.metric)}</b>
+                <b>{drillStatisticType(taskDraft.metric)}</b>
                 <span>{'数据截止'}</span>
                 <b>{dataCutoff}</b>
               </div>
@@ -9060,7 +9257,7 @@ export default function Home({
                     {'统计口径：'}
                     {task.analysisPeriod || '既有任务'}
                     {' · '}
-                    {task.statisticType || metricStatisticType(task.metric)}
+                    {task.statisticType || drillStatisticType(task.metric)}
                     {'　数据截止：'}
                     {task.dataCutoff || '—'}
                   </small>

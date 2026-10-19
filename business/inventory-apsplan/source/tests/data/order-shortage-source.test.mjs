@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const registry = JSON.parse(
-  await readFile(new URL('../../app/data/gea-queries.json', import.meta.url), 'utf8'),
-);
+  await readFile(new URL('../../../sql.config.json', import.meta.url), 'utf8'),
+).workspace;
 const requirements = JSON.parse(
   await readFile(new URL('../fixtures/gea-resource-requirements.json', import.meta.url), 'utf8'),
 );

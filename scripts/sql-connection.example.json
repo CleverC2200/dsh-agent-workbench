@@ -1,0 +1,7 @@
+{
+  "host": "<database-host>",
+  "port": 9030,
+  "user": "<read-only-user>",
+  "password": "<local-secret>",
+  "database": "ai_db"
+}

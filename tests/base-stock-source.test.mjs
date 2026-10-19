@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
+import { resolve } from 'node:path';
 import { selectDefaultPublishedTargetInventory } from '../business/inventory-aqkc/source/aqkc/web/src/lib/target-inventory-version-policy.js';
 
 const compiled = await build({
@@ -19,6 +20,9 @@ const compiled = await build({
     {
       name: 'gea-host',
       setup(api) {
+        api.onResolve({ filter: /^dsh-agent-manage\/inventory-compute\/[a-z-]+$/ }, ({ path }) => ({
+          path: resolve('../dsh-agent-manage/src/' + path.split('/').slice(1).join('/') + '.ts'),
+        }));
         // Only the external Host RPC is replaced. Calculation and formatting modules are real.
         api.onResolve({ filter: /channel\.js$/ }, () => ({
           path: 'gea-host',

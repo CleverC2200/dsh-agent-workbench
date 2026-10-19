@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../../../shared/sql-config.ts';
 import {
   formatRatio,
   sumKnownQuantities,
@@ -160,100 +162,28 @@ export async function loadWarehouseSnapshot(
     throw new WarehouseSnapshotDataError('该分仓在最新数据库目录中不存在或库存映射尚未完成');
 
   const planPromise = Promise.all([
-    database.query(
-      `
-    WITH latest AS (
-      SELECT MAX(plan_snapshot_date) AS snapshot_date
-      FROM data_service.agents_scm_branch_plan
-    )
-    SELECT
-      p.plan_snapshot_date::text AS plan_snapshot_date,
-      p.target_month::text AS target_month,
-      p.plan_version,
-      p.plan_source,
-      p.plan_status,
-      p.material_code,
-      p.material_name,
-      p.product_categ_name,
-      p.current_inventory_qty,
-      p.replenishment_cycle_days,
-      p.cycle_rule_source,
-      p.bi_target_amount,
-      p.bi_target_status,
-      (to_jsonb(p)->>'target_growth_rate')::numeric AS target_growth_rate,
-      p.reference_shipment_qty,
-      p.history_same_period_growth_rate,
-      p.recent_three_month_growth_rate,
-      p.branch_growth_rate,
-      p.shipment_plan_qty,
-      p.transfer_plan_qty,
-      p.expected_month_end_inventory_qty,
-      p.updated_time
-    FROM data_service.agents_scm_branch_plan p
-    JOIN latest ON latest.snapshot_date = p.plan_snapshot_date
-    WHERE BTRIM(p.branch_pickup_point) = $1
-    ORDER BY p.target_month, p.material_code
-  `,
-      [source.branchPickupPoint],
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.1'), [
+      source.branchPickupPoint,
+    ]),
+    planningDatabase.query(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.fc.src.lib.server.warehouse-snapshot.ts.1',
+        [
+          planningDatabase === database
+            ? "to_regclass('data_service.agents_scm_order_fulfillment')"
+            : "'data_service.agents_scm_order_fulfillment'::text",
+        ],
+      ),
     ),
-    planningDatabase.query(`
-    SELECT
-      ${planningDatabase === database ? "to_regclass('data_service.agents_scm_order_fulfillment')" : "'data_service.agents_scm_order_fulfillment'::text"} AS order_fulfillment,
-      to_regclass('data_service.agent_branch_plan_import') AS imported_plans,
-      to_regclass('data_service.agent_branch_cycle_config') AS cycle_config
-  `),
   ]);
 
   const independentQueries = [
     queryBusinessDatabase(
       database,
       inventoryDetail === 'summary'
-        ? `
-      WITH latest AS (SELECT MAX(snapshot_date) AS snapshot_date FROM data_service.agents_scm_branch_inventory_snapshot),
-      inventory_batches AS (
-        SELECT i.snapshot_date, i.material_code, i.prod_date,
-          MAX(i.material_name) AS material_name, MAX(i.product_categ_name) AS product_categ_name,
-          SUM(i.live_qty) AS live_qty, CASE WHEN COUNT(i.available_qty)=COUNT(*) THEN SUM(i.available_qty) END AS available_qty, MAX(i.updated_time) AS updated_time
-        FROM data_service.agents_scm_branch_inventory_snapshot i
-        JOIN latest ON latest.snapshot_date = i.snapshot_date
-        WHERE COALESCE(NULLIF(BTRIM(i.pickup_point), ''), NULLIF(BTRIM(i.self_pickup_point), '')) = $1
-        GROUP BY i.snapshot_date, i.material_code, i.prod_date
-      )
-      SELECT snapshot_date::text AS snapshot_date, material_code, MAX(material_name) AS material_name,
-        MAX(product_categ_name) AS product_categ_name, SUM(live_qty) AS live_qty, CASE WHEN COUNT(available_qty)=COUNT(*) THEN SUM(available_qty) END AS available_qty,
-        MAX(updated_time) AS updated_time,
-        SUM(CASE WHEN live_qty > 0 THEN live_qty ELSE 0 END) AS positive_qty,
-        SUM(CASE WHEN live_qty > 0 AND prod_date IS NOT NULL AND GREATEST(0, snapshot_date::date - prod_date::date) < 30 THEN live_qty ELSE 0 END) AS age_0_30_qty,
-        SUM(CASE WHEN live_qty > 0 AND snapshot_date::date - prod_date::date >= 30 AND snapshot_date::date - prod_date::date < 60 THEN live_qty ELSE 0 END) AS age_30_60_qty,
-        SUM(CASE WHEN live_qty > 0 AND snapshot_date::date - prod_date::date >= 60 AND snapshot_date::date - prod_date::date < 90 THEN live_qty ELSE 0 END) AS age_60_90_qty,
-        SUM(CASE WHEN live_qty > 0 AND prod_date IS NULL THEN live_qty ELSE 0 END) AS unknown_age_qty,
-        SUM(CASE WHEN live_qty > 0 THEN live_qty * GREATEST(0, snapshot_date::date - prod_date::date) ELSE 0 END) AS weighted_age,
-        SUM(CASE WHEN live_qty > 0 AND snapshot_date::date - prod_date::date >= 60 THEN live_qty ELSE 0 END) AS big_date_qty,
-        SUM(CASE WHEN live_qty > 0 AND snapshot_date::date - prod_date::date >= 90 THEN live_qty ELSE 0 END) AS stagnant_qty,
-        MAX(CASE WHEN live_qty > 0 THEN GREATEST(0, snapshot_date::date - prod_date::date) ELSE 0 END) AS max_age_days,
-        COUNT(*) FILTER (WHERE live_qty < 0) AS negative_batch_count
-      FROM inventory_batches GROUP BY snapshot_date, material_code ORDER BY material_code
-    `
-        : `
-      WITH latest AS (
-        SELECT MAX(snapshot_date) AS snapshot_date
-        FROM data_service.agents_scm_branch_inventory_snapshot
-      )
-      SELECT
-        i.snapshot_date::text AS snapshot_date,
-        i.material_code,
-        MAX(i.material_name) AS material_name,
-        MAX(i.product_categ_name) AS product_categ_name,
-        i.prod_date::text AS prod_date,
-        SUM(i.live_qty) AS live_qty,
-        CASE WHEN COUNT(i.available_qty)=COUNT(*) THEN SUM(i.available_qty) END AS available_qty,
-        MAX(i.updated_time) AS updated_time
-      FROM data_service.agents_scm_branch_inventory_snapshot i
-      JOIN latest ON latest.snapshot_date = i.snapshot_date
-      WHERE COALESCE(NULLIF(BTRIM(i.pickup_point), ''), NULLIF(BTRIM(i.self_pickup_point), '')) = $1
-      GROUP BY i.snapshot_date, i.material_code, i.prod_date
-      ORDER BY i.material_code, i.prod_date
-    `,
+        ? configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.2')
+        : configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.3'),
       [source.pickupPointCode],
       {
         pageSize: 100,
@@ -265,50 +195,7 @@ export async function loadWarehouseSnapshot(
     // PostgreSQL can combine the two operation-scope indexes without scanning the whole snapshot.
     queryBusinessDatabase(
       database,
-      `
-      WITH scope_warehouses AS (
-        SELECT DISTINCT i.warehouseid
-        FROM data_service.agents_scm_branch_inventory_snapshot i
-        WHERE i.snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_branch_inventory_snapshot)
-          AND COALESCE(NULLIF(BTRIM(i.pickup_point), ''), NULLIF(BTRIM(i.self_pickup_point), '')) = $1
-      )
-      SELECT
-        o.snapshot_date::text AS snapshot_date,
-        o.period_month::text AS period_month,
-        o.business_date::text AS business_date,
-        o.metric_group,
-        o.metric_name,
-        o.material_code,
-        MAX(o.material_name) AS material_name,
-        o.base_group_id,
-        o.base_group_name,
-        CASE WHEN (o.metric_group='branch_activity' OR o.metric_name IN ('in_transit_qty', 'verified_in_transit_qty')) AND COUNT(*) FILTER (WHERE o.metric_value IS NULL OR o.metric_value < 0) > 0
-          THEN NULL
-          WHEN o.metric_group = 'warehouse_examine'
-          THEN AVG(o.metric_value)
-          ELSE SUM(o.metric_value)
-        END AS metric_value,
-        MAX(o.updated_time) AS updated_time
-      FROM data_service.agents_scm_branch_operation_fact o
-      WHERE (
-          COALESCE(NULLIF(BTRIM(o.pickup_point), ''), NULLIF(BTRIM(o.self_pickup_point), '')) = $1
-          OR o.warehouseid = ANY(ARRAY(SELECT warehouseid FROM scope_warehouses))
-        )
-        AND (
-          o.metric_name IN ('in_transit_qty', 'verified_in_transit_qty')
-          OR (o.metric_group='branch_activity' AND o.period_month=DATE_TRUNC('month',$3::date)::date)
-          OR (
-            o.metric_group = 'warehouse_cost'
-            AND o.period_month = DATE_TRUNC('month', $2::date)::date
-          )
-          OR (
-            o.metric_group NOT IN ('warehouse_cost','branch_activity')
-            AND o.period_month = DATE_TRUNC('month', $2::date)::date
-          )
-        )
-      GROUP BY o.snapshot_date, o.period_month, o.business_date, o.metric_group, o.metric_name, o.material_code, o.base_group_id, o.base_group_name
-      ORDER BY o.metric_group, o.metric_name, o.material_code, o.period_month, o.business_date, o.base_group_id, o.base_group_name
-    `,
+      configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.4'),
       [source.pickupPointCode, addDays(calculationDate, -1), calculationDate],
       {
         pageSize: 100,
@@ -325,58 +212,17 @@ export async function loadWarehouseSnapshot(
         ],
       },
     ),
-    database.query(
-      `
-      WITH latest AS (
-        SELECT MAX(source_snapshot_time) AS snapshot_time
-        FROM data_service.agents_scm_branch_pending_order
-      )
-      SELECT
-        p.source_snapshot_time,
-        p.executeorderno,
-        p.material_code,
-        SUM(CASE WHEN p.order_stage='PREPARED_UNSHIPPED' THEN p.allocated_qty ELSE p.order_qty END) AS order_qty,
-        CASE WHEN COUNT(*) FILTER (WHERE p.order_stage IS NULL OR (p.order_stage='PREPARING' AND p.order_qty IS NULL)) > 0 THEN NULL ELSE SUM(CASE WHEN p.order_stage='PREPARING' THEN p.order_qty ELSE 0 END) END AS preparing_qty,
-        CASE WHEN COUNT(*) FILTER (WHERE p.order_stage IS NULL OR (p.order_stage='PREPARING' AND
-          (p.order_qty IS NULL OR p.allocated_qty IS NULL OR p.order_qty < 0 OR p.allocated_qty < 0 OR p.allocated_qty > p.order_qty))) > 0
-          THEN NULL ELSE SUM(CASE WHEN p.order_stage='PREPARING' THEN p.allocated_qty ELSE 0 END) END AS preparing_allocated_qty,
-        MAX(to_jsonb(p)->>'cust_name') AS cust_name,
-        MAX(to_jsonb(p)->>'cust_code') AS cust_code,
-        CASE WHEN COUNT(DISTINCT to_jsonb(p)->>'required_delivery_at')=1 THEN MAX(to_jsonb(p)->>'required_delivery_at') END AS required_delivery_at,
-        SUM(p.allocated_qty) AS allocated_qty,
-        COUNT(*) FILTER (WHERE p.order_stage IS NULL) AS legacy_count,
-        MAX(p.updated_time) AS updated_time
-      FROM data_service.agents_scm_branch_pending_order p
-      JOIN latest ON latest.snapshot_time = p.source_snapshot_time
-      WHERE BTRIM(p.pickup_point) = $1
-        AND (p.order_stage IN ('PREPARING','PREPARED_UNSHIPPED') OR p.order_stage IS NULL)
-      GROUP BY p.source_snapshot_time, p.executeorderno, p.material_code
-      ORDER BY p.executeorderno, p.material_code
-    `,
-      [source.pickupPointCode],
-    ),
-    database.query(
-      `/* branch:monthly-fulfillment */
-      SELECT
-        SUM(f.metric_value) FILTER (WHERE f.metric_name='order_qty') AS order_qty,
-        SUM(f.metric_value) FILTER (WHERE f.metric_name='shipped_qty') AS shipped_qty,
-        MAX(f.updated_time) AS updated_time
-      FROM data_service.agents_scm_branch_operation_fact f
-      WHERE f.pickup_point=$1 AND f.metric_group='branch_fulfillment'
-        AND f.period_month = DATE_TRUNC('month', $2::date)::date
-    `,
-      [source.pickupPointCode, addDays(calculationDate, -1)],
-    ),
-    database.query(
-      `/* branch:actual-outbound-30d */
-    SELECT material_code, CASE WHEN COUNT(*) FILTER (WHERE metric_value IS NULL OR metric_value < 0 OR business_date IS NULL) > 0 THEN NULL ELSE SUM(metric_value) END AS outbound_qty
-    FROM data_service.agents_scm_branch_operation_fact
-    WHERE pickup_point=$1 AND metric_name='out_qty_daily'
-      AND business_date >= $2::date - INTERVAL '29 days' AND business_date <= $2::date
-    GROUP BY material_code
-  `,
-      [source.pickupPointCode, addDays(calculationDate, -1)],
-    ),
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.5'), [
+      source.pickupPointCode,
+    ]),
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.6'), [
+      source.pickupPointCode,
+      addDays(calculationDate, -1),
+    ]),
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.7'), [
+      source.pickupPointCode,
+      addDays(calculationDate, -1),
+    ]),
   ];
   // Observe failures immediately; the original promises are still awaited below.
   for (const query of independentQueries) void query.catch(() => {});
@@ -426,25 +272,10 @@ export async function loadWarehouseSnapshot(
     independentQueries[1],
     independentQueries[2],
     planMaterialCodes.length
-      ? database.query(
-          `
-      SELECT
-        p.base_finish_date::text AS base_finish_date,
-        p.warehouse_group_id,
-        p.warehouse_group_name,
-        p.base_name,
-        p.material_code,
-        SUM(p.planned_qty) AS planned_qty,
-        MAX(p.updated_time) AS updated_time
-      FROM data_service.agents_scm_branch_production_plan p
-      WHERE p.material_code = ANY($1::text[])
-        AND p.base_finish_date >= $2::date
-        AND p.base_finish_date <= $2::date + INTERVAL '6 days'
-      GROUP BY p.base_finish_date, p.warehouse_group_id, p.warehouse_group_name, p.base_name, p.material_code
-      ORDER BY p.base_finish_date, p.warehouse_group_name, p.material_code, p.warehouse_group_id
-    `,
-          [planMaterialCodes, calculationDate],
-        )
+      ? database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.8'), [
+          planMaterialCodes,
+          calculationDate,
+        ])
       : Promise.resolve({ rows: [] }),
     independentQueries[3],
     independentQueries[4],
@@ -463,38 +294,21 @@ export async function loadWarehouseSnapshot(
       text(row.material_code),
     ]);
     const pairPredicate = pendingOrderResult.rows
-      .map(
-        (_, index) =>
-          `(f.executeorderno = $${3 + index * 2}::text AND f.new_material_code = $${4 + index * 2}::text)`,
+      .map((_, index) =>
+        configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.9', [
+          3 + index * 2,
+          4 + index * 2,
+        ]),
       )
-      .join(' OR ');
+      .join(
+        configuredSql(sqlConfiguration, 'inline.source.fc.src.lib.server.warehouse-snapshot.ts.1'),
+      );
     return hasOrderFulfillment && orderNumbers.length
       ? database.query(
-          `
-    WITH ranked_order_details AS (
-      SELECT f.executeorderno, f.new_material_code, f.new_material_name,
-        f.cust_code, f.cust_name, f.header_addtime, f.qtyshipped, f.snapshot_date,
-        DENSE_RANK() OVER (
-        PARTITION BY f.executeorderno, f.new_material_code ORDER BY f.snapshot_date DESC
-      ) AS snapshot_rank
-      FROM data_service.agents_scm_order_fulfillment f
-      WHERE f.executeorderno = ANY($1::text[])
-        AND ${fulfillmentWarehouseScope(2)} AND f.pick_point_type2 = '分仓'
-        AND (${pairPredicate})
-    )
-    SELECT
-      f.executeorderno,
-      f.new_material_code AS material_code,
-      MAX(f.new_material_name) AS material_name,
-      MAX(f.cust_code) AS cust_code,
-      MAX(f.cust_name) AS cust_name,
-      MIN(f.header_addtime)::date::text AS order_date,
-      SUM(f.qtyshipped) FILTER (WHERE f.snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_order_fulfillment)) AS shipped_qty
-    FROM ranked_order_details f
-    WHERE f.snapshot_rank = 1
-    GROUP BY f.executeorderno, f.new_material_code
-    ORDER BY f.executeorderno, f.new_material_code
-  `,
+          configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.10', [
+            fulfillmentWarehouseScope(2),
+            pairPredicate,
+          ]),
           [orderNumbers, source.pickupPointCode, ...orderPairs],
         )
       : { rows: [] };
@@ -534,29 +348,14 @@ export async function loadWarehouseSnapshot(
     orderDetailPromise,
     planningEnabled ? readPlanningState(warehouseId, planningDatabase) : null,
     planningEnabled
-      ? database.query(
-          `/* planning:monthly-shipments */
-      SELECT f.material_code AS sku,
-        CASE WHEN COUNT(*) FILTER (WHERE f.metric_value IS NULL) > 0 THEN NULL ELSE SUM(f.metric_value) END AS shipped_qty
-      FROM data_service.agents_scm_branch_operation_fact f
-      WHERE f.pickup_point=$1 AND f.metric_group='branch_activity' AND f.metric_name='actual_shipped_qty'
-        AND f.period_month = $2::date
-      GROUP BY f.material_code
-      ORDER BY f.material_code
-    `,
-          [source.pickupPointCode, currentPlanDate],
-        )
+      ? database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.11'), [
+          source.pickupPointCode,
+          currentPlanDate,
+        ])
       : { rows: [] },
     queryBusinessDatabase(
       database,
-      `/* branch:monthly-budgets */
-      SELECT year_month, shipping_code, shipping_name, budget_mny, pre_mny, ly_same_mny,
-        total_rate, history_rate, avg_3month_rate, growth_factor, recent_rate_count, data_status, updated_time
-      FROM data_service.agents_scm_branch_budget_monthly
-      WHERE shipping_code = $1
-        AND year_month BETWEEN TO_CHAR($2::date - INTERVAL '14 months', 'YYYYMM') AND TO_CHAR($2::date, 'YYYYMM')
-      ORDER BY year_month DESC
-    `,
+      configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-snapshot.12'),
       [source.pickupPointCode, addDays(calculationDate, -1)],
       { pageSize: 15 },
     ),

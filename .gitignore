@@ -4,3 +4,4 @@ node_modules/
 
 # Owned transient build/test fixtures
 .scratch/
+__pycache__/

@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../../../shared/sql-config.ts';
 import { fulfillmentWarehouseScope } from './warehouse-scope.ts';
 import type { CatalogDatabase } from './warehouse-catalog.ts';
 
@@ -11,14 +13,9 @@ export async function loadPlanProductMetadata(
   if (!skus.length)
     return new Map<string, { category: string; materialGroup: string; productName?: string }>();
   const result = await database.query(
-    `/* branch:product-metadata */
-    SELECT DISTINCT f.new_material_code AS sku, BTRIM(f.new_material_name) AS product_name,
-      BTRIM(f.product_categ_name) AS category, BTRIM(f.material_group_name) AS material_group
-    FROM data_service.agents_scm_order_fulfillment f
-    WHERE f.snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_order_fulfillment)
-      AND ${fulfillmentWarehouseScope(1)} AND f.pick_point_type2 = '分仓'
-      AND f.new_material_code = ANY($2::text[])
-  `,
+    configuredSql(sqlConfiguration, 'fc.src.lib.server.plan-product-metadata.1', [
+      fulfillmentWarehouseScope(1),
+    ]),
     [pickupPoint, [...new Set(skus)]],
   );
   const names = new Map<string, Set<string>>();
