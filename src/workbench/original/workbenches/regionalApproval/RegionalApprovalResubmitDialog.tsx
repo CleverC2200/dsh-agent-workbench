@@ -303,6 +303,7 @@ export function RegionalApprovalResubmitDialog({
     setAttempted(true);
     setBusy(true);
     const next = [...rows];
+    const processed: SubmissionRow[] = [];
     const publish = () => {
       if (mounted.current) setRows([...next]);
     };
@@ -415,11 +416,12 @@ export function RegionalApprovalResubmitDialog({
             rejection,
           };
         }
+        processed.push(next[index]);
         publish();
       }
       if (mounted.current) {
         onCompleted?.(
-          next
+          processed
             .filter((row) => row.attempt)
             .map((row) => ({
               planId: row.item.planId,
@@ -433,7 +435,7 @@ export function RegionalApprovalResubmitDialog({
               permissionDenied: row.error === 'permission',
             })),
         );
-        if (next.some((row) => row.status === 'success')) onSucceeded?.();
+        if (processed.some((row) => row.status === 'success')) onSucceeded?.();
       }
     } finally {
       submitting.current = false;
