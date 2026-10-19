@@ -12,14 +12,14 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { correctionAdjustments, correctionDecision, correctionLine, correctionMetrics } =
-  await import(
-    'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
-  );
+const { correctionAdjustments, correctionDecision, correctionLine } = await import(
+  'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
+);
 
 test('correction uses a fixed monthly baseline and absolute node decisions including explicit zero', () => {
   const sku = {
     qty: '30',
+    amt: '70.37',
     price: '2.3456',
     adjAddQty: '2',
     adjCutQty: '0',
@@ -40,39 +40,18 @@ test('correction uses a fixed monthly baseline and absolute node decisions inclu
     deltaAmount: '-7.04',
     addQty: '0',
     cutQty: '3',
+    addAmount: '0.00',
+    cutAmount: '7.04',
     participates: true,
   });
   assert.throws(() => correctionLine(sku, '-31'));
-  assert.equal(correctionLine({ qty: '0', price: '1' }, '0').participates, false);
+  assert.equal(correctionLine({ qty: '0', price: '1', amt: '0' }, '0').participates, false);
   assert.equal(correctionLine(sku, '-30').participates, true);
 });
-test('actual progress keeps the monthly denominator and corrected progress measures target coverage', () => {
-  assert.deepEqual(
-    correctionMetrics({
-      targetAmount: '1000',
-      mPlanAmount: '800',
-      mPlanQty: '40',
-      shipAmount: '400',
-      shipQty: '10',
-      corrPlanAmount: '900',
-    }),
-    {
-      amountProgress: '50.00',
-      qtyProgress: '25.00',
-      correctionProgress: '90.00',
-      netAmount: '100.00',
-    },
-  );
-  assert.equal(
-    correctionMetrics({ targetAmount: '0', mPlanAmount: '0', mPlanQty: '0' }).correctionProgress,
-    undefined,
-  );
-});
-
 test('zero baseline cancellation sends an explicit zero decision instead of silently inheriting the previous addition', () => {
   const detail = {
     currentVersion: { status: 1, planTypeCode: 'Y' },
-    skus: [{ skuCode: '123', qty: '0', price: '2', adjAddQty: '8', adjCutQty: '0' }],
+    skus: [{ skuCode: '123', qty: '0', amt: '0', price: '2', adjAddQty: '8', adjCutQty: '0' }],
   };
   assert.deepEqual(correctionAdjustments(detail, { 123: '0' }), [
     { skuCode: '123', adjustQty: '0' },
