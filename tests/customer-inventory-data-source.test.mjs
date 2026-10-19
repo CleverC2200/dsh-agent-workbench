@@ -13,14 +13,28 @@ const source = await readFile(
 );
 
 test('negative customer inventory preserves book balances without negative turnover or partial freshness', () => {
-  const input = { snapshot_date: '2026-10-17', cust_code: 'C1', cust_name: '负库存客户',
-    stock_qty: -100, stock_amt: -20000, sales_qty_30days: 30, normal_stock_qty: -100,
-    sku_rows: 1, stock_coverage: 1, value_coverage: 1, sales_coverage: 1, normal_coverage: 1 };
+  const input = {
+    snapshot_date: '2026-10-17',
+    cust_code: 'C1',
+    cust_name: '负库存客户',
+    stock_qty: -100,
+    stock_amt: -20000,
+    sales_qty_30days: 30,
+    normal_stock_qty: -100,
+    sku_rows: 1,
+    stock_coverage: 1,
+    value_coverage: 1,
+    sales_coverage: 1,
+    normal_coverage: 1,
+  };
   const negative = mapCustomerInventoryRows([input]).rows[0];
   assert.equal(negative.quantity, -100);
   assert.equal(negative.value, -2);
   assert.equal(negative.turnover, null);
-  const summary = summarizeCustomerInventory([negative, { ...negative, quantity: 50, value: 1, normalRatio: 100 }]);
+  const summary = summarizeCustomerInventory([
+    negative,
+    { ...negative, quantity: 50, value: 1, normalRatio: 100 },
+  ]);
   assert.equal(summary.quantity, -50);
   assert.equal(summary.anomalous, true);
   assert.equal(summary.turnover, null);
@@ -30,7 +44,14 @@ test('negative customer inventory preserves book balances without negative turno
 });
 
 test('customer summary preserves missing coverage and weights valid normal stock', () => {
-  const row = { quantity: 100, value: 1, sales30: 50, normalRatio: 80, targetQty: null, targetValue: null };
+  const row = {
+    quantity: 100,
+    value: 1,
+    sales30: 50,
+    normalRatio: 80,
+    targetQty: null,
+    targetValue: null,
+  };
   const summary = summarizeCustomerInventory([row, { ...row, quantity: 300, normalRatio: 100 }]);
   assert.equal(summary.normalRatio, 95);
   assert.equal(summary.turnover, 120);
@@ -42,8 +63,11 @@ test('customer summary preserves missing coverage and weights valid normal stock
 
 test('headquarters retains totals when an individual customer is negative or missing', () => {
   const row = { quantity: 200, value: 4, sales30: 100, normalRatio: 100 };
-  const result = summarizeCustomerInventory([row, { ...row, quantity: -20, value: -1, normalRatio: null },
-    { ...row, quantity: null, value: null, sales30: null, normalRatio: null }]);
+  const result = summarizeCustomerInventory([
+    row,
+    { ...row, quantity: -20, value: -1, normalRatio: null },
+    { ...row, quantity: null, value: null, sales30: null, normalRatio: null },
+  ]);
   assert.equal(result.quantity, 180);
   assert.equal(result.totalValue, 3);
   assert.equal(result.anomalous, false);
