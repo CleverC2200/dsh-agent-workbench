@@ -1197,7 +1197,7 @@ export function FullChainWorkbench() {
               </label>
               <span className={styles.objectCount}>
                 {workspace
-                  ? `${new Set(workspace.structure.filter((r) => r.layer === 'base').map((r) => r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter((r) => r.layer === 'branch').map((r) => r.objectName)).size} 个分仓${workspace.scope === 'all-channel' ? ` · ${workspace.coverage.coveredCustomers} 家已覆盖客户` : ''}`
+                  ? `${new Set(workspace.structure.filter((r) => r.layer === 'base').map((r) => r.objectName)).size} 个基地 · ${new Set(workspace.structure.filter((r) => r.layer === 'branch').map((r) => r.objectName)).size} 个分仓${workspace.scope === 'all-channel' ? ` · ${workspace.coverage.coveredCustomers} 家客户` : ''}`
                   : '正在读取库存范围'}
               </span>
               <div className={styles.headerActions} role="group" aria-label="库存查询条件">

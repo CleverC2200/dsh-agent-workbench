@@ -86,8 +86,8 @@ test('all-stage starts core cards first while leaving a lane for other sources',
   const registry = JSON.parse(
     await (
       await import('node:fs/promises')
-    ).readFile(new URL('../../app/data/gea-queries.json', import.meta.url), 'utf8'),
-  );
+    ).readFile(new URL('../../../sql.config.json', import.meta.url), 'utf8'),
+  ).workspace;
   const calls = [];
   const pending = [];
   const run = createGeaWorkspace((_, q) => {

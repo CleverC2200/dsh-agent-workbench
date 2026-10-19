@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../../shared/sql-config.ts';
 /** Preserve field-level RETURN lineage: each output aggregates only that same field.
  * No whole-row JSON, synthetic values, windows or hidden permission fields.
  */
@@ -23,16 +25,42 @@ export function columnarQuery(sql: string): string | null {
     const word = token[0].toUpperCase();
     if (word === '(') depth++;
     else if (word === ')') depth--;
-    else if (depth === 0 && word === 'SELECT' && start < 0) start = token.index! + word.length;
+    else if (
+      depth === 0 &&
+      word ===
+        configuredSql(
+          sqlConfiguration,
+          'inline.source.inventory-light-plugins.src.governed.columnar.ts.1',
+        ) &&
+      start < 0
+    )
+      start = token.index! + word.length;
     else if (depth === 0 && start >= 0 && word === ',') {
       if (!add(token.index!)) return null;
       start = token.index! + 1;
-    } else if (depth === 0 && start >= 0 && word === 'FROM') {
+    } else if (
+      depth === 0 &&
+      start >= 0 &&
+      word ===
+        configuredSql(
+          sqlConfiguration,
+          'inline.source.inventory-light-plugins.src.governed.columnar.ts.2',
+        )
+    ) {
       if (!add(token.index!) || new Set(columns).size !== columns.length) return null;
       const projection = columns
-        .map((c) => `CAST(JSON_AGG("dsh_columns"."${c}") AS TEXT) AS "${c}"`)
+        .map((c) =>
+          configuredSql(
+            sqlConfiguration,
+            'fragments.source.inventory-light-plugins.src.governed.columnar.ts.1',
+            [c, c],
+          ),
+        )
         .join(',\n');
-      return `SELECT ${projection}\nFROM (\n${sql.replace(/;\s*$/, '')}\n) AS "dsh_columns"`;
+      return configuredSql(sqlConfiguration, 'inventory-light-plugins.src.governed.columnar.1', [
+        projection,
+        sql.replace(/;\s*$/, ''),
+      ]);
     }
   }
   return null;

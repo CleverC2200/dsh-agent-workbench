@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Page from '@business-page';
+import { usesConfiguredSql } from '../../../../../shared/sql-config';
+import ConfiguredWorkbench from './configured-workbench';
 import { clearReadCache } from '../data';
 import { action, ready } from '../channel.js';
 import { updateContext, clearContext } from './context';
@@ -71,7 +73,7 @@ function App() {
       )}
       {reading ? (
         <Boundary key={revision}>
-          <Page />
+          {usesConfiguredSql() ? <ConfiguredWorkbench /> : <Page />}
         </Boundary>
       ) : (
         <p role="status">会话切换中，等待授权通道就绪</p>

@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict';
+import { readFile } from '../helpers/prepared-assets.mjs';
+import { injectSqlConfig } from '../../src/sql-config-document.ts';
+import { makeRequest } from '../../business/shared/configured-query-client.mjs';
+export async function configuredPageHtml(id) {
+  const config = JSON.parse(await readFile(`lib/business/inventory-${id}/sql.config.json`, 'utf8'));
+  return injectSqlConfig(await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'), config);
+}
+/** Synthetic external rows for the current config protocol; never shipped or used for authorization. */
+export async function configuredWire(id) {
+  const config = JSON.parse(await readFile(`lib/business/inventory-${id}/sql.config.json`, 'utf8'));
+  return (payload) => {
+    assert.deepEqual(Object.keys(payload).sort(), ['parameters', 'queryId']);
+    const q = config.queries[payload.queryId];
+    assert.ok(q, `unregistered fixture query ${payload.queryId}`);
+    makeRequest(config, payload.queryId, payload.parameters);
+    const p = payload.parameters;
+    if (id === 'dealer') assert.ok(!p.customer || p.customer === 'customer-A');
+    const columns = q.resultColumns;
+    const history = payload.queryId.startsWith('stock_history.');
+    const total = history ? 2 : payload.queryId.includes('stock.detail') ? 201 : 1;
+    const offset = p.offset ?? 0;
+    const date = p.stat_date ?? p.stock_date ?? '2026-09-30';
+    const makeRow = (index) =>
+      Object.fromEntries(
+        columns.map((field) => {
+          let value = null;
+          if (/^(missing_|negative_|duplicate_)/.test(field)) value = 0;
+          if (/^(valid_|known_.*_count$|matched_.*_count$)/.test(field)) value = 201;
+          const values = {
+            the_date: index === 0 ? '2026-09-28' : '2026-09-30',
+            current_stock: index === 0 ? 10 : 0,
+            day: payload.queryId === 'source.stock-date' ? p.as_of : '2026-09-30',
+            total,
+            page_scope_total: total,
+            page_row_present: 1,
+            row_count: 201,
+            source_rows: 201,
+            customer_count: 1,
+            upload_count: 201,
+            customer: 'customer-A',
+            customer_name: '客户A',
+            sku: `sku-A-${String(index).padStart(3, '0')}`,
+            material_name: '测试商品',
+            category: '汤圆',
+            base: '华东',
+            belong_base: '华东',
+            stat_date: date,
+            stock_date: date,
+            health_date: date,
+            upload_date: date,
+            earliest_upload: date,
+            latest_upload: date,
+            store_count: 10,
+            inventory: 12060,
+            in_transit: 2412,
+            total_inventory: 14472,
+            inventory_value: 120600,
+            sales7: 5628,
+            sales30: 24120,
+            cover_days: 18,
+            onhand_days: 15,
+            known_inventory: 5580,
+            known_available: 5500,
+            known_inventory_count: 105,
+            known_available_count: 105,
+            known_target: 2080,
+            matched_target_gap: 3500,
+            matched_stock_days: 26.57,
+            matched_turnover_inventory: 5580,
+            matched_turnover_demand: 210,
+            fulfillment_rate: 0.88,
+            demand: 100,
+            shortage: 12,
+            shipped: 88,
+          };
+          if (Object.hasOwn(values, field)) value = values[field];
+          return [field, value];
+        }),
+      );
+    let rows;
+    if (payload.queryId.startsWith('source.')) rows = [makeRow(0)];
+    else if (payload.queryId.endsWith('.summary') || columns.includes('total')) rows = [makeRow(0)];
+    else
+      rows = Array.from(
+        { length: Math.max(0, Math.min(p.page_size ?? 10, total - offset)) },
+        (_, i) => makeRow(offset + i),
+      );
+    return { rows, returnedColumns: columns, rejectedColumns: [], configVersion: 'fixture-v1' };
+  };
+}

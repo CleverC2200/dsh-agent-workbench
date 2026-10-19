@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
 // Transport only: preserve every authorized row and let the existing business
 // engine select the month/version. Each result cell contains at most 100 rows.
 const orders: Record<string, string[]> = {
@@ -38,18 +40,28 @@ export function packedSafetyStockSql(sql: string, name = 'workbench-safety-stock
       : [];
   const compact = columns.length > 0 && new Set(columns).size === columns.length;
   const row = compact
-    ? `JSONB_BUILD_ARRAY(${columns.map((key) => `s."${key}"`).join(',')})`
-    : "TO_JSONB(s) - 'dsh_transfer_row'";
-  const schema = compact ? `'${JSON.stringify(columns)}'::text AS dsh_columns,` : '';
-  return `WITH dsh_stock_source AS (${sql}), dsh_stock_numbered AS (
-    SELECT s.*, ROW_NUMBER() OVER (ORDER BY ${order}) AS dsh_transfer_row
-    FROM dsh_stock_source s
-  ) SELECT FLOOR((dsh_transfer_row - 1) / 100) AS dsh_group,
-    COUNT(*) AS dsh_count,
-    ${schema}
-    JSONB_AGG(${row} ORDER BY dsh_transfer_row)::text AS dsh_rows
-    FROM dsh_stock_numbered s GROUP BY FLOOR((dsh_transfer_row - 1) / 100)
-    ORDER BY dsh_group`;
+    ? configuredSql(
+        sqlConfiguration,
+        'inline.source.inventory-light-plugins.src.aqkc-transfer.ts.1',
+        [columns.map((key) => `s."${key}"`).join(',')],
+      )
+    : configuredSql(
+        sqlConfiguration,
+        'inline.source.inventory-light-plugins.src.aqkc-transfer.ts.2',
+      );
+  const schema = compact
+    ? configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.aqkc-transfer.ts.1',
+        [JSON.stringify(columns)],
+      )
+    : '';
+  return configuredSql(sqlConfiguration, 'inventory-light-plugins.src.aqkc-transfer.1', [
+    sql,
+    order,
+    schema,
+    row,
+  ]);
 }
 
 export function unpackSafetyStock(groups: Record<string, unknown>[], maxRows: number) {

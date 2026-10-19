@@ -468,3 +468,33 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
     overflow: visible;
   }
 }
+
+/* The embedded workspace selector must stay within the host panel. */
+.plugin-workspace-tabs.scope-tabs {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  overflow-x: auto;
+}
+.kpi-source-note {
+  margin: 8px 0;
+  color: var(--ui-muted, #667085);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.plugin-source-supplement {
+  min-width: 0;
+  max-width: 100%;
+  background: var(--ui-surface, #fff);
+  border: 1px solid var(--ui-border, #e5e7eb);
+  border-radius: 8px;
+  margin: 8px 0 16px;
+  padding: 12px;
+}
+.plugin-source-supplement > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ui-secondary, #475467);
+}

@@ -4,6 +4,7 @@ import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
+import { sqlConfigPlugin } from './sql-config-build.mjs';
 const root = resolve(import.meta.dirname, '..');
 
 /** Assemble each page's Agent declaration from its owning Manage resource, independently of page compilation. */
@@ -48,6 +49,7 @@ export async function buildInventory(id, sourceCommit) {
       }),
     },
     plugins: [
+      sqlConfigPlugin(),
       {
         name: 'inventory-browser',
         setup(api) {
@@ -176,7 +178,11 @@ export async function buildInventory(id, sourceCommit) {
       code.replace(/<\/script/gi, '<\\/script') +
       '</script></body></html>',
   );
-  for (const file of ['plugin.json', 'page.json'])
+  for (const file of [
+    'plugin.json',
+    'page.json',
+    ...(manifest.sqlConfig ? [manifest.sqlConfig] : []),
+  ])
     await cp(resolve(resource, file), resolve(out, file));
   await assembleInventoryAgentResources(id);
   const inputs = {};

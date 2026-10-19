@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
 import { loadWarehouseCatalog } from '../../fc/src/lib/server/warehouse-catalog';
 import { loadWarehouseSnapshot } from '../../fc/src/lib/server/warehouse-snapshot';
 const planning = {
@@ -21,7 +23,7 @@ export const readWarehouseFacts = async (database: any, warehouseId: string, now
     const warehouse = directory.warehouses.find((row) => row.id === warehouseId);
     if (!warehouse) throw Error('GEA 未返回该分仓映射');
     const shipped = await database.query(
-      `SELECT material_code AS sku, CASE WHEN COUNT(*) FILTER (WHERE metric_value IS NULL)>0 THEN NULL ELSE SUM(metric_value) END AS shipped_qty FROM data_service.agents_scm_branch_operation_fact WHERE pickup_point=$1 AND metric_group='branch_activity' AND metric_name='actual_shipped_qty' AND period_month=$2::date GROUP BY material_code ORDER BY material_code`,
+      configuredSql(sqlConfiguration, 'inventory-light-plugins.src.warehouse-input.1'),
       [warehouse.pickupPointCode, calculationDate.slice(0, 7) + '-01'],
     );
     return { warehouse, shipped };
