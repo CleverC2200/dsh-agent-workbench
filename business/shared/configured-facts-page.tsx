@@ -40,6 +40,10 @@ export function ConfiguredFactsPage({
   date,
   customerCode,
   onChooseCustomer,
+  currentPage,
+  onPageChange,
+  currentPageSize,
+  onPageSizeChange,
 }: {
   config: AgentSqlConfig;
   onRead?: (value: any) => void;
@@ -49,6 +53,10 @@ export function ConfiguredFactsPage({
   date?: string;
   customerCode?: string;
   onChooseCustomer?: (code: string) => void;
+  currentPage?: number;
+  onPageChange?: (page: number) => void;
+  currentPageSize?: number;
+  onPageSizeChange?: (size: number) => void;
 }) {
   const config = agentSqlConfig(fallback),
     definition = config.sourceViews;
@@ -64,9 +72,20 @@ export function ConfiguredFactsPage({
     [customerDraft, setCustomerDraft] = useState(customerCode ?? '');
   const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
   const [draft, setDraft] = useState<Record<string, string>>(initialFilters);
-  const [page, setPage] = useState(1),
-    [pageSize, setPageSize] = useState(10),
+  const [localPage, setLocalPage] = useState(1),
+    [localPageSize, setLocalPageSize] = useState(10),
     [revision, refresh] = useState(0);
+  const pageSize = currentPageSize ?? localPageSize;
+  const setPageSize = (size: number) => {
+    setLocalPageSize(size);
+    onPageSizeChange?.(size);
+  };
+  const page = currentPage ?? localPage;
+  const setPage = (next: React.SetStateAction<number>) => {
+    const value = typeof next === 'function' ? next(page) : next;
+    setLocalPage(value);
+    onPageChange?.(value);
+  };
   const [result, setResult] = useState<any>(null),
     [error, setError] = useState<any>(null),
     [loading, setLoading] = useState(false);

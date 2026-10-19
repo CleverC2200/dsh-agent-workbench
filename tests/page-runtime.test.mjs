@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { mkdir, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { temporaryReferenceStorage } from './helpers/reference-storage.mjs';
+import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
 const core = resolve('../../official-latest-standard'),
   official = (path) => pathToFileURL(resolve(core, path)).href;
@@ -204,39 +205,11 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
     },
   };
 }
-const bundle = await build({
-  entryPoints: ['business/inventory-dealer/source/inventory-light-plugins/src/dealer-mock-sql.ts'],
-  bundle: true,
-  write: false,
-  platform: 'node',
-  format: 'esm',
-  plugins: [
-    {
-      name: 'offline-query-registry',
-      setup(api) {
-        api.onResolve({ filter: /^server-only$|^@\/lib\/gea-sql-client$/ }, (args) => ({
-          path: args.path,
-          namespace: 'fixture',
-        }));
-        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
-          contents:
-            args.path === 'server-only'
-              ? 'export{};'
-              : 'const deny=()=>{throw Error("UNEXPECTED_DIRECT_SQL")};export{deny as executeAllGeaSqlPages,deny as executeGeaSql,deny as executeGeaSqlPage};',
-        }));
-      },
-    },
-  ],
-});
-const { readDealerMock } = await import(
-  'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
-);
+const readDealerMock = await configuredWire('dealer');
 
 async function authorCatalog(t, id) {
   const dom = new JSDOM(
-    id === 'personal'
-      ? await personalFixtureHtml()
-      : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'),
+    id === 'personal' ? await personalFixtureHtml() : await configuredPageHtml(id),
     {
       url: 'https://host.example/' + id,
       referrer: 'https://host.example/',
@@ -283,7 +256,9 @@ async function authorCatalog(t, id) {
       }
     },
   };
-  for (const script of dom.window.document.querySelectorAll('script'))
+  for (const script of dom.window.document.querySelectorAll(
+    'script:not([type="application/json"])',
+  ))
     dom.window.eval(script.textContent);
   dom.window.dispatchEvent(
     new dom.window.MessageEvent('message', {
@@ -327,7 +302,7 @@ async function authorCatalog(t, id) {
     if (
       catalog?.elements?.some((e) =>
         id === 'dealer'
-          ? e.id === 'filter:customer' && e.options.includes('customer-A')
+          ? e.id === 'filter:customer' && e.editable
           : e.id.startsWith('personal:risk:'),
       )
     )
@@ -340,7 +315,12 @@ test('the real dealer author catalog accepts its empty all-customers option thro
   const { catalog } = await authorCatalog(t, 'dealer');
   const filter = catalog?.elements?.find((e) => e.id === 'filter:customer');
   assert.equal(filter?.value, '');
-  assert.deepEqual(Array.from(filter.options), ['', 'customer-A']);
+  assert.equal(filter.editable, true);
+  assert.equal(
+    filter.options,
+    undefined,
+    'current customer-code input is free text, not a stale customer list',
+  );
   const h = await mount(t),
     {
       value: { owner },

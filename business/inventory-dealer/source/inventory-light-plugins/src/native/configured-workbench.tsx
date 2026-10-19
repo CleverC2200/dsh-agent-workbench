@@ -1,11 +1,13 @@
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
+import { reportElements } from '../channel.js';
 import config from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import { businessDay, completeValue, knownNumber } from '../../../../../shared/configured-overview';
 import { DealerOverview } from '../pages/dealer/overview';
-import { updateContext } from './context';
+import { updateContext, beginQuery } from './context';
 import css from '../pages/dealer/workbench.module.css';
 import { dealerStockOverview } from './dealer-stock-overview';
 import common from '../../../../../shared/restored-workbench.module.css';
@@ -28,12 +30,30 @@ const orders = [
   ['pickup', '提货点'],
   ['customer', '客户目录 / 收货地址'],
 ];
+const view = createPageViewState('inventory-dealer');
+const stockTab = (value: unknown) =>
+  ({
+    customer: 'customer-stock',
+    category: 'category-stock',
+    sku: 'sku-stock',
+    shortage: 'shortage-stock',
+  })[String(value)] ?? String(value);
 export default function ConfiguredWorkbench() {
-  const [area, setArea] = useState('stock'),
-    [tab, setTab] = useState('customer-stock'),
-    [customer, setCustomer] = useState(''),
+  const [area, setArea] = usePageViewField(React, view, 'view', 'stock'),
+    [tab, setTab] = usePageViewField(
+      React,
+      view,
+      'tab',
+      'customer-stock',
+      (value) => value,
+      stockTab,
+    ),
+    [customer, setCustomer] = usePageViewField(React, view, 'customer', ''),
     [draft, setDraft] = useState(''),
     [revision, refresh] = useState(0);
+  const [page, setPage] = usePageViewField(React, view, 'page', 1);
+  const [pageSize, setPageSize] = usePageViewField(React, view, 'pageSize', 10);
+  useEffect(() => setDraft(customer), [customer]);
   const [date, setDate] = useState(businessDay),
     [dateDraft, setDateDraft] = useState(businessDay);
   const { parts, errors, busy } = useConfiguredOverview(config, date, customer, revision, (v) =>
@@ -53,6 +73,7 @@ export default function ConfiguredWorkbench() {
     inventoryDailyExpectedCustomerCount: knownNumber(summary?.customer_count),
   };
   const navigate = (value: string) => {
+    setPage(1);
     if (value === 'customer') {
       setArea('order');
       setTab('customer');
@@ -72,10 +93,59 @@ export default function ConfiguredWorkbench() {
     );
   };
   const choose = (value: string) => {
+    setPage(1);
     setCustomer(value);
     setDraft(value);
     setArea('order');
     setTab('orders');
+  };
+  useEffect(
+    () =>
+      reportElements(
+        'dealer-filters',
+        [
+          {
+            id: 'filter:customer',
+            role: 'control',
+            label: '客户编码',
+            value: customer,
+            editable: true,
+          },
+        ],
+        (args) => {
+          if (args.kind !== 'setValue' || typeof args.value !== 'string' || args.value.length > 100)
+            throw Error('INVALID_FILTER');
+          setCustomer(args.value.trim());
+          setDraft(args.value.trim());
+          setPage(1);
+        },
+      ),
+    [customer],
+  );
+  const scopeKey = JSON.stringify([tab, date, customer, revision, page, pageSize]);
+  const [readState, setReadState] = useState({ key: '', status: 'loading' });
+  const referenceReady =
+    readState.key === scopeKey && ['available', 'empty'].includes(readState.status);
+  const received = (value: any) => {
+    setReadState({ key: scopeKey, status: value.status });
+    updateContext('data', value);
+    if (value.status === 'loading') {
+      beginQuery({ customerCode: customer || null, tab, page, pageSize });
+      return;
+    }
+    const available = ['available', 'empty'].includes(value.status);
+    updateContext('queryState', {
+      state: available ? 'ready' : value.status,
+      message: value.message,
+    });
+    updateContext('dealer', {
+      customerCode: customer || null,
+      tab,
+      page: value.page ?? page,
+      recordTotal: value.total,
+      visibleRows: value.rows ?? [],
+      snapshotDate: value.snapshotDate,
+    });
   };
   return (
     <main className={`${css.shell} ${common.root}`}>
@@ -84,6 +154,7 @@ export default function ConfiguredWorkbench() {
           <button
             aria-current={area === 'stock'}
             onClick={() => {
+              setPage(1);
               setArea('stock');
               setTab('customer-stock');
             }}
@@ -93,6 +164,7 @@ export default function ConfiguredWorkbench() {
           <button
             aria-current={area === 'order'}
             onClick={() => {
+              setPage(1);
               setArea('order');
               setTab('catalog');
             }}
@@ -104,6 +176,7 @@ export default function ConfiguredWorkbench() {
           className={`${css.customerPicker} ${common.controls}`}
           onSubmit={(e) => {
             e.preventDefault();
+            setPage(1);
             setCustomer(draft.trim());
             setDate(dateDraft);
             refresh((n) => n + 1);
@@ -128,6 +201,7 @@ export default function ConfiguredWorkbench() {
           <button
             type="button"
             onClick={() => {
+              setPage(1);
               setArea('order');
               setTab('customer');
               setDraft('');
@@ -154,7 +228,10 @@ export default function ConfiguredWorkbench() {
           <DealerOverview data={data} onNavigate={navigate} />
         </div>
       )}
-      <section className={css.listPanel}>
+      <section className={css.listPanel} data-page-reference-ready={referenceReady}>
+        <p role="status" className={common.note}>
+          {referenceReady ? 'GEA 授权只读数据 · 当前查询范围' : '正在确认当前查询范围'}
+        </p>
         <nav
           className={common.tabs}
           aria-label={area === 'stock' ? '库存业务页签' : '客户订单内容'}
@@ -163,7 +240,10 @@ export default function ConfiguredWorkbench() {
             <button
               key={id}
               aria-current={id === tab ? 'page' : undefined}
-              onClick={() => setTab(id)}
+              onClick={() => {
+                setPage(1);
+                setTab(id);
+              }}
             >
               {label}
             </button>
@@ -178,7 +258,11 @@ export default function ConfiguredWorkbench() {
           customerCode={customer}
           initialFilters={tab === 'customer' && customer ? { customer } : {}}
           onChooseCustomer={choose}
-          onRead={(v) => updateContext('data', v)}
+          currentPage={page}
+          onPageChange={setPage}
+          currentPageSize={pageSize}
+          onPageSizeChange={setPageSize}
+          onRead={received}
         />
       </section>
     </main>

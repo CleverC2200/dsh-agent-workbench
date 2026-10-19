@@ -1,5 +1,7 @@
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
+import { ConfiguredTrends } from './configured-trends';
 import config from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
@@ -24,12 +26,21 @@ const views: Record<string, string[]> = {
   aging: ['aging', 'warehouse-age-detail', 'history'],
   shortage: ['fulfillment-path', 'shortage', 'orders', 'delivery'],
 };
+const viewState = createPageViewState('inventory-qll');
 export default function ConfiguredWorkbench() {
-  const [channel, setChannel] = useState(false);
-  const [tab, setTab] = useState('category'),
-    [date, setDate] = useState(businessDay),
+  const [channel, setChannel] = usePageViewField(
+    React,
+    viewState,
+    'scope',
+    false,
+    (value) => (value ? 'all-channel' : 'company'),
+    (value) => value === 'all-channel',
+  );
+  const [tab, setTab] = usePageViewField(React, viewState, 'tab', 'category'),
+    [date, setDate] = usePageViewField(React, viewState, 'asOf', businessDay),
     [draft, setDraft] = useState(businessDay),
     [revision, refresh] = useState(0);
+  useEffect(() => setDraft(date), [date]);
   const { parts, errors, busy } = useConfiguredOverview(config, date, '', revision, (v) =>
     updateContext('overview', v),
   );
@@ -209,9 +220,21 @@ export default function ConfiguredWorkbench() {
                     : views[tab]
                 }
                 date={date}
-                onRead={(v) => updateContext('data', v)}
+                onRead={(v) => {
+                  updateContext('data', v);
+                  updateContext('queryState', {
+                    state: ['available', 'empty'].includes(v.status) ? 'ready' : v.status,
+                    message: v.message,
+                  });
+                  updateContext('fullChainWorkspace', {
+                    realData: ['available', 'empty'].includes(v.status),
+                    date,
+                    scope: 'base',
+                  });
+                }}
               />
             </section>
+            <ConfiguredTrends key={revision} date={date} />
           </div>
         </section>
       </div>
