@@ -918,7 +918,7 @@
           "failed": "The request failed and local state was not changed. Refresh the authoritative queue before deciding.",
           "reference": " (Error reference: {{id}}, quote it to your administrator)",
           "upstream": {
-            "SALES_PLAN_APPROVAL_STATE_INVALID": "This plan's status does not allow a direct approve or reject. Returned plans must be resubmitted (Resubmit returned plan), then refresh the queue.",
+            "SALES_PLAN_APPROVAL_STATE_INVALID": "This version cannot perform the requested approval action. Ask an administrator to check its approval instance.",
             "NOTIFICATION_PAYLOAD_INVALID": "The server rejected the approval notification payload. This is a server-side problem that refreshing cannot fix - send the error reference to the backend team.",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "The server says this account no longer holds the role or org scope for this node. Refresh and retry, and ask an administrator to check your roles."
           }
