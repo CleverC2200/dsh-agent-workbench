@@ -60,6 +60,7 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
       await expect(summary).toBeVisible();
       assert.equal(await summary.evaluate((el) => el.parentElement.open), false);
     }
+    assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
     for (const width of [1280, 560]) {
       await page.setViewportSize({ width, height: 900 });
       const sizes = await root.evaluate((el) => ({

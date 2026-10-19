@@ -16,14 +16,14 @@ test('four perspectives use visible values without missing-data list', () => {
   const metrics = [
     { name: '销售预算达成率', value: 90, unit: '%' },
     { name: '订单满足率', value: 90, unit: '%' },
-    { name: '库存量', value: 42, unit: '万件' },
+    { name: '库存量', value: 42, unit: '万箱' },
   ];
   const overview = analyzePerspective('overview', '9月', metrics);
   assert.equal(overview.total, 2);
   assert.equal(overview.score, 0);
   assert.match(overview.copy, /销售预算达成率90%（严重/);
   assert.match(overview.copy, /订单满足率90%（预警/);
-  assert.match(overview.copy, /库存量42万件/);
+  assert.match(overview.copy, /库存量42万箱/);
   const sales = analyzePerspective('sales', '9月', metrics);
   assert.doesNotMatch(sales.copy, /订单满足率|缺失|待接入/);
   const production = analyzePerspective('production', '9月', metrics);

@@ -98,7 +98,7 @@ import {
 
 type MetricName = '作废率' | '改单率' | '订单满足率' | '准交率' | '可发货天数';
 type MetricSnapshot = Record<MetricName, number>;
-type MetricUnit = '%' | '天' | '万件';
+type MetricUnit = '%' | '天' | '万箱';
 type OverviewMetricName =
   | '销售预算达成率'
   | '销售提报准确率'
@@ -398,9 +398,9 @@ const demoOverviewMetricMeta: Array<{
   },
   { name: '生产计划达成率', unit: '%', target: 99, targetText: '健康 > 99%', lowerBetter: false },
   { name: '订单满足率', unit: '%', target: 95, targetText: '目标 > 95%', lowerBetter: false },
-  { name: '订单缺货量', unit: '万件', target: 0, targetText: '目标 = 0万件', lowerBetter: true },
+  { name: '订单缺货量', unit: '万箱', target: 0, targetText: '目标 = 0万箱', lowerBetter: true },
   { name: '可发货天数', unit: '天', target: 12, targetText: '目标 < 12天', lowerBetter: true },
-  { name: '库存量', unit: '万件', target: null, targetText: '无目标', lowerBetter: false },
+  { name: '库存量', unit: '万箱', target: null, targetText: '无目标', lowerBetter: false },
 ];
 
 const productionMetricNames: ProductionDrillMetricName[] = [
@@ -492,7 +492,7 @@ const metricHelp: Record<OverviewMetricName, string> = {
   订单满足率:
     '指标定义：计划可满足订单需求量占订单需求总量的比例。公式：可满足订单需求量 ÷ 订单需求总量 × 100%。目标值：> 95%。',
   订单缺货量:
-    '指标定义：统计周期内因可用库存不足而无法满足订单的商品数量。常见公式：订单需求量 - 可满足订单量，最低为0。演示目标值：0万件，正式口径需按企业订单行与缺货认定规则确认。',
+    '指标定义：统计周期内因可用库存不足而无法满足订单的商品数量。常见公式：订单需求量 - 可满足订单量，最低为0。演示目标值：0万箱，正式口径需按企业订单行与缺货认定规则确认。',
   可发货天数:
     '指标定义：当前可用库存按照计划日均需求可支撑的天数。公式：可用库存量 ÷ 计划日均需求量。目标值：< 12天。',
   库存量: '基地日库存实存数量，按库存来源的实际快照汇总。可用库存单独用于可发货天数，不与在途量相加；该指标观察库存规模，不设置统一目标。',
@@ -1189,7 +1189,7 @@ function answerQuestion(question: string) {
   if (question.includes('基地') && question.includes('满足率'))
     return '本月五大基地订单满足率均未达到 95% 目标。华东最低，为 90.69%，环比下降 6.23pp；其后依次是西南 92.65%、遂平 92.69%、郑州 92.70%、华南 93.60%。建议优先处理华东预制食材和休闲品类缺货。';
   if (question.includes('水饺'))
-    return '水饺月度订单满足率 86.68%，缺货 22.84 万件。主要根因是冷鲜肉质量问题导致封存降速、遂平三条线双班人员不足，以及西南新配方使产能下降 30%。当前动作包括郑州日产提升至 2.8 万件、遂平提升至 2.4 万件、华南支援 3.6 万件，并逐步恢复单线 40—45T 产能。';
+    return '水饺月度订单满足率 86.68%，缺货 22.84 万箱。主要根因是冷鲜肉质量问题导致封存降速、遂平三条线双班人员不足，以及西南新配方使产能下降 30%。当前动作包括郑州日产提升至 2.8 万箱、遂平提升至 2.4 万箱、华南支援 3.6 万箱，并逐步恢复单线 40—45T 产能。';
   if (question.includes('库存') || question.includes('12天'))
     return '当前超过 12 天的组合共 5 个：郑州×火锅料 20.1 天、华东×面点 15.5 天、郑州×汤圆 15.0 天、遂平×面点 13.1 天、华南×馄饨 12.2 天。其中郑州×火锅料风险最高，需加快政策品拉货并调整后续下单节奏。';
   if (question.includes('郑州') || question.includes('准交率'))
@@ -1207,12 +1207,12 @@ function matrixClass(value: number, mode: 'rate' | 'stock') {
 
 const matrixListMeta: Record<
   MatrixMode,
-  { label: string; target: string; unit: '%' | '天' | '万件' }
+  { label: string; target: string; unit: '%' | '天' | '万箱' }
 > = {
   rate: { label: '订单满足率', target: '> 95%', unit: '%' },
   stock: { label: '可发货天数', target: '< 12天', unit: '天' },
   plan: { label: '生产计划达成率', target: '≥ 100%', unit: '%' },
-  inventory: { label: '库存量', target: '无目标', unit: '万件' },
+  inventory: { label: '库存量', target: '无目标', unit: '万箱' },
   delivery: { label: '准交率', target: '> 98.5%', unit: '%' },
   change: { label: '改单率', target: '< 2%', unit: '%' },
   void: { label: '作废率', target: '< 6%', unit: '%' },
@@ -1465,27 +1465,27 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '销售计划准确率',
       value: '95.6%',
-      detail: '842万件 / 881万件',
+      detail: '842万箱 / 881万箱',
       state: '预警',
       tone: 'watch',
     },
     {
       name: '需求预测准确率',
       value: '95.5%',
-      detail: '841万件 / 881万件',
+      detail: '841万箱 / 881万箱',
       state: '正常',
       tone: 'good',
     },
     {
       name: '生产计划达成',
       value: '61.7%',
-      detail: '512万件 / 830万件',
+      detail: '512万箱 / 830万箱',
       state: '预警',
       tone: 'watch',
     },
     {
       name: '当前库存',
-      value: '50.9万件',
+      value: '50.9万箱',
       detail: '周转 7天 / 目标 6天',
       state: '预警',
       tone: 'watch',
@@ -1493,11 +1493,11 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '库存健康度',
       value: '82天',
-      detail: '风险 6.5万件 / 5 SKU',
+      detail: '风险 6.5万箱 / 5 SKU',
       state: '预警',
       tone: 'watch',
     },
-    { name: '订单缺口', value: '1.4万件', detail: '310张待补订单', state: '风险', tone: 'bad' },
+    { name: '订单缺口', value: '1.4万箱', detail: '310张待补订单', state: '风险', tone: 'bad' },
     {
       name: '订单履约',
       value: '97.5%',
@@ -1510,9 +1510,9 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '水饺',
       sales: '3.2亿 / 62%',
-      plan: '402万件 / 96%',
-      production: '386万件 / 96.5%',
-      inventory: '18万件 / +20%',
+      plan: '402万箱 / 96%',
+      production: '386万箱 / 96.5%',
+      inventory: '18万箱 / +20%',
       delivery: '94.2% / 96.1%',
       result: '产能承压',
       tone: 'watch',
@@ -1520,9 +1520,9 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '汤圆',
       sales: '1.4亿 / 58%',
-      plan: '178万件 / 91%',
-      production: '169万件 / 93.9%',
-      inventory: '13.5万件 / +35%',
+      plan: '178万箱 / 91%',
+      production: '169万箱 / 93.9%',
+      inventory: '13.5万箱 / +35%',
       delivery: '95.1% / 92.1%',
       result: '库存交付双风险',
       tone: 'bad',
@@ -1530,9 +1530,9 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '馄饨',
       sales: '1.5亿 / 60%',
-      plan: '186万件 / 93%',
-      production: '173万件 / 93.5%',
-      inventory: '7.2万件 / -10%',
+      plan: '186万箱 / 93%',
+      production: '173万箱 / 93.5%',
+      inventory: '7.2万箱 / -10%',
       delivery: '93.8% / 95.4%',
       result: '产能缺口',
       tone: 'bad',
@@ -1540,9 +1540,9 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '面点',
       sales: '0.8亿 / 67%',
-      plan: '95万件 / 93%',
-      production: '92万件 / 96.8%',
-      inventory: '5.8万件 / -3%',
+      plan: '95万箱 / 93%',
+      production: '92万箱 / 96.8%',
+      inventory: '5.8万箱 / -3%',
       delivery: '97.3% / 98.2%',
       result: '健康',
       tone: 'good',
@@ -1550,9 +1550,9 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
     {
       name: '粽子',
       sales: '0.6亿 / 50%',
-      plan: '72万件 / 90%',
-      production: '65万件 / 90.3%',
-      inventory: '8.5万件 / +70%',
+      plan: '72万箱 / 90%',
+      production: '65万箱 / 90.3%',
+      inventory: '8.5万箱 / +70%',
       delivery: '91.5% / 90.8%',
       result: '库存积压',
       tone: 'bad',
@@ -1561,10 +1561,10 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
   const focusCopy: Record<string, string> = {
     品类经营总览: '从销售、计划、生产、库存到交付统一观察五大品类经营健康度。',
     销售承接分析: '销售达成率 61.0%，华南与西南承接进度偏慢，需校准渠道增量。',
-    供需平衡分析: '当前产能缺口 8.3 万件，集中在 305 馄饨及重点水饺规格。',
+    供需平衡分析: '当前产能缺口 8.3 万箱，集中在 305 馄饨及重点水饺规格。',
     交付履约分析: '订单满足率 94.6%、准交率 96.2%，郑州装车节拍是主要约束。',
-    生产产能分析: '遂平与华南具备提产空间，预计可覆盖 5 万件重点缺口。',
-    库存结构分析: '库存 50.9 万件总体偏高，西南滞库与华东缺货同时存在。',
+    生产产能分析: '遂平与华南具备提产空间，预计可覆盖 5 万箱重点缺口。',
+    库存结构分析: '库存 50.9 万箱总体偏高，西南滞库与华东缺货同时存在。',
   };
   return (
     <div className="page workspace-page coordination-page">
@@ -1593,18 +1593,18 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
           </span>
           <p className="summary-copy">
             {'本月计划需求 '}
-            <b>{'881 万件'}</b>
+            <b>{'881 万箱'}</b>
             {'，销售计划准确率 '}
             <b>{'95.6%'}</b>
             {'；生产计划完成 61.7%，库存与交付指标均低于目标。'}
           </p>
-          <strong>{'建议：遂平提产 2 万件、华南双班增产 3 万件并启动 ODM 寻源。'}</strong>
+          <strong>{'建议：遂平提产 2 万箱、华南双班增产 3 万箱并启动 ODM 寻源。'}</strong>
         </div>
         <div className="summary-note">
           <small>{'供需侧'}</small>
           <p>
             {'产能缺口 '}
-            <b>{'8.3 万件'}</b>
+            <b>{'8.3 万箱'}</b>
             {'，集中于 305 馄饨等重点品类。'}
           </p>
         </div>
@@ -1612,7 +1612,7 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
           <small>{'库存交付侧'}</small>
           <p>
             {'库存 '}
-            <b>{'50.9 万件'}</b>
+            <b>{'50.9 万箱'}</b>
             {'且结构错配，准交率低于目标。'}
           </p>
         </div>
@@ -1708,32 +1708,32 @@ function DemandOperationsPage() {
   const demandItems = [
     {
       name: '水饺',
-      forecast: '42.6万件',
-      actual: '48.9万件',
+      forecast: '42.6万箱',
+      actual: '48.9万箱',
       bias: '+14.8%',
       signal: '需求上扬',
       level: 'bad',
     },
     {
       name: '预制食材',
-      forecast: '31.8万件',
-      actual: '35.2万件',
+      forecast: '31.8万箱',
+      actual: '35.2万箱',
       bias: '+10.7%',
       signal: '促销拉动',
       level: 'watch',
     },
     {
       name: '火锅料',
-      forecast: '28.4万件',
-      actual: '25.1万件',
+      forecast: '28.4万箱',
+      actual: '25.1万箱',
       bias: '-11.6%',
       signal: '库存承压',
       level: 'bad',
     },
     {
       name: '休闲',
-      forecast: '22.7万件',
-      actual: '23.4万件',
+      forecast: '22.7万箱',
+      actual: '23.4万箱',
       bias: '+3.1%',
       signal: '需求平稳',
       level: 'good',
@@ -1830,7 +1830,7 @@ function DemandOperationsPage() {
             <i>{'01'}</i>
             <div>
               <h3>{'确认水饺渠道增量'}</h3>
-              <p>{'华东大促追加 6.3 万件，需在 8 月 25 日前锁定。'}</p>
+              <p>{'华东大促追加 6.3 万箱，需在 8 月 25 日前锁定。'}</p>
             </div>
             <b>{'销售负责'}</b>
           </article>
@@ -2323,13 +2323,13 @@ function IntelligentWorkbenchPage({
     {
       name: '库存量',
       value: '86.40',
-      unit: '万件',
+      unit: '万箱',
       statistic: '快照指标',
       period: '最新快照 · 截至2026.08.30',
-      previous: '90.20万件',
-      same: '94.60万件',
-      delta: '-3.80万件',
-      yoy: '-8.20万件',
+      previous: '90.20万箱',
+      same: '94.60万箱',
+      delta: '-3.80万箱',
+      yoy: '-8.20万箱',
       target: '无目标',
       gap: '数量观察项',
       status: '无目标',
@@ -2381,7 +2381,7 @@ function IntelligentWorkbenchPage({
     const planned = metrics['客户计划量']?.value;
     const actual = metrics['客户实际发货量']?.value;
     if (planned !== null && planned !== undefined && actual !== null && actual !== undefined)
-      items.push(`客户计划/实际发货量${formatNumber(planned)}/${formatNumber(actual)}万件`);
+      items.push(`客户计划/实际发货量${formatNumber(planned)}/${formatNumber(actual)}万箱`);
     return items.length ? `；${items.join('，')}` : '';
   }, [live?.data]);
   const pageBriefing = summarizePage(live?.data, live?.busy);
@@ -2681,7 +2681,7 @@ function IntelligentWorkbenchPage({
                   data-context-id={`intelligent-metric-${item.name}`}
                   data-context-scope="经营指标"
                   data-context-label={item.name}
-                  data-context-summary={`${item.name} ${item.value}${item.unit}，环比变化 ${String(item.delta).replaceAll('万件', '万箱')}，${item.target}`}
+                  data-context-summary={`${item.name} ${item.value}${item.unit}，环比变化 ${String(item.delta)}，${item.target}`}
                   onClick={() =>
                     onOpenV02(item.scope, item.scope === 'production' ? 'category' : undefined)
                   }
@@ -2702,7 +2702,7 @@ function IntelligentWorkbenchPage({
                   </div>
                   <div className="kpi-value">
                     <strong>{item.value}</strong>
-                    <span>{item.unit.replace('万件', '万箱')}</span>
+                    <span>{item.unit}</span>
                   </div>
                   <div className="kpi-comparison-head">
                     <span>{'对比指标'}</span>
@@ -2712,7 +2712,7 @@ function IntelligentWorkbenchPage({
                     <div>
                       <span>
                         {'上月同期 '}
-                        <em>{String(item.previous).replaceAll('万件', '万箱')}</em>
+                        <em>{String(item.previous)}</em>
                       </span>
                       <b className="good">
                         {item.deltaDirection === 'none' ? null : item.deltaDirection === 'down' ? (
@@ -2720,13 +2720,13 @@ function IntelligentWorkbenchPage({
                         ) : (
                           <TrendingUp />
                         )}
-                        {String(item.delta).replaceAll('万件', '万箱')}
+                        {String(item.delta)}
                       </b>
                     </div>
                     <div>
                       <span>
                         {'去年同月同期 '}
-                        <em>{String(item.same).replaceAll('万件', '万箱')}</em>
+                        <em>{String(item.same)}</em>
                       </span>
                       <b className="good">
                         {item.yoyDirection === 'none' ? null : item.yoyDirection === 'down' ? (
@@ -2734,7 +2734,7 @@ function IntelligentWorkbenchPage({
                         ) : (
                           <TrendingUp />
                         )}
-                        {String(item.yoy).replaceAll('万件', '万箱')}
+                        {String(item.yoy)}
                       </b>
                     </div>
                   </div>
@@ -3489,7 +3489,7 @@ function DigitalHumanWorkbenchPage({
       name: '库存指标',
       metrics: [
         { name: '可发货天数', value: '10.23天', target: '目标 ≤ 12天', state: '健康' },
-        { name: '大日期数量', value: '6.50万件', target: '无目标', state: '健康' },
+        { name: '大日期数量', value: '6.50万箱', target: '无目标', state: '健康' },
       ],
     },
   ];
@@ -3512,7 +3512,7 @@ function DigitalHumanWorkbenchPage({
     },
     {
       name: '库存量',
-      value: '86.40万件',
+      value: '86.40万箱',
       detail: '截至 2026.08.30 · 快照指标',
       status: '数量观察',
       tone: 'neutral',
@@ -5061,7 +5061,7 @@ export default function Home({
       </div>
       <div className="kpi-value">
         <strong>{Number.isFinite(kpi.value) ? formatNumber(kpi.value, 2) : '-'}</strong>
-        {Number.isFinite(kpi.value) && <span>{kpi.unit.replace('万件', '万箱')}</span>}
+        {Number.isFinite(kpi.value) && <span>{kpi.unit}</span>}
       </div>
       {kpi.name === '生产计划达成率' &&
         !Number.isFinite(kpi.value) &&
@@ -6228,7 +6228,7 @@ export default function Home({
               : metric === '订单满足率'
                 ? 95
                 : 100;
-        const unit = metric === '可发货天数' ? '天' : metric === '订单缺货量' ? '万件' : '%';
+        const unit = metric === '可发货天数' ? '天' : metric === '订单缺货量' ? '万箱' : '%';
         const rawGap = value - target;
         return { metric, value, risk, target, unit, rawGap };
       })
