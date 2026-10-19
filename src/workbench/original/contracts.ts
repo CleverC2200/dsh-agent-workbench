@@ -8,12 +8,12 @@ export type GeaSalesPlanGroupMetrics = {
   dimension: 'area' | 'province' | 'region' | 'base' | 'customer';
   key: string;
   targetAmount: string;
-  planAmount: string;
-  diffAmount: string;
-  planQty: string;
-  amountProgress?: string;
-  shipAmount?: string;
-  shipQty?: string;
+  planAmount: string | null;
+  diffAmount: string | null;
+  planQty: string | null;
+  amountProgress?: string | null;
+  shipAmount?: string | null;
+  shipQty?: string | null;
 };
 
 export type GeaSalesPlanPage<T> = {
@@ -23,7 +23,12 @@ export type GeaSalesPlanPage<T> = {
   current: number;
   pages: number;
   groupMetrics?: GeaSalesPlanGroupMetrics[];
-  summary?: { targetAmount: string; planAmount: string; diffAmount: string; planQty: string };
+  summary?: {
+    targetAmount: string;
+    planAmount: string | null;
+    diffAmount: string | null;
+    planQty: string | null;
+  };
 };
 
 export type GeaSalesPlanPeriod = {
@@ -53,16 +58,16 @@ export type GeaSalesPlanListItem = {
   orderType?: 'M' | 'Z';
   monthlyApproved?: boolean;
   hasCorrection?: boolean;
-  mPlanAmount?: string;
-  mPlanQty?: string;
-  shipAmount?: string;
-  shipQty?: string;
-  corrPlanAmount?: string;
-  corrPlanQty?: string;
-  amountProgress?: string;
-  correctionProgress?: string;
-  prevAdjAddQty?: string;
-  prevAdjCutQty?: string;
+  mPlanAmount?: string | null;
+  mPlanQty?: string | null;
+  shipAmount?: string | null;
+  shipQty?: string | null;
+  corrPlanAmount?: string | null;
+  corrPlanQty?: string | null;
+  amountProgress?: string | null;
+  correctionProgress?: string | null;
+  prevAdjAddQty?: string | null;
+  prevAdjCutQty?: string | null;
   planId: string;
   versionId: string;
   seq: number;
@@ -106,6 +111,7 @@ export type GeaSalesPlanPageQuery = {
   orgCode?: string;
   baseName?: string;
   status?: number;
+  statuses?: number[];
   pageNo?: number;
   pageSize?: number;
   signal?: AbortSignal;
@@ -202,6 +208,7 @@ export type GeaSalesPlanDetail = {
   correctionContext?: {
     contract: 'absolute-net-v1';
     monthlyApproved: boolean;
+    hasCorrection?: boolean;
     approvalOpen: boolean;
   };
   dmsMock?: {
@@ -234,6 +241,7 @@ export type GeaSalesPlanSkuDiff = {
 
 export type GeaSalesPlanResourceQuery = {
   planId: string;
+  orderType?: 'M' | 'Z';
   signal?: AbortSignal;
 };
 

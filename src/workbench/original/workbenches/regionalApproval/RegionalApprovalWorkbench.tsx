@@ -1194,24 +1194,24 @@ const RegionalApprovalWorkbench: React.FC<{
       pendingCount: liveRows.filter((row) => row.approvalState === 'pending').length,
       warningCount: liveRows.filter((row) => row.approvalState === 'returned').length,
       // 汇总读展示行（含版本汇总与本节点调整），和表格里看到的数保持一致。
-      quantity:
-        serverSummary?.planQty ??
-        (draftedLiveRows.length === 0
+      quantity: serverSummary
+        ? (serverSummary.planQty ?? '—')
+        : draftedLiveRows.length === 0
           ? '0'
           : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentQty))
             ? addExactDecimals(draftedLiveRows.map((row) => row.currentQty))
             : hasCompleteDetailMetrics
               ? addExactDecimals(detailMetrics.map((detail) => detail!.baseQty))
-              : '—'),
-      amount:
-        serverSummary?.planAmount ??
-        (draftedLiveRows.length === 0
+              : '—',
+      amount: serverSummary
+        ? (serverSummary.planAmount ?? '—')
+        : draftedLiveRows.length === 0
           ? '0'
           : draftedLiveRows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.currentAmount))
             ? addExactDecimals(draftedLiveRows.map((row) => row.currentAmount))
             : hasCompleteDetailMetrics
               ? addExactDecimals(detailMetrics.map((detail) => detail!.baseAmount))
-              : '—'),
+              : '—',
       targetAmount:
         serverSummary?.targetAmount ??
         addExactDecimals(draftedLiveRows.map((row) => row.targetAmount)),
@@ -2816,7 +2816,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   {t('common.assistantSurface.regionalApproval.scopeTotals.planQuantity')}
                 </small>
                 <strong>
-                  {!dashboardReady
+                  {!dashboardReady || metrics.quantity === '—'
                     ? '—'
                     : `${quantityText(metrics.quantity)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
                 </strong>
