@@ -39,11 +39,11 @@ const policy = (roles = ['region'], status = 2) => ({
   allowedActions: [],
   roleActions: roles.map((role) => ({ role, allowedActions: ['SAVE', 'APPROVE', 'REJECT'] })),
 });
-test('visible role can act on pending and returned plans without a resubmit service account', () => {
+test('returned versions cannot approve while normal approvals and continued returns remain available', () => {
   for (const status of [1, 2, 3, 4, 6, 7, 8, 9]) {
     const access = m.salesPlanAccessForRow(row(status), detail(status), ['region']);
     assert.equal(access.approvalRole, 'region');
-    assert.deepEqual(access.allowedActions, ['APPROVE', 'REJECT']);
+    assert.deepEqual(access.allowedActions, status >= 6 ? ['REJECT'] : ['APPROVE', 'REJECT']);
   }
   for (const status of [0, 5, 10])
     assert.equal(m.salesPlanAccessForRow(row(status), detail(status), ['region']), undefined);
@@ -62,10 +62,7 @@ test('returned plans use the explicitly granted role, never the return target as
     [9, 'category'],
   ]) {
     const d = { ...detail(status), actionContext: policy([], status) };
-    assert.deepEqual(m.salesPlanAccessForRow(row(status), d, [role], role).allowedActions, [
-      'APPROVE',
-      'REJECT',
-    ]);
+    assert.deepEqual(m.salesPlanAccessForRow(row(status), d, [role], role).allowedActions, ['REJECT']);
     assert.equal(m.salesPlanAccessForRow(row(status), d, [], role), undefined);
     assert.equal(
       m.salesPlanAccessForRow(

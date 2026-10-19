@@ -4,7 +4,8 @@ import {
   correctionDecimal,
 } from './salesPlanCorrectionModel.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
-import { salesPlanWorkflow, type SalesPlanWorkflowRow } from '../../../salesPlanWorkflow.ts';
+import { type SalesPlanWorkflowRow } from '../../../salesPlanWorkflow.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
 import { isBackendHttpError } from '../../../http-error.ts';
 import type {
   GeaSalesPlanDetail,
@@ -52,6 +53,17 @@ export type SalesPlanSubmitInput = {
     nextSeq: number;
     nextStatus: number;
   };
+};
+
+export const salesPlanCanResubmit = (
+  version: GeaSalesPlanVersion,
+  stages: readonly ApprovalStageId[],
+  userId?: string,
+): boolean => {
+  if (!version.effective || version.status < 6 || version.status > 9) return false;
+  if (version.status === 6) return Boolean(userId && version.submitter === userId);
+  const role = version.status === 7 ? 'region' : version.status === 8 ? 'province' : 'area';
+  return stages.includes(role);
 };
 
 export type SalesPlanSubmitErrorKind =
@@ -164,7 +176,7 @@ export const prepareSalesPlanResubmit = (
 ): SalesPlanSubmitInput => {
   // source 中的身份、价格、周期和路由字段均来自已重新读取的 GEA；调用方只能提供数量调整。
   const version: GeaSalesPlanVersion = source.detail.currentVersion;
-  const nextStatus = salesPlanWorkflow(version.planTypeCode, rows).resubmit(version.status);
+  const nextStatus = version.status >= 6 && version.status <= 9 ? version.status - 5 : undefined;
   const correction = version.orderType === 'Z';
   if (
     correction &&
@@ -407,8 +419,45 @@ export const salesPlanResubmitReadbackMatches = (
   receipt: GeaSalesPlanSubmitReceipt,
   detail: GeaSalesPlanDetail,
   request?: GeaSalesPlanSubmitRequest,
+  sourceSkus?: readonly GeaSalesPlanSku[],
 ): boolean => {
   const current = detail.currentVersion;
+  if (request?.orderType === 'M') {
+    if (
+      current.orderType !== 'M' ||
+      !sourceSkus ||
+      detail.skus.length !== request.items.length ||
+      new Set(detail.skus.map((sku) => sku.skuCode)).size !== detail.skus.length
+    ) return false;
+    const fields = [
+      ['regionConfirmedQty', 'regionConfirmedAmount'],
+      ['provinceConfirmedQty', 'provinceConfirmedAmount'],
+      ['areaConfirmedQty', 'areaConfirmedAmount'],
+      ['categoryConfirmedQty', 'categoryConfirmedAmount'],
+    ] as const;
+    const matches = request.items.every((item) => {
+      const sku = detail.skus.find((row) => row.skuCode === item.skuCode);
+      const source = sourceSkus.find((row) => row.skuCode === item.skuCode);
+      if (!sku || !source || sku.versionId !== receipt.versionId) return false;
+      try {
+        if (!(['qty', 'price', 'baseQty'] as const).every((field) =>
+          correctionDecimal(sku[field]).eq(correctionDecimal(item[field])),
+        )) return false;
+        if (!correctionDecimal(sku.amt).eq(
+          correctionDecimal(item.qty).mul(correctionDecimal(item.price)).toDecimalPlaces(2),
+        )) return false;
+        return fields.every((pair, index) => pair.every((field) => {
+          const expected = index < request.status - 1 ? source[field] : null;
+          const actual = sku[field];
+          return expected == null ? actual == null : actual != null &&
+            correctionDecimal(actual).eq(correctionDecimal(expected));
+        }));
+      } catch {
+        return false;
+      }
+    });
+    if (!matches) return false;
+  }
   if (request?.orderType === 'Z') {
     if (
       current.orderType !== 'Z' ||
