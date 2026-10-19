@@ -778,6 +778,9 @@
           "unavailable": "The result is unknown. To prevent duplicate versions, retry with the same idempotency key and identical body until the result is resolved.",
           "failed": "Resubmission failed and local state was not changed. Refresh authoritative data before deciding."
         },
+        "inheritance": "Changing submitted quantities does not recalculate inherited confirmations. Review all retained quantities and amounts before submitting.",
+        "unitPrice": "Unit price",
+        "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
         "nextStatus": "Resubmission target status"
       },

@@ -1,3 +1,4 @@
+import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
 import { CorrectionWorkbench } from './CorrectionWorkbench.tsx';
@@ -344,6 +345,7 @@ const RegionalApprovalWorkbench: React.FC<{
   ) => void;
   liveActionsEnabled?: boolean;
   automaticAnalysisEnabled?: boolean;
+  currentUserId?: string;
   onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
@@ -359,6 +361,8 @@ const RegionalApprovalWorkbench: React.FC<{
   onContextChange,
   liveActionsEnabled = false,
   automaticAnalysisEnabled = false,
+  onResubmit,
+  currentUserId,
   approvalStages,
   toolCall,
   onToolResult,
@@ -1135,13 +1139,21 @@ const RegionalApprovalWorkbench: React.FC<{
         : { row, skipReason: liveActionDisabledReason(row, kind) ?? 'missingAuthority' };
     });
   /** 分组内有可按角色审批或退回的成员时允许勾选。 */
+  const resubmitAllowed = (row: RegionalApprovalLiveRow) => {
+    const detail = liveAccess.entries[row.versionId];
+    return Boolean(
+      onResubmit && liveQuery.queueState.status === 'success' && detail &&
+      detail.currentVersion.id === row.versionId && detail.currentVersion.status === row.status &&
+      salesPlanCanResubmit(detail.currentVersion, roleStages, currentUserId),
+    );
+  };
   const liveRowSelectable = (row: RegionalApprovalLiveTableRow) => {
     if (row.kind !== 'plan') return false;
     const plans = row.members?.length ? row.members : [row.plan];
     return plans.some(
       (plan) =>
         liveActionDisabledReason(plan, 'APPROVE') === undefined ||
-        liveActionDisabledReason(plan, 'REJECT') === undefined,
+        liveActionDisabledReason(plan, 'REJECT') === undefined || resubmitAllowed(plan),
     );
   };
   // 分组选择会包含待回写/已回写成员；这两类终态在批次中明确跳过。
@@ -2343,6 +2355,11 @@ const RegionalApprovalWorkbench: React.FC<{
     },
   ];
 
+  const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
+  const resubmitRow = selectedLiveRows.length === 1 ? selectedLiveRows[0] : undefined;
+  const resubmitPeriod = liveQuery.periods.find((period) => period.periodId === resubmitRow?.periodId);
+  const resubmitDisabledReason = selectedLiveRows.length !== 1 ? '逐笔核对退回记录后修改提交；不可多选或与待审批记录混合提交。'
+    : !resubmitRow || !resubmitAllowed(resubmitRow) || !resubmitPeriod ? '当前身份、来源版本或完整明细尚未满足修改重提条件。' : undefined;
   const primaryActionDisabledReason = batchDisabledReason('APPROVE');
   const approvalActionButtons = (
     <>
@@ -2377,7 +2394,20 @@ const RegionalApprovalWorkbench: React.FC<{
           {t('common.assistantSurface.regionalApproval.liveAction.reject')}
         </Button>
       ) : null}
-      {liveActionsEnabled ? (
+      {liveActionsEnabled && hasReturnedSelection ? (
+        <Button
+          type="primary"
+          size="small"
+          disabled={Boolean(resubmitDisabledReason) || liveActionPlanId !== undefined}
+          title={resubmitDisabledReason}
+          onClick={() => {
+            if (!resubmitDisabledReason && resubmitRow && resubmitPeriod)
+              onResubmit?.(resubmitRow.planId, resubmitRow.versionId, resubmitPeriod);
+          }}
+        >
+          {t('common.assistantSurface.regionalApproval.liveSubmit.open')}
+        </Button>
+      ) : liveActionsEnabled ? (
         <Button
           type="primary"
           size="small"

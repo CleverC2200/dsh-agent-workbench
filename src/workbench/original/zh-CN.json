@@ -723,7 +723,7 @@
       "liveSubmit": {
         "title": "真实销售计划退回重提",
         "column": "退回重提",
-        "open": "重提",
+        "open": "修改后提交",
         "openFor": "重提 {{plan}}",
         "queueMode": "队列类型",
         "queueModes": {
@@ -743,7 +743,7 @@
         "sourceSummary": "{{count}} 个 SKU · 提报汇总 {{quantity}} · ¥{{amount}}",
         "targetSummary": "计划目标 {{quantity}} · ¥{{amount}}",
         "submitter": "提报人 {{code}} · {{name}}",
-        "confirmation": "我已核对真实周期、退回版本、SKU 汇总和提报人，并确认发起重提。",
+        "confirmation": "我已核对全部提报数量、金额和保留原值的继承确认数量、金额，并确认创建新版本。",
         "required": "请先确认真实重提范围。",
         "loading": "正在提交；结果返回前不能关闭或创建新的提交意图…",
         "close": "关闭",
@@ -756,7 +756,7 @@
         "created": "新建回执",
         "replayed": "幂等回放",
         "receiptBanner": "重提回执：计划 {{planId}} · 版本 {{versionId}} · 请求 {{requestId}} · 审计 {{auditId}}",
-        "refreshFailed": "重提已成功，但队列刷新失败；请关闭后手动刷新，勿创建新的提交意图。",
+        "refreshFailed": "重提已成功，但新版本明细或继承值尚未核验通过；请刷新权威状态，仅重试回读。",
         "disabled": {
           "completed": "该退回版本已收到服务端重提回执，已阻止重复操作。",
           "channelMissing": "计划 ID 不符合 p-{渠道}-{YYYY-MM}-{5位流水号} 业务编码，无法安全确定重提渠道。",
@@ -767,6 +767,7 @@
           "notReturned": "只有状态 6–9 的退回版本可以重提。"
         },
         "errors": {
+          "sourceLoad": "来源读取失败，请关闭后重新打开；当前编辑尚未提交。",
           "validation": "真实明细不满足提交合同；未发送请求，请刷新后核对字段、SKU 和汇总。",
           "sourceMismatch": "周期、版本、状态、SKU 或汇总证据不一致；已拒绝把样例数据或陈旧数据包装成真实提交。",
           "authentication": "当前用户会话已过期；重新登录并刷新真实来源后再操作。",
@@ -778,6 +779,9 @@
           "unavailable": "结果暂时未知；为避免重复版本，必须使用原幂等键和相同请求体重试并确认结果。",
           "failed": "重提失败且未更新本地状态；请刷新权威数据后再决定。"
         },
+        "inheritance": "修改提报数量不会自动重算继承确认值。下列确认数量 / 金额保留原值，后续节点确认值清空；请核对差异。",
+        "unitPrice": "单价",
+        "inheritedValues": "预计继承：区域 {{region}}；省区 {{province}}；大区 {{area}}",
         "quantity": "提报数量",
         "nextStatus": "重提目标状态"
       },

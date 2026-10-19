@@ -1,5 +1,5 @@
 import { correctionDecision, correctionLine } from './models/salesPlanCorrectionModel.ts';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import type {
@@ -43,6 +43,7 @@ export function RegionalApprovalResubmitDialog({
   const [correctionEdits, setCorrectionEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [confirmed, setConfirmed] = useState(false);
   const [attempt, setAttempt] = useState<SalesPlanSubmitAttempt>();
   const [retryable, setRetryable] = useState(false);
@@ -72,8 +73,8 @@ export function RegionalApprovalResubmitDialog({
         });
         setSkus(rows);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setError('sourceMismatch');
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error && cause.message === 'sourceMismatch' ? 'sourceMismatch' : 'sourceLoad');
       });
     return () => controller.abort();
   }, [planId, versionId, period, client]);
@@ -96,13 +97,14 @@ export function RegionalApprovalResubmitDialog({
   }, [source, skus, correctionEdits]);
   const readBack = async (value: GeaSalesPlanSubmitReceipt) => {
     const detail = await client.detail.invoke({ planId });
-    if (!salesPlanResubmitReadbackMatches(versionId, value, detail, input?.request))
+    if (!salesPlanResubmitReadbackMatches(versionId, value, detail, input?.request, source?.skus))
       throw new Error('readback');
     setVerified(true);
     onSucceeded();
   };
   const submit = async () => {
-    if (!connected || !input || !confirmed || busy || verified) return;
+    if (!connected || !input || !confirmed || submitting.current || verified) return;
+    submitting.current = true;
     setBusy(true);
     setError('');
     setRetryable(false);
@@ -134,6 +136,7 @@ export function RegionalApprovalResubmitDialog({
       setError(failure.kind);
       setRetryable(failure.retrySameIntent);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
@@ -179,6 +182,8 @@ export function RegionalApprovalResubmitDialog({
               name: source.currentUser.username,
             })}
           </p>
+          <p>{source.detail.logs.filter((log) => log.actionCode === 'REJECT').at(-1)?.remark}</p>
+          {source.detail.currentVersion.orderType === 'M' && <Alert type="info" content={tr('inheritance')} />}
           <div style={{ maxHeight: 360, overflow: 'auto' }}>
             {skus.map((sku, index) => (
               <label
@@ -187,12 +192,21 @@ export function RegionalApprovalResubmitDialog({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
+                  flexWrap: 'wrap',
                   marginBottom: 8,
                 }}
               >
                 <span>
                   {sku.skuCode} · {sku.productCategName}
                 </span>
+                <span>{tr('unitPrice')}: {sku.price}</span>
+                {source.detail.currentVersion.orderType === 'M' && (
+                  <span>{tr('inheritedValues', {
+                    region: source.detail.currentVersion.status >= 7 ? `${sku.regionConfirmedQty ?? '—'} / ${sku.regionConfirmedAmount ?? '—'}` : '—',
+                    province: source.detail.currentVersion.status >= 8 ? `${sku.provinceConfirmedQty ?? '—'} / ${sku.provinceConfirmedAmount ?? '—'}` : '—',
+                    area: source.detail.currentVersion.status >= 9 ? `${sku.areaConfirmedQty ?? '—'} / ${sku.areaConfirmedAmount ?? '—'}` : '—',
+                  })}</span>
+                )}
                 <Input
                   aria-label={`${source.detail.currentVersion.orderType === 'Z' ? '纠偏调整量' : tr('quantity')} ${sku.skuCode}`}
                   value={

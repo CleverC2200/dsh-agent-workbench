@@ -493,6 +493,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}
                 onContextChange={onContextChange}
+                currentUserId={status.user?.id}
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
                 onResubmit={(planId, versionId, period) =>
