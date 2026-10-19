@@ -2468,7 +2468,7 @@ const RegionalApprovalWorkbench: React.FC<{
 
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const submissionItems = (): SalesPlanSubmissionItem[] =>
-    selectedLiveRows.flatMap((row): SalesPlanSubmissionItem[] => {
+    selectedPendingActionRows.flatMap((row): SalesPlanSubmissionItem[] => {
       const label =
         projectRegionalApprovalLiveDimension(row, dimension).name ?? row.dealerName ?? row.planId;
       const period = liveQuery.periods.find(
@@ -2498,7 +2498,7 @@ const RegionalApprovalWorkbench: React.FC<{
     });
   const selectedSubmissionItems = submissionItems();
   const resubmitDisabledReason =
-    selectedSubmissionItems.length !== selectedLiveRows.length ||
+    selectedSubmissionItems.length !== selectedPendingActionRows.length ||
     (!onSubmitBatch && selectedLiveRows.length !== 1)
       ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
       : undefined;
@@ -2506,7 +2506,7 @@ const RegionalApprovalWorkbench: React.FC<{
     batchDisabledReason('APPROVE') ??
     (onSubmitBatch &&
     selectedLiveRows.length > 1 &&
-    selectedSubmissionItems.length !== selectedLiveRows.length
+    selectedSubmissionItems.length !== selectedPendingActionRows.length
       ? 'missingAuthority'
       : undefined);
   const approvalActionButtons = (
