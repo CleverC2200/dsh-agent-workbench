@@ -313,3 +313,29 @@
   outline: 2px solid var(--brand-color, #df1732);
   outline-offset: 2px;
 }
+
+.submissionFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+}
+
+.submissionFooter :global(.arco-btn) {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.submissionLine > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 420px) {
+  .submissionLine {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -457,12 +457,13 @@ export function RegionalApprovalResubmitDialog({
     <Modal
       visible={visible}
       className={styles.liveModal}
+      style={{ width: 'min(920px, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }}
       title={batch ? tr('batchTitle', { count: items.length }) : tr('title')}
       maskClosable={false}
       closable={!busy}
       onCancel={() => onClose(pending)}
       footer={
-        <div className={styles.footer}>
+        <div className={styles.submissionFooter}>
           <Button disabled={busy} onClick={() => onClose(pending)}>
             {tr('close')}
           </Button>
