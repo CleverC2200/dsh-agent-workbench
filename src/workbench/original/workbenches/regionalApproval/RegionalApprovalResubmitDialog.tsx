@@ -54,6 +54,13 @@ export type SalesPlanSubmissionItem = {
     }
 );
 
+export type SalesPlanSubmissionOutcome = {
+  planId: string;
+  versionId: string;
+  status: 'success' | 'failed' | 'pending';
+  permissionDenied: boolean;
+};
+
 type SubmissionClient = SalesPlanSubmitClient &
   Pick<WorkbenchHost['salesPlan'], 'action' | 'draft'>;
 type SubmissionRow = {
@@ -92,6 +99,7 @@ export function RegionalApprovalResubmitDialog({
   t,
   onClose,
   onSucceeded,
+  onCompleted,
 }: {
   items: readonly SalesPlanSubmissionItem[];
   client: SubmissionClient;
@@ -100,7 +108,8 @@ export function RegionalApprovalResubmitDialog({
   onPendingChange?: (pending: boolean) => void;
   t: TFunction;
   onClose: (pending: boolean) => void;
-  onSucceeded: () => void;
+  onSucceeded?: () => void;
+  onCompleted?: (outcomes: readonly SalesPlanSubmissionOutcome[]) => void;
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`common.assistantSurface.regionalApproval.liveSubmit.${key}`, values);
@@ -408,7 +417,24 @@ export function RegionalApprovalResubmitDialog({
         }
         publish();
       }
-      if (mounted.current && next.some((row) => row.status === 'success')) onSucceeded();
+      if (mounted.current) {
+        onCompleted?.(
+          next
+            .filter((row) => row.attempt)
+            .map((row) => ({
+              planId: row.item.planId,
+              versionId: row.item.versionId,
+              status:
+                row.status === 'success'
+                  ? 'success'
+                  : row.status === 'failed'
+                    ? 'failed'
+                    : 'pending',
+              permissionDenied: row.error === 'permission',
+            })),
+        );
+        if (next.some((row) => row.status === 'success')) onSucceeded?.();
+      }
     } finally {
       submitting.current = false;
       if (mounted.current) setBusy(false);

@@ -1,4 +1,7 @@
-import type { SalesPlanSubmissionItem } from './RegionalApprovalResubmitDialog.tsx';
+import type {
+  SalesPlanSubmissionItem,
+  SalesPlanSubmissionOutcome,
+} from './RegionalApprovalResubmitDialog.tsx';
 import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
@@ -358,6 +361,7 @@ const RegionalApprovalWorkbench: React.FC<{
     label?: string,
   ) => void;
   onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
+  submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
   /** AG-UI 前端工具调用：agent 让页面改这一屏怎么看。 */
@@ -374,6 +378,7 @@ const RegionalApprovalWorkbench: React.FC<{
   automaticAnalysisEnabled = false,
   onResubmit,
   onSubmitBatch,
+  submissionOutcomes,
   currentUserId,
   approvalStages,
   toolCall,
@@ -1053,6 +1058,33 @@ const RegionalApprovalWorkbench: React.FC<{
     liveQuery.retryQueue();
     void refreshApprovalStages();
   };
+  useEffect(() => {
+    if (!submissionOutcomes?.length) return;
+    const attempted = new Set(submissionOutcomes.map((outcome) => outcome.planId));
+    const succeeded = new Set(
+      submissionOutcomes
+        .filter((outcome) => outcome.status === 'success')
+        .map((outcome) => outcome.planId),
+    );
+    setSelectedRowIds((current) => current.filter((id) => !attempted.has(id)));
+    setPermissionDeniedVersions(
+      (current) =>
+        new Set([
+          ...current,
+          ...submissionOutcomes
+            .filter((outcome) => outcome.permissionDenied)
+            .map((outcome) => outcome.versionId),
+        ]),
+    );
+    if (succeeded.size) {
+      setLivePendingValues((current) =>
+        Object.fromEntries(Object.entries(current).filter(([id]) => !succeeded.has(id))),
+      );
+      liveAccess.refresh();
+      liveQuery.retryQueue();
+      void refreshApprovalStages();
+    }
+  }, [submissionOutcomes]);
   const activeLiveActionRow = liveRows.find((row) => row.planId === liveActionPlanId);
 
   const contextFilterSummary = useMemo(

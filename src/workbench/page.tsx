@@ -2,6 +2,7 @@
 import {
   RegionalApprovalResubmitDialog,
   type SalesPlanSubmissionItem,
+  type SalesPlanSubmissionOutcome,
 } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { createWorkflowLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
@@ -290,7 +291,8 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       : undefined;
   const directApiLog = new URLSearchParams(window.location.search).get('view') === 'api-log';
   const [apiLogOpen, setApiLogOpen] = useState(directApiLog);
-  const [workbenchRevision, setWorkbenchRevision] = useState(0);
+  const [submissionOutcomes, setSubmissionOutcomes] =
+    useState<readonly SalesPlanSubmissionOutcome[]>();
   const [resubmit, setResubmit] = useState<{
     items: readonly SalesPlanSubmissionItem[];
     visible: boolean;
@@ -303,6 +305,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   }, []);
   useEffect(() => {
     setResubmit(undefined);
+    setSubmissionOutcomes(undefined);
     if (!directApiLog) setApiLogOpen(false);
   }, [
     directApiLog,
@@ -526,7 +529,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 />
               )}
               <RegionalApprovalWorkbench
-                key={workbenchRevision}
+                submissionOutcomes={submissionOutcomes}
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
                 t={locale.t.bind(locale)}
                 onContextChange={onContextChange}
@@ -581,9 +584,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
               pending && current ? { ...current, pending, visible: false } : undefined,
             )
           }
-          onSucceeded={() => {
-            setWorkbenchRevision((value) => value + 1);
-          }}
+          onCompleted={setSubmissionOutcomes}
         />
       )}
     </div>

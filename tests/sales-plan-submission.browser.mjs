@@ -15,6 +15,7 @@ import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import zh from './src/workbench/original/zh-CN.json';
 import { RegionalApprovalResubmitDialog } from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
+import { BackendHttpError } from './src/workbench/original/http-error.ts';
 const i18n=i18next.createInstance();
 await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
 const period={periodId:'20261001',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'};
@@ -26,16 +27,16 @@ const access=(v)=>({versionId:v.id,status:v.status,policy:'role-visible-v1',allo
 const item=(id,kind)=>({kind,planId:planId(id),versionId:'v'+id,label:'客户'+id,period,...(kind==='approve'?{row:{...versions[planId(id)],versionId:'v'+id},access:access(versions[planId(id)])}:{})});
 const scenario=new URL(location.href).searchParams.get('scenario');
 const items=scenario==='approve'?[item('1','approve'),item('3','approve')]:scenario==='resubmit'?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
-window.actions=[];window.submissions=[];
+window.actions=[];window.submissions=[];window.outcomes=[];
 const client={
  currentUser:{invoke:async()=>({id:'user',username:'user',roles:[{code:'sales_plan_region_approver'}]})},
  detail:{invoke:async({planId})=>({currentVersion:versions[planId],skus:[sku(versions[planId])],versions:[],logs:[],actionContext:access(versions[planId])})},
  versionSkus:{invoke:async({versionId})=>[sku(Object.values(versions).find(v=>v.id===versionId))]},
  draft:{invoke:async()=>({draft:null})},
- action:{invoke:async(request)=>{window.actions.push(request);throw Error('fixture-refusal');}},
+ action:{invoke:async(request)=>{window.actions.push(request);if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
-createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={true} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} />);
+createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={true} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
 `,
   },
   bundle: true,
@@ -100,6 +101,18 @@ for (const scenario of ['approve', 'mixed'])
       assert.ok(calls.actions.every((call) => call.request.remark === '456'));
       assert.equal(calls.submissions.length, scenario === 'approve' ? 0 : 1);
       assert.ok(calls.submissions.every((call) => !('remark' in call.request)));
+      const outcomes = await page.evaluate(() => window.outcomes);
+      assert.equal(outcomes.length, 1);
+      assert.equal(outcomes[0].length, 2);
+      assert.ok(
+        outcomes[0].every((outcome) => outcome.status === 'failed' && !outcome.permissionDenied),
+      );
+      assert.deepEqual(
+        outcomes[0].map((outcome) => outcome.planId),
+        scenario === 'approve'
+          ? ['p-jxs-2026-10-00001', 'p-jxs-2026-10-00003']
+          : ['p-jxs-2026-10-00001', 'p-jxs-2026-10-00002'],
+      );
     },
   );
 
@@ -109,5 +122,23 @@ test(
   async (t) => {
     const { dialog } = await openConfirmation(t, 'resubmit');
     await expect(dialog.getByLabel('批量审批备注')).toHaveCount(0);
+  },
+);
+
+test(
+  'mixed confirmation reports permission denial only for the rejected version',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, dialog } = await openConfirmation(t, 'permission');
+    await dialog.getByRole('button', { name: '确认提交', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.outcomes.length)).toBe(1);
+    const outcomes = await page.evaluate(() => window.outcomes[0]);
+    assert.deepEqual(
+      outcomes.map(({ versionId, permissionDenied }) => ({ versionId, permissionDenied })),
+      [
+        { versionId: 'v1', permissionDenied: true },
+        { versionId: 'v2', permissionDenied: false },
+      ],
+    );
   },
 );
