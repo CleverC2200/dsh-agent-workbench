@@ -30,6 +30,7 @@ const mixedPlans=[plan,{...plan,planId:'z2',versionId:'z-v2',dealerCode:'d2',dea
 const plans=mixed?mixedPlans:scenario==='grouped'?[plan,{...plan,planId:'p2',versionId:'v2',dealerCode:'d2',dealerName:'华南第二客户',targetAmount:'3000',shipAmount:'3000',amountProgress:'100.0'}]:[plan];
 const sku={id:'s1',skuCode:'1001',versionId:'v1',productCategName:'水饺',skuName:'猪肉白菜水饺',qty:'100',corrBaseQty:'100',baseQty:'100',amt:'800',amtBase:'800',price:'8',adjAddQty:'2',adjCutQty:'0',editable:scenario!=='readonly'&&scenario!=='absent',nodeAdjAddQty:'2',nodeAdjCutQty:'0'};
 if(scenario==='rounding'||scenario==='corrupt')Object.assign(sku,{qty:'0.003',corrBaseQty:'0.003',baseQty:'0.003',amt:'0.01',amtBase:'0.01',price:'2',nodeAdjAddQty:'0',nodeAdjCutQty:'0.001'});
+if(scenario==='quantity-tooltip'){Object.assign(plan,{targetAmount:'100000',currentQty:'12345.678',currentAmount:'98765.42',mPlanQty:'12345.678',mPlanAmount:'98765.42',shipQty:'12345.678',shipAmount:'98765.42',amountProgress:'98.8'});Object.assign(sku,{qty:'12345.678',corrBaseQty:'12345.678',amt:'98765.42'});}
 if(scenario==='delivery')Object.assign(sku,{adjAddQty:'25',nodeAdjAddQty:'25'});
 if(scenario==='units') { Object.assign(plan,{mPlanAmount:'9999',mPlanQty:'10000',targetAmount:'1189000'});Object.assign(sku,{qty:'18200',corrBaseQty:'18200',amt:'1189000',price:'11.99',nodeAdjAddQty:'0',nodeAdjCutQty:'10000'}); }
 const skus=scenario==='zero-matrix'?[
@@ -39,11 +40,27 @@ const skus=scenario==='zero-matrix'?[
   {...sku,skuCode:'1004',qty:'0',corrBaseQty:'0',amt:'0',nodeAdjAddQty:'50',nodeAdjCutQty:'0'},
 ]:[sku];
 let detail={currentVersion:{...plan,id:'v1',effective:true,orderType:scenario==='absent'?'M':'Z'},skus,versions:[],logs:[],correctionContext:{contract:'absolute-net-v1',monthlyApproved:true,hasCorrection:scenario!=='absent',approvalOpen:scenario!=='closed'},actionContext:{versionId:'v1',status:1,nodeOrder:2,allowedActions:scenario==='readonly'||scenario==='absent'?[]:['SAVE','APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}};
+const logBase={planId:'p1',versionId:'v1',fromStatus:1,toStatus:1,operatorCode:'approver',operatorName:'城市审批人',actionAt:'2026-10-19T12:00:00+08:00'};
+if(scenario==='audit-history')detail.logs=[{...logBase,id:'legacy',actionCode:'SUBMIT',remark:'原有提报记录'}];
+if(scenario==='audit-invalid')detail.logs=[
+ {...logBase,id:'legacy',actionCode:'SUBMIT',remark:'原有提报记录'},
+ {...logBase,id:'broken',nodeOrder:2,actionCode:'SAVE',decisionJson:'{'},
+ {...logBase,id:'missing',nodeOrder:3,actionCode:'SAVE',decisionJson:JSON.stringify([{skuCode:'1001',adjAddQty:'8'}])},
+ {...logBase,id:'approved',nodeOrder:2,actionCode:'APPROVE',toStatus:2,decisionJson:JSON.stringify([{skuCode:'1001',adjAddQty:'8',adjCutQty:'0',adjAddAmount:'64.00',adjCutAmount:'0.00',confirmedQty:'108',confirmedAmount:'864.00'}])},
+ {...logBase,id:'returned',nodeOrder:3,actionCode:'REJECT',fromStatus:2,toStatus:7,remark:'请核对本节点',decisionJson:JSON.stringify([{skuCode:'1001',adjAddQty:null,adjCutQty:null,adjAddAmount:null,adjCutAmount:null,confirmedQty:null,confirmedAmount:null}])},
+];
 const client={
  periods:{invoke:async(q)=>({records:[{periodId:'20261001',periodMonth:scenario==='past'?'2026-09':scenario==='future'?'2026-11':scenario==='leap'?'2024-02':'2026-10',planTypeCode:'Y',planType:q?.planType,status:'OPEN'}],total:1,size:100,current:1,pages:1})},
- list:{invoke:async(q)=>{window.listRequests.push(q);if(mixed&&q?.orderType==='Z'){const records=[...mixedPlans.filter(p=>p.orderType==='Z'&&(q.statuses?.includes(p.status)||q.status===p.status)),...mixedPlans.filter(p=>p.hasCorrection===false)];return {records,total:records.length,size:20,current:1,pages:1,summary:{targetAmount:scenario==='mixed-null'?'4000':'3000',planAmount:scenario==='mixed-null'?null:'2520',planQty:scenario==='mixed-null'?null:'315',diffAmount:scenario==='mixed-null'?null:'-480'}};}return {groupMetrics:q?.summaryOnly&&scenario==='grouped'?[{dimension:'region',key:'宝阳销售组',targetAmount:'4000',planAmount:'1000',diffAmount:'-3000',planQty:'125',shipAmount:'3600',shipQty:'120',amountProgress:'90.0'}]:[],records:q?.status===undefined||q.status===1?plans.map(p=>({...p,orderType:q?.orderType==='Z'&&p.hasCorrection===false?'M':q?.orderType??'M'})):[],total:q?.status===undefined||q.status===1?plans.length:0,size:200,current:1,pages:1,summary:q?.status===undefined||q.status===1?{targetAmount:plan.targetAmount,planAmount:scenario==='monthly-null'?null:'1000',diffAmount:scenario==='monthly-null'?null:scenario==='zero'?'1000':'0',planQty:scenario==='monthly-null'?null:'125'}:{targetAmount:'0',planAmount:'0',diffAmount:'0',planQty:'0'}};}},
+ list:{invoke:async(q)=>{window.listRequests.push(q);if(mixed&&q?.orderType==='Z'){const records=[...mixedPlans.filter(p=>p.orderType==='Z'&&(q.statuses?.includes(p.status)||q.status===p.status)),...mixedPlans.filter(p=>p.hasCorrection===false)];return {records,total:records.length,size:20,current:1,pages:1,summary:{targetAmount:scenario==='mixed-null'?'4000':'3000',planAmount:scenario==='mixed-null'?null:'2520',planQty:scenario==='mixed-null'?null:'315',diffAmount:scenario==='mixed-null'?null:'-480'}};}return {groupMetrics:q?.summaryOnly&&scenario==='grouped'?[{dimension:'region',key:'宝阳销售组',targetAmount:'4000',planAmount:'1000',diffAmount:'-3000',planQty:'125',shipAmount:'3600',shipQty:'120',amountProgress:'90.0'}]:[],records:q?.status===undefined||q.status===1?plans.map(p=>({...p,orderType:q?.orderType==='Z'&&p.hasCorrection===false?'M':q?.orderType??'M'})):[],total:q?.status===undefined||q.status===1?plans.length:0,size:200,current:1,pages:1,summary:q?.status===undefined||q.status===1?{targetAmount:plan.targetAmount,planAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'98765.42':'1000',diffAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'-1234.58':scenario==='zero'?'1000':'0',planQty:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'12345.678':'125'}:{targetAmount:'0',planAmount:'0',diffAmount:'0',planQty:'0'}};}},
  detail:{invoke:async(q)=>{window.detailRequests.push(q);if(mixed&&q.planId==='m-no-z')return {currentVersion:{...noZ,id:'m-v1',effective:true},skus:[{...sku,id:'m-sku',versionId:'m-v1',qty:q.orderType==='Z'?'90':'100',corrBaseQty:q.orderType==='Z'?'90':'100',amt:q.orderType==='Z'?'720':'800',editable:false,nodeAdjAddQty:'0',nodeAdjCutQty:'0'}],versions:[],logs:[],correctionContext:{contract:'absolute-net-v1',monthlyApproved:true,hasCorrection:false,approvalOpen:true},actionContext:{versionId:'m-v1',status:10,allowedActions:[],snapshotHash:'a'.repeat(64)}};return structuredClone(detail);}},versions:{invoke:async()=>[detail.currentVersion]},versionSkus:{invoke:async()=>detail.skus},logs:{invoke:async()=>detail.logs},compare:{invoke:async()=>[]},draft:{invoke:async()=>({draft:null})},
- action:{invoke:async(p)=>{window.actions.push(p);if(scenario!=='rounding'&&scenario!=='corrupt')throw Error('fixture action not configured');detail={...detail,currentVersion:{...detail.currentVersion,status:2},skus:[{...sku,regionAdjAddQty:'0',regionAdjCutQty:'0.001',regionAdjAddAmount:'0.00',regionAdjCutAmount:scenario==='corrupt'?'0.01':'0.00',regionConfirmedQty:'0.002',regionConfirmedAmount:'0.01'}],logs:[{id:'l1',planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,actionCode:p.request.action,operatorCode:'approver',actionAt:'2026-10-19T12:00:00+08:00',requestId:p.requestId}]};return {planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,replayed:false,requestId:p.requestId,traceId:'t1',auditId:'sales-plan-log:l1'}}},
+ action:{invoke:async(p)=>{window.actions.push(p);if(scenario==='audit-history'){
+ const delta=p.request.adjustments[0].adjustQty;
+ if(p.request.action!=='SAVE'||!['8','-3'].includes(delta))throw Error('unexpected audit fixture action');
+ const decision=delta==='8'?{adjAddQty:'8',adjCutQty:'0',adjAddAmount:'64.00',adjCutAmount:'0.00',confirmedQty:null,confirmedAmount:null}:{adjAddQty:'0',adjCutQty:'3',adjAddAmount:'0.00',adjCutAmount:'24.00',confirmedQty:null,confirmedAmount:null};
+ const id='saved-'+window.actions.length;
+ detail={...detail,skus:[{...sku,nodeAdjAddQty:decision.adjAddQty,nodeAdjCutQty:decision.adjCutQty,regionAdjAddQty:decision.adjAddQty,regionAdjCutQty:decision.adjCutQty,regionAdjAddAmount:decision.adjAddAmount,regionAdjCutAmount:decision.adjCutAmount,regionConfirmedQty:null,regionConfirmedAmount:null}],actionContext:{...detail.actionContext,snapshotHash:(window.actions.length===1?'b':'c').repeat(64)},logs:[...detail.logs,{...logBase,id,nodeOrder:2,actionCode:'SAVE',requestId:p.requestId,actionAt:'2026-10-19T12:0'+window.actions.length+':00+08:00',decisionJson:JSON.stringify([{skuCode:'1001',...decision}])}]};
+ return {planId:'p1',versionId:'v1',fromStatus:1,toStatus:1,replayed:false,requestId:p.requestId,traceId:'trace-'+id,auditId:'sales-plan-log:'+id};
+}if(scenario!=='rounding'&&scenario!=='corrupt')throw Error('fixture action not configured');detail={...detail,currentVersion:{...detail.currentVersion,status:2},skus:[{...sku,regionAdjAddQty:'0',regionAdjCutQty:'0.001',regionAdjAddAmount:'0.00',regionAdjCutAmount:scenario==='corrupt'?'0.01':'0.00',regionConfirmedQty:'0.002',regionConfirmedAmount:'0.01'}],logs:[{id:'l1',planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,actionCode:p.request.action,operatorCode:'approver',actionAt:'2026-10-19T12:00:00+08:00',requestId:p.requestId}]};return {planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,replayed:false,requestId:p.requestId,traceId:'t1',auditId:'sales-plan-log:l1'}}},
 };
 window.setDetail=value=>{detail=value};window.getDetail=()=>structuredClone(detail);
 createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={{salesPlan:client}}><div className="gea-original-workbench"><Workbench stateScope="correction-approval" t={i18n.t.bind(i18n)} onContextChange={()=>{}} approvalStages={['region']} liveActionsEnabled/></div></WorkbenchHostProvider>);
@@ -167,6 +184,88 @@ test('月初卡片尊重服务端显式空确认汇总，不回退到本地计�
   await expect(scope).toContainText('差额（计划 − 目标）—');
   await expect(scope).toContainText('计划数量—');
 });
+
+test('月初发货与顶部计划数量折算万后均可悬停核对三位原值', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'quantity-tooltip');
+  const scope = page.getByTestId('regional-approval-workbench');
+  const planQty = scope.getByText('计划数量', { exact: true }).locator('..').locator('strong');
+  await expect(planQty).toHaveText(/1\.23万\s*件/);
+  await expect(planQty).toHaveAttribute('title', '12,345.678件');
+  const shipment = scope
+    .getByRole('row')
+    .filter({ hasText: '宝阳销售组' })
+    .getByRole('cell')
+    .last();
+  await expect(shipment).toContainText('1.23万件');
+  await expect(shipment.locator('[title="12,345.678件"]')).toBeVisible();
+});
+
+test('同节点先保存追加8再保存追减3后两笔独立SKU决定均可查', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'audit-history');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  for (const delta of ['8', '-3']) {
+    await page.getByRole('button', { name: '华南经销客户', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: '调整量 1001', exact: true }).fill(delta);
+    await dialog.getByRole('button', { name: '保存调整', exact: true }).click();
+    await expect(dialog).toBeHidden();
+  }
+  await page.getByRole('button', { name: '华南经销客户', exact: true }).click();
+  const history = page.getByRole('dialog').getByRole('group', { name: '审批轨迹', exact: true });
+  await expect(history).toBeVisible();
+  await history.locator(':scope > summary').click();
+  const entries = history.getByRole('group', { name: /城市经理 保存调整/ });
+  await expect(entries).toHaveCount(2);
+  for (const [index, add, cut, addAmount, cutAmount] of [
+    [0, '8件', '0件', '¥64', '¥0'],
+    [1, '0件', '3件', '¥0', '¥24'],
+  ]) {
+    const entry = entries.nth(index);
+    await entry.locator(':scope > summary').click();
+    const cells = entry.getByRole('row').filter({ hasText: '1001' }).getByRole('cell');
+    await expect(cells.nth(1)).toContainText(add);
+    await expect(cells.nth(1)).toContainText(addAmount);
+    await expect(cells.nth(2)).toContainText(cut);
+    await expect(cells.nth(2)).toContainText(cutAmount);
+    await expect(cells.nth(3)).toHaveText('——');
+  }
+  await expect(entries.nth(0)).toContainText('8件');
+  await expect(history).toContainText('原有提报记录');
+});
+
+test(
+  '轨迹以可读六字段展示通过和退回，缺失或错误历史决定不编造零值',
+  { timeout: 30000 },
+  async (t) => {
+    const page = await openWorkbench(t, 'audit-invalid');
+    await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+    await page.getByRole('button', { name: '华南经销客户', exact: true }).click();
+    const history = page.getByRole('dialog').getByRole('group', { name: '审批轨迹', exact: true });
+    await history.locator(':scope > summary').click();
+    const approved = history.getByRole('group', { name: /城市经理 通过/ });
+    await approved.locator(':scope > summary').click();
+    const row = approved.getByRole('row').filter({ hasText: '1001' });
+    for (const value of ['8件', '¥64', '108件', '¥864']) await expect(row).toContainText(value);
+    const returned = history.getByRole('group', { name: /省区经理 退回/ });
+    await returned.locator(':scope > summary').click();
+    await expect(returned).toContainText('本节点决定已清空');
+    await expect(returned).toContainText('请核对本节点');
+    await expect(
+      returned.getByRole('row').filter({ hasText: '1001' }).getByRole('cell').nth(1),
+    ).toHaveText('——');
+    const legacy = history.getByRole('group', { name: /节点未记录 历史操作/ });
+    await legacy.locator(':scope > summary').click();
+    await expect(legacy.getByText('原有提报记录', { exact: false })).toBeVisible();
+    await expect(legacy.getByText('该历史记录未提供SKU决定', { exact: true })).toBeVisible();
+    for (const entry of await history.getByRole('group', { name: /保存调整/ }).all()) {
+      await entry.locator(':scope > summary').click();
+      await expect(entry.getByText('该记录的SKU决定数据不可读', { exact: true })).toBeVisible();
+      await expect(entry.getByRole('table')).toHaveCount(0);
+    }
+    await expect(history).not.toContainText('adjAddQty');
+    await expect(history).not.toContainText('APPROVE');
+  },
+);
 
 test('SKU按品类合列，编辑净调整联动金额且负确认量拦截动作', { timeout: 30000 }, async (t) => {
   const page = await openWorkbench(t);

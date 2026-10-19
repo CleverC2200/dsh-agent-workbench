@@ -2355,7 +2355,13 @@ const RegionalApprovalWorkbench: React.FC<{
               />
               <small>
                 {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)} /{' '}
-                {tableRow.plan.shipQty == null ? '—' : `${quantityText(tableRow.plan.shipQty)}件`}
+                {tableRow.plan.shipQty == null ? (
+                  '—'
+                ) : (
+                  <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
+                    {quantityText(tableRow.plan.shipQty)}件
+                  </span>
+                )}
               </small>
             </div>
           );
@@ -2815,7 +2821,13 @@ const RegionalApprovalWorkbench: React.FC<{
                 <small>
                   {t('common.assistantSurface.regionalApproval.scopeTotals.planQuantity')}
                 </small>
-                <strong>
+                <strong
+                  title={
+                    !dashboardReady || metrics.quantity === '—'
+                      ? undefined
+                      : correctionDisplay(metrics.quantity, 'quantity').exact
+                  }
+                >
                   {!dashboardReady || metrics.quantity === '—'
                     ? '—'
                     : `${quantityText(metrics.quantity)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
