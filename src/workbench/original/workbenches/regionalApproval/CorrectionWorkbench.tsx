@@ -328,6 +328,7 @@ export function CorrectionWorkbench({
               data-selected={stage === key}
               aria-pressed={stage === key}
               onClick={() => {
+                if (stage === key) return;
                 setSelected(undefined);
                 setRows([]);
                 setPage(1);
