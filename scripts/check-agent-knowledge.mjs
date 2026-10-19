@@ -190,6 +190,7 @@ const { values } = parseArgs({
     root: { type: 'string' },
     config: { type: 'string' },
     'compare-ref': { type: 'string' },
+    'exports-only': { type: 'boolean' },
   },
 });
 if (!values.root || !values.config) throw Error('AGENT_INPUT_REQUIRED: --root and --config');
@@ -213,6 +214,10 @@ if (config.exports) {
     )
       throw Error(`AGENT_REFERENCE_MISSING: export ${target}`);
   }
+}
+if (values['exports-only']) {
+  console.log('Agent export references verified');
+  process.exit(0);
 }
 const pending = config.entries.map((entry) => resolve(root, entry));
 const visited = new Set();

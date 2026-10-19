@@ -21,6 +21,8 @@ const run = (args, environment = {}) => {
     'QUALITY_SCOPE_ALLOWED',
     'QUALITY_SCOPE_RESULT',
     'QUALITY_GATE_RESULT',
+    'QUALITY_DEPENDENCY_REVIEW_REQUIRED',
+    'QUALITY_DEPENDENCY_REVIEW_RESULT',
     'QUALITY_CANDIDATE',
     'QUALITY_EXPECTED_SHA',
     'CI',
@@ -126,15 +128,27 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
     /QUALITY_EXPECTED_SHA: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/,
   );
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
-  assert.equal(
-    (workflow.match(/fetch-depth: 0/g) ?? []).length,
-    (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
+  const [historyStages] = workflow.split('\n  dependency-review:');
+  const finalStage = workflow.split('\n  candidate-quality:')[1];
+  const checkouts = historyStages
+    .split('\n      - ')
+    .filter((step) => step.startsWith('uses: actions/checkout@v7'));
+  for (const checkout of checkouts.filter(
+    (step) => !step.includes('repository: CleverC2200/deepseek-harness'),
+  ))
+    assert.match(checkout, /fetch-depth: 0/);
+  const sdkSource = checkouts.find((step) => step.includes('ref: ${{ matrix.core }}'));
+  assert.ok(sdkSource);
+  assert.match(
+    sdkSource,
+    /fetch-depth: \$\{\{ needs\.candidate-scope\.outputs\.applicability == 'docs' && 1 \|\| 0 \}\}/,
   );
+  assert.match(finalStage, /fetch-depth: 1/);
   assert.equal(
     (workflow.match(/persist-credentials: false/g) ?? []).length,
     (workflow.match(/uses: actions\/checkout@v7/g) ?? []).length,
   );
-  assert.match(workflow, /candidate\/dsh-gea-plugin\/scripts\/ci-core-policy\.mjs/);
+  assert.match(workflow, /dsh-gea-plugin\/scripts\/ci-core-policy\.mjs/);
   assert.match(workflow, /ciCores\(["']required["']\)/);
   assert.doesNotMatch(workflow, /ciCores\(["']compatibility["']\)/);
   const compatibility = readFileSync('.github/workflows/compatibility.yml', 'utf8');
@@ -142,10 +156,11 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   assert.match(compatibility, /ciCores\(["']compatibility["']\)/);
   assert.doesNotMatch(compatibility, /^ {2}(push|pull_request):/m);
   assert.match(workflow, /fromJSON\(needs\.candidate-scope\.outputs\.cores\)/);
-  assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE" --prepare-sdk/);
+  assert.match(workflow, /npm run quality:ci -- --input "\$QUALITY_CANDIDATE"/);
+  assert.match(workflow, /--prepare --reuse-prepared --with-flock/);
   assert.doesNotMatch(workflow, /PLUGIN_SPLIT_.*_HISTORY_SOURCE/);
   assert.match(workflow, /if: always\(\)/);
-  assert.match(workflow, /needs: \[candidate-scope, gates\]/);
+  assert.match(workflow, /needs: \[candidate-scope, gates, dependency-review\]/);
   assert.match(workflow, /run: node scripts\/run-quality-ci.mjs --phase final/);
   assert.match(workflow, /PLUGIN_SPLIT_READ_TOKEN/);
   const scripts = JSON.parse(readFileSync('package.json')).scripts;
@@ -218,7 +233,7 @@ test('standalone full commands retain their union while CI runs required and aff
   assert.ok(after.some((file) => file.startsWith('business/inventory-apsplan/source/tests/data/')));
   assert.ok(after.some((file) => file.endsWith('.browser.mjs')));
   const ci = readFileSync('scripts/run-quality-ci.mjs', 'utf8');
-  assert.match(ci, /run\('npm', \['run', 'quality:fast', '--', '--checks-only'\]\)/);
+  assert.match(ci, /name: 'fast'/);
   assert.doesNotMatch(ci, /run\('npm', \['run', 'test:ci'\]\)/);
   assert.match(ci, /name: 'required-and-affected'/);
   assert.match(ci, /selectCiTests/);
@@ -245,11 +260,14 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
       'typecheck:official',
       'test:quality',
     ];
+    const registeredCommands = [...commands, 'check:official-input'];
     writeFileSync(
       join(fixture, 'package.json'),
       JSON.stringify({
         private: true,
-        scripts: Object.fromEntries(commands.map((name) => [name, 'node record.mjs ' + name])),
+        scripts: Object.fromEntries(
+          registeredCommands.map((name) => [name, 'node record.mjs ' + name]),
+        ),
       }),
     );
     const call = (...args) => {
@@ -273,7 +291,99 @@ test('fast CLI keeps development tests and performs only checks when CI owns the
     };
     assert.deepEqual(call(), commands);
     assert.deepEqual(call('--checks-only'), commands.slice(0, -1));
+    assert.deepEqual(call('--checks-only', '--declarations-in-build'), [
+      ...commands.slice(0, 3),
+      'check:official-input',
+    ]);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
+});
+
+test('candidate fast checks reject stale identity before a declaration build can repair it', () => {
+  const fixture = mkdtempSync(join(tmpdir(), 'workbench-fast-stamp-'));
+  try {
+    mkdirSync(join(fixture, 'scripts'));
+    mkdirSync(join(fixture, 'src'));
+    for (const file of [
+      'run-quality-fast.mjs',
+      'run-quality-checks.mjs',
+      'generate-plugin-package-version.mjs',
+    ])
+      copyFileSync(join('scripts', file), join(fixture, 'scripts', file));
+    const manifest = JSON.parse(readFileSync('package.json'));
+    writeFileSync(
+      join(fixture, 'package.json'),
+      JSON.stringify({
+        name: '@fixture/workbench',
+        version: '1.2.3',
+        scripts: {
+          'check:knowledge': 'node -e ""',
+          lint: 'node -e ""',
+          'format:check': 'node -e ""',
+          'check:official-input': manifest.scripts['check:official-input'],
+        },
+      }),
+    );
+    writeFileSync(
+      join(fixture, 'scripts/verify-official-input.mjs'),
+      "throw Error('official verification reached');",
+    );
+    writeFileSync(join(fixture, 'src/plugin-package-version.ts'), 'stale stamp');
+    const invoke = (file, args) =>
+      spawnSync(process.execPath, [file, ...args], { cwd: fixture, encoding: 'utf8' });
+    const rejected = invoke('scripts/run-quality-fast.mjs', [
+      '--checks-only',
+      '--declarations-in-build',
+    ]);
+    assert.notEqual(rejected.status, 0);
+    assert.match(rejected.stdout + rejected.stderr, /PLUGIN_PACKAGE_VERSION_STALE/);
+    assert.equal(
+      readFileSync(join(fixture, 'src/plugin-package-version.ts'), 'utf8'),
+      'stale stamp',
+    );
+    assert.equal(invoke('scripts/generate-plugin-package-version.mjs', []).status, 0);
+    const official = invoke('scripts/run-quality-fast.mjs', [
+      '--checks-only',
+      '--declarations-in-build',
+    ]);
+    assert.notEqual(official.status, 0);
+    assert.match(official.stdout + official.stderr, /official verification reached/);
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('final aggregation requires dependency review only for its explicit applicable plan', () => {
+  const good = { QUALITY_SCOPE_RESULT: 'success', QUALITY_GATE_RESULT: 'success' };
+  for (const outcome of ['', 'skipped', 'cancelled', 'failure']) {
+    assert.equal(
+      run(['--phase', 'final'], {
+        ...good,
+        QUALITY_DEPENDENCY_REVIEW_REQUIRED: 'true',
+        QUALITY_DEPENDENCY_REVIEW_RESULT: outcome,
+      }).status,
+      1,
+    );
+    assert.equal(
+      run(['--phase', 'final'], {
+        ...good,
+        QUALITY_DEPENDENCY_REVIEW_REQUIRED: 'false',
+        QUALITY_DEPENDENCY_REVIEW_RESULT: outcome,
+      }).status,
+      0,
+    );
+  }
+  assert.equal(
+    run(['--phase', 'final'], {
+      ...good,
+      QUALITY_DEPENDENCY_REVIEW_REQUIRED: 'true',
+      QUALITY_DEPENDENCY_REVIEW_RESULT: 'success',
+    }).status,
+    0,
+  );
+  assert.equal(
+    run(['--phase', 'final'], { ...good, QUALITY_DEPENDENCY_REVIEW_REQUIRED: '' }).status,
+    1,
+  );
 });

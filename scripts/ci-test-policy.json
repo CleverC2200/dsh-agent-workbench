@@ -1,21 +1,13 @@
 {
   "schemaVersion": 1,
-  "required": [
-    "tests/quality-ci.test.mjs",
-    "tests/hosted-peer-input.test.mjs",
-    "tests/quality-knowledge.test.mjs",
-    "tests/candidate-input.test.mjs",
-    "tests/migration-history-input.test.mjs",
-    "scripts/run-quality-checks.test.mjs",
-    "tests/ci-test-plan.test.mjs",
-    "tests/quality-cli.test.mjs"
-  ],
+  "required": ["tests/official-entry.test.mjs", "tests/workbench-recovery.test.mjs"],
   "tests": [
     "tests/*.test.mjs",
     "tests/*.browser.mjs",
     "scripts/*.test.mjs",
     "business/inventory-fc/source/inventory-light-plugins/tests/*.test.mjs",
-    "business/inventory-apsplan/source/tests/data/*.test.mjs"
+    "business/inventory-apsplan/source/tests/data/*.test.mjs",
+    "tests/final-group-input.contract.mjs"
   ],
   "rules": [
     {
@@ -30,23 +22,29 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^scripts/(?:ci-source-policy|business-profile-ci)\\.mjs$",
-      "tests": ["scripts/business-profile-ci.test.mjs"]
-    },
-    {
-      "repo": "dsh-agent-workbench",
       "pattern": "^scripts/task-status\\.mjs$",
       "tests": ["tests/task-status.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/|scripts/)",
-      "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"],
+      "pattern": "^(?:package\\.json|package-lock\\.json|tsconfig|\\.github/)",
+      "tests": [
+        "tests/quality-ci.test.mjs",
+        "tests/candidate-input.test.mjs",
+        "tests/quality-cli.test.mjs",
+        "tests/ci-test-plan.test.mjs",
+        "tests/final-group-input.contract.mjs"
+      ],
       "exclusive": true
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^business/",
+      "pattern": "^scripts/(?:build|build-inventory|build-inventory-fc)\\.mjs$",
+      "tests": ["tests/core-resource-build.test.mjs", "tests/inventory-storage-build.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-fc/|^business/shared/",
       "tests": ["tests/inventory-storage-build.test.mjs"]
     },
     {
@@ -73,6 +71,61 @@
         "tests/approval-visibility.test.mjs",
         "tests/regional-state-restore.test.mjs"
       ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/",
+      "tests": ["tests/quality-ci.test.mjs", "tests/candidate-input.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:run-quality-fast|check-agent-knowledge)\\.mjs$",
+      "tests": ["tests/quality-knowledge.test.mjs", "tests/agent-knowledge.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:agent_sql\\.py|test_agent_sql\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/agent-sql-direct.test.mjs", "tests/agent-sql-config.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "tests": [
+        "tests/configured-channel.test.mjs",
+        "tests/gea-page-limit.test.mjs",
+        "tests/five-agent-supplement.test.mjs",
+        "tests/page-runtime.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:fc|qll|dealer)/sql\\.config\\.json$",
+      "tests": [
+        "tests/configured-facts.test.mjs",
+        "tests/restored-workbench.test.mjs",
+        "tests/summary-query-performance.test.mjs",
+        "tests/overview-progress.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:aqkc|fc|qll|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/original-field-parity.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:qll|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/inventory-pc-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-dealer/sql\\.config\\.json$",
+      "tests": ["tests/dealer-page-reception.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:run-quality-ci|build)\\.mjs$",
+      "tests": ["tests/agent-authored-layout.browser.mjs"]
     }
   ]
 }

@@ -2,7 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { runQualityChecks } from './run-quality-checks.mjs';
-const { values } = parseArgs({ options: { 'checks-only': { type: 'boolean' } } });
+const { values } = parseArgs({
+  options: { 'checks-only': { type: 'boolean' }, 'declarations-in-build': { type: 'boolean' } },
+});
 const check = (name) => ({
   name,
   execute() {
@@ -23,7 +25,7 @@ if (checks[0].status === 'passed')
       [
         'lint',
         'format:check',
-        'typecheck:official',
+        values['declarations-in-build'] ? 'check:official-input' : 'typecheck:official',
         ...(!values['checks-only'] ? ['test:quality'] : []),
       ].map(check),
     ),

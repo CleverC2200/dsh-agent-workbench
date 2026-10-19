@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = (cwd, ...args) =>
-  spawnSync(process.execPath, ['scripts/quality.mjs', ...args], { cwd, encoding: 'utf8' });
+  spawnSync(process.execPath, ['scripts/quality.mjs', ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, QUALITY_BASE_SHA: '' },
+  });
 const command = (cwd, executable, args) => {
   const result = spawnSync(executable, args, { cwd, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -132,6 +136,32 @@ test('public quality CLI enforces fixed debt and refuses new violations and weak
     writeFileSync(tool, JSON.stringify({ ...JSON.parse(toolManifest), version: '0.0.0' }));
     expect('lint', 'src/quality-new.mjs', 2, /QUALITY_TOOL/);
     writeFileSync(tool, toolManifest);
+    command(fixture, 'git', ['add', '-u']);
+    command(fixture, 'git', [
+      'add',
+      '-f',
+      'src/quality-new.mjs',
+      'src/nested/bad.mjs',
+      'src/nested/.oxlintrc.json',
+      'samples/quality.html',
+    ]);
+    command(fixture, 'git', [
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@invalid',
+      'commit',
+      '-qm',
+      'prepared static-check input',
+    ]);
+    expect('lint', '--changed', 0, /no changed maintained files/);
+    const trackedSource = readFileSync(join(fixture, 'src/quality-new.mjs'));
+    writeFileSync(join(fixture, 'src/quality-new.mjs'), 'const forgotten = 43;\n');
+    expect('lint', '--changed', 1, /1 files scanned/);
+    writeFileSync(join(fixture, 'src/quality-new.mjs'), trackedSource);
+    writeFileSync(join(fixture, '.gitignore'), 'src/ignored-new.mjs\n');
+    writeFileSync(join(fixture, 'src/ignored-new.mjs'), 'const forgotten = 44;\n');
+    expect('lint', '--changed', 1, /src\/ignored-new\.mjs/);
     rmSync(join(fixture, 'node_modules'), { recursive: true });
     expect('lint', 'src/quality-new.mjs', 2);
   } finally {
