@@ -74,7 +74,7 @@ test('Workbench preserves native composer controls in light, dark, wide and narr
     )
   ).join('\n');
   await page.setContent(
-    `<style>${css}\n${bundle.outputFiles.find((file) => file.path.endsWith('.css')).text}\n*,*::before,*::after{transition:none!important;animation:none!important}html,body{margin:0;height:100%}body{font:14px var(--dsw-font-family)}#root{height:100%;margin-left:280px}#original{position:fixed;left:0;top:100px;width:520px;visibility:hidden}</style><div id="root"></div><div id="original"></div>`,
+    `<style>${css}\n${bundle.outputFiles.find((file) => file.path.endsWith('.css')).text}\n*,*::before,*::after{transition:none!important;animation:none!important}html,body{margin:0;height:100%}body{font:16px var(--dsw-font-family)}#root{height:100%;margin-left:280px}#original{font-size:14px;position:fixed;left:0;top:100px;width:520px;visibility:hidden}</style><div id="root"></div><div id="original"></div>`,
   );
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
@@ -86,6 +86,10 @@ test('Workbench preserves native composer controls in light, dark, wide and narr
         cause: error,
       });
     });
+  await expect(page.locator('.agent-workbench-document')).toHaveCSS('font-size', '14px');
+  await page.evaluate(() => document.body.style.setProperty('--dsh-content-font-size', '15px'));
+  await expect(page.locator('.agent-workbench-document')).toHaveCSS('font-size', '15px');
+  await page.evaluate(() => document.body.style.removeProperty('--dsh-content-font-size'));
   const inspect = (container) =>
     page.locator(container).evaluate((root) =>
       Array.from(root.querySelectorAll('[data-composer-card] button')).map((button) => {
