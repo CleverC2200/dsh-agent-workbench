@@ -121,6 +121,11 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^business/inventory-dealer/sql\\.config\\.json$",
       "tests": ["tests/dealer-page-reception.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:run-quality-ci|build)\\.mjs$",
+      "tests": ["tests/agent-authored-layout.browser.mjs"]
     }
   ]
 }

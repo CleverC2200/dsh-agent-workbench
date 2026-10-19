@@ -21,10 +21,17 @@ const tabs = [
   ['shortage', '订单缺口'],
 ];
 const views: Record<string, string[]> = {
-  category: ['category', 'base'],
+  category: ['category', 'base', 'base-stock-flows'],
   structure: ['organization', 'branch-stock', 'plan', 'branch-shipments'],
   aging: ['aging', 'warehouse-age-detail', 'history'],
-  shortage: ['fulfillment-path', 'shortage', 'orders', 'delivery'],
+  shortage: [
+    'fulfillment-path',
+    'shortage',
+    'orders',
+    'delivery',
+    'order-plan-source',
+    'shipment-batches',
+  ],
 };
 const viewState = createPageViewState('inventory-qll');
 export default function ConfiguredWorkbench() {
@@ -179,16 +186,19 @@ export default function ConfiguredWorkbench() {
                 <b>核心判断：</b>
                 数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。货龄展示最大库龄，当前订单阶段仍不能由库存占用量推断。
               </p>
-              <p>
-                <b>数据边界：</b>基地快照 {parts.base?.snapshotDate ?? '-'}；分仓快照{' '}
-                {parts['branch-stock']?.snapshotDate ?? '-'}（{branchStock?.row_count ?? '-'}
-                个仓库SKU）；库存范围 {stock?.known_inventory_count ?? '-'} /{' '}
-                {stock?.row_count ?? '-'}{' '}
-                个基地SKU。差额与周转分别限定库存、目标或需求均有值且非负的同一批SKU，覆盖数量逐项列示；需求合计为0不计算周转。订单满足率使用本月履约，当前待发量保持未知。分仓发货来源有{' '}
-                {branchShipments?.warehouse_count ?? '-'} 个仓库、
-                {branchShipments?.row_count ?? '-'} 个仓库SKU，本月有值{' '}
-                {branchShipments?.month_valid_skus ?? '-'} 行；可在“组织结构→分仓发货观察”查看。
-              </p>
+              <details className={common.scopeDetails}>
+                <summary>统计范围与口径</summary>
+                <p>
+                  <b>数据边界：</b>基地快照 {parts.base?.snapshotDate ?? '-'}；分仓快照{' '}
+                  {parts['branch-stock']?.snapshotDate ?? '-'}（{branchStock?.row_count ?? '-'}
+                  个仓库SKU）；库存范围 {stock?.known_inventory_count ?? '-'} /{' '}
+                  {stock?.row_count ?? '-'}{' '}
+                  个基地SKU。差额与周转分别限定库存、目标或需求均有值且非负的同一批SKU，覆盖数量逐项列示；需求合计为0不计算周转。订单满足率使用本月履约，当前待发量保持未知。分仓发货来源有{' '}
+                  {branchShipments?.warehouse_count ?? '-'} 个仓库、
+                  {branchShipments?.row_count ?? '-'} 个仓库SKU，本月有值{' '}
+                  {branchShipments?.month_valid_skus ?? '-'} 行；可在“组织结构→分仓发货观察”查看。
+                </p>
+              </details>
             </section>
             {channel && (
               <p className={common.note}>

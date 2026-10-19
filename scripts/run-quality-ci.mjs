@@ -276,8 +276,10 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       manifest.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
     );
+    const buildAllPages = plan.files.includes('tests/agent-authored-layout.browser.mjs');
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
     if (
+      buildAllPages ||
       plan.files.some((file) =>
         /^(?:business\/inventory-fc\/|tests\/(?:fc-|inventory-storage-build))/.test(file),
       )
@@ -286,6 +288,12 @@ try {
         'corepack',
         ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
         leaf,
+      );
+    if (buildAllPages)
+      run(
+        'corepack',
+        ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
+        resolve('business/inventory-aqkc/source/inventory-light-plugins'),
       );
     if (plan.build || plan.files.some((file) => file.startsWith('business/inventory-apsplan/')))
       run(
@@ -316,7 +324,7 @@ try {
                 {
                   name: 'build',
                   execute: () => {
-                    run('npm', ['run', 'build:core']);
+                    run('npm', ['run', buildAllPages ? 'build' : 'build:core']);
                   },
                 },
               ]

@@ -25,6 +25,7 @@ const orders = [
   ['suggested-order', '建议订单'],
   ['orders', '订单履约'],
   ['customer-plan', '客户月计划'],
+  ['customer-plan-analysis', '客户计划分析'],
   ['delivery', '交货记录'],
   ['vehicles', '客户车型'],
   ['pickup', '提货点'],
