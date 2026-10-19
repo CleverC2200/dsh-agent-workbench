@@ -62,7 +62,9 @@ test('returned plans use the explicitly granted role, never the return target as
     [9, 'category'],
   ]) {
     const d = { ...detail(status), actionContext: policy([], status) };
-    assert.deepEqual(m.salesPlanAccessForRow(row(status), d, [role], role).allowedActions, ['REJECT']);
+    assert.deepEqual(m.salesPlanAccessForRow(row(status), d, [role], role).allowedActions, [
+      'REJECT',
+    ]);
     assert.equal(m.salesPlanAccessForRow(row(status), d, [], role), undefined);
     assert.equal(
       m.salesPlanAccessForRow(

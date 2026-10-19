@@ -428,7 +428,8 @@ export const salesPlanResubmitReadbackMatches = (
       !sourceSkus ||
       detail.skus.length !== request.items.length ||
       new Set(detail.skus.map((sku) => sku.skuCode)).size !== detail.skus.length
-    ) return false;
+    )
+      return false;
     const fields = [
       ['regionConfirmedQty', 'regionConfirmedAmount'],
       ['provinceConfirmedQty', 'provinceConfirmedAmount'],
@@ -440,18 +441,27 @@ export const salesPlanResubmitReadbackMatches = (
       const source = sourceSkus.find((row) => row.skuCode === item.skuCode);
       if (!sku || !source || sku.versionId !== receipt.versionId) return false;
       try {
-        if (!(['qty', 'price', 'baseQty'] as const).every((field) =>
-          correctionDecimal(sku[field]).eq(correctionDecimal(item[field])),
-        )) return false;
-        if (!correctionDecimal(sku.amt).eq(
-          correctionDecimal(item.qty).mul(correctionDecimal(item.price)).toDecimalPlaces(2),
-        )) return false;
-        return fields.every((pair, index) => pair.every((field) => {
-          const expected = index < request.status - 1 ? source[field] : null;
-          const actual = sku[field];
-          return expected == null ? actual == null : actual != null &&
-            correctionDecimal(actual).eq(correctionDecimal(expected));
-        }));
+        if (
+          !(['qty', 'price', 'baseQty'] as const).every((field) =>
+            correctionDecimal(sku[field]).eq(correctionDecimal(item[field])),
+          )
+        )
+          return false;
+        if (
+          !correctionDecimal(sku.amt).eq(
+            correctionDecimal(item.qty).mul(correctionDecimal(item.price)).toDecimalPlaces(2),
+          )
+        )
+          return false;
+        return fields.every((pair, index) =>
+          pair.every((field) => {
+            const expected = index < request.status - 1 ? source[field] : null;
+            const actual = sku[field];
+            return expected == null
+              ? actual == null
+              : actual != null && correctionDecimal(actual).eq(correctionDecimal(expected));
+          }),
+        );
       } catch {
         return false;
       }

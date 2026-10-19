@@ -294,7 +294,13 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   useEffect(() => {
     setResubmit(undefined);
     if (!directApiLog) setApiLogOpen(false);
-  }, [directApiLog, status?.environment, status?.user?.id]);
+  }, [
+    directApiLog,
+    status?.environment,
+    status?.user?.id,
+    status?.user?.tenantId,
+    status?.pageScope,
+  ]);
   const [statusError, setError] = useState('');
   const [pageConnection, setPageConnection] = useState<{ sessionId: string; owner: string } | null>(
     null,

@@ -201,11 +201,17 @@ test('monthly readback checks every submitted SKU, amount and inherited confirma
     logs: [{ ...receipt, actionCode: 'RESUBMIT' }],
     skus: [{ ...original.skus[0], versionId: 'v2', qty: '3.000', amt: '37.02' }],
   };
-  const matches = (value) => salesPlanResubmitReadbackMatches('v1', receipt, value, input.request, original.skus);
+  const matches = (value) =>
+    salesPlanResubmitReadbackMatches('v1', receipt, value, input.request, original.skus);
   assert.equal(matches(detail), true);
   assert.equal(matches({ ...detail, skus: [] }), false);
-  for (const patch of [{ qty: '2.000' }, { price: '12.3500' }, { amt: '37.01' },
-    { regionConfirmedQty: '3.000' }, { regionConfirmedAmount: '37.02' },
-    { provinceConfirmedQty: '1.000' }])
+  for (const patch of [
+    { qty: '2.000' },
+    { price: '12.3500' },
+    { amt: '37.01' },
+    { regionConfirmedQty: '3.000' },
+    { regionConfirmedAmount: '37.02' },
+    { provinceConfirmedQty: '1.000' },
+  ])
     assert.equal(matches({ ...detail, skus: [{ ...detail.skus[0], ...patch }] }), false);
 });

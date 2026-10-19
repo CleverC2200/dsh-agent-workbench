@@ -723,7 +723,7 @@
       "liveSubmit": {
         "title": "Live sales plan resubmission",
         "column": "Resubmit",
-        "open": "Resubmit",
+        "open": "Edit and resubmit",
         "openFor": "Resubmit {{plan}}",
         "queueMode": "Queue type",
         "queueModes": {
@@ -767,6 +767,7 @@
           "notReturned": "Only returned statuses 6–9 can be resubmitted."
         },
         "errors": {
+          "sourceLoad": "Source data could not be loaded. Close and reopen the editor; no submission has been sent.",
           "validation": "The real details do not satisfy the submit contract. No request was sent; refresh and verify fields, SKUs, and totals.",
           "sourceMismatch": "The period, version, status, SKUs, or totals conflict. Sample or stale data was rejected as a real submission.",
           "authentication": "The current user session expired. Sign in again and refresh the real sources before acting.",
@@ -780,6 +781,8 @@
         },
         "inheritance": "Changing submitted quantities does not recalculate inherited confirmations. Review all retained quantities and amounts before submitting.",
         "unitPrice": "Unit price",
+        "lineAmount": "Submitted amount",
+        "requestReference": "Error reference {{id}}",
         "inheritedValues": "Inherited quantity / amount: region {{region}}; province {{province}}; area {{area}}",
         "quantity": "Submitted quantity",
         "nextStatus": "Resubmission target status"

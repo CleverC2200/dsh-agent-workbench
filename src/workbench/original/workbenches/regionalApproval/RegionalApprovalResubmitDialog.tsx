@@ -1,4 +1,10 @@
-import { correctionDecision, correctionLine } from './models/salesPlanCorrectionModel.ts';
+import { isBackendHttpError } from '../../http-error.ts';
+import { businessSafeErrorMessage, reportSalesPlanError } from './models/salesPlanActionModel.ts';
+import {
+  correctionDecision,
+  correctionLine,
+  correctionDecimal,
+} from './models/salesPlanCorrectionModel.ts';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
@@ -42,6 +48,7 @@ export function RegionalApprovalResubmitDialog({
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>([]);
   const [correctionEdits, setCorrectionEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [rejection, setRejection] = useState('');
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -74,7 +81,12 @@ export function RegionalApprovalResubmitDialog({
         setSkus(rows);
       })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setError(cause instanceof Error && cause.message === 'sourceMismatch' ? 'sourceMismatch' : 'sourceLoad');
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error && cause.message === 'sourceMismatch'
+              ? 'sourceMismatch'
+              : 'sourceLoad',
+          );
       });
     return () => controller.abort();
   }, [planId, versionId, period, client]);
@@ -107,6 +119,7 @@ export function RegionalApprovalResubmitDialog({
     submitting.current = true;
     setBusy(true);
     setError('');
+    setRejection('');
     setRetryable(false);
     try {
       if (receipt) {
@@ -134,6 +147,14 @@ export function RegionalApprovalResubmitDialog({
     } catch (cause) {
       const failure = classifySalesPlanSubmitError(cause);
       setError(failure.kind);
+      if (isBackendHttpError(failure.cause)) {
+        const id = reportSalesPlanError('sales-plan-submit', failure.cause);
+        setRejection(
+          [businessSafeErrorMessage(failure.cause.backendMessage), tr('requestReference', { id })]
+            .filter(Boolean)
+            .join(' '),
+        );
+      }
       setRetryable(failure.retrySameIntent);
     } finally {
       submitting.current = false;
@@ -183,7 +204,9 @@ export function RegionalApprovalResubmitDialog({
             })}
           </p>
           <p>{source.detail.logs.filter((log) => log.actionCode === 'REJECT').at(-1)?.remark}</p>
-          {source.detail.currentVersion.orderType === 'M' && <Alert type="info" content={tr('inheritance')} />}
+          {source.detail.currentVersion.orderType === 'M' && (
+            <Alert type="info" content={tr('inheritance')} />
+          )}
           <div style={{ maxHeight: 360, overflow: 'auto' }}>
             {skus.map((sku, index) => (
               <label
@@ -199,13 +222,39 @@ export function RegionalApprovalResubmitDialog({
                 <span>
                   {sku.skuCode} · {sku.productCategName}
                 </span>
-                <span>{tr('unitPrice')}: {sku.price}</span>
+                <span>
+                  {tr('unitPrice')}: {sku.price}
+                </span>
+                <span>
+                  {tr('lineAmount')}:{' '}
+                  {(() => {
+                    try {
+                      return correctionDecimal(sku.qty)
+                        .mul(correctionDecimal(sku.price))
+                        .toDecimalPlaces(2)
+                        .toFixed(2);
+                    } catch {
+                      return '—';
+                    }
+                  })()}
+                </span>
                 {source.detail.currentVersion.orderType === 'M' && (
-                  <span>{tr('inheritedValues', {
-                    region: source.detail.currentVersion.status >= 7 ? `${sku.regionConfirmedQty ?? '—'} / ${sku.regionConfirmedAmount ?? '—'}` : '—',
-                    province: source.detail.currentVersion.status >= 8 ? `${sku.provinceConfirmedQty ?? '—'} / ${sku.provinceConfirmedAmount ?? '—'}` : '—',
-                    area: source.detail.currentVersion.status >= 9 ? `${sku.areaConfirmedQty ?? '—'} / ${sku.areaConfirmedAmount ?? '—'}` : '—',
-                  })}</span>
+                  <span>
+                    {tr('inheritedValues', {
+                      region:
+                        source.detail.currentVersion.status >= 7
+                          ? `${sku.regionConfirmedQty ?? '—'} / ${sku.regionConfirmedAmount ?? '—'}`
+                          : '—',
+                      province:
+                        source.detail.currentVersion.status >= 8
+                          ? `${sku.provinceConfirmedQty ?? '—'} / ${sku.provinceConfirmedAmount ?? '—'}`
+                          : '—',
+                      area:
+                        source.detail.currentVersion.status >= 9
+                          ? `${sku.areaConfirmedQty ?? '—'} / ${sku.areaConfirmedAmount ?? '—'}`
+                          : '—',
+                    })}
+                  </span>
                 )}
                 <Input
                   aria-label={`${source.detail.currentVersion.orderType === 'Z' ? '纠偏调整量' : tr('quantity')} ${sku.skuCode}`}
@@ -253,7 +302,14 @@ export function RegionalApprovalResubmitDialog({
         </>
       )}
       {error && (
-        <Alert type="error" content={receipt ? tr('refreshFailed') : tr(`errors.${error}`)} />
+        <Alert
+          type="error"
+          content={
+            receipt
+              ? tr('refreshFailed')
+              : [tr(`errors.${error}`), rejection].filter(Boolean).join(' ')
+          }
+        />
       )}
       {verified && receipt && (
         <Alert
