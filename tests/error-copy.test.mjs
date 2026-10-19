@@ -4,14 +4,19 @@ import { build } from 'esbuild';
 
 const { outputFiles } = await build({
   stdin: {
-    contents:
+    contents: [
       "export * from './src/workbench/original/workbenches/regionalApproval/models/salesPlanActionModel.ts';",
+      "export { actionErrorText } from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalLiveActionDialog.tsx';",
+      "export { BackendHttpError } from './src/workbench/original/http-error.ts';",
+    ].join('\n'),
     resolveDir: process.cwd(),
   },
   bundle: true,
   write: false,
   platform: 'node',
   format: 'esm',
+  outfile: '/tmp/sales-plan-error-copy.js',
+  loader: { '.css': 'empty', '.module.css': 'empty' },
 });
 const m = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
@@ -56,6 +61,31 @@ test('reported error id is human-transferable and detail stays in the log', () =
     assert.match(String(logged[0][0]), /sales-plan-action/);
     assert.match(String(logged[0][0]), new RegExp(id));
     assert.deepEqual(logged[0][1], { backendMessage: 'payload.plan_month 为必填字段' });
+  } finally {
+    console.warn = original;
+  }
+});
+
+test('an ended approval instance preserves the backend reason without advising resubmission', () => {
+  const original = console.warn;
+  console.warn = () => {};
+  try {
+    const cause = new m.BackendHttpError({
+      method: 'POST',
+      path: '/sales-plan/plans/versions/v1/actions',
+      status: 409,
+      body: {
+        error: 'GEA_HTTP_409：该版本审批实例已经结束',
+        details: { upstreamCode: 'SALES_PLAN_APPROVAL_STATE_INVALID', requestId: 'ended-instance' },
+      },
+    });
+    const translate = (key) =>
+      key.endsWith('SALES_PLAN_APPROVAL_STATE_INVALID')
+        ? '该版本当前无法执行此审批动作；请联系管理员核对审批实例状态。'
+        : '';
+    const text = m.actionErrorText(translate, m.classifySalesPlanActionError(cause));
+    assert.match(text, /该版本审批实例已经结束/);
+    assert.doesNotMatch(text, /退回重提|重新提交/);
   } finally {
     console.warn = original;
   }

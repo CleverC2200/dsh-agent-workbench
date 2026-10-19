@@ -92,7 +92,10 @@ const UPSTREAM_REJECTION_CODES = [
   'APPROVAL_OPERATOR_NOT_ALLOWED',
 ] as const;
 
-const upstreamRejectionText = (t: TFunction, cause: { details?: unknown }): string | undefined => {
+const upstreamRejectionText = (
+  t: TFunction,
+  cause: { details?: unknown; backendMessage?: string },
+): string | undefined => {
   const details = cause.details;
   const code =
     details &&
@@ -101,6 +104,12 @@ const upstreamRejectionText = (t: TFunction, cause: { details?: unknown }): stri
       ? (details as { upstreamCode: string }).upstreamCode
       : '';
   if (!(UPSTREAM_REJECTION_CODES as readonly string[]).includes(code)) return undefined;
+  if (code === 'SALES_PLAN_APPROVAL_STATE_INVALID') {
+    const reason = businessSafeErrorMessage(
+      cause.backendMessage?.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, ''),
+    );
+    if (reason) return reason;
+  }
   return t(`common.assistantSurface.regionalApproval.liveAction.errors.upstream.${code}`);
 };
 

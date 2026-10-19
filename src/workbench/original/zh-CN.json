@@ -918,7 +918,7 @@
           "failed": "操作请求失败且未更新本地状态；请刷新权威队列后再决定。",
           "reference": "（错误编号：{{id}}，可将编号告知系统管理员）",
           "upstream": {
-            "SALES_PLAN_APPROVAL_STATE_INVALID": "这条单子的状态不允许直接通过或退回；退回的单子请用「退回重提」重新提交，再刷新队列。",
+            "SALES_PLAN_APPROVAL_STATE_INVALID": "该版本当前无法执行此审批动作；请联系管理员核对审批实例状态。",
             "NOTIFICATION_PAYLOAD_INVALID": "服务端在生成审批通知时被拒绝，属于服务端问题，刷新无法解决；请把错误编号发给后端核对。",
             "APPROVAL_OPERATOR_NOT_ALLOWED": "服务端认为当前账号已不具备该节点的角色或组织权限；请刷新后重试，并联系管理员核对角色。"
           }
