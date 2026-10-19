@@ -1,3 +1,4 @@
+import { salesPlanConflictErrorKind } from './salesPlanActionModel.ts';
 import {
   correctionDecision,
   correctionLine,
@@ -70,6 +71,8 @@ export type SalesPlanSubmitErrorKind =
   | 'validation'
   | 'sourceMismatch'
   | 'authentication'
+  | 'serviceAuthentication'
+  | 'configuration'
   | 'permission'
   | 'conflict'
   | 'rateLimited'
@@ -144,6 +147,9 @@ const fixedDecimal = (scaled: bigint, scale: number): string => {
   const raw = scaled.toString().padStart(scale + 1, '0');
   return scale === 0 ? raw : `${raw.slice(0, -scale)}.${raw.slice(-scale)}`;
 };
+
+export const salesPlanPeriodMonthForPlanId = (planId: string): string | undefined =>
+  planId.trim().match(BUSINESS_PLAN_ID_PATTERN)?.[2];
 
 export const salesPlanChannelCodeForPlanId = (
   planId: string,
@@ -289,12 +295,22 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
   if (isBackendHttpError(error)) {
     if (error.status === 400)
       return new SalesPlanSubmitError('validation', false, undefined, { cause: error });
+    if (
+      error.status === 401 &&
+      error.details &&
+      typeof error.details === 'object' &&
+      'authentication' in error.details &&
+      error.details.authentication === 'service'
+    )
+      return new SalesPlanSubmitError('serviceAuthentication', false, undefined, { cause: error });
     if (error.status === 401)
       return new SalesPlanSubmitError('authentication', false, undefined, { cause: error });
     if (error.status === 403)
       return new SalesPlanSubmitError('permission', false, undefined, { cause: error });
     if (error.status === 409)
-      return new SalesPlanSubmitError('conflict', false, undefined, { cause: error });
+      return new SalesPlanSubmitError(salesPlanConflictErrorKind(error.details), false, undefined, {
+        cause: error,
+      });
     if (error.status === 429) {
       return new SalesPlanSubmitError(
         'rateLimited',
@@ -320,19 +336,33 @@ export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitErr
   return new SalesPlanSubmitError('failed', false, undefined, { cause: error });
 };
 
-export const salesPlanSubmitReceiptMatches = (
+const validSubmitReceipt = (
   input: SalesPlanSubmitInput,
   requestId: string,
   receipt: GeaSalesPlanSubmitReceipt,
 ): boolean =>
   receipt.planId === input.expected.planId &&
+  typeof receipt.versionId === 'string' &&
   receipt.versionId !== input.expected.previousVersionId &&
   receipt.versionId.trim().length > 0 &&
-  receipt.seq === input.expected.nextSeq &&
-  receipt.status === input.expected.nextStatus &&
+  Number.isSafeInteger(receipt.seq) &&
+  receipt.seq > 0 &&
+  Number.isSafeInteger(receipt.status) &&
+  receipt.status >= 0 &&
+  receipt.status <= 10 &&
   receipt.requestId === requestId &&
+  typeof receipt.traceId === 'string' &&
   receipt.traceId.trim().length > 0 &&
-  receipt.auditId.trim().length > 0;
+  (receipt.auditId == null || typeof receipt.auditId === 'string');
+
+export const salesPlanSubmitReceiptMatches = (
+  input: SalesPlanSubmitInput,
+  requestId: string,
+  receipt: GeaSalesPlanSubmitReceipt,
+): boolean =>
+  validSubmitReceipt(input, requestId, receipt) &&
+  receipt.seq === input.expected.nextSeq &&
+  receipt.status === input.expected.nextStatus;
 
 export class SalesPlanSubmitAttempt {
   private static readonly MAX_CALLS = 3;
@@ -386,7 +416,7 @@ export class SalesPlanSubmitAttempt {
     this.inFlight = this.client.submit
       .invoke(command)
       .then((receipt) => {
-        if (!salesPlanSubmitReceiptMatches(input, command.requestId, receipt)) {
+        if (!validSubmitReceipt(input, command.requestId, receipt)) {
           throw new SalesPlanSubmitError('unavailable', true);
         }
         this.receipt = receipt;

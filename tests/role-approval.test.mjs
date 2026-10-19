@@ -184,6 +184,8 @@ test('role receipt verifies actor, configured return target and all required app
     approvalRole: 'region',
   };
   assert.equal(m.salesPlanActionReceiptMatches(input, 'r', receipt), true);
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, auditId: null }), true);
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, auditId: 42 }), false);
   assert.equal(
     m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, approvalRole: 'province' }),
     false,

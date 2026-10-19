@@ -259,7 +259,7 @@ export type GeaSalesPlanSubmitReceipt = {
   replayed: boolean;
   requestId: string;
   traceId: string;
-  auditId: string;
+  auditId?: string | null;
 };
 
 export type GeaSalesPlanSubmitParams = {
@@ -299,7 +299,7 @@ export type GeaSalesPlanActionReceipt = {
   replayed: boolean;
   requestId: string;
   traceId: string;
-  auditId: string;
+  auditId?: string | null;
 };
 
 export type GeaSalesPlanActionParams = {

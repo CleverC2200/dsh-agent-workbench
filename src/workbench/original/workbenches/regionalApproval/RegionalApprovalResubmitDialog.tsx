@@ -16,6 +16,7 @@ import type {
 import {
   prepareSalesPlanResubmit,
   salesPlanResubmitReadbackMatches,
+  salesPlanSubmitReceiptMatches,
   SalesPlanSubmitAttempt,
   classifySalesPlanSubmitError,
   type SalesPlanResubmitSource,
@@ -119,7 +120,11 @@ export function RegionalApprovalResubmitDialog({
   }, [source, skus, correctionEdits]);
   const readBack = async (value: GeaSalesPlanSubmitReceipt) => {
     const detail = await client.detail.invoke({ planId });
-    if (!salesPlanResubmitReadbackMatches(versionId, value, detail, input?.request, source?.skus))
+    if (
+      !input ||
+      !salesPlanSubmitReceiptMatches(input, value.requestId, value) ||
+      !salesPlanResubmitReadbackMatches(versionId, value, detail, input.request, source?.skus)
+    )
       throw new Error('readback');
     setVerified(true);
     onSucceeded();
@@ -314,6 +319,11 @@ export function RegionalApprovalResubmitDialog({
                 quantity: input.sourceSummary.submittedQty,
                 amount: input.sourceSummary.submittedAmount,
               })}{' '}
+              ·{' '}
+              {tr('targetSummary', {
+                quantity: input.request.targetQty,
+                amount: input.request.targetAmount,
+              })}{' '}
               · {tr('nextStatus')}: {input.expected.nextStatus}
             </p>
           ) : (
@@ -339,6 +349,7 @@ export function RegionalApprovalResubmitDialog({
           type="success"
           content={tr('success', {
             ...receipt,
+            auditReference: receipt.auditId ? tr('auditReference', { id: receipt.auditId }) : '',
             replayed: tr(receipt.replayed ? 'replayed' : 'created'),
           })}
         />

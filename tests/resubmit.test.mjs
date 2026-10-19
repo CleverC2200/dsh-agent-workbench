@@ -13,9 +13,11 @@ const { outputFiles } = await build({
   format: 'esm',
 });
 const {
+  classifySalesPlanSubmitError,
   prepareSalesPlanResubmit,
   salesPlanCanResubmit,
   salesPlanResubmitReadbackMatches,
+  salesPlanSubmitReceiptMatches,
   SalesPlanSubmitAttempt,
   replaceSalesPlanWorkflowRows,
 } = await import(
@@ -110,7 +112,7 @@ test('unknown outcomes retry exactly one intent and a completed attempt cannot d
             status: input.expected.nextStatus,
             requestId: cmd.requestId,
             traceId: 'trace',
-            auditId: 'audit',
+            auditId: null,
           };
         },
       },
@@ -214,4 +216,63 @@ test('monthly readback checks every submitted SKU, amount and inherited confirma
     { provinceConfirmedQty: '1.000' },
   ])
     assert.equal(matches({ ...detail, skus: [{ ...detail.skus[0], ...patch }] }), false);
+});
+
+test('a valid successful receipt with an unexpected sequence is retained for readback without another write', async () => {
+  const input = prepareSalesPlanResubmit(source(7));
+  let writes = 0;
+  const attempt = new SalesPlanSubmitAttempt(
+    {
+      submit: {
+        invoke: async (command) => {
+          writes++;
+          return {
+            planId: input.expected.planId,
+            versionId: 'v3',
+            seq: 3,
+            status: 3,
+            replayed: false,
+            requestId: command.requestId,
+            traceId: 'trace',
+            auditId: null,
+          };
+        },
+      },
+    },
+    () => 'unexpected',
+  );
+  const actual = await attempt.submit(input);
+  assert.equal(actual.seq, 3);
+  assert.equal(actual.status, 3);
+  assert.equal(salesPlanSubmitReceiptMatches(input, actual.requestId, actual), false);
+  assert.equal((await attempt.retry()).versionId, 'v3');
+  assert.equal(writes, 1);
+});
+
+test('configuration conflicts and service authentication failures keep their own non-retryable meaning', () => {
+  const failure = (status, details) => ({
+    name: 'BackendHttpError',
+    status,
+    code: 'GEA_HTTP_' + status,
+    details,
+  });
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'NOTIFICATION_PAYLOAD_INVALID' }))
+      .kind,
+    'configuration',
+  );
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'SALES_PLAN_CONFLICT' })).kind,
+    'conflict',
+  );
+  assert.equal(
+    classifySalesPlanSubmitError(failure(401, { authentication: 'service' })).kind,
+    'serviceAuthentication',
+  );
+  assert.equal(classifySalesPlanSubmitError(failure(401, {})).kind, 'authentication');
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'APPROVAL_CANDIDATE_MISSING' }))
+      .retrySameIntent,
+    false,
+  );
 });

@@ -320,7 +320,7 @@ const normalizeLiveActionReceipts = (value: unknown): Record<string, GeaSalesPla
         typeof candidate.replayed === 'boolean' &&
         typeof candidate.requestId === 'string' &&
         typeof candidate.traceId === 'string' &&
-        typeof candidate.auditId === 'string'
+        (candidate.auditId == null || typeof candidate.auditId === 'string')
       );
     }),
   ) as Record<string, GeaSalesPlanActionReceipt>;
