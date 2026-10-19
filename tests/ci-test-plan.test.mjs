@@ -346,6 +346,29 @@ test('unmapped runtime source refuses before preparation; no full-suite fallback
   f.repositories[0].head = f.commit(f.root);
   assert.throws(f.plan, /CI_TEST_IMPACT_UNMAPPED/);
 });
+test('deleted source without a current consumer can retire without a fallback suite', (t) => {
+  const f = fixture(t, 'dsh-gea-plugin');
+  f.put(f.root, 'scripts/unused.mjs', 'export const unused = true;');
+  f.checkpoint();
+  unlinkSync(join(f.root, 'scripts/unused.mjs'));
+  f.repositories[2].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.equal(plan.applicability, 'source');
+  assert.equal(plan.fullSuite, 'not-run');
+  assert.deepEqual(plan.files, ['tests/required.test.mjs']);
+  assert.deepEqual(plan.reasons['dsh-gea-plugin/scripts/unused.mjs'], []);
+});
+test('deleted source with a current consumer still selects that consumer', (t) => {
+  const f = fixture(t, 'dsh-gea-plugin');
+  f.put(f.root, 'scripts/consumed.mjs', 'export const consumed = true;');
+  f.put(f.root, 'tests/script.test.mjs', 'import "../scripts/consumed.mjs";');
+  f.checkpoint();
+  unlinkSync(join(f.root, 'scripts/consumed.mjs'));
+  f.repositories[2].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.deepEqual(plan.files, ['tests/required.test.mjs', 'tests/script.test.mjs']);
+  assert.deepEqual(plan.reasons['dsh-gea-plugin/scripts/consumed.mjs'], ['tests/script.test.mjs']);
+});
 test('explicit dynamic-consumer rules select real files and missing required files refuse', (t) => {
   const f = fixture(t);
   f.policy.rules.push({

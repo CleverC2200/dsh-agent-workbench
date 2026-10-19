@@ -469,6 +469,7 @@ export function selectCiTests({
     if (
       !files.length &&
       !rules.length &&
+      existsSync(change.path) &&
       ((ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
         /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
           change.file,
