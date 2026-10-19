@@ -13,7 +13,11 @@ const Exact = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
 export type CorrectionNode = Exclude<SalesPlanRole, 'customer'>;
 export type CorrectionFields = Partial<
   Record<
-    `${CorrectionNode}AdjAddQty` | `${CorrectionNode}AdjCutQty` | 'adjAddQty' | 'adjCutQty',
+    | `${CorrectionNode}${'AdjAddQty' | 'AdjCutQty' | 'AdjAddAmount' | 'AdjCutAmount' | 'ConfirmedQty' | 'ConfirmedAmount'}`
+    | 'adjAddQty'
+    | 'adjCutQty'
+    | 'adjAddAmount'
+    | 'adjCutAmount',
     string | null
   >
 >;
@@ -33,78 +37,76 @@ export function correctionDecision(
   workflowRows?: readonly SalesPlanWorkflowRow[],
   selectedRole?: CorrectionNode,
 ): string {
-  // 沿审批链从当前节点向前找第一组完整决定，禁止把缺失值当成零。
   const flow = salesPlanWorkflow(typeCode, workflowRows);
   const roles = selectedRole
     ? SALES_PLAN_ROLES.slice(0, SALES_PLAN_ROLES.indexOf(selectedRole) + 1)
         .toReversed()
         .filter((role) => role === selectedRole || flow.pending(role) !== undefined)
     : flow.confirmationRoles(status);
-  for (const role of includeCurrent ? roles : roles.slice(1)) {
-    const add = role === 'customer' ? sku.adjAddQty : sku[`${role}AdjAddQty`];
-    const cut = role === 'customer' ? sku.adjCutQty : sku[`${role}AdjCutQty`];
-    if (add == null && cut == null) continue;
-    if (add == null || cut == null) throw new Error('纠偏追加与追减字段不完整');
-    const a = correctionDecimal(add),
-      c = correctionDecimal(cut);
-    if (a.isNegative() || c.isNegative() || (!a.isZero() && !c.isZero()))
-      throw new Error('纠偏调整必须是绝对净量');
-    return a.minus(c).toFixed();
-  }
-  throw new Error('纠偏继承数据缺失');
+  const selected = includeCurrent ? roles : roles.slice(1);
+  const value = (suffix: 'AdjAddQty' | 'AdjCutQty') => {
+    for (const role of selected) {
+      const candidate =
+        role === 'customer'
+          ? sku[suffix === 'AdjAddQty' ? 'adjAddQty' : 'adjCutQty']
+          : sku[`${role}${suffix}`];
+      if (candidate != null) {
+        const quantity = correctionDecimal(candidate);
+        if (quantity.isNegative()) throw new Error('纠偏追加与追减数量不可为负');
+        return quantity;
+      }
+    }
+    return correctionDecimal('0');
+  };
+  return value('AdjAddQty').minus(value('AdjCutQty')).toFixed();
 }
-export function correctionLine(sku: Pick<GeaSalesPlanSku, 'qty' | 'price'>, input: string) {
+export function correctionLine(
+  sku: Pick<GeaSalesPlanSku, 'qty' | 'price' | 'amt' | 'corrBaseQty'>,
+  input: string,
+) {
   if (!/^[+-]?\d{1,15}(?:\.\d{1,3})?$/.test(input)) throw new Error('调整量最多三位小数');
   const base = correctionDecimal(sku.qty),
     price = correctionDecimal(sku.price),
     delta = correctionDecimal(input);
   const qty = base.plus(delta);
+  const addQty = delta.isNegative() ? correctionDecimal('0') : delta;
+  const cutQty = delta.isNegative() ? delta.negated() : correctionDecimal('0');
+  const addAmount = addQty.times(price).toFixed(2);
+  const cutAmount = cutQty.times(price).toFixed(2);
   if (base.isNegative() || price.isNegative() || qty.isNegative())
     throw new Error('纠偏后计划数量不可为负');
   if (qty.gte('1000000000000000')) throw new Error('纠偏后计划数量超出范围');
   return {
     baseQty: base.toFixed(),
     qty: qty.toFixed(),
-    amount: qty.times(price).toFixed(2),
+    amount: correctionDecimal(sku.amt).plus(addAmount).minus(cutAmount).toFixed(2),
     delta: delta.toFixed(),
     deltaAmount: delta.times(price).toFixed(2),
-    addQty: delta.isNegative() ? '0' : delta.toFixed(),
-    cutQty: delta.isNegative() ? delta.negated().toFixed() : '0',
+    addQty: addQty.toFixed(),
+    cutQty: cutQty.toFixed(),
+    addAmount,
+    cutAmount,
     participates: !base.isZero() || !delta.isZero(),
   };
 }
-export function correctionMetrics(row: {
-  targetAmount?: string;
-  mPlanAmount?: string;
-  mPlanQty?: string;
-  shipAmount?: string;
-  shipQty?: string;
-  corrPlanAmount?: string;
-}) {
-  const ratio = (n?: string, d?: string) => {
-    try {
-      const denominator = correctionDecimal(d);
-      return denominator.gt(0)
-        ? correctionDecimal(n).div(denominator).times(100).toFixed(2)
-        : undefined;
-    } catch {
-      return undefined;
-    }
-  };
-  let netAmount: string | undefined;
+export function correctionDisplay(value: string | undefined, kind: 'money' | 'quantity') {
   try {
-    netAmount = correctionDecimal(row.corrPlanAmount)
-      .minus(correctionDecimal(row.mPlanAmount))
-      .toFixed(2);
+    const number = correctionDecimal(value);
+    const sign = number.isNegative() && !number.isZero() ? '−' : '';
+    const absolute = number.abs();
+    const large = absolute.gte(10000);
+    const group = (raw: string) => raw.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const numeric = large ? absolute.div(10000).toFixed(2) + '万' : group(absolute.toFixed());
+    return {
+      display: kind === 'money' ? `${sign}¥${numeric}` : `${sign}${numeric}件`,
+      exact:
+        kind === 'money'
+          ? `${sign}¥${group(absolute.toFixed(2))}`
+          : `${sign}${group(absolute.toFixed(3))}件`,
+    };
   } catch {
-    /* 缺失不等于零。 */
+    return { display: '—', exact: '—' };
   }
-  return {
-    amountProgress: ratio(row.shipAmount, row.mPlanAmount),
-    qtyProgress: ratio(row.shipQty, row.mPlanQty),
-    correctionProgress: ratio(row.corrPlanAmount, row.targetAmount),
-    netAmount,
-  };
 }
 
 import type {
@@ -136,12 +138,15 @@ export function correctionAccess(
     context.versionId !== v.id ||
     context.status !== v.status ||
     !/^[a-f0-9]{64}$/.test(context.snapshotHash) ||
-    !role || role === 'customer' || role !== actor ||
+    !role ||
+    role === 'customer' ||
+    role !== actor ||
     context.nodeOrder !== SALES_PLAN_ROLES.indexOf(role) + 1 ||
     !Array.isArray(context.allowedActions) ||
-    context.allowedActions.some(action => !['SAVE', 'APPROVE', 'REJECT'].includes(action)) ||
+    context.allowedActions.some((action) => !['SAVE', 'APPROVE', 'REJECT'].includes(action)) ||
     !stages.includes(role)
-  ) return undefined;
+  )
+    return undefined;
   return {
     ...context,
     approvalRole: role,
@@ -159,6 +164,9 @@ export function correctionAdjustments(
   return detail.skus.flatMap((sku) => {
     const delta =
       edits[sku.skuCode] ??
+      (sku.nodeAdjAddQty != null && sku.nodeAdjCutQty != null
+        ? correctionDecimal(sku.nodeAdjAddQty).minus(sku.nodeAdjCutQty).toFixed()
+        : undefined) ??
       correctionDecision(
         sku,
         detail.currentVersion.status,
@@ -168,7 +176,6 @@ export function correctionAdjustments(
         selectedRole,
       );
     const line = correctionLine(sku, delta);
-    // 零是明确意图；服务端只会在校验后移除加减均为零的行。
     return [{ skuCode: sku.skuCode, adjustQty: line.delta }];
   });
 }
@@ -239,28 +246,65 @@ export function verifyCorrectionAction(
     const saved = after.skus.find((x) => x.skuCode === sku.skuCode);
     const delta = decisions.get(sku.skuCode);
     if (
-      request.action !== 'REJECT' &&
-      delta != null &&
-      correctionLine(sku, delta).participates === false
+      !saved ||
+      !equal(saved.qty, sku.qty) ||
+      !equal(saved.price, sku.price) ||
+      !equal(saved.amt, sku.amt) ||
+      !equal(saved.corrBaseQty, sku.corrBaseQty) ||
+      !equal(saved.adjAddQty, sku.adjAddQty) ||
+      !equal(saved.adjCutQty, sku.adjCutQty) ||
+      !equal(saved.adjAddAmount, sku.adjAddAmount) ||
+      !equal(saved.adjCutAmount, sku.adjCutAmount)
     )
-      return !saved;
-    if (!saved || !equal(saved.qty, sku.qty) || !equal(saved.price, sku.price)) return false;
+      return false;
     for (const other of ['region', 'province', 'area', 'category'] as const) {
-      for (const suffix of ['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'] as const) {
+      for (const suffix of [
+        'AdjAddQty',
+        'AdjCutQty',
+        'AdjAddAmount',
+        'AdjCutAmount',
+        'ConfirmedQty',
+        'ConfirmedAmount',
+      ] as const) {
         if (other !== role || (request.action === 'SAVE' && suffix.startsWith('Confirmed'))) {
           if (!equal(saved[`${other}${suffix}`], sku[`${other}${suffix}`])) return false;
         }
       }
     }
     if (request.action === 'REJECT')
-      return ['AdjAddQty', 'AdjCutQty', 'ConfirmedQty', 'ConfirmedAmount'].every(
-        (s) => saved[`${role}${s}` as keyof GeaSalesPlanSku] == null,
-      );
+      return [
+        'AdjAddQty',
+        'AdjCutQty',
+        'AdjAddAmount',
+        'AdjCutAmount',
+        'ConfirmedQty',
+        'ConfirmedAmount',
+      ].every((s) => saved[`${role}${s}` as keyof GeaSalesPlanSku] == null);
     if (delta == null) return false;
     const expected = correctionLine(sku, delta);
+    if (
+      !expected.participates &&
+      sku[`${role}AdjAddQty`] == null &&
+      sku[`${role}AdjCutQty`] == null
+    )
+      return [
+        'AdjAddQty',
+        'AdjCutQty',
+        'AdjAddAmount',
+        'AdjCutAmount',
+        'ConfirmedQty',
+        'ConfirmedAmount',
+      ].every((suffix) =>
+        equal(
+          saved[`${role}${suffix}` as keyof GeaSalesPlanSku],
+          sku[`${role}${suffix}` as keyof GeaSalesPlanSku],
+        ),
+      );
     return (
       equal(saved[`${role}AdjAddQty`], expected.addQty) &&
       equal(saved[`${role}AdjCutQty`], expected.cutQty) &&
+      equal(saved[`${role}AdjAddAmount`], expected.addAmount) &&
+      equal(saved[`${role}AdjCutAmount`], expected.cutAmount) &&
       (request.action === 'SAVE' ||
         (equal(saved[`${role}ConfirmedQty`], expected.qty) &&
           equal(saved[`${role}ConfirmedAmount`], expected.amount)))

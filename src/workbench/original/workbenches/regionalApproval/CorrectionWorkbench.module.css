@@ -61,3 +61,45 @@
   width: 2px;
   background: rgb(var(--danger-6));
 }
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.summary > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.summary strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+}
+.page small {
+  display: block;
+}
+.organization small {
+  color: var(--color-text-2);
+}
+.zero {
+  color: var(--color-text-3);
+}
+.zero input {
+  color: var(--color-text-3);
+}
+.detail input {
+  font-variant-numeric: tabular-nums;
+}
+.group {
+  background: var(--color-fill-2);
+}
+@media (max-width: 640px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .page {
+    padding: 12px;
+  }
+}
