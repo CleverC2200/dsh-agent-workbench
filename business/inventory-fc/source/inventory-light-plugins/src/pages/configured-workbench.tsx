@@ -26,7 +26,7 @@ const views: Record<string, string[]> = {
   structure: ['inventory', 'health', 'flows'],
   plan: ['plan'],
   base: ['base-resources', 'base'],
-  operations: ['cost', 'flows', 'shipments'],
+  operations: ['cost', 'flows', 'shipments', 'base-stock-flows'],
 };
 const show = (n: number | null, unit = '') =>
   n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
@@ -46,7 +46,7 @@ export default function ConfiguredWorkbench() {
     `${plan?.['known_' + field + '_count'] ?? '-'} / ${plan?.row_count ?? '-'} 个仓库SKU`;
   const cards = [
     {
-      title: '库存水位',
+      title: '当前库存',
       value: knownNumber(branchStock?.total_qty),
       unit: '箱',
       color: 'blue',
@@ -58,7 +58,7 @@ export default function ConfiguredWorkbench() {
       ],
     },
     {
-      title: '库存货龄',
+      title: '最大库龄',
       value: knownNumber(branchStock?.max_age),
       unit: '天',
       color: 'purple',
@@ -69,7 +69,7 @@ export default function ConfiguredWorkbench() {
       ],
     },
     {
-      title: '当月订单满足率',
+      title: '订单满足率',
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
@@ -82,7 +82,7 @@ export default function ConfiguredWorkbench() {
       ],
     },
     {
-      title: '补货确认',
+      title: '待补货量',
       value: null,
       unit: '箱',
       color: 'red',
@@ -95,7 +95,7 @@ export default function ConfiguredWorkbench() {
       ],
     },
     {
-      title: '待分配缺口（近60天）',
+      title: '当前订单',
       value: null,
       unit: '箱',
       color: 'amber',
@@ -199,14 +199,17 @@ export default function ConfiguredWorkbench() {
                 <b>核心判断：</b>
                 分仓现存、可用、备单占用、冻结和源超龄量已接入库存快照；货龄展示最大值。批次分布、安全目标、补货周期及有效计划不足时，建议补货量仍保持未知。
               </p>
-              <p>
-                <b>数据边界：</b>
-                订单满足率为所选月截至读取日的分仓履约；调拨量为当前源计划记录，单位与版本未确认，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
-                {shipments?.warehouse_count ?? '-'} 个仓库、{shipments?.row_count ?? '-'}{' '}
-                个仓库SKU；本月发货有值 {shipments?.month_valid_skus ?? '-'} 行、近30日有值{' '}
-                {shipments?.rolling_valid_skus ?? '-'} 行；末次发货日{' '}
-                {shipments?.last_ship_date ?? '-'}。
-              </p>
+              <details className={common.scopeDetails}>
+                <summary>统计范围与口径</summary>
+                <p>
+                  <b>数据边界：</b>
+                  订单满足率为所选月截至读取日的分仓履约；调拨量为当前源计划记录，单位与版本未确认，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
+                  {shipments?.warehouse_count ?? '-'} 个仓库、{shipments?.row_count ?? '-'}{' '}
+                  个仓库SKU；本月发货有值 {shipments?.month_valid_skus ?? '-'} 行、近30日有值{' '}
+                  {shipments?.rolling_valid_skus ?? '-'} 行；末次发货日{' '}
+                  {shipments?.last_ship_date ?? '-'}。
+                </p>
+              </details>
             </section>
             <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
               {tabs.map(([id, label]) => (

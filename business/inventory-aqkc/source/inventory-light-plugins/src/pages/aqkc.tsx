@@ -1,3 +1,4 @@
+import common from '../../../../../shared/restored-workbench.module.css';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
@@ -184,6 +185,7 @@ const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
 };
 
 export function InventoryOperationsWorkbench() {
+  const [sourceDetailsOpen, setSourceDetailsOpen] = useState(false);
   const restoredView = useRef<Record<string, unknown> | null>(null);
   const restorePhase = useRef(0);
   const [activeBoardTab, setActiveBoardTab] = useState<BoardTabName>('基地结构');
@@ -1217,6 +1219,26 @@ export function InventoryOperationsWorkbench() {
           </>
         </div>
       </section>
+      {usesConfiguredSql() && (
+        <details
+          className={common.sourceSupplement}
+          onToggle={(event) => setSourceDetailsOpen(event.currentTarget.open)}
+        >
+          <summary>业务明细</summary>
+          {sourceDetailsOpen && (
+            <ConfiguredFactsPage
+              config={healthSqlConfig}
+              embedded
+              viewIds={['health', 'health-base', 'base-stock-flows', 'order-plan-source']}
+              initialFilters={
+                paths.length
+                  ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
+                  : {}
+              }
+            />
+          )}
+        </details>
+      )}
     </div>
   );
 }

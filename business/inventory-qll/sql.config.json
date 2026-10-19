@@ -7776,7 +7776,7 @@
       "title": "源库存健康度明细分页",
       "plugins": ["aqkc", "fc", "qll", "aps"],
       "grain": ["stat_date", "belong_base", "warehouse_type", "warehouseid", "material_code"],
-      "notes": "按统计日/基地/仓库类型/仓库编码/SKU读取；同键重复保留NULL。total_qty用于仓库库存范围；current_stock、target_stock_qty为跨仓重复的基地SKU参考值，不逐仓相加。货龄采用同记录total_qty加权，不推演批次。",
+      "notes": "按统计日、仓库编码、SKU读取；相同重复值只取一次，冲突保持未知。age_days是最大库龄。名称优先取当前订单中的唯一非空SKU名称，订单无名称时才补出入库来源唯一名称，订单名称冲突不回退。名称均为当前参考，不回溯历史命名；左连接不改变库存行数。",
       "activation": "source_candidate_pending_published_fields_and_agent_gea_replay",
       "parameterSpec": {
         "gea_p1": {
@@ -7946,7 +7946,7 @@
         }
       },
       "request": {
-        "sql": "WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM filtered AS r ORDER BY CASE WHEN :gea_p20 = 'overaged_qty' AND r.overaged_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN r.overaged_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN r.overaged_qty ELSE NULL END DESC, CASE WHEN :gea_p20 = 'total_qty' AND r.total_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN r.total_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN r.total_qty ELSE NULL END DESC, r.stat_date ASC, r.belong_base ASC, r.warehouse_type ASC, r.product_categ_name ASC, r.material_group_name ASC, r.material_code ASC, r.warehouseid ASC LIMIT :gea_p18 OFFSET :gea_p19",
+        "sql": "WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))), order_sku_names AS (SELECT t.new_material_code AS sku, COUNT(DISTINCT NULLIF(TRIM(t.new_material_name), '')) AS name_count, MAX(NULLIF(TRIM(t.new_material_name), '')) AS material_name FROM agents_order_execute_isontime_mi AS t GROUP BY t.new_material_code), flow_sku_names AS (SELECT t.material_code AS sku, COUNT(DISTINCT NULLIF(TRIM(t.material_name), '')) AS name_count, MAX(NULLIF(TRIM(t.material_name), '')) AS material_name FROM agents_scm_material_in_out_summary_d AS t GROUP BY t.material_code), sku_names AS (SELECT k.sku AS sku, CASE WHEN o.name_count = 1 THEN o.material_name WHEN (o.name_count IS NULL OR o.name_count = 0) AND f.name_count = 1 THEN f.material_name ELSE NULL END AS material_name FROM (SELECT b.material_code AS sku FROM business_rows AS b GROUP BY b.material_code) AS k LEFT JOIN order_sku_names AS o ON k.sku = o.sku LEFT JOIN flow_sku_names AS f ON k.sku = f.sku) SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at, n.material_name AS material_name FROM filtered AS r LEFT JOIN sku_names AS n ON r.material_code = n.sku ORDER BY CASE WHEN :gea_p20 = 'overaged_qty' AND r.overaged_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN r.overaged_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN r.overaged_qty ELSE NULL END DESC, CASE WHEN :gea_p20 = 'total_qty' AND r.total_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN r.total_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN r.total_qty ELSE NULL END DESC, r.stat_date ASC, r.belong_base ASC, r.warehouse_type ASC, r.product_categ_name ASC, r.material_group_name ASC, r.material_code ASC, r.warehouseid ASC LIMIT :gea_p18 OFFSET :gea_p19",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p2": false,
@@ -8000,7 +8000,8 @@
         "available_qty",
         "pack_unit_qty",
         "freeze_qty",
-        "source_updated_at"
+        "source_updated_at",
+        "material_name"
       ]
     },
     "health.count": {
@@ -14697,7 +14698,7 @@
         }
       },
       "request": {
-        "sql": "SELECT p.stat_date AS stat_date, p.belong_base AS belong_base, p.warehouse_type AS warehouse_type, p.product_categ_name AS product_categ_name, p.material_group_name AS material_group_name, p.material_code AS material_code, p.is_overaged AS is_overaged, p.overaged_qty AS overaged_qty, p.total_qty AS total_qty, p.is_low_stock AS is_low_stock, p.is_high_stock AS is_high_stock, p.update_time AS update_time, p.source_rows AS source_rows, p.warehouseid AS warehouseid, p.warehouse_name AS warehouse_name, p.current_stock AS current_stock, p.safe_stock_qty AS safe_stock_qty, p.target_stock_qty AS target_stock_qty, p.age_days AS age_days, p.available_qty AS available_qty, p.pack_unit_qty AS pack_unit_qty, p.freeze_qty AS freeze_qty, p.source_updated_at AS source_updated_at, c.total AS page_scope_total, p.page_row_present AS page_row_present FROM (WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT COUNT(*) AS total FROM filtered AS r) AS c LEFT JOIN (WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at, CASE WHEN :gea_p20 = 'overaged_qty' AND r.overaged_qty IS NULL THEN 1 ELSE 0 END AS page_sort_0, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN r.overaged_qty ELSE NULL END AS page_sort_1, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN r.overaged_qty ELSE NULL END AS page_sort_2, CASE WHEN :gea_p20 = 'total_qty' AND r.total_qty IS NULL THEN 1 ELSE 0 END AS page_sort_3, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN r.total_qty ELSE NULL END AS page_sort_4, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN r.total_qty ELSE NULL END AS page_sort_5, r.stat_date AS page_sort_6, r.belong_base AS page_sort_7, r.warehouse_type AS page_sort_8, r.product_categ_name AS page_sort_9, r.material_group_name AS page_sort_10, r.material_code AS page_sort_11, r.warehouseid AS page_sort_12, 1 AS page_row_present FROM filtered AS r ORDER BY CASE WHEN :gea_p20 = 'overaged_qty' AND r.overaged_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN r.overaged_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN r.overaged_qty ELSE NULL END DESC, CASE WHEN :gea_p20 = 'total_qty' AND r.total_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN r.total_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN r.total_qty ELSE NULL END DESC, r.stat_date ASC, r.belong_base ASC, r.warehouse_type ASC, r.product_categ_name ASC, r.material_group_name ASC, r.material_code ASC, r.warehouseid ASC LIMIT :gea_p18 OFFSET :gea_p19) AS p ON TRUE ORDER BY p.page_sort_0 ASC, p.page_sort_1 ASC, p.page_sort_2 DESC, p.page_sort_3 ASC, p.page_sort_4 ASC, p.page_sort_5 DESC, p.page_sort_6 ASC, p.page_sort_7 ASC, p.page_sort_8 ASC, p.page_sort_9 ASC, p.page_sort_10 ASC, p.page_sort_11 ASC, p.page_sort_12 ASC LIMIT :gea_p18",
+        "sql": "WITH current_page AS (WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))), order_sku_names AS (SELECT t.new_material_code AS sku, COUNT(DISTINCT NULLIF(TRIM(t.new_material_name), '')) AS name_count, MAX(NULLIF(TRIM(t.new_material_name), '')) AS material_name FROM agents_order_execute_isontime_mi AS t GROUP BY t.new_material_code), flow_sku_names AS (SELECT t.material_code AS sku, COUNT(DISTINCT NULLIF(TRIM(t.material_name), '')) AS name_count, MAX(NULLIF(TRIM(t.material_name), '')) AS material_name FROM agents_scm_material_in_out_summary_d AS t GROUP BY t.material_code), sku_names AS (SELECT k.sku AS sku, CASE WHEN o.name_count = 1 THEN o.material_name WHEN (o.name_count IS NULL OR o.name_count = 0) AND f.name_count = 1 THEN f.material_name ELSE NULL END AS material_name FROM (SELECT b.material_code AS sku FROM business_rows AS b GROUP BY b.material_code) AS k LEFT JOIN order_sku_names AS o ON k.sku = o.sku LEFT JOIN flow_sku_names AS f ON k.sku = f.sku) SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at, n.material_name AS material_name, 1 AS page_row_present FROM filtered AS r LEFT JOIN sku_names AS n ON r.material_code = n.sku ORDER BY CASE WHEN :gea_p20 = 'overaged_qty' AND r.overaged_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN r.overaged_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN r.overaged_qty ELSE NULL END DESC, CASE WHEN :gea_p20 = 'total_qty' AND r.total_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN r.total_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN r.total_qty ELSE NULL END DESC, r.stat_date ASC, r.belong_base ASC, r.warehouse_type ASC, r.product_categ_name ASC, r.material_group_name ASC, r.material_code ASC, r.warehouseid ASC LIMIT :gea_p18 OFFSET :gea_p19), page_count AS (WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT COUNT(*) AS total FROM filtered AS r) SELECT p.stat_date AS stat_date, p.belong_base AS belong_base, p.warehouse_type AS warehouse_type, p.product_categ_name AS product_categ_name, p.material_group_name AS material_group_name, p.material_code AS material_code, p.is_overaged AS is_overaged, p.overaged_qty AS overaged_qty, p.total_qty AS total_qty, p.is_low_stock AS is_low_stock, p.is_high_stock AS is_high_stock, p.update_time AS update_time, p.source_rows AS source_rows, p.warehouseid AS warehouseid, p.warehouse_name AS warehouse_name, p.current_stock AS current_stock, p.safe_stock_qty AS safe_stock_qty, p.target_stock_qty AS target_stock_qty, p.age_days AS age_days, p.available_qty AS available_qty, p.pack_unit_qty AS pack_unit_qty, p.freeze_qty AS freeze_qty, p.source_updated_at AS source_updated_at, p.material_name AS material_name, c.total AS page_scope_total, p.page_row_present AS page_row_present FROM page_count AS c LEFT JOIN current_page AS p ON TRUE ORDER BY CASE WHEN :gea_p20 = 'overaged_qty' AND p.overaged_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'asc' THEN p.overaged_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'overaged_qty' AND :gea_p21 = 'desc' THEN p.overaged_qty ELSE NULL END DESC, CASE WHEN :gea_p20 = 'total_qty' AND p.total_qty IS NULL THEN 1 ELSE 0 END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'asc' THEN p.total_qty ELSE NULL END ASC, CASE WHEN :gea_p20 = 'total_qty' AND :gea_p21 = 'desc' THEN p.total_qty ELSE NULL END DESC, p.stat_date ASC, p.belong_base ASC, p.warehouse_type ASC, p.product_categ_name ASC, p.material_group_name ASC, p.material_code ASC, p.warehouseid ASC",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p2": false,
@@ -14747,6 +14748,7 @@
         "pack_unit_qty",
         "freeze_qty",
         "source_updated_at",
+        "material_name",
         "page_scope_total",
         "page_row_present"
       ]
@@ -16623,6 +16625,343 @@
         "page_scope_total",
         "page_row_present"
       ]
+    },
+    "order_plan_source.detail": {
+      "title": "订单日期归属、基地、SKU、大区、省区源值核对；同键不一致字段保持未知，计划字段不跨日累计。",
+      "grain": ["order_day", "base", "sku", "region_code", "province_code"],
+      "notes": "订单日期归属、基地、SKU、大区、省区源值核对；同键不一致字段保持未知，计划字段不跨日累计。",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-01",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-20",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "required": true,
+          "nullable": false,
+          "example": false
+        },
+        "gea_p4": {
+          "name": "bases",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "example": ["郑州"],
+          "items": "string"
+        },
+        "gea_p5": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p6": {
+          "name": "region_code",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p7": {
+          "name": "province_code",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p8": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "example": 10,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "gea_p9": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "example": 0,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "WITH source_rows AS (SELECT t.fromorderno_month AS order_day, t.belong_base AS base, t.material_code AS sku, t.region_code AS region_code, t.province_region_code AS province_code, CASE WHEN COUNT(t.region_name)=COUNT(*) AND COUNT(DISTINCT t.region_name)=1 THEN MAX(t.region_name) ELSE NULL END AS region, CASE WHEN COUNT(t.province_region_name)=COUNT(*) AND COUNT(DISTINCT t.province_region_name)=1 THEN MAX(t.province_region_name) ELSE NULL END AS province, CASE WHEN COUNT(t.material_name)=COUNT(*) AND COUNT(DISTINCT t.material_name)=1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(t.need_qty_origin)=COUNT(*) AND COUNT(DISTINCT t.need_qty_origin)=1 THEN MAX(t.need_qty_origin) ELSE NULL END AS demand, CASE WHEN COUNT(t.qtyshipped)=COUNT(*) AND COUNT(DISTINCT t.qtyshipped)=1 THEN MAX(t.qtyshipped) ELSE NULL END AS shipped, CASE WHEN COUNT(t.outqty)=COUNT(*) AND COUNT(DISTINCT t.outqty)=1 THEN MAX(t.outqty) ELSE NULL END AS shortage, CASE WHEN COUNT(t.demand_change_outqty)=COUNT(*) AND COUNT(DISTINCT t.demand_change_outqty)=1 THEN MAX(t.demand_change_outqty) ELSE NULL END AS demand_change_shortage, CASE WHEN COUNT(t.plan_inner_outqty)=COUNT(*) AND COUNT(DISTINCT t.plan_inner_outqty)=1 THEN MAX(t.plan_inner_outqty) ELSE NULL END AS within_plan_shortage, CASE WHEN COUNT(t.allnum)=COUNT(*) AND COUNT(DISTINCT t.allnum)=1 THEN MAX(t.allnum) ELSE NULL END AS planned, CASE WHEN COUNT(t.plan_order_qty_origin)=COUNT(*) AND COUNT(DISTINCT t.plan_order_qty_origin)=1 THEN MAX(t.plan_order_qty_origin) ELSE NULL END AS plan_ordered, CASE WHEN COUNT(t.plan_act_dl_qty)=COUNT(*) AND COUNT(DISTINCT t.plan_act_dl_qty)=1 THEN MAX(t.plan_act_dl_qty) ELSE NULL END AS plan_shipped, CASE WHEN COUNT(t.update_time)=COUNT(*) AND COUNT(DISTINCT t.update_time)=1 THEN MAX(t.update_time) ELSE NULL END AS source_date, COUNT(*) AS source_rows FROM agents_scm_order_plan_exe_m AS t WHERE t.fromorderno_month>=CAST(:gea_p1 AS DATE) AND t.fromorderno_month<CAST(:gea_p2 AS DATE) AND (:gea_p3=FALSE OR t.belong_base IN (:gea_p4)) AND (:gea_p5 IS NULL OR t.material_code=:gea_p5) AND (:gea_p6 IS NULL OR t.region_code=:gea_p6) AND (:gea_p7 IS NULL OR t.province_region_code=:gea_p7) GROUP BY t.fromorderno_month, t.belong_base, t.material_code, t.region_code, t.province_region_code) SELECT r.order_day AS order_day, r.base AS base, r.sku AS sku, r.region_code AS region_code, r.province_code AS province_code, r.region AS region, r.province AS province, r.material_name AS material_name, r.demand AS demand, r.shipped AS shipped, r.shortage AS shortage, r.demand_change_shortage AS demand_change_shortage, r.within_plan_shortage AS within_plan_shortage, r.planned AS planned, r.plan_ordered AS plan_ordered, r.plan_shipped AS plan_shipped, r.source_date AS source_date, r.source_rows AS source_rows FROM source_rows AS r ORDER BY r.order_day, r.base, r.sku, r.region_code, r.province_code LIMIT :gea_p8 OFFSET :gea_p9",
+        "parameters": {
+          "gea_p1": "2026-10-01",
+          "gea_p2": "2026-10-20",
+          "gea_p3": false,
+          "gea_p4": ["郑州"],
+          "gea_p5": null,
+          "gea_p6": null,
+          "gea_p7": null,
+          "gea_p8": 10,
+          "gea_p9": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "order_day",
+        "base",
+        "sku",
+        "region_code",
+        "province_code",
+        "region",
+        "province",
+        "material_name",
+        "demand",
+        "shipped",
+        "shortage",
+        "demand_change_shortage",
+        "within_plan_shortage",
+        "planned",
+        "plan_ordered",
+        "plan_shipped",
+        "source_date",
+        "source_rows"
+      ],
+      "pagination": {
+        "mode": "sql_limit_offset",
+        "countQuery": "order_plan_source.count"
+      }
+    },
+    "order_plan_source.count": {
+      "title": "订单日期归属、基地、SKU、大区、省区源值核对；同键不一致字段保持未知，计划字段不跨日累计。计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-01",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-20",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "required": true,
+          "nullable": false,
+          "example": false
+        },
+        "gea_p4": {
+          "name": "bases",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "example": ["郑州"],
+          "items": "string"
+        },
+        "gea_p5": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p6": {
+          "name": "region_code",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p7": {
+          "name": "province_code",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        }
+      },
+      "request": {
+        "sql": "WITH source_rows AS (SELECT t.fromorderno_month AS order_day, t.belong_base AS base, t.material_code AS sku, t.region_code AS region_code, t.province_region_code AS province_code, CASE WHEN COUNT(t.region_name)=COUNT(*) AND COUNT(DISTINCT t.region_name)=1 THEN MAX(t.region_name) ELSE NULL END AS region, CASE WHEN COUNT(t.province_region_name)=COUNT(*) AND COUNT(DISTINCT t.province_region_name)=1 THEN MAX(t.province_region_name) ELSE NULL END AS province, CASE WHEN COUNT(t.material_name)=COUNT(*) AND COUNT(DISTINCT t.material_name)=1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(t.need_qty_origin)=COUNT(*) AND COUNT(DISTINCT t.need_qty_origin)=1 THEN MAX(t.need_qty_origin) ELSE NULL END AS demand, CASE WHEN COUNT(t.qtyshipped)=COUNT(*) AND COUNT(DISTINCT t.qtyshipped)=1 THEN MAX(t.qtyshipped) ELSE NULL END AS shipped, CASE WHEN COUNT(t.outqty)=COUNT(*) AND COUNT(DISTINCT t.outqty)=1 THEN MAX(t.outqty) ELSE NULL END AS shortage, CASE WHEN COUNT(t.demand_change_outqty)=COUNT(*) AND COUNT(DISTINCT t.demand_change_outqty)=1 THEN MAX(t.demand_change_outqty) ELSE NULL END AS demand_change_shortage, CASE WHEN COUNT(t.plan_inner_outqty)=COUNT(*) AND COUNT(DISTINCT t.plan_inner_outqty)=1 THEN MAX(t.plan_inner_outqty) ELSE NULL END AS within_plan_shortage, CASE WHEN COUNT(t.allnum)=COUNT(*) AND COUNT(DISTINCT t.allnum)=1 THEN MAX(t.allnum) ELSE NULL END AS planned, CASE WHEN COUNT(t.plan_order_qty_origin)=COUNT(*) AND COUNT(DISTINCT t.plan_order_qty_origin)=1 THEN MAX(t.plan_order_qty_origin) ELSE NULL END AS plan_ordered, CASE WHEN COUNT(t.plan_act_dl_qty)=COUNT(*) AND COUNT(DISTINCT t.plan_act_dl_qty)=1 THEN MAX(t.plan_act_dl_qty) ELSE NULL END AS plan_shipped, CASE WHEN COUNT(t.update_time)=COUNT(*) AND COUNT(DISTINCT t.update_time)=1 THEN MAX(t.update_time) ELSE NULL END AS source_date, COUNT(*) AS source_rows FROM agents_scm_order_plan_exe_m AS t WHERE t.fromorderno_month>=CAST(:gea_p1 AS DATE) AND t.fromorderno_month<CAST(:gea_p2 AS DATE) AND (:gea_p3=FALSE OR t.belong_base IN (:gea_p4)) AND (:gea_p5 IS NULL OR t.material_code=:gea_p5) AND (:gea_p6 IS NULL OR t.region_code=:gea_p6) AND (:gea_p7 IS NULL OR t.province_region_code=:gea_p7) GROUP BY t.fromorderno_month, t.belong_base, t.material_code, t.region_code, t.province_region_code) SELECT COUNT(*) AS total FROM source_rows AS r",
+        "parameters": {
+          "gea_p1": "2026-10-01",
+          "gea_p2": "2026-10-20",
+          "gea_p3": false,
+          "gea_p4": ["郑州"],
+          "gea_p5": null,
+          "gea_p6": null,
+          "gea_p7": null
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "shipment_batches.detail": {
+      "title": "按发货日、交货单、SKU、批次读取；同键冲突值保持未知。保留销售单位与仓库保管单位，不混加。",
+      "grain": ["day", "delivery_order", "sku", "batch"],
+      "notes": "按发货日、交货单、SKU、批次读取；同键冲突值保持未知。保留销售单位与仓库保管单位，不混加。",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-01",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-20",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p4": {
+          "name": "delivery_order",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p5": {
+          "name": "delivery_type",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p6": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "example": 10,
+          "minimum": 1,
+          "maximum": 100
+        },
+        "gea_p7": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "example": 0,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "WITH source_rows AS (SELECT t.act_ship_date AS day, t.delivery_order_no AS delivery_order, t.material_code AS sku, t.batch_no AS batch, CASE WHEN COUNT(t.material_name)=COUNT(*) AND COUNT(DISTINCT t.material_name)=1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(t.sign_date)=COUNT(*) AND COUNT(DISTINCT t.sign_date)=1 THEN MAX(t.sign_date) ELSE NULL END AS arrival_date_raw, CASE WHEN COUNT(t.cust_group)=COUNT(*) AND COUNT(DISTINCT t.cust_group)=1 THEN MAX(t.cust_group) ELSE NULL END AS customer_group, CASE WHEN COUNT(t.province_region_code)=COUNT(*) AND COUNT(DISTINCT t.province_region_code)=1 THEN MAX(t.province_region_code) ELSE NULL END AS province_code, CASE WHEN COUNT(t.delivery_type)=COUNT(*) AND COUNT(DISTINCT t.delivery_type)=1 THEN MAX(t.delivery_type) ELSE NULL END AS delivery_type, CASE WHEN COUNT(t.product_categ_name)=COUNT(*) AND COUNT(DISTINCT t.product_categ_name)=1 THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(t.product_range_name)=COUNT(*) AND COUNT(DISTINCT t.product_range_name)=1 THEN MAX(t.product_range_name) ELSE NULL END AS product_range, CASE WHEN COUNT(t.act_dl_qty)=COUNT(*) AND COUNT(DISTINCT t.act_dl_qty)=1 THEN MAX(t.act_dl_qty) ELSE NULL END AS warehouse_quantity, CASE WHEN COUNT(t.dlv_qty)=COUNT(*) AND COUNT(DISTINCT t.dlv_qty)=1 THEN MAX(t.dlv_qty) ELSE NULL END AS sales_quantity, CASE WHEN COUNT(t.volume_dl)=COUNT(*) AND COUNT(DISTINCT t.volume_dl)=1 THEN MAX(t.volume_dl) ELSE NULL END AS delivered_quantity, CASE WHEN COUNT(t.storno_flag)=COUNT(*) AND COUNT(DISTINCT t.storno_flag)=1 THEN MAX(t.storno_flag) ELSE NULL END AS reversal_flag, CASE WHEN COUNT(t.update_time)=COUNT(*) AND COUNT(DISTINCT t.update_time)=1 THEN MAX(t.update_time) ELSE NULL END AS source_date, COUNT(*) AS source_rows FROM agents_sales_deliv_flow_m AS t WHERE t.act_ship_date>=CAST(:gea_p1 AS DATE) AND t.act_ship_date<CAST(:gea_p2 AS DATE) AND (:gea_p3 IS NULL OR t.material_code=:gea_p3) AND (:gea_p4 IS NULL OR t.delivery_order_no=:gea_p4) AND (:gea_p5 IS NULL OR t.delivery_type=:gea_p5) GROUP BY t.act_ship_date, t.delivery_order_no, t.material_code, t.batch_no) SELECT r.day AS day, r.delivery_order AS delivery_order, r.sku AS sku, r.batch AS batch, r.material_name AS material_name, r.arrival_date_raw AS arrival_date_raw, r.customer_group AS customer_group, r.province_code AS province_code, r.delivery_type AS delivery_type, r.category AS category, r.product_range AS product_range, r.warehouse_quantity AS warehouse_quantity, r.sales_quantity AS sales_quantity, r.delivered_quantity AS delivered_quantity, r.reversal_flag AS reversal_flag, r.source_date AS source_date, r.source_rows AS source_rows FROM source_rows AS r ORDER BY r.day, r.delivery_order, r.sku, r.batch LIMIT :gea_p6 OFFSET :gea_p7",
+        "parameters": {
+          "gea_p1": "2026-10-01",
+          "gea_p2": "2026-10-20",
+          "gea_p3": null,
+          "gea_p4": null,
+          "gea_p5": null,
+          "gea_p6": 10,
+          "gea_p7": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "day",
+        "delivery_order",
+        "sku",
+        "batch",
+        "material_name",
+        "arrival_date_raw",
+        "customer_group",
+        "province_code",
+        "delivery_type",
+        "category",
+        "product_range",
+        "warehouse_quantity",
+        "sales_quantity",
+        "delivered_quantity",
+        "reversal_flag",
+        "source_date",
+        "source_rows"
+      ],
+      "pagination": {
+        "mode": "sql_limit_offset",
+        "countQuery": "shipment_batches.count"
+      }
+    },
+    "shipment_batches.count": {
+      "title": "按发货日、交货单、SKU、批次读取；同键冲突值保持未知。保留销售单位与仓库保管单位，不混加。计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-01",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "example": "2026-10-20",
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p4": {
+          "name": "delivery_order",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        },
+        "gea_p5": {
+          "name": "delivery_type",
+          "type": "string",
+          "required": true,
+          "nullable": true,
+          "example": null
+        }
+      },
+      "request": {
+        "sql": "WITH source_rows AS (SELECT t.act_ship_date AS day, t.delivery_order_no AS delivery_order, t.material_code AS sku, t.batch_no AS batch, CASE WHEN COUNT(t.material_name)=COUNT(*) AND COUNT(DISTINCT t.material_name)=1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(t.sign_date)=COUNT(*) AND COUNT(DISTINCT t.sign_date)=1 THEN MAX(t.sign_date) ELSE NULL END AS arrival_date_raw, CASE WHEN COUNT(t.cust_group)=COUNT(*) AND COUNT(DISTINCT t.cust_group)=1 THEN MAX(t.cust_group) ELSE NULL END AS customer_group, CASE WHEN COUNT(t.province_region_code)=COUNT(*) AND COUNT(DISTINCT t.province_region_code)=1 THEN MAX(t.province_region_code) ELSE NULL END AS province_code, CASE WHEN COUNT(t.delivery_type)=COUNT(*) AND COUNT(DISTINCT t.delivery_type)=1 THEN MAX(t.delivery_type) ELSE NULL END AS delivery_type, CASE WHEN COUNT(t.product_categ_name)=COUNT(*) AND COUNT(DISTINCT t.product_categ_name)=1 THEN MAX(t.product_categ_name) ELSE NULL END AS category, CASE WHEN COUNT(t.product_range_name)=COUNT(*) AND COUNT(DISTINCT t.product_range_name)=1 THEN MAX(t.product_range_name) ELSE NULL END AS product_range, CASE WHEN COUNT(t.act_dl_qty)=COUNT(*) AND COUNT(DISTINCT t.act_dl_qty)=1 THEN MAX(t.act_dl_qty) ELSE NULL END AS warehouse_quantity, CASE WHEN COUNT(t.dlv_qty)=COUNT(*) AND COUNT(DISTINCT t.dlv_qty)=1 THEN MAX(t.dlv_qty) ELSE NULL END AS sales_quantity, CASE WHEN COUNT(t.volume_dl)=COUNT(*) AND COUNT(DISTINCT t.volume_dl)=1 THEN MAX(t.volume_dl) ELSE NULL END AS delivered_quantity, CASE WHEN COUNT(t.storno_flag)=COUNT(*) AND COUNT(DISTINCT t.storno_flag)=1 THEN MAX(t.storno_flag) ELSE NULL END AS reversal_flag, CASE WHEN COUNT(t.update_time)=COUNT(*) AND COUNT(DISTINCT t.update_time)=1 THEN MAX(t.update_time) ELSE NULL END AS source_date, COUNT(*) AS source_rows FROM agents_sales_deliv_flow_m AS t WHERE t.act_ship_date>=CAST(:gea_p1 AS DATE) AND t.act_ship_date<CAST(:gea_p2 AS DATE) AND (:gea_p3 IS NULL OR t.material_code=:gea_p3) AND (:gea_p4 IS NULL OR t.delivery_order_no=:gea_p4) AND (:gea_p5 IS NULL OR t.delivery_type=:gea_p5) GROUP BY t.act_ship_date, t.delivery_order_no, t.material_code, t.batch_no) SELECT COUNT(*) AS total FROM source_rows AS r",
+        "parameters": {
+          "gea_p1": "2026-10-01",
+          "gea_p2": "2026-10-20",
+          "gea_p3": null,
+          "gea_p4": null,
+          "gea_p5": null
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
     }
   },
   "templates": {
@@ -16858,7 +17197,7 @@
         "unique SKU dimension",
         "ton_per_piece unit confirmation"
       ],
-      "reason": "新库已存在物料产销维表，但只含SKU、渠道、大类、系列、规格及吨件换算；不能替代完整物料主数据。GEA发布及字段授权尚未核验。",
+      "reason": "物料产销维表的已用字段已通过当前GEA身份权限检查；仍缺完整物料主数据及吨件换算口径确认。SKU名称仅取唯一映射，不将维表多渠道行直接连接库存。",
       "sourceKind": "publication_or_mapping",
       "rootCause": {
         "causeTypes": ["publication_unverified", "mapping_validation"],
@@ -17166,6 +17505,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -17263,13 +17620,26 @@
             "label": "不含税收入",
             "missing": "missing_income"
           }
+        ],
+        "defaultColumns": [
+          "day",
+          "base",
+          "warehouse",
+          "warehouse_group",
+          "customer",
+          "sku",
+          "material_name",
+          "category",
+          "actual",
+          "actual_all",
+          "income"
         ]
       },
       {
         "id": "health",
         "title": "库存健康",
         "queryId": "health.detail",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。",
         "columns": [
           {
             "field": "stat_date",
@@ -17294,6 +17664,10 @@
           {
             "field": "material_code",
             "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "产品名称"
           },
           {
             "field": "product_categ_name",
@@ -17371,7 +17745,28 @@
         "timeMode": "health",
         "overrides": {},
         "summaryId": "health.summary",
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "stat_date",
+          "belong_base",
+          "warehouseid",
+          "warehouse_name",
+          "warehouse_type",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "total_qty",
+          "age_days",
+          "overaged_qty",
+          "current_stock",
+          "safe_stock_qty",
+          "target_stock_qty",
+          "is_low_stock",
+          "is_high_stock",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty"
+        ]
       },
       {
         "id": "shortage",
@@ -17433,7 +17828,18 @@
             "label": "SKU"
           }
         ],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "fromorderno",
+          "executeorderno",
+          "needbillingdate",
+          "pickup_point",
+          "pick_point_type2",
+          "material_code",
+          "material_name",
+          "after_inventory_short_qty",
+          "final_short_qty"
+        ]
       },
       {
         "id": "history",
@@ -17614,13 +18020,38 @@
         ],
         "timeMode": "current",
         "summaryId": "transfer_plan.summary",
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "warehouse_code",
+          "warehouse_name",
+          "sku",
+          "material_name",
+          "daily_plan",
+          "month_out_plan",
+          "future30_qty",
+          "open_transfer_reported_qty",
+          "in_transit",
+          "preparing",
+          "plan_month",
+          "snapshot_date",
+          "plan_version",
+          "warehouse_month_transfer_plan",
+          "manual_month_out_plan",
+          "manual_month_transfer_plan",
+          "plan_qty_unit",
+          "manual_plan_source",
+          "manual_confirmed_at",
+          "rolling_ship_positive",
+          "rolling_ship_daily",
+          "month_ship_net",
+          "last_ship_date"
+        ]
       },
       {
         "id": "aging",
         "title": "库存库龄",
         "queryId": "health.detail",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。",
         "columns": [
           {
             "field": "warehouse_type",
@@ -17637,6 +18068,10 @@
           {
             "field": "material_code",
             "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "产品名称"
           },
           {
             "field": "age_days",
@@ -18629,6 +19064,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -18756,13 +19209,31 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
         "id": "warehouse-age-detail",
         "title": "仓库货龄明细",
         "queryId": "health.detail",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。",
         "columns": [
           {
             "field": "stat_date",
@@ -18787,6 +19258,10 @@
           {
             "field": "material_code",
             "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "产品名称"
           },
           {
             "field": "product_categ_name",
@@ -18865,7 +19340,28 @@
         "summaryId": "health.summary",
         "timeMode": "health",
         "overrides": {},
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "stat_date",
+          "belong_base",
+          "warehouseid",
+          "warehouse_name",
+          "warehouse_type",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "total_qty",
+          "age_days",
+          "overaged_qty",
+          "current_stock",
+          "safe_stock_qty",
+          "target_stock_qty",
+          "is_low_stock",
+          "is_high_stock",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty"
+        ]
       },
       {
         "id": "branch-shipments",
@@ -18957,7 +19453,7 @@
         "id": "branch-stock",
         "title": "分仓库存快照",
         "queryId": "health.detail",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。",
         "columns": [
           {
             "field": "stat_date",
@@ -18974,6 +19470,10 @@
           {
             "field": "material_code",
             "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "产品名称"
           },
           {
             "field": "product_categ_name",
@@ -19053,7 +19553,470 @@
           }
         ],
         "gapIds": [],
-        "snapshotQuery": "source.branch-stock-date"
+        "snapshotQuery": "source.branch-stock-date",
+        "defaultColumns": [
+          "stat_date",
+          "warehouseid",
+          "warehouse_name",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "material_group_name",
+          "total_qty",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty",
+          "overaged_qty",
+          "age_days"
+        ]
+      },
+      {
+        "id": "order-plan-source",
+        "title": "订单计划源值",
+        "queryId": "order_plan_source.detail",
+        "columns": [
+          {
+            "field": "order_day",
+            "label": "订单归属日"
+          },
+          {
+            "field": "base",
+            "label": "基地"
+          },
+          {
+            "field": "sku",
+            "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "商品"
+          },
+          {
+            "field": "region",
+            "label": "大区"
+          },
+          {
+            "field": "province",
+            "label": "省区"
+          },
+          {
+            "field": "demand",
+            "label": "源需求量",
+            "format": "decimal"
+          },
+          {
+            "field": "shipped",
+            "label": "源发货量",
+            "format": "decimal"
+          },
+          {
+            "field": "shortage",
+            "label": "源缺货量",
+            "format": "decimal"
+          },
+          {
+            "field": "planned",
+            "label": "源计划量",
+            "format": "decimal"
+          },
+          {
+            "field": "plan_ordered",
+            "label": "源计划下单量",
+            "format": "decimal"
+          },
+          {
+            "field": "plan_shipped",
+            "label": "源计划发货量",
+            "format": "decimal"
+          },
+          {
+            "field": "demand_change_shortage",
+            "label": "源需求变化缺货量",
+            "format": "decimal"
+          },
+          {
+            "field": "within_plan_shortage",
+            "label": "源计划内缺货量",
+            "format": "decimal"
+          },
+          {
+            "field": "source_rows",
+            "label": "同键源记录数",
+            "format": "decimal"
+          }
+        ],
+        "description": "含出口的订单计划执行来源，按订单日期归属筛选，并非所选日历史快照。同日期/基地/SKU/大区/省区相同的值只取一次，冲突或部分缺值保持未知。月计划及缺货归因字段会随订单日期重复，不能直接跨行求和；不替代内销订单指标或客户计划执行率。",
+        "filters": [
+          {
+            "name": "base",
+            "label": "基地"
+          },
+          {
+            "name": "sku",
+            "label": "SKU"
+          },
+          {
+            "name": "region_code",
+            "label": "大区编码"
+          },
+          {
+            "name": "province_code",
+            "label": "省区编码"
+          }
+        ],
+        "metrics": [],
+        "gapIds": [],
+        "timeMode": "period",
+        "defaultColumns": [
+          "order_day",
+          "base",
+          "sku",
+          "material_name",
+          "region",
+          "province",
+          "demand",
+          "shipped",
+          "shortage",
+          "planned",
+          "plan_ordered",
+          "plan_shipped",
+          "demand_change_shortage",
+          "within_plan_shortage"
+        ]
+      },
+      {
+        "id": "shipment-batches",
+        "title": "发货批次流水",
+        "queryId": "shipment_batches.detail",
+        "columns": [
+          {
+            "field": "day",
+            "label": "实际发货日"
+          },
+          {
+            "field": "delivery_order",
+            "label": "交货单"
+          },
+          {
+            "field": "sku",
+            "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "商品"
+          },
+          {
+            "field": "batch",
+            "label": "批次编号"
+          },
+          {
+            "field": "arrival_date_raw",
+            "label": "源到达日期"
+          },
+          {
+            "field": "customer_group",
+            "label": "客户组编码"
+          },
+          {
+            "field": "province_code",
+            "label": "省区编码"
+          },
+          {
+            "field": "delivery_type",
+            "label": "交货类型"
+          },
+          {
+            "field": "category",
+            "label": "产品大类"
+          },
+          {
+            "field": "product_range",
+            "label": "产品品类"
+          },
+          {
+            "field": "warehouse_quantity",
+            "label": "交货量/仓库保管单位",
+            "format": "decimal"
+          },
+          {
+            "field": "sales_quantity",
+            "label": "交货量/销售单位",
+            "format": "decimal"
+          },
+          {
+            "field": "delivered_quantity",
+            "label": "源已交付量",
+            "format": "decimal"
+          },
+          {
+            "field": "reversal_flag",
+            "label": "源冲销标识"
+          },
+          {
+            "field": "source_rows",
+            "label": "同键源记录数",
+            "format": "decimal"
+          }
+        ],
+        "description": "按发货日期读取交货单×SKU×批次流水。客户组不能当作客户编码；源到达日期存在早于发货或晚于当前日的记录，原值供核对，不据此推算当前在途或签收率。批次编号不等于生产日期，不用于库存货龄分桶。不同交货类型、销售单位与仓库保管单位不混加。",
+        "filters": [
+          {
+            "name": "sku",
+            "label": "SKU"
+          },
+          {
+            "name": "delivery_order",
+            "label": "交货单"
+          },
+          {
+            "name": "delivery_type",
+            "label": "交货类型"
+          }
+        ],
+        "metrics": [],
+        "gapIds": [],
+        "timeMode": "period",
+        "defaultColumns": [
+          "day",
+          "delivery_order",
+          "sku",
+          "material_name",
+          "batch",
+          "arrival_date_raw",
+          "customer_group",
+          "province_code",
+          "delivery_type",
+          "category",
+          "product_range",
+          "warehouse_quantity",
+          "sales_quantity",
+          "delivered_quantity",
+          "reversal_flag"
+        ]
+      },
+      {
+        "id": "base-stock-flows",
+        "title": "基地产销日记录",
+        "queryId": "stock_history.detail",
+        "timeMode": "period",
+        "description": "按所选月初至读取日查询基地SKU日记录，展示源生产、调入调出、销售及次月计划。数量单位箱。日库存和月累计/滚动计划不能跨日期直接相加；此来源不是分仓库存、未来逐日排产或当前待发订单，名称及分类保留源值。",
+        "filters": [
+          {
+            "name": "base",
+            "label": "基地"
+          },
+          {
+            "name": "material_code",
+            "label": "SKU"
+          },
+          {
+            "name": "product_item",
+            "label": "品项"
+          },
+          {
+            "name": "series",
+            "label": "系列"
+          },
+          {
+            "name": "channel_name",
+            "label": "渠道"
+          }
+        ],
+        "columns": [
+          {
+            "field": "data_month",
+            "label": "源月份"
+          },
+          {
+            "field": "the_date",
+            "label": "业务日期"
+          },
+          {
+            "field": "belong_base",
+            "label": "基地"
+          },
+          {
+            "field": "material_code",
+            "label": "SKU"
+          },
+          {
+            "field": "material_name",
+            "label": "商品"
+          },
+          {
+            "field": "product_item",
+            "label": "品项"
+          },
+          {
+            "field": "series",
+            "label": "系列"
+          },
+          {
+            "field": "channel_name",
+            "label": "渠道"
+          },
+          {
+            "field": "current_stock",
+            "label": "源现存库存/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "available_stock",
+            "label": "源可用库存/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "current_stock_60",
+            "label": "超60天库存/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "avg_30d_sale",
+            "label": "近30日均销量/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "produce_plan",
+            "label": "原生产计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "produce_plan_adj",
+            "label": "纠偏生产计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "produce_in_qty",
+            "label": "生产入库量/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_in_plan_v1",
+            "label": "原调入计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_in_plan_adj",
+            "label": "纠偏调入计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_in_plan_roll",
+            "label": "滚动调入计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_in_qty_no_direct",
+            "label": "调入量不含直调/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_in_qty_with_direct",
+            "label": "调入量含直调/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_out_plan_v1",
+            "label": "原调出计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_out_plan_adj",
+            "label": "纠偏调出计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_out_plan_roll",
+            "label": "滚动调出计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "transfer_out_qty",
+            "label": "调出量/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "main_sales_plan_v1",
+            "label": "原主销计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "main_sales_plan_adj",
+            "label": "纠偏主销计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "roll_sales_plan",
+            "label": "滚动销售计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "total_sales_qty",
+            "label": "源销售量/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "next_month_out_plan",
+            "label": "次月出货计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "next_month_sales_plan",
+            "label": "次月销售计划/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "allocated_qty",
+            "label": "源已备单占用/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "ordered_qty",
+            "label": "源未备单量/箱",
+            "format": "decimal"
+          },
+          {
+            "field": "source_rows",
+            "label": "同键源记录数",
+            "format": "decimal"
+          }
+        ],
+        "metrics": [],
+        "gapIds": [],
+        "defaultColumns": [
+          "data_month",
+          "the_date",
+          "belong_base",
+          "material_code",
+          "material_name",
+          "product_item",
+          "series",
+          "channel_name",
+          "current_stock",
+          "available_stock",
+          "current_stock_60",
+          "avg_30d_sale",
+          "produce_plan",
+          "produce_plan_adj",
+          "produce_in_qty",
+          "transfer_in_plan_v1",
+          "transfer_in_plan_adj",
+          "transfer_in_plan_roll",
+          "transfer_in_qty_no_direct",
+          "transfer_in_qty_with_direct",
+          "transfer_out_plan_v1",
+          "transfer_out_plan_adj",
+          "transfer_out_plan_roll",
+          "transfer_out_qty",
+          "main_sales_plan_v1",
+          "main_sales_plan_adj",
+          "roll_sales_plan",
+          "total_sales_qty",
+          "next_month_out_plan",
+          "next_month_sales_plan",
+          "allocated_qty",
+          "ordered_qty"
+        ]
       }
     ]
   },

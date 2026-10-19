@@ -220,12 +220,13 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       manifest.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
     );
-    const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
-    run(
-      'corepack',
-      ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
-      leaf,
-    );
+    // Browser acceptance must use freshly compiled FC and AQKC pages, not tracked historical HTML.
+    for (const id of ['fc', 'aqkc'])
+      run(
+        'corepack',
+        ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
+        resolve(`business/inventory-${id}/source/inventory-light-plugins`),
+      );
     run(
       'npm',
       ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
@@ -241,7 +242,7 @@ try {
           const previousTypecheck = process.env.DSH_TYPECHECK_PROJECT;
           process.env.DSH_TYPECHECK_PROJECT = 'tsconfig.official.json';
           try {
-            run('npm', ['run', 'build:core']);
+            run('npm', ['run', 'build']);
           } finally {
             if (previousTypecheck === undefined) delete process.env.DSH_TYPECHECK_PROJECT;
             else process.env.DSH_TYPECHECK_PROJECT = previousTypecheck;
