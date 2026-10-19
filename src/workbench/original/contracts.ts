@@ -174,6 +174,8 @@ export type GeaSalesPlanSku = CorrectionFields & {
 };
 
 export type GeaSalesPlanApprovalLog = {
+  nodeOrder?: number | null;
+  decisionJson?: string | null;
   id: GeaSalesPlanId;
   planId: string;
   versionId: string;

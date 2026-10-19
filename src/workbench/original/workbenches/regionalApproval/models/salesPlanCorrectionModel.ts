@@ -1,5 +1,6 @@
 import { salesPlanActionReceiptMatches } from './salesPlanActionModel.ts';
 import { Decimal } from 'decimal.js';
+import { z } from 'zod';
 import {
   SALES_PLAN_ROLES,
   salesPlanWorkflow,
@@ -107,6 +108,41 @@ export function correctionDisplay(value: string | null | undefined, kind: 'money
   } catch {
     return { display: '—', exact: '—' };
   }
+}
+
+const decisionDecimal = z
+  .string()
+  .regex(/^[+-]?\d+(?:\.\d+)?$/)
+  .nullable();
+const correctionLogSchema = z.array(
+  z.object({
+    skuCode: z.string().min(1),
+    adjAddQty: decisionDecimal,
+    adjCutQty: decisionDecimal,
+    adjAddAmount: decisionDecimal,
+    adjCutAmount: decisionDecimal,
+    confirmedQty: decisionDecimal,
+    confirmedAmount: decisionDecimal,
+  }),
+);
+
+export function correctionLogDecisions(
+  json: unknown,
+):
+  | { kind: 'missing' }
+  | { kind: 'invalid' }
+  | { kind: 'available'; decisions: z.infer<typeof correctionLogSchema> } {
+  if (json == null) return { kind: 'missing' };
+  if (typeof json !== 'string') return { kind: 'invalid' };
+  if (!json.trim()) return { kind: 'missing' };
+  let value: unknown;
+  try {
+    value = JSON.parse(json);
+  } catch {
+    return { kind: 'invalid' };
+  }
+  const result = correctionLogSchema.safeParse(value);
+  return result.success ? { kind: 'available', decisions: result.data } : { kind: 'invalid' };
 }
 
 import type {

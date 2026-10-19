@@ -1260,6 +1260,15 @@
     "region": "城市经理",
     "province": "省区经理",
     "area": "大区总监",
-    "category": "品类计划审批"
+    "category": "品类计划审批",
+    "historyNodeMissing": "节点未记录",
+    "historyAction": "历史操作",
+    "historyMissing": "该历史记录未提供SKU决定",
+    "historyInvalid": "该记录的SKU决定数据不可读",
+    "historyEmpty": "本次操作未写入SKU决定",
+    "historyCleared": "本节点决定已清空",
+    "historyAdd": "追加量 / 金额",
+    "historyCut": "追减量 / 金额",
+    "historyConfirmed": "确认量 / 金额"
   }
 }

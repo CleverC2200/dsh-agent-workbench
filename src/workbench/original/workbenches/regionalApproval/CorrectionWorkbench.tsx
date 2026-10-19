@@ -29,6 +29,7 @@ import {
   correctionAccess,
   correctionAdjustments,
   correctionLine,
+  correctionLogDecisions,
   correctionDisplay,
   correctionDecimal,
   verifyCorrectionAction,
@@ -767,13 +768,82 @@ function CorrectionDetail({
           {detail.dmsMock?.receipts.map((r) => (
             <p key={r.key}>模拟回执 {r.dmsId}</p>
           ))}
-          <details>
+          <details aria-label={tr('logs')}>
             <summary>{tr('logs')}</summary>
-            {detail.logs.map((l) => (
-              <p key={l.id}>
-                {l.actionCode} · {l.fromStatus} → {l.toStatus} · {l.remark ?? ''} · {l.actionAt}
-              </p>
-            ))}
+            {detail.logs.map((log) => {
+              const node = log.nodeOrder == null ? undefined : roles[log.nodeOrder - 2];
+              const nodeLabel = node ? tr(node) : tr('historyNodeMissing');
+              const action =
+                log.actionCode === 'SAVE'
+                  ? tr('save')
+                  : log.actionCode === 'APPROVE'
+                    ? tr('approve')
+                    : log.actionCode === 'REJECT'
+                      ? tr('reject')
+                      : log.actionCode === 'RESUBMIT'
+                        ? tr('resubmit')
+                        : tr('historyAction');
+              const decision = correctionLogDecisions(log.decisionJson);
+              return (
+                <details key={log.id} aria-label={`${nodeLabel} ${action} ${log.actionAt}`}>
+                  <summary>
+                    {nodeLabel} · {action} · {log.actionAt}
+                  </summary>
+                  <p>
+                    {log.operatorName ?? log.operatorCode} ·{' '}
+                    {log.fromStatus == null
+                      ? '—'
+                      : salesPlanStatusText(
+                          log.fromStatus,
+                          detail.currentVersion.planTypeCode,
+                          t,
+                        )}{' '}
+                    → {salesPlanStatusText(log.toStatus, detail.currentVersion.planTypeCode, t)}
+                    {log.remark ? ` · ${log.remark}` : ''}
+                  </p>
+                  {decision.kind !== 'available' ? (
+                    <p>{tr(decision.kind === 'missing' ? 'historyMissing' : 'historyInvalid')}</p>
+                  ) : decision.decisions.length === 0 ? (
+                    <p>{tr('historyEmpty')}</p>
+                  ) : (
+                    <>
+                      {log.actionCode === 'REJECT' && <p>{tr('historyCleared')}</p>}
+                      <div className={styles.scroll}>
+                        <table className={styles.detail}>
+                          <thead>
+                            <tr>
+                              <th>SKU</th>
+                              <th>{tr('historyAdd')}</th>
+                              <th>{tr('historyCut')}</th>
+                              <th>{tr('historyConfirmed')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {decision.decisions.map((sku, index) => (
+                              <tr key={`${sku.skuCode}:${index}`}>
+                                <td>{sku.skuCode}</td>
+                                <td>
+                                  {quantity(sku.adjAddQty)}
+                                  <small>{money(sku.adjAddAmount)}</small>
+                                </td>
+                                <td>
+                                  {quantity(sku.adjCutQty)}
+                                  <small>{money(sku.adjCutAmount)}</small>
+                                </td>
+                                <td>
+                                  {quantity(sku.confirmedQty)}
+                                  <small>{money(sku.confirmedAmount)}</small>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </details>
+              );
+            })}
           </details>
         </>
       )}
