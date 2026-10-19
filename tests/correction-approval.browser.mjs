@@ -39,7 +39,14 @@ const skus=scenario==='zero-matrix'?[
   {...sku,skuCode:'1003',qty:'0',corrBaseQty:'0',amt:'0',nodeAdjAddQty:'0',nodeAdjCutQty:'0'},
   {...sku,skuCode:'1004',qty:'0',corrBaseQty:'0',amt:'0',nodeAdjAddQty:'50',nodeAdjCutQty:'0'},
 ]:[sku];
-let detail={currentVersion:{...plan,id:'v1',effective:true,orderType:scenario==='absent'?'M':'Z'},skus,versions:[],logs:[],correctionContext:{contract:'absolute-net-v1',monthlyApproved:true,hasCorrection:scenario!=='absent',approvalOpen:scenario!=='closed'},actionContext:{versionId:'v1',status:1,nodeOrder:2,allowedActions:scenario==='readonly'||scenario==='absent'?[]:['SAVE','APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}};
+if(scenario==='existing-m'||scenario==='existing-z'){
+ for(const key of ['monthlyApproved','hasCorrection','mPlanAmount','mPlanQty','shipAmount','shipQty','corrPlanAmount','corrPlanQty','prevAdjAddQty','prevAdjCutQty','amountProgress','correctionProgress'])delete plan[key];
+ if(scenario==='existing-m')Object.assign(sku,{categoryConfirmedQty:'90',categoryConfirmedAmount:'720'});
+ Object.assign(plan,{orderType:scenario==='existing-m'?'M':'Z',status:scenario==='existing-m'?10:1,currentQty:scenario==='existing-m'?'90':'102',currentAmount:scenario==='existing-m'?'720':'816'});
+ for(const key of ['editable','nodeAdjAddQty','nodeAdjCutQty'])delete sku[key];
+}
+let detail={currentVersion:{...plan,id:'v1',effective:true},skus,versions:[],logs:[],correctionContext:{contract:'absolute-net-v1',monthlyApproved:true,hasCorrection:scenario!=='absent',approvalOpen:scenario!=='closed'},actionContext:{versionId:'v1',status:1,nodeOrder:2,allowedActions:scenario==='readonly'||scenario==='absent'?[]:['SAVE','APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}};
+if(scenario==='existing-m'||scenario==='existing-z'){delete detail.actionContext;delete detail.correctionContext;}
 const logBase={planId:'p1',versionId:'v1',fromStatus:1,toStatus:1,operatorCode:'approver',operatorName:'城市审批人',actionAt:'2026-10-19T12:00:00+08:00'};
 if(scenario==='audit-history')detail.logs=[{...logBase,id:'legacy',actionCode:'SUBMIT',remark:'原有提报记录'}];
 if(scenario==='audit-invalid')detail.logs=[
@@ -51,9 +58,9 @@ if(scenario==='audit-invalid')detail.logs=[
 ];
 const client={
  periods:{invoke:async(q)=>({records:[{periodId:'20261001',periodMonth:scenario==='past'?'2026-09':scenario==='future'?'2026-11':scenario==='leap'?'2024-02':'2026-10',planTypeCode:'Y',planType:q?.planType,status:'OPEN'}],total:1,size:100,current:1,pages:1})},
- list:{invoke:async(q)=>{window.listRequests.push(q);if(mixed&&q?.orderType==='Z'){const records=[...mixedPlans.filter(p=>p.orderType==='Z'&&(q.statuses?.includes(p.status)||q.status===p.status)),...mixedPlans.filter(p=>p.hasCorrection===false)];return {records,total:records.length,size:20,current:1,pages:1,summary:{targetAmount:scenario==='mixed-null'?'4000':'3000',planAmount:scenario==='mixed-null'?null:'2520',planQty:scenario==='mixed-null'?null:'315',diffAmount:scenario==='mixed-null'?null:'-480'}};}return {groupMetrics:q?.summaryOnly&&scenario==='grouped'?[{dimension:'region',key:'宝阳销售组',targetAmount:'4000',planAmount:'1000',diffAmount:'-3000',planQty:'125',shipAmount:'3600',shipQty:'120',amountProgress:'90.0'}]:[],records:q?.status===undefined||q.status===1?plans.map(p=>({...p,orderType:q?.orderType==='Z'&&p.hasCorrection===false?'M':q?.orderType??'M'})):[],total:q?.status===undefined||q.status===1?plans.length:0,size:200,current:1,pages:1,summary:q?.status===undefined||q.status===1?{targetAmount:plan.targetAmount,planAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'98765.42':'1000',diffAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'-1234.58':scenario==='zero'?'1000':'0',planQty:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'12345.678':'125'}:{targetAmount:'0',planAmount:'0',diffAmount:'0',planQty:'0'}};}},
+ list:{invoke:async(q)=>{window.listRequests.push(q);if(scenario==='existing-m'||scenario==='existing-z')return {records:[{...plan}],total:1,size:200,current:1,pages:1};if(mixed&&q?.orderType==='Z'){const records=[...mixedPlans.filter(p=>p.orderType==='Z'&&(q.statuses?.includes(p.status)||q.status===p.status||(q.statuses===undefined&&q.status===undefined))),...mixedPlans.filter(p=>p.hasCorrection===false)];return {records,total:records.length,size:20,current:1,pages:1,summary:{targetAmount:scenario==='mixed-null'?'4000':'3000',planAmount:scenario==='mixed-null'?null:'2520',planQty:scenario==='mixed-null'?null:'315',diffAmount:scenario==='mixed-null'?null:'-480'}};}return {groupMetrics:q?.summaryOnly&&scenario==='grouped'?[{dimension:'region',key:'宝阳销售组',targetAmount:'4000',planAmount:'1000',diffAmount:'-3000',planQty:'125',shipAmount:'3600',shipQty:'120',amountProgress:'90.0'}]:[],records:q?.status===undefined||q.status===1?plans.map(p=>({...p,orderType:q?.orderType==='Z'&&p.hasCorrection===false?'M':q?.orderType??'M'})):[],total:q?.status===undefined||q.status===1?plans.length:0,size:200,current:1,pages:1,summary:q?.status===undefined||q.status===1?{targetAmount:plan.targetAmount,planAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'98765.42':'1000',diffAmount:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'-1234.58':scenario==='zero'?'1000':'0',planQty:scenario==='monthly-null'?null:scenario==='quantity-tooltip'?'12345.678':'125'}:{targetAmount:'0',planAmount:'0',diffAmount:'0',planQty:'0'}};}},
  detail:{invoke:async(q)=>{window.detailRequests.push(q);if(mixed&&q.planId==='m-no-z')return {currentVersion:{...noZ,id:'m-v1',effective:true},skus:[{...sku,id:'m-sku',versionId:'m-v1',qty:q.orderType==='Z'?'90':'100',corrBaseQty:q.orderType==='Z'?'90':'100',amt:q.orderType==='Z'?'720':'800',editable:false,nodeAdjAddQty:'0',nodeAdjCutQty:'0'}],versions:[],logs:[],correctionContext:{contract:'absolute-net-v1',monthlyApproved:true,hasCorrection:false,approvalOpen:true},actionContext:{versionId:'m-v1',status:10,allowedActions:[],snapshotHash:'a'.repeat(64)}};return structuredClone(detail);}},versions:{invoke:async()=>[detail.currentVersion]},versionSkus:{invoke:async()=>detail.skus},logs:{invoke:async()=>detail.logs},compare:{invoke:async()=>[]},draft:{invoke:async()=>({draft:null})},
- action:{invoke:async(p)=>{window.actions.push(p);if(scenario==='audit-history'){
+ action:{invoke:async(p)=>{window.actions.push(p);if(scenario==='existing-z'){detail={...detail,currentVersion:{...detail.currentVersion,status:2},skus:[{...sku,regionAdjAddQty:'8',regionAdjCutQty:'0',regionConfirmedQty:'108',regionConfirmedAmount:'864.00'}],logs:[{id:'l1',planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,actionCode:'APPROVE',requestId:p.requestId}]};return {planId:'p1',versionId:'v1',fromStatus:1,toStatus:2,replayed:false,requestId:p.requestId,traceId:'t1',auditId:'sales-plan-log:l1'};}if(scenario==='audit-history'){
  const delta=p.request.adjustments[0].adjustQty;
  if(p.request.action!=='SAVE'||!['8','-3'].includes(delta))throw Error('unexpected audit fixture action');
  const decision=delta==='8'?{adjAddQty:'8',adjCutQty:'0',adjAddAmount:'64.00',adjCutAmount:'0.00',confirmedQty:null,confirmedAmount:null}:{adjAddQty:'0',adjCutQty:'3',adjAddAmount:'0.00',adjCutAmount:'24.00',confirmedQty:null,confirmedAmount:null};
@@ -119,6 +126,53 @@ async function openWorkbench(t, scenario = 'default', date = '2026-10-19T04:00:0
   return page;
 }
 
+test('既有列表回包的月初基准保留M身份，只读展示且不要求新增字段', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'existing-m');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  await expect(
+    page.getByText('纠偏接口返回了其他周期或非纠偏数据，请联系管理员核对服务版本'),
+  ).toHaveCount(0);
+  const row = page.getByRole('row').filter({ hasText: '华南经销客户' });
+  await expect(row).toContainText('¥720');
+  await expect(row).toContainText('90件');
+  await expect(page.getByTestId('correction-summary')).toContainText('¥720');
+  const queries = await page.evaluate(() => window.listRequests.filter((q) => q.orderType === 'Z'));
+  assert.ok(queries.length > 0);
+  assert.ok(queries.every((q) => q.statuses === undefined && q.summaryOnly === undefined));
+  await row.getByRole('button', { name: '华南经销客户', exact: true }).click();
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: '通过', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole('dialog').getByRole('row').filter({ hasText: '猪肉白菜水饺' }),
+  ).toContainText('90件');
+  await expect(
+    page.getByRole('dialog').getByRole('row').filter({ hasText: '猪肉白菜水饺' }),
+  ).toContainText('¥720');
+});
+
+test('既有纠偏明细无需新增能力字段，沿原审批请求和回执操作', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t, 'existing-z');
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  const customer = page.getByRole('row').filter({ hasText: '华南经销客户' });
+  await expect(customer).toContainText('100件');
+  await expect(customer).toContainText('¥800');
+  await page.getByRole('button', { name: '华南经销客户', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const input = dialog.getByRole('textbox', { name: '调整量 1001', exact: true });
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue('2');
+  await expect(dialog.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
+  await input.fill('8');
+  await dialog.getByRole('button', { name: '通过', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const actions = await page.evaluate(() => window.actions);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].request.adjustmentMode, undefined);
+  assert.equal(actions[0].request.expectedSnapshot, undefined);
+  assert.deepEqual(actions[0].request.adjustments, [{ skuCode: '1001', adjustQty: '8' }]);
+});
+
 test('两Tab用发货和目标显示月达成，纠偏六列与全范围汇总同口径', { timeout: 30000 }, async (t) => {
   const page = await openWorkbench(t);
   await expect(page.getByTestId('regional-approval-workbench')).toContainText('60.0%');
@@ -138,28 +192,34 @@ test('两Tab用发货和目标显示月达成，纠偏六列与全范围汇总�
     await expect(page.getByTestId('correction-summary')).toContainText(value);
 });
 
-test('多状态纠偏一次读取真实无Z的M回退，明细消费只读品类基准', { timeout: 30000 }, async (t) => {
-  const page = await openWorkbench(t, 'mixed');
-  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
-  await expect(page.getByRole('row').filter({ hasText: '终审月初客户' })).toHaveCount(1);
-  await expect(page.getByRole('row').filter({ hasText: '省区纠偏客户' })).toHaveCount(1);
-  const summary = page.getByTestId('correction-summary');
-  for (const value of ['¥3,000', '¥2,520', '−¥480', '315件'])
-    await expect(summary).toContainText(value);
-  const queries = await page.evaluate(() => window.listRequests.filter((q) => q.orderType === 'Z'));
-  assert.equal(queries.length, 1);
-  assert.ok(queries[0].statuses.includes(1) && queries[0].statuses.includes(2));
-  assert.equal(queries[0].status, undefined);
-  await page.getByRole('button', { name: '终审月初客户', exact: true }).click();
-  const dialog = page.getByRole('dialog');
-  const row = dialog.getByRole('row').filter({ hasText: '猪肉白菜水饺' });
-  await expect(row).toContainText('90件');
-  await expect(row).toContainText('¥720');
-  await expect(dialog.getByRole('textbox', { name: '调整量 1001', exact: true })).toBeDisabled();
-  await expect(dialog.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
-  assert.equal(await page.evaluate(() => window.detailRequests.at(-1).orderType), 'Z');
-  assert.deepEqual(await page.evaluate(() => window.actions), []);
-});
+test(
+  '多状态纠偏复用既有列表读取无Z的M基准，明细消费只读品类基准',
+  { timeout: 30000 },
+  async (t) => {
+    const page = await openWorkbench(t, 'mixed');
+    await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+    await expect(page.getByRole('row').filter({ hasText: '终审月初客户' })).toHaveCount(1);
+    await expect(page.getByRole('row').filter({ hasText: '省区纠偏客户' })).toHaveCount(1);
+    const summary = page.getByTestId('correction-summary');
+    for (const value of ['¥3,000', '¥2,520', '−¥480', '315件'])
+      await expect(summary).toContainText(value);
+    const queries = await page.evaluate(() =>
+      window.listRequests.filter((q) => q.orderType === 'Z'),
+    );
+    assert.equal(queries.length, 1);
+    assert.equal(queries[0].statuses, undefined);
+    assert.equal(queries[0].status, undefined);
+    await page.getByRole('button', { name: '终审月初客户', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    const row = dialog.getByRole('row').filter({ hasText: '猪肉白菜水饺' });
+    await expect(row).toContainText('90件');
+    await expect(row).toContainText('¥720');
+    await expect(dialog.getByRole('textbox', { name: '调整量 1001', exact: true })).toBeDisabled();
+    await expect(dialog.getByRole('button', { name: '通过', exact: true })).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.detailRequests.at(-1).orderType), 'Z');
+    assert.deepEqual(await page.evaluate(() => window.actions), []);
+  },
+);
 
 test('同范围含未终审M时保留目标与灰行，未知汇总保持缺失', { timeout: 30000 }, async (t) => {
   const page = await openWorkbench(t, 'mixed-null');

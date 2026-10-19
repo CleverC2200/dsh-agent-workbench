@@ -32,6 +32,11 @@ import {
   correctionLogDecisions,
   correctionDisplay,
   correctionDecimal,
+  correctionDecision,
+  correctionListItem,
+  correctionListSummary,
+  correctionReadDetail,
+  correctionListDetail,
   verifyCorrectionAction,
 } from './models/salesPlanCorrectionModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
@@ -138,21 +143,77 @@ export function CorrectionWorkbench({
       orderType: 'Z' as const,
       signal: controller.signal,
     };
-    void queryClient.list
-      .invoke({
+    const load = async () => {
+      const first = await queryClient.list.invoke({
         ...base,
-        ...(selectedStatuses ? { statuses: selectedStatuses } : {}),
-        pageNo: page,
-        pageSize: 20,
-      })
+        pageNo: 1,
+        pageSize: 200,
+      });
+      const size = first.size ?? 200;
+      if (size <= 0) throw new Error('INCOMPLETE_CORRECTION_PAGE');
+      const rest = await Promise.all(
+        Array.from({ length: Math.max(0, Math.ceil(first.total / size) - 1) }, (_, index) =>
+          queryClient.list.invoke({ ...base, pageNo: index + 2, pageSize: size }),
+        ),
+      );
+      const all = [
+        ...new Map(
+          [first, ...rest].flatMap((result) => result.records).map((row) => [row.versionId, row]),
+        ).values(),
+      ];
+      if (all.length < first.total) throw new Error('INCOMPLETE_CORRECTION_PAGE');
+      if (
+        all.some(
+          (row) =>
+            row.periodId !== periodId ||
+            (row.orderType != null && row.orderType !== 'M' && row.orderType !== 'Z'),
+        )
+      )
+        throw new Error('CORRECTION_SCOPE_MISMATCH');
+      const key = (row: GeaSalesPlanListItem) =>
+        JSON.stringify([row.dealerCode, row.periodId, row.planTypeCode]);
+      const corrected = new Set(all.filter((row) => row.orderType === 'Z').map(key));
+      const filtered = all
+        .filter((row) =>
+          row.orderType === 'Z'
+            ? !selectedStatuses || selectedStatuses.includes(row.status)
+            : !corrected.has(key(row)),
+        )
+        .map(correctionListItem);
+      const records = await Promise.all(
+        filtered.map(async (row, index) => {
+          if (
+            row.orderType !== 'Z' ||
+            !detailClient ||
+            index < (page - 1) * 20 ||
+            index >= page * 20 ||
+            (row.mPlanQty !== undefined && row.mPlanAmount !== undefined)
+          )
+            return row;
+          try {
+            const detail = await detailClient.detail.invoke({
+              planId: row.planId,
+              orderType: 'Z',
+              signal: controller.signal,
+            });
+            return correctionListDetail(row, detail);
+          } catch {
+            return row;
+          }
+        }),
+      );
+      return {
+        records,
+        total: records.length,
+        summary:
+          records.length === all.length && first.summary
+            ? first.summary
+            : correctionListSummary(records),
+      };
+    };
+    void load()
       .then((result) => {
         if (controller.signal.aborted) return;
-        if (
-          result.records.some(
-            (r) => r.periodId !== periodId || (r.orderType !== 'Z' && r.hasCorrection !== false),
-          )
-        )
-          throw new Error('CORRECTION_SCOPE_MISMATCH');
         setSummary(result.summary);
         setRows(result.records);
         setTotal(result.total);
@@ -176,7 +237,7 @@ export function CorrectionWorkbench({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [queryClient, periodId, period?.planTypeCode, page, revision, statusesKey]);
+  }, [queryClient, detailClient, periodId, period?.planTypeCode, page, revision, statusesKey]);
   const month = period?.periodMonth;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -259,7 +320,7 @@ export function CorrectionWorkbench({
       <Table
         rowKey="planId"
         rowClassName={(row) => (row.monthlyApproved !== true ? styles.inactive : '')}
-        data={rows}
+        data={rows.slice((page - 1) * 20, page * 20)}
         loading={loading}
         pagination={false}
         scroll={{ x: 1000 }}
@@ -397,7 +458,6 @@ export function CorrectionWorkbench({
         total={total}
         onChange={(value) => {
           setSelected(undefined);
-          setRows([]);
           setPage(value);
         }}
       />
@@ -463,7 +523,7 @@ function CorrectionDetail({
         if (controller.signal.aborted) return;
         if (d.currentVersion.id !== row.versionId || !d.currentVersion.effective)
           throw new Error('版本已变化，请刷新');
-        setDetail(d);
+        setDetail(correctionReadDetail(d));
       })
       .catch(() => {
         if (!controller.signal.aborted) setError('读取失败或版本已变化，请关闭后刷新');
@@ -494,9 +554,18 @@ function CorrectionDetail({
           const delta =
             edits[sku.skuCode] ??
             (detail.currentVersion.orderType === 'Z'
-              ? correctionDecimal(sku.nodeAdjAddQty)
-                  .minus(correctionDecimal(sku.nodeAdjCutQty))
-                  .toFixed()
+              ? sku.nodeAdjAddQty != null && sku.nodeAdjCutQty != null
+                ? correctionDecimal(sku.nodeAdjAddQty)
+                    .minus(correctionDecimal(sku.nodeAdjCutQty))
+                    .toFixed()
+                : correctionDecision(
+                    sku,
+                    detail.currentVersion.status,
+                    detail.currentVersion.planTypeCode,
+                    true,
+                    undefined,
+                    stage === 'current' ? access?.approvalRole : (stage as (typeof roles)[number]),
+                  )
               : '0');
           return { sku, line: correctionLine(sku, delta), input: delta, error: '' };
         } catch (e) {
@@ -543,7 +612,9 @@ function CorrectionDetail({
           ...(access!.roleContractSupported ? { approvalPolicy: 'role-visible-v1' as const } : {}),
           expectedStatus: detail.currentVersion.status,
           expectedSnapshot: access!.snapshotHash,
-          adjustmentMode: 'ABSOLUTE_NET',
+          ...(detail.correctionContext?.contract === 'absolute-net-v1'
+            ? { adjustmentMode: 'ABSOLUTE_NET' as const }
+            : {}),
           ...(kind === 'REJECT'
             ? { remark: reason.trim() }
             : {
@@ -736,7 +807,7 @@ function CorrectionDetail({
                                 onFocus={() => setEditing(sku.skuCode)}
                                 onBlur={() => setEditing(undefined)}
                                 disabled={
-                                  !writable || sku.editable !== true || busy || Boolean(pending)
+                                  !writable || sku.editable === false || busy || Boolean(pending)
                                 }
                                 onChange={(value) =>
                                   setEdits((current) => ({ ...current, [sku.skuCode]: value }))

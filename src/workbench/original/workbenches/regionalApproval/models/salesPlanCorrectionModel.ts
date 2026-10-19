@@ -1,4 +1,5 @@
 import { salesPlanActionReceiptMatches } from './salesPlanActionModel.ts';
+import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
 import {
@@ -149,9 +150,126 @@ import type {
   GeaSalesPlanDetail,
   GeaSalesPlanActionRequest,
   GeaSalesPlanActionReceipt,
+  GeaSalesPlanListItem,
 } from '../../../contracts.ts';
 
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
+
+export function correctionListItem(row: GeaSalesPlanListItem): GeaSalesPlanListItem {
+  const monthly = row.orderType !== 'Z';
+  const monthlyApproved = row.monthlyApproved ?? (!monthly || row.status >= 10);
+  return {
+    ...row,
+    monthlyApproved,
+    hasCorrection: row.hasCorrection ?? !monthly,
+    ...(monthly && monthlyApproved
+      ? {
+          mPlanAmount: row.mPlanAmount === undefined ? row.currentAmount : row.mPlanAmount,
+          mPlanQty: row.mPlanQty === undefined ? row.currentQty : row.mPlanQty,
+        }
+      : {}),
+  };
+}
+
+export function correctionListSummary(rows: GeaSalesPlanListItem[]) {
+  const sum = (values: (string | null | undefined)[]) => {
+    try {
+      return values
+        .reduce<Decimal>((n, value) => n.plus(correctionDecimal(value)), new Exact(0))
+        .toFixed();
+    } catch {
+      return null;
+    }
+  };
+  const targetAmount = sum(rows.map((row) => row.targetAmount));
+  const planAmount = sum(
+    rows.map((row) =>
+      row.monthlyApproved === false
+        ? null
+        : row.corrPlanAmount === undefined
+          ? row.currentAmount
+          : row.corrPlanAmount,
+    ),
+  );
+  const planQty = sum(
+    rows.map((row) =>
+      row.monthlyApproved === false
+        ? null
+        : row.corrPlanQty === undefined
+          ? row.currentQty
+          : row.corrPlanQty,
+    ),
+  );
+  return {
+    targetAmount: targetAmount ?? '',
+    planAmount,
+    planQty,
+    diffAmount:
+      targetAmount != null && planAmount != null
+        ? correctionDecimal(planAmount).minus(targetAmount).toFixed()
+        : null,
+  };
+}
+
+export function correctionReadDetail(detail: GeaSalesPlanDetail): GeaSalesPlanDetail {
+  if (detail.currentVersion.orderType === 'Z' || detail.correctionContext?.hasCorrection === false)
+    return detail;
+  if (detail.currentVersion.status < 10) throw new Error('月初计划尚未终审');
+  return {
+    ...detail,
+    skus: detail.skus.map((sku) => ({
+      ...sku,
+      qty: correctionDecimal(sku.categoryConfirmedQty).toFixed(),
+      corrBaseQty: correctionDecimal(sku.categoryConfirmedQty).toFixed(),
+      amt: correctionDecimal(sku.categoryConfirmedAmount).toFixed(2),
+    })),
+  };
+}
+
+export function correctionListDetail(
+  row: GeaSalesPlanListItem,
+  detail: GeaSalesPlanDetail,
+): GeaSalesPlanListItem {
+  const version = detail.currentVersion;
+  if (
+    version.id !== row.versionId ||
+    version.planId !== row.planId ||
+    version.orderType !== 'Z' ||
+    !version.effective ||
+    (row.skuCount > 0 && detail.skus.length === 0) ||
+    detail.skus.some((sku) => sku.versionId !== version.id)
+  )
+    throw new Error('纠偏版本已变化');
+  const sum = (values: string[]) =>
+    values.reduce((n, value) => n.plus(correctionDecimal(value)), new Exact(0)).toFixed();
+  const deltas = detail.skus.map((sku) =>
+    correctionDecimal(correctionDecision(sku, version.status, version.planTypeCode, false)),
+  );
+  const target = correctionDecimal(row.targetAmount);
+  return {
+    ...row,
+    mPlanQty:
+      row.mPlanQty === undefined
+        ? sum(detail.skus.map((sku) => sku.corrBaseQty ?? sku.qty))
+        : row.mPlanQty,
+    mPlanAmount:
+      row.mPlanAmount === undefined ? sum(detail.skus.map((sku) => sku.amt)) : row.mPlanAmount,
+    prevAdjAddQty:
+      row.prevAdjAddQty === undefined
+        ? deltas.reduce((n, value) => n.plus(value.gt(0) ? value : 0), new Exact(0)).toFixed()
+        : row.prevAdjAddQty,
+    prevAdjCutQty:
+      row.prevAdjCutQty === undefined
+        ? deltas
+            .reduce((n, value) => n.plus(value.lt(0) ? value.negated() : 0), new Exact(0))
+            .toFixed()
+        : row.prevAdjCutQty,
+    correctionProgress:
+      row.correctionProgress === undefined && target.gt(0)
+        ? correctionDecimal(row.currentAmount).div(target).times(100).toFixed(1)
+        : row.correctionProgress,
+  };
+}
 
 export function correctionAccess(
   detail: GeaSalesPlanDetail,
@@ -160,34 +278,27 @@ export function correctionAccess(
   stages: readonly ApprovalStageId[] = [],
 ) {
   const v = detail.currentVersion;
-  const context = detail.actionContext;
   const flow = salesPlanWorkflow(v.planTypeCode, workflowRows);
   const actor = flow.actor(v.status);
   const role = selectedRole ?? actor;
   if (
     v.orderType !== 'Z' ||
     !v.effective ||
-    detail.correctionContext?.contract !== 'absolute-net-v1' ||
-    detail.correctionContext.monthlyApproved !== true ||
-    detail.correctionContext.approvalOpen !== true ||
-    !context ||
-    context.versionId !== v.id ||
-    context.status !== v.status ||
-    !/^[a-f0-9]{64}$/.test(context.snapshotHash) ||
+    detail.correctionContext?.monthlyApproved === false ||
+    detail.correctionContext?.approvalOpen === false ||
     !role ||
     role === 'customer' ||
     role !== actor ||
-    context.nodeOrder !== SALES_PLAN_ROLES.indexOf(role) + 1 ||
-    !Array.isArray(context.allowedActions) ||
-    context.allowedActions.some((action) => !['SAVE', 'APPROVE', 'REJECT'].includes(action)) ||
     !stages.includes(role)
   )
     return undefined;
-  return {
-    ...context,
-    approvalRole: role,
-    roleContractSupported: false,
-  };
+  return salesPlanAccessForRow(
+    { planId: v.planId, versionId: v.id, status: v.status, planTypeCode: v.planTypeCode },
+    detail,
+    stages,
+    role,
+    workflowRows,
+  );
 }
 
 /** 构造全部绝对决策，包括未变化的继承值和显式零值。 */
@@ -339,8 +450,10 @@ export function verifyCorrectionAction(
     return (
       equal(saved[`${role}AdjAddQty`], expected.addQty) &&
       equal(saved[`${role}AdjCutQty`], expected.cutQty) &&
-      equal(saved[`${role}AdjAddAmount`], expected.addAmount) &&
-      equal(saved[`${role}AdjCutAmount`], expected.cutAmount) &&
+      ((request.adjustmentMode !== 'ABSOLUTE_NET' && saved[`${role}AdjAddAmount`] === undefined) ||
+        equal(saved[`${role}AdjAddAmount`], expected.addAmount)) &&
+      ((request.adjustmentMode !== 'ABSOLUTE_NET' && saved[`${role}AdjCutAmount`] === undefined) ||
+        equal(saved[`${role}AdjCutAmount`], expected.cutAmount)) &&
       (request.action === 'SAVE' ||
         (equal(saved[`${role}ConfirmedQty`], expected.qty) &&
           equal(saved[`${role}ConfirmedAmount`], expected.amount)))
