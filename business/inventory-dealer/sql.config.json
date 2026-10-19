@@ -5871,6 +5871,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -5956,6 +5974,19 @@
             "label": "不含税收入",
             "missing": "missing_income"
           }
+        ],
+        "defaultColumns": [
+          "day",
+          "base",
+          "warehouse",
+          "warehouse_group",
+          "customer",
+          "sku",
+          "material_name",
+          "category",
+          "actual",
+          "actual_all",
+          "income"
         ]
       },
       {
@@ -6249,7 +6280,19 @@
             "label": "SKU"
           }
         ],
-        "timeMode": "current"
+        "timeMode": "current",
+        "defaultColumns": [
+          "pickup_point_code",
+          "pickup_point_name",
+          "missing_base",
+          "missing_default",
+          "missing_available",
+          "missing_matched",
+          "material_code",
+          "material_name",
+          "min_order_quantity",
+          "min_pallet_quantity"
+        ]
       },
       {
         "id": "expiry",

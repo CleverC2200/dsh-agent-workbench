@@ -47796,7 +47796,23 @@
         ],
         "metrics": [],
         "gapIds": [],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "order_day",
+          "base",
+          "sku",
+          "material_name",
+          "region",
+          "province",
+          "demand",
+          "shipped",
+          "shortage",
+          "planned",
+          "plan_ordered",
+          "plan_shipped",
+          "demand_change_shortage",
+          "within_plan_shortage"
+        ]
       },
       {
         "id": "shipment-batches",
@@ -47889,7 +47905,24 @@
         ],
         "metrics": [],
         "gapIds": [],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "day",
+          "delivery_order",
+          "sku",
+          "material_name",
+          "batch",
+          "arrival_date_raw",
+          "customer_group",
+          "province_code",
+          "delivery_type",
+          "category",
+          "product_range",
+          "warehouse_quantity",
+          "sales_quantity",
+          "delivered_quantity",
+          "reversal_flag"
+        ]
       },
       {
         "id": "workflow-source",
@@ -47957,7 +47990,22 @@
         "filters": [],
         "metrics": [],
         "gapIds": [],
-        "timeMode": "current"
+        "timeMode": "current",
+        "defaultColumns": [
+          "id",
+          "type_code",
+          "type_name",
+          "examine_level",
+          "examine_node",
+          "node_num",
+          "org_code",
+          "org_name",
+          "status",
+          "delete_status",
+          "create_time",
+          "created_time",
+          "updated_time"
+        ]
       },
       {
         "id": "base-stock-flows",
@@ -48147,7 +48195,41 @@
           }
         ],
         "metrics": [],
-        "gapIds": []
+        "gapIds": [],
+        "defaultColumns": [
+          "data_month",
+          "the_date",
+          "belong_base",
+          "material_code",
+          "material_name",
+          "product_item",
+          "series",
+          "channel_name",
+          "current_stock",
+          "available_stock",
+          "current_stock_60",
+          "avg_30d_sale",
+          "produce_plan",
+          "produce_plan_adj",
+          "produce_in_qty",
+          "transfer_in_plan_v1",
+          "transfer_in_plan_adj",
+          "transfer_in_plan_roll",
+          "transfer_in_qty_no_direct",
+          "transfer_in_qty_with_direct",
+          "transfer_out_plan_v1",
+          "transfer_out_plan_adj",
+          "transfer_out_plan_roll",
+          "transfer_out_qty",
+          "main_sales_plan_v1",
+          "main_sales_plan_adj",
+          "roll_sales_plan",
+          "total_sales_qty",
+          "next_month_out_plan",
+          "next_month_sales_plan",
+          "allocated_qty",
+          "ordered_qty"
+        ]
       }
     ]
   },

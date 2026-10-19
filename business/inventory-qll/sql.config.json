@@ -17505,6 +17505,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -17602,6 +17620,19 @@
             "label": "不含税收入",
             "missing": "missing_income"
           }
+        ],
+        "defaultColumns": [
+          "day",
+          "base",
+          "warehouse",
+          "warehouse_group",
+          "customer",
+          "sku",
+          "material_name",
+          "category",
+          "actual",
+          "actual_all",
+          "income"
         ]
       },
       {
@@ -17714,7 +17745,28 @@
         "timeMode": "health",
         "overrides": {},
         "summaryId": "health.summary",
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "stat_date",
+          "belong_base",
+          "warehouseid",
+          "warehouse_name",
+          "warehouse_type",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "total_qty",
+          "age_days",
+          "overaged_qty",
+          "current_stock",
+          "safe_stock_qty",
+          "target_stock_qty",
+          "is_low_stock",
+          "is_high_stock",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty"
+        ]
       },
       {
         "id": "shortage",
@@ -17776,7 +17828,18 @@
             "label": "SKU"
           }
         ],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "fromorderno",
+          "executeorderno",
+          "needbillingdate",
+          "pickup_point",
+          "pick_point_type2",
+          "material_code",
+          "material_name",
+          "after_inventory_short_qty",
+          "final_short_qty"
+        ]
       },
       {
         "id": "history",
@@ -17957,7 +18020,32 @@
         ],
         "timeMode": "current",
         "summaryId": "transfer_plan.summary",
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "warehouse_code",
+          "warehouse_name",
+          "sku",
+          "material_name",
+          "daily_plan",
+          "month_out_plan",
+          "future30_qty",
+          "open_transfer_reported_qty",
+          "in_transit",
+          "preparing",
+          "plan_month",
+          "snapshot_date",
+          "plan_version",
+          "warehouse_month_transfer_plan",
+          "manual_month_out_plan",
+          "manual_month_transfer_plan",
+          "plan_qty_unit",
+          "manual_plan_source",
+          "manual_confirmed_at",
+          "rolling_ship_positive",
+          "rolling_ship_daily",
+          "month_ship_net",
+          "last_ship_date"
+        ]
       },
       {
         "id": "aging",
@@ -18976,6 +19064,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -19103,6 +19209,24 @@
             "label": "缺货量",
             "missing": "missing_shortage"
           }
+        ],
+        "defaultColumns": [
+          "from_order",
+          "execute_order",
+          "base",
+          "pickup_type",
+          "pickup_code",
+          "pickup_name",
+          "customer",
+          "customer_name",
+          "sku",
+          "material_name",
+          "ordered",
+          "demand",
+          "shortage",
+          "shipped",
+          "order_date",
+          "source_occupied"
         ]
       },
       {
@@ -19216,7 +19340,28 @@
         "summaryId": "health.summary",
         "timeMode": "health",
         "overrides": {},
-        "metrics": []
+        "metrics": [],
+        "defaultColumns": [
+          "stat_date",
+          "belong_base",
+          "warehouseid",
+          "warehouse_name",
+          "warehouse_type",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "total_qty",
+          "age_days",
+          "overaged_qty",
+          "current_stock",
+          "safe_stock_qty",
+          "target_stock_qty",
+          "is_low_stock",
+          "is_high_stock",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty"
+        ]
       },
       {
         "id": "branch-shipments",
@@ -19408,7 +19553,22 @@
           }
         ],
         "gapIds": [],
-        "snapshotQuery": "source.branch-stock-date"
+        "snapshotQuery": "source.branch-stock-date",
+        "defaultColumns": [
+          "stat_date",
+          "warehouseid",
+          "warehouse_name",
+          "material_code",
+          "material_name",
+          "product_categ_name",
+          "material_group_name",
+          "total_qty",
+          "available_qty",
+          "pack_unit_qty",
+          "freeze_qty",
+          "overaged_qty",
+          "age_days"
+        ]
       },
       {
         "id": "order-plan-source",
@@ -19506,7 +19666,23 @@
         ],
         "metrics": [],
         "gapIds": [],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "order_day",
+          "base",
+          "sku",
+          "material_name",
+          "region",
+          "province",
+          "demand",
+          "shipped",
+          "shortage",
+          "planned",
+          "plan_ordered",
+          "plan_shipped",
+          "demand_change_shortage",
+          "within_plan_shortage"
+        ]
       },
       {
         "id": "shipment-batches",
@@ -19599,7 +19775,24 @@
         ],
         "metrics": [],
         "gapIds": [],
-        "timeMode": "period"
+        "timeMode": "period",
+        "defaultColumns": [
+          "day",
+          "delivery_order",
+          "sku",
+          "material_name",
+          "batch",
+          "arrival_date_raw",
+          "customer_group",
+          "province_code",
+          "delivery_type",
+          "category",
+          "product_range",
+          "warehouse_quantity",
+          "sales_quantity",
+          "delivered_quantity",
+          "reversal_flag"
+        ]
       },
       {
         "id": "base-stock-flows",
@@ -19789,7 +19982,41 @@
           }
         ],
         "metrics": [],
-        "gapIds": []
+        "gapIds": [],
+        "defaultColumns": [
+          "data_month",
+          "the_date",
+          "belong_base",
+          "material_code",
+          "material_name",
+          "product_item",
+          "series",
+          "channel_name",
+          "current_stock",
+          "available_stock",
+          "current_stock_60",
+          "avg_30d_sale",
+          "produce_plan",
+          "produce_plan_adj",
+          "produce_in_qty",
+          "transfer_in_plan_v1",
+          "transfer_in_plan_adj",
+          "transfer_in_plan_roll",
+          "transfer_in_qty_no_direct",
+          "transfer_in_qty_with_direct",
+          "transfer_out_plan_v1",
+          "transfer_out_plan_adj",
+          "transfer_out_plan_roll",
+          "transfer_out_qty",
+          "main_sales_plan_v1",
+          "main_sales_plan_adj",
+          "roll_sales_plan",
+          "total_sales_qty",
+          "next_month_out_plan",
+          "next_month_sales_plan",
+          "allocated_qty",
+          "ordered_qty"
+        ]
       }
     ]
   },

@@ -1077,8 +1077,8 @@ function demoBaseCategoryProductItems(categoryName: string): BaseProductItem[] {
 }
 
 function productionMetricDisplay(name: ProductionDrillMetricName, value: number) {
-  if (!Number.isFinite(value)) return '—';
-  if (name === '库存量' || name === '订单缺货量') return `${formatNumber(value, 2)}万件`;
+  if (!Number.isFinite(value)) return '-';
+  if (name === '库存量' || name === '订单缺货量') return `${formatNumber(value, 2)}万箱`;
   if (name === '可发货天数') return `${formatNumber(value, 1)}天`;
   return `${formatNumber(value, 2)}%`;
 }
@@ -2681,7 +2681,7 @@ function IntelligentWorkbenchPage({
                   data-context-id={`intelligent-metric-${item.name}`}
                   data-context-scope="经营指标"
                   data-context-label={item.name}
-                  data-context-summary={`${item.name} ${item.value}${item.unit}，环比变化 ${item.delta}，${item.target}`}
+                  data-context-summary={`${item.name} ${item.value}${item.unit}，环比变化 ${String(item.delta).replaceAll('万件', '万箱')}，${item.target}`}
                   onClick={() =>
                     onOpenV02(item.scope, item.scope === 'production' ? 'category' : undefined)
                   }
@@ -2702,7 +2702,7 @@ function IntelligentWorkbenchPage({
                   </div>
                   <div className="kpi-value">
                     <strong>{item.value}</strong>
-                    <span>{item.unit}</span>
+                    <span>{item.unit.replace('万件', '万箱')}</span>
                   </div>
                   <div className="kpi-comparison-head">
                     <span>{'对比指标'}</span>
@@ -2712,7 +2712,7 @@ function IntelligentWorkbenchPage({
                     <div>
                       <span>
                         {'上月同期 '}
-                        <em>{item.previous}</em>
+                        <em>{String(item.previous).replaceAll('万件', '万箱')}</em>
                       </span>
                       <b className="good">
                         {item.deltaDirection === 'none' ? null : item.deltaDirection === 'down' ? (
@@ -2720,13 +2720,13 @@ function IntelligentWorkbenchPage({
                         ) : (
                           <TrendingUp />
                         )}
-                        {item.delta}
+                        {String(item.delta).replaceAll('万件', '万箱')}
                       </b>
                     </div>
                     <div>
                       <span>
                         {'去年同月同期 '}
-                        <em>{item.same}</em>
+                        <em>{String(item.same).replaceAll('万件', '万箱')}</em>
                       </span>
                       <b className="good">
                         {item.yoyDirection === 'none' ? null : item.yoyDirection === 'down' ? (
@@ -2734,7 +2734,7 @@ function IntelligentWorkbenchPage({
                         ) : (
                           <TrendingUp />
                         )}
-                        {item.yoy}
+                        {String(item.yoy).replaceAll('万件', '万箱')}
                       </b>
                     </div>
                   </div>
@@ -5060,8 +5060,8 @@ export default function Home({
           : periodMeta.current}
       </div>
       <div className="kpi-value">
-        <strong>{formatNumber(kpi.value, 2)}</strong>
-        <span>{kpi.unit}</span>
+        <strong>{Number.isFinite(kpi.value) ? formatNumber(kpi.value, 2) : '-'}</strong>
+        {Number.isFinite(kpi.value) && <span>{kpi.unit.replace('万件', '万箱')}</span>}
       </div>
       {kpi.name === '生产计划达成率' &&
         !Number.isFinite(kpi.value) &&
@@ -6721,7 +6721,7 @@ export default function Home({
                       {label} {observation.days == null ? '-' : formatNumber(observation.days)} 天（
                       {observation.count}/{observation.total} 个库存基地SKU；同范围
                       {key === 'support' ? '现存' : '可用'}{' '}
-                      {formatNumber(observation.quantity / 10000)} 万件 / 计划日均需求{' '}
+                      {formatNumber(observation.quantity / 10000)} 万箱 / 计划日均需求{' '}
                       {formatNumber(observation.demand)} 件）。{' '}
                     </span>
                   ) : null;
@@ -6799,24 +6799,6 @@ export default function Home({
               产销协同看板
             </button>
           </nav>
-        )}
-        {embedMode && liveData && usesConfiguredSql() && (
-          <details
-            className="plugin-source-supplement"
-            onToggle={(event) => setSourceSupplementOpen(event.currentTarget.open)}
-          >
-            <summary>销售目标源表明细</summary>
-            {sourceSupplementOpen && (
-              <ConfiguredFactsPage
-                key={'targets:' + liveDate + ':' + selectedBase}
-                config={sqlSourceConfiguration}
-                embedded
-                viewIds={['monthly-targets']}
-                date={liveDate}
-                initialFilters={selectedBase === '全部基地' ? {} : { base: selectedBase }}
-              />
-            )}
-          </details>
         )}
 
         {activeWorkspace === 'intelligent' ? (
@@ -8641,6 +8623,30 @@ export default function Home({
               </section>
             </section>
           </div>
+        )}
+        {embedMode && liveData && usesConfiguredSql() && (
+          <details
+            className="plugin-source-supplement"
+            onToggle={(event) => setSourceSupplementOpen(event.currentTarget.open)}
+          >
+            <summary>业务明细</summary>
+            {sourceSupplementOpen && (
+              <ConfiguredFactsPage
+                key={'targets:' + liveDate + ':' + selectedBase}
+                config={sqlSourceConfiguration}
+                embedded
+                viewIds={[
+                  'monthly-targets',
+                  'base-stock-flows',
+                  'order-plan-source',
+                  'shipment-batches',
+                  'workflow-source',
+                ]}
+                date={liveDate}
+                initialFilters={selectedBase === '全部基地' ? {} : { base: selectedBase }}
+              />
+            )}
+          </details>
         )}
       </main>
       <aside className="ai-chat" aria-label="产销协同数字人">
