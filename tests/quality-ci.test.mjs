@@ -130,9 +130,18 @@ test('hosted workflow uses actual event, full history, read-only peers and same 
   assert.match(workflow, /ref: \$\{\{ github.event.pull_request.head.sha \|\| github.sha \}\}/);
   const [historyStages] = workflow.split('\n  dependency-review:');
   const finalStage = workflow.split('\n  candidate-quality:')[1];
-  assert.equal(
-    (historyStages.match(/fetch-depth: 0/g) ?? []).length,
-    (historyStages.match(/uses: actions\/checkout@v7/g) ?? []).length,
+  const checkouts = historyStages
+    .split('\n      - ')
+    .filter((step) => step.startsWith('uses: actions/checkout@v7'));
+  for (const checkout of checkouts.filter(
+    (step) => !step.includes('repository: CleverC2200/deepseek-harness'),
+  ))
+    assert.match(checkout, /fetch-depth: 0/);
+  const sdkSource = checkouts.find((step) => step.includes('ref: ${{ matrix.core }}'));
+  assert.ok(sdkSource);
+  assert.match(
+    sdkSource,
+    /fetch-depth: \$\{\{ needs\.candidate-scope\.outputs\.applicability == 'docs' && 1 \|\| 0 \}\}/,
   );
   assert.match(finalStage, /fetch-depth: 1/);
   assert.equal(

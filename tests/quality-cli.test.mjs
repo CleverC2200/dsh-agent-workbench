@@ -7,7 +7,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const run = (cwd, ...args) =>
-  spawnSync(process.execPath, ['scripts/quality.mjs', ...args], { cwd, encoding: 'utf8' });
+  spawnSync(process.execPath, ['scripts/quality.mjs', ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, QUALITY_BASE_SHA: '' },
+  });
 const command = (cwd, executable, args) => {
   const result = spawnSync(executable, args, { cwd, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
