@@ -381,7 +381,12 @@ export function selectCiTests({
   const browserFixtures = [...new Set(policy.browserFixtures ?? [])].sort();
   const own = repositories.find((entry) => entry.repo === repo);
   const diffBase = git(root, 'merge-base', base, own.head).trim();
-  const baselineBytes = git(root, 'show', 'HEAD:scripts/quality-peer-baseline.json');
+  let baselineBytes;
+  try {
+    baselineBytes = git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
+  } catch {
+    throw Error('CI_TEST_PEER_BASE_REQUIRED: committed peer baseline at comparison base');
+  }
   const baseline = JSON.parse(baselineBytes);
   const changes = repositories.flatMap((entry) => {
     const before =

@@ -9,7 +9,7 @@
 - 先由现有 reader 核冻结三仓、实际事件、Core、包身份、原锁和源码。测试选择不能授予运行权限。
 - 同一选择器返回 `applicability: docs | source`。仅当三仓合并差分非空、全部属于根导航文档或 `docs/` Markdown，且运行源码和测试没有实际导入、读取或执行消费时，才适用 docs。Prompt、Skill、预设、业务资源、未知文件及空差分均走 source。被真实消费者读取的 README 仍走 source。
 - docs 的测试文件集合为空，仍执行实际源码准入、知识引用及适用的文本检查；省去 SDK、消费者依赖、页面构建和浏览器准备。前置 scope 用相同 reader 与选择器观察源码，后续执行重算相同计划，不能用旧计划代替当前准入。
-- PR 使用实际 base SHA，push 使用 before SHA。手动运行沿已提交的 own baseline；完整基线必须可从本 checkout 查询。其他仓与本仓当前已提交的 peer baseline 比较，联合输入的差异单独记录。
+- PR 使用实际 base SHA，push 使用 before SHA。手动运行沿已提交的 own baseline；完整基线必须可从本 checkout 查询。其他仓与本仓 diffBase 中已提交的 peer baseline 比较，捕捉本票更新 peer baseline 带入的改动；历史 baseline 不可读时拒绝。实际候选准入仍绑定 HEAD 的 peer baseline 或显式联合输入。
 - 明确标记 exclusive 的工程配置规则使用必需合同集合，普通动态消费规则补充静态路径追踪。Workbench 的 scripts 规则不排除真实消费者；修改测试及固定原始字节 fixture 也继续追踪消费者。未映射的运行源码或本仓测试 fixture 立即拒绝，不回退到全量，也不截断选中的文件。
 - 业务核心按 policy 常驻，工程工具回归按实际改动选择。撤下固定集合前须闭合源码、动态入口、配置和 peer 输入的选择关系。
 - 必需文件缺失、非法路径或基线不可读均拒绝。`quality-test-plan.json` 保存实际文件、改动、选择理由、策略摘要和 `fullSuite: not-run`，没有受影响集成测试不表示全量通过。

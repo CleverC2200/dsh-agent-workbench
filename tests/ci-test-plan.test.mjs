@@ -340,6 +340,81 @@ test('deleted source remains an affected dependency, and peer changes are bound 
     'tests/required.test.mjs',
   ]);
 });
+test('source events and joint inputs retain peer changes when the candidate updates its baseline', async (t) => {
+  for (const event of ['pull_request', 'workflow_dispatch'])
+    await t.test(event, (t) => {
+      const f = fixture(t);
+      f.policy.rules.push({
+        pattern: '^scripts/quality-peer-baseline\\.json$',
+        tests: ['tests/required.test.mjs'],
+      });
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      const baseline = () =>
+        JSON.stringify({
+          schemaVersion: 1,
+          repositories: f.repositories.map(({ repo, head }) => ({ repo, head })),
+        });
+      const previousBaseline = baseline();
+      f.put(f.root, 'scripts/quality-peer-baseline.json', previousBaseline);
+      f.checkpoint();
+      const peer = f.repositories[1];
+      f.put(peer.path, 'src/value.ts', 'export const value = 3;');
+      peer.head = f.commit(peer.path);
+      const candidateBaseline = baseline();
+      f.put(f.root, 'scripts/quality-peer-baseline.json', candidateBaseline);
+      f.repositories[0].head = f.commit(f.root);
+      const admitted = spawnSync(
+        process.execPath,
+        [
+          join(import.meta.dirname, '../scripts/read-hosted-peer-input.mjs'),
+          '--repo',
+          'dsh-agent-workbench',
+        ],
+        {
+          cwd: f.root,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            GITHUB_OUTPUT: '',
+            GITHUB_REPOSITORY: 'CleverC2200/dsh-agent-workbench',
+            GITHUB_EVENT_NAME: event,
+            QUALITY_SCOPE_ALLOWED: 'true',
+            QUALITY_EXPECTED_SHA: f.repositories[0].head,
+            QUALITY_GROUP_WORKBENCH: f.repositories[0].head,
+            QUALITY_GROUP_MANAGE: peer.head,
+            QUALITY_GROUP_GEA: f.repositories[2].head,
+          },
+        },
+      );
+      assert.equal(admitted.status, 0, admitted.stderr);
+      const input = JSON.parse(admitted.stdout);
+      assert.equal(input['manage-sha'], peer.head);
+      assert.equal(input['source-kind'], event === 'pull_request' ? 'source-event' : 'joint-group');
+      assert.equal(
+        input['baseline-id'],
+        event === 'pull_request'
+          ? createHash('sha256').update(candidateBaseline).digest('hex')
+          : '',
+      );
+      const plan = f.plan();
+      assert.deepEqual(plan.files, ['tests/peer.test.mjs', 'tests/required.test.mjs']);
+      assert.deepEqual(plan.reasons['dsh-agent-manage/src/value.ts'], ['tests/peer.test.mjs']);
+      assert.equal(
+        plan.peerBaselineSha256,
+        createHash('sha256').update(previousBaseline).digest('hex'),
+      );
+    });
+});
+test('a candidate cannot replace a missing historical peer comparison baseline', (t) => {
+  const f = fixture(t);
+  const file = join(f.root, 'scripts/quality-peer-baseline.json');
+  const baseline = readFileSync(file);
+  unlinkSync(file);
+  f.checkpoint();
+  writeFileSync(file, baseline);
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(f.plan, /CI_TEST_PEER_BASE_REQUIRED/);
+});
 test('unmapped runtime source refuses before preparation; no full-suite fallback is allowed', (t) => {
   const f = fixture(t);
   f.put(f.root, 'src/unmapped.ts', 'export const uncovered = true;');
