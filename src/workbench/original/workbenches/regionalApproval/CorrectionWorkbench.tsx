@@ -293,6 +293,7 @@ export function CorrectionWorkbench({
               <Select
                 size="small"
                 aria-label={tr('period')}
+                style={{ width: 136 }}
                 value={periodId}
                 disabled={periods.length === 0}
                 onChange={(id) => {
@@ -408,7 +409,7 @@ export function CorrectionWorkbench({
                   width: 240,
                   render: (_, r) => (
                     <div className={shell.organizationCell}>
-                      <div className={shell.organizationTitle}>
+                      <div className={`${shell.organizationTitle} ${styles.organizationTitle}`}>
                         <Button
                           type="text"
                           size="small"
