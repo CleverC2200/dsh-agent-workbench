@@ -160,9 +160,7 @@ export const salesPlanWorkflow = (
       const index = chain.findIndex((row) => row.nodeNum === nodeNum);
       return valid && index >= 0 ? chain[index + 1]?.nodeNum : undefined;
     },
-    resubmit: (status: number) => {
-      const role = actor(status);
-      return status >= 6 && status <= 9 && role ? nextStatus(roleIndex(role)) : undefined;
-    },
+    resubmit: (status: number) =>
+      Number.isInteger(status) && status >= 6 && status <= 9 ? status - 5 : undefined,
   };
 };

@@ -2362,13 +2362,17 @@ const RegionalApprovalWorkbench: React.FC<{
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const resubmitRow = selectedLiveRows.length === 1 ? selectedLiveRows[0] : undefined;
   const resubmitPeriod = liveQuery.periods.find(
-    (period) => period.periodId === resubmitRow?.periodId,
+    (period) =>
+      period.periodId === resubmitRow?.periodId &&
+      period.planTypeCode === resubmitRow?.planTypeCode,
   );
   const resubmitDisabledReason =
     selectedLiveRows.length !== 1
-      ? '逐笔核对退回记录后修改提交；不可多选或与待审批记录混合提交。'
+      ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.multiple')
       : !resubmitRow || !resubmitAllowed(resubmitRow) || !resubmitPeriod
-        ? '当前身份、来源版本或完整明细尚未满足修改重提条件。'
+        ? t(
+            `common.assistantSurface.regionalApproval.liveSubmit.disabled.${resubmitRow?.status === 6 ? 'unconfirmedSubmitter' : 'sourceAuthority'}`,
+          )
         : undefined;
   const primaryActionDisabledReason = batchDisabledReason('APPROVE');
   const approvalActionButtons = (
