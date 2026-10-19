@@ -5,6 +5,9 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--workbench-page);
+  color: var(--workbench-text);
+  font: var(--workbench-font-size) / 1.5 var(--workbench-font-family);
   --workbench-ai-width: var(--workbench-ai-preferred-width, 520px);
 }
 .agent-workbench-document-chrome {
