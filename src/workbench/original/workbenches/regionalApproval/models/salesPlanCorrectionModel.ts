@@ -1,4 +1,3 @@
-import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
 import { salesPlanActionReceiptMatches } from './salesPlanActionModel.ts';
 import { Decimal } from 'decimal.js';
 import {
@@ -123,19 +122,31 @@ export function correctionAccess(
   stages: readonly ApprovalStageId[] = [],
 ) {
   const v = detail.currentVersion;
+  const context = detail.actionContext;
+  const flow = salesPlanWorkflow(v.planTypeCode, workflowRows);
+  const actor = flow.actor(v.status);
+  const role = selectedRole ?? actor;
   if (
     v.orderType !== 'Z' ||
+    !v.effective ||
     detail.correctionContext?.contract !== 'absolute-net-v1' ||
-    detail.correctionContext.monthlyApproved !== true
-  )
-    return undefined;
-  return salesPlanAccessForRow(
-    { planId: v.planId, versionId: v.id, status: v.status, planTypeCode: v.planTypeCode },
-    detail,
-    stages,
-    selectedRole,
-    workflowRows,
-  );
+    detail.correctionContext.monthlyApproved !== true ||
+    detail.correctionContext.approvalOpen !== true ||
+    !context ||
+    context.versionId !== v.id ||
+    context.status !== v.status ||
+    !/^[a-f0-9]{64}$/.test(context.snapshotHash) ||
+    !role || role === 'customer' || role !== actor ||
+    context.nodeOrder !== SALES_PLAN_ROLES.indexOf(role) + 1 ||
+    !Array.isArray(context.allowedActions) ||
+    context.allowedActions.some(action => !['SAVE', 'APPROVE', 'REJECT'].includes(action)) ||
+    !stages.includes(role)
+  ) return undefined;
+  return {
+    ...context,
+    approvalRole: role,
+    roleContractSupported: false,
+  };
 }
 
 /** 构造全部绝对决策，包括未变化的继承值和显式零值。 */
