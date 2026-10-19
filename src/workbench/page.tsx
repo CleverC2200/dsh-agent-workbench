@@ -1,6 +1,8 @@
 /** Workbench Native 业务文档中的审批页面；GEA 保留认证与业务授权。 */
-import { RegionalApprovalResubmitDialog } from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
-import type { GeaSalesPlanPeriod } from './original/contracts.ts';
+import {
+  RegionalApprovalResubmitDialog,
+  type SalesPlanSubmissionItem,
+} from './original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { createWorkflowLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -213,6 +215,8 @@ export const workbenchHost: WorkbenchHost = {
 };
 const host = workbenchHost;
 const resubmitClient = {
+  action: host.salesPlan.action,
+  draft: host.salesPlan.draft,
   detail: host.salesPlan.detail,
   versionSkus: host.salesPlan.versionSkus,
   submit: host.salesPlan.submit,
@@ -288,9 +292,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
   const [apiLogOpen, setApiLogOpen] = useState(directApiLog);
   const [workbenchRevision, setWorkbenchRevision] = useState(0);
   const [resubmit, setResubmit] = useState<{
-    planId: string;
-    versionId: string;
-    period: GeaSalesPlanPeriod;
+    items: readonly SalesPlanSubmissionItem[];
     visible: boolean;
     pending: boolean;
   }>();
@@ -508,7 +510,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                   style={{ flexShrink: 0 }}
                   content={locale.t(
                     'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
-                    { plan: resubmit.planId },
+                    { plan: resubmit.items.map((item) => item.label).join('、') },
                   )}
                   action={
                     <Button
@@ -531,13 +533,22 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 currentUserId={status.user?.id}
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
-                onResubmit={(planId, versionId, period) =>
+                onResubmit={(planId, versionId, period, label = '') =>
                   setResubmit((current) =>
                     current?.pending
-                      ? current.planId === planId
-                        ? { ...current, visible: true }
-                        : current
-                      : { planId, versionId, period, visible: true, pending: false },
+                      ? { ...current, visible: true }
+                      : {
+                          items: [{ kind: 'resubmit', planId, versionId, period, label }],
+                          visible: true,
+                          pending: false,
+                        },
+                  )
+                }
+                onSubmitBatch={(items) =>
+                  setResubmit((current) =>
+                    current?.pending
+                      ? { ...current, visible: true }
+                      : { items, visible: true, pending: false },
                   )
                 }
                 automaticAnalysisEnabled={true}
@@ -558,7 +569,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       )}
       {resubmit && (
         <RegionalApprovalResubmitDialog
-          key={resubmit.versionId}
+          key={resubmit.items.map((item) => item.versionId).join(':')}
           {...resubmit}
           visible={resubmit.visible && !apiLogOpen}
           onPendingChange={updateResubmitPending}

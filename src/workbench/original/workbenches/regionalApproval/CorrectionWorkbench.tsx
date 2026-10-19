@@ -81,7 +81,12 @@ export function CorrectionWorkbench({
   queryClient?: SalesPlanQueryClient | null;
   detailClient?: SalesPlanDetailClient;
   actionClient?: SalesPlanActionClient;
-  onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;
+  onResubmit?: (
+    planId: string,
+    versionId: string,
+    period: GeaSalesPlanPeriod,
+    label?: string,
+  ) => void;
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`common.correction.${key}`, values);
@@ -433,7 +438,17 @@ export function CorrectionWorkbench({
                           .join(' / ')}
                       </small>
                       {r.status >= 6 && r.status <= 9 && onResubmit && (
-                        <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
+                        <Button
+                          onClick={() =>
+                            period &&
+                            onResubmit(
+                              r.planId,
+                              r.versionId,
+                              period,
+                              r.dealerName ?? r.orgName ?? r.planId,
+                            )
+                          }
+                        >
                           {tr('resubmit')}
                         </Button>
                       )}
