@@ -278,13 +278,12 @@ for (const [typeCode, status, actor, wrong] of [
   });
 }
 
-test('returned plans keep ordinary approval for the explicitly granted visible role', () => {
+test('returned plans require resubmission while continued rejection preserves granted roles', () => {
   for (const status of [6, 7, 8, 9]) {
     const row = { planId: 'p', versionId: 'v', status, planTypeCode: 'Y' };
     const detail = { currentVersion: { ...row, id: 'v', effective: true } };
     for (const role of ['region', 'province', 'area', 'category']) {
       assert.deepEqual(salesPlanAccessForRow(row, detail, [role], role)?.allowedActions, [
-        'APPROVE',
         'REJECT',
       ]);
       assert.equal(salesPlanAccessForRow(row, detail, [], role), undefined);
