@@ -2233,6 +2233,21 @@ const RegionalApprovalWorkbench: React.FC<{
                     ))
                   : '—'}
             </span>
+            {!liveRowSelectable(tableRow) &&
+              (tableRow.members ?? [row]).some((plan) => {
+                const version = liveAccess.entries[plan.versionId]?.currentVersion;
+                return (
+                  plan.status === 6 &&
+                  version?.status === 6 &&
+                  !salesPlanCanResubmit(version, roleStages, currentUserId)
+                );
+              }) && (
+                <div role="note" className={styles.resubmitUnavailable}>
+                  {t(
+                    'common.assistantSurface.regionalApproval.liveSubmit.disabled.unconfirmedSubmitter',
+                  )}
+                </div>
+              )}
           </div>
         );
       },

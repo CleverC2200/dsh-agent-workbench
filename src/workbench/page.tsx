@@ -501,25 +501,28 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       ) : (
         <section className="gea-center-surface" aria-label="插件内容">
           <WorkbenchSessionProvider value={{ conversationId: sessionId }}>
-            {resubmit?.pending && !resubmit.visible && (
-              <Alert
-                type="warning"
-                content={locale.t(
-                  'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
-                  { plan: resubmit.planId },
-                )}
-                action={
-                  <Button
-                    onClick={() =>
-                      setResubmit((current) => (current ? { ...current, visible: true } : current))
-                    }
-                  >
-                    {locale.t('common.assistantSurface.regionalApproval.liveSubmit.resume')}
-                  </Button>
-                }
-              />
-            )}
             <div className="gea-original-workbench">
+              {resubmit?.pending && !resubmit.visible && (
+                <Alert
+                  type="warning"
+                  style={{ flexShrink: 0 }}
+                  content={locale.t(
+                    'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
+                    { plan: resubmit.planId },
+                  )}
+                  action={
+                    <Button
+                      onClick={() =>
+                        setResubmit((current) =>
+                          current ? { ...current, visible: true } : current,
+                        )
+                      }
+                    >
+                      {locale.t('common.assistantSurface.regionalApproval.liveSubmit.resume')}
+                    </Button>
+                  }
+                />
+              )}
               <RegionalApprovalWorkbench
                 key={workbenchRevision}
                 stateScope={`gea-dsh:${status.environment}:${status.user?.tenantId}:${status.user?.id}`}
