@@ -34,6 +34,7 @@ jobs:
       run:
         working-directory: candidate/dsh-agent-workbench
     outputs:
+      python-sql: ${{ steps.plan.outputs.python-sql }}
       applicability: ${{ steps.plan.outputs.applicability }}
       browser: ${{ steps.plan.outputs.browser }}
       cores: ${{ steps.cores.outputs.cores }}
@@ -251,6 +252,10 @@ jobs:
         with:
           path: playwright-browsers
           key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/dsh-agent-workbench/package-lock.json') }}
+      - uses: astral-sh/setup-uv@v6
+        if: needs.candidate-scope.outputs.python-sql == 'true'
+        with:
+          enable-cache: false
       - name: Verify prepared SDK and run all public quality gates
         env:
           INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}

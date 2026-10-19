@@ -24,6 +24,8 @@ Core 下载内容与产物缓存分别保存。Workbench 的下载缓存保留�
 
 Workbench 的 `build` 需求来自选中测试对本仓 lib 或生成 HTML 的实际消费。无需这些产物时保留官方 noEmit 类型检查，省去页面构建及无关 APS 安装；需要产物时由同次声明构建完成类型分析，构建前仍核 stamp 一致及固定官方输入。基础检查失败后不进入构建。构建后的知识检查只核导出目标，源知识引用在此前检查。FC 依赖仅供实际 FC 测试或 storage 构建使用，不因其他 business 路径改动安装。需要页面产物时当前仍采用原 build:core 装配范围，尚未拆成逐页面构建。
 
+相邻 SQL 配置的动态页面和计算消费者由既有 policy 明确登记。直连执行器的原 Python 单测归属 `tests/agent-sql-direct.test.mjs`，按 `scripts/requirements-sql.txt` 通过 uv 运行；只有该 owner 入选时 workflow 准备 uv，普通 Node 检查不增加 Python 阶段。配置生成器的实际重新生成仍是显式操作，CI 不运行该写入口。
+
 GEA 仅在选中 Profile 测试时准备真实 flock、Workbench 页面构建和冻结 source Profile 输入。窗口准入合同会遍历 Core 的完整依赖树，因此它仍需要 Core Web 产物，但无需真实 Profile 和浏览器。纯静态与权限、取消合同不触发 Profile 准备。原锁所需的 GenUI/Sidebar 固定依赖仍独立准备，不能通过跳过 link 输入改变锁的消费协议。每个实际 Profile 的 Home、Session、登录、进程、窗口预算与完整复核仍独立保留。
 
 Workbench 和 Manage 使用同一选择记录。Manage 能力入口消费同一份选中文件，普通批次排除能力文件；完整独立能力验收入口保留。Windows 归档与安全审计保持独立结果。

@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { JSDOM } from 'jsdom';
-import { readDealerMock } from './fixtures/dealer-mock-sql.mjs';
+import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 const pause = () => new Promise((resolve) => setTimeout(resolve, 25));
 async function until(check) {
   for (let i = 0; i < 100; i++) {
@@ -13,7 +12,8 @@ async function until(check) {
 }
 
 test('the built dealer page opens safely, reports current scope and restores the last SKU page through the public view protocol', async (t) => {
-  const html = await readFile('lib/business/inventory-dealer/index.html', 'utf8');
+  const html = await configuredPageHtml('dealer');
+  const readDealerMock = await configuredWire('dealer');
   const dom = new JSDOM(html, {
     url: 'https://host.example/api/agent-workbench/html?id=inventory-dealer',
     referrer: 'https://host.example/',
@@ -47,7 +47,9 @@ test('the built dealer page opens safely, reports current scope and restores the
   };
   dom.window.addEventListener('error', (e) => errors.push(e.error));
   dom.window.addEventListener('unhandledrejection', (e) => errors.push(e.reason));
-  for (const script of dom.window.document.querySelectorAll('script'))
+  for (const script of dom.window.document.querySelectorAll(
+    'script:not([type="application/json"])',
+  ))
     dom.window.eval(script.textContent);
   const root = dom.window.document.getElementById('app');
   const port = {
@@ -92,18 +94,14 @@ test('the built dealer page opens safely, reports current scope and restores the
       },
     }),
   );
-  await until(
-    () => root.textContent.includes('GEA 授权只读数据') && root.textContent.includes('12,060'),
-  );
+  await until(() => root.textContent.includes('12,060'));
   dom.window.dispatchEvent(new dom.window.Event('gea-session-changing'));
   await until(() => root.textContent.includes('会话切换中'));
   const pausedReads = requests.filter((m) => m.method === 'sql').length;
   await pause();
   assert.equal(requests.filter((m) => m.method === 'sql').length, pausedReads);
   dom.window.dispatchEvent(new dom.window.Event('gea-session-changed'));
-  await until(
-    () => root.textContent.includes('GEA 授权只读数据') && root.textContent.includes('12,060'),
-  );
+  await until(() => root.textContent.includes('12,060'));
   assert.doesNotMatch(root.textContent, /UNDECLARED_DEALER_MOCK_QUERY/);
   post({
     protocol: 'dsh-workbench-view-v1',
@@ -127,12 +125,37 @@ test('the built dealer page opens safely, reports current scope and restores the
   assert.equal(current.realData, true);
   assert.equal(current.parts.dealer.recordTotal, 201);
   assert.equal(current.parts.dealer.visibleRows.length, 1);
-  assert.equal(current.parts.dealer.visibleRows[0].code, 'sku-A-200');
-  assert.equal(current.parts.dealer.health.unreasonable, 201);
+  assert.equal(current.parts.dealer.visibleRows[0].sku, 'sku-A-200');
+  assert.equal(
+    current.parts.dealer.health,
+    undefined,
+    'missing health thresholds must not fabricate health classifications',
+  );
   assert.ok(requests.some((m) => m.method === 'sql'));
   assert.deepEqual(
     requests.filter((m) => m.method === 'conversation'),
     [],
+  );
+  const previous = [...root.querySelectorAll('button')].find(
+    (button) => button.textContent === '上一页',
+  );
+  assert.ok(previous);
+  previous.click();
+  await until(() =>
+    requests.some(
+      (message) =>
+        message.method === 'sql' &&
+        message.parameters.queryId === 'dealer.stock.detail.atomic' &&
+        message.parameters.parameters.offset === 190,
+    ),
+  );
+  await until(() => root.textContent.includes('sku-A-190'));
+  assert.ok(
+    requests
+      .filter(
+        (message) => message.method === 'sql' && message.parameters.queryId.endsWith('.atomic'),
+      )
+      .every((message) => message.parameters.parameters.page_size === 10),
   );
   assert.deepEqual(external, []);
   assert.deepEqual(errors, []);

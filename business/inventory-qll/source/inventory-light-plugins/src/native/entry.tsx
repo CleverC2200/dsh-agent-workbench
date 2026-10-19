@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Page from '@business-page';
+import { usesConfiguredSql } from '../../../../../shared/sql-config';
+import ConfiguredWorkbench from '../pages/configured-workbench';
 import { mountBusinessFetch, clearBusinessCache } from './api';
 import { action, ready } from '../channel.js';
 import { updateContext, clearContext, removeContextPart } from './context';
@@ -58,9 +60,7 @@ function App() {
           ))}
         </div>
       )}
-      <Boundary key={revision}>
-        <Page />
-      </Boundary>
+      <Boundary key={revision}>{usesConfiguredSql() ? <ConfiguredWorkbench /> : <Page />}</Boundary>
     </>
   );
 }
@@ -74,6 +74,7 @@ async function mount() {
     refreshPage();
     return { refreshing: true };
   });
+  window.addEventListener('gea-session-changing', () => refreshPage());
   window.addEventListener('gea-identity-changed', () => {
     clearBusinessCache(true);
     clearContext();

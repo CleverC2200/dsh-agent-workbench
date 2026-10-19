@@ -81,6 +81,46 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/(?:run-quality-fast|check-agent-knowledge)\\.mjs$",
       "tests": ["tests/quality-knowledge.test.mjs", "tests/agent-knowledge.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:agent_sql\\.py|test_agent_sql\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/agent-sql-direct.test.mjs", "tests/agent-sql-config.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "tests": [
+        "tests/configured-channel.test.mjs",
+        "tests/gea-page-limit.test.mjs",
+        "tests/five-agent-supplement.test.mjs",
+        "tests/page-runtime.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:fc|qll|dealer)/sql\\.config\\.json$",
+      "tests": [
+        "tests/configured-facts.test.mjs",
+        "tests/restored-workbench.test.mjs",
+        "tests/summary-query-performance.test.mjs",
+        "tests/overview-progress.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:aqkc|fc|qll|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/original-field-parity.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:qll|dealer)/sql\\.config\\.json$",
+      "tests": ["tests/inventory-pc-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-dealer/sql\\.config\\.json$",
+      "tests": ["tests/dealer-page-reception.test.mjs"]
     }
   ]
 }

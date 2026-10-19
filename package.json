@@ -58,7 +58,11 @@
       "types": "./lib/types/workbench/api-log-contract.d.ts"
     },
     "./dms-mock": "./lib/prototypes/dms/model.js",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./configured-query": {
+      "types": "./lib/configured-query-client.d.mts",
+      "default": "./lib/configured-query-client.mjs"
+    }
   },
   "dsh": {
     "client": {

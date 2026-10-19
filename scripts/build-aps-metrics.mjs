@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { sqlConfigPlugin } from './sql-config-build.mjs';
 const root = resolve(import.meta.dirname, '..'),
   resource = join(root, 'business/inventory-apsplan'),
   ui = join(resource, 'source'),
@@ -16,6 +17,7 @@ const mock = process.env.APS_BUILD_MODE === 'mock';
 const result = await build({
   define: { APS_MOCK: JSON.stringify(mock) },
   plugins: [
+    sqlConfigPlugin(),
     {
       name: 'manage-aps-compute',
       setup(api) {
@@ -26,6 +28,10 @@ const result = await build({
     },
   ],
   entryPoints: [join(ui, 'app/plugin-entry.tsx')],
+  outfile: 'inventory-apsplan.js',
+  loader: { '.module.css': 'local-css' },
+  // Shared source panels must use the same React instance as the APS renderer.
+  alias: { react: join(ui, 'node_modules/react'), 'react-dom': join(ui, 'node_modules/react-dom') },
   bundle: true,
   minify: true,
   write: false,
@@ -42,7 +48,7 @@ if (
   )
 )
   throw Error('SERVER_DEPENDENCY_IN_PAGE');
-let script = result.outputFiles[0].text;
+let script = result.outputFiles.find((file) => file.path.endsWith('.js')).text;
 const assets = [];
 const inputs = {};
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -59,7 +65,10 @@ for (const path of new Set(script.match(/\/images\/[a-zA-Z0-9_.-]+\.(?:png|jpg|w
   inputs['source/public' + path] = hash(bytes);
 }
 script = `const __apsImageAssets=${JSON.stringify(assets)};\n${script}`;
-let css = '';
+let css = result.outputFiles
+  .filter((file) => file.path.endsWith('.css'))
+  .map((file) => file.text)
+  .join('\n');
 for (const file of [
   join(ui, 'reference/provided-board.css'),
   join(ui, 'app/data/plugin-host.css'),
@@ -76,7 +85,8 @@ const html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><met
 if (Buffer.byteLength(html) > 5000000) throw Error('HTML_TOO_LARGE');
 await mkdir(out, { recursive: true });
 await writeFile(join(out, 'index.html'), html);
-for (const file of ['plugin.json', 'page.json']) await cp(join(resource, file), join(out, file));
+for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
+  await cp(join(resource, file), join(out, file));
 const agent = join(root, '../dsh-agent-manage/business-resources/inventory-apsplan');
 for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
   await cp(join(agent, file), join(out, file), { recursive: true });
@@ -104,7 +114,7 @@ for (const path of Object.keys(result.metafile.inputs)) {
   else if (file.startsWith(join(root, 'business/shared') + '/'))
     inputs['../shared/' + file.split('/shared/')[1]] = hash(await readFile(file));
 }
-for (const file of ['plugin.json', 'page.json'])
+for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
   inputs[file] = hash(await readFile(join(resource, file)));
 for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills/aps/SKILL.md'])
   inputs['manage/business-resources/inventory-apsplan/' + file] = hash(

@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../../../shared/sql-config.ts';
 import { warehouseIdFromPickupCode, type WarehouseOption } from '../warehouse.ts';
 import { getDatabase } from './database.ts';
 
@@ -27,25 +29,8 @@ export async function loadWarehouseCatalog(
   database: CatalogDatabase = getDatabase(),
 ): Promise<WarehouseCatalog> {
   const [plans, inventory] = await Promise.all([
-    database.query(`/* warehouse_catalog:plans */
-      SELECT DISTINCT branch_pickup_point, branch_name
-      FROM data_service.agents_scm_branch_plan
-      WHERE plan_snapshot_date = (SELECT MAX(plan_snapshot_date) FROM data_service.agents_scm_branch_plan)
-      ORDER BY branch_pickup_point, branch_name
-    `),
-    database.query(`/* warehouse_catalog:inventory */
-      WITH scopes AS (
-        SELECT DISTINCT COALESCE(NULLIF(BTRIM(pickup_point), ''), NULLIF(BTRIM(self_pickup_point), '')) AS pickup_code, warehouseid,
-          NULLIF(BTRIM(warehouse_name), '') AS warehouse_name
-        FROM data_service.agents_scm_branch_inventory_snapshot
-        WHERE snapshot_date = (SELECT MAX(snapshot_date) FROM data_service.agents_scm_branch_inventory_snapshot)
-          AND warehouse_classify = '20'
-      )
-      SELECT DISTINCT pickup_code, warehouseid, warehouse_name
-      FROM scopes
-      WHERE pickup_code IS NOT NULL AND warehouse_name IS NOT NULL
-      ORDER BY pickup_code, warehouse_name
-    `),
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-catalog.1')),
+    database.query(configuredSql(sqlConfiguration, 'fc.src.lib.server.warehouse-catalog.2')),
   ]);
   const codesByName = new Map<string, Set<string>>();
   const namesByCode = new Map<string, Set<string>>();

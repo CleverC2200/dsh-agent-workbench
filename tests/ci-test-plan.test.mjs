@@ -823,6 +823,7 @@ test('production policy preserves actual build and provenance regression consume
     ['scripts/html-author.mjs', 'tests/html-sample-resource.test.mjs'],
     ['scripts/build-inventory.mjs', 'tests/inventory-storage-build.test.mjs'],
     ['scripts/build.mjs', 'tests/core-resource-build.test.mjs'],
+    ['scripts/sql-config-build.mjs', 'tests/sql-config-build.test.mjs'],
   ])
     await t.test(source, (t) => {
       const f = productionFixture(t);
@@ -1148,4 +1149,54 @@ test('the public docs lane validates the real frozen source without SDK or depen
   const denied = invoke('plan');
   assert.notEqual(denied.status, 0);
   assert.match(denied.stderr, /CANDIDATE_LOCK/);
+});
+
+test('SQL execution inputs select the existing Python contract owner without browser expansion', async (t) => {
+  for (const file of [
+    'scripts/agent_sql.py',
+    'scripts/test_agent_sql.py',
+    'scripts/requirements-sql.txt',
+    'scripts/build_deep_query_configs.py',
+  ])
+    await t.test(file, (t) => {
+      const f = productionFixture(t);
+      f.put(f.root, file, 'original input');
+      f.checkpoint();
+      f.put(f.root, file, 'changed input');
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + file].includes('tests/agent-sql-direct.test.mjs'),
+      );
+      assert.equal(plan.applicability, 'source');
+      assert.equal(plan.browser, false);
+      assert.equal(plan.fullSuite, 'not-run');
+    });
+});
+
+test('adjacent SQL configs preserve dynamic page and computation consumers in the same plan', (t) => {
+  const f = productionFixture(t);
+  for (const file of [
+    'tests/inventory-pc-layout.browser.mjs',
+    'tests/fixtures/configured-page.mjs',
+    'tests/helpers/prepared-assets.mjs',
+  ])
+    f.put(f.root, file, readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
+  const file = 'business/inventory-qll/sql.config.json';
+  f.put(f.root, file, '{}');
+  f.checkpoint();
+  f.put(f.root, file, '{"changed":true}');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  for (const consumer of [
+    'tests/agent-sql-direct.test.mjs',
+    'tests/configured-channel.test.mjs',
+    'tests/summary-query-performance.test.mjs',
+    'tests/original-field-parity.test.mjs',
+    'tests/inventory-pc-layout.browser.mjs',
+  ])
+    assert.ok(plan.reasons['dsh-agent-workbench/' + file].includes(consumer));
+  assert.equal(plan.browser, true);
+  assert.equal(plan.build, true);
+  assert.ok(!plan.files.includes('tests/inventory-storage-build.test.mjs'));
 });

@@ -20,5 +20,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "sqlConfig": "sql.config.json"
 }

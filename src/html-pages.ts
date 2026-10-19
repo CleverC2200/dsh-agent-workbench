@@ -3,6 +3,7 @@ import { resolve, sep } from 'node:path';
 import { injectPicker } from './page-interaction/inject.ts';
 import { PageRuntime, type BusinessPage, type AuthorizeBusinessPage } from './page-runtime.ts';
 import { presentHtml } from './html-document.ts';
+import { injectSqlConfig } from './sql-config-document.ts';
 
 export interface HtmlPage {
   id: string;
@@ -148,8 +149,18 @@ export class HtmlPages extends PageRuntime implements WorkbenchPages {
     if (!item) return new Response('Page unavailable', { status: 404 });
     const path = await realpath(item.htmlPath);
     if (!path.startsWith(item.directory + sep)) throw Error('INVALID_HTML_PATH');
-    const html = await readFile(path, 'utf8');
+    let html = await readFile(path, 'utf8');
     if (Buffer.byteLength(html) > 5_000_000) throw Error('HTML_TOO_LARGE');
+    if (item.manifest.sqlConfig !== undefined) {
+      if (item.manifest.sqlConfig !== 'sql.config.json') throw Error('INVALID_SQL_CONFIG_PATH');
+      const configPath = await realpath(resolve(item.directory, item.manifest.sqlConfig));
+      if (!configPath.startsWith(item.directory + sep)) throw Error('INVALID_SQL_CONFIG_PATH');
+      const raw = await readFile(configPath, 'utf8');
+      if (Buffer.byteLength(raw) > 5_000_000) throw Error('SQL_CONFIG_TOO_LARGE');
+      const config = JSON.parse(raw);
+      if (config.agentId !== item.manifest.id) throw Error('SQL_CONFIG_AGENT_MISMATCH');
+      html = injectSqlConfig(html, config);
+    }
     const page = item.manifest.pages.find((page: HtmlPage) => page.id === id);
     const document = injectPicker(html, await this.picker());
     return new Response(presentHtml(document, this.css), {

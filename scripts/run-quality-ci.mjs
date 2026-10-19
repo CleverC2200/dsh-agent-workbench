@@ -136,6 +136,9 @@ try {
             'build=' +
             plan.build +
             '\n' +
+            'python-sql=' +
+            plan.files.includes('tests/agent-sql-direct.test.mjs') +
+            '\n' +
             'dependency-review=' +
             dependencyReview +
             '\n',

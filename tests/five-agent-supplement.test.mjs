@@ -1,0 +1,90 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { build } from 'esbuild';
+const output = await build({
+  entryPoints: ['../dsh-agent-manage/src/aps-compute/production-output.ts'],
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+});
+const { productionOutputMetric, productionOutputObservation } = await import(
+  'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+);
+const row = {
+  source_basis: 'MES_QUANTITY',
+  records: 5,
+  invalid: 1,
+  valid_records: 3,
+  planned: null,
+  actual: null,
+  known_planned: 100,
+  known_actual: 110,
+};
+test('MES conflicts remain excluded; observed subset never supplies the complete metric', () => {
+  assert.equal(productionOutputMetric([row]).value, null);
+  assert.deepEqual(productionOutputObservation([row]), {
+    value: 110.00000000000001,
+    count: 3,
+    total: 5,
+    excluded: 2,
+  });
+  assert.equal(productionOutputObservation([{ ...row, known_planned: 0 }]), null);
+  assert.equal(productionOutputObservation([{ ...row, known_actual: null }]), null);
+  assert.equal(productionOutputObservation([{ ...row, valid_records: 6 }]), null);
+  assert.equal(productionOutputObservation([{ ...row, invalid: 0 }]), null);
+  assert.equal(
+    productionOutputObservation([
+      { ...row, valid_records: 0, known_planned: null, known_actual: null },
+    ]),
+    null,
+  );
+});
+for (const agent of ['aqkc', 'fc', 'qll', 'apsplan'])
+  test(`${agent}: health keeps warehouse identity and maximum age; never averages maximum ages`, async () => {
+    const c = JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`));
+    const detail = c.queries['health.detail'];
+    assert.ok(detail.resultColumns.includes('warehouseid'));
+    assert.ok(detail.resultColumns.includes('age_days'));
+    assert.match(detail.request.sql, /GROUP BY [\s\S]*t\.warehouseid/);
+    const summary = c.queries['health.summary'];
+    assert.match(summary.request.sql, /MAX\(r\.age_days\) AS max_age/);
+    assert.match(summary.request.sql, /NULL AS weighted_age/);
+    assert.doesNotMatch(summary.request.sql, /r\.(total_qty|current_stock) \* r\.age_days/);
+    for (const q of Object.values(c.queries)) assert.doesNotMatch(q.request.sql, /%\(gea_p/);
+  });
+test('known inputs are accessible without labeling unknown decisions as zero', async () => {
+  const load = async (a) => JSON.parse(await readFile(`business/inventory-${a}/sql.config.json`));
+  const dealer = await load('dealer'),
+    fc = await load('fc'),
+    qll = await load('qll');
+  for (const id of ['shortage-stock', 'expiry'])
+    assert.equal(dealer.sourceViews.views.find((v) => v.id === id).queryId, 'dealer.stock.detail');
+  assert.equal(
+    fc.sourceViews.views.find((v) => v.id === 'replenishment').queryId,
+    'transfer_plan.detail',
+  );
+  assert.equal(
+    qll.sourceViews.views.find((v) => v.id === 'channel-sku').queryId,
+    'dealer.stock.detail',
+  );
+  assert.equal(
+    fc.sourceViews.views.find((v) => v.id === 'health').overrides.warehouse_type,
+    '分仓',
+  );
+});
+
+test('base overview uses maximum age and cannot present the source maximum as an average', async () => {
+  const source = await readFile(
+    'business/inventory-aqkc/source/aqkc/web/src/lib/cube-dashboard.ts',
+    'utf8',
+  );
+  assert.match(source, /numeric\(healthSummary\?\.max_age\)/);
+  assert.match(source, /numeric\(warehouseAge\?\.max_age\)/);
+  assert.doesNotMatch(
+    source,
+    /healthSummary\?\.weighted_age|warehouseAge\?\.weighted_age|按仓库源库存加权/,
+  );
+  assert.match(source, /direct \? '最大库龄' : '当前货龄'/);
+});

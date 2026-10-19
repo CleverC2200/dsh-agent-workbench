@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir, writeFile } from './helpers/prepared-assets.mjs';
 import { execFileSync } from 'node:child_process';
-import { readDealerMock } from './fixtures/dealer-mock-sql.mjs';
-import { createCompanyWire } from './fixtures/full-chain-company-wire.mjs';
+import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 import { personalFixtureHtml } from './fixtures/personal-page-html.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -83,7 +82,9 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
     authorDocument ??
     (id === 'personal'
       ? await personalFixtureHtml()
-      : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'));
+      : ['qll', 'dealer'].includes(id)
+        ? await configuredPageHtml(id)
+        : await readFile(`lib/business/inventory-${id}/index.html`, 'utf8'));
   const pluginId = ['regional', 'category', 'mps'].includes(id)
     ? JSON.parse(await readFile(`lib/static/${id}/plugin.json`, 'utf8')).id
     : `inventory-${id}`;
@@ -102,12 +103,10 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
   page.on('console', (message) => {
     if (message.text().startsWith('CATALOG_PARSE_FAILED ')) errors.push(message.text());
   });
-  const companyWire = createCompanyWire();
+  const query = ['qll', 'dealer'].includes(id) ? await configuredWire(id) : null;
   await page.exposeFunction('replyToLayoutRequest', async (message) => {
     assert.equal(message.session, 'layout-session');
-    if (id === 'qll' && ['sql', 'access'].includes(message.method))
-      return companyWire(message.method, message.parameters);
-    if (id === 'dealer' && message.method === 'sql') return readDealerMock(message.parameters);
+    if (query && message.method === 'sql') return query(message.parameters);
     if (message.method === 'context') return { ok: true };
     if (id === 'personal' && message.method === 'draft') {
       assert.match(
@@ -164,10 +163,11 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
   return { page, frame };
 }
 async function startCompanyQuery(frame) {
-  const date = frame.getByPlaceholder('读取时点');
-  await date.fill('2026-10-02');
-  await date.press('Enter');
-  await frame.getByRole('button', { name: '查询', exact: true }).click();
+  const date = frame
+    .getByRole('textbox', { name: '读取时点' })
+    .or(frame.locator('input[type=date][aria-label=读取时点]'));
+  await date.fill('2026-09-30');
+  await frame.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
   await expect(frame.locator('#app')).toContainText('5,580');
 }
 async function readablePaint(locator) {
@@ -223,21 +223,21 @@ for (const id of ['qll', 'dealer'])
         ? [
             frame.locator('strong').filter({ hasText: '5,580' }).first(),
             frame.getByText(/核心判断/).first(),
-            frame.getByText('数据取值说明与各层日期', { exact: true }),
+            frame.getByText(/数据边界：/).first(),
             frame.locator('label').filter({ hasText: '含渠道' }),
             frame.getByRole('button', { name: '查询趋势', exact: true }),
           ]
         : [frame.locator('[role="status"]').filter({ hasText: 'GEA 授权只读数据' }).first()];
     if (id === 'dealer') {
-      await frame.getByRole('tab', { name: 'SKU库存', exact: true }).press('Enter');
+      await frame.getByRole('button', { name: 'SKU库存', exact: true }).press('Enter');
       await expect(frame.getByRole('heading', { name: 'SKU库存', exact: true })).toBeVisible();
       await expect(frame.locator('section[data-page-reference-ready]')).toHaveAttribute(
         'data-page-reference-ready',
         'true',
       );
       targets.push(
-        frame.locator('[role="status"]').filter({ hasText: 'SAP 定价' }).first(),
-        frame.getByRole('button', { name: '下载', exact: true }),
+        frame.getByRole('columnheader', { name: 'SKU编码', exact: true }),
+        frame.getByRole('heading', { name: 'SKU库存', exact: true }),
       );
     }
     const paints = [];
@@ -441,7 +441,7 @@ test('opaque PC author document keeps raw script/style text and current picker/t
 test('dealer metrics retain their authored grid in the PC split panel', async (t) => {
   const { page, frame } = await fixture(t, 'dealer');
   const metrics = frame.locator('[aria-label="库存总览指标"]');
-  await expect(metrics).toContainText('12,060');
+  await expect(metrics).toContainText('1.45万箱');
   assert.equal(await frame.locator('body').evaluate(() => document.compatMode), 'CSS1Compat');
   const positions = await metrics
     .locator('button')
@@ -673,17 +673,17 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
     await expect(trend.getByRole('button', { name: '查询趋势', exact: true })).toBeVisible();
     assert.equal(
       geometry.segmentCount,
-      3,
+      2,
       'missing September 29 observation keeps the original separate segments',
     );
     assert.ok(
-      geometry.circleTitles.some((text) => text.endsWith('基地库存/件 0')),
+      geometry.circleTitles.some((text) => text.endsWith('基地库存/箱 0')),
       'a real zero is still a visible point',
     );
   }
-  const zero = svg.locator('circle').filter({ hasText: /基地库存\/件 0$/ });
+  const zero = svg.locator('circle').filter({ hasText: /基地库存\/箱 0$/ });
   await zero.focus();
-  await expect(trend.locator('figcaption')).toContainText('基地库存/件：0');
+  await expect(trend.locator('figcaption')).toContainText('基地库存/箱：0');
   // A fresh author page checks the original order values independently of prior focus.
   await page.goto('http://inventory-layout.test/');
   await startCompanyQuery(page.frameLocator('iframe'));
@@ -698,15 +698,14 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
       ),
     )
     .toBe('ready');
-  await next.getByLabel('趋势指标').selectOption('orders');
-  await next.getByRole('button', { name: '查询趋势', exact: true }).press('Enter');
-  const point = next.locator('circle').filter({ hasText: /原始需求\/件 100$/ });
-  await expect(point).toBeVisible();
-  await expect(next.locator('figcaption')).not.toContainText('：100');
-  await point.focus();
-  await expect(next.locator('figcaption')).toContainText('原始需求/件：100');
-  await expect(next.locator('figcaption')).toContainText('发运后缺口/件：12');
-  await expect(next.locator('figcaption')).toContainText('2026-09-30');
+  assert.equal(
+    await next
+      .getByLabel('趋势指标')
+      .locator('option[value=orders]')
+      .evaluate((option) => option.disabled),
+    true,
+  );
+  await expect(next).toContainText('订单与平均货龄历史来源未接入');
   if (evidence) await page.screenshot({ path: evidence + '/chart-keyboard-100-12.png' });
 });
 

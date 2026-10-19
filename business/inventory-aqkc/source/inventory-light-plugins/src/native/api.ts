@@ -1,4 +1,5 @@
 import { clearReadCache } from '../data';
+import { startConfiguredStockReadCycle } from '../configured-stock';
 import * as engines from '../aqkc-engine';
 import { updateContext } from './context';
 declare const PLUGIN_ID: string;
@@ -46,6 +47,8 @@ async function dispatch(url: URL, method: string, body: any, signal?: AbortSigna
           p.get('level') ?? undefined,
         ),
       };
+    if (path === '/api/inventory/sku-page' && method === 'POST')
+      return engine.loadInventorySkuPage(body, signal);
     if (path === '/api/inventory/details')
       return {
         page: await engine.loadSafetyStockDetailPage(
@@ -62,9 +65,11 @@ async function dispatch(url: URL, method: string, body: any, signal?: AbortSigna
 }
 export async function mountBusinessFetch() {
   let lifetime = new AbortController();
+  startConfiguredStockReadCycle(lifetime.signal);
   window.addEventListener('light-refresh', () => {
     lifetime.abort();
     lifetime = new AbortController();
+    startConfiguredStockReadCycle(lifetime.signal);
   });
   window.addEventListener('gea-identity-changed', () => lifetime.abort());
   window.fetch = async (input: any, init: any = {}) => {
@@ -86,10 +91,16 @@ export async function mountBusinessFetch() {
     } catch (e) {
       if (signal.aborted) throw e;
       const message = (e as Error).message;
+      if (typeof document !== 'undefined' && document.getElementById('agent-sql-direct'))
+        console.error('LOCAL_SQL_PAGE_READ_FAILED', (e as any).code ?? 'PAGE_READ_FAILED', message);
       return Response.json(
         {
           error: message,
           message,
+          code: (e as any).code ?? (e as any).errorCode,
+          failure: (e as any).failure,
+          returnedColumns: (e as any).returnedColumns,
+          rejectedColumns: (e as any).rejectedColumns,
           errors: (e as any).errors,
           recoverable: true,
           sampleFallback: false,

@@ -76,3 +76,29 @@ test('当前页面指标全部缺失时不借其他指标生成判断', () => {
   const input = data([{ id: 'stock', status: 'ready', rows: [{ inventory: 10000 }] }]);
   assert.match(summarizePage(input, false, ['销售预算达成率']).title, /暂无可分析/);
 });
+
+test('multi-day shipment totals are labelled as period totals, not one-day volume', () => {
+  const result = summarizePage(
+    data([
+      {
+        id: 'delivery-daily',
+        status: 'ready',
+        rows: [
+          { actual: 10000, missing_qty: 0 },
+          { actual: 20000, missing_qty: 0 },
+        ],
+      },
+    ]),
+  );
+  assert.match(result.copy, /期间发货量3万件/);
+  assert.match(result.title, /期间发货量3万件/);
+  assert.doesNotMatch(result.copy, /日发货量/);
+});
+test('a single-day shipment briefing retains its daily label', () => {
+  const result = summarizePage({
+    ...data([{ id: 'delivery-daily', status: 'ready', rows: [{ actual: 0, missing_qty: 0 }] }]),
+    start: '2026-09-23',
+    granularity: 'day',
+  });
+  assert.match(result.copy, /日发货量0万件/);
+});

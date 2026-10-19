@@ -12,6 +12,8 @@ Workbench 贡献页面目录、Native/HTML 业务文档、公共布局、页面�
 - [页面恢复与 Core Session 关联](docs/presentation-recovery.md)
 - 修改页面动作、取消、回执或引用时读[页面能力与受控桥](docs/page-interaction.md)
 - 修改作者模块与生成页时读[HTML 作者源](docs/html-authoring.md)
+- 修改 Agent SQL、查询配置及新库直连时读[SQL 集中配置](docs/agent-sql-config.md)
+- 分仓、全链、经销商的新库接入及字段来源见[SQL 配置与来源边界](docs/agent-sql-config.md)
 - 修改具体业务页时读[业务页面导航](docs/business-pages.md)
 - [共享视觉资源](theme/README.md)
 
@@ -40,3 +42,5 @@ Workbench 贡献页面目录、Native/HTML 业务文档、公共布局、页面�
 Host 与 client 的公共入口均导出冻结的 `pluginPackageVersion {name, version}`，记录该模块编译时的包身份。构建从当前 package.json 生成标记，类型检查拒绝过期标记；已加载模块不会重读更新后的磁盘版本。运行核对应读取实际 ACTIVE Loader 模块的导出，另核安装来源与重启过程；标记本身不证明 Native 装载或业务验收。
 
 外部 Native 工具开合的完整订阅仍需上游接口与窗口证据，见[页面桥](docs/page-interaction.md)。业务来源文件分别保留真实权限、数据、模型及 Native 的未完成验收，见[业务页面导航](docs/business-pages.md)。显式引用旧回执没有内容时保持 unavailable，不能用回执推断可读内容，见[恢复合同](docs/presentation-recovery.md)。这些入口记录要求与缺口，不是本轮运行通过表。
+
+五个 HTML Agent 的统一身份、GEA 配置查询、10 行分页与本次验证状态见 [统一通道接入说明](docs/agent-sql-config.md)。
