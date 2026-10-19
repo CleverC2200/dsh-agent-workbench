@@ -1,3 +1,4 @@
+import type { SalesPlanSubmissionItem } from './RegionalApprovalResubmitDialog.tsx';
 import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
@@ -350,7 +351,13 @@ const RegionalApprovalWorkbench: React.FC<{
   liveActionsEnabled?: boolean;
   automaticAnalysisEnabled?: boolean;
   currentUserId?: string;
-  onResubmit?: (planId: string, versionId: string, period: GeaSalesPlanPeriod) => void;
+  onResubmit?: (
+    planId: string,
+    versionId: string,
+    period: GeaSalesPlanPeriod,
+    label?: string,
+  ) => void;
+  onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
   approvalStages?: readonly ApprovalStageId[];
   /** AG-UI 前端工具调用：agent 让页面改这一屏怎么看。 */
@@ -366,6 +373,7 @@ const RegionalApprovalWorkbench: React.FC<{
   liveActionsEnabled = false,
   automaticAnalysisEnabled = false,
   onResubmit,
+  onSubmitBatch,
   currentUserId,
   approvalStages,
   toolCall,
@@ -2427,21 +2435,48 @@ const RegionalApprovalWorkbench: React.FC<{
   ];
 
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
-  const resubmitRow = selectedLiveRows.length === 1 ? selectedLiveRows[0] : undefined;
-  const resubmitPeriod = liveQuery.periods.find(
-    (period) =>
-      period.periodId === resubmitRow?.periodId &&
-      period.planTypeCode === resubmitRow?.planTypeCode,
-  );
+  const submissionItems = (): SalesPlanSubmissionItem[] =>
+    selectedLiveRows.flatMap((row): SalesPlanSubmissionItem[] => {
+      const label =
+        projectRegionalApprovalLiveDimension(row, dimension).name ?? row.dealerName ?? row.planId;
+      const period = liveQuery.periods.find(
+        (period) => period.periodId === row.periodId && period.planTypeCode === row.planTypeCode,
+      );
+      if (!period) return [];
+      if (row.status >= 6 && row.status <= 9) {
+        return resubmitAllowed(row)
+          ? [{ kind: 'resubmit', planId: row.planId, versionId: row.versionId, label, period }]
+          : [];
+      }
+      const access = liveActionAccessFor(row, 'APPROVE');
+      return access && !liveActionDisabledReason(row, 'APPROVE')
+        ? [
+            {
+              kind: 'approve',
+              planId: row.planId,
+              versionId: row.versionId,
+              label,
+              row,
+              period,
+              access,
+              pendingValues: livePendingValues[row.planId],
+            },
+          ]
+        : [];
+    });
+  const selectedSubmissionItems = submissionItems();
   const resubmitDisabledReason =
-    selectedLiveRows.length !== 1
-      ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.multiple')
-      : !resubmitRow || !resubmitAllowed(resubmitRow) || !resubmitPeriod
-        ? t(
-            `common.assistantSurface.regionalApproval.liveSubmit.disabled.${resubmitRow?.status === 6 ? 'unconfirmedSubmitter' : 'sourceAuthority'}`,
-          )
-        : undefined;
-  const primaryActionDisabledReason = batchDisabledReason('APPROVE');
+    selectedSubmissionItems.length !== selectedLiveRows.length ||
+    (!onSubmitBatch && selectedLiveRows.length !== 1)
+      ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
+      : undefined;
+  const primaryActionDisabledReason =
+    batchDisabledReason('APPROVE') ??
+    (onSubmitBatch &&
+    selectedLiveRows.length > 1 &&
+    selectedSubmissionItems.length !== selectedLiveRows.length
+      ? 'missingAuthority'
+      : undefined);
   const approvalActionButtons = (
     <>
       {liveActionsEnabled ? (
@@ -2482,11 +2517,18 @@ const RegionalApprovalWorkbench: React.FC<{
           disabled={Boolean(resubmitDisabledReason) || liveActionPlanId !== undefined}
           title={resubmitDisabledReason}
           onClick={() => {
-            if (!resubmitDisabledReason && resubmitRow && resubmitPeriod)
-              onResubmit?.(resubmitRow.planId, resubmitRow.versionId, resubmitPeriod);
+            if (resubmitDisabledReason) return;
+            if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
+            else {
+              const item = selectedSubmissionItems[0];
+              if (item?.kind === 'resubmit')
+                onResubmit?.(item.planId, item.versionId, item.period, item.label);
+            }
           }}
         >
-          {t('common.assistantSurface.regionalApproval.liveSubmit.open')}
+          {t(
+            `common.assistantSurface.regionalApproval.liveSubmit.${selectedLiveRows.length > 1 ? 'openBatch' : 'open'}`,
+          )}
         </Button>
       ) : liveActionsEnabled ? (
         <Button
@@ -2514,7 +2556,12 @@ const RegionalApprovalWorkbench: React.FC<{
               setLiveActionPlanId(row.planId);
               return;
             }
-            setBatchAction({ kind: 'APPROVE', items: batchItemsFor(selectedLiveRows, 'APPROVE') });
+            if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
+            else
+              setBatchAction({
+                kind: 'APPROVE',
+                items: batchItemsFor(selectedLiveRows, 'APPROVE'),
+              });
           }}
         >
           {t('common.assistantSurface.regionalApproval.liveAction.approve')}
