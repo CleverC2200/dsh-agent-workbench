@@ -1,5 +1,11 @@
-import { correctionDecision, correctionLine } from './models/salesPlanCorrectionModel.ts';
-import React, { useEffect, useMemo, useState } from 'react';
+import { isBackendHttpError } from '../../http-error.ts';
+import { businessSafeErrorMessage, reportSalesPlanError } from './models/salesPlanActionModel.ts';
+import {
+  correctionDecision,
+  correctionLine,
+  correctionDecimal,
+} from './models/salesPlanCorrectionModel.ts';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Button, Checkbox, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import type {
@@ -10,6 +16,7 @@ import type {
 import {
   prepareSalesPlanResubmit,
   salesPlanResubmitReadbackMatches,
+  salesPlanSubmitReceiptMatches,
   SalesPlanSubmitAttempt,
   classifySalesPlanSubmitError,
   type SalesPlanResubmitSource,
@@ -23,6 +30,8 @@ export function RegionalApprovalResubmitDialog({
   period,
   client,
   connected,
+  visible = true,
+  onPendingChange,
   t,
   onClose,
   onSucceeded,
@@ -32,8 +41,10 @@ export function RegionalApprovalResubmitDialog({
   period: GeaSalesPlanPeriod;
   client: SalesPlanSubmitClient;
   connected: boolean;
+  visible?: boolean;
+  onPendingChange?: (pending: boolean) => void;
   t: TFunction;
-  onClose: () => void;
+  onClose: (pending: boolean) => void;
   onSucceeded: () => void;
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
@@ -42,12 +53,20 @@ export function RegionalApprovalResubmitDialog({
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>([]);
   const [correctionEdits, setCorrectionEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
+  const [rejection, setRejection] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [confirmed, setConfirmed] = useState(false);
   const [attempt, setAttempt] = useState<SalesPlanSubmitAttempt>();
   const [retryable, setRetryable] = useState(false);
   const [receipt, setReceipt] = useState<GeaSalesPlanSubmitReceipt>();
   const [verified, setVerified] = useState(false);
+  const pending = Boolean(
+    attempt &&
+    !verified &&
+    (busy || retryable || receipt || error === 'unavailable' || error === 'retryExhausted'),
+  );
+  useEffect(() => onPendingChange?.(pending), [pending, onPendingChange]);
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
@@ -72,8 +91,13 @@ export function RegionalApprovalResubmitDialog({
         });
         setSkus(rows);
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setError('sourceMismatch');
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted)
+          setError(
+            cause instanceof Error && cause.message === 'sourceMismatch'
+              ? 'sourceMismatch'
+              : 'sourceLoad',
+          );
       });
     return () => controller.abort();
   }, [planId, versionId, period, client]);
@@ -96,15 +120,21 @@ export function RegionalApprovalResubmitDialog({
   }, [source, skus, correctionEdits]);
   const readBack = async (value: GeaSalesPlanSubmitReceipt) => {
     const detail = await client.detail.invoke({ planId });
-    if (!salesPlanResubmitReadbackMatches(versionId, value, detail, input?.request))
+    if (
+      !input ||
+      !salesPlanSubmitReceiptMatches(input, value.requestId, value) ||
+      !salesPlanResubmitReadbackMatches(versionId, value, detail, input.request, source?.skus)
+    )
       throw new Error('readback');
     setVerified(true);
     onSucceeded();
   };
   const submit = async () => {
-    if (!connected || !input || !confirmed || busy || verified) return;
+    if (!connected || !input || !confirmed || submitting.current || verified) return;
+    submitting.current = true;
     setBusy(true);
     setError('');
+    setRejection('');
     setRetryable(false);
     try {
       if (receipt) {
@@ -132,21 +162,37 @@ export function RegionalApprovalResubmitDialog({
     } catch (cause) {
       const failure = classifySalesPlanSubmitError(cause);
       setError(failure.kind);
+      if (isBackendHttpError(failure.cause)) {
+        const id = reportSalesPlanError('sales-plan-submit', failure.cause);
+        setRejection(
+          [
+            failure.cause.status < 500
+              ? businessSafeErrorMessage(
+                  failure.cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, ''),
+                )
+              : undefined,
+            tr('requestReference', { id }),
+          ]
+            .filter(Boolean)
+            .join(' '),
+        );
+      }
       setRetryable(failure.retrySameIntent);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
   return (
     <Modal
-      visible
+      visible={visible}
       title={tr('title')}
-      onCancel={onClose}
+      onCancel={() => onClose(pending)}
       closable={!busy}
       maskClosable={false}
       footer={
         <>
-          <Button disabled={busy} onClick={onClose}>
+          <Button disabled={busy} onClick={() => onClose(pending)}>
             {tr('close')}
           </Button>
           <Button
@@ -161,7 +207,7 @@ export function RegionalApprovalResubmitDialog({
             }
             onClick={() => void submit()}
           >
-            {tr(receipt ? 'refresh' : attempt ? 'retry' : 'confirm')}
+            {tr(receipt ? 'refresh' : attempt && retryable ? 'retry' : 'confirm')}
           </Button>
         </>
       }
@@ -171,6 +217,9 @@ export function RegionalApprovalResubmitDialog({
       {source && (
         <>
           <p>
+            {tr('plan')}: {planId}
+          </p>
+          <p>
             {tr('version')}: {versionId} · {tr('period')}: {period.periodMonth}
           </p>
           <p>
@@ -179,6 +228,13 @@ export function RegionalApprovalResubmitDialog({
               name: source.currentUser.username,
             })}
           </p>
+          <p>
+            {source.detail.currentVersion.returnReason ??
+              source.detail.logs.filter((log) => log.actionCode === 'REJECT').at(-1)?.remark}
+          </p>
+          {source.detail.currentVersion.orderType === 'M' && (
+            <Alert type="info" content={tr('inheritance')} />
+          )}
           <div style={{ maxHeight: 360, overflow: 'auto' }}>
             {skus.map((sku, index) => (
               <label
@@ -187,12 +243,47 @@ export function RegionalApprovalResubmitDialog({
                   display: 'flex',
                   alignItems: 'center',
                   gap: 12,
+                  flexWrap: 'wrap',
                   marginBottom: 8,
                 }}
               >
                 <span>
                   {sku.skuCode} · {sku.productCategName}
                 </span>
+                <span>
+                  {tr('unitPrice')}: {sku.price}
+                </span>
+                <span>
+                  {tr('lineAmount')}:{' '}
+                  {(() => {
+                    try {
+                      return correctionDecimal(sku.qty)
+                        .mul(correctionDecimal(sku.price))
+                        .toDecimalPlaces(2)
+                        .toFixed(2);
+                    } catch {
+                      return '—';
+                    }
+                  })()}
+                </span>
+                {source.detail.currentVersion.orderType === 'M' && (
+                  <span>
+                    {tr('inheritedValues', {
+                      region:
+                        source.detail.currentVersion.status >= 7
+                          ? `${sku.regionConfirmedQty ?? '—'} / ${sku.regionConfirmedAmount ?? '—'}`
+                          : '—',
+                      province:
+                        source.detail.currentVersion.status >= 8
+                          ? `${sku.provinceConfirmedQty ?? '—'} / ${sku.provinceConfirmedAmount ?? '—'}`
+                          : '—',
+                      area:
+                        source.detail.currentVersion.status >= 9
+                          ? `${sku.areaConfirmedQty ?? '—'} / ${sku.areaConfirmedAmount ?? '—'}`
+                          : '—',
+                    })}
+                  </span>
+                )}
                 <Input
                   aria-label={`${source.detail.currentVersion.orderType === 'Z' ? '纠偏调整量' : tr('quantity')} ${sku.skuCode}`}
                   value={
@@ -228,6 +319,11 @@ export function RegionalApprovalResubmitDialog({
                 quantity: input.sourceSummary.submittedQty,
                 amount: input.sourceSummary.submittedAmount,
               })}{' '}
+              ·{' '}
+              {tr('targetSummary', {
+                quantity: input.request.targetQty,
+                amount: input.request.targetAmount,
+              })}{' '}
               · {tr('nextStatus')}: {input.expected.nextStatus}
             </p>
           ) : (
@@ -239,13 +335,21 @@ export function RegionalApprovalResubmitDialog({
         </>
       )}
       {error && (
-        <Alert type="error" content={receipt ? tr('refreshFailed') : tr(`errors.${error}`)} />
+        <Alert
+          type="error"
+          content={
+            receipt
+              ? tr('refreshFailed')
+              : [tr(`errors.${error}`), rejection].filter(Boolean).join(' ')
+          }
+        />
       )}
       {verified && receipt && (
         <Alert
           type="success"
           content={tr('success', {
             ...receipt,
+            auditReference: receipt.auditId ? tr('auditReference', { id: receipt.auditId }) : '',
             replayed: tr(receipt.replayed ? 'replayed' : 'created'),
           })}
         />

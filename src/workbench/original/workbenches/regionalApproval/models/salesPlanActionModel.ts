@@ -32,6 +32,7 @@ export type SalesPlanActionErrorKind =
   | 'validation'
   | 'authentication'
   | 'permission'
+  | 'configuration'
   | 'conflict'
   | 'rateLimited'
   | 'unavailable'
@@ -162,10 +163,32 @@ export const businessSafeErrorMessage = (message: unknown): string | undefined =
 
 /** 技术细节只进日志，并返回一个可口头转述的错误编号，供用户报给管理员核对。 */
 export const reportSalesPlanError = (scope: string, detail: unknown): string => {
-  const id = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const details =
+    detail && typeof detail === 'object' && 'details' in detail ? detail.details : undefined;
+  const reference =
+    details && typeof details === 'object' && 'requestId' in details
+      ? details.requestId
+      : undefined;
+  const id =
+    typeof reference === 'string' && /^[A-Za-z0-9:._-]{1,128}$/.test(reference)
+      ? reference
+      : Math.random().toString(36).slice(2, 8).toUpperCase();
   // eslint-disable-next-line no-console
   console.warn(`[gea-error] ${scope} 错误编号=${id}`, detail);
   return id;
+};
+
+export const salesPlanConflictErrorKind = (details: unknown): 'conflict' | 'configuration' => {
+  if (
+    details &&
+    typeof details === 'object' &&
+    'upstreamCode' in details &&
+    typeof details.upstreamCode === 'string' &&
+    details.upstreamCode &&
+    details.upstreamCode !== 'SALES_PLAN_CONFLICT'
+  )
+    return 'configuration';
+  return 'conflict';
 };
 
 export const classifySalesPlanActionError = (error: unknown): SalesPlanActionError => {
@@ -178,7 +201,9 @@ export const classifySalesPlanActionError = (error: unknown): SalesPlanActionErr
     if (error.status === 403)
       return new SalesPlanActionError('permission', false, undefined, { cause: error });
     if (error.status === 409)
-      return new SalesPlanActionError('conflict', false, undefined, { cause: error });
+      return new SalesPlanActionError(salesPlanConflictErrorKind(error.details), false, undefined, {
+        cause: error,
+      });
     if (error.status === 429) {
       return new SalesPlanActionError('rateLimited', true, retryAfterMsFromDetails(error.details), {
         cause: error,
@@ -204,7 +229,7 @@ export const salesPlanActionReceiptMatches = (
     receipt.fromStatus !== input.request.expectedStatus ||
     receipt.requestId !== requestId ||
     !receipt.traceId?.trim() ||
-    !receipt.auditId?.trim()
+    (receipt.auditId != null && typeof receipt.auditId !== 'string')
   )
     return false;
   const flow = salesPlanWorkflow(input.planTypeCode ?? 'Y');

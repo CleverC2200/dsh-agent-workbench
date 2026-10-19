@@ -1,3 +1,4 @@
+import type { GeaSalesPlanGroupMetrics } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { TFunction } from 'i18next';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
@@ -132,7 +133,6 @@ export type RegionalApprovalQueryScope = Pick<
 export type RegionalApprovalLiveRow = GeaSalesPlanListItem & {
   source: 'gea';
   approvalState: 'pending' | 'approved' | 'returned';
-  channelCode?: string;
 };
 
 const normalizeSalesPlanDecimal = (value: unknown): string => {
@@ -271,6 +271,7 @@ export const salesPlanPeriodOptionLabel = (periodMonth: string): string => perio
 export const groupRegionalApprovalLiveRows = (
   rows: readonly RegionalApprovalLiveRow[],
   dimension: ApprovalDimension,
+  groupMetrics: readonly GeaSalesPlanGroupMetrics[] = [],
 ) => {
   const groups = new Map<string, RegionalApprovalLiveRow[]>();
   for (const row of rows) {
@@ -298,6 +299,15 @@ export const groupRegionalApprovalLiveRows = (
         ? members[0]
         : {
             ...members[0],
+            amountProgress: groupMetrics.find(
+              (group) => JSON.stringify([group.dimension, group.key]) === key,
+            )?.amountProgress,
+            shipAmount: groupMetrics.find(
+              (group) => JSON.stringify([group.dimension, group.key]) === key,
+            )?.shipAmount,
+            shipQty: groupMetrics.find(
+              (group) => JSON.stringify([group.dimension, group.key]) === key,
+            )?.shipQty,
             mPlanAmount: members.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.mPlanAmount ?? ''))
               ? addExactDecimals(members.map((row) => row.mPlanAmount!))
               : undefined,

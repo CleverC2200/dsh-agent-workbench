@@ -1,8 +1,19 @@
 import type { TFunction } from 'i18next';
+import { Down, Refresh, Up } from '@icon-park/react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Input, Modal, Pagination, Select, Table } from '@arco-design/web-react';
+import {
+  Alert,
+  Button,
+  Input,
+  Modal,
+  Pagination,
+  Select,
+  Table,
+  Tag,
+} from '@arco-design/web-react';
 import type {
   GeaSalesPlanListItem,
+  GeaSalesPlanPage,
   GeaSalesPlanPeriod,
   GeaSalesPlanDetail,
   GeaSalesPlanActionRequest,
@@ -18,13 +29,19 @@ import {
 import {
   correctionAccess,
   correctionAdjustments,
-  correctionDecision,
   correctionLine,
-  correctionMetrics,
+  correctionLogDecisions,
+  correctionDisplay,
   correctionDecimal,
+  correctionDecision,
+  correctionListItem,
+  correctionListSummary,
+  correctionReadDetail,
+  correctionListDetail,
   verifyCorrectionAction,
 } from './models/salesPlanCorrectionModel.ts';
 import { salesPlanVarianceClass } from './models/salesPlanVarianceModel.ts';
+import { salesPlanProgressBarColor } from './models/salesPlanProgressModel.ts';
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import {
   salesPlanVisibleStatuses,
@@ -32,24 +49,21 @@ import {
 } from './regionalApprovalQueryModel.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import { salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
-import { formatExactDecimal, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
+import {
+  aggregateRegionalApprovalLiveCategories,
+  salesPlanStatusText,
+} from './regionalApprovalQueryModel.ts';
 import styles from './CorrectionWorkbench.module.css';
+import shell from './RegionalApprovalWorkbench.module.css';
 
 const roles = ['region', 'province', 'area', 'category'] as const;
-const money = (v?: string) => (v == null ? '—' : `¥${formatExactDecimal(v)}`);
-const percent = (v?: string) => (v == null ? '—' : `${v}%`);
-const sum = (
-  rows: GeaSalesPlanListItem[],
-  field: 'targetAmount' | 'corrPlanAmount' | 'mPlanAmount' | 'mPlanQty' | 'corrPlanQty',
-) => {
-  try {
-    return rows
-      .reduce((total, row) => total.plus(correctionDecimal(row[field])), correctionDecimal('0'))
-      .toFixed(2);
-  } catch {
-    return undefined;
-  }
+const formatted = (value: string | null | undefined, kind: 'money' | 'quantity') => {
+  const number = correctionDisplay(value, kind);
+  return <span title={number.exact}>{number.display}</span>;
 };
+const money = (value?: string | null) => formatted(value, 'money');
+const quantity = (value?: string | null) => formatted(value, 'quantity');
+const percent = (v?: string | null) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
 /** 纠偏是现有工作台中的一个视图，使用已认证的客户端能力。 */
 export function CorrectionWorkbench({
@@ -71,6 +85,7 @@ export function CorrectionWorkbench({
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
     t(`common.correction.${key}`, values);
+  const [summary, setSummary] = useState<GeaSalesPlanPage<GeaSalesPlanListItem>['summary']>();
   const [periods, setPeriods] = useState<GeaSalesPlanPeriod[]>([]);
   const [periodId, setPeriodId] = useState('');
   const [rows, setRows] = useState<GeaSalesPlanListItem[]>([]);
@@ -81,6 +96,8 @@ export function CorrectionWorkbench({
     [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<GeaSalesPlanListItem>();
   const [stage, setStage] = useState('current');
+  const [stageLaneOpen, setStageLaneOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(20);
   const period = periods.find((p) => p.periodId === periodId);
   const roleStages = [...(approvalStages ?? [])];
   const statusScope = roleStages.length
@@ -120,6 +137,7 @@ export function CorrectionWorkbench({
     if (!periodId || !queryClient) return;
     const controller = new AbortController();
     setRows([]);
+    setSummary(undefined);
     setSelected(undefined);
     setLoading(true);
     setError('');
@@ -130,46 +148,77 @@ export function CorrectionWorkbench({
       signal: controller.signal,
     };
     const load = async () => {
-      if (!selectedStatuses)
-        return queryClient.list.invoke({ ...base, pageNo: page, pageSize: 20 });
-      const pages = await Promise.all(
-        selectedStatuses.map(async (status) => {
-          const prefix = page * 20;
-          const first = await queryClient.list.invoke({
-            ...base,
-            status,
-            pageNo: 1,
-            pageSize: Math.min(200, prefix),
-          });
-          const rest = await Promise.all(
-            Array.from(
-              { length: Math.max(0, Math.ceil(Math.min(first.total, prefix) / first.size) - 1) },
-              (_, i) =>
-                queryClient.list.invoke({ ...base, status, pageNo: i + 2, pageSize: first.size }),
-            ),
-          );
-          return { total: first.total, records: [first, ...rest].flatMap((p) => p.records) };
+      const first = await queryClient.list.invoke({
+        ...base,
+        pageNo: 1,
+        pageSize: 200,
+      });
+      const size = first.size ?? 200;
+      if (size <= 0) throw new Error('INCOMPLETE_CORRECTION_PAGE');
+      const rest = await Promise.all(
+        Array.from({ length: Math.max(0, Math.ceil(first.total / size) - 1) }, (_, index) =>
+          queryClient.list.invoke({ ...base, pageNo: index + 2, pageSize: size }),
+        ),
+      );
+      const all = [
+        ...new Map(
+          [first, ...rest].flatMap((result) => result.records).map((row) => [row.versionId, row]),
+        ).values(),
+      ];
+      if (all.length < first.total) throw new Error('INCOMPLETE_CORRECTION_PAGE');
+      if (
+        all.some(
+          (row) =>
+            row.periodId !== periodId ||
+            (row.orderType != null && row.orderType !== 'M' && row.orderType !== 'Z'),
+        )
+      )
+        throw new Error('CORRECTION_SCOPE_MISMATCH');
+      const key = (row: GeaSalesPlanListItem) =>
+        JSON.stringify([row.dealerCode, row.periodId, row.planTypeCode]);
+      const corrected = new Set(all.filter((row) => row.orderType === 'Z').map(key));
+      const filtered = all
+        .filter((row) =>
+          row.orderType === 'Z'
+            ? !selectedStatuses || selectedStatuses.includes(row.status)
+            : !corrected.has(key(row)),
+        )
+        .map(correctionListItem);
+      const records = await Promise.all(
+        filtered.map(async (row, index) => {
+          if (
+            row.orderType !== 'Z' ||
+            !detailClient ||
+            index < (page - 1) * pageSize ||
+            index >= page * pageSize ||
+            (row.mPlanQty !== undefined && row.mPlanAmount !== undefined)
+          )
+            return row;
+          try {
+            const detail = await detailClient.detail.invoke({
+              planId: row.planId,
+              orderType: 'Z',
+              signal: controller.signal,
+            });
+            return correctionListDetail(row, detail);
+          } catch {
+            return row;
+          }
         }),
       );
-      const records = pages
-        .flatMap((p) => p.records)
-        .toSorted((a, b) =>
-          String(b.updatedAt ?? b.planId).localeCompare(String(a.updatedAt ?? a.planId)),
-        );
       return {
-        records: records.slice((page - 1) * 20, page * 20),
-        total: pages.reduce((n, p) => n + p.total, 0),
+        records,
+        total: records.length,
+        summary:
+          records.length === all.length && first.summary
+            ? first.summary
+            : correctionListSummary(records),
       };
     };
     void load()
       .then((result) => {
         if (controller.signal.aborted) return;
-        if (
-          result.records.some(
-            (r) => r.periodId !== periodId || (r.orderType !== 'Z' && r.hasCorrection !== false),
-          )
-        )
-          throw new Error('CORRECTION_SCOPE_MISMATCH');
+        setSummary(result.summary);
         setRows(result.records);
         setTotal(result.total);
       })
@@ -192,172 +241,358 @@ export function CorrectionWorkbench({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [queryClient, periodId, period?.planTypeCode, page, revision, statusesKey]);
+  }, [
+    queryClient,
+    detailClient,
+    periodId,
+    period?.planTypeCode,
+    page,
+    pageSize,
+    revision,
+    statusesKey,
+  ]);
   const month = period?.periodMonth;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const timeProgress =
     month === currentMonth
       ? (now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) * 100
-      : undefined;
+      : month && /^\d{4}-\d{2}$/.test(month)
+        ? month < currentMonth
+          ? 100
+          : 0
+        : undefined;
   return (
-    <main className={styles.page}>
-      <div className={styles.toolbar}>
-        {headerControls}
-        <h2>{tr('title')}</h2>
-      </div>
-      <div className={styles.toolbar}>
-        <Select
-          aria-label={tr('period')}
-          value={periodId}
-          onChange={(id) => {
-            setSelected(undefined);
-            setRows([]);
-            setPeriodId(id);
-            setPage(1);
-          }}
-          style={{ width: 220 }}
-        >
-          {periods.map((p) => (
-            <Select.Option key={p.periodId} value={p.periodId}>
-              {p.periodMonth} · {p.planTypeCode}
-            </Select.Option>
+    <main className={shell.root} aria-label={tr('title')} data-testid="correction-workbench">
+      <header className={shell.header}>
+        <div className={shell.titleLine}>{headerControls}</div>
+        <div className={shell.headerRight}>
+          <Button
+            type="text"
+            size="small"
+            className={shell.stageLaneToggle}
+            aria-label={t(
+              `common.assistantSurface.regionalApproval.stageLaneToggle.${stageLaneOpen ? 'collapse' : 'expand'}`,
+            )}
+            aria-expanded={stageLaneOpen}
+            aria-controls="correction-stage-lane"
+            onClick={() => setStageLaneOpen((open) => !open)}
+          >
+            <span>
+              {t('common.assistantSurface.regionalApproval.stageLaneToggle.current', {
+                stage: t(
+                  `common.assistantSurface.regionalApproval.stages.${stage === 'current' ? (roleStages[0] ?? 'all') : stage}`,
+                ),
+              })}
+            </span>
+            {stageLaneOpen ? <Up size={12} /> : <Down size={12} />}
+          </Button>
+          <div className={shell.scope}>
+            <span className={shell.monthField}>
+              <small>{t('common.assistantSurface.regionalApproval.planMonth')}</small>
+              <Select
+                size="small"
+                aria-label={tr('period')}
+                style={{ width: 136 }}
+                value={periodId}
+                disabled={periods.length === 0}
+                onChange={(id) => {
+                  setSelected(undefined);
+                  setRows([]);
+                  setPeriodId(id);
+                  setPage(1);
+                }}
+              >
+                {periods.map((p) => (
+                  <Select.Option key={p.periodId} value={p.periodId}>
+                    {p.periodMonth} · {p.planTypeCode}
+                  </Select.Option>
+                ))}
+              </Select>
+            </span>
+          </div>
+        </div>
+      </header>
+      <div className={shell.stageViewport} data-collapsed={!stageLaneOpen}>
+        <nav id="correction-stage-lane" className={shell.stageLane} aria-label={tr('viewNode')}>
+          {['current', ...roles].map((key, index) => (
+            <Button
+              key={key}
+              type="text"
+              className={shell.stageButton}
+              data-selected={stage === key}
+              aria-pressed={stage === key}
+              onClick={() => {
+                setSelected(undefined);
+                setRows([]);
+                setPage(1);
+                setStage(key);
+              }}
+            >
+              <span className={shell.stageMarker}>{index + 1}</span>
+              <span className={shell.stageCopy}>
+                <strong>{tr(key === 'current' ? 'currentNode' : key)}</strong>
+              </span>
+            </Button>
           ))}
-        </Select>
-        <Select
-          aria-label={tr('viewNode')}
-          value={stage}
-          onChange={(value) => {
-            setSelected(undefined);
-            setRows([]);
-            setPage(1);
-            setStage(value);
-          }}
-          style={{ width: 160 }}
-        >
-          <Select.Option value="current">{tr('currentNode')}</Select.Option>
-          {roles.map((key) => (
-            <Select.Option key={key} value={key}>
-              {tr(key)}
-            </Select.Option>
-          ))}
-        </Select>
-        <Button disabled={loading} onClick={refresh}>
-          {tr('refresh')}
-        </Button>
+        </nav>
       </div>
-      <p>
-        {tr('summary', {
-          target: error || loading ? '—' : money(sum(rows, 'targetAmount')),
-          qty: error || loading ? '—' : (sum(rows, 'corrPlanQty') ?? '—'),
-          amount: error || loading ? '—' : money(sum(rows, 'corrPlanAmount')),
-          count: total,
-        })}
-      </p>
-      {error && <Alert type="error" content={error} />}
-      <Table
-        rowKey="planId"
-        data={rows}
-        loading={loading}
-        pagination={false}
-        scroll={{ x: 1000 }}
-        columns={[
-          { title: tr('customer'), render: (_, r) => r.dealerName ?? r.orgName ?? r.dealerCode },
-          { title: tr('target'), render: (_, r) => money(r.targetAmount) },
-          {
-            title: tr('plan'),
-            render: (_, r) => (
-              <>
-                {money(r.mPlanAmount)}
-                <br />
-                {r.mPlanQty ?? '—'} 件
-              </>
-            ),
-          },
-          {
-            title: tr('progress'),
-            render: (_, r) => {
-              const m = correctionMetrics(r);
-              return (
-                <>
-                  <div>{tr('amountProgress', { value: percent(m.amountProgress) })}</div>
-                  <div>{tr('qtyProgress', { value: percent(m.qtyProgress) })}</div>
-                  {m.amountProgress != null && (
-                    <div
-                      className={styles.progress}
-                      role="img"
-                      aria-label={`金额进度 ${m.amountProgress}%${timeProgress == null ? '' : `，时间进度 ${timeProgress.toFixed(2)}%`}`}
-                    >
-                      <span
-                        style={{
-                          width: `${Math.max(0, Math.min(100, Number(m.amountProgress)))}%`,
-                        }}
-                      />
-                      {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
-                    </div>
-                  )}
-                  {timeProgress != null &&
-                  m.amountProgress != null &&
-                  Number(m.amountProgress) < timeProgress ? (
-                    <small>{tr('behind')}</small>
-                  ) : null}
-                </>
-              );
-            },
-          },
-          {
-            title: tr('correctedProgress'),
-            render: (_, r) => {
-              const m = correctionMetrics(r);
-              return r.hasCorrection === false ? (
-                '—'
-              ) : (
-                <>
-                  <div>{percent(m.correctionProgress)}</div>
-                  <small>{tr('net', { value: money(m.netAmount) })}</small>
-                </>
-              );
-            },
-          },
-          {
-            title: tr('status'),
-            render: (_, r) =>
-              r.monthlyApproved === false
-                ? tr('notApproved')
-                : r.hasCorrection === false
-                  ? tr('absent')
-                  : salesPlanStatusText(r.status, r.planTypeCode, t),
-          },
-          {
-            title: tr('actions'),
-            render: (_, r) => (
-              <>
-                <Button
-                  disabled={loading || r.monthlyApproved !== true || !detailClient}
-                  onClick={() => setSelected(r)}
+      <div className={shell.content}>
+        <section className={shell.queue} aria-label={tr('title')}>
+          <header className={shell.dashboardHeader}>
+            <div className={shell.queueMetrics} data-testid="correction-summary">
+              {[
+                ['目标金额', money(summary?.targetAmount)],
+                ['计划金额', money(summary?.planAmount)],
+                ['差额（计划 − 目标）', money(summary?.diffAmount)],
+                ['计划数量', quantity(summary?.planQty)],
+              ].map(([label, value]) => (
+                <span key={String(label)}>
+                  <small>{label}</small>
+                  <strong
+                    className={
+                      label === '差额（计划 − 目标）'
+                        ? salesPlanVarianceClass(
+                            summary?.diffAmount,
+                            shell.variancePositive,
+                            shell.varianceNegative,
+                          )
+                        : undefined
+                    }
+                  >
+                    {error || loading ? '—' : value}
+                  </strong>
+                </span>
+              ))}
+            </div>
+          </header>
+          <div className={shell.queueHeader}>
+            <div className={shell.controlToolbar}>
+              <div className={shell.dimensionControls}>
+                <div
+                  className={shell.dimensionTabs}
+                  role="tablist"
+                  aria-label={t('common.assistantSurface.regionalApproval.dimensions.ariaLabel')}
                 >
-                  {tr('detail')}
-                </Button>
-                {r.status >= 6 && r.status <= 9 && onResubmit && (
-                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
-                    {tr('resubmit')}
+                  <Button size="small" type="text" role="tab" aria-selected data-active>
+                    {t('common.assistantSurface.regionalApproval.dimensions.customer')}
                   </Button>
-                )}
-              </>
-            ),
-          },
-        ]}
-      />
-      <Pagination
-        current={page}
-        pageSize={20}
-        total={total}
-        onChange={(value) => {
-          setSelected(undefined);
-          setRows([]);
-          setPage(value);
-        }}
-      />
+                </div>
+              </div>
+              <div className={shell.toolbarActions}>
+                <Button
+                  size="small"
+                  icon={<Refresh size={14} />}
+                  loading={loading}
+                  disabled={loading}
+                  aria-label={tr('refresh')}
+                  title={tr('refresh')}
+                  onClick={refresh}
+                />
+              </div>
+            </div>
+          </div>
+          {error && <Alert type="error" content={error} />}
+          <div className={shell.tableViewport}>
+            <Table
+              className={shell.organizationTable}
+              size="small"
+              rowKey="planId"
+              rowClassName={(row) => (row.monthlyApproved !== true ? styles.inactive : '')}
+              data={rows.slice((page - 1) * pageSize, page * pageSize)}
+              loading={loading}
+              pagination={false}
+              scroll={{ x: 1000 }}
+              columns={[
+                {
+                  title: tr('customer'),
+                  width: 240,
+                  render: (_, r) => (
+                    <div className={shell.organizationCell}>
+                      <div className={`${shell.organizationTitle} ${styles.organizationTitle}`}>
+                        <Button
+                          type="text"
+                          size="small"
+                          className={shell.detailTrigger}
+                          disabled={loading || r.monthlyApproved !== true || !detailClient}
+                          onClick={() => setSelected(r)}
+                        >
+                          {r.dealerName ?? r.orgName ?? r.dealerCode}
+                        </Button>
+                        <Tag size="small">
+                          {r.monthlyApproved !== true
+                            ? tr('notApproved')
+                            : r.hasCorrection === false
+                              ? tr('absent')
+                              : salesPlanStatusText(r.status, r.planTypeCode, t)}
+                        </Tag>
+                      </div>
+                      <small className={shell.organizationPath}>
+                        {[r.channelName ?? r.channelCode, r.orgName, r.provinceName, r.areaName]
+                          .filter(Boolean)
+                          .join(' / ')}
+                      </small>
+                      {r.status >= 6 && r.status <= 9 && onResubmit && (
+                        <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
+                          {tr('resubmit')}
+                        </Button>
+                      )}
+                    </div>
+                  ),
+                },
+                { title: tr('target'), width: 150, render: (_, r) => money(r.targetAmount) },
+                {
+                  title: tr('plan'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div className={shell.stackCell}>
+                      <span>{money(r.mPlanAmount)}</span>
+                      <small>{quantity(r.mPlanQty)}</small>
+                    </div>
+                  ),
+                },
+                {
+                  title: tr('progress'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div
+                      className={shell.stackCell}
+                      title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}
+                    >
+                      <strong>{percent(r.amountProgress)}</strong>
+                      <small>
+                        {money(r.shipAmount)} / {quantity(r.shipQty)}
+                      </small>
+                      {r.amountProgress != null && (
+                        <div
+                          className={styles.progress}
+                          role="img"
+                          aria-label={`月达成进度 ${r.amountProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                        >
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, Number(r.amountProgress)))}%`,
+                              background: salesPlanProgressBarColor(Number(r.amountProgress)),
+                            }}
+                          />
+                          {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                        </div>
+                      )}
+                      {timeProgress != null &&
+                        r.amountProgress != null &&
+                        Number(r.amountProgress) < timeProgress && <small>{tr('behind')}</small>}
+                    </div>
+                  ),
+                },
+                {
+                  title: tr('adjustment'),
+                  width: 160,
+                  render: (_, r) =>
+                    r.hasCorrection === false ||
+                    r.prevAdjAddQty == null ||
+                    r.prevAdjCutQty == null ||
+                    (correctionDecimal(r.prevAdjAddQty).isZero() &&
+                      correctionDecimal(r.prevAdjCutQty).isZero()) ? (
+                      '—'
+                    ) : (
+                      <span>
+                        <span
+                          className={
+                            correctionDecimal(r.prevAdjAddQty).isZero()
+                              ? styles.zero
+                              : styles.positive
+                          }
+                          title={correctionDisplay(r.prevAdjAddQty, 'quantity').exact}
+                        >
+                          +
+                          {correctionDisplay(r.prevAdjAddQty, 'quantity').display.replace('件', '')}
+                        </span>{' '}
+                        /{' '}
+                        <span
+                          className={
+                            correctionDecimal(r.prevAdjCutQty).isZero()
+                              ? styles.zero
+                              : styles.negative
+                          }
+                          title={correctionDisplay(r.prevAdjCutQty, 'quantity').exact}
+                        >
+                          −
+                          {correctionDisplay(r.prevAdjCutQty, 'quantity').display.replace('件', '')}
+                        </span>
+                      </span>
+                    ),
+                },
+                {
+                  title: tr('correctedProgress'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div
+                      className={shell.stackCell}
+                      title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}
+                    >
+                      <strong>
+                        {r.hasCorrection === false ? '—' : percent(r.correctionProgress)}
+                      </strong>
+                      {r.hasCorrection !== false && r.correctionProgress != null && (
+                        <div
+                          className={styles.progress}
+                          role="img"
+                          aria-label={`纠偏后进度 ${r.correctionProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                        >
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, Number(r.correctionProgress)))}%`,
+                              background: salesPlanProgressBarColor(Number(r.correctionProgress)),
+                            }}
+                          />
+                          {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
+          <footer className={shell.queueFooter}>
+            <div className={shell.footerControls}>
+              <div className={shell.pageSizeControl}>
+                <span>{t('common.assistantSurface.regionalApproval.pagination.pageSize')}</span>
+                <Select
+                  size="small"
+                  aria-label={t('common.assistantSurface.regionalApproval.pagination.pageSize')}
+                  value={pageSize}
+                  onChange={(value) => {
+                    setPageSize(value);
+                    setPage(1);
+                  }}
+                >
+                  {[10, 20, 50, 100].map((size) => (
+                    <Select.Option key={size} value={size}>
+                      {t('common.assistantSurface.regionalApproval.pagination.pageSizeValue', {
+                        count: size,
+                      })}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+              <span>
+                {t('common.assistantSurface.regionalApproval.pagination.total', { count: total })}
+              </span>
+              <Pagination
+                size="small"
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(value) => {
+                  setSelected(undefined);
+                  setPage(value);
+                }}
+              />
+            </div>
+          </footer>
+        </section>
+      </div>
       {selected && detailClient && (
         <CorrectionDetail
           t={t}
@@ -398,6 +633,8 @@ function CorrectionDetail({
     t(`common.correction.${key}`, values);
   const [detail, setDetail] = useState<GeaSalesPlanDetail>();
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [editing, setEditing] = useState<string>();
   const [reason, setReason] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
@@ -413,12 +650,12 @@ function CorrectionDetail({
     alive.current = true;
     const controller = new AbortController();
     void client.detail
-      .invoke({ planId: row.planId, signal: controller.signal })
+      .invoke({ planId: row.planId, orderType: 'Z', signal: controller.signal })
       .then((d) => {
         if (controller.signal.aborted) return;
         if (d.currentVersion.id !== row.versionId || !d.currentVersion.effective)
           throw new Error('版本已变化，请刷新');
-        setDetail(d);
+        setDetail(correctionReadDetail(d));
       })
       .catch(() => {
         if (!controller.signal.aborted) setError('读取失败或版本已变化，请关闭后刷新');
@@ -440,7 +677,7 @@ function CorrectionDetail({
       approvalStages,
     );
   const writable = Boolean(
-    access && actionClient && (access.roleContractSupported || access.approvalRole === actor),
+    access && actionClient && access.allowedActions.length > 0 && access.approvalRole === actor,
   );
   const lines = useMemo(
     () =>
@@ -449,22 +686,18 @@ function CorrectionDetail({
           const delta =
             edits[sku.skuCode] ??
             (detail.currentVersion.orderType === 'Z'
-              ? correctionDecision(
-                  sku,
-                  stage === 'current'
-                    ? detail.currentVersion.status === 5
-                      ? 10
-                      : detail.currentVersion.status
-                    : (salesPlanWorkflow(detail.currentVersion.planTypeCode).pending(
-                        stage as (typeof roles)[number],
-                      ) ?? -1),
-                  detail.currentVersion.planTypeCode,
-                  true,
-                  undefined,
-                  stage === 'current'
-                    ? access?.approvalRole
-                    : (stage as 'region' | 'province' | 'area' | 'category'),
-                )
+              ? sku.nodeAdjAddQty != null && sku.nodeAdjCutQty != null
+                ? correctionDecimal(sku.nodeAdjAddQty)
+                    .minus(correctionDecimal(sku.nodeAdjCutQty))
+                    .toFixed()
+                : correctionDecision(
+                    sku,
+                    detail.currentVersion.status,
+                    detail.currentVersion.planTypeCode,
+                    true,
+                    undefined,
+                    stage === 'current' ? access?.approvalRole : (stage as (typeof roles)[number]),
+                  )
               : '0');
           return { sku, line: correctionLine(sku, delta), input: delta, error: '' };
         } catch (e) {
@@ -477,6 +710,14 @@ function CorrectionDetail({
       }) ?? [],
     [detail, edits, stage],
   );
+  const groups = detail
+    ? aggregateRegionalApprovalLiveCategories(detail.skus).map((category) => ({
+        name: category.categoryName,
+        lines: lines.filter(
+          (line) => (line.sku.productCategName.trim() || '其他') === category.categoryName,
+        ),
+      }))
+    : [];
   const invalid = lines.some((x) => x.error);
   const total = invalid
     ? '—'
@@ -503,7 +744,9 @@ function CorrectionDetail({
           ...(access!.roleContractSupported ? { approvalPolicy: 'role-visible-v1' as const } : {}),
           expectedStatus: detail.currentVersion.status,
           expectedSnapshot: access!.snapshotHash,
-          adjustmentMode: 'ABSOLUTE_NET',
+          ...(detail.correctionContext?.contract === 'absolute-net-v1'
+            ? { adjustmentMode: 'ABSOLUTE_NET' as const }
+            : {}),
           ...(kind === 'REJECT'
             ? { remark: reason.trim() }
             : {
@@ -526,7 +769,7 @@ function CorrectionDetail({
       } else if (!operation.receipt) operation.receipt = await operation.attempt.retry();
       if (!alive.current) return;
       setPending({ ...operation });
-      const after = await client.detail.invoke({ planId: row.planId });
+      const after = await client.detail.invoke({ planId: row.planId, orderType: 'Z' });
       if (!verifyCorrectionAction(detail, after, operation.request, operation.receipt))
         throw new Error('操作回执已返回，但字段或日志尚未核对通过；请回读核对');
       if (alive.current) onSaved();
@@ -602,69 +845,118 @@ function CorrectionDetail({
           </p>
           {!access && <Alert type="info" content={tr('unavailable')} />}
           <p className={salesPlanVarianceClass(total, styles.positive, styles.negative)}>
-            {tr('difference', { value: total })}
+            净纠偏数量 {quantity(total)}
           </p>
           <div className={styles.scroll}>
             <table className={styles.detail}>
               <thead>
                 <tr>
-                  {[
-                    'SKU',
-                    'baseQty',
-                    'newQty',
-                    'baseAmount',
-                    'newAmount',
-                    'delta',
-                    'deltaAmount',
-                    'ai',
-                  ].map((x) => (
-                    <th key={x}>{x === 'SKU' ? x : tr(x)}</th>
+                  {['SKU 编码 / 物料描述', '月初计划量 / 金额', '纠偏量 / 金额'].map((label) => (
+                    <th key={label}>{label}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {lines.map(({ sku, line, input, error: lineError }) => (
-                  <tr
-                    key={sku.skuCode}
-                    className={line && !line.participates ? styles.inactive : undefined}
-                  >
-                    <td>
-                      {sku.skuCode}
-                      <br />
-                      {sku.productCategName}
-                    </td>
-                    <td>{sku.qty}</td>
-                    <td>{line?.qty ?? '—'}</td>
-                    <td>{money(sku.amt)}</td>
-                    <td>{money(line?.amount)}</td>
-                    <td>
-                      <Input
-                        aria-label={`${tr('delta')} ${sku.skuCode}`}
-                        aria-invalid={Boolean(lineError)}
-                        value={input}
-                        disabled={!writable || busy || Boolean(pending)}
-                        onChange={(value) =>
-                          setEdits((current) => ({ ...current, [sku.skuCode]: value }))
-                        }
-                      />
-                      {lineError ? (
-                        <small role="alert">{lineError}</small>
-                      ) : line && !line.participates ? (
-                        <small>{tr('zero')}</small>
-                      ) : null}
-                    </td>
-                    <td
-                      className={salesPlanVarianceClass(
-                        line?.delta,
-                        styles.positive,
-                        styles.negative,
-                      )}
-                    >
-                      {money(line?.deltaAmount)}
-                    </td>
-                    <td>{tr('noAi')}</td>
-                  </tr>
-                ))}
+                {groups.map((group) => {
+                  const sum = (field: 'baseQty' | 'delta' | 'deltaAmount') =>
+                    group.lines.every((item) => item.line)
+                      ? group.lines
+                          .reduce((n, item) => n.plus(item.line![field]), correctionDecimal('0'))
+                          .toFixed()
+                      : undefined;
+                  const baseAmount = group.lines
+                    .reduce((n, item) => n.plus(item.sku.amt), correctionDecimal('0'))
+                    .toFixed(2);
+                  return (
+                    <React.Fragment key={group.name}>
+                      <tr className={styles.group}>
+                        <td>
+                          <Button
+                            type="text"
+                            aria-expanded={!collapsed.includes(group.name)}
+                            onClick={() =>
+                              setCollapsed((current) =>
+                                current.includes(group.name)
+                                  ? current.filter((name) => name !== group.name)
+                                  : [...current, group.name],
+                              )
+                            }
+                          >
+                            {group.name} · {group.lines.length} 项
+                          </Button>
+                        </td>
+                        <td>
+                          {quantity(sum('baseQty'))}
+                          <small>{money(baseAmount)}</small>
+                        </td>
+                        <td
+                          className={
+                            salesPlanVarianceClass(
+                              sum('delta'),
+                              styles.positive,
+                              styles.negative,
+                            ) ?? styles.zero
+                          }
+                        >
+                          {quantity(sum('delta'))}
+                          <small>{money(sum('deltaAmount'))}</small>
+                        </td>
+                      </tr>
+                      {!collapsed.includes(group.name) &&
+                        group.lines.map(({ sku, line, input, error: lineError }) => (
+                          <tr
+                            key={sku.skuCode}
+                            className={line && !line.participates ? styles.inactive : undefined}
+                          >
+                            <td>
+                              {sku.skuCode}
+                              <small>{sku.skuName ?? sku.materialDescription ?? '—'}</small>
+                            </td>
+                            <td>
+                              {quantity(sku.corrBaseQty ?? sku.qty)}
+                              <small>{money(sku.amt)}</small>
+                            </td>
+                            <td
+                              className={
+                                salesPlanVarianceClass(
+                                  line?.delta,
+                                  styles.positive,
+                                  styles.negative,
+                                ) ?? styles.zero
+                              }
+                            >
+                              <Input
+                                aria-label={`${tr('delta')} ${sku.skuCode}`}
+                                aria-invalid={Boolean(lineError)}
+                                title={correctionDisplay(input, 'quantity').exact}
+                                value={
+                                  editing === sku.skuCode ||
+                                  !/^[+-]?\d+(?:\.\d+)?$/.test(input) ||
+                                  correctionDecimal(input).abs().lt(10000)
+                                    ? input
+                                    : correctionDisplay(input, 'quantity').display.replace('件', '')
+                                }
+                                onFocus={() => setEditing(sku.skuCode)}
+                                onBlur={() => setEditing(undefined)}
+                                disabled={
+                                  !writable || sku.editable === false || busy || Boolean(pending)
+                                }
+                                onChange={(value) =>
+                                  setEdits((current) => ({ ...current, [sku.skuCode]: value }))
+                                }
+                              />
+                              <small>{money(line?.deltaAmount)}</small>
+                              {lineError ? (
+                                <small role="alert">{lineError}</small>
+                              ) : line && !line.participates ? (
+                                <small>{tr('zero')}</small>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -679,13 +971,82 @@ function CorrectionDetail({
           {detail.dmsMock?.receipts.map((r) => (
             <p key={r.key}>模拟回执 {r.dmsId}</p>
           ))}
-          <details>
+          <details aria-label={tr('logs')}>
             <summary>{tr('logs')}</summary>
-            {detail.logs.map((l) => (
-              <p key={l.id}>
-                {l.actionCode} · {l.fromStatus} → {l.toStatus} · {l.remark ?? ''} · {l.actionAt}
-              </p>
-            ))}
+            {detail.logs.map((log) => {
+              const node = log.nodeOrder == null ? undefined : roles[log.nodeOrder - 2];
+              const nodeLabel = node ? tr(node) : tr('historyNodeMissing');
+              const action =
+                log.actionCode === 'SAVE'
+                  ? tr('save')
+                  : log.actionCode === 'APPROVE'
+                    ? tr('approve')
+                    : log.actionCode === 'REJECT'
+                      ? tr('reject')
+                      : log.actionCode === 'RESUBMIT'
+                        ? tr('resubmit')
+                        : tr('historyAction');
+              const decision = correctionLogDecisions(log.decisionJson);
+              return (
+                <details key={log.id} aria-label={`${nodeLabel} ${action} ${log.actionAt}`}>
+                  <summary>
+                    {nodeLabel} · {action} · {log.actionAt}
+                  </summary>
+                  <p>
+                    {log.operatorName ?? log.operatorCode} ·{' '}
+                    {log.fromStatus == null
+                      ? '—'
+                      : salesPlanStatusText(
+                          log.fromStatus,
+                          detail.currentVersion.planTypeCode,
+                          t,
+                        )}{' '}
+                    → {salesPlanStatusText(log.toStatus, detail.currentVersion.planTypeCode, t)}
+                    {log.remark ? ` · ${log.remark}` : ''}
+                  </p>
+                  {decision.kind !== 'available' ? (
+                    <p>{tr(decision.kind === 'missing' ? 'historyMissing' : 'historyInvalid')}</p>
+                  ) : decision.decisions.length === 0 ? (
+                    <p>{tr('historyEmpty')}</p>
+                  ) : (
+                    <>
+                      {log.actionCode === 'REJECT' && <p>{tr('historyCleared')}</p>}
+                      <div className={styles.scroll}>
+                        <table className={styles.detail}>
+                          <thead>
+                            <tr>
+                              <th>SKU</th>
+                              <th>{tr('historyAdd')}</th>
+                              <th>{tr('historyCut')}</th>
+                              <th>{tr('historyConfirmed')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {decision.decisions.map((sku, index) => (
+                              <tr key={`${sku.skuCode}:${index}`}>
+                                <td>{sku.skuCode}</td>
+                                <td>
+                                  {quantity(sku.adjAddQty)}
+                                  <small>{money(sku.adjAddAmount)}</small>
+                                </td>
+                                <td>
+                                  {quantity(sku.adjCutQty)}
+                                  <small>{money(sku.adjCutAmount)}</small>
+                                </td>
+                                <td>
+                                  {quantity(sku.confirmedQty)}
+                                  <small>{money(sku.confirmedAmount)}</small>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+                </details>
+              );
+            })}
           </details>
         </>
       )}

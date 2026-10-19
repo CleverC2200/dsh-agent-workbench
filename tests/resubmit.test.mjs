@@ -13,8 +13,11 @@ const { outputFiles } = await build({
   format: 'esm',
 });
 const {
+  classifySalesPlanSubmitError,
   prepareSalesPlanResubmit,
+  salesPlanCanResubmit,
   salesPlanResubmitReadbackMatches,
+  salesPlanSubmitReceiptMatches,
   SalesPlanSubmitAttempt,
   replaceSalesPlanWorkflowRows,
 } = await import(
@@ -81,16 +84,16 @@ test('resubmission retains order type, sends the configured next status and vali
   assert.equal(prepareSalesPlanResubmit(source(6, 'CLOSED')).request.status, 1);
   assert.equal(prepareSalesPlanResubmit(source(7, 'CLOSED')).request.status, 2);
 });
-test('shortened workflows choose their next configured role rather than subtracting five', () => {
+test('resubmission status stays fixed when a workflow omits an approval node', () => {
   replaceSalesPlanWorkflowRows([
     { typeCode: 'Y', examineLevel: 0, nodeNum: '0' },
     { typeCode: 'Y', examineLevel: 2, nodeNum: '2' },
     { typeCode: 'Y', examineLevel: 4, nodeNum: '4' },
     { typeCode: 'Y', examineLevel: 5, nodeNum: 'Y' },
   ]);
-  assert.equal(prepareSalesPlanResubmit(source()).request.status, 2);
-  assert.equal(prepareSalesPlanResubmit(source(8, 'CLOSED')).request.status, 4);
-  assert.throws(() => prepareSalesPlanResubmit(source(7)));
+  assert.equal(prepareSalesPlanResubmit(source()).request.status, 1);
+  assert.equal(prepareSalesPlanResubmit(source(8, 'CLOSED')).request.status, 3);
+  assert.equal(prepareSalesPlanResubmit(source(7)).request.status, 2);
 });
 test('unknown outcomes retry exactly one intent and a completed attempt cannot duplicate a version', async () => {
   const input = prepareSalesPlanResubmit(source());
@@ -109,7 +112,7 @@ test('unknown outcomes retry exactly one intent and a completed attempt cannot d
             status: input.expected.nextStatus,
             requestId: cmd.requestId,
             traceId: 'trace',
-            auditId: 'audit',
+            auditId: null,
           };
         },
       },
@@ -163,6 +166,7 @@ test('Z resubmit keeps the fixed baseline and carries submission corrections rat
   z.skus[0] = {
     ...z.skus[0],
     qty: '30',
+    amt: '370.20',
     adjAddQty: '2',
     adjCutQty: '0',
     regionAdjAddQty: '8',
@@ -174,4 +178,102 @@ test('Z resubmit keeps the fixed baseline and carries submission corrections rat
   assert.equal(input.request.items[0].adjCutQty, '0');
   assert.equal(input.request.items[0].regionAdjAddQty, undefined);
   assert.equal(input.sourceSummary.submittedQty, '32.000');
+});
+
+test('returned submission requires its responsible role or original submitter and current source', () => {
+  const v = { ...source(7).detail.currentVersion, submitter: 'dealer' };
+  assert.equal(salesPlanCanResubmit(v, ['region'], 'region-user'), true);
+  assert.equal(salesPlanCanResubmit(v, ['province'], 'province-user'), false);
+  assert.equal(salesPlanCanResubmit({ ...v, status: 8 }, ['province'], 'province-user'), true);
+  assert.equal(salesPlanCanResubmit({ ...v, status: 9 }, ['area'], 'area-user'), true);
+  assert.equal(salesPlanCanResubmit({ ...v, status: 6 }, [], 'dealer'), true);
+  assert.equal(salesPlanCanResubmit({ ...v, status: 6 }, ['region'], 'other'), false);
+  assert.equal(salesPlanCanResubmit({ ...v, effective: false }, ['region'], 'region-user'), false);
+});
+
+test('monthly readback checks every submitted SKU, amount and inherited confirmation without recalculating it', () => {
+  const original = source(7);
+  original.skus[0].regionConfirmedQty = '1.250';
+  original.skus[0].regionConfirmedAmount = '15.43';
+  const edited = { ...original, skus: [{ ...original.skus[0], qty: '3.000' }] };
+  const input = prepareSalesPlanResubmit(edited);
+  const receipt = { planId: original.planId, versionId: 'v2', seq: 2, status: 2, requestId: 'r' };
+  const detail = {
+    currentVersion: { ...original.detail.currentVersion, id: 'v2', status: 2, seq: 2 },
+    versions: [{ ...original.detail.currentVersion, effective: false }],
+    logs: [{ ...receipt, actionCode: 'RESUBMIT' }],
+    skus: [{ ...original.skus[0], versionId: 'v2', qty: '3.000', amt: '37.02' }],
+  };
+  const matches = (value) =>
+    salesPlanResubmitReadbackMatches('v1', receipt, value, input.request, original.skus);
+  assert.equal(matches(detail), true);
+  assert.equal(matches({ ...detail, skus: [] }), false);
+  for (const patch of [
+    { qty: '2.000' },
+    { price: '12.3500' },
+    { amt: '37.01' },
+    { regionConfirmedQty: '3.000' },
+    { regionConfirmedAmount: '37.02' },
+    { provinceConfirmedQty: '1.000' },
+  ])
+    assert.equal(matches({ ...detail, skus: [{ ...detail.skus[0], ...patch }] }), false);
+});
+
+test('a valid successful receipt with an unexpected sequence is retained for readback without another write', async () => {
+  const input = prepareSalesPlanResubmit(source(7));
+  let writes = 0;
+  const attempt = new SalesPlanSubmitAttempt(
+    {
+      submit: {
+        invoke: async (command) => {
+          writes++;
+          return {
+            planId: input.expected.planId,
+            versionId: 'v3',
+            seq: 3,
+            status: 3,
+            replayed: false,
+            requestId: command.requestId,
+            traceId: 'trace',
+            auditId: null,
+          };
+        },
+      },
+    },
+    () => 'unexpected',
+  );
+  const actual = await attempt.submit(input);
+  assert.equal(actual.seq, 3);
+  assert.equal(actual.status, 3);
+  assert.equal(salesPlanSubmitReceiptMatches(input, actual.requestId, actual), false);
+  assert.equal((await attempt.retry()).versionId, 'v3');
+  assert.equal(writes, 1);
+});
+
+test('configuration conflicts and service authentication failures keep their own non-retryable meaning', () => {
+  const failure = (status, details) => ({
+    name: 'BackendHttpError',
+    status,
+    code: 'GEA_HTTP_' + status,
+    details,
+  });
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'NOTIFICATION_PAYLOAD_INVALID' }))
+      .kind,
+    'configuration',
+  );
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'SALES_PLAN_CONFLICT' })).kind,
+    'conflict',
+  );
+  assert.equal(
+    classifySalesPlanSubmitError(failure(401, { authentication: 'service' })).kind,
+    'serviceAuthentication',
+  );
+  assert.equal(classifySalesPlanSubmitError(failure(401, {})).kind, 'authentication');
+  assert.equal(
+    classifySalesPlanSubmitError(failure(409, { upstreamCode: 'APPROVAL_CANDIDATE_MISSING' }))
+      .retrySameIntent,
+    false,
+  );
 });

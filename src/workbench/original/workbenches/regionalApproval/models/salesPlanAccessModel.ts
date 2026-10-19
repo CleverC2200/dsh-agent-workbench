@@ -146,7 +146,9 @@ export const salesPlanAccessForRow = (
     nodeOrder,
     approvalRole: role,
     allowedActions: [...allowedActions].filter(
-      (action) => action !== 'REJECT' || flow.pending(role) !== undefined,
+      (action) =>
+        (row.status < 6 || action === 'REJECT') &&
+        (action !== 'REJECT' || flow.pending(role) !== undefined),
     ),
     ...(context?.snapshotHash ? { snapshotHash: context.snapshotHash } : {}),
     roleContractSupported: supported,

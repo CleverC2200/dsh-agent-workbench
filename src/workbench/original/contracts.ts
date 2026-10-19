@@ -4,12 +4,31 @@ export type GeaSalesPlanId = string;
 /** 精确小数跨越 JavaScript/Core/GEA 边界时始终保持字符串。 */
 export type GeaSalesPlanDecimal = string;
 
+export type GeaSalesPlanGroupMetrics = {
+  dimension: 'area' | 'province' | 'region' | 'base' | 'customer';
+  key: string;
+  targetAmount: string;
+  planAmount: string | null;
+  diffAmount: string | null;
+  planQty: string | null;
+  amountProgress?: string | null;
+  shipAmount?: string | null;
+  shipQty?: string | null;
+};
+
 export type GeaSalesPlanPage<T> = {
   records: T[];
   total: number;
   size: number;
   current: number;
   pages: number;
+  groupMetrics?: GeaSalesPlanGroupMetrics[];
+  summary?: {
+    targetAmount: string;
+    planAmount: string | null;
+    diffAmount: string | null;
+    planQty: string | null;
+  };
 };
 
 export type GeaSalesPlanPeriod = {
@@ -34,15 +53,21 @@ export type GeaSalesPlanPeriodQuery = {
 };
 
 export type GeaSalesPlanListItem = {
+  channelCode?: string | null;
+  channelName?: string | null;
   orderType?: 'M' | 'Z';
   monthlyApproved?: boolean;
   hasCorrection?: boolean;
-  mPlanAmount?: string;
-  mPlanQty?: string;
-  shipAmount?: string;
-  shipQty?: string;
-  corrPlanAmount?: string;
-  corrPlanQty?: string;
+  mPlanAmount?: string | null;
+  mPlanQty?: string | null;
+  shipAmount?: string | null;
+  shipQty?: string | null;
+  corrPlanAmount?: string | null;
+  corrPlanQty?: string | null;
+  amountProgress?: string | null;
+  correctionProgress?: string | null;
+  prevAdjAddQty?: string | null;
+  prevAdjCutQty?: string | null;
   planId: string;
   versionId: string;
   seq: number;
@@ -75,6 +100,8 @@ export type GeaSalesPlanListItem = {
 };
 
 export type GeaSalesPlanPageQuery = {
+  versionIds?: string[];
+  summaryOnly?: boolean;
   orderType?: 'M' | 'Z';
   periodId?: GeaSalesPlanId;
   planTypeCode?: string;
@@ -84,6 +111,7 @@ export type GeaSalesPlanPageQuery = {
   orgCode?: string;
   baseName?: string;
   status?: number;
+  statuses?: number[];
   pageNo?: number;
   pageSize?: number;
   signal?: AbortSignal;
@@ -117,6 +145,12 @@ export type GeaSalesPlanVersion = {
 };
 
 export type GeaSalesPlanSku = CorrectionFields & {
+  corrBaseQty?: GeaSalesPlanDecimal;
+  nodeAdjAddQty?: GeaSalesPlanDecimal | null;
+  nodeAdjCutQty?: GeaSalesPlanDecimal | null;
+  prevAdjAddQty?: GeaSalesPlanDecimal | null;
+  prevAdjCutQty?: GeaSalesPlanDecimal | null;
+  editable?: boolean;
   id: GeaSalesPlanId;
   versionId: string;
   skuCode: GeaSalesPlanId;
@@ -140,6 +174,8 @@ export type GeaSalesPlanSku = CorrectionFields & {
 };
 
 export type GeaSalesPlanApprovalLog = {
+  nodeOrder?: number | null;
+  decisionJson?: string | null;
   id: GeaSalesPlanId;
   planId: string;
   versionId: string;
@@ -174,6 +210,7 @@ export type GeaSalesPlanDetail = {
   correctionContext?: {
     contract: 'absolute-net-v1';
     monthlyApproved: boolean;
+    hasCorrection?: boolean;
     approvalOpen: boolean;
   };
   dmsMock?: {
@@ -206,6 +243,7 @@ export type GeaSalesPlanSkuDiff = {
 
 export type GeaSalesPlanResourceQuery = {
   planId: string;
+  orderType?: 'M' | 'Z';
   signal?: AbortSignal;
 };
 
@@ -259,7 +297,7 @@ export type GeaSalesPlanSubmitReceipt = {
   replayed: boolean;
   requestId: string;
   traceId: string;
-  auditId: string;
+  auditId?: string | null;
 };
 
 export type GeaSalesPlanSubmitParams = {
@@ -299,7 +337,7 @@ export type GeaSalesPlanActionReceipt = {
   replayed: boolean;
   requestId: string;
   traceId: string;
-  auditId: string;
+  auditId?: string | null;
 };
 
 export type GeaSalesPlanActionParams = {

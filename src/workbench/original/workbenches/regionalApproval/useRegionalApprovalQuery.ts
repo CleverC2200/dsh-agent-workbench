@@ -309,9 +309,10 @@ export const useRegionalApprovalQuery = ({
               return {
                 records: [first, ...rest].flatMap((result) => result.records),
                 total: first.total,
+                summary: first.summary,
               };
             }),
-          ).then((results) => {
+          ).then(async (results) => {
             // 同一计划只会属于一个 (period, status) 分区；这里再去重一次，
             // 避免上游分页异常重发同一条导致列表出现重复组织行。
             const records = [
@@ -326,11 +327,22 @@ export const useRegionalApprovalQuery = ({
               ),
             );
             const total = results.reduce((sum, result) => sum + result.total, 0);
+            const aggregates =
+              records.length > 0 && results.every((result) => result.summary)
+                ? await client.list.invoke({
+                    ...stableScope,
+                    versionIds: records.map((record) => record.versionId),
+                    summaryOnly: true,
+                    signal: request.signal,
+                  })
+                : undefined;
             // records 是完整集合；current / size / pages 只回显调用方请求的分页参数，
             // 真正的分页由工作台按分组后的外层行完成。
             return {
               records,
               total,
+              summary: aggregates?.summary,
+              groupMetrics: aggregates?.groupMetrics,
               size: requestedSize,
               current: requestedPage,
               pages: Math.max(1, Math.ceil(total / requestedSize)),

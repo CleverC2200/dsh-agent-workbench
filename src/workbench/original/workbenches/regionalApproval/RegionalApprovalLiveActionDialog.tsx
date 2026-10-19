@@ -1068,7 +1068,11 @@ const RegionalApprovalLiveActionDialog: React.FC<{
                 {
                   from: action.state.receipt.fromStatus,
                   to: action.state.receipt.toStatus,
-                  auditId: action.state.receipt.auditId,
+                  auditReference: action.state.receipt.auditId
+                    ? t('common.assistantSurface.regionalApproval.liveAction.auditReference', {
+                        id: action.state.receipt.auditId,
+                      })
+                    : '',
                 },
               )}
             />

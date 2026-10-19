@@ -39,11 +39,11 @@ const policy = (roles = ['region'], status = 2) => ({
   allowedActions: [],
   roleActions: roles.map((role) => ({ role, allowedActions: ['SAVE', 'APPROVE', 'REJECT'] })),
 });
-test('visible role can act on pending and returned plans without a resubmit service account', () => {
+test('returned versions cannot approve while normal approvals and continued returns remain available', () => {
   for (const status of [1, 2, 3, 4, 6, 7, 8, 9]) {
     const access = m.salesPlanAccessForRow(row(status), detail(status), ['region']);
     assert.equal(access.approvalRole, 'region');
-    assert.deepEqual(access.allowedActions, ['APPROVE', 'REJECT']);
+    assert.deepEqual(access.allowedActions, status >= 6 ? ['REJECT'] : ['APPROVE', 'REJECT']);
   }
   for (const status of [0, 5, 10])
     assert.equal(m.salesPlanAccessForRow(row(status), detail(status), ['region']), undefined);
@@ -63,7 +63,6 @@ test('returned plans use the explicitly granted role, never the return target as
   ]) {
     const d = { ...detail(status), actionContext: policy([], status) };
     assert.deepEqual(m.salesPlanAccessForRow(row(status), d, [role], role).allowedActions, [
-      'APPROVE',
       'REJECT',
     ]);
     assert.equal(m.salesPlanAccessForRow(row(status), d, [], role), undefined);
@@ -185,6 +184,8 @@ test('role receipt verifies actor, configured return target and all required app
     approvalRole: 'region',
   };
   assert.equal(m.salesPlanActionReceiptMatches(input, 'r', receipt), true);
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, auditId: null }), true);
+  assert.equal(m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, auditId: 42 }), false);
   assert.equal(
     m.salesPlanActionReceiptMatches(input, 'r', { ...receipt, approvalRole: 'province' }),
     false,
@@ -227,17 +228,21 @@ test('role receipt verifies actor, configured return target and all required app
     false,
   );
 });
-test('correction role authority ignores approval date window and uses selected-role data', () => {
+test('correction role authority uses explicit current-node capability and selected-role data', () => {
   const d = {
     ...detail(),
     currentVersion: { ...detail().currentVersion, orderType: 'Z' },
-    correctionContext: { contract: 'absolute-net-v1', monthlyApproved: true, approvalOpen: false },
+    correctionContext: { contract: 'absolute-net-v1', monthlyApproved: true, approvalOpen: true },
     actionContext: policy(),
   };
   const returned = {
     ...d,
     currentVersion: { ...d.currentVersion, status: 7 },
-    actionContext: policy(['region'], 7),
+    actionContext: {
+      ...policy(['region'], 7),
+      nodeOrder: 2,
+      allowedActions: ['SAVE', 'APPROVE', 'REJECT'],
+    },
   };
   assert.equal(
     m.correctionAccess(returned, undefined, 'region', ['region']).approvalRole,

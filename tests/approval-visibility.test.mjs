@@ -148,12 +148,12 @@ test('category queue includes approval and DMS completion states without expandi
   assert.equal(flow.visibility(5, 'category'), 'read-only');
   assert.equal(flow.visibility(10, 'category'), 'read-only');
 });
-test('XN has no region visibility and returns to the next configured node after customer resubmission', () => {
+test('XN visibility skips region while customer resubmission keeps the fixed request status', () => {
   assert.deepEqual(salesPlanVisibleStatuses('XN', ['region']), []);
   assert.deepEqual(salesPlanVisibleStatuses('XN', ['province']), [2, 3, 4, 5, 6, 8, 10]);
   const flow = salesPlanWorkflow('XN');
   assert.equal(flow.transition(2, 'REJECT'), 6);
-  assert.equal(flow.resubmit(6), 2);
+  assert.equal(flow.resubmit(6), 1);
   assert.equal(flow.actor(2), 'province');
   assert.equal(flow.actor(1), undefined);
   assert.equal(flow.actor(7), undefined);
