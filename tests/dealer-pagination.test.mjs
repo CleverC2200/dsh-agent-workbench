@@ -88,6 +88,17 @@ test('empty and exact-page totals finish without an unnecessary next page', asyn
   }
 });
 
+test('a governed host may return one complete unpaged SQL result', async (t) => {
+  const f = await fixture(t, () => ({
+    rows: Array.from({ length: 441 }, (_, i) => ({ sku: i })),
+    total: 441,
+    returnedColumns: ['sku'],
+    rejectedColumns: [],
+  }));
+  assert.equal((await f.executeAllGeaSqlPages('SELECT sku FROM fixture')).length, 441);
+  assert.equal(f.calls.length, 1);
+});
+
 test('changed permissions/totals, short pages and missing totals never publish partial rows', async (t) => {
   for (const secondTotal of [1, 202, undefined]) {
     const f = await fixture(t, ({ pageNo }) => ({

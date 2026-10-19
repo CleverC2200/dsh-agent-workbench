@@ -86,13 +86,23 @@ export async function executeAllGeaSqlPages(
     const page = await read({ sql, parameters, pageNo, pageSize }, { ...options, signal });
     signal.throwIfAborted();
     const pagePermissions = JSON.stringify([page.returnedColumns, page.rejectedColumns]);
+    // Some governed SQL hosts apply the statement as one atomic read and return
+    // every row even when the request carries page metadata. A complete first
+    // response is safe to consume; treating it as a short 200-row page leaves
+    // the business page blank despite having a consistent result set.
+    const completeUnpagedFirstResponse =
+      pageNo === 1 &&
+      Array.isArray(page.rows) &&
+      Number.isSafeInteger(page.total) &&
+      page.rows.length === page.total;
     if (
       !Number.isSafeInteger(page.total) ||
       page.total < 0 ||
       (total !== undefined && page.total !== total) ||
       (permissions !== undefined && pagePermissions !== permissions) ||
       !Array.isArray(page.rows) ||
-      page.rows.length !== Math.min(pageSize, page.total - rows.length)
+      (!completeUnpagedFirstResponse &&
+        page.rows.length !== Math.min(pageSize, page.total - rows.length))
     )
       throw new GeaSqlApiError(
         '查询结果或字段权限在分页期间发生变化或不完整，请刷新后重新查询；未使用不完整结果',
