@@ -188,7 +188,7 @@ export function mountNativeResourceSelection(
                 const state = input.state.getSnapshot();
                 if (
                   state.draft ||
-                  reference.binding.ctx.bail('slash/input-insert-text', {
+                  reference.binding.ctx.bail(reference.binding.ctx, 'slash/input-insert-text', {
                     text: `${skill ? `/${skill} ` : ''}${draft ?? ''}`,
                     span: { start: 0, end: 0, draftRev: state.draftRev },
                   }) !== true
