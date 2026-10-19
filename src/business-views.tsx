@@ -1,5 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis';
 import React, { useSyncExternalStore } from 'react';
+import type { SettingsSectionOwnerProps } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import { zh, en } from './client/locales.ts';
 import { Inbox, type InboxViewState } from './client/inbox.tsx';
@@ -62,7 +63,7 @@ export function mountBusinessViews(ctx: Context) {
         </section>
       );
     }
-    function LogPage() {
+    function LogPage({ close }: { close?: () => void }) {
       const account = useSyncExternalStore(identity.subscribe, identity.getSnapshot);
       const environment = account.status?.environment;
       if (!environment || !account.scope || !account.status?.authenticated)
@@ -80,7 +81,7 @@ export function mountBusinessViews(ctx: Context) {
             key={account.scope ?? 'unconfirmed'}
             environment={environment}
             request={request}
-            onClose={() => void ctx.agentWorkbench.open(PANEL)}
+            onClose={close ?? (() => void ctx.agentWorkbench.open(PANEL))}
           />
         </section>
       );
@@ -95,6 +96,18 @@ export function mountBusinessViews(ctx: Context) {
           unregister();
         };
       });
+    ctx.slots.inject('settings.section', () =>
+      ctx.slots.register(
+        {
+          name: 'settings.section',
+          id: API_LOG_PANEL,
+          order: 1000,
+          label: () => t('geaApiLog'),
+          locale: 'geaProof',
+        },
+        ({ close }: SettingsSectionOwnerProps) => <LogPage close={close} />,
+      ),
+    );
     ctx.slots.inject('main', () =>
       ctx.agentWorkbench.registerFrame({
         id: INBOX,

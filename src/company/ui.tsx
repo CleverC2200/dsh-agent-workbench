@@ -37,7 +37,6 @@ import { IconNewChatOutline16 } from './formal-static-icons.tsx';
 
 const DIRECTORY = 'agent-workbench' as MainPanelId;
 const INBOX = 'gea-inbox' as MainPanelId;
-const PLUGINS = 'plugins' as MainPanelId;
 const agents: Record<string, prompts.ConversationPromptConfig> = {
   'gea-proof': prompts.approvalConversation,
   'gea-regional-plan': prompts.regionalPlanConversation,
@@ -524,9 +523,7 @@ export function mountCompanyUI(
     );
     const layoutPanel = usePanelInfo((value) => value.activePanelId);
     const activePanel = layoutPanel ?? documentState.selectedDocument?.id;
-    const business = Boolean(
-      activePanel && ![DIRECTORY, PLUGINS, 'gea-api-log'].includes(activePanel),
-    );
+    const business = Boolean(activePanel && ![DIRECTORY, 'gea-api-log'].includes(activePanel));
     const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>(() =>
       business ? 'function' : 'workspace',
     );

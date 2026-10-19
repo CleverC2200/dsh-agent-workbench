@@ -142,7 +142,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v7
         with:
-          repository: deepseek-ai/deepseek-harness
+          repository: CleverC2200/deepseek-harness
           ref: ${{ matrix.core }}
           fetch-depth: 0
           path: source/official-core
