@@ -4,6 +4,7 @@ import type { GeaSalesPlanPeriod } from './original/contracts.ts';
 import { createWorkflowLoader } from './workflow-loader.ts';
 import '@arco-design/web-react/dist/css/arco.css';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Button } from '@arco-design/web-react';
 import i18next from 'i18next';
 import {
   RegionalApprovalWorkbench,
@@ -290,7 +291,14 @@ export function WorkbenchPage({ t }: { t: Translate }) {
     planId: string;
     versionId: string;
     period: GeaSalesPlanPeriod;
+    visible: boolean;
+    pending: boolean;
   }>();
+  const updateResubmitPending = useCallback((pending: boolean) => {
+    setResubmit((current) =>
+      current && current.pending !== pending ? { ...current, pending } : current,
+    );
+  }, []);
   useEffect(() => {
     setResubmit(undefined);
     if (!directApiLog) setApiLogOpen(false);
@@ -493,6 +501,24 @@ export function WorkbenchPage({ t }: { t: Translate }) {
       ) : (
         <section className="gea-center-surface" aria-label="插件内容">
           <WorkbenchSessionProvider value={{ conversationId: sessionId }}>
+            {resubmit?.pending && !resubmit.visible && (
+              <Alert
+                type="warning"
+                content={locale.t(
+                  'common.assistantSurface.regionalApproval.liveSubmit.pendingNotice',
+                  { plan: resubmit.planId },
+                )}
+                action={
+                  <Button
+                    onClick={() =>
+                      setResubmit((current) => (current ? { ...current, visible: true } : current))
+                    }
+                  >
+                    {locale.t('common.assistantSurface.regionalApproval.liveSubmit.resume')}
+                  </Button>
+                }
+              />
+            )}
             <div className="gea-original-workbench">
               <RegionalApprovalWorkbench
                 key={workbenchRevision}
@@ -503,7 +529,13 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
                 onResubmit={(planId, versionId, period) =>
-                  setResubmit({ planId, versionId, period })
+                  setResubmit((current) =>
+                    current?.pending
+                      ? current.planId === planId
+                        ? { ...current, visible: true }
+                        : current
+                      : { planId, versionId, period, visible: true, pending: false },
+                  )
                 }
                 automaticAnalysisEnabled={true}
                 onCatalogChange={(elements) => {
@@ -518,21 +550,27 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 }}
               />
             </div>
-            {resubmit && (
-              <RegionalApprovalResubmitDialog
-                key={resubmit.versionId}
-                {...resubmit}
-                client={resubmitClient}
-                connected={status?.resubmitConnected === true}
-                t={locale.t.bind(locale)}
-                onClose={() => setResubmit(undefined)}
-                onSucceeded={() => {
-                  setWorkbenchRevision((value) => value + 1);
-                }}
-              />
-            )}
           </WorkbenchSessionProvider>
         </section>
+      )}
+      {resubmit && (
+        <RegionalApprovalResubmitDialog
+          key={resubmit.versionId}
+          {...resubmit}
+          visible={resubmit.visible && !apiLogOpen}
+          onPendingChange={updateResubmitPending}
+          client={resubmitClient}
+          connected={status?.resubmitConnected === true}
+          t={locale.t.bind(locale)}
+          onClose={(pending) =>
+            setResubmit((current) =>
+              pending && current ? { ...current, pending, visible: false } : undefined,
+            )
+          }
+          onSucceeded={() => {
+            setWorkbenchRevision((value) => value + 1);
+          }}
+        />
       )}
     </div>
   );

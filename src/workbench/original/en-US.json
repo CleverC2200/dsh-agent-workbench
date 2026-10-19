@@ -721,6 +721,8 @@
         "empty": "This organization has no SKU details."
       },
       "liveSubmit": {
+        "pendingNotice": "Plan {{plan}} has a pending submission or receipt. Resume it before resubmitting another plan.",
+        "resume": "Resume pending resubmission",
         "title": "Live sales plan resubmission",
         "column": "Resubmit",
         "open": "Edit and resubmit",

@@ -29,6 +29,8 @@ export function RegionalApprovalResubmitDialog({
   period,
   client,
   connected,
+  visible = true,
+  onPendingChange,
   t,
   onClose,
   onSucceeded,
@@ -38,8 +40,10 @@ export function RegionalApprovalResubmitDialog({
   period: GeaSalesPlanPeriod;
   client: SalesPlanSubmitClient;
   connected: boolean;
+  visible?: boolean;
+  onPendingChange?: (pending: boolean) => void;
   t: TFunction;
-  onClose: () => void;
+  onClose: (pending: boolean) => void;
   onSucceeded: () => void;
 }) {
   const tr = (key: string, values?: Record<string, unknown>) =>
@@ -56,6 +60,12 @@ export function RegionalApprovalResubmitDialog({
   const [retryable, setRetryable] = useState(false);
   const [receipt, setReceipt] = useState<GeaSalesPlanSubmitReceipt>();
   const [verified, setVerified] = useState(false);
+  const pending = Boolean(
+    attempt &&
+    !verified &&
+    (busy || retryable || receipt || error === 'unavailable' || error === 'retryExhausted'),
+  );
+  useEffect(() => onPendingChange?.(pending), [pending, onPendingChange]);
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
@@ -170,14 +180,14 @@ export function RegionalApprovalResubmitDialog({
   };
   return (
     <Modal
-      visible
+      visible={visible}
       title={tr('title')}
-      onCancel={onClose}
+      onCancel={() => onClose(pending)}
       closable={!busy}
       maskClosable={false}
       footer={
         <>
-          <Button disabled={busy} onClick={onClose}>
+          <Button disabled={busy} onClick={() => onClose(pending)}>
             {tr('close')}
           </Button>
           <Button
@@ -201,6 +211,9 @@ export function RegionalApprovalResubmitDialog({
       {!source && !error ? <Spin /> : null}
       {source && (
         <>
+          <p>
+            {tr('plan')}: {planId}
+          </p>
           <p>
             {tr('version')}: {versionId} · {tr('period')}: {period.periodMonth}
           </p>

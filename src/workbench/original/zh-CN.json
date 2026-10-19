@@ -721,6 +721,8 @@
         "empty": "当前组织没有 SKU 明细。"
       },
       "liveSubmit": {
+        "pendingNotice": "计划 {{plan}} 仍有待核对的重提请求或回执；请先恢复处理，再修改其他计划。",
+        "resume": "恢复待处理重提",
         "title": "真实销售计划退回重提",
         "column": "退回重提",
         "open": "修改后提交",
