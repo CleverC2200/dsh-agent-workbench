@@ -1,26 +1,69 @@
+import sqlConfiguration from '../../../sql.config.json';
+import { sqlTemplate as configuredSql } from '../../../../shared/sql-config.ts';
 // Transfer complete rows in bounded packets; keep business filtering and calculations unchanged.
 type Database = { query(sql: string, values?: unknown[]): Promise<{ rows: any[] }> };
 type Packing = { order: string[]; timestamps?: string[] };
 function columnsFor(sql: string): string[] | undefined {
-  if (sql.includes('p.plan_snapshot_date::text AS plan_snapshot_date'))
+  if (
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.1',
+      ),
+    )
+  )
     return 'plan_snapshot_date target_month plan_version plan_source plan_status material_code material_name product_categ_name current_inventory_qty replenishment_cycle_days cycle_rule_source bi_target_amount bi_target_status target_growth_rate reference_shipment_qty history_same_period_growth_rate recent_three_month_growth_rate branch_growth_rate shipment_plan_qty transfer_plan_qty expected_month_end_inventory_qty updated_time'.split(
       ' ',
     );
   if (
     sql.includes('AS shipped_qty') &&
-    sql.includes('material_code AS sku') &&
-    sql.includes("metric_name='actual_shipped_qty'")
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.2',
+      ),
+    ) &&
+    sql.includes(
+      configuredSql(sqlConfiguration, 'inline.source.inventory-light-plugins.src.fc-transfer.ts.1'),
+    )
   )
     return ['sku', 'shipped_qty'];
-  if (sql.includes('AS preparing_allocated_qty'))
+  if (
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.3',
+      ),
+    )
+  )
     return 'source_snapshot_time executeorderno material_code order_qty preparing_qty preparing_allocated_qty cust_name cust_code required_delivery_at allocated_qty legacy_count updated_time'.split(
       ' ',
     );
-  if (sql.includes('p.base_finish_date::text AS base_finish_date'))
+  if (
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.4',
+      ),
+    )
+  )
     return 'base_finish_date warehouse_group_id warehouse_group_name base_name material_code planned_qty updated_time'.split(
       ' ',
     );
-  if (sql.includes('i.prod_date::text AS prod_date') && sql.includes('SUM(i.live_qty) AS live_qty'))
+  if (
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.5',
+      ),
+    ) &&
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.6',
+      ),
+    )
+  )
     return 'snapshot_date material_code material_name product_categ_name prod_date live_qty available_qty updated_time'.split(
       ' ',
     );
@@ -38,17 +81,48 @@ export function packetSql(sql: string, packing: Packing) {
   const order = packing.order.map((k) => `"${k}"`).join(',');
   const columns = columnsFor(sql);
   const row = columns
-    ? `JSONB_BUILD_ARRAY(${columns.map((k) => ((packing.timestamps ?? []).includes(k) ? `TO_CHAR(s.${k},'YYYY-MM-DD HH24:MI:SS')` : `s.${k}`)).join(',')})`
-    : "TO_JSONB(s) - 'dsh_packet_row'" +
+    ? configuredSql(
+        sqlConfiguration,
+        'inline.source.inventory-light-plugins.src.fc-transfer.ts.2',
+        [
+          columns
+            .map((k) =>
+              (packing.timestamps ?? []).includes(k)
+                ? configuredSql(
+                    sqlConfiguration,
+                    'inline.source.inventory-light-plugins.src.fc-transfer.ts.3',
+                    [k],
+                  )
+                : `s.${k}`,
+            )
+            .join(','),
+        ],
+      )
+    : configuredSql(
+        sqlConfiguration,
+        'inline.source.inventory-light-plugins.src.fc-transfer.ts.4',
+      ) +
       (packing.timestamps ?? [])
-        .map((k) => ` || JSONB_BUILD_OBJECT('${k}',TO_CHAR(s.${k},'YYYY-MM-DD HH24:MI:SS'))`)
+        .map((k) =>
+          configuredSql(
+            sqlConfiguration,
+            'inline.source.inventory-light-plugins.src.fc-transfer.ts.5',
+            [k, k],
+          ),
+        )
         .join('');
-  return `WITH dsh_packet_source AS (${sql}), dsh_packet_numbered AS (
-    SELECT s.*,ROW_NUMBER() OVER (ORDER BY ${order}) AS dsh_packet_row FROM dsh_packet_source s
-  ) SELECT FLOOR((dsh_packet_row-1)/100) AS dsh_packet,COUNT(*) AS dsh_count,
-    ${columns ? `'${JSON.stringify(columns)}'::text AS dsh_columns,` : ''}
-    JSONB_AGG((${row}) ORDER BY dsh_packet_row)::text AS dsh_rows
-    FROM dsh_packet_numbered s GROUP BY FLOOR((dsh_packet_row-1)/100) ORDER BY dsh_packet`;
+  return configuredSql(sqlConfiguration, 'inventory-light-plugins.src.fc-transfer.1', [
+    sql,
+    order,
+    columns
+      ? configuredSql(
+          sqlConfiguration,
+          'fragments.source.inventory-light-plugins.src.fc-transfer.ts.7',
+          [JSON.stringify(columns)],
+        )
+      : '',
+    row,
+  ]);
 }
 export function unpackPackets(groups: any[]) {
   const rows: any[] = [];
@@ -88,21 +162,50 @@ export function unpackPackets(groups: any[]) {
   return { rows };
 }
 function packingFor(sql: string): Packing | undefined {
-  if (sql.includes('p.plan_snapshot_date::text AS plan_snapshot_date'))
+  if (
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.8',
+      ),
+    )
+  )
     return { order: ['target_month', 'material_code'], timestamps: ['updated_time'] };
   if (
     sql.includes('AS shipped_qty') &&
-    sql.includes('material_code AS sku') &&
-    sql.includes("metric_name='actual_shipped_qty'")
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.9',
+      ),
+    ) &&
+    sql.includes(
+      configuredSql(sqlConfiguration, 'inline.source.inventory-light-plugins.src.fc-transfer.ts.6'),
+    )
   )
     return { order: ['sku'] };
   if (
-    sql.includes('FROM data_service.agents_scm_branch_pending_order p') &&
-    sql.includes('AS preparing_allocated_qty')
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.10',
+      ),
+    ) &&
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.11',
+      ),
+    )
   )
     return { order: ['executeorderno', 'material_code'], timestamps: ['updated_time'] };
   if (
-    sql.includes('p.base_finish_date::text AS base_finish_date') &&
+    sql.includes(
+      configuredSql(
+        sqlConfiguration,
+        'fragments.source.inventory-light-plugins.src.fc-transfer.ts.12',
+      ),
+    ) &&
     sql.includes('AS planned_qty')
   )
     return {

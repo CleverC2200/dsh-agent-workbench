@@ -12,8 +12,15 @@ type Result = {
   error: string;
   busy: boolean;
 };
-export function useWorkspace(enabled: boolean, date: string, granularity: string) {
-  const key = JSON.stringify([date, granularity]);
+export function useWorkspace(
+  enabled: boolean,
+  date: string,
+  granularity: string,
+  summary = false,
+  detailMode?: 'organization' | 'product',
+  productScope?: { mode: 'category' | 'base'; categories: string[]; items: string[] },
+) {
+  const key = JSON.stringify([date, granularity, summary, detailMode, productScope]);
   const [result, setResult] = useState<Result>({
     key: '',
     data: null,
@@ -28,7 +35,15 @@ export function useWorkspace(enabled: boolean, date: string, granularity: string
     let active = true;
     const workspace = APS_MOCK ? readMockWorkspace : createGeaWorkspace(request);
     let controller: AbortController | undefined;
-    const input = { date, granularity, version: '滚动', orderType: 'M' };
+    const input = {
+      date,
+      granularity,
+      summary,
+      detailMode,
+      productScope,
+      version: '滚动',
+      orderType: 'M',
+    };
     async function load(refresh = false, externalSignal?: AbortSignal) {
       controller?.abort();
       controller = new AbortController();
@@ -43,8 +58,12 @@ export function useWorkspace(enabled: boolean, date: string, granularity: string
         const failures = data.sections.filter((section) => section.status === 'error');
         const error = failures
           .map(
-            (section: { id: string; error?: { code?: string; message?: string } }) =>
-              `${section.id}：${section.error?.message || '读取失败'}（${section.error?.code || 'QUERY_FAILED'}）`,
+            (section: {
+              id: string;
+              label?: string;
+              error?: { code?: string; message?: string };
+            }) =>
+              `${section.label || section.id}：${section.error?.message || '读取失败'}（${section.error?.code || 'QUERY_FAILED'}）`,
           )
           .join('；');
         setResult({ key, data, previous: null, annual: null, error, busy });
@@ -158,7 +177,7 @@ export function useWorkspace(enabled: boolean, date: string, granularity: string
       window.removeEventListener('gea-session-changing', logout);
       window.removeEventListener('gea-session-changed', sessionChanged);
     };
-  }, [enabled, key, date, granularity]);
+  }, [enabled, key, date, granularity, summary, detailMode]);
   return result.key === key
     ? result
     : { key, data: null, previous: null, annual: null, error: '', busy: enabled };

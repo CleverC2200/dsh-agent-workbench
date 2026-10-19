@@ -1,4 +1,7 @@
-import registry from './gea-queries.json';
+import sqlConfiguration from '../../../sql.config.json';
+import { agentSqlConfig, usesConfiguredSql } from '../../../../shared/sql-config';
+import { readWorkspaceQuery } from '../../../../shared/workspace-query';
+const registry = agentSqlConfig(sqlConfiguration).workspace;
 import { readGovernedSql, GeaQueryError, type SqlTransport } from './gea-sql';
 type Row = Record<string, any>;
 type Input = {
@@ -8,16 +11,20 @@ type Input = {
   orderType: string;
   stage?: string;
   comparison?: boolean;
+  summary?: boolean;
+  detailMode?: 'organization' | 'product';
+  productScope?: { mode: 'category' | 'base'; categories: string[]; items: string[] };
   refresh?: boolean;
   signal?: AbortSignal;
   onProgress?: (data: any) => void;
   onComparison?: (data: any) => void;
 };
-const { labels, notes, paths } = registry;
+const { labels, notes } = registry;
+const paths = registry.paths as (string | null)[][];
 const queries = registry.queries as Record<string, { sql: string; parameters: string[] }>;
-// First paint only waits for the four sources used by the intelligent-workbench
-// KPI cards. Detail-only sources continue in the background stage.
-const primary = ['stock', 'orders', 'finance', 'sales-budget'];
+// Core card sources enter the queue first. Direct preview also prioritizes MES
+// production; the governed path retains its published-source set. Unused product forecast details are fetched only by an explicit details request.
+const primarySources = ['stock', 'orders', 'finance', 'sales-budget'];
 // KPI comparison does not need detail tables, product drill-downs or daily
 // shipment exports. Keeping this list small avoids re-reading six large sources
 // for both the previous period and the same period last year.
@@ -31,6 +38,15 @@ const comparisonKeys = [
   'shippable',
 ];
 const numericFields = new Set([
+  'known_planned',
+  'known_actual',
+  'valid_records',
+  'covered_support_quantity',
+  'covered_support_demand',
+  'covered_support_count',
+  'covered_shippable_quantity',
+  'covered_shippable_demand',
+  'covered_shippable_count',
   'records',
   'inventory',
   'demand',
@@ -128,10 +144,21 @@ export function createGeaWorkspace(transport: SqlTransport) {
     input: Input,
     bounds = period(input.date, input.granularity),
     selected?: string[],
+    sourceConcurrency?: number,
   ) {
     const [start, end] = bounds,
       kind = input.granularity;
+    // A single period load may expose the same configured snapshot in two
+    // sections. Share only that load's raw read; refreshes and comparisons own
+    // separate maps, and each consumer receives its own converted row objects.
+    const directReads = new Map<string, Promise<Row[]>>();
+    const primary = usesConfiguredSql()
+      ? ['stock', 'orders', 'production', 'finance', 'sales-budget']
+      : primarySources;
     const values: Row = {
+      summary: input.summary,
+      detailMode: input.detailMode,
+      productScope: input.productScope,
       start,
       end,
       anchor: input.date,
@@ -149,6 +176,36 @@ export function createGeaWorkspace(transport: SqlTransport) {
       ratio_group: 'warehouse_examine',
     };
     async function read(name: string): Promise<Row[]> {
+      if (usesConfiguredSql()) {
+        const config = agentSqlConfig(sqlConfiguration);
+        const binding =
+          (input.summary
+            ? config.workspaceSummaryBindings?.[name]
+            : config.workspaceDrillBindings?.[input.detailMode]?.[name]) ??
+          config.workspaceBindings?.[name];
+        const key = binding ? JSON.stringify(binding) : name;
+        let job = directReads.get(key);
+        if (!job) {
+          job = limited(() =>
+            readWorkspaceQuery(sqlConfiguration, name, values, { signal: input.signal }),
+          );
+          directReads.set(key, job);
+        }
+        const rows = await job;
+        return rows.map((row: Row) =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [
+              key,
+              numericFields.has(key) &&
+              typeof value === 'string' &&
+              value.trim() !== '' &&
+              Number.isFinite(Number(value))
+                ? Number(value)
+                : value,
+            ]),
+          ),
+        );
+      }
       const q = queries[name];
       if (!q) throw new GeaQueryError('QUERY_NOT_REGISTERED', '未登记的查询');
       const parameters = Object.fromEntries(
@@ -205,7 +262,14 @@ export function createGeaWorkspace(transport: SqlTransport) {
     }
     let orgPromise: Promise<Row[]> | undefined;
     async function section(key: string) {
-      const result = { id: key, label: (labels as Row)[key], note: (notes as Row)[key] };
+      const override = usesConfiguredSql()
+        ? agentSqlConfig(sqlConfiguration).workspaceSourceOverrides?.[key]
+        : undefined;
+      const result = {
+        id: key,
+        label: override?.label ?? (labels as Row)[key],
+        note: override?.note ?? (notes as Row)[key],
+      };
       try {
         if (
           ['demand-accuracy', 'sales-accuracy', 'finance', 'sales-budget'].includes(key) &&
@@ -265,7 +329,11 @@ export function createGeaWorkspace(transport: SqlTransport) {
         }
         return { ...result, status: rows.length ? 'ready' : 'empty', rows };
       } catch (e) {
-        const error = e as GeaQueryError;
+        const error = e as GeaQueryError & {
+          failure?: any;
+          returnedColumns?: any;
+          rejectedColumns?: any;
+        };
         return {
           ...result,
           status: 'error',
@@ -273,21 +341,35 @@ export function createGeaWorkspace(transport: SqlTransport) {
           error: {
             code: error.code || 'GEA_QUERY_FAILED',
             message: error.message,
-            stage: error.stage,
+            stage: error.stage ?? error.failure?.stage,
+            failure: error.failure,
+            returnedColumns: error.returnedColumns,
+            rejectedColumns: error.rejectedColumns,
           },
         };
       }
     }
+    // These product forecast rows do not feed any initial card or current drill metric.
+    // They remain queryable explicitly without delaying the initial workspace.
+    const deferred = usesConfiguredSql() ? ['forecast-products'] : [];
     const keys =
       selected ??
-      (input.stage === 'primary'
-        ? primary
-        : input.stage === 'remaining'
-          ? Object.keys(labels).filter((k) => !primary.includes(k))
-          : [...primary, ...Object.keys(labels).filter((k) => !primary.includes(k))]);
+      (input.stage === 'details'
+        ? deferred
+        : input.stage === 'primary'
+          ? primary
+          : input.stage === 'remaining'
+            ? Object.keys(labels).filter((k) => !primary.includes(k) && !deferred.includes(k))
+            : [
+                ...primary,
+                ...Object.keys(labels).filter((k) => !primary.includes(k) && !deferred.includes(k)),
+              ]);
     const byId = new Map<string, any>();
     const snapshot = () => ({
-      mode: 'gea-governed-sql',
+      mode:
+        typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
+          ? 'direct-doris'
+          : 'gea-governed-sql',
       realData: true,
       readOnly: true,
       readAt: new Date().toISOString(),
@@ -296,27 +378,42 @@ export function createGeaWorkspace(transport: SqlTransport) {
       granularity: kind,
       orderType: input.orderType,
       version: input.version,
-      sections: (input.stage === 'primary' && !selected ? Object.keys(labels) : keys).map(
+      sections: (!selected && input.stage !== 'details'
+        ? [
+            ...new Set([
+              ...keys,
+              ...deferred,
+              ...(input.stage === 'primary' ? Object.keys(labels) : []),
+            ]),
+          ]
+        : keys
+      ).map(
         (id) =>
           byId.get(id) ?? {
             id,
             label: (labels as Row)[id],
             note: (notes as Row)[id],
-            status: 'loading',
+            status: deferred.includes(id) ? 'deferred' : 'loading',
             rows: [],
           },
       ),
       limitations: [
-        '由 GEA 当前用户和 Agent aps 的授权范围读取；权限拒绝与不完整返回不补零。',
+        typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
+          ? '本地数据库账户只读直连；尚未核验 GEA 用户、Consumer 与字段授权。'
+          : '由 GEA 当前用户和 Agent aps 的授权范围读取；权限拒绝与不完整返回不补零。',
         '各来源日期和完整性请在数据来源中核对。',
         '正式派单与写回尚未接入。',
       ],
     });
+    let nextKey = 0;
     await Promise.all(
-      keys.map(async (key) => {
-        const result = await section(key);
-        byId.set(key, result);
-        if (!selected && !input.signal?.aborted) input.onProgress?.(snapshot());
+      Array.from({ length: Math.min(sourceConcurrency ?? keys.length, keys.length) }, async () => {
+        while (nextKey < keys.length) {
+          const key = keys[nextKey++];
+          const result = await section(key);
+          byId.set(key, result);
+          if (!selected && !input.signal?.aborted) input.onProgress?.(snapshot());
+        }
       }),
     );
     return snapshot();
@@ -330,7 +427,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
       !['year', 'month', 'week', 'day'].includes(input.granularity) ||
       !['月初', '滚动', '纠偏'].includes(input.version) ||
       !['M', 'Z'].includes(input.orderType) ||
-      ![undefined, 'primary', 'remaining'].includes(input.stage)
+      ![undefined, 'primary', 'remaining', 'details'].includes(input.stage)
     )
       throw new GeaQueryError('APS_INVALID_FILTER', '筛选参数无效');
     if (input.refresh && !input.comparison && input.stage !== 'remaining') {
@@ -347,14 +444,22 @@ export function createGeaWorkspace(transport: SqlTransport) {
           : shiftDays(s, input.granularity === 'week' ? -7 : -1),
     ) as [string, string];
     const annual = bounds.map((s) => shiftMonths(s, -12)) as [string, string];
-    const before = await run({ ...input, date: previous[1] }, previous, comparisonKeys);
-    if (!input.signal?.aborted) input.onComparison?.({ previous: before });
-    return {
-      previous: before,
-      annual:
-        JSON.stringify(previous) === JSON.stringify(annual)
-          ? before
-          : await run({ ...input, date: annual[1] }, annual, comparisonKeys),
-    };
+    // Shippable reuses stock. Do not let that waiting consumer occupy the
+    // second annual worker ahead of independent production.
+    const keys = usesConfiguredSql()
+      ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'production', 'shippable']
+      : comparisonKeys;
+    const previousRead = run({ ...input, date: previous[1] }, previous, keys).then((before) => {
+      if (!input.signal?.aborted) input.onComparison?.({ previous: before });
+      return before;
+    });
+    const annualRead =
+      JSON.stringify(previous) === JSON.stringify(annual)
+        ? // Let annual orders/production progress while stock pages are in flight.
+          // Both periods still share the adapter's three-source limit.
+          previousRead
+        : run({ ...input, date: annual[1] }, annual, keys, 2);
+    const [before, yearBefore] = await Promise.all([previousRead, annualRead]);
+    return { previous: before, annual: yearBefore };
   };
 }

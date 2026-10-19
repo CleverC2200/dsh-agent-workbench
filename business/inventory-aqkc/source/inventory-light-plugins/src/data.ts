@@ -1,4 +1,6 @@
 import { call } from './channel.js';
+import { usesConfiguredSql } from '../../../../shared/sql-config';
+import { readConfiguredStock } from './configured-stock';
 import { sqlQueryError, DATA_PERMISSION_MESSAGE } from './query-error.js';
 import { packedSafetyStockSql, unpackSafetyStock, supportsPackedTransfer } from './aqkc-transfer';
 import type {
@@ -18,6 +20,21 @@ export async function queryStock(
   query: WorkbenchSqlQuery,
   signal?: AbortSignal,
 ): Promise<WorkbenchSqlRow[]> {
+  if (usesConfiguredSql()) {
+    try {
+      return await readConfiguredStock(query, { signal });
+    } catch (error: any) {
+      if (!signal?.aborted && (error.failure || error.errorCode)) {
+        // Keep gateway diagnostics, while the original page receives an explicit permission/session message.
+        error.message = sqlQueryError(error).message;
+      }
+      if (!signal?.aborted && error.code === 'SOURCE_NOT_AVAILABLE')
+        window.dispatchEvent(
+          new CustomEvent('gea-query-warning', { detail: { message: error.message } }),
+        );
+      throw error;
+    }
+  }
   const key = JSON.stringify(query);
   let request = signal ? undefined : pending.get(key);
   if (!request) {

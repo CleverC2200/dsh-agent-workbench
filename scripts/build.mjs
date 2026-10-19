@@ -10,6 +10,8 @@ execFileSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], 
 });
 await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
+for (const file of ['configured-query-client.mjs', 'configured-query-client.d.mts'])
+  await copyFile(`business/shared/${file}`, `lib/${file}`);
 await mkdir('lib/theme', { recursive: true });
 await copyFile('theme/tokens.css', 'lib/theme/tokens.css');
 await copyFile('theme/html-defaults.css', 'lib/theme/html-defaults.css');

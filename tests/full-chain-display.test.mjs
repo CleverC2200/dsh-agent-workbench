@@ -1,0 +1,88 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'esbuild';
+const output = await build({
+  entryPoints: ['business/shared/full-chain-display.ts'],
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+});
+const { fullChainCards, formatChainValue } = await import(
+  'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+);
+test('available base inventory and matched turnover are primary values with their distinct coverage', () => {
+  const cards = fullChainCards(
+    {
+      row_count: 10,
+      known_inventory: '120',
+      known_inventory_count: 8,
+      matched_stock_days: '3',
+      matched_turnover_count: 4,
+      matched_turnover_inventory: 90,
+      matched_turnover_demand: 30,
+    },
+    null,
+  );
+  assert.equal(cards[0].value, 120);
+  assert.equal(cards[0].scope, '基地 · 范围 8 / 10 个SKU');
+  assert.equal(cards[1].value, 3);
+  assert.equal(cards[1].scope, '基地 · 同范围 4 / 10 个SKU');
+  assert.equal(cards[1].details[0][1], 90);
+  assert.equal(cards[1].details[1][1], 30);
+});
+test('over-60 quantity and period orders never substitute for average age or current pending', () => {
+  const cards = fullChainCards(
+    { row_count: 10, known_over60: 100, known_over60_count: 8 },
+    { ordered: 500, shipped: 400 },
+  );
+  assert.equal(cards[2].value, null);
+  assert.equal(cards[2].details[0][1], 100);
+  assert.equal(cards[4].value, null);
+  assert.equal(cards[4].details[0][1], 500);
+});
+test('zero stays visible, absent or zero coverage stays unknown', () => {
+  assert.equal(
+    fullChainCards({ row_count: 1, known_inventory: 0, known_inventory_count: 1 }, null)[0].value,
+    0,
+  );
+  assert.equal(
+    fullChainCards({ row_count: 1, known_inventory: 0, known_inventory_count: 0 }, null)[0].value,
+    null,
+  );
+  assert.ok(fullChainCards(null, null).every((c) => c.value === null));
+  assert.equal(formatChainValue(0, '件'), '0件');
+  assert.equal(formatChainValue(null, '件'), '-');
+  assert.equal(formatChainValue(4698200, '件'), '469.82万件');
+});
+
+test('confirmed 1:1 quantities use boxes without changing values and compact counts consistently', () => {
+  const cards = fullChainCards(
+    {
+      known_inventory: 4757283,
+      known_inventory_count: 3367,
+      row_count: 3527,
+      matched_turnover_inventory: 4685600,
+      matched_turnover_demand: 335548.42,
+      matched_turnover_count: 2592,
+    },
+    { ordered: 100, shipped: 90 },
+  );
+  assert.equal(cards[0].value, 4757283);
+  assert.equal(cards[0].unit, '箱');
+  assert.equal(cards[1].details[1][2], '箱/天');
+  assert.equal(formatChainValue(cards[0].value, cards[0].unit), '475.73万箱');
+  assert.equal(formatChainValue(1608948.15, '箱'), '160.89万箱');
+  assert.equal(formatChainValue(335548.42, '箱/天'), '33.55万箱/天');
+  assert.equal(formatChainValue(79.05, '天'), '79.05天');
+  assert.equal(formatChainValue(0, '箱'), '0箱');
+  assert.equal(formatChainValue(null, '箱'), '-');
+  assert.equal(formatChainValue(NaN, '箱'), '-');
+});
+test('missing branch snapshot is explained and never replaced with base or shipment quantities', () => {
+  const cards = fullChainCards(
+    { known_inventory: 100, known_inventory_count: 1, row_count: 1 },
+    { shipped: 50 },
+  );
+  assert.deepEqual(cards[0].details[1], ['分仓库存', null, '箱', '缺分仓库存快照']);
+});
