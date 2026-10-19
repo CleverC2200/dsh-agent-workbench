@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next';
+import { Down, Refresh, Up } from '@icon-park/react';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -53,6 +54,7 @@ import {
   salesPlanStatusText,
 } from './regionalApprovalQueryModel.ts';
 import styles from './CorrectionWorkbench.module.css';
+import shell from './RegionalApprovalWorkbench.module.css';
 
 const roles = ['region', 'province', 'area', 'category'] as const;
 const formatted = (value: string | null | undefined, kind: 'money' | 'quantity') => {
@@ -94,6 +96,8 @@ export function CorrectionWorkbench({
     [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<GeaSalesPlanListItem>();
   const [stage, setStage] = useState('current');
+  const [stageLaneOpen, setStageLaneOpen] = useState(false);
+  const [pageSize, setPageSize] = useState(20);
   const period = periods.find((p) => p.periodId === periodId);
   const roleStages = [...(approvalStages ?? [])];
   const statusScope = roleStages.length
@@ -185,8 +189,8 @@ export function CorrectionWorkbench({
           if (
             row.orderType !== 'Z' ||
             !detailClient ||
-            index < (page - 1) * 20 ||
-            index >= page * 20 ||
+            index < (page - 1) * pageSize ||
+            index >= page * pageSize ||
             (row.mPlanQty !== undefined && row.mPlanAmount !== undefined)
           )
             return row;
@@ -237,7 +241,16 @@ export function CorrectionWorkbench({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [queryClient, detailClient, periodId, period?.planTypeCode, page, revision, statusesKey]);
+  }, [
+    queryClient,
+    detailClient,
+    periodId,
+    period?.planTypeCode,
+    page,
+    pageSize,
+    revision,
+    statusesKey,
+  ]);
   const month = period?.periodMonth;
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -250,217 +263,335 @@ export function CorrectionWorkbench({
           : 0
         : undefined;
   return (
-    <main className={styles.page}>
-      <div className={styles.toolbar}>
-        {headerControls}
-        <h2>{tr('title')}</h2>
-      </div>
-      <div className={styles.toolbar}>
-        <Select
-          aria-label={tr('period')}
-          value={periodId}
-          onChange={(id) => {
-            setSelected(undefined);
-            setRows([]);
-            setPeriodId(id);
-            setPage(1);
-          }}
-          style={{ width: 220 }}
-        >
-          {periods.map((p) => (
-            <Select.Option key={p.periodId} value={p.periodId}>
-              {p.periodMonth} · {p.planTypeCode}
-            </Select.Option>
-          ))}
-        </Select>
-        <Select
-          aria-label={tr('viewNode')}
-          value={stage}
-          onChange={(value) => {
-            setSelected(undefined);
-            setRows([]);
-            setPage(1);
-            setStage(value);
-          }}
-          style={{ width: 160 }}
-        >
-          <Select.Option value="current">{tr('currentNode')}</Select.Option>
-          {roles.map((key) => (
-            <Select.Option key={key} value={key}>
-              {tr(key)}
-            </Select.Option>
-          ))}
-        </Select>
-        <Button disabled={loading} onClick={refresh}>
-          {tr('refresh')}
-        </Button>
-      </div>
-      <div className={styles.summary} data-testid="correction-summary">
-        {[
-          ['目标金额', money(summary?.targetAmount)],
-          ['计划金额', money(summary?.planAmount)],
-          ['差额', money(summary?.diffAmount)],
-          ['计划数量', quantity(summary?.planQty)],
-        ].map(([label, value]) => (
-          <div key={String(label)}>
-            <span>{label}</span>
-            <strong
-              className={
-                label === '差额'
-                  ? salesPlanVarianceClass(summary?.diffAmount, styles.positive, styles.negative)
-                  : undefined
-              }
-            >
-              {error || loading ? '—' : value}
-            </strong>
+    <main className={shell.root} aria-label={tr('title')} data-testid="correction-workbench">
+      <header className={shell.header}>
+        <div className={shell.titleLine}>{headerControls}</div>
+        <div className={shell.headerRight}>
+          <Button
+            type="text"
+            size="small"
+            className={shell.stageLaneToggle}
+            aria-label={t(
+              `common.assistantSurface.regionalApproval.stageLaneToggle.${stageLaneOpen ? 'collapse' : 'expand'}`,
+            )}
+            aria-expanded={stageLaneOpen}
+            aria-controls="correction-stage-lane"
+            onClick={() => setStageLaneOpen((open) => !open)}
+          >
+            <span>
+              {t('common.assistantSurface.regionalApproval.stageLaneToggle.current', {
+                stage: t(
+                  `common.assistantSurface.regionalApproval.stages.${stage === 'current' ? (roleStages[0] ?? 'all') : stage}`,
+                ),
+              })}
+            </span>
+            {stageLaneOpen ? <Up size={12} /> : <Down size={12} />}
+          </Button>
+          <div className={shell.scope}>
+            <span className={shell.monthField}>
+              <small>{t('common.assistantSurface.regionalApproval.planMonth')}</small>
+              <Select
+                size="small"
+                aria-label={tr('period')}
+                value={periodId}
+                disabled={periods.length === 0}
+                onChange={(id) => {
+                  setSelected(undefined);
+                  setRows([]);
+                  setPeriodId(id);
+                  setPage(1);
+                }}
+              >
+                {periods.map((p) => (
+                  <Select.Option key={p.periodId} value={p.periodId}>
+                    {p.periodMonth} · {p.planTypeCode}
+                  </Select.Option>
+                ))}
+              </Select>
+            </span>
           </div>
-        ))}
+        </div>
+      </header>
+      <div className={shell.stageViewport} data-collapsed={!stageLaneOpen}>
+        <nav id="correction-stage-lane" className={shell.stageLane} aria-label={tr('viewNode')}>
+          {['current', ...roles].map((key, index) => (
+            <Button
+              key={key}
+              type="text"
+              className={shell.stageButton}
+              data-selected={stage === key}
+              aria-pressed={stage === key}
+              onClick={() => {
+                setSelected(undefined);
+                setRows([]);
+                setPage(1);
+                setStage(key);
+              }}
+            >
+              <span className={shell.stageMarker}>{index + 1}</span>
+              <span className={shell.stageCopy}>
+                <strong>{tr(key === 'current' ? 'currentNode' : key)}</strong>
+              </span>
+            </Button>
+          ))}
+        </nav>
       </div>
-      {error && <Alert type="error" content={error} />}
-      <Table
-        rowKey="planId"
-        rowClassName={(row) => (row.monthlyApproved !== true ? styles.inactive : '')}
-        data={rows.slice((page - 1) * 20, page * 20)}
-        loading={loading}
-        pagination={false}
-        scroll={{ x: 1000 }}
-        columns={[
-          {
-            title: tr('customer'),
-            render: (_, r) => (
-              <div className={styles.organization}>
-                <Button
-                  type="text"
-                  disabled={loading || r.monthlyApproved !== true || !detailClient}
-                  onClick={() => setSelected(r)}
-                >
-                  {r.dealerName ?? r.orgName ?? r.dealerCode}
-                </Button>
-                <Tag size="small">
-                  {r.monthlyApproved !== true
-                    ? tr('notApproved')
-                    : r.hasCorrection === false
-                      ? tr('absent')
-                      : salesPlanStatusText(r.status, r.planTypeCode, t)}
-                </Tag>
-                <small>
-                  {[r.channelName ?? r.channelCode, r.orgName, r.provinceName, r.areaName]
-                    .filter(Boolean)
-                    .join(' / ')}
-                </small>
-                {r.status >= 6 && r.status <= 9 && onResubmit && (
-                  <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
-                    {tr('resubmit')}
-                  </Button>
-                )}
-              </div>
-            ),
-          },
-          { title: tr('target'), render: (_, r) => money(r.targetAmount) },
-          {
-            title: tr('plan'),
-            render: (_, r) => (
-              <>
-                {money(r.mPlanAmount)}
-                <br />
-                {quantity(r.mPlanQty)}
-              </>
-            ),
-          },
-          {
-            title: tr('progress'),
-            render: (_, r) => (
-              <div title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}>
-                <strong>{percent(r.amountProgress)}</strong>
-                <small>
-                  {money(r.shipAmount)} / {quantity(r.shipQty)}
-                </small>
-                {r.amountProgress != null && (
-                  <div
-                    className={styles.progress}
-                    role="img"
-                    aria-label={`月达成进度 ${r.amountProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
-                  >
-                    <span
-                      style={{
-                        width: `${Math.max(0, Math.min(100, Number(r.amountProgress)))}%`,
-                        background: salesPlanProgressBarColor(Number(r.amountProgress)),
-                      }}
-                    />
-                    {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
-                  </div>
-                )}
-                {timeProgress != null &&
-                  r.amountProgress != null &&
-                  Number(r.amountProgress) < timeProgress && <small>{tr('behind')}</small>}
-              </div>
-            ),
-          },
-          {
-            title: tr('adjustment'),
-            render: (_, r) =>
-              r.hasCorrection === false ||
-              r.prevAdjAddQty == null ||
-              r.prevAdjCutQty == null ||
-              (correctionDecimal(r.prevAdjAddQty).isZero() &&
-                correctionDecimal(r.prevAdjCutQty).isZero()) ? (
-                '—'
-              ) : (
-                <span>
-                  <span
+      <div className={shell.content}>
+        <section className={shell.queue} aria-label={tr('title')}>
+          <header className={shell.dashboardHeader}>
+            <div className={shell.queueMetrics} data-testid="correction-summary">
+              {[
+                ['目标金额', money(summary?.targetAmount)],
+                ['计划金额', money(summary?.planAmount)],
+                ['差额（计划 − 目标）', money(summary?.diffAmount)],
+                ['计划数量', quantity(summary?.planQty)],
+              ].map(([label, value]) => (
+                <span key={String(label)}>
+                  <small>{label}</small>
+                  <strong
                     className={
-                      correctionDecimal(r.prevAdjAddQty).isZero() ? styles.zero : styles.positive
+                      label === '差额（计划 − 目标）'
+                        ? salesPlanVarianceClass(
+                            summary?.diffAmount,
+                            shell.variancePositive,
+                            shell.varianceNegative,
+                          )
+                        : undefined
                     }
-                    title={correctionDisplay(r.prevAdjAddQty, 'quantity').exact}
                   >
-                    +{correctionDisplay(r.prevAdjAddQty, 'quantity').display.replace('件', '')}
-                  </span>{' '}
-                  /{' '}
-                  <span
-                    className={
-                      correctionDecimal(r.prevAdjCutQty).isZero() ? styles.zero : styles.negative
-                    }
-                    title={correctionDisplay(r.prevAdjCutQty, 'quantity').exact}
-                  >
-                    −{correctionDisplay(r.prevAdjCutQty, 'quantity').display.replace('件', '')}
-                  </span>
+                    {error || loading ? '—' : value}
+                  </strong>
                 </span>
-              ),
-          },
-          {
-            title: tr('correctedProgress'),
-            render: (_, r) => (
-              <div title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}>
-                <strong>{r.hasCorrection === false ? '—' : percent(r.correctionProgress)}</strong>
-                {r.hasCorrection !== false && r.correctionProgress != null && (
-                  <div
-                    className={styles.progress}
-                    role="img"
-                    aria-label={`纠偏后进度 ${r.correctionProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
-                  >
-                    <span
-                      style={{
-                        width: `${Math.max(0, Math.min(100, Number(r.correctionProgress)))}%`,
-                        background: salesPlanProgressBarColor(Number(r.correctionProgress)),
-                      }}
-                    />
-                    {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
-                  </div>
-                )}
+              ))}
+            </div>
+          </header>
+          <div className={shell.queueHeader}>
+            <div className={shell.controlToolbar}>
+              <div className={shell.dimensionControls}>
+                <div
+                  className={shell.dimensionTabs}
+                  role="tablist"
+                  aria-label={t('common.assistantSurface.regionalApproval.dimensions.ariaLabel')}
+                >
+                  <Button size="small" type="text" role="tab" aria-selected data-active>
+                    {t('common.assistantSurface.regionalApproval.dimensions.customer')}
+                  </Button>
+                </div>
               </div>
-            ),
-          },
-        ]}
-      />
-      <Pagination
-        current={page}
-        pageSize={20}
-        total={total}
-        onChange={(value) => {
-          setSelected(undefined);
-          setPage(value);
-        }}
-      />
+              <div className={shell.toolbarActions}>
+                <Button
+                  size="small"
+                  icon={<Refresh size={14} />}
+                  loading={loading}
+                  disabled={loading}
+                  aria-label={tr('refresh')}
+                  title={tr('refresh')}
+                  onClick={refresh}
+                />
+              </div>
+            </div>
+          </div>
+          {error && <Alert type="error" content={error} />}
+          <div className={shell.tableViewport}>
+            <Table
+              className={shell.organizationTable}
+              size="small"
+              rowKey="planId"
+              rowClassName={(row) => (row.monthlyApproved !== true ? styles.inactive : '')}
+              data={rows.slice((page - 1) * pageSize, page * pageSize)}
+              loading={loading}
+              pagination={false}
+              scroll={{ x: 1000 }}
+              columns={[
+                {
+                  title: tr('customer'),
+                  width: 240,
+                  render: (_, r) => (
+                    <div className={shell.organizationCell}>
+                      <div className={shell.organizationTitle}>
+                        <Button
+                          type="text"
+                          size="small"
+                          className={shell.detailTrigger}
+                          disabled={loading || r.monthlyApproved !== true || !detailClient}
+                          onClick={() => setSelected(r)}
+                        >
+                          {r.dealerName ?? r.orgName ?? r.dealerCode}
+                        </Button>
+                        <Tag size="small">
+                          {r.monthlyApproved !== true
+                            ? tr('notApproved')
+                            : r.hasCorrection === false
+                              ? tr('absent')
+                              : salesPlanStatusText(r.status, r.planTypeCode, t)}
+                        </Tag>
+                      </div>
+                      <small className={shell.organizationPath}>
+                        {[r.channelName ?? r.channelCode, r.orgName, r.provinceName, r.areaName]
+                          .filter(Boolean)
+                          .join(' / ')}
+                      </small>
+                      {r.status >= 6 && r.status <= 9 && onResubmit && (
+                        <Button onClick={() => period && onResubmit(r.planId, r.versionId, period)}>
+                          {tr('resubmit')}
+                        </Button>
+                      )}
+                    </div>
+                  ),
+                },
+                { title: tr('target'), width: 150, render: (_, r) => money(r.targetAmount) },
+                {
+                  title: tr('plan'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div className={shell.stackCell}>
+                      <span>{money(r.mPlanAmount)}</span>
+                      <small>{quantity(r.mPlanQty)}</small>
+                    </div>
+                  ),
+                },
+                {
+                  title: tr('progress'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div
+                      className={shell.stackCell}
+                      title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}
+                    >
+                      <strong>{percent(r.amountProgress)}</strong>
+                      <small>
+                        {money(r.shipAmount)} / {quantity(r.shipQty)}
+                      </small>
+                      {r.amountProgress != null && (
+                        <div
+                          className={styles.progress}
+                          role="img"
+                          aria-label={`月达成进度 ${r.amountProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                        >
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, Number(r.amountProgress)))}%`,
+                              background: salesPlanProgressBarColor(Number(r.amountProgress)),
+                            }}
+                          />
+                          {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                        </div>
+                      )}
+                      {timeProgress != null &&
+                        r.amountProgress != null &&
+                        Number(r.amountProgress) < timeProgress && <small>{tr('behind')}</small>}
+                    </div>
+                  ),
+                },
+                {
+                  title: tr('adjustment'),
+                  width: 160,
+                  render: (_, r) =>
+                    r.hasCorrection === false ||
+                    r.prevAdjAddQty == null ||
+                    r.prevAdjCutQty == null ||
+                    (correctionDecimal(r.prevAdjAddQty).isZero() &&
+                      correctionDecimal(r.prevAdjCutQty).isZero()) ? (
+                      '—'
+                    ) : (
+                      <span>
+                        <span
+                          className={
+                            correctionDecimal(r.prevAdjAddQty).isZero()
+                              ? styles.zero
+                              : styles.positive
+                          }
+                          title={correctionDisplay(r.prevAdjAddQty, 'quantity').exact}
+                        >
+                          +
+                          {correctionDisplay(r.prevAdjAddQty, 'quantity').display.replace('件', '')}
+                        </span>{' '}
+                        /{' '}
+                        <span
+                          className={
+                            correctionDecimal(r.prevAdjCutQty).isZero()
+                              ? styles.zero
+                              : styles.negative
+                          }
+                          title={correctionDisplay(r.prevAdjCutQty, 'quantity').exact}
+                        >
+                          −
+                          {correctionDisplay(r.prevAdjCutQty, 'quantity').display.replace('件', '')}
+                        </span>
+                      </span>
+                    ),
+                },
+                {
+                  title: tr('correctedProgress'),
+                  width: 160,
+                  render: (_, r) => (
+                    <div
+                      className={shell.stackCell}
+                      title={Number(r.targetAmount) === 0 ? tr('noTarget') : undefined}
+                    >
+                      <strong>
+                        {r.hasCorrection === false ? '—' : percent(r.correctionProgress)}
+                      </strong>
+                      {r.hasCorrection !== false && r.correctionProgress != null && (
+                        <div
+                          className={styles.progress}
+                          role="img"
+                          aria-label={`纠偏后进度 ${r.correctionProgress}%，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+                        >
+                          <span
+                            style={{
+                              width: `${Math.max(0, Math.min(100, Number(r.correctionProgress)))}%`,
+                              background: salesPlanProgressBarColor(Number(r.correctionProgress)),
+                            }}
+                          />
+                          {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </div>
+          <footer className={shell.queueFooter}>
+            <div className={shell.footerControls}>
+              <div className={shell.pageSizeControl}>
+                <span>{t('common.assistantSurface.regionalApproval.pagination.pageSize')}</span>
+                <Select
+                  size="small"
+                  aria-label={t('common.assistantSurface.regionalApproval.pagination.pageSize')}
+                  value={pageSize}
+                  onChange={(value) => {
+                    setPageSize(value);
+                    setPage(1);
+                  }}
+                >
+                  {[10, 20, 50, 100].map((size) => (
+                    <Select.Option key={size} value={size}>
+                      {t('common.assistantSurface.regionalApproval.pagination.pageSizeValue', {
+                        count: size,
+                      })}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </div>
+              <span>
+                {t('common.assistantSurface.regionalApproval.pagination.total', { count: total })}
+              </span>
+              <Pagination
+                size="small"
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={(value) => {
+                  setSelected(undefined);
+                  setPage(value);
+                }}
+              />
+            </div>
+          </footer>
+        </section>
+      </div>
       {selected && detailClient && (
         <CorrectionDetail
           t={t}

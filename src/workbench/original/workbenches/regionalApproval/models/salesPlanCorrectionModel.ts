@@ -1,5 +1,6 @@
 import { salesPlanActionReceiptMatches } from './salesPlanActionModel.ts';
 import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
+import { salesPlanSkuNodeComparison } from './salesPlanDetailModel.ts';
 import { Decimal } from 'decimal.js';
 import { z } from 'zod';
 import {
@@ -217,12 +218,15 @@ export function correctionReadDetail(detail: GeaSalesPlanDetail): GeaSalesPlanDe
   if (detail.currentVersion.status < 10) throw new Error('月初计划尚未终审');
   return {
     ...detail,
-    skus: detail.skus.map((sku) => ({
-      ...sku,
-      qty: correctionDecimal(sku.categoryConfirmedQty).toFixed(),
-      corrBaseQty: correctionDecimal(sku.categoryConfirmedQty).toFixed(),
-      amt: correctionDecimal(sku.categoryConfirmedAmount).toFixed(2),
-    })),
+    skus: detail.skus.map((sku) => {
+      const confirmed = salesPlanSkuNodeComparison(sku, 'category');
+      return {
+        ...sku,
+        qty: correctionDecimal(confirmed.currentQty).toFixed(),
+        corrBaseQty: correctionDecimal(confirmed.currentQty).toFixed(),
+        amt: correctionDecimal(confirmed.currentAmount).toFixed(2),
+      };
+    }),
   };
 }
 
