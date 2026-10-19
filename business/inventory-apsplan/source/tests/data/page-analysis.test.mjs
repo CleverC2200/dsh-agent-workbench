@@ -26,7 +26,7 @@ test('partial failure analyzes available inventory without inventing order concl
     ]),
     true,
   );
-  assert.match(result.copy, /库存量1万件/);
+  assert.match(result.copy, /库存量1万箱/);
   assert.match(result.title, /结合需求评估/);
   assert.doesNotMatch(result.title + result.copy, /90%|缺货明细|GEA_|SQL|暂不可用|仍在加载|不推断/);
 });
@@ -40,7 +40,7 @@ test('available shortage produces a conclusion during loading', () => {
   );
   assert.match(result.title, /订单仍有缺口/);
   assert.match(result.copy, /订单满足率93.49%/);
-  assert.match(result.copy, /订单缺货量6.51万件/);
+  assert.match(result.copy, /订单缺货量6.51万箱/);
   assert.match(result.copy, /核对缺货品项/);
   assert.doesNotMatch(result.copy, /库存过高|库存充足|下降|上涨|仍在加载|不推断/);
 });
@@ -90,8 +90,8 @@ test('multi-day shipment totals are labelled as period totals, not one-day volum
       },
     ]),
   );
-  assert.match(result.copy, /期间发货量3万件/);
-  assert.match(result.title, /期间发货量3万件/);
+  assert.match(result.copy, /期间发货量3万箱/);
+  assert.match(result.title, /期间发货量3万箱/);
   assert.doesNotMatch(result.copy, /日发货量/);
 });
 test('a single-day shipment briefing retains its daily label', () => {
@@ -100,5 +100,5 @@ test('a single-day shipment briefing retains its daily label', () => {
     start: '2026-09-23',
     granularity: 'day',
   });
-  assert.match(result.copy, /日发货量0万件/);
+  assert.match(result.copy, /日发货量0万箱/);
 });

@@ -36,7 +36,7 @@ const sum = (values: (number | null)[]) =>
     : null;
 const qty = (value: number) =>
   Math.abs(value) >= 10000
-    ? `${(value / 10000).toFixed(1)}万件`
+    ? `${(value / 10000).toFixed(1)}万箱`
     : `${Math.ceil(value).toLocaleString('zh-CN')}件`;
 const key = (base: string, sku: string) => JSON.stringify([base, sku]);
 export function buildInventoryInsight(input: {

@@ -78,7 +78,7 @@ const KPI_COPY: Record<KpiKey, { title: string; eyebrow: string; target: string 
 function formatMetric(value: number | null, unit: MetricValue['unit'], compact = false) {
   if (value == null) return '-';
   if (unit === '件' && compact && Math.abs(value) >= 10_000)
-    return `${(value / 10_000).toFixed(2)} 万件`;
+    return `${(value / 10_000).toFixed(2)} 万箱`;
   if (unit === '%') return `${value.toFixed(2)}%`;
   if (unit === '天') return `${value.toFixed(1)} 天`;
   return `${Math.round(value).toLocaleString('zh-CN')} ${unit}`;

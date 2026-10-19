@@ -115,7 +115,7 @@ export function ReplenishmentDetailContent(input: Input) {
     <>
       <p>
         SKU {input.sku}
-        {input.baseName ? ` · ${input.baseName}` : ''} · 数量单位：件
+        {input.baseName ? ` · ${input.baseName}` : ''} · 数量单位：箱
       </p>
       <p>
         库存汇总{detail.summaryDate ? `（${detail.summaryDate}）` : ''}：

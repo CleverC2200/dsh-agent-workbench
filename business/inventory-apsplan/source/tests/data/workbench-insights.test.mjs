@@ -40,7 +40,7 @@ test('从订单履约事实生成品类预警和基地品类严重项', () => {
   assert.equal(result.warnings[0].metric, '订单满足率 92.00%');
   assert.equal(result.warnings[0].trend, '较上期 -3.00pp');
   assert.equal(result.actions[0].scope, '西南 × 休闲');
-  assert.match(result.actions[0].diagnosis, /缺货0.00万件/);
+  assert.match(result.actions[0].diagnosis, /缺货0.00万箱/);
 });
 
 test('缺失、异常和查询失败的数据不生成判断', () => {
