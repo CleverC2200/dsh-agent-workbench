@@ -19,6 +19,10 @@ const copy = {
     '暂时无法定位消息目标，请确认对应功能已安装，或在消息待办中查看。',
     'The destination could not be located. Check that its feature is installed or open the inbox.',
   ],
+  navigationServiceUnavailable: [
+    '消息服务暂不可用，请重试。',
+    'Message service is temporarily unavailable. Retry.',
+  ],
   navigationFailed: [
     '消息打开或回执未完成，请重试。',
     'Opening the message or confirming arrival did not finish. Retry.',

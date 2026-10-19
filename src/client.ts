@@ -11,6 +11,7 @@ import {
   selectResource,
   resourceWorkspace,
   mountNativeResourceSelection,
+  openNativeAgentSession,
   type ResourceSummary,
   type NativeResourceSelection,
 } from './resource-selection.ts';
@@ -136,6 +137,13 @@ export function apply(ctx: Context): void {
   const workbench = new WorkbenchController(
     {
       panel: (id) => ctx.layout.selectPanel(id),
+      openAgentSession: async (session) => {
+        if (!nativeResources) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
+        const signal = AbortSignal.any([ctx.layout.beginNavigation(), agentLifetime.signal]);
+        await openNativeAgentSession(nativeResources, session, signal, () =>
+          workbench.leaveDocument(),
+        );
+      },
       startAgent: async (preset) => {
         const host = nativeResources;
         if (!host) throw Error('WORKBENCH_AGENT_UNAVAILABLE');

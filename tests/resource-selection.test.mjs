@@ -8,9 +8,32 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { selectResource, mountNativeResourceSelection } = await import(
+const { selectResource, mountNativeResourceSelection, openNativeAgentSession } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].text).toString('base64')
 );
+test('opens the Host-created Skill editor Session in its real workspace and stages the target instruction', async () => {
+  const selection = {
+    sessionId: 'editor-session',
+    preset: 'skill-directory-editor',
+    cwd: '/owned/workcopy',
+    draft: 'Edit selected SKILL.md, then call skill_directory_apply.',
+  };
+  const opened = [];
+  const host = {
+    open: async (id, skill, signal, beforeOpen, draft) => {
+      await beforeOpen({ sessionId: id, preset: 'skill-directory-editor', cwd: '/owned/workcopy' });
+      opened.push({ id, skill, draft });
+    },
+  };
+  await openNativeAgentSession(host, selection, new AbortController().signal);
+  assert.deepEqual(opened, [{ id: 'editor-session', skill: undefined, draft: selection.draft }]);
+  host.open = async (id, skill, signal, beforeOpen) =>
+    beforeOpen({ sessionId: id, preset: 'standard', cwd: '/other' });
+  await assert.rejects(
+    openNativeAgentSession(host, selection, new AbortController().signal),
+    /PAGE_SESSION_PRESET_UNAVAILABLE/,
+  );
+});
 test('resource selection creates a new native session in the explicit workspace and stages a Skill without sending or replacing another session', async () => {
   const calls = [];
   const host = {

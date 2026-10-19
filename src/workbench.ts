@@ -12,10 +12,17 @@ export interface AgentWorkbench {
   register(page: WorkbenchPage): () => void;
   /** Start a fresh native Conversation with this preset; preserve defaults and existing Sessions. */
   startAgent(preset: string): Promise<void>;
+  openAgentSession(session: NativeAgentSession): Promise<void>;
   /** Open a page; a Document restores its associated Core Session without creating one. */
   open(id: MainPanelId): Promise<boolean>;
   /** Contribute a Document inside the actual main Conversation. */
   registerFrame(page: WorkbenchFramePage): () => void;
+}
+export interface NativeAgentSession {
+  sessionId: string;
+  preset: string;
+  cwd: string;
+  draft: string;
 }
 export interface DocumentSession {
   readonly sessionId: SessionId;
@@ -37,6 +44,7 @@ export interface WorkbenchSnapshot {
 export interface WorkbenchPorts {
   panel(id: MainPanelId): void;
   startAgent?(preset: string): Promise<void>;
+  openAgentSession?(session: NativeAgentSession): Promise<void>;
   hasPanel?(id: MainPanelId): boolean;
   document?(sessionId?: SessionId): void;
 }
@@ -169,6 +177,11 @@ export class WorkbenchController implements AgentWorkbench {
     if (this.disposed) throw Error('WORKBENCH_DISPOSED');
     if (!this.ports.startAgent) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
     await this.ports.startAgent(preset);
+  }
+  async openAgentSession(session: NativeAgentSession): Promise<void> {
+    if (this.disposed) throw Error('WORKBENCH_DISPOSED');
+    if (!this.ports.openAgentSession) throw Error('WORKBENCH_AGENT_UNAVAILABLE');
+    await this.ports.openAgentSession(session);
   }
   async open(id: MainPanelId): Promise<boolean> {
     if (this.disposed) return false;
