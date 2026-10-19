@@ -72,7 +72,7 @@ npm run typecheck:official
 name = "核心构建"
 icon = "tool"
 command = '''
-DSH_TYPECHECK_PROJECT=tsconfig.official.json npm run build:core
+npm run build:core
 '''
 
 [[actions]]

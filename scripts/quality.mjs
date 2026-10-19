@@ -42,7 +42,11 @@ for (const [file, hash] of [
     refuse(`QUALITY_POLICY_REQUIRED: ${file}`);
   }
 }
-const [mode, ...requested] = process.argv.slice(2);
+const [mode, ...arguments_] = process.argv.slice(2);
+const changedOnly = arguments_.includes('--changed');
+const requested = arguments_.filter((argument) => argument !== '--changed');
+if (changedOnly && requested.length)
+  throw Error('QUALITY_TARGET_REQUIRED: changed mode does not accept explicit files');
 if (!['lint', 'lint-audit', 'format', 'format-audit'].includes(mode)) {
   throw Error('QUALITY_MODE_REQUIRED: lint, lint-audit, format or format-audit');
 }
@@ -122,9 +126,45 @@ if (!lint) {
     if (extensions.has(extname(file)) && !['package-lock.json'].includes(file)) files.push(file);
   }
 }
-const selected = requested.length
+let selected = requested.length
   ? requested.map((file) => relative(root, resolve(root, file)))
   : files;
+if (changedOnly) {
+  const git = (args) => {
+    const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    if (result.status !== 0) throw Error('QUALITY_CHANGED_INPUT_REQUIRED: ' + result.stderr);
+    return result.stdout;
+  };
+  const base = process.env.QUALITY_BASE_SHA || undefined;
+  if (base !== undefined && !/^[a-f0-9]{40}$/.test(base))
+    throw Error('QUALITY_CHANGED_INPUT_REQUIRED: full base commit');
+  const tracked = new Set(git(['ls-files', '-z']).split('\0'));
+  const changes = new Set(
+    [
+      ...(base
+        ? git([
+            'diff',
+            '--name-only',
+            '-z',
+            git(['merge-base', base, 'HEAD']).trim(),
+            'HEAD',
+          ]).split('\0')
+        : []),
+      ...git(['diff', '--name-only', '-z', 'HEAD']).split('\0'),
+      ...files.filter((file) => !tracked.has(file)),
+    ].filter(Boolean),
+  );
+  if (
+    ![...changes].some((file) =>
+      /^(?:package(?:-lock)?\.json|\.ox(?:lint|fmt)rc\.json|scripts\/quality\.mjs)$/.test(file),
+    )
+  )
+    selected = files.filter((file) => changes.has(file));
+  if (!selected.length) {
+    output('QUALITY_INCREMENTAL: no changed maintained files');
+    process.exit(0);
+  }
+}
 if (!selected.length || selected.some((file) => !files.includes(file))) {
   throw Error('QUALITY_TARGET_REQUIRED: every requested path must be a maintained supported file');
 }

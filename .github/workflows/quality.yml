@@ -31,8 +31,16 @@ concurrency:
 jobs:
   candidate-scope:
     runs-on: ubuntu-latest
+    env:
+      QUALITY_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+      QUALITY_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    defaults:
+      run:
+        working-directory: candidate/dsh-agent-workbench
     outputs:
-      business-lane: ${{ steps.business.outputs.lane }}
+      dependency-review: ${{ steps.plan.outputs.dependency-review }}
+      applicability: ${{ steps.plan.outputs.applicability }}
+      browser: ${{ steps.plan.outputs.browser }}
       cores: ${{ steps.cores.outputs.cores }}
       gea-sha: ${{ steps.group.outputs.gea-sha }}
       workbench-sha: ${{ steps.group.outputs.workbench-sha }}
@@ -45,6 +53,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          path: candidate/dsh-agent-workbench
           persist-credentials: false
       - uses: actions/setup-node@v7
         id: node
@@ -54,13 +63,6 @@ jobs:
         env:
           QUALITY_SCOPE_ALLOWED: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         run: node scripts/run-quality-ci.mjs --phase scope
-      - name: Select the authorized business repair lane
-        id: business
-        env:
-          QUALITY_EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          QUALITY_PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          QUALITY_PR_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-        run: node scripts/business-profile-ci.mjs
       - name: Bind frozen peer source and actual own event
         id: group
         env:
@@ -88,10 +90,47 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          import { ciCores } from './candidate/dsh-gea-plugin/scripts/ci-core-policy.mjs';
+          import { ciCores } from '../dsh-gea-plugin/scripts/ci-core-policy.mjs';
           const heads = ciCores('required').map(core => core.head);
           fs.appendFileSync(process.env.GITHUB_OUTPUT, 'cores=' + JSON.stringify(heads) + '\n');
           NODE
+      - uses: actions/checkout@v7
+        with:
+          repository: CleverC2200/dsh-agent-manage
+          ref: ${{ steps.group.outputs.manage-sha }}
+          path: candidate/dsh-agent-manage
+          fetch-depth: 0
+          token: ${{ secrets.PLUGIN_SPLIT_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: CleverC2200/deepseek-harness
+          ref: ${{ fromJSON(steps.cores.outputs.cores)[0] }}
+          path: source/official-core
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Bind source-only planning inputs
+        id: planning-group
+        env:
+          QUALITY_GROUP_GEA: ${{ steps.group.outputs.gea-sha }}
+          QUALITY_GROUP_WORKBENCH: ${{ steps.group.outputs.workbench-sha }}
+          QUALITY_GROUP_MANAGE: ${{ steps.group.outputs.manage-sha }}
+          QUALITY_GROUP_ID: ${{ steps.group.outputs.group-id }}
+          QUALITY_SOURCE_KIND: ${{ steps.group.outputs.source-kind }}
+          QUALITY_BASELINE_ID: ${{ steps.group.outputs.baseline-id }}
+          CORE_HEAD: ${{ fromJSON(steps.cores.outputs.cores)[0] }}
+        run: node scripts/write-hosted-group.mjs --repo dsh-agent-workbench --root "$GITHUB_WORKSPACE" --core-head "$CORE_HEAD"
+      - name: Select source and documentation applicability before preparation
+        id: plan
+        env:
+          INPUT_SHA256: ${{ steps.planning-group.outputs.input-sha256 }}
+        run: node scripts/run-quality-ci.mjs --phase plan --input "$GITHUB_WORKSPACE/candidate-input.json" --core-source "$GITHUB_WORKSPACE/source/official-core" --final-group-sha256 "$INPUT_SHA256"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: quality-source-plan
+          path: quality-test-plan.json
+          if-no-files-found: warn
 
   gates:
     strategy:
@@ -148,6 +187,7 @@ jobs:
           path: source/official-core
           persist-credentials: false
       - name: Enable declared package managers
+        if: needs.candidate-scope.outputs.applicability == 'source'
         run: |
           npm install --global npm@11.11.0
           corepack enable
@@ -168,12 +208,14 @@ jobs:
           INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
         run: node scripts/run-quality-ci.mjs --phase verify-input --input "$QUALITY_CANDIDATE" --core-source "$GITHUB_WORKSPACE/source/official-core" --final-group-sha256 "$INPUT_SHA256"
       - name: Locate package download cache
+        if: needs.candidate-scope.outputs.applicability == 'source'
         id: cache-path
         working-directory: candidate/dsh-agent-manage
         shell: bash
         run: |
           echo "store=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
+        if: needs.candidate-scope.outputs.applicability == 'source'
         with:
           path: |
             ~/.npm
@@ -183,7 +225,7 @@ jobs:
           restore-keys: downloads-${{ runner.os }}-${{ runner.arch }}-
       - name: Prepare owned Core source without compiling
         id: sdk-paths
-        if: needs.candidate-scope.outputs.business-lane != 'business-profile'
+        if: needs.candidate-scope.outputs.applicability == 'source'
         env:
           CORE_HEAD: ${{ matrix.core }}
         run: |
@@ -191,28 +233,34 @@ jobs:
           node "$GITHUB_WORKSPACE/candidate/dsh-agent-manage/scripts/sdk-artifact-cache.mjs" --github-paths "$GITHUB_WORKSPACE/official-latest-standard"
       - uses: actions/cache/restore@v4
         id: sdk-cache
-        if: needs.candidate-scope.outputs.business-lane != 'business-profile'
+        if: needs.candidate-scope.outputs.applicability == 'source'
         with:
           path: ${{ steps.sdk-paths.outputs.paths }}
           key: sdk-${{ github.repository }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.node.outputs.node-version }}-${{ matrix.core }}-${{ hashFiles('candidate/dsh-agent-manage/scripts/prepare-official-sdk.mjs', 'candidate/dsh-agent-manage/scripts/sdk-artifact-cache.mjs', 'candidate/dsh-gea-plugin/scripts/supported-cores.json', 'source/official-core/pnpm-lock.yaml') }}
-      - uses: actions/cache/restore@v4
-        with:
-          path: playwright-browsers
-          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/dsh-agent-workbench/package-lock.json') }}
-      - name: Prepare independent SDK and run all public quality gates
+      - name: Prepare and verify reusable SDK before product checks
+        id: sdk-prepare
+        if: needs.candidate-scope.outputs.applicability == 'source'
         env:
-          INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
           CORE_HEAD: ${{ matrix.core }}
-          QUALITY_PHASE: ${{ needs.candidate-scope.outputs.business-lane == 'business-profile' && 'business-profile' || 'quality' }}
-        run: npm run quality:ci -- --input "$QUALITY_CANDIDATE" --prepare-sdk --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256" --phase "$QUALITY_PHASE"
-      - name: Save verified SDK cache without delaying required checks
-        if: success() && needs.candidate-scope.outputs.business-lane != 'business-profile' && steps.sdk-cache.outputs.cache-hit != 'true'
+        run: node "$GITHUB_WORKSPACE/candidate/dsh-agent-manage/scripts/prepare-official-sdk.mjs" --prepare --reuse-prepared --with-flock --core "$GITHUB_WORKSPACE/official-latest-standard" --core-head "$CORE_HEAD" --source "$GITHUB_WORKSPACE/source/official-core"
+      - name: Save verified SDK before unrelated product checks
+        if: success() && needs.candidate-scope.outputs.applicability == 'source' && steps.sdk-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         timeout-minutes: 1
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.sdk-paths.outputs.paths }}
           key: ${{ steps.sdk-cache.outputs.cache-primary-key }}
+      - uses: actions/cache/restore@v4
+        if: needs.candidate-scope.outputs.browser == 'true'
+        with:
+          path: playwright-browsers
+          key: chromium-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('candidate/dsh-agent-workbench/package-lock.json') }}
+      - name: Verify prepared SDK and run all public quality gates
+        env:
+          INPUT_SHA256: ${{ steps.group.outputs.input-sha256 }}
+          CORE_HEAD: ${{ matrix.core }}
+        run: npm run quality:ci -- --input "$QUALITY_CANDIDATE" --core-source "$GITHUB_WORKSPACE/source/official-core" --core-head "$CORE_HEAD" --browser --prepare-browser --final-group-sha256 "$INPUT_SHA256"
       - name: Keep independent quality results including failure
         if: always()
         uses: actions/upload-artifact@v7
@@ -224,18 +272,36 @@ jobs:
             quality-source-*.json
             quality-checks.json
             quality-test-plan.json
+            quality-prepared.json
             candidate/dsh-agent-workbench/.runtime/quality-fast.json
           if-no-files-found: warn
 
+  dependency-review:
+    needs: candidate-scope
+    if: needs.candidate-scope.outputs.dependency-review == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
   candidate-quality:
     if: always()
-    needs: [candidate-scope, gates]
+    needs: [candidate-scope, gates, dependency-review]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
       - uses: actions/setup-node@v7
         id: node
@@ -245,4 +311,6 @@ jobs:
         env:
           QUALITY_SCOPE_RESULT: ${{ needs.candidate-scope.result }}
           QUALITY_GATE_RESULT: ${{ needs.gates.result }}
+          QUALITY_DEPENDENCY_REVIEW_REQUIRED: ${{ needs.candidate-scope.outputs.dependency-review }}
+          QUALITY_DEPENDENCY_REVIEW_RESULT: ${{ needs.dependency-review.result }}
         run: node scripts/run-quality-ci.mjs --phase final

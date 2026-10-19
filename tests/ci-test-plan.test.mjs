@@ -1,9 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
+import {
+  copyFileSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+} from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
 import { selectCiTests } from '../scripts/ci-test-plan.mjs';
 
 function fixture(t, repo = 'dsh-agent-workbench') {
@@ -72,12 +82,13 @@ function fixture(t, repo = 'dsh-agent-workbench') {
   };
 }
 
-test('required checks run for a docs-only change without selecting the full pool', (t) => {
+test('ordinary documentation skips source tests without selecting the full pool', (t) => {
   const f = fixture(t);
   f.put(f.root, 'README.md', 'documentation');
   f.repositories[0].head = f.commit(f.root);
   const plan = f.plan();
-  assert.deepEqual(plan.files, ['tests/required.test.mjs']);
+  assert.deepEqual(plan.files, []);
+  assert.equal(plan.applicability, 'docs');
   assert.equal(plan.fullSuite, 'not-run');
   assert.equal(plan.runtime, false);
 });
@@ -506,11 +517,7 @@ test('script-only source policy and task status changes select their direct publ
   const production = JSON.parse(
     readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
   );
-  for (const [source, consumer] of [
-    ['scripts/ci-source-policy.mjs', 'scripts/business-profile-ci.test.mjs'],
-    ['scripts/business-profile-ci.mjs', 'scripts/business-profile-ci.test.mjs'],
-    ['scripts/task-status.mjs', 'tests/task-status.test.mjs'],
-  ])
+  for (const [source, consumer] of [['scripts/task-status.mjs', 'tests/task-status.test.mjs']])
     await t.test(source, (t) => {
       const f = fixture(t);
       f.policy.rules = production.rules;
@@ -518,7 +525,7 @@ test('script-only source policy and task status changes select their direct publ
       f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
       for (const file of [
         consumer,
-        'scripts/business-profile-ci.test.mjs',
+        'scripts/run-quality-checks.test.mjs',
         'tests/quality-ci.test.mjs',
         'tests/candidate-input.test.mjs',
       ])
@@ -534,7 +541,6 @@ test('script-only source policy and task status changes select their direct publ
         JSON.stringify(plan),
       );
       assert.ok(plan.files.includes('tests/required.test.mjs'));
-      assert.ok(plan.files.includes('tests/quality-ci.test.mjs'));
       assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
     });
 });
@@ -788,4 +794,358 @@ test('execution ownership rejects unknown, missing, self-referencing and cyclic 
     () => f.plan({ 'tests/affected.test.mjs': 'tests/peer.test.mjs' }),
     /CI_TEST_OWNER_REQUIRED/,
   );
+});
+
+function productionFixture(t) {
+  const f = fixture(t);
+  Object.assign(
+    f.policy,
+    JSON.parse(readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url))),
+  );
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  for (const file of new Set([
+    ...f.policy.required,
+    ...f.policy.rules.flatMap((rule) => rule.tests),
+  ]))
+    f.put(f.root, file, 'export const fixture = true;');
+  for (const file of [
+    'scripts/run-quality-checks.test.mjs',
+    'business/inventory-fc/source/inventory-light-plugins/tests/fixture.test.mjs',
+    'business/inventory-apsplan/source/tests/data/fixture.test.mjs',
+  ])
+    f.put(f.root, file, 'export const fixture = true;');
+  return f;
+}
+
+test('production policy preserves actual build and provenance regression consumers', async (t) => {
+  for (const [source, consumer] of [
+    ['scripts/static-author-provenance.mjs', 'tests/static-author-provenance.test.mjs'],
+    ['scripts/html-author.mjs', 'tests/html-sample-resource.test.mjs'],
+    ['scripts/build-inventory.mjs', 'tests/inventory-storage-build.test.mjs'],
+    ['scripts/build.mjs', 'tests/core-resource-build.test.mjs'],
+  ])
+    await t.test(source, (t) => {
+      const f = productionFixture(t);
+      for (const file of [source, consumer, 'scripts/build-html-sample.mjs'])
+        f.put(f.root, file, readFileSync(new URL('../' + file, import.meta.url), 'utf8'));
+      f.checkpoint();
+      f.put(f.root, source, readFileSync(join(f.root, source), 'utf8') + '\n');
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.ok(
+        plan.reasons['dsh-agent-workbench/' + source].includes(consumer),
+        JSON.stringify(plan),
+      );
+      assert.ok(!plan.files.includes('tests/unrelated.test.mjs'));
+      assert.equal(plan.fullSuite, 'not-run');
+    });
+});
+
+test('test files and consumed raw fixtures remain selectable with production policy', async (t) => {
+  for (const changed of ['scripts/raw-consumer.test.mjs', 'tests/fixtures/input.raw'])
+    await t.test(changed, (t) => {
+      const f = productionFixture(t);
+      const consumer = 'scripts/raw-consumer.test.mjs';
+      f.put(f.root, consumer, "readFileSync('../tests/fixtures/input.raw');");
+      f.put(f.root, 'tests/fixtures/input.raw', 'original bytes');
+      f.checkpoint();
+      f.put(f.root, changed, readFileSync(join(f.root, changed), 'utf8') + '\n');
+      f.repositories[0].head = f.commit(f.root);
+      assert.ok(f.plan().reasons['dsh-agent-workbench/' + changed].includes(consumer));
+    });
+});
+
+test('exclusive engineering rules cannot suppress a changed test or a consumed fixture', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^tests/',
+    tests: ['tests/required.test.mjs'],
+    exclusive: true,
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/affected.test.mjs', "readFileSync('tests/fixtures/input.raw');");
+  f.put(f.root, 'tests/fixtures/input.raw', 'original bytes');
+  f.checkpoint();
+  f.put(f.root, 'tests/affected.test.mjs', "readFileSync('tests/fixtures/input.raw');\n");
+  f.put(f.root, 'tests/fixtures/input.raw', 'updated bytes');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  for (const file of ['tests/affected.test.mjs', 'tests/fixtures/input.raw'])
+    assert.ok(plan.reasons['dsh-agent-workbench/' + file].includes('tests/affected.test.mjs'));
+});
+
+test('an unmapped own test fixture is rejected instead of silently receiving a green plan', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'tests/fixtures/unmapped.raw', 'unmapped bytes');
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(f.plan, /CI_TEST_IMPACT_UNMAPPED/);
+});
+
+test('documentation applicability includes every peer change and rejects runtime resources', async (t) => {
+  for (const file of [
+    'docs/guide.md',
+    'README.md',
+    'business-resources/skills/example/SKILL.md',
+    'docs/skills/example.md',
+    'docs/prompt.md',
+    'docs/input.txt',
+    'src/value.ts',
+  ])
+    await t.test(file, (t) => {
+      const f = fixture(t);
+      f.put(f.root, 'README.md', 'ordinary documentation');
+      const peer = f.repositories[1];
+      f.put(peer.path, file, file.endsWith('.ts') ? 'export const value = 2;' : 'updated input');
+      peer.head = f.commit(peer.path);
+      f.repositories[0].head = f.commit(f.root);
+      const plan = f.plan();
+      assert.equal(
+        plan.applicability,
+        ['docs/guide.md', 'README.md'].includes(file) ? 'docs' : 'source',
+      );
+      if (plan.applicability === 'docs') {
+        assert.deepEqual(plan.files, []);
+        assert.equal(plan.browser, false);
+        assert.equal(plan.runtime, false);
+      }
+    });
+});
+
+test('runtime and test reads keep ordinary documentation in the source lane across repositories', async (t) => {
+  for (const owner of ['src/reader.mjs', 'tests/reader.test.mjs'])
+    await t.test(owner, (t) => {
+      const f = fixture(t);
+      const peer = f.repositories[2];
+      f.put(
+        peer.path,
+        owner,
+        "import { readFileSync } from 'node:fs'; readFileSync('../docs/guide.md');",
+      );
+      f.put(peer.path, 'docs/guide.md', 'original runtime input');
+      peer.head = f.commit(peer.path);
+      f.put(
+        f.root,
+        'scripts/quality-peer-baseline.json',
+        JSON.stringify({ repositories: f.repositories }),
+      );
+      f.checkpoint();
+      f.put(peer.path, 'docs/guide.md', 'changed runtime input');
+      peer.head = f.commit(peer.path);
+      assert.equal(f.plan().applicability, 'source');
+    });
+});
+
+test('an unchanged tuple does not claim documentation-only applicability', (t) => {
+  const f = fixture(t);
+  assert.equal(f.plan().applicability, 'source');
+  assert.ok(f.plan().files.length > 0);
+});
+
+test('the production policy avoids FC builds for unrelated business paths', async (t) => {
+  for (const [file, expected] of [
+    ['business/inventory-apsplan/page.json', false],
+    ['business/inventory-fc/page.json', true],
+  ])
+    await t.test(file, (t) => {
+      const f = productionFixture(t);
+      f.put(f.root, file, '{}');
+      if (!expected) {
+        f.put(f.root, 'tests/affected.test.mjs', `readFileSync('${file}');`);
+      }
+      f.checkpoint();
+      f.put(f.root, file, '{"updated":true}');
+      f.repositories[0].head = f.commit(f.root);
+      assert.equal(f.plan().files.includes('tests/inventory-storage-build.test.mjs'), expected);
+    });
+});
+
+test('only selected actual Workbench artifact consumers request the build', async (t) => {
+  for (const [body, expected] of [
+    ["import '../src/value.js';", false],
+    ["readFileSync('lib/client.js');", true],
+    ["readFileSync('static/mps/index.html');", true],
+    ["const text = 'lib/client.js';", false],
+  ])
+    await t.test(body, (t) => {
+      const f = fixture(t);
+      f.put(f.root, 'tests/required.test.mjs', body);
+      f.put(f.root, 'lib/client.js', 'compiled source');
+      f.put(f.root, 'static/mps/index.html', '<html></html>');
+      f.checkpoint();
+      f.put(f.root, 'src/value.ts', 'export const value = 2;');
+      f.repositories[0].head = f.commit(f.root);
+      assert.equal(f.plan().build, expected);
+    });
+});
+
+test('a CommonJS desktop helper selects one direct owner through require dependencies', (t) => {
+  const f = fixture(t);
+  f.policy.tests.push('desktop/*.test.cjs');
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'desktop/host.test.cjs', "require('./helper.test.cjs');");
+  f.put(f.root, 'desktop/helper.test.cjs', "require('../src/value.cjs');");
+  f.put(f.root, 'src/value.cjs', 'module.exports = 1;');
+  f.checkpoint();
+  f.put(f.root, 'src/value.cjs', 'module.exports = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan({ 'desktop/helper.test.cjs': 'desktop/host.test.cjs' });
+  assert.deepEqual(plan.reasons['dsh-agent-workbench/src/value.cjs'], ['desktop/host.test.cjs']);
+  assert.equal(plan.files.filter((file) => file === 'desktop/host.test.cjs').length, 1);
+  assert.ok(!plan.files.includes('desktop/helper.test.cjs'));
+  assert.equal(plan.executedBy['desktop/helper.test.cjs'], 'desktop/host.test.cjs');
+});
+
+test('the public docs lane validates the real frozen source without SDK or dependency preparation', (t) => {
+  const f = fixture(t);
+  const core = join(dirname(f.root), 'core-source');
+  mkdirSync(core);
+  const git = (root, ...args) =>
+    execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
+  git(core, 'init', '-q');
+  f.put(core, 'package.json', JSON.stringify({ packageManager: 'pnpm@11.11.0' }));
+  f.put(core, 'pnpm-lock.yaml', 'fixture original lock\n');
+  const coreHead = f.commit(core);
+  const names = [
+    '@cleverc2200/dsh-agent-workbench',
+    'dsh-agent-manage',
+    '@cleverc2200/gea-dsh-prototype',
+  ];
+  for (const [index, entry] of f.repositories.entries()) {
+    f.put(entry.path, 'package.json', JSON.stringify({ name: names[index], type: 'module' }));
+    f.put(entry.path, index === 0 ? 'package-lock.json' : 'pnpm-lock.yaml', 'frozen lock\n');
+  }
+  for (const name of [
+    'run-quality-ci.mjs',
+    'run-quality-checks.mjs',
+    'candidate-input.mjs',
+    'ci-test-plan.mjs',
+    'check-agent-knowledge.mjs',
+  ])
+    copyFileSync(new URL('../scripts/' + name, import.meta.url), join(f.root, 'scripts', name));
+  const manage = f.repositories[1];
+  mkdirSync(join(manage.path, 'scripts'));
+  for (const name of ['prepare-official-sdk.mjs', 'sdk-artifact-cache.mjs'])
+    copyFileSync(
+      new URL('../../dsh-agent-manage/scripts/' + name, import.meta.url),
+      join(manage.path, 'scripts', name),
+    );
+  f.put(
+    f.repositories[2].path,
+    'scripts/supported-cores.json',
+    JSON.stringify([
+      {
+        head: coreHead,
+        nodeMajor: 24,
+        packageManager: 'pnpm@11.11.0',
+        lockSha256: createHash('sha256')
+          .update(readFileSync(join(core, 'pnpm-lock.yaml')))
+          .digest('hex'),
+      },
+    ]),
+  );
+  f.put(
+    f.root,
+    'tsconfig.official.json',
+    JSON.stringify({
+      compilerOptions: {
+        paths: {
+          '@deepseek-ai/cordis': [
+            '../../official-latest-standard/vendor/cordis/lib/types/index.d.ts',
+          ],
+        },
+      },
+    }),
+  );
+  f.put(f.root, 'README.md', 'original documentation\n');
+  f.put(
+    f.root,
+    'agent-knowledge.json',
+    JSON.stringify({ entries: ['README.md'], paths: [], scripts: [] }),
+  );
+  for (const entry of f.repositories.slice(1)) entry.head = f.commit(entry.path);
+  f.put(
+    f.root,
+    'scripts/quality-peer-baseline.json',
+    JSON.stringify({ repositories: f.repositories }),
+  );
+  f.checkpoint();
+  const base = f.repositories[0].head;
+  f.put(f.root, 'README.md', 'updated documentation\n');
+  f.repositories[0].head = f.commit(f.root);
+  const input = join(dirname(f.root), 'integration-set.json');
+  f.put(
+    dirname(f.root),
+    'integration-set.json',
+    JSON.stringify({ core: coreHead, repositories: f.repositories }),
+  );
+  const args = () => [
+    '--input',
+    input,
+    '--core-source',
+    core,
+    '--final-group-sha256',
+    createHash('sha256').update(readFileSync(input)).digest('hex'),
+  ];
+  const output = join(dirname(f.root), 'github-output');
+  const invoke = (phase) =>
+    spawnSync(process.execPath, ['scripts/run-quality-ci.mjs', '--phase', phase, ...args()], {
+      cwd: f.root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        CI: 'true',
+        QUALITY_BASE_SHA: base,
+        GITHUB_OUTPUT: output,
+        GITHUB_EVENT_NAME: 'pull_request',
+        QUALITY_EXPECTED_SHA: f.repositories[0].head,
+      },
+    });
+  const planned = invoke('plan');
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+  assert.equal(JSON.parse(planned.stdout).applicability, 'docs');
+  assert.match(readFileSync(output, 'utf8'), /dependency-review=false/);
+  const checked = invoke('quality');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  const result = JSON.parse(checked.stdout.trim().split('\n').at(-1));
+  assert.equal(result.applicability, 'docs');
+  assert.equal(result.runtime, 'not-observed');
+  for (const entry of f.repositories)
+    assert.equal(existsSync(join(entry.path, 'node_modules')), false);
+  assert.equal(existsSync(join(f.root, 'lib')), false);
+  assert.equal(existsSync(join(dirname(f.root), 'official-latest-standard')), false);
+  const ownPackage = readFileSync(join(f.root, 'package.json'));
+  f.put(f.root, 'package.json', JSON.stringify({ ...JSON.parse(ownPackage), version: '1.0.1' }));
+  f.repositories[0].head = f.commit(f.root);
+  const refresh = () =>
+    f.put(
+      dirname(f.root),
+      'integration-set.json',
+      JSON.stringify({ core: coreHead, repositories: f.repositories }),
+    );
+  refresh();
+  writeFileSync(output, '');
+  const ownDependency = invoke('plan');
+  assert.equal(ownDependency.status, 0, ownDependency.stderr);
+  assert.match(readFileSync(output, 'utf8'), /dependency-review=true/);
+  writeFileSync(join(f.root, 'package.json'), ownPackage);
+  f.repositories[0].head = f.commit(f.root);
+  f.put(
+    manage.path,
+    'package.json',
+    JSON.stringify({
+      ...JSON.parse(readFileSync(join(manage.path, 'package.json'))),
+      version: '1.0.1',
+    }),
+  );
+  manage.head = f.commit(manage.path);
+  refresh();
+  writeFileSync(output, '');
+  const peerDependency = invoke('plan');
+  assert.equal(peerDependency.status, 0, peerDependency.stderr);
+  assert.equal(JSON.parse(peerDependency.stdout).applicability, 'source');
+  assert.match(readFileSync(output, 'utf8'), /dependency-review=false/);
+  f.put(f.repositories[2].path, 'pnpm-lock.yaml', 'changed lock\n');
+  const denied = invoke('plan');
+  assert.notEqual(denied.status, 0);
+  assert.match(denied.stderr, /CANDIDATE_LOCK/);
 });
