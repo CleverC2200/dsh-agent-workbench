@@ -49,13 +49,13 @@ import {
 import styles from './CorrectionWorkbench.module.css';
 
 const roles = ['region', 'province', 'area', 'category'] as const;
-const formatted = (value: string | undefined, kind: 'money' | 'quantity') => {
+const formatted = (value: string | null | undefined, kind: 'money' | 'quantity') => {
   const number = correctionDisplay(value, kind);
   return <span title={number.exact}>{number.display}</span>;
 };
-const money = (value?: string) => formatted(value, 'money');
-const quantity = (value?: string) => formatted(value, 'quantity');
-const percent = (v?: string) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
+const money = (value?: string | null) => formatted(value, 'money');
+const quantity = (value?: string | null) => formatted(value, 'quantity');
+const percent = (v?: string | null) => (v == null ? '—' : `${Number(v).toFixed(1)}%`);
 
 /** 纠偏是现有工作台中的一个视图，使用已认证的客户端能力。 */
 export function CorrectionWorkbench({
@@ -137,59 +137,13 @@ export function CorrectionWorkbench({
       orderType: 'Z' as const,
       signal: controller.signal,
     };
-    const load = async () => {
-      if (!selectedStatuses)
-        return queryClient.list.invoke({ ...base, pageNo: page, pageSize: 20 });
-      const pages = await Promise.all(
-        selectedStatuses.map(async (status) => {
-          const prefix = page * 20;
-          const first = await queryClient.list.invoke({
-            ...base,
-            status,
-            pageNo: 1,
-            pageSize: Math.min(200, prefix),
-          });
-          const rest = await Promise.all(
-            Array.from(
-              { length: Math.max(0, Math.ceil(Math.min(first.total, prefix) / first.size) - 1) },
-              (_, i) =>
-                queryClient.list.invoke({ ...base, status, pageNo: i + 2, pageSize: first.size }),
-            ),
-          );
-          return {
-            total: first.total,
-            summary: first.summary,
-            records: [first, ...rest].flatMap((p) => p.records),
-          };
-        }),
-      );
-      const records = pages
-        .flatMap((p) => p.records)
-        .toSorted((a, b) =>
-          String(b.updatedAt ?? b.planId).localeCompare(String(a.updatedAt ?? a.planId)),
-        );
-      return {
-        records: records.slice((page - 1) * 20, page * 20),
-        total: pages.reduce((n, p) => n + p.total, 0),
-        summary: pages.every((p) => p.summary)
-          ? {
-              targetAmount: pages
-                .reduce((n, p) => n.plus(p.summary!.targetAmount), correctionDecimal('0'))
-                .toFixed(2),
-              planAmount: pages
-                .reduce((n, p) => n.plus(p.summary!.planAmount), correctionDecimal('0'))
-                .toFixed(2),
-              diffAmount: pages
-                .reduce((n, p) => n.plus(p.summary!.diffAmount), correctionDecimal('0'))
-                .toFixed(2),
-              planQty: pages
-                .reduce((n, p) => n.plus(p.summary!.planQty), correctionDecimal('0'))
-                .toFixed(3),
-            }
-          : undefined,
-      };
-    };
-    void load()
+    void queryClient.list
+      .invoke({
+        ...base,
+        ...(selectedStatuses ? { statuses: selectedStatuses } : {}),
+        pageNo: page,
+        pageSize: 20,
+      })
       .then((result) => {
         if (controller.signal.aborted) return;
         if (
@@ -503,7 +457,7 @@ function CorrectionDetail({
     alive.current = true;
     const controller = new AbortController();
     void client.detail
-      .invoke({ planId: row.planId, signal: controller.signal })
+      .invoke({ planId: row.planId, orderType: 'Z', signal: controller.signal })
       .then((d) => {
         if (controller.signal.aborted) return;
         if (d.currentVersion.id !== row.versionId || !d.currentVersion.effective)
@@ -611,7 +565,7 @@ function CorrectionDetail({
       } else if (!operation.receipt) operation.receipt = await operation.attempt.retry();
       if (!alive.current) return;
       setPending({ ...operation });
-      const after = await client.detail.invoke({ planId: row.planId });
+      const after = await client.detail.invoke({ planId: row.planId, orderType: 'Z' });
       if (!verifyCorrectionAction(detail, after, operation.request, operation.receipt))
         throw new Error('操作回执已返回，但字段或日志尚未核对通过；请回读核对');
       if (alive.current) onSaved();

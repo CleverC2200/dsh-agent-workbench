@@ -89,7 +89,7 @@ export function correctionLine(
     participates: !base.isZero() || !delta.isZero(),
   };
 }
-export function correctionDisplay(value: string | undefined, kind: 'money' | 'quantity') {
+export function correctionDisplay(value: string | null | undefined, kind: 'money' | 'quantity') {
   try {
     const number = correctionDecimal(value);
     const sign = number.isNegative() && !number.isZero() ? '−' : '';
