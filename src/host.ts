@@ -40,16 +40,9 @@ export async function apply(ctx: Context, config: Config = {}): Promise<void> {
       ...['regional', 'category', 'mps'].map((id) =>
         fileURLToPath(new URL(`./static/${id}/`, import.meta.url)),
       ),
-      ...[
-        'fc',
-        'aqkc',
-        'dealer',
-        'qll',
-        'customer',
-        'orderworkbench',
-        'orderfulfillment',
-        'apsplan',
-      ].map((id) => fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url))),
+      ...['fc', 'aqkc', 'dealer', 'qll', 'customer', 'orderfulfillment', 'apsplan'].map((id) =>
+        fileURLToPath(new URL(`./business/inventory-${id}/`, import.meta.url)),
+      ),
     ]),
   ]);
   ctx.provide('workbenchPages', pages);

@@ -541,7 +541,7 @@ export function mountFramePresentation(
     return (
       <section
         ref={documentElement}
-        className="agent-workbench-ui agent-workbench-document"
+        className="agent-workbench-document"
         style={
           { '--workbench-ai-preferred-width': conversationWidth + 'px' } as React.CSSProperties
         }

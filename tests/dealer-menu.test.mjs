@@ -26,3 +26,15 @@ test('received optional dealer and personal pages join the inventory menu only w
   );
   assert.equal(hidden.find((item) => item.id === 'inventory-fc')?.disabled, true);
 });
+
+test('order menu omits the removed workbench even when an old directory still declares it', () => {
+  const orders = resolveBusinessMenu(
+    BUSINESS_MENU_PRESET,
+    new Map(['inventory-orderworkbench', 'inventory-orderfulfillment'].map((id) => [id, id])),
+  ).find((group) => group.key === 'orders');
+  assert.deepEqual(
+    orders.entries.map((entry) => entry.id),
+    ['inventory-orderfulfillment'],
+  );
+  assert.equal(orders.entries[0].disabled, false);
+});

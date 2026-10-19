@@ -52,7 +52,6 @@ const agents: Record<string, prompts.ConversationPromptConfig> = {
   'inventory-qll': prompts.fullChainStockConversation,
   'inventory-apsplan': prompts.supplyCoordinationConversation,
   'inventory-customer': prompts.customerStockConversation,
-  'inventory-orderworkbench': prompts.orderManagementConversation,
   'inventory-orderfulfillment': prompts.orderFulfillmentConversation,
 };
 const unavailableAccount = {
