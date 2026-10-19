@@ -150,7 +150,14 @@ export function RegionalApprovalResubmitDialog({
       if (isBackendHttpError(failure.cause)) {
         const id = reportSalesPlanError('sales-plan-submit', failure.cause);
         setRejection(
-          [businessSafeErrorMessage(failure.cause.backendMessage), tr('requestReference', { id })]
+          [
+            failure.cause.status < 500
+              ? businessSafeErrorMessage(
+                  failure.cause.backendMessage.replace(/^GEA_HTTP_\d{3}[：:]\s*/u, ''),
+                )
+              : undefined,
+            tr('requestReference', { id }),
+          ]
             .filter(Boolean)
             .join(' '),
         );
@@ -185,7 +192,7 @@ export function RegionalApprovalResubmitDialog({
             }
             onClick={() => void submit()}
           >
-            {tr(receipt ? 'refresh' : attempt ? 'retry' : 'confirm')}
+            {tr(receipt ? 'refresh' : attempt && retryable ? 'retry' : 'confirm')}
           </Button>
         </>
       }
@@ -203,7 +210,10 @@ export function RegionalApprovalResubmitDialog({
               name: source.currentUser.username,
             })}
           </p>
-          <p>{source.detail.logs.filter((log) => log.actionCode === 'REJECT').at(-1)?.remark}</p>
+          <p>
+            {source.detail.currentVersion.returnReason ??
+              source.detail.logs.filter((log) => log.actionCode === 'REJECT').at(-1)?.remark}
+          </p>
           {source.detail.currentVersion.orderType === 'M' && (
             <Alert type="info" content={tr('inheritance')} />
           )}
