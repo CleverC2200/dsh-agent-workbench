@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..'),
   source = resolve(root, 'prototypes/inventory-customer'),
   out = resolve(root, 'lib/business/inventory-customer');
-const theme = await readFile(resolve(root, 'theme/tokens.css'), 'utf8');
+const theme = (await readFile(resolve(root, 'theme/tokens.css'), 'utf8')).replace(/\r\n/g, '\n');
 if (
   createHash('sha256').update(theme).digest('hex') !==
   '19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66'
@@ -32,9 +32,9 @@ const styles =
 await mkdir(out, { recursive: true });
 await writeFile(
   resolve(out, 'index.html'),
-  '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>客户库存(开发中)</title><style>' +
+  '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>客户库存</title><style>' +
     styles +
-    '</style><body><main id="app"><aside class="prototype-notice" role="note">客户库存原型 · 开发中 · 模拟数据。原型业务角色、内置回复和任务提示仅为本地演示，不代表真实授权、模型结果或业务操作。<span id="prototype-sync-status" role="status" aria-live="polite"></span></aside><div id="root"></div></main><script>' +
+    '</style><body><main id="app"><aside class="prototype-notice" role="note">客户库存 · GEA受控只读。数据范围取决于当前登录身份及Consumer授权；未接入字段显示为未知。<span id="prototype-sync-status" role="status" aria-live="polite"></span></aside><div id="root"></div></main><script>' +
     code.replace(/<\/script/gi, '<\\/script') +
     '</script></body></html>',
 );
@@ -62,4 +62,4 @@ await writeFile(
     2,
   ) + '\n',
 );
-console.log('Built inventory-customer mock prototype from Workbench and Manage owners');
+console.log('Built inventory-customer governed-read page from Workbench and Manage owners');
