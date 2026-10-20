@@ -18,7 +18,19 @@ function coverage(summary: any, count: string) {
 }
 
 /** Put available facts in view without presenting a partial base scope as company stock. */
-export function fullChainCards(stock: any, orders: any, version = ''): FullChainCard[] {
+export function fullChainCards(
+  stock: any,
+  orders: any,
+  version = '',
+  snapshotDate = '',
+): FullChainCard[] {
+  const openOrders = snapshotDate
+    ? coveredValue(stock, 'known_open_orders', 'known_open_orders_count')
+    : null;
+  const allocated = snapshotDate
+    ? coveredValue(stock, 'known_allocated', 'known_allocated_count')
+    : null;
+  const snapshotCount = knownNumber(stock?.order_snapshot_count);
   return [
     {
       title: '当前库存',
@@ -74,13 +86,28 @@ export function fullChainCards(stock: any, orders: any, version = ''): FullChain
     },
     {
       title: '当前订单',
-      value: null,
+      value: openOrders,
       unit: '箱',
-      scope: '当前待发与备单阶段缺少来源',
+      scope:
+        openOrders == null
+          ? '当前待发与备单阶段缺少来源'
+          : `基地未备单量 · ${snapshotDate} · 范围 ${stock.known_open_orders_count}/${snapshotCount ?? '-'} 个SKU`,
       tab: 'shortage',
       details: [
         ['本月订单量', completeValue(orders, 'ordered'), '箱'],
         ['本月发货量', completeValue(orders, 'shipped'), '箱'],
+        ...(allocated == null
+          ? []
+          : [
+              [
+                '基地已备单占用' +
+                  (knownNumber(stock?.known_allocated_count) === snapshotCount
+                    ? ''
+                    : `（范围 ${stock.known_allocated_count}/${snapshotCount ?? '-'} 个SKU）`),
+                allocated,
+                '箱',
+              ] as Detail,
+            ]),
       ],
     },
   ];

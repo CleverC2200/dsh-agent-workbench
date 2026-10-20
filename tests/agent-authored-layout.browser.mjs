@@ -6,7 +6,7 @@ import { configuredPageHtml, configuredWire } from './fixtures/configured-page.m
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');
-async function mount(t, id, width) {
+async function mount(t, id, width, override) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
@@ -18,7 +18,8 @@ async function mount(t, id, width) {
   await page.exposeFunction('queryLayoutFixture', async (message) => {
     if (message.method === 'sql') {
       calls.push(message.parameters);
-      return wire(message.parameters);
+      const result = wire(message.parameters);
+      return override ? override(message.parameters, result) : result;
     }
     if (message.method === 'access') return { principalId: 'layout-user', consumerCode: id };
     if (message.method === 'context') return { ok: true };
@@ -80,6 +81,32 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
     }
     assert.deepEqual(errors, []);
   });
+test('qll execution headline shows dated base orders without deriving pending from monthly totals', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (query.queryId === 'inventory.summary')
+      Object.assign(result.rows[0], {
+        known_open_orders: 1049341,
+        known_open_orders_count: 3500,
+        known_allocated: 261249,
+        known_allocated_count: 3500,
+        order_snapshot_count: 3500,
+      });
+    return result;
+  });
+  const card = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('订单执行', { exact: true }) });
+  await expect(card).toContainText('104.93万箱');
+  await expect(card).toContainText('基地未备单量 · 2026-10-19 · 范围 3500/3500 个SKU');
+  await expect(card).toContainText('基地已备单占用');
+  await expect(card).toContainText('26.12万箱');
+  assert.equal(
+    calls.some((query) => query.queryId.startsWith('inventory.detail')),
+    false,
+  );
+  assert.deepEqual(errors, []);
+});
 test('dealer keeps original column order while display choices do not change queries or ten-row pagination', async (t) => {
   const { frame, calls } = await mount(t, 'dealer', 1280);
   await frame.getByRole('button', { name: 'SKU库存', exact: true }).click();

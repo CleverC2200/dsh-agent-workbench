@@ -53,7 +53,12 @@ export default function ConfiguredWorkbench() {
   );
   const stock = parts.base?.summary,
     orders = parts.orders?.summary;
-  const cards = fullChainCards(stock, orders, parts.base?.inventoryVersion);
+  const cards = fullChainCards(
+    stock,
+    orders,
+    parts.base?.inventoryVersion,
+    parts.base?.snapshotDate,
+  );
   cards[0].title = '库存水平';
   cards[2].title = '库存库龄';
   cards[4].title = '订单执行';
@@ -184,7 +189,7 @@ export default function ConfiguredWorkbench() {
               </div>
               <p>
                 <b>核心判断：</b>
-                数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。货龄展示最大库龄，当前订单阶段仍不能由库存占用量推断。
+                数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。订单执行主值为基地库存快照中的未备单量，已备单占用独立列示；货龄展示最大库龄，当前订单阶段仍不能由库存占用量推断。
               </p>
               <details className={common.scopeDetails}>
                 <summary>统计范围与口径</summary>

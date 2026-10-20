@@ -169,6 +169,33 @@ test('monthly forecast uses an exclusive next month and annual stock uses the en
   assert.equal(stock.values.stock_date, '2026-10-14');
 });
 
+test('both accuracy sources bind the selected base in configured summary and detail reads', async () => {
+  const { readWorkspaceQuery } = await load('business/shared/workspace-query.ts');
+  const config = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+  for (const name of ['sales-accuracy', 'demand-accuracy']) {
+    for (const summary of [false, true]) {
+      const calls = [];
+      await readWorkspaceQuery(
+        config,
+        name,
+        { start: '2026-10-01', end: '2026-10-20', base: '华东', summary },
+        {
+          execute: async (_, options) => {
+            calls.push(options);
+            return options.queryId.endsWith('.count') ? { rows: [{ total: 0 }] } : { rows: [] };
+          },
+        },
+      );
+      assert.ok(calls.length);
+      for (const call of calls) {
+        assert.equal(call.values.base_mode, 'equal');
+        assert.equal(call.values.base, '华东');
+        assert.equal(call.values.source_flag, name === 'sales-accuracy' ? '销售口径' : '基地口径');
+      }
+    }
+  }
+});
+
 test('Host rereads adjacent SQL on each presentation and rejects mismatched Agent identity', async (t) => {
   const { HtmlPages } = await load('src/html-pages.ts', [
     {

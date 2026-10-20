@@ -13,6 +13,14 @@ await build({
   format: 'esm',
 });
 const { deriveMetrics } = await import(join(dir, 'metrics.mjs'));
+await build({
+  entryPoints: ['app/data/adapter.ts'],
+  outfile: join(dir, 'adapter.mjs'),
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+});
+const { metricValues } = await import(join(dir, 'adapter.mjs'));
 const row = {
   month: '202609',
   initial_plan: 100,
@@ -42,6 +50,51 @@ test('偏差先累加再除计划，避免正负抵消或行百分比平均', ()
   });
   const expected = ((1 - 941 / 1000 + (1 - 900 / 1041)) / 2) * 100;
   assert.equal(deriveMetrics(d)['销售提报准确率'].value, expected);
+});
+test('基地准确率使用本基地基础量，公司汇总仍按计划量加权', () => {
+  for (const id of ['sales-accuracy', 'demand-accuracy']) {
+    const d = structuredClone(data);
+    d.sections = [
+      {
+        id,
+        status: 'ready',
+        rows: [
+          {
+            ...row,
+            base: '华东',
+            initial_plan: 100,
+            adjusted_plan: 100,
+            initial_deviation: 0,
+            adjusted_deviation: 0,
+            actual: 100,
+          },
+          {
+            ...row,
+            base: '郑州',
+            initial_plan: 900,
+            adjusted_plan: 900,
+            initial_deviation: 900,
+            adjusted_deviation: 900,
+            actual: 0,
+          },
+        ],
+      },
+    ];
+    const name = id === 'sales-accuracy' ? '销售提报准确率' : '需求预测准确率';
+    assert.equal(metricValues(d, { base: '华东' })[name], 100);
+    assert.equal(metricValues(d, { base: '郑州' })[name], 0);
+    assert.ok(Math.abs(metricValues(d)[name] - 10) < 1e-10);
+    assert.ok(Number.isNaN(metricValues(d, { base: '不存在的基地' })[name]));
+  }
+});
+test('未归属基地保留公司合计，完整基地准确率不以已归属部分替代', () => {
+  const d = structuredClone(data);
+  d.sections[0].rows = [
+    { ...row, base: '华东' },
+    { ...row, base: null },
+  ];
+  assert.equal(metricValues(d)['销售提报准确率'], 79.5);
+  assert.ok(Number.isNaN(metricValues(d, { base: '华东' })['销售提报准确率']));
 });
 test('需求准确率使用同字段口径，有数据自动生效、空表保持缺失', () => {
   const d = structuredClone(data);
