@@ -20,6 +20,14 @@
     },
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:prototypes/inventory-customer/|scripts/build-customer-prototype\\.mjs$|src/frame-presenter\\.tsx$|business/shared/(?:channel\\.js|sql-reader\\.ts|query-error\\.js)$)",
+      "tests": [
+        "tests/customer-inventory-loading.browser.mjs",
+        "tests/customer-inventory-data-source.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^src/(?:workbench/api-log|business-views|workbench/page)|^tests/api-log",
       "tests": ["tests/api-log-center.browser.mjs", "tests/api-log-batch.browser.mjs"]
     },

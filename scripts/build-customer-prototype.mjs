@@ -3,6 +3,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
+import { customerShellMarkup } from '../prototypes/inventory-customer/load-state.js';
 const root = resolve(import.meta.dirname, '..'),
   source = resolve(root, 'prototypes/inventory-customer'),
   out = resolve(root, 'lib/business/inventory-customer');
@@ -34,7 +35,9 @@ await writeFile(
   resolve(out, 'index.html'),
   '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>客户库存</title><style>' +
     styles +
-    '</style><body><main id="app"><aside class="prototype-notice" role="note">客户库存 · GEA受控只读。数据范围取决于当前登录身份及Consumer授权；未接入字段显示为未知。<span id="prototype-sync-status" role="status" aria-live="polite"></span></aside><div id="root"></div></main><script>' +
+    '</style><body><main id="app"><p id="prototype-sync-status" class="prototype-notice" role="status" aria-live="polite"></p><p id="customer-load-status" role="status" aria-live="polite">客户库存界面尚未启动，数据尚未读取。</p><div id="root">' +
+    customerShellMarkup() +
+    '</div></main><script>' +
     code.replace(/<\/script/gi, '<\\/script') +
     '</script></body></html>',
 );
