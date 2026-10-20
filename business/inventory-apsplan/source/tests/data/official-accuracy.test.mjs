@@ -87,6 +87,15 @@ test('基地准确率使用本基地基础量，公司汇总仍按计划量加�
     assert.ok(Number.isNaN(metricValues(d, { base: '不存在的基地' })[name]));
   }
 });
+test('未归属基地保留公司合计，完整基地准确率不以已归属部分替代', () => {
+  const d = structuredClone(data);
+  d.sections[0].rows = [
+    { ...row, base: '华东' },
+    { ...row, base: null },
+  ];
+  assert.equal(metricValues(d)['销售提报准确率'], 79.5);
+  assert.ok(Number.isNaN(metricValues(d, { base: '华东' })['销售提报准确率']));
+});
 test('需求准确率使用同字段口径，有数据自动生效、空表保持缺失', () => {
   const d = structuredClone(data);
   d.sections = [{ ...d.sections[0], id: 'demand-accuracy' }];

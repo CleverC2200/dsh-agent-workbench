@@ -6707,6 +6707,25 @@ export default function Home({
                   : live.error}
               </p>
             )}
+            {live.data?.sections
+              .filter(
+                (section) =>
+                  ['sales-accuracy', 'demand-accuracy'].includes(section.id) &&
+                  section.status === 'ready',
+              )
+              .map((section) => {
+                const unassigned = section.rows
+                  .filter((row) => row.base == null || row.base === '')
+                  .reduce((count, row) => count + Number(row.records ?? 0), 0);
+                return unassigned > 0 ? (
+                  <p key={section.id}>
+                    {section.id === 'sales-accuracy' ? '销售提报' : '需求预测'}
+                    {'有 ' +
+                      unassigned +
+                      ' 条记录未归属基地，保留在公司合计中；基地归属不全的完整指标保持未知，不分摊到各基地。'}
+                  </p>
+                ) : null;
+              })}
             {stockObservation && (
               <p>
                 {(
