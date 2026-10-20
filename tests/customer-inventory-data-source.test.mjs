@@ -101,7 +101,7 @@ test('customer summary preserves missing coverage and weights valid normal stock
     targetValue: null,
   };
   const summary = summarizeCustomerInventory([row, { ...row, quantity: 300, normalRatio: 100 }]);
-  assert.equal(summary.normalRatio, 95);
+  assert.equal(summary.normalRatio, null);
   assert.equal(summary.turnover, 120);
   const partial = summarizeCustomerInventory([row, { ...row, quantity: null }]);
   assert.equal(partial.quantity, 100);
@@ -127,7 +127,7 @@ test('headquarters retains totals when an individual customer is negative or mis
   assert.equal(result.totalValue, 3);
   assert.equal(result.anomalous, false);
   assert.equal(result.abnormalCustomerCount, 1);
-  assert.equal(result.normalRatio, 100);
+  assert.equal(result.normalRatio, null);
   assert.equal(result.turnover, 60);
 });
 const application = await readFile(
@@ -216,9 +216,9 @@ test('authoritative large-date quantities preserve anomalies and never fall back
   assert.equal(rows[4].largeDateQty, null);
   const summary = summarizeCustomerInventory(rows);
   assert.equal(summary.largeDateQty, 170);
-  assert.equal(summary.largeDateRatio, 12.5);
+  assert.equal(summary.largeDateRatio, (170 / 590) * 100);
   assert.equal(summary.largeDateCoverageCount, 6);
-  assert.equal(summary.largeDateRatioCoverageCount, 2);
+  assert.equal(summary.largeDateRatioCoverageCount, 6);
   assert.equal(summary.largeDateInvalidCount, 3);
   assert.equal(rows[6].largeDateRatio, null);
   assert.equal(summary.largeDateEstimated, false);
@@ -257,8 +257,8 @@ test('latest metric thresholds, risk totals and arithmetic structure rollup', ()
     { quantity: null },
   ];
   const summary = summarizeCustomerInventory(rows);
-  assert.equal(summary.riskCount, 4);
-  assert.equal(summary.highRiskCount, 2);
+  assert.equal(summary.riskCount, 3);
+  assert.equal(summary.highRiskCount, 1);
   assert.equal(summary.attentionCount, 2);
   assert.equal(summary.unknownCount, 1);
   assert.equal(summary.structureScore, 80);
@@ -333,4 +333,30 @@ test('customer inventory role views use live hierarchy and expose unavailable sa
   );
   assert.doesNotMatch(application, /MJ=\{hq:/);
   assert.doesNotMatch(application, /N\.manager!=="\\u5F20\\u65E0\\u5FCC"/);
+});
+
+test('isolated SKU discrepancies do not block customer or city aggregates or imply risk', () => {
+  const rows = mapCustomerInventoryRows([
+    {
+      snapshot_date: '2026-10-18',
+      cust_code: 'C1',
+      cust_name: '客户',
+      sku_rows: 1,
+      stock_coverage: 1,
+      stock_qty: 1000,
+      large_date_coverage: 1,
+      large_date_qty: 60,
+      large_date_invalid_sku: 1,
+    },
+  ]).rows;
+  assert.equal(rows[0].largeDateRatio, 6);
+  assert.equal(rows[0].normalRatio, 94);
+  assert.equal(rows[0].largeDateInvalid, false);
+  const summary = summarizeCustomerInventory(rows);
+  assert.equal(summary.largeDateRatio, 6);
+  assert.equal(summary.largeDateSkuIssueCount, 1);
+  assert.equal(
+    customerInventoryStatus({ ...rows[0], largeDateRatio: 1, structureScore: 90 }),
+    'healthy',
+  );
 });
