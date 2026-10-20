@@ -9,6 +9,26 @@ export const CUSTOMER_INVENTORY_TABLE = 'agents_scm_cust_jxc_ai_daliy_d';
 // Keep the SQL fixed. GEA supplies the current business identity and enforces
 // the consumer's table/column grant before any row reaches this page.
 export const CUSTOMER_INVENTORY_SQL = `
+WITH sku AS (
+  SELECT stat_date, cust_code, material_code,
+    MAX(cust_name) AS cust_name, MAX(region_name) AS region_name,
+    MAX(province_region_name) AS province_region_name,
+    CASE WHEN COUNT(stock_qty) = COUNT(*) THEN SUM(stock_qty) END AS stock_qty,
+    CASE WHEN COUNT(stock_amt) = COUNT(*) THEN SUM(stock_amt) END AS stock_amt,
+    CASE WHEN COUNT(pack_unitqty) = COUNT(*) THEN SUM(pack_unitqty) END AS in_transit_qty,
+    CASE WHEN COUNT(normal_stock_qty) = COUNT(*) THEN SUM(normal_stock_qty) END AS normal_stock_qty,
+    CASE WHEN COUNT(over120_final_qty) = COUNT(*) THEN SUM(over120_final_qty) END AS large_date_qty,
+    SUM(CASE WHEN over120_final_qty < 0 OR over120_final_qty > stock_qty THEN 1 ELSE 0 END) AS large_date_invalid_sku,
+    CASE WHEN COUNT(sales_qty_30days) = COUNT(*) THEN SUM(sales_qty_30days) END AS sales_qty_30days
+  FROM agents_scm_cust_jxc_ai_daliy_d
+  WHERE stat_date = (SELECT MAX(stat_date) FROM agents_scm_cust_jxc_ai_daliy_d)
+  GROUP BY stat_date, cust_code, material_code
+), weighted AS (
+  SELECT sku.*,
+    SUM(stock_qty) OVER (PARTITION BY stat_date, cust_code) AS total_stock,
+    SUM(sales_qty_30days) OVER (PARTITION BY stat_date, cust_code) AS total_sales
+  FROM sku
+)
 SELECT
   DATE_FORMAT(inventory.stat_date, '%Y-%m-%d') AS snapshot_date,
   inventory.cust_code,
@@ -19,6 +39,24 @@ SELECT
   SUM(stock_amt) AS stock_amt,
   SUM(sales_qty_30days) AS sales_qty_30days,
   SUM(normal_stock_qty) AS normal_stock_qty,
+  SUM(large_date_qty) AS large_date_qty,
+  COUNT(large_date_qty) AS large_date_coverage,
+  SUM(large_date_invalid_sku) AS large_date_invalid_sku,
+  SUM(in_transit_qty) AS in_transit_qty,
+  COUNT(in_transit_qty) AS transit_coverage,
+  COUNT(*) - COUNT(material_code) AS structure_missing_sku,
+  SUM(CASE WHEN stock_qty < 0 THEN 1 ELSE 0 END) AS structure_negative_stock,
+  SUM(CASE WHEN sales_qty_30days < 0 THEN 1 ELSE 0 END) AS structure_negative_sales,
+  CASE WHEN COUNT(stock_qty) = COUNT(*) AND COUNT(sales_qty_30days) = COUNT(*)
+    AND COUNT(material_code) = COUNT(*)
+    AND MIN(stock_qty) >= 0 AND MIN(sales_qty_30days) >= 0
+    AND MAX(total_stock) > 0 AND MAX(total_sales) > 0
+    THEN 100 * (1 - 0.5 * SUM(ABS(stock_qty / NULLIF(total_stock, 0)
+      - sales_qty_30days / NULLIF(total_sales, 0)))) END AS structure_score,
+  CASE WHEN COUNT(stock_qty) = COUNT(*) AND COUNT(sales_qty_30days) = COUNT(*)
+    AND MIN(stock_qty) >= 0 AND MIN(sales_qty_30days) >= 0
+    THEN COUNT(DISTINCT CASE WHEN sales_qty_30days > 0
+      AND stock_qty / (sales_qty_30days / 30) < 60 THEN material_code END) END AS shortage_sku,
   COUNT(DISTINCT CASE
     WHEN stock_qty > 0 AND sales_qty_30days = 0 THEN material_code
     ELSE NULL
@@ -29,7 +67,7 @@ SELECT
   COUNT(sales_qty_30days) AS sales_coverage,
   COUNT(normal_stock_qty) AS normal_coverage
   ,MAX(dealer.dealer_receive_addr) AS dealer_receive_addr
-FROM agents_scm_cust_jxc_ai_daliy_d inventory
+FROM weighted inventory
 LEFT JOIN (
   SELECT cust_code, MAX(dealer_receive_addr) AS dealer_receive_addr
   FROM agents_dim_dealer_data_d
