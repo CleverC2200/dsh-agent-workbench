@@ -485,47 +485,6 @@
   border-radius: 2px;
 }
 
-.gea-shell-plugin-group {
-  display: grid;
-  gap: 2px;
-  margin-top: 2px;
-  padding-top: 4px;
-}
-
-.gea-shell-plugin {
-  min-height: 32px !important;
-  padding-block: 6px !important;
-  padding-left: 40px !important;
-  color: var(--gea-sidebar-ink) !important;
-  font-size: 12px !important;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.gea-shell-plugin:hover {
-  color: #df1732 !important;
-  background: #fffafb !important;
-}
-
-.gea-shell-plugin.is-active {
-  color: #d0132c !important;
-  background: #fff0f2 !important;
-}
-
-.gea-shell-plugin-dot {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #c7ced8;
-}
-
-.gea-shell-plugin:hover .gea-shell-plugin-dot,
-.gea-shell-plugin.is-active .gea-shell-plugin-dot {
-  background: #df1732;
-}
-
 .gea-shell-nav-section {
   display: grid;
   gap: 2px;
@@ -1055,31 +1014,6 @@
   text-align: left;
 }
 
-.gea-home-panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 11px;
-}
-
-.gea-home-panel-head strong {
-  color: #2c2f34;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.gea-home-panel-head small {
-  color: #a0a4aa;
-  font-size: 11px;
-}
-
-.gea-home-panel-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
 .gea-home-panel-item {
   display: flex;
   min-width: 0;
@@ -1105,67 +1039,12 @@
   outline-offset: 2px;
 }
 
-.gea-home-panel-copy {
-  display: grid;
-  min-width: 0;
-  flex: 1 1 auto;
-  gap: 2px;
-}
-
-.gea-home-panel-copy strong {
-  color: #2c2f34;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.gea-home-panel-copy small {
-  color: #9a9a96;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.gea-home-panel-note {
-  margin: 2px 0 0;
-  color: #9a9a96;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.gea-home-panel-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 11px;
-}
-
-.gea-home-panel-more {
-  padding: 7px 13px;
-  border: 1px solid #e9d7da !important;
-  border-radius: 999px;
-  background: #fff7f8 !important;
-  color: #c14049;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.gea-home-panel-more:hover {
-  border-color: #e7a4ae !important;
-  background: #fff0f2 !important;
-}
-
 .gea-home-prompts {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   margin-top: 16px;
-}
-
-.gea-home-panel .gea-home-prompts {
-  justify-content: flex-start;
-  margin-top: 0;
 }
 
 .gea-home-prompts button {

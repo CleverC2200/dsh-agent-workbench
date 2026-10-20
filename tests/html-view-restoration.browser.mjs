@@ -539,7 +539,7 @@ test('received MPS publishes the committed visible demand edits and removes the 
     ).applied,
     true,
   );
-  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估');
+  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   const stale = await page.evaluate(() =>
     window.applyMock({ kind: 'setValue', target: 'step:ship', value: 'old' }),
   );
@@ -604,7 +604,15 @@ test('received MPS context covers each mounted original step and preserves sampl
     ['capacity', '产能评估'],
     ['gap', '缺口处置'],
   ]) {
-    await frame.locator('.ap-page-tab').filter({ hasText: label }).click();
+    if (['plans', 'gap'].includes(key)) {
+      await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
+      await frame
+        .getByRole('button', {
+          name: key === 'plans' ? '查看原月度计划模拟' : '查看原缺口模拟',
+          exact: true,
+        })
+        .click();
+    } else await frame.locator('.ap-page-tab').filter({ hasText: label }).click();
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -625,10 +633,26 @@ test('received MPS context covers each mounted original step and preserves sampl
       (step) => window.mockContexts['plan-category-production'].parts[step],
       key,
     );
-    if (key === 'check') assert.match(data.sources[0].note, /未同步/);
+    if (key === 'check') {
+      assert.equal(data.scope, 'local-check-only');
+      assert.equal(data.productSource, 'demo');
+      assert.equal(data.productCount, 15);
+      assert.equal(data.sourceSummaries.report.rowCount, 0);
+      assert.equal(data.businessSave, 'not-connected');
+    }
     if (key === 'process')
       assert.equal(data.rows.find((row) => row.sku === '300g 奶黄包').report, null);
-    if (key === 'ship') assert.ok(data.missingBases.length > 0);
+    if (key === 'ship') {
+      assert.equal(data.scope, 'local-check-only');
+      assert.equal(data.unit, '件');
+      assert.equal(data.businessSave, 'not-connected');
+      assert.equal(data.nextStage, 'not-connected');
+      assert.equal(data.bases.length, 5);
+      assert.equal(
+        data.bases.some((base) => base.who === '濮阳'),
+        false,
+      );
+    }
     if (key === 'masterdata')
       assert.ok(data.skuMappings.some((row) => !row.base || !row.shop || !row.lineId));
     if (key === 'plans') assert.ok(data.rows.some((row) => row.ref === true));
@@ -940,7 +964,7 @@ test('MPS Host context stays at the latest visible step when an earlier transpor
   await frame.locator('tbody tr').first().locator('input').fill('2100000');
   await frame.locator('tbody tr').first().locator('input').blur();
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
-  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估');
+  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   await page.evaluate(() => window.releaseHostContext());
   await expect
     .poll(async () => Object.keys((await readHost())?.parts ?? {}).sort())
@@ -988,7 +1012,7 @@ test('MPS Host context discards a held old Session publication before restored a
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
   // Settle the authored navigation/hash event before rebinding its Session;
   // the external context delivery remains held across the entire switch.
-  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估');
+  await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   await expect
     .poll(() => page.evaluate(() => window.readState('plan-category-production')?.tab))
     .toBe('capacity');
@@ -1017,6 +1041,7 @@ test('MPS Host context discards a held old Session publication before restored a
     )
     .toEqual(['navigation', 'ship']);
   assert.deepEqual(await readHost(), beforeSwitch);
+  await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.locator('.author-draft-recovery pre')).toHaveText('新Session未发文字');
 });
 test('MPS Host context does not receive a delayed old snapshot after the authored page hides', async (t) => {
@@ -1057,4 +1082,148 @@ test('MPS Host context remains unavailable after identity withdrawal even when a
   await expect.poll(readHost).toBeUndefined();
   await page.evaluate(() => window.releaseHostContext());
   assert.equal(await readHost(), undefined);
+});
+
+test('received MPS clears local files and in-flight file reads when the current Session changes', async (t) => {
+  const page = await fixture(t, ['mps']);
+  await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+  const frame = page.frameLocator('iframe');
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const creating = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await creating.getByLabel('评估月份', { exact: true }).fill('2026-12');
+  await creating.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  const csv =
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,P1,产品,汤圆,系列,组,8,9';
+  const upload = () =>
+    frame
+      .getByLabel('选择计划提报CSV')
+      .setInputFiles({ name: 'local.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+  await upload();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.check?.sourceSummaries?.report
+            ?.quantity,
+      ),
+    )
+    .toBe(8);
+  await frame.locator('body').evaluate(() => {
+    const read = File.prototype.text;
+    File.prototype.text = function () {
+      return new Promise((resolve) => {
+        window.releaseLocalFile = async () => resolve(await read.call(this));
+      });
+    };
+  });
+  await upload();
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
+    '正在读取本地文件',
+  );
+  await page.evaluate(() =>
+    window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
+  );
+  await frame.locator('body').evaluate(() => window.releaseLocalFile());
+  await expect(frame.getByLabel('评估版本选择').locator('option')).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.check?.sourceSummaries?.report
+            ?.rowCount,
+      ),
+    )
+    .toBe(0);
+  assert.equal(
+    await page.evaluate(() =>
+      Object.hasOwn(window.readState('plan-category-production'), 'report'),
+    ),
+    false,
+  );
+  await page.evaluate(() => window.switchViewSession('mock-session'));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.check?.sourceSummaries?.report
+            ?.rowCount,
+      ),
+    )
+    .toBe(0);
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
+    '当前期间无已读取记录',
+  );
+});
+
+for (const boundary of ['Session', 'identity']) {
+  test(`MPS S2 rejects delayed file input when ${boundary} resets the same initial draft id and month`, async (t) => {
+    const page = await fixture(t, ['mps']);
+    await page.clock.install({ time: new Date('2026-10-20T04:00:00Z') });
+    await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+    const frame = page.frameLocator('iframe');
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('129 个单品'));
+    await frame.locator('body').evaluate(() => {
+      const original = File.prototype.text;
+      File.prototype.text = function () {
+        return new Promise((resolve) => {
+          window.releaseShipmentFile = async () => resolve(await original.call(this));
+        });
+      };
+    });
+    await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+      name: 'old-identity.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(
+        '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,OLD,旧身份输入,汤圆,系列,组,1,0,0,1,0,0,0',
+      ),
+    });
+    await expect(frame.getByRole('status')).toContainText('正在校验');
+    if (boundary === 'Session')
+      await page.evaluate(() =>
+        window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
+      );
+    else
+      await page.evaluate(() =>
+        window.mockChannels['plan-category-production'].postMessage({ type: 'identity-changed' }),
+      );
+    await expect(frame.getByLabel('评估版本选择')).toHaveValue('local-1');
+    await frame.locator('body').evaluate(() => window.releaseShipmentFile());
+    await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+    await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('129 个单品'));
+    await expect(frame.getByRole('region', { name: '发货本地核对' })).not.toContainText(
+      'old-identity.csv',
+    );
+  });
+}
+
+test('MPS S2 publishes actual local inputs and carry output within the Host context budget and withdraws the old step on navigation', async (t) => {
+  const page = await fixture(t, ['mps']);
+  await page.clock.install({ time: new Date('2026-10-20T04:00:00Z') });
+  const readHost = await publicMpsContext(t, page);
+  await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
+  const frame = page.frameLocator('iframe');
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(645);
+  const demo = await readHost();
+  assert.ok(JSON.stringify(demo).length < 100000);
+  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+    name: 'local-ship.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,A,产品,汤圆,系列,组,220,10,10,10,100,200,80',
+    ),
+  });
+  await expect.poll(async () => (await readHost())?.parts?.ship?.totals?.fin).toBe(300);
+  const data = (await readHost()).parts.ship;
+  assert.equal(data.totals.end, 80);
+  assert.equal(data.rows[0][data.rowFields.indexOf('shipped')], 220);
+  assert.equal(data.rows[0][data.rowFields.indexOf('end')], 80);
+  assert.equal(data.carryToMonth, '2026-10');
+  assert.equal(data.nextStage, 'not-connected');
+  await frame.getByRole('button', { name: '下一步：需求加工与收敛', exact: true }).click();
+  await expect
+    .poll(async () => Object.keys((await readHost())?.parts ?? {}).sort())
+    .toEqual(['navigation', 'process']);
 });

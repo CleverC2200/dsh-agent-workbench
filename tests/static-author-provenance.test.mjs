@@ -43,6 +43,17 @@ for (const page of ['category', 'mps']) {
       () => verifyFixedAuthoredData(page, changed, source),
       /STATIC_AUTHORED_DATA_CHANGED/,
     );
+    const missing = {
+      ...files,
+      'app.js': files['app.js'].replace(
+        new RegExp(`const ${name}\\s*=`),
+        'const missingFixedData =',
+      ),
+    };
+    assert.throws(
+      () => verifyFixedAuthoredData(page, missing, source),
+      /STATIC_AUTHORED_DATA_CHANGED/,
+    );
     const metadata = structuredClone(source);
     metadata.fixedAuthoredData[name].sha256 = '0'.repeat(64);
     assert.throws(
