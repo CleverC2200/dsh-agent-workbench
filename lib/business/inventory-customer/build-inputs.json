@@ -5,15 +5,16 @@
     "sha256": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66"
   },
   "inputs": {
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\customer-inventory-model.js": "ded96d0684b5ded7c1f87f8fd48a8421c9f19e28facc4224df22daf11b650355",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\customer-inventory-model.js": "df318289419728794b80d046da84fc56df7cd668a572efa70f85756580c0036b",
     "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\metric-definitions.js": "69c0c524a29ad84b3d5735c15136473462b0692785059c791192394ddf09b78a",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\load-state.js": "a907ade4d79d9babb17c0b5b54eef4253ad71fd31c19708b049093f291225d7f",
     "D:\\dsh-agent-workbench\\business\\shared\\view-state.js": "f97984820b3c079fd88a86f78a6e30433689088ee4fe63212f40380df9c5ac98",
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\application.js": "8bc15b0187601c3fa449eaf5aea5bcfff249ab81ab12caa713c260ea77ec6265",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\application.js": "2380cce255ffcd2ee242c3c760ce1dd4ccbc2f62de7ef944e26ea1c30741a979",
     "D:\\dsh-agent-workbench\\business\\shared\\governed-parameters.ts": "1a9e16b857be66afd1c1e446ff0bb6c782df90efce69f33155ed7f0f7402a33f",
     "D:\\dsh-agent-workbench\\business\\shared\\query-error.js": "c3a621fbafda738bd1d275b53b847df17140a4a071b83ef31f8e0bb2754848ff",
     "D:\\dsh-agent-workbench\\business\\shared\\channel.js": "ce1055f422b00070d68f84cb099bc9d65ef1cb2bd30709b7d6a2c1a9b018a79e",
     "D:\\dsh-agent-workbench\\business\\shared\\sql-reader.ts": "7ac75378a0bb4639a4666388796e073d3c5c1e42249d03d0dc8520a1fc88b4d1",
     "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\data-source.js": "55b3517ddc54011a9a1aad96089b7059620d76496e1d1dcd4d1758201760cbf2",
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\entry.js": "157e2b3bbe516d0f63eea119d625587963165ec6edadf946e310243ed6ef9928"
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\entry.js": "706eeeda5f9589591343d791100cce56860a352df740e708cca4f2bcf6647e2b"
   }
 }

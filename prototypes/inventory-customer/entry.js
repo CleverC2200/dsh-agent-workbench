@@ -1,6 +1,7 @@
 import { mountCustomerPrototype } from './application.js';
 import { loadCustomerInventory } from './data-source.js';
 import { ready, publish, reportElements } from '../../business/shared/channel.js';
+import { customerLoadLocales, customerLoadFailure } from './load-state.js';
 
 let snapshot;
 let inventorySnapshot;
@@ -9,13 +10,36 @@ let unregister = () => {};
 let attached = true;
 let publication = 0;
 let publishing = false;
+let hasData = false;
+let loadGeneration = 0;
+let loadController;
+const copy = customerLoadLocales[document.documentElement.lang.startsWith('en') ? 'en' : 'zh'];
+const emptyInventory = () => ({ snapshot: null, rows: [] });
+const presentation = mountCustomerPrototype(report, emptyInventory());
+let loadState = 'waiting';
+function showLoadState(state) {
+  loadState = state;
+  const status = document.getElementById('customer-load-status');
+  if (status) {
+    status.textContent = copy[state] ?? '';
+    status.hidden = state === 'ready';
+    status.dataset.state = state;
+  }
+}
+showLoadState('waiting');
+const connectionTimer = setTimeout(() => {
+  if (loadState === 'waiting') showLoadState('timeout');
+}, 15000);
 function syncStatus(message) {
   const status = document.getElementById('prototype-sync-status');
   if (status) status.textContent = message;
 }
 async function readAuthorizationScope() {
   try {
-    const response = await fetch('/api/gea-html/identity', { cache: 'no-store' });
+    const response = await fetch('/api/gea-html/identity', {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(5000),
+    });
     if (!response.ok) return null;
     const identity = await response.json();
     const scope = identity?.customerInventory;
@@ -36,12 +60,13 @@ async function publishLatest() {
   try {
     let current;
     do {
+      if (!attached || !hasData || !snapshot) return;
       current = publication;
       const value = snapshot;
       try {
         // One in-flight context prevents older transport requests from overwriting newer facts.
         await publish(value);
-        if (!attached) return;
+        if (!attached || !hasData) return;
         if (current !== publication) continue;
         unregister = reportElements(
           'customer-prototype',
@@ -75,6 +100,7 @@ async function publishLatest() {
   }
 }
 function report(value) {
+  if (!hasData || !attached) return;
   snapshot = {
     ...value,
     source: 'gea-governed-sql',
@@ -92,31 +118,77 @@ function report(value) {
 }
 ready
   .then(async () => {
-    syncStatus('正在读取最新客户库存…');
-    const inventory = await loadCustomerInventory();
-    if (!inventory.rows.length) throw Error('当前授权范围没有客户库存数据');
+    clearTimeout(connectionTimer);
+    showLoadState('loading');
+    const generation = ++loadGeneration;
+    loadController = new AbortController();
+    const inventory = await loadCustomerInventory({
+      signal: AbortSignal.any([loadController.signal, AbortSignal.timeout(90000)]),
+    });
+    if (!attached || generation !== loadGeneration) return;
     authorizationScope = await readAuthorizationScope();
+    if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
+    hasData = true;
     syncStatus('');
-    mountCustomerPrototype(report, inventory);
+    showLoadState(inventory.rows.length ? 'ready' : 'empty');
+    presentation.update(inventory);
   })
   .catch((error) => {
-    document.getElementById('app').textContent = `客户库存读取失败：${error.message}，请重新进入。`;
+    if (attached && !loadController?.signal.aborted) showLoadState(customerLoadFailure(error));
   });
+window.addEventListener('customer-render-failed', () => {
+  hasData = false;
+  loadGeneration++;
+  loadController?.abort();
+  clearTimeout(connectionTimer);
+  snapshot = undefined;
+  publication++;
+  unregister();
+  syncStatus('');
+  showLoadState('render');
+});
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent || event.data?.protocol !== 'customer-inventory-status')
+    return;
+  if (event.data.failed) {
+    invalidateInventory();
+    showLoadState(
+      customerLoadFailure(event.data.error) === 'query'
+        ? 'connection'
+        : customerLoadFailure(event.data.error),
+    );
+  }
+});
 window.addEventListener('gea-session-changed', () => {
   attached = true;
   if (snapshot) report(snapshot);
 });
-window.addEventListener('gea-identity-changed', () => {
+function invalidateInventory() {
   attached = false;
+  hasData = false;
+  loadGeneration++;
+  loadController?.abort();
+  clearTimeout(connectionTimer);
   publication++;
   unregister();
-  syncStatus('页面连接已变化，请重新进入。');
-});
+  snapshot = undefined;
+  authorizationScope = undefined;
+  inventorySnapshot = undefined;
+  presentation.update(emptyInventory());
+  syncStatus('');
+  showLoadState('changed');
+}
+window.addEventListener('gea-identity-changed', invalidateInventory);
+window.addEventListener('gea-session-changing', invalidateInventory);
 window.addEventListener(
   'pagehide',
   () => {
     attached = false;
+    hasData = false;
+    loadGeneration++;
+    clearTimeout(connectionTimer);
+    loadController?.abort();
     publication++;
     unregister();
   },

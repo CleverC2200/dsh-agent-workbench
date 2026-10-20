@@ -7,7 +7,7 @@
   "skills": ["skills/customer/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
-    "consumerCode": "customer-inventory-preview",
+    "consumerCode": "customer_inventory",
     "readonly": true,
     "contract": "gea-html-v2"
   },

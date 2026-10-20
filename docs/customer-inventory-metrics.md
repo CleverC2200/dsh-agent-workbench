@@ -6,6 +6,14 @@ Source: [客户库存知识库](https://klvcodtump.feishu.cn/docx/Alj7d3XXjow3Gr
 
 The layout is unchanged. Governed read-only SQL first groups each snapshot by customer/SKU, then computes structure differences and shortage items before customer rollup. GEA remains the identity and permission authority.
 
+## 加载与失败展示 / Loading and failures
+
+客户库存先渲染六张指标卡、筛选框和空表格，再等待页面连接及受控查询；未读取的指标显示 `—`，不发布为库存证据。15秒仍未连接时展示未就绪提示，读取有90秒取消上限；身份范围的可选读取最多等待5秒。Agent拒权、数据拒权、资源未就绪、会话失效和查询失败均保留界面并说明原因。成功的空结果单独标明“当前授权范围暂无客户库存数据”。身份或会话变化立即清除旧数据并取消在途读取，迟到结果不得回填。HTML内保留静态卡片和表格作为脚本未执行时的兜底，不含样例库存，也不绕过GEA权限。
+
+The six KPI cards, filters and empty table render before the page connection and governed query. Unread KPIs remain `—` and are not published as inventory evidence. A missing connection is explained after15 seconds; reads are cancelled after90 seconds and the optional identity projection waits at most5 seconds. Agent/data denial, missing resources, expired sessions and query failures preserve the layout with distinct messages. A successful empty result is not an error. Identity or session changes clear old data and cancel in-flight reads; late results cannot refill the page. Static HTML cards/table remain when scripts do not execute, without mock facts or an authorization bypass.
+
+刷新按钮重新加载页面，由宿主重新建立授权连接和读取数据。Refresh reloads the page so the Host re-establishes authorization and reads current data.
+
 | Metric / 指标           | Implementation / 实现与限制                                                                                                                                                                                                                                                                                                               |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Quantity / 库存量       | Sum upstream stock_qty, in boxes; no in-transit added. Upstream stock-report simulation is not independently verified. 汇总上游现库存；提报推演未独立核验。                                                                                                                                                                               |

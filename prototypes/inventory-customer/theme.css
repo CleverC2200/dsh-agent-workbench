@@ -36,7 +36,48 @@ html body {
   flex-direction: column;
   overflow: hidden;
 }
+#customer-load-status {
+  flex: none;
+  margin: 0;
+  padding: 12px 16px;
+  background: var(--workbench-subtle, #f6f7fa);
+  color: var(--workbench-text, #24324a);
+  border-bottom: 1px solid var(--workbench-border, #e3e6ea);
+}
+#customer-load-status[data-state='denied'],
+#customer-load-status[data-state='dataDenied'],
+#customer-load-status[data-state='connection'],
+#customer-load-status[data-state='query'] {
+  color: var(--workbench-danger, #c62136);
+}
+.customer-static-shell {
+  padding: 20px;
+}
+.customer-static-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.customer-static-metrics article {
+  padding: 20px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 12px;
+  background: var(--workbench-surface);
+}
+.customer-static-metrics strong {
+  font-size: 30px;
+}
+.customer-static-shell table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.customer-static-shell th,
+.customer-static-shell td {
+  padding: 16px;
+  border: 1px solid var(--workbench-border);
+}
 .prototype-notice {
+  margin: 0;
   flex: none;
   padding: 10px 16px;
   border-bottom: 1px solid var(--workbench-border);
@@ -44,9 +85,17 @@ html body {
   color: var(--workbench-body);
   font-size: var(--workbench-font-size);
 }
+.prototype-notice:empty {
+  display: none;
+}
 #root {
   flex: 1;
   overflow: auto;
+}
+/* These tooltips contain read-only text and must not block the role menu. */
+.arco-tooltip,
+.arco-tooltip * {
+  pointer-events: none !important;
 }
 .app-shell,
 .app-main,
