@@ -1,93 +1,40 @@
-# Codex 原生环境。创建工作树只检查工具；准备依赖前先按本票冻结输入准备官方 SDK 与相邻仓。
 version = 1
 name = "dsh-agent-workbench"
 
 [setup]
-script = '''
-set -eu
-node --version
-node --input-type=module <<'NODE'
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8'));
-const actual = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
-if (packageManager !== `npm@${actual}`) throw Error(`包管理器版本不匹配：需要 ${packageManager}，当前 npm@${actual}`);
-console.log(packageManager);
-NODE
-'''
+script = "node --version && corepack --version"
 
 [[actions]]
-name = "工具检查"
+name = "工具与输入检查"
 icon = "tool"
-command = '''
-set -eu
-node --version
-node --input-type=module <<'NODE'
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8'));
-const actual = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
-if (packageManager !== `npm@${actual}`) throw Error(`包管理器版本不匹配：需要 ${packageManager}，当前 npm@${actual}`);
-console.log(packageManager);
-NODE
-'''
+command = "node ../dsh-gea-plugin/scripts/development-tasks.mjs check"
 
 [[actions]]
 name = "准备依赖"
 icon = "tool"
-command = '''
-set -eu
-node --version
-node --input-type=module <<'NODE'
-import { readFileSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-const { packageManager } = JSON.parse(readFileSync('package.json', 'utf8'));
-const actual = execFileSync('npm', ['--version'], { encoding: 'utf8' }).trim();
-if (packageManager !== `npm@${actual}`) throw Error(`包管理器版本不匹配：需要 ${packageManager}，当前 npm@${actual}`);
-console.log(packageManager);
-NODE
-node --input-type=module <<'NODE'
-import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
-const missing = Object.values({ ...manifest.dependencies, ...manifest.devDependencies, ...manifest.optionalDependencies })
-  .filter(value => /^(file|link):/.test(value))
-  .map(value => resolve(value.replace(/^(file|link):/, ''), 'package.json'))
-  .filter(path => !existsSync(path));
-if (!existsSync('../dsh-gea-plugin/scripts/supported-cores.json')) missing.push('../dsh-gea-plugin/scripts/supported-cores.json');
-if (missing.length) throw Error(`本票的官方 SDK 或相邻 GEA 输入未就绪，请先按冻结输入准备对应路径：\n${missing.join('\n')}`);
-NODE
-node scripts/verify-official-input.mjs
-npm ci --ignore-scripts --prefer-offline --no-audit --no-fund
-'''
+command = "node ../dsh-gea-plugin/scripts/development-tasks.mjs prepare"
+
+[[actions]]
+name = "构建插件"
+icon = "tool"
+command = "node ../dsh-gea-plugin/scripts/development-tasks.mjs build"
 
 [[actions]]
 name = "类型检查"
 icon = "tool"
-command = '''
-npm run typecheck:official
-'''
+command = "node ../dsh-gea-plugin/scripts/development-tasks.mjs typecheck"
 
 [[actions]]
-name = "核心构建"
+name = "收尾与占用报告"
 icon = "tool"
-command = '''
-npm run build:core
-'''
+command = "node ../dsh-gea-plugin/scripts/development-tasks.mjs finish"
 
 [[actions]]
-name = "快速检查"
+name = "完整验收（冻结输入）"
 icon = "tool"
-command = '''
-npm run quality:fast
-'''
+command = 'node ../dsh-gea-plugin/scripts/development-tasks.mjs verify --input "$DSH_QUALITY_INPUT" --sha256 "$DSH_QUALITY_INPUT_SHA256"'
 
 [[actions]]
-name = "完整质量验收（需冻结输入）"
+name = "准备原始插件包（冻结输入）"
 icon = "tool"
-command = '''
-set -eu
-: "${DSH_QUALITY_INPUT:?请指定本票冻结组输入的绝对路径}"
-: "${DSH_QUALITY_INPUT_SHA256:?请指定冻结输入原始字节的 SHA256}"
-npm run quality:ci -- --input "$DSH_QUALITY_INPUT" --final-group-sha256 "$DSH_QUALITY_INPUT_SHA256" --browser
-'''
+command = 'node ../dsh-gea-plugin/scripts/pack-raw.mjs --input "$DSH_DELIVERY_INPUT" --repo dsh-agent-workbench --destination "$DSH_PACKAGE_OUTPUT"'
