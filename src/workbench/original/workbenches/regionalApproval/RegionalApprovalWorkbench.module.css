@@ -1634,3 +1634,30 @@
   width: 2px;
   background: rgb(var(--danger-6));
 }
+.headerRight {
+  min-width: max-content;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+}
+.versionComparisonBar {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+.versionComparisonField {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.versionComparisonBar :global(.arco-select) {
+  width: 100px;
+  font-weight: 400;
+}
+.returnReasons {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

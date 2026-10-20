@@ -321,8 +321,8 @@ test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段
     await expect(monthly).toContainText(order === 'Z' ? '¥800' : '¥11.48万');
     await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
     const sku = page.getByRole('row').filter({ hasText: '猪肉白菜水饺' }).last();
-    await expect(sku.getByRole('cell').nth(1)).toHaveText(order === 'Z' ? '100' : '-4');
-    await expect(sku.getByRole('cell').nth(3)).toHaveText(order === 'Z' ? '800' : '114,800');
+    await expect(sku.getByRole('cell').nth(1)).toHaveText(order === 'Z' ? '100¥800' : '-4¥114,800');
+    await expect(sku.getByRole('cell')).toHaveCount(3);
     if (order === 'Z') {
       await page.getByRole('tab', { name: '按区域', exact: true }).click();
       await page
@@ -331,8 +331,8 @@ test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段
         .click();
       const grouped = page.getByTestId('regional-approval-group-sku-summary');
       const groupedSku = grouped.getByRole('row').filter({ hasText: '猪肉白菜水饺' });
-      await expect(groupedSku.getByRole('cell').nth(1)).toHaveText('200');
-      await expect(groupedSku.getByRole('cell').nth(3)).toHaveText('1,600');
+      await expect(groupedSku.getByRole('cell').nth(1)).toHaveText('200¥1,600');
+      await expect(groupedSku.getByRole('cell')).toHaveCount(3);
     }
   }
 });

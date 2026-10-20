@@ -905,7 +905,8 @@
           "detailUnavailable": "Actions are unavailable because plan details could not be loaded. Refresh; the list record may not match its details.",
           "queueNotFresh": "The approval queue is refreshing or failed to load. Retained rows may be stale; wait for a successful refresh before acting.",
           "closedPeriod": "Approval is available only for an OPEN period.",
-          "notCurrentStage": "This plan is no longer at the selected approval node. Refresh the queue."
+          "notCurrentStage": "This plan is no longer at the selected approval node. Refresh the queue.",
+          "invalidQuantity": "Correct the group quantity first. Up to three decimals are allowed."
         },
         "errors": {
           "validation": "The request is invalid. Verify the status and reject reason, then start again.",
@@ -1155,6 +1156,8 @@
         "henan": "Henan Province",
         "sichuan": "Sichuan Province"
       },
+      "versionCompare": "Compare versions",
+      "versionCompareUnavailable": "No sales plans are available to compare",
       "organizationGroupCount": "{{count}} plans",
       "mixedApprovalStatus": "Multiple approval stages",
       "expandOrganization": "Expand organizations under {{plan}}",
@@ -1179,7 +1182,32 @@
       "inlineAdjustments": "View adjustment details",
       "versionTargetMissing": "This version has no monthly target",
       "comparePlan": "Version 2: {{amount}} / {{qty}}",
-      "compareProgress": "Version 2 amount progress: {{value}}"
+      "compareProgress": "Version 2 amount progress: {{value}}",
+      "inlineComparison": {
+        "title": "Compare versions in list",
+        "primary": "Version ①",
+        "compared": "Version ②",
+        "current": "Current version",
+        "previous": "Previous version",
+        "earlier": "{{count}} versions earlier",
+        "monthlyPrimary": "Monthly plan ①",
+        "monthlyCompared": "Monthly plan ②",
+        "difference": "Difference (① − ②)",
+        "returnReason": "Return reason",
+        "hint": "Compare each plan relative to its current version. Missing versions display —.",
+        "plan": "Monthly plan",
+        "confirmed": "Confirmed quantity",
+        "confirmedPrimary": "Confirmed quantity ①",
+        "confirmedCompared": "Confirmed quantity ②",
+        "missing": "The selected version is unavailable for this plan",
+        "allocation": "Allocate in proportion to original confirmed quantities, to three decimals. Split equally when the original total is zero.",
+        "allocationFailed": "Some allocated drafts could not be saved. Retry.",
+        "allocationSaving": "Saving allocated drafts",
+        "allocationRetry": "Retry saving",
+        "allocationReadOnly": "All plans in this group must be editable. Historical versions are read-only.",
+        "invalidQuantity": "Enter a nonnegative quantity with up to three decimals",
+        "groupScope": "{{plans}} plans · {{skus}} SKUs, summarized by version ①"
+      }
     },
     "contract": {
       "name": "Contract Review Agent",
