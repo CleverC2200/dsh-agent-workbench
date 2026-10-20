@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {
+  customerLoadFailure,
+  customerLoadLocales,
+} from '../prototypes/inventory-customer/load-state.js';
 import { customerMetricDefinitions } from '../prototypes/inventory-customer/metric-definitions.js';
 import { readFile } from 'node:fs/promises';
 import {
@@ -9,12 +13,50 @@ import {
   structureStatus,
   customerInventoryStatus,
   largeDateStatus,
+  buildCustomerHierarchy,
+  completeCustomerPath,
 } from '../prototypes/inventory-customer/customer-inventory-model.js';
+
+test('customer hierarchy and incomplete paths follow the latest loaded rows', () => {
+  assert.deepEqual(buildCustomerHierarchy([]), []);
+  const tree = buildCustomerHierarchy([
+    { region: '大区A', province: '省区A', cities: ['城市A', '城市B'] },
+    { region: '大区A', province: '省区A', cities: ['城市A'] },
+  ]);
+  assert.equal(tree.length, 1);
+  assert.equal(tree[0].children[0].children.length, 2);
+  assert.deepEqual(completeCustomerPath('region', [], tree), ['大区A']);
+  assert.deepEqual(completeCustomerPath('province', [], tree), ['大区A', '省区A']);
+  assert.deepEqual(completeCustomerPath('city', ['大区A', '省区A', '城市B'], tree), [
+    '大区A',
+    '省区A',
+    '城市B',
+  ]);
+});
 
 const source = await readFile(
   new URL('../prototypes/inventory-customer/data-source.js', import.meta.url),
   'utf8',
 );
+
+test('inventory loading copy distinguishes permission, resource, session and query failures in both locales', () => {
+  for (const [message, expected] of [
+    ['AGENT_ACCESS_DENIED', 'denied'],
+    ['DATA_PERMISSION_DENIED', 'dataDenied'],
+    ['PAGE_REFERENCE_LOGIN_REQUIRED', 'login'],
+    ['PAGE_AGENT_MISSING', 'resource'],
+    ['FIELD_NOT_PUBLISHED', 'resource'],
+    ['PAGE_AGENT_SESSION_MISMATCH', 'session'],
+    ['SESSION_EXPIRED', 'session'],
+    ['network unavailable', 'query'],
+  ]) {
+    assert.equal(customerLoadFailure(Error(message)), expected);
+  }
+  assert.deepEqual(
+    Object.keys(customerLoadLocales.zh).sort(),
+    Object.keys(customerLoadLocales.en).sort(),
+  );
+});
 
 test('metric dialogs separate formulas, state rules and data caveats', () => {
   assert.equal(Object.keys(customerMetricDefinitions).length, 6);
@@ -314,6 +356,26 @@ test('customer inventory keeps incomplete coverage unknown instead of filling ze
   assert.equal(result.rows[0].sales30, null);
   assert.equal(result.rows[0].turnover, null);
   assert.equal(result.rows[0].targetValue, null);
+});
+
+test('customer page and installed resource declarations use the confirmed formal Consumer', async () => {
+  const json = async (path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
+  const plugin = await json('../prototypes/inventory-customer/plugin.json');
+  const page = await json('../prototypes/inventory-customer/page.json');
+  const base = '../../dsh-agent-manage/business-resources/inventory-customer/';
+  const mcp = await json(base + 'mcp.json');
+  const prompt = await json(base + 'prompt.json');
+  const capability = await json(base + 'capability.json');
+  assert.equal(plugin.id, 'inventory-customer');
+  for (const consumer of [
+    plugin.gea.consumerCode,
+    page.consumerCode,
+    mcp.consumer.consumerCode,
+    prompt.consumerCode,
+    capability.data.consumerCode,
+  ]) {
+    assert.equal(consumer, 'customer_inventory');
+  }
 });
 
 test('customer inventory SQL is fixed to the granted latest snapshot table', () => {

@@ -24,6 +24,38 @@ export function parseDeliveryCities(value) {
   }
 }
 
+export function buildCustomerHierarchy(rows) {
+  const regions = new Map();
+  for (const row of rows) {
+    if (!regions.has(row.region)) regions.set(row.region, new Map());
+    const provinces = regions.get(row.region);
+    if (!provinces.has(row.province)) provinces.set(row.province, new Set());
+    for (const city of row.cities ?? []) provinces.get(row.province).add(city);
+  }
+  return [...regions].map(([region, provinces]) => ({
+    value: region,
+    label: region,
+    children: [...provinces].map(([province, cities]) => ({
+      value: province,
+      label: province,
+      children: [...cities].map((city) => ({ value: city, label: city })),
+    })),
+  }));
+}
+
+export function completeCustomerPath(role, path, hierarchy) {
+  const depth = { region: 1, province: 2, city: 3 }[role] ?? 0;
+  const result = [];
+  let options = hierarchy;
+  for (let index = 0; index < depth; index++) {
+    const node = options?.find((item) => item.value === path?.[index]) ?? options?.[0];
+    if (!node) break;
+    result.push(node.value);
+    options = node.children;
+  }
+  return result;
+}
+
 export function mapCustomerInventoryRows(rows) {
   if (!Array.isArray(rows)) throw Error('CUSTOMER_INVENTORY_RESULT_INVALID');
   let snapshot = null;

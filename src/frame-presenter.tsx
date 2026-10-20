@@ -302,6 +302,18 @@ export function mountFramePresentation(
     const connectionTransition = useRef<Promise<void>>(Promise.resolve());
     const title = typeof page.label === 'function' ? page.label() : (page.label ?? page.id);
     const src = typeof page.src === 'function' ? page.src() : page.src;
+    useEffect(() => {
+      if (page.id !== 'inventory-customer' || !loaded) return;
+      const failure = error || navigationError || identity.error;
+      frame.current?.contentWindow?.postMessage(
+        {
+          protocol: 'customer-inventory-status',
+          failed: Boolean(failure),
+          error: failure || '',
+        },
+        '*',
+      );
+    }, [page.id, loaded, error, navigationError, identity.error]);
     const Body = page.kind === 'local' ? page.body : undefined;
     const visibleReceipt = useSyncExternalStore(
       page.visibleRequest?.subscribe ?? noSubscribe,
