@@ -819,6 +819,12 @@ test('stdin shorthand and named wrapper parameters retain compiled source import
             ? 'src/workbench.ts'
             : 'src/workbench.ts';
     f.put(f.root, 'tests/' + file, readFileSync(new URL('./' + file, import.meta.url), 'utf8'));
+    if (file === 'html-author-layout.browser.mjs')
+      f.put(
+        f.root,
+        'tests/helpers/author-page.mjs',
+        readFileSync(new URL('./helpers/author-page.mjs', import.meta.url), 'utf8'),
+      );
     f.put(f.root, source, '/* initial */');
     f.checkpoint();
     f.put(f.root, source, '/* changed */');
