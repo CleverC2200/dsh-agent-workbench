@@ -7339,7 +7339,7 @@
         }
       },
       "request": {
-        "sql": "WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT COUNT(*) AS row_count, CASE WHEN COUNT(r.overaged_qty) = COUNT(*) THEN SUM(r.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(r.total_qty) = COUNT(*) THEN SUM(r.total_qty) ELSE NULL END AS total_qty, SUM(CASE WHEN r.overaged_qty IS NULL THEN 1 ELSE 0 END) AS missing_overaged_qty, SUM(CASE WHEN r.total_qty IS NULL THEN 1 ELSE 0 END) AS missing_total_qty, NULL AS weighted_age, SUM(CASE WHEN r.age_days >= 0 AND r.total_qty >= 0 THEN 1 ELSE 0 END) AS age_valid_count, SUM(CASE WHEN r.age_days >= 0 AND r.total_qty >= 0 THEN r.total_qty ELSE NULL END) AS age_weight_qty, MIN(r.age_days) AS min_age, MAX(r.age_days) AS max_age, SUM(CASE WHEN r.source_rows > 1 THEN 1 ELSE 0 END) AS duplicate_keys, COUNT(DISTINCT r.warehouseid) AS warehouse_count, COUNT(DISTINCT CASE WHEN r.is_low_stock = 1 THEN r.material_code ELSE NULL END) AS is_low_stock_sku_count, COUNT(DISTINCT CASE WHEN r.is_high_stock = 1 THEN r.material_code ELSE NULL END) AS is_high_stock_sku_count, COUNT(DISTINCT CASE WHEN r.is_overaged = 1 THEN r.material_code ELSE NULL END) AS is_overaged_sku_count, COUNT(DISTINCT CASE WHEN r.is_low_stock = 1 AND r.is_high_stock = 1 THEN r.material_code ELSE NULL END) AS conflicting_stock_flag_skus, CASE WHEN COUNT(r.available_qty) = COUNT(*) THEN SUM(r.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(r.pack_unit_qty) = COUNT(*) THEN SUM(r.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(r.freeze_qty) = COUNT(*) THEN SUM(r.freeze_qty) ELSE NULL END AS freeze_qty, COUNT(r.total_qty) AS total_qty_count, COUNT(r.overaged_qty) AS overaged_qty_count, COUNT(r.available_qty) AS available_qty_count, COUNT(r.pack_unit_qty) AS pack_unit_qty_count, COUNT(r.freeze_qty) AS freeze_qty_count, MAX(r.source_updated_at) AS source_updated_at FROM filtered AS r",
+        "sql": "WITH business_rows AS (SELECT t.stat_date AS stat_date, CASE WHEN COUNT(t.belong_base) = COUNT(*) AND COUNT(DISTINCT t.belong_base) = 1 THEN MAX(t.belong_base) ELSE NULL END AS belong_base, CASE WHEN COUNT(t.warehouse_type) = COUNT(*) AND COUNT(DISTINCT t.warehouse_type) = 1 THEN MAX(t.warehouse_type) ELSE NULL END AS warehouse_type, CASE WHEN COUNT(t.product_categ_name) = COUNT(*) AND COUNT(DISTINCT t.product_categ_name) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(t.material_group_name) = COUNT(*) AND COUNT(DISTINCT t.material_group_name) = 1 THEN MAX(t.material_group_name) ELSE NULL END AS material_group_name, t.material_code AS material_code, CASE WHEN COUNT(t.is_overaged) = COUNT(*) AND COUNT(DISTINCT t.is_overaged) = 1 THEN MAX(t.is_overaged) ELSE NULL END AS is_overaged, CASE WHEN COUNT(t.overaged_qty) = COUNT(*) AND COUNT(DISTINCT t.overaged_qty) = 1 THEN MAX(t.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(t.total_qty) = COUNT(*) AND COUNT(DISTINCT t.total_qty) = 1 THEN MAX(t.total_qty) ELSE NULL END AS total_qty, CASE WHEN COUNT(t.is_low_stock) = COUNT(*) AND COUNT(DISTINCT t.is_low_stock) = 1 THEN MAX(t.is_low_stock) ELSE NULL END AS is_low_stock, CASE WHEN COUNT(t.is_high_stock) = COUNT(*) AND COUNT(DISTINCT t.is_high_stock) = 1 THEN MAX(t.is_high_stock) ELSE NULL END AS is_high_stock, MAX(t.update_time) AS update_time, COUNT(*) AS source_rows, t.warehouseid AS warehouseid, CASE WHEN COUNT(t.warehouse_name) = COUNT(*) AND COUNT(DISTINCT t.warehouse_name) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(t.current_stock) = COUNT(*) AND COUNT(DISTINCT t.current_stock) = 1 THEN MAX(t.current_stock) ELSE NULL END AS current_stock, CASE WHEN COUNT(t.safe_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.safe_stock_qty) = 1 THEN MAX(t.safe_stock_qty) ELSE NULL END AS safe_stock_qty, CASE WHEN COUNT(t.target_stock_qty) = COUNT(*) AND COUNT(DISTINCT t.target_stock_qty) = 1 THEN MAX(t.target_stock_qty) ELSE NULL END AS target_stock_qty, CASE WHEN COUNT(t.age_days) = COUNT(*) AND COUNT(DISTINCT t.age_days) = 1 THEN MAX(t.age_days) ELSE NULL END AS age_days, CASE WHEN COUNT(t.available_qty) = COUNT(*) AND COUNT(DISTINCT t.available_qty) = 1 THEN MAX(t.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(t.pack_unit_qty) = COUNT(*) AND COUNT(DISTINCT t.pack_unit_qty) = 1 THEN MAX(t.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(t.freeze_qty) = COUNT(*) AND COUNT(DISTINCT t.freeze_qty) = 1 THEN MAX(t.freeze_qty) ELSE NULL END AS freeze_qty, MAX(t.source_updated_at) AS source_updated_at FROM agents_scm_inventory_sku_data_d AS t WHERE t.stat_date = CAST(:gea_p1 AS DATE) GROUP BY t.stat_date, t.warehouseid, t.material_code), filtered AS (SELECT r.stat_date AS stat_date, r.belong_base AS belong_base, r.warehouse_type AS warehouse_type, r.product_categ_name AS product_categ_name, r.material_group_name AS material_group_name, r.material_code AS material_code, r.is_overaged AS is_overaged, r.overaged_qty AS overaged_qty, r.total_qty AS total_qty, r.is_low_stock AS is_low_stock, r.is_high_stock AS is_high_stock, r.update_time AS update_time, r.source_rows AS source_rows, r.warehouseid AS warehouseid, r.warehouse_name AS warehouse_name, r.current_stock AS current_stock, r.safe_stock_qty AS safe_stock_qty, r.target_stock_qty AS target_stock_qty, r.age_days AS age_days, r.available_qty AS available_qty, r.pack_unit_qty AS pack_unit_qty, r.freeze_qty AS freeze_qty, r.source_updated_at AS source_updated_at FROM business_rows AS r WHERE (:gea_p2 = FALSE OR r.belong_base IN (:gea_p3)) AND (:gea_p4 = 'all' OR (:gea_p4 = 'equal' AND r.warehouse_type = :gea_p5) OR (:gea_p4 = 'missing' AND r.warehouse_type IS NULL)) AND (:gea_p6 = 'all' OR (:gea_p6 = 'equal' AND r.product_categ_name = :gea_p7) OR (:gea_p6 = 'missing' AND r.product_categ_name IS NULL)) AND (:gea_p8 = 'all' OR (:gea_p8 = 'equal' AND r.material_group_name = :gea_p9) OR (:gea_p8 = 'missing' AND r.material_group_name IS NULL)) AND (:gea_p10 = 'all' OR (:gea_p10 = 'equal' AND r.material_code = :gea_p11) OR (:gea_p10 = 'missing' AND r.material_code IS NULL)) AND (:gea_p12 = 'all' OR (:gea_p12 = 'equal' AND r.is_overaged = :gea_p13) OR (:gea_p12 = 'missing' AND r.is_overaged IS NULL)) AND (:gea_p14 = 'all' OR (:gea_p14 = 'equal' AND r.is_low_stock = :gea_p15) OR (:gea_p14 = 'missing' AND r.is_low_stock IS NULL)) AND (:gea_p16 = 'all' OR (:gea_p16 = 'equal' AND r.is_high_stock = :gea_p17) OR (:gea_p16 = 'missing' AND r.is_high_stock IS NULL))) SELECT COUNT(*) AS row_count, CASE WHEN COUNT(r.overaged_qty) = COUNT(*) THEN SUM(r.overaged_qty) ELSE NULL END AS overaged_qty, CASE WHEN COUNT(r.total_qty) = COUNT(*) THEN SUM(r.total_qty) ELSE NULL END AS total_qty, SUM(CASE WHEN r.overaged_qty IS NULL THEN 1 ELSE 0 END) AS missing_overaged_qty, SUM(CASE WHEN r.total_qty IS NULL THEN 1 ELSE 0 END) AS missing_total_qty, NULL AS weighted_age, SUM(CASE WHEN r.age_days >= 0 AND r.total_qty >= 0 THEN 1 ELSE 0 END) AS age_valid_count, SUM(CASE WHEN r.age_days >= 0 AND r.total_qty >= 0 THEN r.total_qty ELSE NULL END) AS age_weight_qty, MIN(r.age_days) AS min_age, MAX(r.age_days) AS max_age, SUM(CASE WHEN r.source_rows > 1 THEN 1 ELSE 0 END) AS duplicate_keys, COUNT(DISTINCT r.warehouseid) AS warehouse_count, COUNT(DISTINCT CASE WHEN r.is_low_stock = 1 THEN r.material_code ELSE NULL END) AS is_low_stock_sku_count, COUNT(DISTINCT CASE WHEN r.is_high_stock = 1 THEN r.material_code ELSE NULL END) AS is_high_stock_sku_count, COUNT(DISTINCT CASE WHEN r.is_overaged = 1 THEN r.material_code ELSE NULL END) AS is_overaged_sku_count, COUNT(DISTINCT CASE WHEN r.is_low_stock = 1 AND r.is_high_stock = 1 THEN r.material_code ELSE NULL END) AS conflicting_stock_flag_skus, CASE WHEN COUNT(r.available_qty) = COUNT(*) THEN SUM(r.available_qty) ELSE NULL END AS available_qty, CASE WHEN COUNT(r.pack_unit_qty) = COUNT(*) THEN SUM(r.pack_unit_qty) ELSE NULL END AS pack_unit_qty, CASE WHEN COUNT(r.freeze_qty) = COUNT(*) THEN SUM(r.freeze_qty) ELSE NULL END AS freeze_qty, COUNT(r.total_qty) AS total_qty_count, COUNT(r.overaged_qty) AS overaged_qty_count, COUNT(r.available_qty) AS available_qty_count, COUNT(r.pack_unit_qty) AS pack_unit_qty_count, COUNT(r.freeze_qty) AS freeze_qty_count, MAX(r.source_updated_at) AS source_updated_at, SUM(CASE WHEN r.available_qty>=0 THEN r.available_qty ELSE NULL END) AS known_available_qty, COUNT(CASE WHEN r.available_qty>=0 THEN 1 ELSE NULL END) AS known_available_qty_count, SUM(CASE WHEN r.pack_unit_qty>=0 THEN r.pack_unit_qty ELSE NULL END) AS known_pack_unit_qty, COUNT(CASE WHEN r.pack_unit_qty>=0 THEN 1 ELSE NULL END) AS known_pack_unit_qty_count, SUM(CASE WHEN r.freeze_qty>=0 THEN r.freeze_qty ELSE NULL END) AS known_freeze_qty, COUNT(CASE WHEN r.freeze_qty>=0 THEN 1 ELSE NULL END) AS known_freeze_qty_count FROM filtered AS r",
         "parameters": {
           "gea_p1": "2026-10-14",
           "gea_p2": false,
@@ -7386,7 +7386,13 @@
         "available_qty_count",
         "pack_unit_qty_count",
         "freeze_qty_count",
-        "source_updated_at"
+        "source_updated_at",
+        "known_available_qty",
+        "known_available_qty_count",
+        "known_pack_unit_qty",
+        "known_pack_unit_qty_count",
+        "known_freeze_qty",
+        "known_freeze_qty_count"
       ]
     },
     "health.groups": {
@@ -16115,6 +16121,265 @@
         "includeTotal": false
       },
       "resultColumns": ["total"]
+    },
+    "base_shipments.detail": {
+      "title": "基地实际发货",
+      "notes": "以工厂发货来源plant_flag=工厂为范围，按实际发货日期汇总；正向量、负向量（负数量绝对值）和净量分列。保留未知基地组，不把分仓再次计入工厂发货。无本期记录保持空，不用30日日均乘30；数量先在SQL按基地SKU汇总。此来源为发货，不代表完整出库或库存周转。",
+      "activation": "source_candidate_pending_agent_gea_replay",
+      "parameterSpec": {
+        "gea_p2000": {
+          "name": "shipment_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2001": {
+          "name": "shipment_end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2002": {
+          "name": "shipment_month_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2003": {
+          "name": "rolling_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2010": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2011": {
+          "name": "bases",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "items": "string",
+          "minItems": 1
+        },
+        "gea_p2012": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p1001": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p1002": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "WITH factory_shipments AS (\n SELECT NULLIF(TRIM(t.belong_base),'') AS base,t.material_code AS sku,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.material_name),''))=1 THEN MAX(NULLIF(TRIM(t.material_name),'')) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(t.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS month_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END) AS month_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS month_missing_qty,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS rolling_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END) AS rolling_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS rolling_missing_qty,\n MIN(t.act_ship_date) AS first_ship_date,MAX(t.act_ship_date) AS last_ship_date,COUNT(*) AS source_rows\n FROM agents_scm_cust_deliv_daily_di AS t\n WHERE t.plant_flag='工厂' AND t.act_ship_date>=:gea_p2000 AND t.act_ship_date<:gea_p2001\n GROUP BY NULLIF(TRIM(t.belong_base),''),t.material_code\n), filtered AS (\n SELECT s.base AS base, s.sku AS sku, s.material_name AS material_name, s.category AS category, s.month_ship_positive AS month_ship_positive, s.month_ship_net AS month_ship_net, s.month_ship_negative AS month_ship_negative, s.rolling_ship_positive AS rolling_ship_positive, s.rolling_ship_net AS rolling_ship_net, s.rolling_ship_negative AS rolling_ship_negative, s.month_records AS month_records, s.month_missing_qty AS month_missing_qty, s.rolling_records AS rolling_records, s.rolling_missing_qty AS rolling_missing_qty, s.first_ship_date AS first_ship_date, s.last_ship_date AS last_ship_date, s.source_rows AS source_rows\n FROM factory_shipments AS s WHERE (:gea_p2010=FALSE OR s.base IN (:gea_p2011)) AND (:gea_p2012 IS NULL OR s.sku=:gea_p2012)\n) SELECT r.base AS base, r.sku AS sku, r.material_name AS material_name, r.category AS category, r.month_ship_positive AS month_ship_positive, r.month_ship_net AS month_ship_net, r.month_ship_negative AS month_ship_negative, r.rolling_ship_positive AS rolling_ship_positive, r.rolling_ship_net AS rolling_ship_net, r.rolling_ship_negative AS rolling_ship_negative, r.month_records AS month_records, r.month_missing_qty AS month_missing_qty, r.rolling_records AS rolling_records, r.rolling_missing_qty AS rolling_missing_qty, r.first_ship_date AS first_ship_date, r.last_ship_date AS last_ship_date, r.source_rows AS source_rows FROM filtered AS r ORDER BY CASE WHEN r.base IS NULL THEN 1 ELSE 0 END,r.base,r.sku LIMIT :gea_p1001 OFFSET :gea_p1002",
+        "parameters": {
+          "gea_p2000": "20260921",
+          "gea_p2001": "20261021",
+          "gea_p2002": "20261001",
+          "gea_p2003": "20260921",
+          "gea_p2010": false,
+          "gea_p2011": [""],
+          "gea_p2012": null,
+          "gea_p1001": 10,
+          "gea_p1002": 0
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "base",
+        "sku",
+        "material_name",
+        "category",
+        "month_ship_positive",
+        "month_ship_net",
+        "month_ship_negative",
+        "rolling_ship_positive",
+        "rolling_ship_net",
+        "rolling_ship_negative",
+        "month_records",
+        "month_missing_qty",
+        "rolling_records",
+        "rolling_missing_qty",
+        "first_ship_date",
+        "last_ship_date",
+        "source_rows"
+      ],
+      "pagination": {
+        "countQuery": "base_shipments.count"
+      }
+    },
+    "base_shipments.count": {
+      "title": "基地实际发货计数",
+      "notes": "以工厂发货来源plant_flag=工厂为范围，按实际发货日期汇总；正向量、负向量（负数量绝对值）和净量分列。保留未知基地组，不把分仓再次计入工厂发货。无本期记录保持空，不用30日日均乘30；数量先在SQL按基地SKU汇总。此来源为发货，不代表完整出库或库存周转。",
+      "activation": "source_candidate_pending_agent_gea_replay",
+      "parameterSpec": {
+        "gea_p2000": {
+          "name": "shipment_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2001": {
+          "name": "shipment_end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2002": {
+          "name": "shipment_month_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2003": {
+          "name": "rolling_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2010": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2011": {
+          "name": "bases",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "items": "string",
+          "minItems": 1
+        },
+        "gea_p2012": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "WITH factory_shipments AS (\n SELECT NULLIF(TRIM(t.belong_base),'') AS base,t.material_code AS sku,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.material_name),''))=1 THEN MAX(NULLIF(TRIM(t.material_name),'')) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(t.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS month_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END) AS month_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS month_missing_qty,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS rolling_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END) AS rolling_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS rolling_missing_qty,\n MIN(t.act_ship_date) AS first_ship_date,MAX(t.act_ship_date) AS last_ship_date,COUNT(*) AS source_rows\n FROM agents_scm_cust_deliv_daily_di AS t\n WHERE t.plant_flag='工厂' AND t.act_ship_date>=:gea_p2000 AND t.act_ship_date<:gea_p2001\n GROUP BY NULLIF(TRIM(t.belong_base),''),t.material_code\n), filtered AS (\n SELECT s.base AS base, s.sku AS sku, s.material_name AS material_name, s.category AS category, s.month_ship_positive AS month_ship_positive, s.month_ship_net AS month_ship_net, s.month_ship_negative AS month_ship_negative, s.rolling_ship_positive AS rolling_ship_positive, s.rolling_ship_net AS rolling_ship_net, s.rolling_ship_negative AS rolling_ship_negative, s.month_records AS month_records, s.month_missing_qty AS month_missing_qty, s.rolling_records AS rolling_records, s.rolling_missing_qty AS rolling_missing_qty, s.first_ship_date AS first_ship_date, s.last_ship_date AS last_ship_date, s.source_rows AS source_rows\n FROM factory_shipments AS s WHERE (:gea_p2010=FALSE OR s.base IN (:gea_p2011)) AND (:gea_p2012 IS NULL OR s.sku=:gea_p2012)\n) SELECT COUNT(*) AS total FROM filtered AS r",
+        "parameters": {
+          "gea_p2000": "20260921",
+          "gea_p2001": "20261021",
+          "gea_p2002": "20261001",
+          "gea_p2003": "20260921",
+          "gea_p2010": false,
+          "gea_p2011": [""],
+          "gea_p2012": null
+        },
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "base_shipments.summary": {
+      "title": "基地实际发货汇总",
+      "notes": "以工厂发货来源plant_flag=工厂为范围，按实际发货日期汇总；正向量、负向量（负数量绝对值）和净量分列。保留未知基地组，不把分仓再次计入工厂发货。无本期记录保持空，不用30日日均乘30；数量先在SQL按基地SKU汇总。此来源为发货，不代表完整出库或库存周转。",
+      "activation": "source_candidate_pending_agent_gea_replay",
+      "parameterSpec": {
+        "gea_p2000": {
+          "name": "shipment_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2001": {
+          "name": "shipment_end_exclusive",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2002": {
+          "name": "shipment_month_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2003": {
+          "name": "rolling_start",
+          "type": "string",
+          "format": "YYYYMMDD",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2010": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2011": {
+          "name": "bases",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "items": "string",
+          "minItems": 1
+        },
+        "gea_p2012": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "WITH factory_shipments AS (\n SELECT NULLIF(TRIM(t.belong_base),'') AS base,t.material_code AS sku,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.material_name),''))=1 THEN MAX(NULLIF(TRIM(t.material_name),'')) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(t.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(t.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS month_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS month_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN 1 ELSE NULL END) AS month_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2002 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS month_missing_qty,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty>0 THEN t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_positive,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN t.act_dl_qty ELSE 0 END) ELSE NULL END AS rolling_ship_net,\n CASE WHEN COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END)>0 AND COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 AND t.act_dl_qty IS NULL THEN 1 ELSE NULL END)=0 THEN SUM(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty<0 THEN -t.act_dl_qty ELSE 0 END ELSE 0 END) ELSE NULL END AS rolling_ship_negative,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN 1 ELSE NULL END) AS rolling_records,\n COUNT(CASE WHEN t.act_ship_date>=:gea_p2003 THEN CASE WHEN t.act_dl_qty IS NULL THEN 1 ELSE NULL END ELSE NULL END) AS rolling_missing_qty,\n MIN(t.act_ship_date) AS first_ship_date,MAX(t.act_ship_date) AS last_ship_date,COUNT(*) AS source_rows\n FROM agents_scm_cust_deliv_daily_di AS t\n WHERE t.plant_flag='工厂' AND t.act_ship_date>=:gea_p2000 AND t.act_ship_date<:gea_p2001\n GROUP BY NULLIF(TRIM(t.belong_base),''),t.material_code\n), filtered AS (\n SELECT s.base AS base, s.sku AS sku, s.material_name AS material_name, s.category AS category, s.month_ship_positive AS month_ship_positive, s.month_ship_net AS month_ship_net, s.month_ship_negative AS month_ship_negative, s.rolling_ship_positive AS rolling_ship_positive, s.rolling_ship_net AS rolling_ship_net, s.rolling_ship_negative AS rolling_ship_negative, s.month_records AS month_records, s.month_missing_qty AS month_missing_qty, s.rolling_records AS rolling_records, s.rolling_missing_qty AS rolling_missing_qty, s.first_ship_date AS first_ship_date, s.last_ship_date AS last_ship_date, s.source_rows AS source_rows\n FROM factory_shipments AS s WHERE (:gea_p2010=FALSE OR s.base IN (:gea_p2011)) AND (:gea_p2012 IS NULL OR s.sku=:gea_p2012)\n) SELECT COUNT(*) AS row_count, COUNT(DISTINCT r.base) AS base_count, COUNT(CASE WHEN r.base IS NULL THEN 1 ELSE NULL END) AS unknown_base_skus, SUM(CASE WHEN r.base IS NULL THEN r.source_rows ELSE 0 END) AS unknown_base_records, MAX(r.last_ship_date) AS last_ship_date, CASE WHEN SUM(r.month_records)>0 AND SUM(r.month_missing_qty)=0 THEN SUM(r.month_ship_positive) ELSE NULL END AS month_ship_positive, CASE WHEN SUM(r.month_records)>0 AND SUM(r.month_missing_qty)=0 THEN SUM(r.month_ship_net) ELSE NULL END AS month_ship_net, CASE WHEN SUM(r.month_records)>0 AND SUM(r.month_missing_qty)=0 THEN SUM(r.month_ship_negative) ELSE NULL END AS month_ship_negative, SUM(r.month_records) AS month_records, SUM(r.month_missing_qty) AS month_missing_qty, CASE WHEN SUM(r.rolling_records)>0 AND SUM(r.rolling_missing_qty)=0 THEN SUM(r.rolling_ship_positive) ELSE NULL END AS rolling_ship_positive, CASE WHEN SUM(r.rolling_records)>0 AND SUM(r.rolling_missing_qty)=0 THEN SUM(r.rolling_ship_net) ELSE NULL END AS rolling_ship_net, CASE WHEN SUM(r.rolling_records)>0 AND SUM(r.rolling_missing_qty)=0 THEN SUM(r.rolling_ship_negative) ELSE NULL END AS rolling_ship_negative, SUM(r.rolling_records) AS rolling_records, SUM(r.rolling_missing_qty) AS rolling_missing_qty FROM filtered AS r",
+        "parameters": {
+          "gea_p2000": "20260921",
+          "gea_p2001": "20261021",
+          "gea_p2002": "20261001",
+          "gea_p2003": "20260921",
+          "gea_p2010": false,
+          "gea_p2011": [""],
+          "gea_p2012": null
+        },
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "row_count",
+        "base_count",
+        "unknown_base_skus",
+        "unknown_base_records",
+        "last_ship_date",
+        "month_ship_positive",
+        "month_ship_net",
+        "month_ship_negative",
+        "month_records",
+        "month_missing_qty",
+        "rolling_ship_positive",
+        "rolling_ship_net",
+        "rolling_ship_negative",
+        "rolling_records",
+        "rolling_missing_qty"
+      ]
     }
   },
   "templates": {
@@ -16596,7 +16861,7 @@
         "queryId": "health.detail",
         "summaryId": "health.summary",
         "timeMode": "health",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
         "columns": [
           {
             "field": "stat_date",
@@ -16703,7 +16968,23 @@
           "warehouse_type_mode": "equal",
           "warehouse_type": "基地仓"
         },
-        "metrics": [],
+        "metrics": [
+          {
+            "field": "known_available_qty",
+            "label": "可用库存（有值范围，箱）",
+            "coverage": "known_available_qty_count"
+          },
+          {
+            "field": "known_pack_unit_qty",
+            "label": "备单占用（有值范围，箱）",
+            "coverage": "known_pack_unit_qty_count"
+          },
+          {
+            "field": "known_freeze_qty",
+            "label": "冻结库存（有值范围，箱）",
+            "coverage": "known_freeze_qty_count"
+          }
+        ],
         "defaultColumns": [
           "stat_date",
           "belong_base",
@@ -16732,7 +17013,7 @@
         "queryId": "health.groups",
         "summaryId": "health.summary",
         "timeMode": "health",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
         "columns": [
           {
             "field": "belong_base",
@@ -16792,7 +17073,23 @@
           "warehouse_type_mode": "equal",
           "warehouse_type": "基地仓"
         },
-        "metrics": []
+        "metrics": [
+          {
+            "field": "known_available_qty",
+            "label": "可用库存（有值范围，箱）",
+            "coverage": "known_available_qty_count"
+          },
+          {
+            "field": "known_pack_unit_qty",
+            "label": "备单占用（有值范围，箱）",
+            "coverage": "known_pack_unit_qty_count"
+          },
+          {
+            "field": "known_freeze_qty",
+            "label": "冻结库存（有值范围，箱）",
+            "coverage": "known_freeze_qty_count"
+          }
+        ]
       },
       {
         "id": "age-structure",
@@ -16800,7 +17097,7 @@
         "queryId": "health.groups",
         "summaryId": "health.summary",
         "timeMode": "health",
-        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。",
+        "description": "库存快照按日期、仓库和SKU核对：重复且相同的字段只取一次，冲突或部分缺值保留未知。现存、可用、占用、冻结各自展示，不重复相加。age_days为最大库龄，不能代表平均货龄或批次分布；基地目标字段不可跨仓重复汇总。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
         "columns": [
           {
             "field": "belong_base",
@@ -16917,7 +17214,23 @@
           "warehouse_type_mode": "equal",
           "warehouse_type": "基地仓"
         },
-        "metrics": []
+        "metrics": [
+          {
+            "field": "known_available_qty",
+            "label": "可用库存（有值范围，箱）",
+            "coverage": "known_available_qty_count"
+          },
+          {
+            "field": "known_pack_unit_qty",
+            "label": "备单占用（有值范围，箱）",
+            "coverage": "known_pack_unit_qty_count"
+          },
+          {
+            "field": "known_freeze_qty",
+            "label": "冻结库存（有值范围，箱）",
+            "coverage": "known_freeze_qty_count"
+          }
+        ]
       },
       {
         "id": "order-plan-source",
@@ -17255,6 +17568,144 @@
           "next_month_sales_plan",
           "allocated_qty",
           "ordered_qty"
+        ]
+      },
+      {
+        "id": "base-shipments",
+        "title": "基地实际发货",
+        "queryId": "base_shipments.detail",
+        "summaryId": "base_shipments.summary",
+        "timeMode": "shipment",
+        "description": "以工厂发货来源plant_flag=工厂为范围，按实际发货日期汇总；正向量、负向量（负数量绝对值）和净量分列。保留未知基地组，不把分仓再次计入工厂发货。无本期记录保持空，不用30日日均乘30；数量先在SQL按基地SKU汇总。此来源为发货，不代表完整出库或库存周转。 按基地筛选时只表示已明确归属的记录，未知基地量不分摊。",
+        "filters": [
+          {
+            "name": "base",
+            "label": "基地"
+          },
+          {
+            "name": "sku",
+            "label": "SKU"
+          }
+        ],
+        "metrics": [
+          {
+            "field": "month_ship_positive",
+            "label": "本月正向发货（箱）"
+          },
+          {
+            "field": "month_ship_net",
+            "label": "本月净发货（箱）"
+          },
+          {
+            "field": "rolling_ship_positive",
+            "label": "近30日正向发货（箱）"
+          },
+          {
+            "field": "rolling_ship_net",
+            "label": "近30日净发货（箱）"
+          },
+          {
+            "field": "rolling_ship_negative",
+            "label": "近30日负向发货（箱）"
+          }
+        ],
+        "columns": [
+          {
+            "field": "base",
+            "label": "基地",
+            "format": null
+          },
+          {
+            "field": "sku",
+            "label": "SKU",
+            "format": null
+          },
+          {
+            "field": "material_name",
+            "label": "商品",
+            "format": null
+          },
+          {
+            "field": "category",
+            "label": "品类",
+            "format": null
+          },
+          {
+            "field": "month_ship_positive",
+            "label": "本月正向发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "month_ship_net",
+            "label": "本月净发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "month_ship_negative",
+            "label": "本月负向发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "rolling_ship_positive",
+            "label": "近30日正向发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "rolling_ship_net",
+            "label": "近30日净发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "rolling_ship_negative",
+            "label": "近30日负向发货（箱）",
+            "format": "decimal"
+          },
+          {
+            "field": "month_records",
+            "label": "本月源记录",
+            "format": null
+          },
+          {
+            "field": "month_missing_qty",
+            "label": "本月缺量记录",
+            "format": null
+          },
+          {
+            "field": "rolling_records",
+            "label": "近30日源记录",
+            "format": null
+          },
+          {
+            "field": "rolling_missing_qty",
+            "label": "近30日缺量记录",
+            "format": null
+          },
+          {
+            "field": "first_ship_date",
+            "label": "本次查询首发货日",
+            "format": null
+          },
+          {
+            "field": "last_ship_date",
+            "label": "末次发货日",
+            "format": null
+          },
+          {
+            "field": "source_rows",
+            "label": "源记录数",
+            "format": null
+          }
+        ],
+        "defaultColumns": [
+          "base",
+          "sku",
+          "material_name",
+          "month_ship_positive",
+          "month_ship_net",
+          "rolling_ship_positive",
+          "rolling_ship_net",
+          "rolling_ship_negative",
+          "last_ship_date"
         ]
       }
     ]

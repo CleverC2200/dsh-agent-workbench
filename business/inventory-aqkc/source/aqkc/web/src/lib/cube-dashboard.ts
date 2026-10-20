@@ -2539,21 +2539,21 @@ async function loadConfiguredSummaryDashboard(
     '数据边界：',
     `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，周转覆盖${all.turnCount}/${all.n}个基地SKU，均只比较同一匹配范围；`,
   );
-  const orderCard = currentOrderCard([], bases);
-  orderCard.helpers = [
-    {
-      label: '快照未备单订单',
-      value: all.sum('ordered_valid_count')
-        ? `${show(all, 'ordered', true)}（${all.sum('ordered_valid_count')}/${all.n} SKU）`
-        : '-',
-    },
-    {
-      label: '快照已备单占用',
-      value: all.sum('allocated_valid_count')
-        ? `${show(all, 'allocated', true)}（${all.sum('allocated_valid_count')}/${all.n} SKU）`
-        : '-',
-    },
-  ];
+  // The daily fact provides an unprepared subset, not the full pending-order total.
+  const orderCard = {
+    title: '基地未备单量',
+    value: show(all, 'ordered', true),
+    helpers: [
+      {
+        label: '快照已备单占用',
+        value: all.sum('allocated_valid_count')
+          ? `${show(all, 'allocated', true)}箱（${all.sum('allocated_valid_count')}/${all.n} SKU）`
+          : '-',
+      },
+      { label: '当前待发总量', value: '-' },
+    ],
+    tone: 'neutral' as const,
+  };
   const cards = [
     {
       title: '当前库存',
@@ -2602,7 +2602,7 @@ async function loadConfiguredSummaryDashboard(
     },
     {
       ...orderCard,
-      coverage: '订单辅助项取日库存快照，未备单与占用分别展示，当前待发总量仍未知。',
+      coverage: `快照 ${day} · 范围 ${all.sum('ordered_valid_count')}/${all.n} 个基地SKU；未备单与占用分别展示`,
     },
   ];
   const workspace = unavailableWorkspace();

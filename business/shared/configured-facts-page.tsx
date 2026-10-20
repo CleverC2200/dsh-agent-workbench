@@ -1,7 +1,7 @@
 import { LocalQueryForm } from './local-query-form';
 import React, { useEffect, useRef, useState } from 'react';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
-import { factMetric, readConfiguredFacts } from './configured-facts';
+import { factMetric, readConfiguredFacts, initialFiltersForView } from './configured-facts';
 import css from './configured-facts-page.module.css';
 import { formatFactValue } from './fact-display';
 
@@ -70,8 +70,9 @@ export function ConfiguredFactsPage({
     [dateDraft, setDateDraft] = useState(date ?? today());
   const [customer, setCustomer] = useState(customerCode ?? ''),
     [customerDraft, setCustomerDraft] = useState(customerCode ?? '');
-  const [filters, setFilters] = useState<Record<string, string>>(initialFilters);
-  const [draft, setDraft] = useState<Record<string, string>>(initialFilters);
+  const defaultsFor = (id: string) => initialFiltersForView(config, id, initialFilters);
+  const [filters, setFilters] = useState<Record<string, string>>(() => defaultsFor(viewId));
+  const [draft, setDraft] = useState<Record<string, string>>(() => defaultsFor(viewId));
   const [columnChoices, setColumnChoices] = useState<Record<string, string[]>>({});
   const [localPage, setLocalPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
@@ -140,8 +141,8 @@ export function ConfiguredFactsPage({
   const navigate = (id: string) => {
     setViewId(id);
     setPage(1);
-    setFilters(initialFilters);
-    setDraft(initialFilters);
+    setFilters(defaultsFor(id));
+    setDraft(defaultsFor(id));
   };
   const chooseCustomer = (code: string) => {
     if (onChooseCustomer) {
@@ -153,9 +154,7 @@ export function ConfiguredFactsPage({
     setPage(1);
     navigate('orders');
   };
-  const gaps = (view.gapIds ?? [])
-    .map((id: string) => config.fieldGaps?.find((g: any) => g.id === id))
-    .filter(Boolean);
+
   const totalPages = result?.total == null ? null : Math.max(1, Math.ceil(result.total / pageSize));
   const Container = embedded ? 'div' : 'main';
   return (
@@ -242,7 +241,19 @@ export function ConfiguredFactsPage({
                   ? '所属月份：' + asOf.slice(0, 7)
                   : result?.snapshotDate
                     ? '快照日：' + result.snapshotDate
-                    : asOf.slice(0, 7) + '-01 至 ' + asOf}
+                    : result?.parameters?.rolling_start
+                      ? '本月 ' +
+                        asOf.slice(0, 7) +
+                        '-01 至 ' +
+                        asOf +
+                        '；近30日 ' +
+                        String(result.parameters.rolling_start).replace(
+                          /^(\d{4})(\d{2})(\d{2})$/,
+                          '$1-$2-$3',
+                        ) +
+                        ' 至 ' +
+                        asOf
+                      : asOf.slice(0, 7) + '-01 至 ' + asOf}
             </span>
             <details className={css.columnPicker}>
               <summary>显示列（{columns.length}）</summary>
@@ -309,8 +320,8 @@ export function ConfiguredFactsPage({
             <button
               type="button"
               onClick={() => {
-                setDraft(initialFilters);
-                setFilters(initialFilters);
+                setDraft(defaultsFor(viewId));
+                setFilters(defaultsFor(viewId));
                 setPage(1);
               }}
             >
@@ -498,50 +509,12 @@ export function ConfiguredFactsPage({
             )}
           </>
         )}
-        <details className={css.details}>
-          <summary>口径与数据缺口</summary>
-          <p>{view.description}</p>
-          {view.id === 'customer' && (
-            <p>
-              已按当前数据修正提货点返回映射：编码取物理列 pickup_point_name，名称取
-              pickup_point_code；多点原串不按位置配对。
-            </p>
-          )}
-          {view.id === 'plan' && (
-            <p>
-              计划月份、版本、快照日期、月调拨计划及单位字段已存在，当前源值为空时显示“-”。未来30日计划量不作为现存库存或下月计划。
-            </p>
-          )}
-          {view.columns.some((c: any) => c.unavailable) && (
-            <ul>
-              {view.columns
-                .filter((c: any) => c.unavailable)
-                .map((c: any) => (
-                  <li key={c.field}>
-                    <b>{c.label}</b>：{c.reason || '当前来源缺少该字段'}
-                  </li>
-                ))}
-            </ul>
-          )}
-          {gaps.length > 0 && (
-            <ul>
-              {gaps.map((gap: any) => (
-                <li key={gap.id}>
-                  <b>{gap.field}</b>：{gap.status}；{gap.source}。{gap.impact}
-                </li>
-              ))}
-            </ul>
-          )}
-          {result?.queryId && (
-            <p>
-              查询：{result.queryId}
-              ；分页前后核对计数，非原子快照；汇总独立读取，不用当前显示页推算总量。
-            </p>
-          )}
-          {result?.summaryError?.failure && (
+        {result?.summaryError?.failure && (
+          <details className={css.details}>
+            <summary>查询错误详情</summary>
             <pre>{JSON.stringify(result.summaryError.failure, null, 2)}</pre>
-          )}
-        </details>
+          </details>
+        )}
       </section>
     </Container>
   );

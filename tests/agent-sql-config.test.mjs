@@ -45,12 +45,16 @@ test('configuration is inserted before author code and cannot close its data scr
     templates: {},
     queries: {},
     note: '</script><script>alert(1)</script>',
+    sourceFlag: '销售口径',
+    padding: 'x'.repeat(2048),
   };
   const html = injectSqlConfig(
     '<!doctype html><html><head></head><body><script>APP()</script></body></html>',
     config,
   );
   assert.ok(html.indexOf('agent-sql-config') < html.indexOf('APP()'));
+  assert.ok(html.indexOf('<meta charset="utf-8">') < html.indexOf('agent-sql-config'));
+  assert.ok(html.indexOf('<meta charset="utf-8">') < 1024);
   assert.ok(!html.includes('<script>alert(1)</script>'));
   assert.deepEqual(JSON.parse(html.match(/id="agent-sql-config">([^<]*)<\/script>/)[1]), config);
   assert.throws(() => injectSqlConfig('', {}), /INVALID_AGENT_SQL_CONFIG/);

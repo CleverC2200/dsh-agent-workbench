@@ -9,7 +9,7 @@ const out = await build({
   platform: 'node',
   format: 'esm',
 });
-const { readConfiguredOverview } = await import(
+const { readConfiguredOverview, completeCount } = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
@@ -123,3 +123,16 @@ for (const agent of ['qll', 'dealer'])
     assert.ok(early);
     assert.equal(result[ready].summary.row_count, 1);
   });
+
+test('complete SQL counts preserve zero and reject incomplete identities or malformed values', () => {
+  assert.equal(completeCount({ count: '2770', missing: '0' }, 'count', ['missing']), 2770);
+  assert.equal(completeCount({ count: 0, missing: 0 }, 'count', ['missing']), 0);
+  for (const source of [
+    { count: null, missing: 0 },
+    { count: 2, missing: 1 },
+    { count: 2 },
+    { count: -1, missing: 0 },
+    { count: 1.5, missing: 0 },
+  ])
+    assert.equal(completeCount(source, 'count', ['missing']), null);
+});

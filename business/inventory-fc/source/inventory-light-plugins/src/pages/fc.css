@@ -4641,3 +4641,21 @@ body,
 .priority-analysis p {
   margin: 8px 0 0;
 }
+
+/* Retain the original KPI hierarchy while allowing long business labels to wrap. */
+.agent-root .safety-stock-kpis .kpi-card dl > div {
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+.agent-root .safety-stock-kpis .kpi-card dt {
+  flex: 1 1 90px;
+  white-space: normal;
+  overflow: visible;
+}
+.agent-root .safety-stock-kpis .kpi-card dd {
+  max-width: 100%;
+  margin-left: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

@@ -1229,7 +1229,13 @@ export function InventoryOperationsWorkbench() {
             <ConfiguredFactsPage
               config={healthSqlConfig}
               embedded
-              viewIds={['health', 'health-base', 'base-stock-flows', 'order-plan-source']}
+              viewIds={[
+                'health',
+                'health-base',
+                'base-stock-flows',
+                'order-plan-source',
+                'base-shipments',
+              ]}
               initialFilters={
                 paths.length
                   ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
@@ -1266,17 +1272,19 @@ function Kpi({
       </div>
       <strong
         title={
-          title === '当前订单'
-            ? currentOrderMetricScopes.orderQuantity
-            : title === '订单满足率'
-              ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
-              : undefined
+          title === '基地未备单量'
+            ? '日库存快照未备单量的非负有值范围；不含已备单占用，不代表全部当前待发订单'
+            : title === '当前订单'
+              ? currentOrderMetricScopes.orderQuantity
+              : title === '订单满足率'
+                ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
+                : undefined
         }
         className={`${styles.kpiValue} ${tone === 'red' ? styles.toneRed : ''}`}
       >
         {value}
-        {title === '当前订单' && value !== '-' ? (
-          <small className={styles.kpiUnit}>件</small>
+        {(title === '当前订单' || title === '基地未备单量') && value !== '-' ? (
+          <small className={styles.kpiUnit}>箱</small>
         ) : null}
       </strong>
       {coverage && <p className={styles.metricCoverage}>{coverage}</p>}
@@ -1286,15 +1294,19 @@ function Kpi({
             <dt>{item.label}</dt>
             <dd
               title={
-                title === '当前订单'
-                  ? item.label.startsWith('快照')
-                    ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
-                    : item.label === '备单量'
-                      ? currentOrderMetricScopes.preparingQuantity
-                      : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
-                  : title === '订单满足率'
-                    ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
-                    : undefined
+                title === '基地未备单量'
+                  ? item.label === '当前待发总量'
+                    ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
+                    : '日库存快照已备单占用量，仅展示非负有值范围'
+                  : title === '当前订单'
+                    ? item.label.startsWith('快照')
+                      ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
+                      : item.label === '备单量'
+                        ? currentOrderMetricScopes.preparingQuantity
+                        : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
+                    : title === '订单满足率'
+                      ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
+                      : undefined
               }
             >
               {item.value.endsWith('（部分）') ? (
