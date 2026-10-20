@@ -20,7 +20,7 @@ let connected = false,
 let latest;
 let lifetime = new AbortController();
 const notice =
-  '模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。';
+  '前两步为本地隔离核对，可下载已读输入与发货结存底稿；刷新或切换对话会清除内存输入，未接入真实取数与正式保存。第三至七步保留旧模拟内容，未接入前两步本地结果。当前对话保留界面意图和未发送文字。';
 mpsView.subscribe((_snapshot, event) => {
   if (event === 'released') {
     cancelPublication();
@@ -94,7 +94,7 @@ function cancelPublication() {
   latest = undefined;
 }
 /** Component owners report their current state, without discovering DOM. */
-export function useMpsPart(react, key, value, label) {
+export function useMpsPart(react, key, value, label, active = true) {
   const serialized = JSON.stringify(value);
   const [restoreRevision, setRestoreRevision] = react.useState(restoration);
   react.useEffect(() => {
@@ -103,6 +103,7 @@ export function useMpsPart(react, key, value, label) {
     return () => restorationListeners.delete(setRestoreRevision);
   }, []);
   react.useEffect(() => {
+    if (!active) return;
     const part = {
       value: JSON.parse(serialized),
       restoration: restoreRevision,
@@ -123,7 +124,7 @@ export function useMpsPart(react, key, value, label) {
       stop();
       schedule();
     };
-  }, [key, serialized, restoreRevision]);
+  }, [key, serialized, restoreRevision, active]);
 }
 export function useMpsNavigation(react, state, select) {
   useMpsPart(react, 'navigation', state);
@@ -155,7 +156,7 @@ void ready.then(() => {
   connected = true;
   schedule();
 });
-const refreshLabel = '刷新MPS模拟原型，恢复当前Session界面意图并保留未发送文字';
+const refreshLabel = '刷新MPS页面，保留对话界面意图和未发送文字，清除本页隔离输入';
 action('refresh', refreshLabel, () => window.location.reload());
 reportElements(
   'refresh',

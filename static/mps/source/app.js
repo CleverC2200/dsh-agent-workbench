@@ -1,3 +1,4 @@
+import { createDemandConfirmation } from './demand-confirmation.js';
 import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
@@ -1118,92 +1119,6 @@ const Ud = [
       },
     ],
   },
-  TV = [
-    {
-      value: 'pro',
-      label: '\u4E13\u4E1A\u987E\u95EE',
-      desc: '\u6C89\u7A33\u3001\u53EF\u4FE1\uFF0C\u9002\u5408\u5BF9\u5916\u6C47\u62A5\u4E0E\u51B3\u7B56\u573A\u666F',
-    },
-    {
-      value: 'geo',
-      label: '\u7B80\u7EA6\u51E0\u4F55',
-      desc: '\u514B\u5236\u3001\u7406\u6027\uFF0C\u5F31\u5316\u62DF\u4EBA\u611F',
-    },
-    {
-      value: 'soft',
-      label: '\u4EB2\u548C\u5706\u6DA6',
-      desc: '\u8F7B\u5FEB\u3001\u6613\u63A5\u8FD1\uFF0C\u9002\u5408\u65E5\u5E38\u95EE\u7B54\u4E0E\u63D0\u9192',
-    },
-  ],
-  MV = [
-    { value: 'suit', label: '\u6DF1\u8272\u897F\u88C5' },
-    { value: 'shirt', label: '\u6D45\u8272\u886C\u886B' },
-    { value: 'uniform', label: '\u54C1\u724C\u5236\u670D' },
-  ],
-  RV = [
-    { value: 'calm', label: '\u6C89\u7740' },
-    { value: 'warm', label: '\u4EB2\u548C' },
-    { value: 'focus', label: '\u4E13\u6CE8' },
-  ],
-  $V = [
-    { value: 'boardroom', label: '\u4EA7\u9500\u534F\u8C03\u4F1A' },
-    { value: 'screen', label: '\u6570\u636E\u5927\u5C4F' },
-    { value: 'plain', label: '\u7B80\u51C0\u80CC\u666F' },
-  ],
-  DV = [
-    { value: '#C8352F', label: '\u54C1\u724C\u7EA2' },
-    { value: '#2A6E9E', label: '\u6DF1\u6D77\u84DD' },
-    { value: '#1B7A5A', label: '\u677E\u67CF\u7EFF' },
-    { value: '#6A4BA8', label: '\u96FE\u7D2B' },
-  ],
-  T1 = [
-    {
-      value: 'zhixing',
-      label: '\u77E5\u6027\u5973\u58F0',
-      desc: '\u6E05\u6670\u3001\u6709\u6761\u7406\uFF0C\u9ED8\u8BA4\u63A8\u8350',
-    },
-    {
-      value: 'chenwen',
-      label: '\u6C89\u7A33\u7537\u58F0',
-      desc: '\u4F4E\u7F13\u3001\u6709\u5206\u91CF',
-    },
-    {
-      value: 'qingliang',
-      label: '\u6E05\u4EAE\u5973\u58F0',
-      desc: '\u660E\u5FEB\u3001\u8F7B\u91CF',
-    },
-    {
-      value: 'wenhe',
-      label: '\u6E29\u548C\u7537\u58F0',
-      desc: '\u67D4\u548C\u3001\u4E0D\u538B\u8FEB',
-    },
-  ],
-  M1 = [
-    {
-      value: 'precise',
-      label: '\u4E25\u8C28\u7CBE\u786E',
-      desc: '\u5148\u7ED9\u7ED3\u8BBA\u4E0E\u4F9D\u636E\uFF0C\u518D\u7ED9\u5EFA\u8BAE',
-    },
-    {
-      value: 'warm',
-      label: '\u4EB2\u548C\u534F\u4F5C',
-      desc: '\u5148\u5BF9\u9F50\u76EE\u6807\uFF0C\u518D\u63A8\u8FDB\u65B9\u6848',
-    },
-    {
-      value: 'brief',
-      label: '\u7B80\u6D01\u76F4\u63A5',
-      desc: '\u53EA\u8BB2\u8981\u70B9\u4E0E\u5F85\u529E',
-    },
-  ],
-  AV = { style: 'pro', outfit: 'suit', mood: 'calm', scene: 'boardroom', color: '#C8352F' },
-  zV = { tone: 'zhixing', rate: 1, pitch: 0 },
-  LV = {
-    name: '\u4E3B\u8BA1\u5212\u53C2\u8C0B',
-    address: '\u674E\u7433',
-    tone: 'precise',
-    greeting:
-      '\u674E\u7433\uFF0C10 \u6708\u7684\u9700\u6C42\u7248\u672C\u5DF2\u7ECF\u751F\u6548\u3002\u6211\u628A\u5404\u57FA\u5730\u7684\u6EDA\u52A8\u8BA1\u5212\u521D\u7A3F\u5148\u8DD1\u4E86\u4E00\u7248\uFF0C\u534E\u4E1C\u57FA\u5730 M+2 \u6709\u4E2A\u7F3A\u53E3\uFF0C\u8981\u4E0D\u8981\u4E00\u8D77\u8FC7\u4E00\u904D\uFF1F',
-  },
   cu = [
     {
       id: 'plan',
@@ -1246,14 +1161,6 @@ const Ud = [
     strokeLinecap: 'round',
     strokeLinejoin: 'round',
   },
-  R1 = () =>
-    c.jsxs('svg', {
-      ...dn,
-      children: [
-        c.jsx('path', { d: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z' }),
-        c.jsx('circle', { cx: '12', cy: '12', r: '3' }),
-      ],
-    }),
   _VV = () =>
     c.jsxs('svg', {
       ...dn,
@@ -1303,16 +1210,6 @@ const Ud = [
       children: c.jsx('path', {
         d: 'M12 2.6 13.9 9l6.4 1.9-6.4 1.9L12 19.2l-1.9-6.4L3.7 10.9 10.1 9 12 2.6Z',
       }),
-    }),
-  MO = () =>
-    c.jsxs('svg', {
-      ...dn,
-      width: 13,
-      height: 13,
-      children: [
-        c.jsx('circle', { cx: '12', cy: '12', r: '8.6' }),
-        c.jsx('path', { d: 'M12 7.4V12l3.2 2' }),
-      ],
     }),
   If = () =>
     c.jsxs('svg', {
@@ -1371,924 +1268,10 @@ const Ud = [
       children: c.jsx('path', {
         d: 'M20.4 11.6 12 20a5 5 0 0 1-7.1-7.1L13.2 4.7a3.4 3.4 0 0 1 4.8 4.8l-8.3 8.3a1.8 1.8 0 0 1-2.5-2.5l7.6-7.6',
       }),
-    }),
-  $O = () =>
-    c.jsxs('svg', {
-      ...dn,
-      width: 15,
-      height: 15,
-      children: [
-        c.jsx('path', { d: 'M20.4 12a8.4 8.4 0 1 1-2.6-6' }),
-        c.jsx('path', { d: 'M20.6 4.2v5.4h-5.4' }),
-      ],
-    }),
-  DO = () =>
-    c.jsxs('svg', {
-      ...dn,
-      width: 15,
-      height: 15,
-      children: [
-        c.jsx('path', { d: 'M12 15.5V3.8M8 7.4 12 3.4l4 4' }),
-        c.jsx('path', { d: 'M4.4 14.5v3.7a2.4 2.4 0 0 0 2.4 2.4h10.4a2.4 2.4 0 0 0 2.4-2.4v-3.7' }),
-      ],
-    }),
-  Gd = '#F3C9A7',
-  fu = '#E5B08D',
-  Yd = '#2E2B34';
-function YV({ style: e }) {
-  return e === 'geo'
-    ? c.jsx('rect', { x: 68, y: 48, width: 84, height: 94, rx: 30, fill: Gd })
-    : e === 'soft'
-      ? c.jsx('ellipse', { cx: 110, cy: 96, rx: 46, ry: 48, fill: Gd })
-      : c.jsx('ellipse', { cx: 110, cy: 94, rx: 43, ry: 47, fill: Gd });
-}
-function ZV({ style: e }) {
-  return e === 'geo'
-    ? c.jsx('path', {
-        d: 'M68 78 C68 46 86 38 110 38 C134 38 152 46 152 78 L152 66 C152 50 134 46 110 46 C86 46 68 50 68 66 Z',
-        fill: Yd,
-      })
-    : e === 'soft'
-      ? c.jsxs('g', {
-          fill: Yd,
-          children: [
-            c.jsx('circle', { cx: 82, cy: 66, r: 22 }),
-            c.jsx('circle', { cx: 110, cy: 54, r: 26 }),
-            c.jsx('circle', { cx: 138, cy: 66, r: 22 }),
-            c.jsx('circle', { cx: 70, cy: 86, r: 14 }),
-            c.jsx('circle', { cx: 150, cy: 86, r: 14 }),
-            c.jsx('ellipse', { cx: 110, cy: 72, rx: 46, ry: 30 }),
-          ],
-        })
-      : c.jsx('path', {
-          d: 'M67 88 C67 52 84 38 110 38 C136 38 153 52 153 88 C153 72 140 60 110 60 C80 60 67 72 67 88 Z',
-          fill: Yd,
-        });
-}
-function XV({ mood: e }) {
-  const t = '#3A3540',
-    n =
-      e === 'warm'
-        ? 'M80 82 Q90 77 100 81'
-        : e === 'focus'
-          ? 'M80 80 Q90 79 100 82'
-          : 'M80 82 Q90 78 100 82',
-    r =
-      e === 'warm'
-        ? 'M120 81 Q130 77 140 82'
-        : e === 'focus'
-          ? 'M120 82 Q130 79 140 80'
-          : 'M120 82 Q130 78 140 82';
-  return c.jsxs('g', {
-    stroke: t,
-    strokeWidth: 2.6,
-    fill: 'none',
-    strokeLinecap: 'round',
-    children: [c.jsx('path', { d: n }), c.jsx('path', { d: r })],
-  });
-}
-function QV({ style: e, mood: t }) {
-  if (e === 'geo')
-    return c.jsxs('g', {
-      fill: '#2A2830',
-      children: [
-        c.jsx('rect', { x: 84, y: 92, width: 15, height: 3.6, rx: 1.8 }),
-        c.jsx('rect', { x: 121, y: 92, width: 15, height: 3.6, rx: 1.8 }),
-      ],
     });
-  const n = e === 'soft' ? 7.5 : 6.5,
-    r = e === 'soft' ? 6 : 5.2;
-  return c.jsxs('g', {
-    children: [
-      c.jsx('ellipse', { cx: 91, cy: 97, rx: r, ry: n, fill: '#25232C' }),
-      c.jsx('ellipse', { cx: 129, cy: 97, rx: r, ry: n, fill: '#25232C' }),
-      c.jsx('circle', { cx: 93, cy: 94.5, r: 1.9, fill: '#FFFFFF', opacity: 0.85 }),
-      c.jsx('circle', { cx: 131, cy: 94.5, r: 1.9, fill: '#FFFFFF', opacity: 0.85 }),
-      t === 'warm' &&
-        c.jsxs('g', {
-          stroke: '#3A3540',
-          strokeWidth: 1.8,
-          fill: 'none',
-          strokeLinecap: 'round',
-          opacity: 0.55,
-          children: [
-            c.jsx('path', { d: 'M84 89 Q91 85 98 89' }),
-            c.jsx('path', { d: 'M122 89 Q129 85 136 89' }),
-          ],
-        }),
-    ],
-  });
-}
-function qV({ mood: e }) {
-  const t =
-    e === 'warm'
-      ? 'M100 124 Q110 134 120 124'
-      : e === 'focus'
-        ? 'M103 127 Q110 129 117 127'
-        : 'M101 125 Q110 131 119 125';
-  return c.jsx('path', {
-    d: t,
-    stroke: '#C36A5C',
-    strokeWidth: 2.6,
-    fill: 'none',
-    strokeLinecap: 'round',
-  });
-}
-function JV() {
-  return c.jsxs('g', {
-    stroke: '#3C4150',
-    strokeWidth: 2,
-    fill: 'none',
-    opacity: 0.92,
-    children: [
-      c.jsx('rect', {
-        x: 77,
-        y: 85,
-        width: 26,
-        height: 22,
-        rx: 8,
-        fill: '#FFFFFF',
-        fillOpacity: 0.12,
-      }),
-      c.jsx('rect', {
-        x: 117,
-        y: 85,
-        width: 26,
-        height: 22,
-        rx: 8,
-        fill: '#FFFFFF',
-        fillOpacity: 0.12,
-      }),
-      c.jsx('path', { d: 'M103 95 L117 95' }),
-      c.jsx('path', { d: 'M77 92 L67 96' }),
-      c.jsx('path', { d: 'M143 92 L153 96' }),
-    ],
-  });
-}
-function eH({ outfit: e, color: t }) {
-  return e === 'shirt'
-    ? c.jsxs('g', {
-        children: [
-          c.jsx('path', {
-            d: 'M34 240 C34 194 66 170 110 170 C154 170 186 194 186 240 Z',
-            fill: '#E7EAF1',
-          }),
-          c.jsx('path', {
-            d: 'M34 240 C34 194 66 170 110 170 C154 170 186 194 186 240 Z',
-            fill: 'none',
-            stroke: '#D3D8E3',
-            strokeWidth: 1.5,
-          }),
-          c.jsx('path', {
-            d: 'M96 172 Q110 194 124 172 Q117 170 110 170 Q103 170 96 172 Z',
-            fill: '#F5F7FB',
-          }),
-          c.jsx('path', { d: 'M110 186 L110 240', stroke: '#D8DDE7', strokeWidth: 1.4 }),
-          c.jsx('circle', { cx: 110, cy: 203, r: 2.2, fill: '#C3CAD7' }),
-        ],
-      })
-    : e === 'uniform'
-      ? c.jsxs('g', {
-          children: [
-            c.jsx('path', {
-              d: 'M34 240 C34 194 66 170 110 170 C154 170 186 194 186 240 Z',
-              fill: '#EDEFF3',
-            }),
-            c.jsx('path', {
-              d: 'M34 240 C34 194 66 170 110 170 C154 170 186 194 186 240 Z',
-              fill: 'none',
-              stroke: '#DCE0E8',
-              strokeWidth: 1.5,
-            }),
-            c.jsx('path', {
-              d: 'M88 172 L110 196 L132 172 L124 170 L110 182 L96 170 Z',
-              fill: t,
-              opacity: 0.92,
-            }),
-            c.jsx('path', { d: 'M110 196 L110 240', stroke: '#D5DAE3', strokeWidth: 1.4 }),
-            c.jsx('circle', {
-              cx: 139,
-              cy: 206,
-              r: 6,
-              fill: 'none',
-              stroke: t,
-              strokeWidth: 1.6,
-              opacity: 0.7,
-            }),
-            c.jsx('circle', { cx: 139, cy: 206, r: 2, fill: t, opacity: 0.7 }),
-          ],
-        })
-      : c.jsxs('g', {
-          children: [
-            c.jsx('path', {
-              d: 'M34 240 C34 194 66 170 110 170 C154 170 186 194 186 240 Z',
-              fill: '#2C3345',
-            }),
-            c.jsx('path', {
-              d: 'M92 170 L110 198 L128 170 L120 168 L110 182 L100 168 Z',
-              fill: '#F4F6FA',
-            }),
-            c.jsx('path', { d: 'M110 192 L103 202 L110 234 L117 202 Z', fill: t }),
-            c.jsx('path', { d: 'M92 170 L110 198 L104 200 L88 176 Z', fill: '#232A3A' }),
-            c.jsx('path', { d: 'M128 170 L110 198 L116 200 L132 176 Z', fill: '#232A3A' }),
-          ],
-        });
-}
-function tH({ scene: e, color: t }) {
-  if (e === 'screen') {
-    const n = [];
-    for (let r = 0; r < 6; r += 1)
-      for (let a = 0; a < 10; a += 1)
-        n.push(
-          c.jsx(
-            'circle',
-            { cx: 18 + a * 21, cy: 22 + r * 21, r: 1.4, fill: t, opacity: 0.1 },
-            `${r}-${a}`,
-          ),
-        );
-    return c.jsxs('g', {
-      children: [n, c.jsx('rect', { x: 0, y: 150, width: 220, height: 3, fill: t, opacity: 0.13 })],
-    });
-  }
-  return e === 'boardroom'
-    ? c.jsxs('g', {
-        children: [
-          c.jsx('circle', { cx: 110, cy: 74, r: 96, fill: t, opacity: 0.05 }),
-          c.jsx('ellipse', { cx: 110, cy: 252, rx: 132, ry: 46, fill: t, opacity: 0.07 }),
-          c.jsx('path', {
-            d: 'M0 176 C48 168 64 150 110 150 C156 150 172 168 220 176 L220 182 C172 174 156 156 110 156 C64 156 48 174 0 182 Z',
-            fill: t,
-            opacity: 0.06,
-          }),
-        ],
-      })
-    : c.jsx('circle', { cx: 110, cy: 92, r: 82, fill: t, opacity: 0.06 });
-}
-function Iu({ cfg: e, size: t = 200, breathe: n = true, className: r }) {
-  const { style: a, outfit: i, mood: o, scene: l, color: s } = e,
-    u = `${a}-${i}-${o}-${l}-${s.replace('#', '')}`;
-  return c.jsxs('svg', {
-    className: r,
-    width: t,
-    height: t * (240 / 220),
-    viewBox: '0 0 220 240',
-    role: 'img',
-    'aria-label': '\u6570\u5B57\u4EBA\u5F62\u8C61\u9884\u89C8',
-    children: [
-      c.jsxs('defs', {
-        children: [
-          c.jsxs('linearGradient', {
-            id: `bg-${u}`,
-            x1: '0',
-            y1: '0',
-            x2: '0',
-            y2: '1',
-            children: [
-              c.jsx('stop', { offset: '0%', stopColor: '#FFFFFF' }),
-              c.jsx('stop', { offset: '100%', stopColor: '#F2F4F8' }),
-            ],
-          }),
-          c.jsx('clipPath', {
-            id: `clip-${u}`,
-            children: c.jsx('rect', { x: 0, y: 0, width: 220, height: 240, rx: 18 }),
-          }),
-        ],
-      }),
-      c.jsxs('g', {
-        clipPath: `url(#clip-${u})`,
-        children: [
-          c.jsx('rect', { x: 0, y: 0, width: 220, height: 240, fill: `url(#bg-${u})` }),
-          c.jsx(tH, { scene: l, color: s }),
-          c.jsxs('g', {
-            className: n ? 'avatar-breathe' : void 0,
-            children: [
-              c.jsx(eH, { outfit: i, color: s }),
-              c.jsx('rect', { x: 94, y: 128, width: 32, height: 46, rx: 15, fill: fu }),
-              c.jsx('ellipse', { cx: 110, cy: 140, rx: 16, ry: 9, fill: fu }),
-              a !== 'geo' &&
-                c.jsxs('g', {
-                  fill: fu,
-                  children: [
-                    c.jsx('ellipse', { cx: a === 'soft' ? 63 : 67, cy: 98, rx: 7, ry: 10.5 }),
-                    c.jsx('ellipse', { cx: a === 'soft' ? 157 : 153, cy: 98, rx: 7, ry: 10.5 }),
-                  ],
-                }),
-              c.jsx(YV, { style: a }),
-              c.jsx(ZV, { style: a }),
-              (o === 'warm' || a === 'soft') &&
-                c.jsxs('g', {
-                  fill: '#EF9A8B',
-                  opacity: 0.36,
-                  children: [
-                    c.jsx('ellipse', { cx: 78, cy: 112, rx: 9.5, ry: 5.5 }),
-                    c.jsx('ellipse', { cx: 142, cy: 112, rx: 9.5, ry: 5.5 }),
-                  ],
-                }),
-              c.jsx(XV, { mood: o }),
-              c.jsx(QV, { style: a, mood: o }),
-              c.jsx('path', {
-                d: 'M110 103 L110 113 L104 115',
-                stroke: fu,
-                strokeWidth: 2,
-                fill: 'none',
-                strokeLinecap: 'round',
-              }),
-              c.jsx(qV, { mood: o }),
-              a === 'pro' && c.jsx(JV, {}),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
-}
-
-function Fn({ label: e, badge: t, children: n }) {
-  return c.jsxs('div', {
-    className: 'ap-ctrl',
-    children: [
-      c.jsxs('div', {
-        className: 'ap-ctrl-label',
-        children: [
-          e,
-          t &&
-            c.jsx('span', {
-              style: { fontWeight: 400, color: 'var(--ap-ink-3)', fontSize: 11.5 },
-              children: t,
-            }),
-        ],
-      }),
-      n,
-    ],
-  });
-}
-function al({ value: e, options: t, onChange: n }) {
-  return c.jsx(On.Group, {
-    className: 'ap-opt-group',
-    value: e,
-    onChange: (r) => n(String(r)),
-    children: t.map((r) =>
-      c.jsx(
-        On,
-        {
-          value: r.value,
-          children: c.jsxs('span', {
-            className: 'ap-opt-inner',
-            children: [
-              c.jsx('span', { className: 'ap-opt-label', children: r.label }),
-              r.desc ? c.jsx('span', { className: 'ap-opt-desc', children: r.desc }) : null,
-            ],
-          }),
-        },
-        r.value,
-      ),
-    ),
-  });
-}
-function iH({ cfg: e, voice: t, persona: n, onCfg: r, onVoice: a, onPersona: i }) {
-  var p, h, m;
-  const [o, l] = y.useState(0),
-    [s, u] = y.useState(0);
-  y.useEffect(() => {
-    l(0);
-    let g = 0;
-    const w = window.setInterval(() => {
-      void ((g += 1), l(g), g >= n.greeting.length && window.clearInterval(w));
-    }, 26);
-    return () => window.clearInterval(w);
-  }, [n.greeting, s]);
-  const d =
-      (h = (p = T1.find((g) => g.value === t.tone)) == null ? void 0 : p.label) != null
-        ? h
-        : '\u77E5\u6027\u5973\u58F0',
-    v = o < n.greeting.length;
-  return c.jsxs('div', {
-    className: 'ap-studio-layout',
-    children: [
-      c.jsxs('div', {
-        className: 'ap-stage',
-        children: [
-          c.jsx('div', { className: 'ap-stage-ava', children: c.jsx(Iu, { cfg: e, size: 244 }) }),
-          c.jsxs('div', {
-            className: 'ap-bubble',
-            children: [
-              c.jsxs('div', {
-                style: {
-                  fontSize: 11,
-                  color: 'var(--ap-ink-3)',
-                  marginBottom: 7,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                },
-                children: [
-                  c.jsxs('span', {
-                    style: { display: 'flex', alignItems: 'center', gap: 6 },
-                    children: [
-                      c.jsx('span', {
-                        style: {
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: 'var(--green-6)',
-                        },
-                      }),
-                      n.name,
-                      ' \xB7 ',
-                      d,
-                    ],
-                  }),
-                  c.jsxs('span', { children: [t.rate.toFixed(2), '\xD7'] }),
-                ],
-              }),
-              c.jsx('span', {
-                className: v ? 'ap-caret' : void 0,
-                children: n.greeting.slice(0, o),
-              }),
-            ],
-          }),
-          c.jsx(Ke, {
-            long: true,
-            onClick: () => u((g) => g + 1),
-            children: '\u91CD\u64AD\u5F00\u573A\u767D',
-          }),
-          c.jsxs('div', {
-            style: { fontSize: 11.5, color: 'var(--ap-ink-3)', lineHeight: 1.65 },
-            children: [
-              c.jsx(If, {}),
-              ' \u5F62\u8C61\u4E3A\u77E2\u91CF\u7ED8\u5236\uFF0C\u6B63\u5F0F\u5F00\u53D1\u65F6\u66FF\u6362\u4E3A\u6B63\u5F0F\u5F62\u8C61\u8D44\u6E90\uFF1B\u6B64\u5904\u53EA\u7528\u4E8E\u786E\u8BA4\u98CE\u683C\u65B9\u5411\u3002',
-            ],
-          }),
-        ],
-      }),
-      c.jsxs('div', {
-        children: [
-          c.jsx(Fn, {
-            label: '\u5F62\u8C61\u98CE\u683C',
-            children: c.jsx(al, {
-              value: e.style,
-              options: TV,
-              onChange: (g) => r({ ...e, style: g }),
-            }),
-          }),
-          c.jsx(Fn, {
-            label: '\u670D\u9970',
-            children: c.jsx(al, {
-              value: e.outfit,
-              options: MV,
-              onChange: (g) => r({ ...e, outfit: g }),
-            }),
-          }),
-          c.jsx(Fn, {
-            label: '\u795E\u6001',
-            children: c.jsx(al, {
-              value: e.mood,
-              options: RV,
-              onChange: (g) => r({ ...e, mood: g }),
-            }),
-          }),
-          c.jsx(Fn, {
-            label: '\u51FA\u573A\u573A\u666F',
-            children: c.jsx(al, {
-              value: e.scene,
-              options: $V,
-              onChange: (g) => r({ ...e, scene: g }),
-            }),
-          }),
-          c.jsx(Fn, {
-            label: '\u4E3B\u8272',
-            badge: '\u7528\u4E8E\u670D\u9970\u70B9\u7F00\u4E0E\u573A\u666F\u6C1B\u56F4',
-            children: c.jsx('div', {
-              className: 'ap-swatch',
-              children: DV.map((g) =>
-                c.jsx(
-                  Ke,
-                  {
-                    shape: 'square',
-                    type: e.color === g.value ? 'primary' : 'secondary',
-                    title: g.label,
-                    onClick: () => r({ ...e, color: g.value }),
-                    icon: c.jsx('span', {
-                      className: 'ap-swatch-dot',
-                      style: { background: g.value },
-                    }),
-                  },
-                  g.value,
-                ),
-              ),
-            }),
-          }),
-          c.jsx('div', { className: 'ap-divider' }),
-          c.jsx(Fn, {
-            label: '\u97F3\u8272',
-            badge:
-              '\u4E00\u671F\u4F7F\u7528\u901A\u7528\u97F3\u8272\uFF0C\u4E8C\u671F\u63A5\u5165\u54C1\u724C\u4E13\u5C5E\u97F3\u8272',
-            children: c.jsx(al, {
-              value: t.tone,
-              options: T1,
-              onChange: (g) => a({ ...t, tone: g }),
-            }),
-          }),
-          c.jsxs('div', {
-            style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 },
-            children: [
-              c.jsx(Fn, {
-                label: '\u8BED\u901F',
-                badge: `${t.rate.toFixed(2)}\xD7`,
-                children: c.jsx(Hp, {
-                  min: 0.8,
-                  max: 1.25,
-                  step: 0.05,
-                  value: t.rate,
-                  onChange: (g) => a({ ...t, rate: Number(g) }),
-                  formatTooltip: (g) => `${Number(g).toFixed(2)}\xD7`,
-                }),
-              }),
-              c.jsx(Fn, {
-                label: '\u8BED\u8C03',
-                badge: t.pitch > 0 ? '\u7565\u9AD8' : t.pitch < 0 ? '\u7565\u4F4E' : '\u6807\u51C6',
-                children: c.jsx(Hp, {
-                  min: -2,
-                  max: 2,
-                  step: 1,
-                  value: t.pitch,
-                  onChange: (g) => a({ ...t, pitch: Number(g) }),
-                  formatTooltip: (g) => String(g),
-                }),
-              }),
-            ],
-          }),
-          c.jsx('div', { className: 'ap-divider' }),
-          c.jsxs('div', {
-            style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 },
-            children: [
-              c.jsx(Fn, {
-                label: '\u52A9\u624B\u540D\u79F0',
-                children: c.jsx(Zt, {
-                  value: n.name,
-                  onChange: (g) => i({ ...n, name: g }),
-                  placeholder: '\u4F8B\u5982\uFF1A\u4E3B\u8BA1\u5212\u53C2\u8C0B',
-                }),
-              }),
-              c.jsx(Fn, {
-                label: '\u79F0\u547C\u4F60\u4E3A',
-                children: c.jsx(Zt, {
-                  value: n.address,
-                  onChange: (g) => i({ ...n, address: g }),
-                  placeholder: '\u4F8B\u5982\uFF1A\u674E\u7433',
-                }),
-              }),
-            ],
-          }),
-          c.jsxs(Fn, {
-            label: '\u8BDD\u672F\u53E3\u543B',
-            children: [
-              c.jsx(On.Group, {
-                type: 'button',
-                value: n.tone,
-                onChange: (g) => i({ ...n, tone: String(g) }),
-                children: M1.map((g) => c.jsx(On, { value: g.value, children: g.label }, g.value)),
-              }),
-              c.jsx('div', {
-                style: { fontSize: 11.5, color: 'var(--ap-ink-3)', marginTop: 8 },
-                children: (m = M1.find((g) => g.value === n.tone)) == null ? void 0 : m.desc,
-              }),
-            ],
-          }),
-          c.jsx(Fn, {
-            label: '\u5F00\u573A\u767D',
-            children: c.jsx(Zt.TextArea, {
-              value: n.greeting,
-              onChange: (g) => i({ ...n, greeting: g }),
-              autoSize: { minRows: 3, maxRows: 5 },
-            }),
-          }),
-          c.jsx(Ke, {
-            type: 'primary',
-            onClick: () => kt.success('\u8BBE\u7F6E\u5DF2\u4FDD\u5B58\uFF08\u6A21\u62DF\uFF09'),
-            children: '\u4FDD\u5B58\u8BBE\u7F6E',
-          }),
-        ],
-      }),
-    ],
-  });
-}
-function oH({
-  s: e,
-  pullType: t,
-  onPullType: n,
-  months: r,
-  onMonths: a,
-  shipPeriod: i,
-  onShipPeriod: o,
-  onPreview: l,
-}) {
-  var s, u;
-  return c.jsxs('section', {
-    className: 'ap-board-card ap-source-card',
-    children: [
-      c.jsxs('div', {
-        className: 'ap-card-head',
-        children: [
-          c.jsxs('h3', {
-            children: [
-              e.title,
-              c.jsx(ut, {
-                color: e.state === 'ok' ? 'green' : 'orange',
-                size: 'small',
-                bordered: true,
-                children: e.state === 'ok' ? '\u5DF2\u9F50\u5907' : '\u6709\u7F3A\u9879',
-              }),
-            ],
-          }),
-          c.jsx('span', { style: { fontSize: 11.5, color: 'var(--ap-ink-3)' }, children: e.from }),
-        ],
-      }),
-      c.jsxs('div', {
-        className: 'ap-card-body ap-source-body',
-        children: [
-          c.jsxs('div', {
-            className: 'ap-source-meta',
-            children: [
-              c.jsxs('span', { className: 'ap-brand-chip', children: [c.jsx(MO, {}), e.time] }),
-              c.jsx('span', { className: 'ap-brand-chip', children: e.version }),
-            ],
-          }),
-          c.jsx('div', {
-            className: 'ap-source-stats',
-            children: e.stats.map((d) =>
-              c.jsxs(
-                'div',
-                {
-                  children: [
-                    c.jsx('div', { className: 'ap-stat-k', children: d.k }),
-                    c.jsx('div', { className: 'ap-stat-v', children: d.v }),
-                  ],
-                },
-                d.k,
-              ),
-            ),
-          }),
-          e.pull &&
-            c.jsxs('div', {
-              className: 'ap-pull',
-              children: [
-                c.jsx('div', { className: 'ap-pull-title', children: '\u62C9\u53D6\u8BBE\u7F6E' }),
-                c.jsxs('div', {
-                  className: 'ap-pull-row',
-                  children: [
-                    c.jsx('span', {
-                      className: 'ap-pull-label',
-                      children: '\u8BA1\u5212\u7C7B\u578B',
-                    }),
-                    c.jsx(On.Group, {
-                      type: 'button',
-                      size: 'small',
-                      value: t,
-                      onChange: (d) => n(String(d)),
-                      children: k1.map((d) =>
-                        c.jsx(On, { value: d.value, children: d.label }, d.value),
-                      ),
-                    }),
-                  ],
-                }),
-                c.jsxs('div', {
-                  className: 'ap-pull-row',
-                  children: [
-                    c.jsx('span', {
-                      className: 'ap-pull-label',
-                      children: '\u53C2\u4E0E\u671F\u95F4',
-                    }),
-                    c.jsx(Mr.Group, {
-                      value: r,
-                      onChange: (d) => a(d),
-                      options: IO.map((d) => ({ label: d.label, value: d.value })),
-                    }),
-                  ],
-                }),
-                c.jsxs('div', {
-                  className: 'ap-pull-hint',
-                  children: [
-                    (s = k1.find((d) => d.value === t)) == null ? void 0 : s.desc,
-                    ' \xB7 \u9ED8\u8BA4\u53D6\u8BC4\u4F30\u6708\u4EFD\u8D77\u8FDE\u7EED 3 \u4E2A\u6708',
-                    r.length === 0 &&
-                      ' \xB7 \u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u671F\u95F4',
-                  ],
-                }),
-              ],
-            }),
-          e.periods &&
-            c.jsxs('div', {
-              className: 'ap-periods',
-              children: [
-                c.jsx('div', {
-                  className: 'ap-periods-title',
-                  children:
-                    '\u540C\u671F\u53D1\u8D27\u660E\u7EC6\uFF08\u6309\u8BC4\u4F30\u6708\u4EFD\u63A8\u5BFC\uFF09',
-                }),
-                c.jsx('div', {
-                  className: 'ap-period-grid',
-                  children: ig.map((d) =>
-                    c.jsxs(
-                      Ke,
-                      {
-                        className: 'ap-period-tile',
-                        'data-active': i === d.value,
-                        onClick: () => {
-                          void (o(d.value), l('ship'));
-                        },
-                        children: [
-                          c.jsx('span', { className: 'ap-period-tag', children: d.tag }),
-                          c.jsx('span', { className: 'ap-period-val', children: d.label }),
-                          c.jsxs('span', {
-                            className: 'ap-period-eye',
-                            children: [c.jsx(R1, {}), '\u9884\u89C8'],
-                          }),
-                        ],
-                      },
-                      d.value,
-                    ),
-                  ),
-                }),
-              ],
-            }),
-          e.note && c.jsx('div', { className: 'ap-source-note', children: e.note }),
-          c.jsxs('div', {
-            className: 'ap-source-actions',
-            children: [
-              e.canSync &&
-                c.jsx(Ke, {
-                  size: 'small',
-                  icon: e.syncText ? c.jsx(DO, {}) : c.jsx($O, {}),
-                  onClick: () => {
-                    var d;
-                    return kt.success(
-                      `\u5DF2\u53D1\u8D77${e.title}${(d = e.syncText) != null ? d : '\u540C\u6B65'}\uFF08\u6A21\u62DF\uFF09`,
-                    );
-                  },
-                  children: (u = e.syncText) != null ? u : '\u540C\u6B65\u6570\u636E',
-                }),
-              c.jsx(Ke, {
-                size: 'small',
-                type: 'text',
-                icon: c.jsx(R1, {}),
-                onClick: () => l(e.id),
-                children: '\u9884\u89C8\u6570\u636E',
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
-}
-function lH({ onNext: e }) {
-  var v;
-  const [t, n] = usePageViewField(
-      y,
-      mpsView,
-      'preview',
-      null,
-      (value) => value,
-      (value) => (value === null || mV.some((row) => row.id === value) ? value : null),
-    ),
-    [r, a] = usePageViewField(y, mpsView, 'pullType', 'monthly'),
-    [i, o] = usePageViewField(
-      y,
-      mpsView,
-      'months',
-      IO.map((p) => p.value),
-      (value) => value,
-      (value) => value.filter((month) => IO.some((row) => row.value === month)),
-    ),
-    [l, s] = usePageViewField(y, mpsView, 'shipPeriod', ig[0].value),
-    u =
-      t === 'report'
-        ? `report-${r === 'adjust' ? 'adjust' : 'monthly'}`
-        : t === 'ship'
-          ? `ship-${l}`
-          : t,
-    d = u ? TO[u] : null;
-  useMpsPart(
-    y,
-    'check',
-    { sources: mV, pullType: r, months: i, shipPeriod: l, preview: d },
-    pV['check'] ?? vV['check'],
-  );
-  return c.jsxs(c.Fragment, {
-    children: [
-      c.jsxs('div', {
-        className: 'ap-notice',
-        'data-kind': 'info',
-        style: { marginBottom: 16 },
-        children: [
-          c.jsx(If, {}),
-          c.jsxs('span', {
-            children: [
-              '\u8FD9\u662F\u8BA1\u5212\u94FE\u7684\u7B2C\u4E00\u6B65\uFF1A\u5148\u786E\u8BA4\u4E09\u8DEF\u6570\u636E\uFF08',
-              c.jsx('b', { children: '\u8BA1\u5212\u63D0\u62A5\u6570\u636E' }),
-              ' + ',
-              c.jsx('b', { children: '\u6210\u957F\u9884\u6D4B\u6570\u636E' }),
-              ' + ',
-              c.jsx('b', { children: '\u5386\u53F2\u53D1\u8D27\u6570\u636E' }),
-              '\uFF09 \u9F50\u5168\u3001\u5B57\u6BB5\u5B8C\u6574\uFF0C\u786E\u8BA4\u65E0\u8BEF\u540E\u518D\u8FDB\u5165\u9700\u6C42\u52A0\u5DE5\u4E0E\u4E3B\u6570\u636E\u5BF9\u5E94\u5173\u7CFB\u3002\u7F3A\u9879\u4E00\u5F8B\u5982\u5B9E\u6807\u6CE8\uFF0C\u4E0D\u7528\u4F30\u7B97\u503C\u8865\u9F50\u3002',
-            ],
-          }),
-        ],
-      }),
-      c.jsxs('div', {
-        className: 'ap-section-title',
-        style: { marginTop: 0 },
-        children: [
-          c.jsx('h2', { children: '\u4E09\u8DEF\u6570\u636E' }),
-          c.jsx('span', {
-            children:
-              '\u4E09\u8DEF\u90FD\u53C2\u4E0E\u52A0\u6743\u52A0\u5DE5\u51FA\u521D\u7248\u9700\u6C42\uFF0C\u5386\u53F2\u53D1\u8D27\u5355\u72EC\u770B\u4E5F\u662F\u540C\u671F\u6821\u9A8C\u7684\u53C2\u7167',
-          }),
-        ],
-      }),
-      c.jsx('div', {
-        className: 'ap-grid-3 ap-source-grid',
-        children: mV.map((p) =>
-          c.jsx(
-            oH,
-            {
-              s: p,
-              pullType: r,
-              onPullType: a,
-              months: i,
-              onMonths: o,
-              shipPeriod: l,
-              onShipPeriod: s,
-              onPreview: n,
-            },
-            p.id,
-          ),
-        ),
-      }),
-      c.jsx('div', {
-        style: { display: 'flex', justifyContent: 'flex-end', marginTop: 16 },
-        children: c.jsx(Ke, {
-          type: 'primary',
-          onClick: e,
-          children: '\u4E0B\u4E00\u6B65\uFF1A\u9700\u6C42\u52A0\u5DE5\u4E0E\u6536\u655B',
-        }),
-      }),
-      c.jsx(Zm, {
-        width: 880,
-        title: (v = d == null ? void 0 : d.title) != null ? v : '',
-        visible: !!d,
-        onCancel: () => n(null),
-        footer: null,
-        children:
-          d &&
-          c.jsxs(c.Fragment, {
-            children: [
-              c.jsx('div', {
-                style: { fontSize: 12.5, color: 'var(--ap-ink-3)', marginBottom: 14 },
-                children: d.sub,
-              }),
-              c.jsx('div', {
-                style: { border: '1px solid var(--ap-line)', borderRadius: 10, overflow: 'hidden' },
-                children: c.jsxs('table', {
-                  className: 'ap-table',
-                  children: [
-                    c.jsx('thead', {
-                      children: c.jsx('tr', {
-                        children: d.cols.map((p) => c.jsx('th', { children: p }, p)),
-                      }),
-                    }),
-                    c.jsx('tbody', {
-                      children: d.rows.map((p, h) =>
-                        c.jsx(
-                          'tr',
-                          {
-                            children: p.map((m, g) =>
-                              c.jsx(
-                                'td',
-                                { className: g === 0 ? 'ap-left' : 'ap-num', children: m },
-                                g,
-                              ),
-                            ),
-                          },
-                          h,
-                        ),
-                      ),
-                    }),
-                  ],
-                }),
-              }),
-              c.jsx('div', {
-                style: { fontSize: 11.8, color: 'var(--ap-ink-3)', marginTop: 12, lineHeight: 1.7 },
-                children:
-                  '\u4EE5\u4E0A\u4E3A\u524D 10 \u6761\u793A\u4F8B\u8BB0\u5F55\u3002\u5B8C\u6574\u660E\u7EC6\u53EF\u5BFC\u51FA\u540E\u67E5\u770B\u3002',
-              }),
-            ],
-          }),
-      }),
-    ],
-  });
-}
+void k1;
+void IO;
+const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView);
 function sH(e, t) {
   const n = [
       { v: e.report, weight: t.report },
@@ -4397,406 +3380,28 @@ const yH = [
   { label: '\u5168\u90E8\u57FA\u5730', value: '\u5168\u90E8' },
   ...Array.from(new Set(dl.map((e) => e.base))).map((e) => ({ label: e, value: e })),
 ];
-function xH({ onNext: e }) {
-  const [t, n] = usePageViewField(y, mpsView, 'shipBase', '\u5168\u90E8'),
-    [r, a] = usePageViewField(
-      y,
-      mpsView,
-      'shipRemaining',
-      Object.fromEntries(dl.map((w) => [w.id, w.rest])),
-      (value) =>
-        Object.fromEntries(Object.entries(value).filter(([id]) => dl.some((row) => row.id === id))),
-    ),
-    i = y.useMemo(
-      () =>
-        dl.map((w) => {
-          var x;
-          const b = w.noData ? 0 : (x = r[w.id]) != null ? x : w.rest;
-          return {
-            ...w,
-            restVal: b,
-            est: w.noData ? null : w.shipped + b,
-            monthEnd: w.noData ? null : w.stock + w.inbound + w.restProd - b,
-            changed: !w.noData && b !== w.rest,
-          };
-        }),
-      [r],
-    ),
-    o = y.useMemo(() => Array.from(new Set(dl.filter((w) => w.noData).map((w) => w.base))), []),
-    l = t === '\u5168\u90E8' ? i : i.filter((w) => w.base === t),
-    s = t === '\u5168\u90E8' ? o : o.filter((w) => w === t),
-    u = i.filter((w) => !w.noData),
-    d = u.reduce((w, b) => w + b.shipped, 0),
-    v = u.reduce((w, b) => {
-      var x;
-      return w + ((x = b.est) != null ? x : 0);
-    }, 0),
-    p = u.reduce((w, b) => {
-      var x;
-      return w + ((x = b.monthEnd) != null ? x : 0);
-    }, 0),
-    h = u
-      .filter((w) => w.base === '\u90D1\u5DDE')
-      .reduce((w, b) => {
-        var x;
-        return w + ((x = b.monthEnd) != null ? x : 0);
-      }, 0),
-    m = i.some((w) => w.changed),
-    g = v ? Math.round((d / v) * 100) : 0;
-  useMpsPart(
-    y,
-    'ship',
-    { base: t, rows: l, missingBases: s, shipped: d, estimatedShipment: v, monthEnd: p },
-    pV['ship'] ?? vV['ship'],
-  );
-  return c.jsxs(c.Fragment, {
-    children: [
-      c.jsxs('div', {
-        className: 'ap-notice',
-        'data-kind': 'info',
-        style: { marginBottom: 16 },
-        children: [
-          c.jsx(If, {}),
-          c.jsxs('span', {
-            children: [
-              '\u672C\u6708\u7684',
-              c.jsx('strong', { children: '\u5DF2\u53D1\u8D27' }),
-              '\u53D6\u81EA BI \u5B9E\u9645\u3001',
-              c.jsx('strong', { children: '\u5269\u4F59\u5929\u6570\u9884\u4F30' }),
-              '\u6309\u63D0\u62A5\u53E3\u5F84\uFF0C\u4E24\u8005\u76F8\u52A0\u5F97\u5230\u6574\u6708\u9884\u4F30\u53D1\u8FD0\uFF1B \u63A8\u7B97\u51FA\u7684',
-              c.jsxs('strong', {
-                children: [
-                  '\u6708\u672B\u5E93\u5B58\u76F4\u63A5\u4F5C\u4E3A ',
-                  ar.planMonth,
-                  ' \u8BA1\u5212\u7684\u671F\u521D\u5E93\u5B58',
-                ],
-              }),
-              '\uFF0C\u4E0D\u518D\u624B\u5DE5\u63A8\u7B97\u3002',
-            ],
-          }),
-        ],
-      }),
-      c.jsxs('div', {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-          marginBottom: 16,
-        },
-        children: [
-          c.jsxs('span', {
-            className: 'ap-pill',
-            children: ['\u672C\u6708 ', c.jsx('b', { children: ar.curMonth })],
-          }),
-          c.jsxs('span', {
-            className: 'ap-pill',
-            children: ['\u8BC4\u4F30\u8BA1\u5212\u6708 ', c.jsx('b', { children: ar.planMonth })],
-          }),
-          c.jsxs('span', {
-            className: 'ap-pill',
-            children: ['\u6570\u636E\u622A\u6B62 ', c.jsx('b', { children: ar.cutOff })],
-          }),
-          c.jsxs('span', {
-            className: 'ap-pill',
-            children: [
-              '\u5269\u4F59\u53D1\u8FD0\u5929\u6570 ',
-              c.jsxs('b', { children: [ar.restDays, ' \u5929'] }),
-            ],
-          }),
-          c.jsxs('span', {
-            className: 'ap-pill',
-            children: ['\u672C\u6708\u5171 ', c.jsxs('b', { children: [ar.monthDays, ' \u5929'] })],
-          }),
-        ],
-      }),
-      c.jsx('div', {
-        className: 'ap-grid-3',
-        style: { marginBottom: 16 },
-        children: [
-          {
-            k: `\u672C\u6708\u5DF2\u53D1\u8D27 \xB7 \u622A\u81F3 ${ar.cutOff}`,
-            v: d,
-            d: `\u5360\u6574\u6708\u9884\u4F30 ${g}%\uFF0C\u5269\u4F59 ${ar.restDays} \u5929\u4E3A\u9884\u4F30\u503C`,
-          },
-          {
-            k: '\u672C\u6708\u9884\u4F30\u53D1\u8FD0\uFF08\u6574\u6708\uFF09',
-            v,
-            d: '\u5DF2\u53D1\u8D27 + \u5269\u4F59\u5929\u6570\u9884\u4F30\uFF08\u6309\u57FA\u5730 \xD7 \u5927\u7C7B\uFF09',
-          },
-          {
-            k: '\u9884\u8BA1\u6708\u672B\u5E93\u5B58\u5408\u8BA1',
-            v: p,
-            d: `\u7ED3\u8F6C\u4E3A ${ar.planMonth} \u8BA1\u5212\u7684\u671F\u521D\u5E93\u5B58`,
-          },
-        ].map((w) =>
-          c.jsx(
-            'section',
-            {
-              className: 'ap-board-card',
-              style: { marginBottom: 0 },
-              children: c.jsxs('div', {
-                className: 'ap-card-body',
-                children: [
-                  c.jsx('div', {
-                    style: { fontSize: 12, color: 'var(--ap-ink-3)', marginBottom: 6 },
-                    children: w.k,
-                  }),
-                  c.jsxs('div', {
-                    style: { fontSize: 22, fontWeight: 650, letterSpacing: '-0.3px' },
-                    children: [
-                      w.v.toLocaleString(),
-                      c.jsx('span', {
-                        style: {
-                          fontSize: 12.5,
-                          fontWeight: 400,
-                          color: 'var(--ap-ink-3)',
-                          marginLeft: 6,
-                        },
-                        children: '\u5428',
-                      }),
-                    ],
-                  }),
-                  c.jsx('div', {
-                    style: { marginTop: 8, fontSize: 12, color: 'var(--ap-ink-2)' },
-                    children: w.d,
-                  }),
-                ],
-              }),
-            },
-            w.k,
-          ),
-        ),
-      }),
-      c.jsxs('section', {
-        className: 'ap-board-card',
-        children: [
-          c.jsxs('div', {
-            className: 'ap-card-head',
-            children: [
-              c.jsxs('h3', {
-                children: [
-                  '\u672C\u6708\u9884\u4F30\u53D1\u8D27',
-                  c.jsx(ut, {
-                    size: 'small',
-                    bordered: true,
-                    children: '\u5355\u4F4D\uFF1A\u5428',
-                  }),
-                ],
-              }),
-              c.jsx('span', {
-                style: { fontSize: 11.5, color: 'var(--ap-ink-3)' },
-                children:
-                  '\u5269\u4F59\u5929\u6570\u9884\u4F30\u53EF\u76F4\u63A5\u6539\uFF0C\u6574\u6708\u9884\u4F30\u4E0E\u6708\u672B\u5E93\u5B58\u5373\u65F6\u91CD\u7B97',
-              }),
-              c.jsx('span', { style: { flex: 1 } }),
-              m &&
-                c.jsx(Ke, {
-                  size: 'small',
-                  icon: c.jsx($O, {}),
-                  onClick: () => a(Object.fromEntries(dl.map((w) => [w.id, w.rest]))),
-                  children: '\u91CD\u7F6E\u4E3A\u63D0\u62A5\u503C',
-                }),
-              c.jsx(kn, {
-                size: 'small',
-                value: t,
-                onChange: n,
-                style: { width: 108 },
-                options: yH,
-              }),
-            ],
-          }),
-          c.jsx('div', {
-            className: 'ap-card-body flush',
-            style: { overflowX: 'auto' },
-            children: c.jsxs('table', {
-              className: 'ap-table',
-              children: [
-                c.jsx('thead', {
-                  children: c.jsxs('tr', {
-                    children: [
-                      c.jsx('th', { children: '\u57FA\u5730' }),
-                      c.jsx('th', { children: '\u5927\u7C7B' }),
-                      c.jsx('th', { children: '\u672C\u6708\u5DF2\u53D1\u8D27' }),
-                      c.jsx('th', { children: '\u5269\u4F59\u5929\u6570\u9884\u4F30' }),
-                      c.jsx('th', { children: '\u672C\u6708\u9884\u4F30\u53D1\u8FD0' }),
-                      c.jsx('th', { children: '\u73B0\u5E93\u5B58' }),
-                      c.jsx('th', { children: '\u8C03\u62E8\u5165\u5E93' }),
-                      c.jsx('th', { children: '\u672C\u6708\u5269\u4F59\u6392\u4EA7' }),
-                      c.jsx('th', { children: '\u9884\u8BA1\u6708\u672B\u5E93\u5B58' }),
-                    ],
-                  }),
-                }),
-                c.jsxs('tbody', {
-                  children: [
-                    l
-                      .filter((w) => !w.noData)
-                      .map((w) => {
-                        var b, x;
-                        return c.jsxs(
-                          'tr',
-                          {
-                            children: [
-                              c.jsx('td', {
-                                className: 'ap-left',
-                                style: { fontWeight: 500 },
-                                children: w.base,
-                              }),
-                              c.jsx('td', { className: 'ap-left ap-muted', children: w.cat }),
-                              c.jsx('td', {
-                                className: 'ap-num ap-muted',
-                                children: w.shipped.toLocaleString(),
-                              }),
-                              c.jsx('td', {
-                                children: c.jsxs('span', {
-                                  style: { display: 'inline-flex', gap: 6, alignItems: 'center' },
-                                  children: [
-                                    c.jsx(hi, {
-                                      size: 'small',
-                                      min: 0,
-                                      value: w.restVal,
-                                      style: { width: 92 },
-                                      onChange: (C) => a((_) => ({ ..._, [w.id]: Number(C) || 0 })),
-                                    }),
-                                    w.changed &&
-                                      c.jsx(ut, {
-                                        size: 'small',
-                                        color: 'orange',
-                                        bordered: true,
-                                        children: '\u5DF2\u8C03\u6574',
-                                      }),
-                                  ],
-                                }),
-                              }),
-                              c.jsx('td', {
-                                className: 'ap-num',
-                                style: { fontWeight: 650 },
-                                children: ((b = w.est) != null ? b : 0).toLocaleString(),
-                              }),
-                              c.jsx('td', {
-                                className: 'ap-num ap-muted',
-                                children: w.stock.toLocaleString(),
-                              }),
-                              c.jsx('td', {
-                                className: 'ap-num ap-muted',
-                                children: w.inbound === 0 ? '\u2014' : `+${w.inbound}`,
-                              }),
-                              c.jsx('td', {
-                                className: 'ap-num ap-muted',
-                                children: w.restProd.toLocaleString(),
-                              }),
-                              c.jsx('td', {
-                                className: 'ap-num',
-                                style: { fontWeight: 650, color: 'var(--primary-7)' },
-                                children: ((x = w.monthEnd) != null ? x : 0).toLocaleString(),
-                              }),
-                            ],
-                          },
-                          w.id,
-                        );
-                      }),
-                    s.map((w) =>
-                      c.jsxs(
-                        'tr',
-                        {
-                          children: [
-                            c.jsx('td', {
-                              className: 'ap-left',
-                              style: { fontWeight: 500 },
-                              children: w,
-                            }),
-                            c.jsxs('td', {
-                              className: 'ap-left ap-muted',
-                              colSpan: 8,
-                              children: [
-                                '\u793A\u4F8B\u6570\u636E\u91CC',
-                                c.jsx('b', {
-                                  children:
-                                    '\u53EA\u6709\u4EA7\u7EBF\u6570\u636E\u3001\u6CA1\u6709\u53D1\u8FD0\u4E0E\u9884\u6D4B\u8BB0\u5F55',
-                                }),
-                                '\uFF0C\u672C\u6B21\u4E0D\u7EB3\u5165\u63A8\u7B97 \u2014\u2014 \u5DF2\u4F5C\u4E3A\u6570\u636E\u7F3A\u53E3\u5217\u5165\u5F85\u786E\u8BA4',
-                              ],
-                            }),
-                          ],
-                        },
-                        w,
-                      ),
-                    ),
-                  ],
-                }),
-              ],
-            }),
-          }),
-          c.jsxs('div', {
-            className: 'ap-card-body',
-            style: { borderTop: '1px solid var(--ap-line)', paddingTop: 12 },
-            children: [
-              c.jsxs('div', {
-                style: { fontSize: 12.6, color: 'var(--ap-ink-2)', lineHeight: 1.75 },
-                children: [
-                  c.jsx('b', { children: '\u9884\u8BA1\u6708\u672B\u5E93\u5B58' }),
-                  ' = \u73B0\u5E93\u5B58 + \u8C03\u62E8\u5165\u5E93\uFF08\u542B\u5728\u9014\uFF09+ \u672C\u6708\u5269\u4F59\u6392\u4EA7 \u2212 \u5269\u4F59\u5929\u6570\u9884\u4F30\uFF1B \u5176\u4E2D',
-                  c.jsx('b', { children: '\u5269\u4F59\u5929\u6570\u9884\u4F30' }),
-                  ' = \u672C\u6708\u9884\u4F30\u53D1\u8FD0 \u2212 \u672C\u6708\u5DF2\u53D1\u8D27\u3002',
-                  c.jsx('br', {}),
-                  '\u90D1\u5DDE 4 \u5927\u7C7B\u6708\u672B\u5E93\u5B58\u5408\u8BA1 ',
-                  c.jsxs('b', { children: [h.toLocaleString(), ' \u5428'] }),
-                  '\uFF0C\u5373 ',
-                  ar.planMonth,
-                  ' \u8BA1\u5212\u7684\u671F\u521D\u5E93\u5B58\uFF0C \u4E0E\u300C\u6708\u5EA6\u8BA1\u5212\u7F16\u5236\u300D\u91CC\u7684\u671F\u521D\u5E93\u5B58\u9010\u5927\u7C7B\u4E00\u81F4\u3002',
-                ],
-              }),
-              c.jsxs('div', {
-                style: {
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  flexWrap: 'wrap',
-                  marginTop: 12,
-                },
-                children: [
-                  c.jsx('span', {
-                    style: { fontSize: 12.6, color: 'var(--ap-ink-2)' },
-                    children:
-                      '\u786E\u8BA4\u540E\u53EF\u76F4\u63A5\u5E26\u8FDB\u4E0B\u6708\u8BA1\u5212\uFF0C\u4E0D\u9700\u8981\u518D\u7EBF\u4E0B\u63A8\u4E00\u904D\u671F\u521D\u5E93\u5B58\u3002',
-                  }),
-                  c.jsx('span', { style: { flex: 1 } }),
-                  c.jsx(Ke, {
-                    size: 'small',
-                    icon: c.jsx(DO, {}),
-                    onClick: () =>
-                      kt.info(
-                        '\u5DF2\u5BFC\u51FA\u672C\u6708\u53D1\u8FD0\u660E\u7EC6\uFF08\u6A21\u62DF\uFF09',
-                      ),
-                    children: '\u5BFC\u51FA\u660E\u7EC6',
-                  }),
-                  c.jsx(Ke, {
-                    size: 'small',
-                    type: 'primary',
-                    onClick: () => {
-                      void (kt.success(
-                        `\u5DF2\u7ED3\u8F6C ${ar.planMonth} \u671F\u521D\u5E93\u5B58\uFF08\u6A21\u62DF\uFF09`,
-                      ),
-                      e == null || e());
-                    },
-                    children: '\u7ED3\u8F6C\u81F3\u6708\u5EA6\u8BA1\u5212\u7F16\u5236',
-                  }),
-                ],
-              }),
-            ],
-          }),
-        ],
-      }),
-    ],
-  });
-}
-const bH = eh.map((e) => e.key);
+export { ar, yH };
+const mpsSteps = [
+  ['check', '需求确认'],
+  ['ship', '本月预估发货'],
+  ['process', '需求加工与收敛'],
+  ['masterdata', '主数据对应关系'],
+  ['constraints', '约束与配置'],
+  ['capacity', '产能评估与缺口'],
+  ['report', '产销存报告'],
+].map(([key, label], index) => ({
+  key,
+  label,
+  step: String(index + 1),
+  hint:
+    index < 2 ? '本地隔离输入核对，正式保存未接入' : '后续步骤保留旧模拟内容，本轮未实现业务计算',
+}));
+const bH = [...mpsSteps.map((step) => step.key), 'plans', 'gap'];
 function A1() {
   const e = window.location.hash.replace(/^#\/?/, '').split('/')[0];
   return bH.includes(e) ? e : 'check';
 }
 function CH() {
-  var m;
   const [e, t] = usePageViewField(
       y,
       mpsView,
@@ -4805,10 +3410,6 @@ function CH() {
       (value) => value,
       (value) => (bH.includes(value) ? value : 'check'),
     ),
-    [n, r] = usePageViewField(y, mpsView, 'avatar', AV),
-    [a, i] = usePageViewField(y, mpsView, 'voice', zV),
-    [o, l] = usePageViewField(y, mpsView, 'persona', LV),
-    [s, u] = usePageViewField(y, mpsView, 'studioOpen', false),
     [draft, setDraft] = usePageViewField(y, mpsView, 'assistantDraft', ''),
     actions = useAuthorQuote(y);
   f.useEffect(() => {
@@ -4820,13 +3421,31 @@ function CH() {
   const h = (g) => {
     void (t(g), window.location.hash !== `#${g}` && (window.location.hash = g));
   };
+  const assistant = c.jsx(AuthorQuestions, {
+    react: y,
+    jsx: c,
+    Button: Ke,
+    questions: cu.map((item) => ({ label: item.chip, text: item.question })),
+    draft,
+    onClearDraft: () => setDraft(''),
+    actions,
+  });
   useMpsNavigation(
     y,
-    { tab: e, title: pV[e] ?? vV[e], description: hV[e], tabs: eh, version: No },
+    {
+      tab: e,
+      title: mpsSteps.find((step) => step.key === e)?.label ?? vV[e],
+      description: ['check', 'ship'].includes(e)
+        ? '前两步为本地隔离核对，真实取数与正式保存未接入。'
+        : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
+      tabs: mpsSteps,
+      version: ['check', 'ship'].includes(e) ? { scope: 'local-check-only' } : No,
+    },
     h,
   );
   return c.jsxs('div', {
     className: 'ap-app',
+    'data-step': e,
     children: [
       c.jsxs('main', {
         className: 'ap-board',
@@ -4837,24 +3456,24 @@ function CH() {
               c.jsxs('div', {
                 className: 'ap-page-tabs',
                 children: [
-                  c.jsxs('div', {
-                    className: 'ap-brando',
-                    children: [
-                      c.jsx('span', { className: 'ap-brando-mark', children: '\u5FF5' }),
-                      c.jsx('span', {
-                        className: 'ap-brando-name',
-                        children: '\u8BA1\u5212\u534F\u540C\u5E73\u53F0',
-                      }),
-                    ],
-                  }),
-                  eh.map((g, w) => {
-                    const b = eh.findIndex((x) => x.key === e);
+                  !['check', 'ship'].includes(e) &&
+                    c.jsxs('div', {
+                      className: 'ap-brando',
+                      children: [
+                        c.jsx('span', { className: 'ap-brando-mark', children: '\u5FF5' }),
+                        c.jsx('span', {
+                          className: 'ap-brando-name',
+                          children: '\u8BA1\u5212\u534F\u540C\u5E73\u53F0',
+                        }),
+                      ],
+                    }),
+                  mpsSteps.map((g) => {
                     return c.jsx(
                       Ke,
                       {
                         className: 'ap-page-tab',
                         'data-active': e === g.key,
-                        'data-done': w < b,
+                        'data-done': false,
                         title: g.hint,
                         onClick: () => h(g.key),
                         children: c.jsxs('span', {
@@ -4863,8 +3482,8 @@ function CH() {
                             c.jsx('span', {
                               className: 'ap-page-tab-step',
                               style: {
-                                background: e === g.key ? '#C8352F' : w < b ? '#1B8A56' : '#EFF1F5',
-                                color: e === g.key || w < b ? '#FFFFFF' : '#878F9D',
+                                background: e === g.key ? '#C8352F' : '#EFF1F5',
+                                color: e === g.key ? '#FFFFFF' : '#878F9D',
                                 boxShadow: e === g.key ? '0 0 0 3px rgba(200,53,47,0.15)' : void 0,
                               },
                               children: g.step,
@@ -4878,97 +3497,110 @@ function CH() {
                   }),
                 ],
               }),
-              c.jsxs('div', {
-                className: 'ap-title-row',
-                children: [
-                  c.jsx('h1', {
-                    className: 'ap-board-title',
-                    children: (m = pV[e]) != null ? m : vV[e],
-                  }),
-                  c.jsxs('div', {
-                    className: 'ap-version-switch',
-                    children: [
-                      c.jsxs('span', {
-                        className: 'ap-pill',
+              !['check', 'ship'].includes(e) &&
+                c.jsxs('div', {
+                  className: 'ap-title-row',
+                  children: [
+                    c.jsx('h1', {
+                      className: 'ap-board-title',
+                      children: mpsSteps.find((step) => step.key === e)?.label ?? vV[e],
+                    }),
+                    !['check', 'ship'].includes(e) &&
+                      c.jsxs('div', {
+                        className: 'ap-version-switch',
                         children: [
-                          '\u8BC4\u4F30\u7248\u672C',
-                          ' ',
-                          c.jsxs('b', { children: [No.name, ' \xB7 ', No.no] }),
+                          c.jsxs('span', {
+                            className: 'ap-pill',
+                            children: [
+                              '\u8BC4\u4F30\u7248\u672C',
+                              ' ',
+                              c.jsxs('b', { children: [No.name, ' \xB7 ', No.no] }),
+                            ],
+                          }),
+                          c.jsx(Ke, {
+                            size: 'small',
+                            icon: c.jsx(RO, {}),
+                            onClick: () =>
+                              kt.success(
+                                '\u5DF2\u65B0\u5EFA\u8BC4\u4F30\u7248\u672C\uFF08\u6A21\u62DF\uFF09',
+                              ),
+                            children: '\u65B0\u5EFA\u8BC4\u4F30\u7248\u672C',
+                          }),
                         ],
                       }),
+                  ],
+                }),
+              !['check', 'ship'].includes(e) &&
+                c.jsx('p', {
+                  className: 'ap-board-sub',
+                  children:
+                    e === 'check'
+                      ? '核对当前隔离草稿；业务取数、测算口径与正式保存尚未接入。'
+                      : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
+                }),
+              !['check', 'ship'].includes(e) &&
+                c.jsxs('div', {
+                  className: 'ap-board-actions',
+                  children: [
+                    c.jsx('span', { style: { flex: 1 } }),
+                    e === 'check' &&
                       c.jsx(Ke, {
                         size: 'small',
-                        icon: c.jsx(RO, {}),
-                        onClick: () =>
-                          kt.success(
-                            '\u5DF2\u65B0\u5EFA\u8BC4\u4F30\u7248\u672C\uFF08\u6A21\u62DF\uFF09',
-                          ),
-                        children: '\u65B0\u5EFA\u8BC4\u4F30\u7248\u672C',
+                        disabled: true,
+                        title: '正式保存合同与权限未接入',
+                        children: '保存调整',
                       }),
-                    ],
-                  }),
-                ],
-              }),
-              c.jsx('p', { className: 'ap-board-sub', children: hV[e] }),
-              c.jsxs('div', {
-                className: 'ap-board-actions',
-                children: [
-                  c.jsx(Ke, {
-                    size: 'small',
-                    onClick: () => u(true),
-                    children: 'Studio / 人物设置',
-                  }),
-                  c.jsx('span', { style: { flex: 1 } }),
-                  e !== 'masterdata' &&
-                    c.jsx(Ke, {
-                      size: 'small',
-                      onClick: () =>
-                        kt.success('\u8C03\u6574\u5DF2\u4FDD\u5B58\uFF08\u6A21\u62DF\uFF09'),
-                      children: '\u4FDD\u5B58\u8C03\u6574',
-                    }),
-                  ['plans', 'capacity', 'gap'].includes(e) &&
-                    c.jsx(Ke, {
-                      size: 'small',
-                      type: 'primary',
-                      onClick: () =>
-                        kt.success('\u5DF2\u63D0\u4EA4\u786E\u8BA4\uFF08\u6A21\u62DF\uFF09'),
-                      children: '\u63D0\u4EA4\u786E\u8BA4',
-                    }),
-                ],
-              }),
+                    !['check', 'masterdata'].includes(e) &&
+                      c.jsx(Ke, {
+                        size: 'small',
+                        onClick: () =>
+                          kt.success('\u8C03\u6574\u5DF2\u4FDD\u5B58\uFF08\u6A21\u62DF\uFF09'),
+                        children: '\u4FDD\u5B58\u8C03\u6574',
+                      }),
+                    ['plans', 'capacity', 'gap'].includes(e) &&
+                      c.jsx(Ke, {
+                        size: 'small',
+                        type: 'primary',
+                        onClick: () =>
+                          kt.success('\u5DF2\u63D0\u4EA4\u786E\u8BA4\uFF08\u6A21\u62DF\uFF09'),
+                        children: '\u63D0\u4EA4\u786E\u8BA4',
+                      }),
+                  ],
+                }),
             ],
           }),
           c.jsxs('div', {
             className: 'ap-board-body',
             children: [
-              c.jsx(AuthorQuestions, {
-                react: y,
-                jsx: c,
-                Button: Ke,
-                questions: cu.map((item) => ({ label: item.chip, text: item.question })),
-                draft,
-                onClearDraft: () => setDraft(''),
-                actions,
-              }),
-              e === 'check' && c.jsx(lH, { onNext: () => h('process') }),
+              !['check', 'ship'].includes(e) && assistant,
               e === 'process' && c.jsx(uH, {}),
               e === 'masterdata' && c.jsx(dH, {}),
               e === 'constraints' && c.jsx(gH, {}),
-              e === 'ship' && c.jsx(xH, { onNext: () => h('plans') }),
               e === 'plans' && c.jsx(pH, {}),
-              e === 'capacity' && c.jsx(hH, {}),
+              e === 'capacity' &&
+                c.jsxs(c.Fragment, {
+                  children: [
+                    c.jsx('p', { children: '以下为原模拟页面，未使用前两步本地隔离输入。' }),
+                    c.jsx(Ke, { onClick: () => h('plans'), children: '查看原月度计划模拟' }),
+                    c.jsx(Ke, { onClick: () => h('gap'), children: '查看原缺口模拟' }),
+                    c.jsx(hH, {}),
+                  ],
+                }),
+              e === 'report' &&
+                c.jsx('p', {
+                  className: 'ap-notice',
+                  children: '产销存报告尚未实现，等待第六步业务结果与报告模板。',
+                }),
               e === 'gap' && c.jsx(mH, {}),
+              c.jsx(DemandConfirmation, {
+                active: ['check', 'ship'].includes(e),
+                step: e,
+                onNext: () => h(e === 'check' ? 'ship' : 'process'),
+                assistant,
+              }),
             ],
           }),
         ],
-      }),
-      c.jsx(Zm, {
-        width: 'min(760px, calc(100vw - 32px))',
-        title: 'AI \u52A9\u624B\u8BBE\u7F6E',
-        visible: s,
-        onCancel: () => u(false),
-        footer: null,
-        children: c.jsx(iH, { cfg: n, voice: a, persona: o, onCfg: r, onVoice: i, onPersona: l }),
       }),
     ],
   });

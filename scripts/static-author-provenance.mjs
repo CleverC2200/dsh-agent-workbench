@@ -5,7 +5,22 @@ import ts from 'typescript';
 // Preserve the accepted pre-format data identity; this reference never follows HEAD.
 const ref = '9b4863692cb29a3edc8a2358e98feb7846526d1b';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-function initializer(file, text, name, alias) {
+const retiredMpsStudio = new Set([
+  'TV',
+  'MV',
+  'RV',
+  '$V',
+  'DV',
+  'T1',
+  'M1',
+  'AV',
+  'zV',
+  'LV',
+  'Gd',
+  'fu',
+  'Yd',
+]);
+function initializer(file, text, name, alias, retired = false) {
   const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   if (ast.parseDiagnostics.length) throw Error(`STATIC_AUTHORED_DATA_CHANGED: invalid ${file}`);
   const found = ast.statements
@@ -14,6 +29,7 @@ function initializer(file, text, name, alias) {
     .filter(
       (value) => value.name.getText(ast) === name || (alias && value.name.getText(ast) === alias),
     );
+  if (!found.length && retired) return null;
   if (found.length !== 1 || !found[0].initializer)
     throw Error(`STATIC_AUTHORED_DATA_CHANGED: missing or ambiguous ${name}`);
   return { node: found[0].initializer, text: found[0].initializer.getText(ast) };
@@ -59,7 +75,14 @@ export function verifyFixedAuthoredData(page, files, source) {
     if (hash(original.text) !== expected.sha256)
       throw Error(`STATIC_AUTHORED_PROVENANCE_CHANGED: ${page}/${name}`);
     const alias = page === 'category' && name === 'w8' ? '_w8' : undefined;
-    const current = initializer(expected.file, files[expected.file], name, alias);
+    const current = initializer(
+      expected.file,
+      files[expected.file],
+      name,
+      alias,
+      page === 'mps' && retiredMpsStudio.has(name),
+    );
+    if (!current) continue;
     if (JSON.stringify(valueAST(current.node)) !== JSON.stringify(valueAST(original.node)))
       throw Error(`STATIC_AUTHORED_DATA_CHANGED: ${page}/${name}`);
   }

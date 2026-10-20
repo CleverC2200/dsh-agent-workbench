@@ -100,13 +100,7 @@ function fixture(
     },
     memory,
   );
-  mountCompanyUI(
-    ctx,
-    workbench,
-    () =>
-      React.createElement('div', { 'data-resource-selection': true }, 'resource-selection-fixture'),
-    restorePageSession,
-  );
+  mountCompanyUI(ctx, workbench, restorePageSession);
   const renderSlot = (name, props = {}, options = {}) => {
     if (name === 'sidebar.panellist') {
       const entry = panelEntries().find((row) => row.options.id === options.only);
@@ -349,7 +343,7 @@ test('actual owned anchors constrain the bell and put the browser after both dra
     siblings.indexOf(document.querySelector('.gea-drawer-workspace')) < siblings.indexOf(browser),
   );
 });
-test('formal business navigation retains Workbench and the registered public Plugins label', () => {
+test('formal business navigation removes the Workbench directory and retains the registered public Plugins label', () => {
   const { entries, renderSlot } = fixture();
   const entry = entries.find((row) => row.options.name === 'sidebar');
   const markup = renderToStaticMarkup(
@@ -361,15 +355,13 @@ test('formal business navigation retains Workbench and the registered public Plu
     }),
   );
   assert.ok(markup.includes('插件管理'));
-  assert.ok(markup.includes('>工作台</span>'));
+  assert.ok(!markup.includes('>工作台</span>'));
   assert.ok(!markup.includes('>plugins</span>'));
   const dom = new JSDOM(markup);
   const entryButton = dom.window.document.querySelector('.gea-plugin-entry');
   assert.equal(entryButton.textContent, '插件管理');
   assert.equal(dom.window.document.querySelectorAll('.gea-plugin-entry').length, 1);
-  assert.ok(
-    !dom.window.document.querySelector('.gea-shell-plugin-group').textContent.includes('插件管理'),
-  );
+  assert.equal(dom.window.document.querySelector('.gea-shell-plugin-group'), null);
   assert.equal(entryButton.previousElementSibling.classList.contains('gea-new-session'), true);
   assert.equal(entryButton.nextElementSibling.classList.contains('gea-sidebar-region'), true);
   dom.window.close();
@@ -428,7 +420,7 @@ test('official Home remains Core-owned while the company brand and retained reso
   assert.match(markup, /width="34"/);
   assert.equal(
     entries.some((e) => e.options.name === 'main' && e.options.key === 'agent-workbench'),
-    true,
+    false,
   );
 });
 test('official blank Home keeps its native workspace, Agent and composer seats without company overrides', () => {
@@ -468,18 +460,20 @@ test('business Documents have a persistent independent Session seat and retain t
     false,
   );
 });
-test('retained Workbench directory reads current official workspace facts and provides native Conversation plus resource selection', () => {
-  const { entries } = fixture();
-  const entry = entries.find((row) => row.options.name === 'agent-workbench.directory');
-  const markup = renderToStaticMarkup(
-    React.createElement(entry.component, {
-      sessionId: 'current',
-      useSessions: (selector) => selector({ byId: { current: { cwd: '/native/project' } } }),
-    }),
+test('the Workbench directory page and slot are unregistered while business Documents remain available', () => {
+  const { entries, workbench } = fixture();
+  assert.equal(
+    entries.some((row) => row.options.name === 'agent-workbench.directory'),
+    false,
   );
-  assert.ok(markup.includes('已接入页面'));
-  assert.ok(markup.includes('原生对话'));
-  assert.ok(markup.includes('data-resource-selection'));
+  assert.equal(
+    entries.some((row) => row.options.name === 'main' && row.options.key === 'agent-workbench'),
+    false,
+  );
+  assert.equal(
+    workbench.getSnapshot().pages.some((page) => page.id === 'agent-workbench'),
+    false,
+  );
 });
 test('formal registrations use the fixed public declaration ledger without taking Core-owned children', () => {
   const core = new SlotCore();
@@ -802,7 +796,7 @@ test('entering a business page opens its functional drawer once and preserves ma
       ),
     );
   const drawer = () => document.querySelector('.gea-sidebar-region').dataset.geaDrawer;
-  await render('agent-workbench');
+  await render(null);
   assert.equal(drawer(), 'workspace');
   await render('gea-inbox');
   assert.equal(

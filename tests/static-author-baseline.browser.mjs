@@ -25,15 +25,15 @@ for (const name of ['category', 'mps'])
       await page.goto('http://static-author.test/');
       await expect(page.locator('#root')).not.toBeEmpty();
       const businessText = () =>
-        page.locator(name === 'mps' ? '.ap-board' : '.work').evaluate((element) => {
+        page.locator(name === 'mps' ? '.ap-board-body' : '.work').evaluate((element) => {
           const copy = element.cloneNode(true);
-          copy.querySelectorAll('.author-questions').forEach((node) => node.remove());
+          copy.querySelectorAll('.author-questions,.dc-page').forEach((node) => node.remove());
           copy.querySelectorAll('button').forEach((button) => {
             if (button.textContent === 'Studio / 人物设置') button.remove();
           });
           return copy.textContent.replace(/\s+/g, ' ').trim();
         });
-      const initial = await businessText();
+      const initial = name === 'mps' ? undefined : await businessText();
       if (name === 'mps') {
         await page.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
         await expect(page.locator('.ap-board-title')).toHaveText('需求加工与收敛');
