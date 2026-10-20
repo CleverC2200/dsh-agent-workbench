@@ -1,6 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeGroupSkus } from '../src/workbench/original/workbenches/regionalApproval/models/salesPlanGroupSkuModel.ts';
+import { build } from 'esbuild';
+
+const { outputFiles } = await build({
+  entryPoints: [
+    'src/workbench/original/workbenches/regionalApproval/models/salesPlanGroupSkuModel.ts',
+  ],
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'esm',
+});
+const { summarizeGroupSkus } = await import(
+  'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
+);
 
 const plan = (planId, versionId, skuCount = 1) => ({
   planId,

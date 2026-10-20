@@ -1247,6 +1247,8 @@
     }
   },
   "correction": {
+    "correctionSourceReadOnly": "纠偏来源（只读）",
+    "monthlySourceReadOnly": "月初来源（只读）",
     "monthly": "月初",
     "correction": "纠偏",
     "tabs": "计划单据类型",
@@ -1260,10 +1262,12 @@
     "plan": "月计划",
     "progress": "月达成进度",
     "noTarget": "未设置有效目标",
+    "adjustmentAmount": "纠偏金额",
     "adjustment": "追加/追减",
     "correctedProgress": "纠偏后进度",
     "status": "审批状态",
     "actions": "操作",
+    "monthlyVerificationPending": "月初终审数据待核验",
     "notApproved": "不可纠偏：月初未终审",
     "absent": "暂无纠偏单",
     "detail": "调整明细",

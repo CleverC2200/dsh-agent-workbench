@@ -1246,6 +1246,11 @@
     }
   },
   "correction": {
+    "correctionSourceReadOnly": "Correction source (read only)",
+    "monthlySourceReadOnly": "Monthly source (read only)",
+    "noTarget": "No valid monthly target",
+    "adjustment": "Addition / reduction",
+    "adjustmentAmount": "Adjustment amount",
     "monthly": "Monthly",
     "correction": "Correction",
     "tabs": "Plan order type",
@@ -1261,6 +1266,7 @@
     "correctedProgress": "Corrected target coverage",
     "status": "Approval status",
     "actions": "Actions",
+    "monthlyVerificationPending": "Monthly final approval data awaiting verification",
     "notApproved": "Correction unavailable: monthly plan is not approved",
     "absent": "No correction order",
     "detail": "Adjustment details",
