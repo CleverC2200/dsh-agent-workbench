@@ -62,3 +62,5 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 `settings.section/gea-api-log` 复用 `LogPage` 与 `ApiLogCenter`，导航标签为 GEA 接口日志，位于插件管理之前。设置关闭动作由容器传入；原业务页的关闭仍返回业务工作台。同一身份投影控制是否挂载日志中心，切换账号或环境沿原 scope 重新挂载。进入页面不执行重发或清空，日志后端和业务授权继续归 GEA。
 
 配置化 HTML 在注入大体积 SQL JSON 前声明 UTF-8，确保无显式响应字符集的加载方式也能完整保留中文 SQL 文本、筛选值及枚举。配置仍在作者脚本前装载，保留 JSON 的 HTML 转义与原权限校验。
+
+公司欢迎区通过 Core 的 `conversation.hero.content` 插槽贡献，文案与样式由 Workbench 维护。侧栏复用原生 `sidebar.workspaces`，通过 `heading` 和 `expanded` 显示单一“工作台”入口；收起列表不卸载浏览器。该组合需要提供上述 UI 接口的公司 Core，确切输入由同组 GEA 的 Core 清单与 CI 策略登记。

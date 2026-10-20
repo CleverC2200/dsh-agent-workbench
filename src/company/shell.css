@@ -42,10 +42,6 @@
   order: 1;
 }
 
-.gea-drawer-workspace {
-  order: 3;
-}
-
 .gea-sidebar-tab {
   display: flex;
   width: 100%;
@@ -133,31 +129,6 @@
   background: transparent;
 }
 
-[data-gea-drawer='function'] > [data-slot='sidebar.workspaces'],
-[data-gea-drawer='none'] > [data-slot='sidebar.workspaces'] {
-  display: none !important;
-}
-
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
-  display: flex !important;
-  flex-direction: column;
-  position: relative;
-  /* 会话列表在「历史会话」下面往下长，自己滚。
-     这里不做滚动容器：原生那一行的搜索/排序/新建按钮要能上移到抽屉标题那一行。 */
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
-}
-
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] > * {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-[data-gea-drawer='workspace'] .gea-drawer-workspace .gea-sidebar-tab {
-  padding-right: 8px;
-}
-
 [data-gea-drawer='workspace'] .gea-sidebar-panel {
   display: none;
 }
@@ -177,13 +148,8 @@
   animation: gea-panel-down 200ms ease-out;
 }
 
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
-  animation: gea-panel-down 220ms ease-out;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .gea-panel-function,
-  [data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
+  .gea-panel-function {
     animation: none;
   }
 }

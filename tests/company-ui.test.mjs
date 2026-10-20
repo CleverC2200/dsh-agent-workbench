@@ -115,6 +115,8 @@ function fixture(
       const entry = panels.entriesOfSlot(name)[0];
       return entry ? React.createElement(entry.component, props) : null;
     }
+    if (name === 'sidebar.workspaces')
+      return React.createElement('div', { 'data-slot': name }, props.heading, name);
     const entry = entries.find((entry) => entry.options.name === name);
     return React.createElement(
       'div',
@@ -249,7 +251,7 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
     'Synear GEA',
     '智能体工作台',
     '业务工作台',
-    '历史会话',
+    '工作台',
     '产销协同',
     '计划管理',
     '库存管理',
@@ -259,6 +261,7 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
   ])
     assert.ok(markup.includes(text), text);
   assert.ok(markup.includes('sidebar.workspaces'));
+  assert.equal(markup.includes('历史会话'), false);
   assert.ok(markup.includes('sidebar.settings'));
   assert.ok(markup.includes('gea-brand-copy'));
   assert.ok(markup.includes('gea-shell-nav-heading'));
@@ -305,7 +308,7 @@ test('formal account contribution renders the GEA read-only avatar and pending l
   assert.ok(markup.includes('gea-user-avatar'));
   assert.ok(!markup.includes('workbench-avatar'));
 });
-test('actual owned anchors constrain the bell and put the browser after both drawer headers', (t) => {
+test('actual owned anchors constrain the bell and keep one workspace heading inside the browser', (t) => {
   const { entries, renderSlot } = fixture();
   const entry = entries.find((row) => row.options.name === 'sidebar');
   const markup = renderToStaticMarkup(
@@ -339,9 +342,8 @@ test('actual owned anchors constrain the bell and put the browser after both dra
   assert.ok(
     siblings.indexOf(document.querySelector('.gea-drawer-function')) < siblings.indexOf(browser),
   );
-  assert.ok(
-    siblings.indexOf(document.querySelector('.gea-drawer-workspace')) < siblings.indexOf(browser),
-  );
+  assert.equal(document.querySelector('.gea-drawer-workspace'), null);
+  assert.equal(browser.querySelectorAll('.gea-workspace-heading').length, 1);
 });
 test('formal business navigation removes the Workbench directory and retains the registered public Plugins label', () => {
   const { entries, renderSlot } = fixture();
@@ -355,7 +357,10 @@ test('formal business navigation removes the Workbench directory and retains the
     }),
   );
   assert.ok(markup.includes('插件管理'));
-  assert.ok(!markup.includes('>工作台</span>'));
+  assert.equal(
+    new JSDOM(markup).window.document.querySelector('[data-gea-business-entry="workbench"]'),
+    null,
+  );
   assert.ok(!markup.includes('>plugins</span>'));
   const dom = new JSDOM(markup);
   const entryButton = dom.window.document.querySelector('.gea-plugin-entry');
@@ -413,11 +418,16 @@ function officialContentProps(overrides = {}) {
 test('official Home remains Core-owned while the company brand and retained resources stay available', () => {
   const { entries } = fixture();
   assert.equal(entries.filter((e) => e.options.name === 'main.conversation').length, 0);
-  const brand = entries.find((e) => e.options.name === 'conversation.hero.brand.mark');
-  const markup = renderToStaticMarkup(React.createElement(brand.component, { size: 34 }));
-  assert.match(markup, /<img/);
-  assert.equal(new JSDOM(markup).window.document.querySelector('img').alt, zh.geaBusiness);
-  assert.match(markup, /width="34"/);
+  const welcome = entries.find((e) => e.options.name === 'conversation.hero.content');
+  const markup = renderToStaticMarkup(React.createElement(welcome.component));
+  const document = new JSDOM(markup).window.document;
+  assert.equal(document.querySelector('h1').textContent, 'AI不止于对话，更融入工作');
+  assert.deepEqual(
+    [...document.querySelectorAll('h1 span')].map((node) => node.textContent),
+    ['AI', '工作'],
+  );
+  assert.equal(document.querySelector('p').textContent, '懂业务 · 会协同 · 能行动');
+  assert.equal(markup.includes('预览版'), false);
   assert.equal(
     entries.some((e) => e.options.name === 'main' && e.options.key === 'agent-workbench'),
     false,
@@ -428,7 +438,7 @@ test('official blank Home keeps its native workspace, Agent and composer seats w
     React.createElement(ConversationContent, officialContentProps()),
   );
   for (const seat of [
-    'conversation.hero.brand.mark',
+    'conversation.hero.content',
     'conversation.hero.workspace',
     'conversation.hero.agentPreset',
     'conversation.composer.bar',
@@ -509,7 +519,7 @@ test('formal registrations use the fixed public declaration ledger without takin
       name: 'conversation.content',
       scope: 'session-maybe',
       children: {
-        'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
+        'conversation.hero.content': { kind: 'single', scope: 'root' },
         'conversation.hero.workspace': { kind: 'single', scope: 'root' },
         'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' },
       },
@@ -576,7 +586,7 @@ test('Core keeps the native header owner while Workbench takes only the selected
     {
       name: 'conversation.content',
       scope: 'session-maybe',
-      children: { 'conversation.hero.brand.mark': { kind: 'single', scope: 'root' } },
+      children: { 'conversation.hero.content': { kind: 'single', scope: 'root' } },
     },
     () => null,
   );
@@ -804,7 +814,7 @@ test('entering a business page opens its functional drawer once and preserves ma
     'function',
     'a directory/notification arrival opens the business navigation',
   );
-  await act(async () => document.querySelector('[aria-controls="gea-panel-workspace"]').click());
+  await act(async () => document.querySelector('.gea-workspace-heading').click());
   assert.equal(drawer(), 'workspace');
   await render('inventory-fc');
   assert.equal(

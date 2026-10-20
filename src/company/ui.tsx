@@ -698,18 +698,6 @@ export function mountCompanyUI(
               <Chevron open={drawer === 'function'} />
             </button>
           </div>
-          <div className="gea-sidebar-drawer gea-drawer-workspace">
-            <button
-              type="button"
-              className="gea-sidebar-tab"
-              aria-expanded={drawer === 'workspace'}
-              aria-controls="gea-panel-workspace"
-              onClick={() => toggleDrawer('workspace')}
-            >
-              <span className="gea-drawer-title">{t('workspaceArea')}</span>
-              <Chevron open={drawer === 'workspace'} />
-            </button>
-          </div>
           {drawer === 'function' && (
             <div className="gea-sidebar-panel gea-panel-function" id="gea-panel-function">
               <nav className="gea-shell-navigation" aria-label={t('businessNavigation')}>
@@ -758,24 +746,44 @@ export function mountCompanyUI(
               </nav>
             </div>
           )}
-          <div className="gea-workspace-owned" hidden={drawer !== 'workspace'}>
-            {documentState.historyPage &&
-              documentState.selectedDocument?.id === documentState.historyPage &&
-              documentState.selectedDocument.resourceId &&
-              documentState.selection?.cwd && (
-                <PageUnsentHistory
-                  page={documentState.selectedDocument}
-                  cwd={documentState.selection.cwd}
-                  sessions={ctx.sessions}
-                  selectedSessionId={documentState.selection.sessionId}
-                  request={fetch}
-                  language={ctx.locale.getSnapshot().active}
-                  onChoose={(id, preset, cwd) => {
-                    pageSessions.chooseHistory(documentState.historyPage!, id, { preset, cwd });
-                  }}
-                />
-              )}
-            {renderSlot('sidebar.workspaces', { wide: !collapsed, expandSidebar })}
+          <div className="gea-workspace-owned" data-gea-expanded={drawer === 'workspace'}>
+            <div hidden={drawer !== 'workspace'}>
+              {documentState.historyPage &&
+                documentState.selectedDocument?.id === documentState.historyPage &&
+                documentState.selectedDocument.resourceId &&
+                documentState.selection?.cwd && (
+                  <PageUnsentHistory
+                    page={documentState.selectedDocument}
+                    cwd={documentState.selection.cwd}
+                    sessions={ctx.sessions}
+                    selectedSessionId={documentState.selection.sessionId}
+                    request={fetch}
+                    language={ctx.locale.getSnapshot().active}
+                    onChoose={(id, preset, cwd) => {
+                      pageSessions.chooseHistory(documentState.historyPage!, id, { preset, cwd });
+                    }}
+                  />
+                )}
+            </div>
+            {renderSlot('sidebar.workspaces', {
+              wide: !collapsed,
+              expandSidebar: () => {
+                setDrawer('workspace');
+                expandSidebar();
+              },
+              expanded: drawer === 'workspace',
+              heading: (
+                <button
+                  type="button"
+                  className="gea-sidebar-tab gea-workspace-heading"
+                  aria-expanded={drawer === 'workspace'}
+                  onClick={() => toggleDrawer('workspace')}
+                >
+                  <span className="gea-drawer-title">{t('workspaceArea')}</span>
+                  <Chevron open={drawer === 'workspace'} />
+                </button>
+              ),
+            })}
           </div>
         </div>
         <footer className="gea-sidebar-footer">
@@ -973,19 +981,19 @@ export function mountCompanyUI(
       ShellLeading,
     ),
   );
-  ctx.slots.inject('conversation.hero.brand.mark', () =>
+  ctx.slots.inject('conversation.hero.content', () =>
     ctx.slots.register(
-      { name: 'conversation.hero.brand.mark', priority: -10, locale: 'companyWorkbench' },
-      function HeroBrand({ size, className }: PropsRuntime<'conversation.hero.brand.mark'>) {
+      { name: 'conversation.hero.content', priority: -10, locale: 'companyWorkbench' },
+      function Welcome() {
         return (
-          <img
-            data-company-hero-brand
-            src={brandLogo}
-            width={size}
-            height={size}
-            className={className}
-            alt={t('geaBusiness')}
-          />
+          <div className="gea-conversation-welcome">
+            <h1>
+              <span>{t('welcomeLead')}</span>
+              {t('welcomeMessage')}
+              <span>{t('welcomeWork')}</span>
+            </h1>
+            <p>{t('welcomeTagline')}</p>
+          </div>
         );
       },
     ),
