@@ -336,3 +336,21 @@ test('Z月计划和展开基准只展示corrBaseQty与amt，M保留原base字段
     }
   }
 });
+
+test('纠偏重复点击当前节点保留选择和调整输入', { timeout: 30000 }, async (t) => {
+  const page = await openWorkbench(t);
+  await page.getByRole('tab', { name: '纠偏', exact: true }).click();
+  await page.getByRole('tab', { name: '按客户', exact: true }).click();
+  await page.getByRole('button', { name: '打开 华南经销客户 调整明细', exact: true }).click();
+  const input = page.getByRole('spinbutton', { name: '追加/追减 1001', exact: true });
+  await input.fill('-3');
+  const selected = page.getByRole('checkbox').first();
+  await selected.locator('..').click();
+  await page.getByRole('button', { name: '展开审批流程图', exact: true }).click();
+  const current = page.getByTestId('regional-approval-stage-region');
+  await expect(current).toHaveAttribute('aria-pressed', 'true');
+  await current.click();
+  await expect(current).toHaveAttribute('aria-pressed', 'true');
+  await expect(selected).toBeChecked();
+  await expect(input).toHaveValue('-3');
+});

@@ -1732,6 +1732,7 @@ const RegionalApprovalWorkbench: React.FC<{
   };
 
   const changeStage = (stage: ApprovalStageId) => {
+    if (orderType === 'Z' && liveStageFilter === stage) return;
     // 再点当前节点就回到「全部节点」；没权限的节点已置灰，切不过来。
     const nextStage = liveStageFilter === stage ? undefined : stage;
     setLiveStageFilter(nextStage);
