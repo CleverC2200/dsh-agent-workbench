@@ -107,6 +107,36 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
   await page.exposeFunction('replyToLayoutRequest', async (message) => {
     assert.equal(message.session, 'layout-session');
     if (query && message.method === 'sql') return query(message.parameters);
+    if (id === 'customer' && message.method === 'sql') {
+      assert.match(message.parameters.sql, /customer-inventory:latest/);
+      // This page now loads governed rows before mounting. Keep layout
+      // fixtures synthetic and separate from production query acceptance.
+      const rows = [
+        {
+          snapshot_date: '2026-10-17',
+          cust_code: '10154963',
+          cust_name: '郑州佳特商贸有限公司',
+          region_name: '华中大区',
+          province_name: '河南省',
+          stock_qty: 300,
+          stock_amt: 60000,
+          sales_qty_30days: 150,
+          normal_stock_qty: 270,
+          no_sales_sku: 2,
+          sku_rows: 3,
+          stock_coverage: 3,
+          value_coverage: 3,
+          sales_coverage: 3,
+          normal_coverage: 3,
+        },
+      ];
+      return {
+        rows,
+        total: rows.length,
+        returnedColumns: Object.keys(rows[0]),
+        rejectedColumns: [],
+      };
+    }
     if (message.method === 'context') return { ok: true };
     if (id === 'personal' && message.method === 'draft') {
       assert.match(
