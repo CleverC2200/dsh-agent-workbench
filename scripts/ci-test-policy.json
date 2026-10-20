@@ -126,6 +126,11 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/(?:run-quality-ci|build)\\.mjs$",
       "tests": ["tests/agent-authored-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-qll/source/inventory-light-plugins/src/pages/configured-workbench\\.tsx$",
+      "tests": ["tests/agent-authored-layout.browser.mjs"]
     }
   ]
 }
