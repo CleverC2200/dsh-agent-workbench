@@ -76,6 +76,10 @@ export async function readWorkspaceQuery(
     values.bases_enabled = true;
     values.bases = [input.base];
   }
+  if (input.base && 'base_mode' in values) {
+    values.base_mode = 'equal';
+    values.base = input.base;
+  }
   if ('stock_date' in values) {
     // Stock is a snapshot at the period end, including annual views.
     values.month = end.slice(0, 7) + '-01';
