@@ -12,6 +12,14 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-(?:apsplan|aqkc|fc|qll)/source/|^business/shared/.*\\.css$",
+      "tests": [
+        "tests/agent-authored-layout.browser.mjs",
+        "tests/agent-responsive-layout.browser.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^src/(?:workbench/api-log|business-views|workbench/page)|^tests/api-log",
       "tests": ["tests/api-log-center.browser.mjs", "tests/api-log-batch.browser.mjs"]
     },
