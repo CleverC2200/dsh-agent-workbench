@@ -43,12 +43,21 @@ for (const page of ['category', 'mps']) {
     target: 'es2022',
     legalComments: 'inline',
   });
+  const confirmationStyles =
+    page === 'mps' ? await readFile(new URL('demand-confirmation.css', root), 'utf8') : '';
   const script = files['vendor.js'] + '\n' + author.outputFiles[0].text;
   const html = files['shell.html']
     .replace('__WORKBENCH_AUTHOR_SCRIPT__', () => script.replace(/<\/script/gi, '<\\/script'))
     .replace(
       '__WORKBENCH_AUTHOR_STYLES__',
-      () => files['vendor.css'] + '\n' + files['layout.css'] + '\n' + questionStyles,
+      () =>
+        files['vendor.css'] +
+        '\n' +
+        files['layout.css'] +
+        '\n' +
+        questionStyles +
+        '\n' +
+        confirmationStyles,
     );
   await writeFile(new URL(`${page}/index.html`, outputs), html);
 }
