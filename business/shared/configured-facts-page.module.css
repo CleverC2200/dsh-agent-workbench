@@ -135,6 +135,7 @@
   min-width: 0;
 }
 .heading {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -352,10 +353,11 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 12px;
+  min-width: 0;
 }
 .definition,
 .columnPicker {
-  position: relative;
+  position: static;
   color: var(--ui-muted);
   font-size: 10px;
 }
@@ -368,8 +370,9 @@
 .columnOptions {
   position: absolute;
   right: 0;
+  top: 100%;
   z-index: 20;
-  width: min(360px, calc(100vw - 40px));
+  width: min(360px, 100%);
   padding: 12px;
   border: 1px solid var(--ui-border);
   border-radius: 8px;
@@ -390,6 +393,8 @@
   align-items: center;
   font-size: 10px;
   font-weight: 400;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .columnOptions input {
   width: 14px;
@@ -495,5 +500,31 @@
   }
   .embedded .filters input {
     width: min(220px, 65vw);
+  }
+  .pagination {
+    gap: 8px;
+    justify-content: flex-start;
+  }
+  .pagination > span {
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .tableActions {
+    width: 100%;
+  }
+  .columnPicker[open],
+  .definition[open] {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .columnOptions,
+  .definition > p {
+    position: static;
+    width: 100%;
+    max-height: 280px;
+    margin: 8px 0;
+    box-shadow: none;
   }
 }

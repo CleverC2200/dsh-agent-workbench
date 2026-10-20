@@ -347,3 +347,36 @@ test('new branch inventory binds its own snapshot and warehouse type', async () 
   assert.equal(call.values.warehouse_type_mode, 'equal');
   assert.equal(call.values.stat_date, '2026-10-15');
 });
+test('production base defaults are kept only on compatible source views', async () => {
+  const { initialFiltersForView } = await import(
+    'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+  );
+  const aps = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+  assert.deepEqual(
+    initialFiltersForView(aps, 'base-shipments', { base: '华东', warehouse_id: 'wrong' }),
+    { base: '华东' },
+  );
+  assert.deepEqual(initialFiltersForView(aps, 'warehouse-health', { base: '华东' }), {
+    base: '华东',
+  });
+  assert.deepEqual(initialFiltersForView(aps, 'branch-stock', { base: '华东' }), {});
+  assert.deepEqual(
+    initialFiltersForView(aps, 'branch-operations', { base: '华东', warehouse_id: 'W1' }),
+    { warehouse_id: 'W1' },
+  );
+});
+test('all four Agent views carry their count, atomic page and snapshot query dependencies', async () => {
+  for (const agent of ['aqkc', 'fc', 'qll', 'apsplan']) {
+    const config = JSON.parse(
+      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    );
+    for (const view of config.sourceViews.views)
+      for (const key of ['queryId', 'summaryId', 'snapshotQuery'])
+        if (view[key]) assert.ok(config.queries[view[key]], agent + ':' + view.id + ':' + key);
+    for (const [id, query] of Object.entries(config.queries))
+      for (const dependency of Object.entries(query.pagination ?? {})
+        .filter(([key]) => ['countQuery', 'atomicQuery'].includes(key))
+        .map(([, value]) => value))
+        assert.ok(config.queries[dependency], agent + ':' + id + ':' + dependency);
+  }
+});

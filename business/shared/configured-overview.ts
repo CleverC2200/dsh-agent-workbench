@@ -11,6 +11,16 @@ export function knownNumber(value: unknown): number | null {
 export function completeValue(summary: any, field: string) {
   return Number(summary?.['missing_' + field]) > 0 ? null : knownNumber(summary?.[field]);
 }
+/** SQL counts retain zero, but missing identities/quantities are not complete counts. */
+export function completeCount(summary: any, field: string, missingFields: string[] = []) {
+  const value = knownNumber(summary?.[field]);
+  return value !== null &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    missingFields.every((key) => knownNumber(summary?.[key]) === 0)
+    ? value
+    : null;
+}
 /** orders.summary returns (demand-shortage)/demand, a fraction. */
 export function fulfillmentPercent(summary: any) {
   const value = completeValue(summary, 'fulfillment_rate');

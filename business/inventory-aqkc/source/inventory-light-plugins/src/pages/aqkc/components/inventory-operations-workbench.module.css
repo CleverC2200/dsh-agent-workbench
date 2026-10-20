@@ -437,8 +437,7 @@
 }
 .kpiGrid {
   display: grid;
-  /* Five metrics fit on one row in the normal minimum-width board. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
   overflow: visible;
@@ -1045,10 +1044,13 @@
   }
 }
 .kpiCard dt {
-  flex-shrink: 0;
-  white-space: nowrap;
+  min-width: 0;
+  flex: 1 1 90px;
+  white-space: normal;
 }
 .kpiCard dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
   text-align: right;
 }
 .kpiHelperNumber {
@@ -1481,4 +1483,21 @@
   font-size: 10px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+/* Use the actual business pane width, including the desktop conversation split. */
+@container (max-width: 1200px) {
+  .kpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@container (max-width: 900px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@container (max-width: 520px) {
+  .kpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

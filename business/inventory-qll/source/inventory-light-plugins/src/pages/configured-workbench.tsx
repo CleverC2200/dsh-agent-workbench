@@ -21,7 +21,7 @@ const tabs = [
   ['shortage', '订单缺口'],
 ];
 const views: Record<string, string[]> = {
-  category: ['category', 'base', 'base-stock-flows'],
+  category: ['category', 'base', 'base-stock-flows', 'base-shipments'],
   structure: ['organization', 'branch-stock', 'plan', 'branch-shipments'],
   aging: ['aging', 'warehouse-age-detail', 'history'],
   shortage: [
@@ -62,6 +62,8 @@ export default function ConfiguredWorkbench() {
   cards[0].title = '库存水平';
   cards[2].title = '库存库龄';
   cards[4].title = '订单执行';
+  if (cards[2].value == null) cards[2].scope = '基地 · 货龄指标';
+  if (cards[4].value == null) cards[4].scope = '基地未备单量';
   const branchStock = parts['branch-stock']?.summary;
   cards[0].details[1] = ['分仓库存', knownNumber(branchStock?.total_qty), '箱'];
   cards[0].details.push(['分仓可用', knownNumber(branchStock?.available_qty), '箱']);
@@ -83,6 +85,13 @@ export default function ConfiguredWorkbench() {
       : Number(branchShipments.month_ship_positive),
     '箱',
   ]);
+  const factoryShipments = parts['base-shipments']?.summary;
+  cards[4].details.push(
+    ['工厂本月正向发货', knownNumber(factoryShipments?.month_ship_positive), '箱'],
+    ['工厂近30日正向发货', knownNumber(factoryShipments?.rolling_ship_positive), '箱'],
+    ['工厂近30日净发货', knownNumber(factoryShipments?.rolling_ship_net), '箱'],
+    ['分仓近30日净发货', knownNumber(branchShipments?.rolling_ship_net), '箱'],
+  );
   const health = parts.health?.summary,
     customerStock = parts['channel-overview'];
   if (channel && customerStock?.summary) {
@@ -166,15 +175,10 @@ export default function ConfiguredWorkbench() {
                     <p className={common.metricScope}>{c.scope}</p>
                     <strong className={styles.kpiValue}>{show(c.value, c.unit)}</strong>
                     <dl className={styles.kpiHelpers}>
-                      {c.details.map(([label, n, unit, missingReason]) => (
+                      {c.details.map(([label, n, unit]) => (
                         <div key={String(label)}>
                           <dt>{label}</dt>
-                          <dd>
-                            {show(n as number | null, String(unit))}
-                            {n == null && missingReason && (
-                              <small className={common.missingReason}>{missingReason}</small>
-                            )}
-                          </dd>
+                          <dd>{show(n as number | null, String(unit))}</dd>
                         </div>
                       ))}
                     </dl>
@@ -189,7 +193,7 @@ export default function ConfiguredWorkbench() {
               </div>
               <p>
                 <b>核心判断：</b>
-                数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。订单执行主值为基地库存快照中的未备单量，已备单占用独立列示；货龄展示最大库龄，当前订单阶段仍不能由库存占用量推断。
+                数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。订单执行主值为基地库存快照中的未备单量，已备单占用独立列示；货龄展示最大库龄。
               </p>
               <details className={common.scopeDetails}>
                 <summary>统计范围与口径</summary>

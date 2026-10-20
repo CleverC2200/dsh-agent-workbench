@@ -89,6 +89,14 @@
     min-width: 0;
   }
 }
+@media (max-width: 1200px) {
+  .root .kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .root .kpis > :last-child {
+    grid-column: auto;
+  }
+}
 @media (max-width: 900px) {
   .root .kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));

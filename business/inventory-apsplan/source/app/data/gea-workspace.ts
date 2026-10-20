@@ -13,7 +13,11 @@ type Input = {
   comparison?: boolean;
   summary?: boolean;
   detailMode?: 'organization' | 'product';
-  productScope?: { mode: 'category' | 'base'; categories: string[]; items: string[] };
+  productScope?: {
+    mode: 'category' | 'base';
+    categories: string[];
+    items: string[];
+  };
   refresh?: boolean;
   signal?: AbortSignal;
   onProgress?: (data: any) => void;
@@ -38,6 +42,13 @@ const comparisonKeys = [
   'shippable',
 ];
 const numericFields = new Set([
+  'budget_keys',
+  'income_keys',
+  'missing_budget_keys',
+  'missing_income_records',
+  'matched_keys',
+  'matched_budget',
+  'matched_income',
   'known_planned',
   'known_actual',
   'valid_records',
@@ -61,6 +72,8 @@ const numericFields = new Set([
   'missing_predicted',
   'planned',
   'initial_plan',
+  'demand_initial_plan',
+  'demand_adjusted_plan',
   'missing_plan',
   'available',
   'invalid',
@@ -184,11 +197,26 @@ export function createGeaWorkspace(transport: SqlTransport) {
             : config.workspaceDrillBindings?.[input.detailMode]?.[name]) ??
           config.workspaceBindings?.[name];
         const key = binding ? JSON.stringify(binding) : name;
+        const permissionKey = 'configured:' + key;
+        if (unavailable.has(permissionKey)) throw unavailable.get(permissionKey);
         let job = directReads.get(key);
         if (!job) {
-          job = limited(() =>
-            readWorkspaceQuery(sqlConfiguration, name, values, { signal: input.signal }),
-          );
+          job = limited(async () => {
+            input.signal?.throwIfAborted();
+            if (unavailable.has(permissionKey)) throw unavailable.get(permissionKey);
+            return readWorkspaceQuery(sqlConfiguration, name, values, {
+              signal: input.signal,
+            });
+          }).catch((error) => {
+            if (
+              !input.signal?.aborted &&
+              /^(RESOURCE_NOT_PUBLISHED|RESOURCE_NOT_IN_DATASET|FIELD_NOT_PUBLISHED|NO_RETURN_COLUMN_ALLOWED|RETURN_PERMISSION_DENIED|GEA_RETURN_COLUMNS_REJECTED|GEA_SQL_PERMISSION_DENIED|DATA_PERMISSION_DENIED|AI_GATEWAY_DATA_PERMISSION_DENIED|ACCESS_DENIED)$/.test(
+                String(error?.code),
+              )
+            )
+              unavailable.set(permissionKey, error);
+            throw error;
+          });
           directReads.set(key, job);
         }
         const rows = await job;
@@ -273,9 +301,18 @@ export function createGeaWorkspace(transport: SqlTransport) {
       try {
         if (
           ['demand-accuracy', 'sales-accuracy', 'finance', 'sales-budget'].includes(key) &&
-          !monthly(start, end, kind)
+          !(override?.supportsHistoricalCutoff
+            ? ['month', 'year'].includes(kind) && start.endsWith('-01')
+            : monthly(start, end, kind))
         )
-          return { ...result, status: 'empty', rows: [] };
+          return {
+            ...result,
+            status:
+              usesConfiguredSql() && agentSqlConfig(sqlConfiguration).missingValuePolicy === 'zero'
+                ? 'unavailable'
+                : 'empty',
+            rows: [],
+          };
         let query =
           key === 'plans' ? (kind === 'year' ? 'plans-source-year' : 'plans-source') : key;
         if (['orders', 'orders-products'].includes(key) && start.slice(0, 7) === end.slice(0, 7))
@@ -297,7 +334,10 @@ export function createGeaWorkspace(transport: SqlTransport) {
             );
             if (parents.size === 1) row.region = [...parents][0];
           }
-        if (['finance', 'sales-budget'].includes(key)) {
+        if (
+          ['finance', 'sales-budget'].includes(key) &&
+          override?.organizationBasis !== 'company'
+        ) {
           const orgs = await (orgPromise ??= read('sales-org'));
           const codes = ['region_code', 'province_code', 'group_code'];
           for (const row of rows) {
@@ -370,6 +410,9 @@ export function createGeaWorkspace(transport: SqlTransport) {
         typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
           ? 'direct-doris'
           : 'gea-governed-sql',
+      missingValuePolicy: usesConfiguredSql()
+        ? agentSqlConfig(sqlConfiguration).missingValuePolicy
+        : undefined,
       realData: true,
       readOnly: true,
       readAt: new Date().toISOString(),

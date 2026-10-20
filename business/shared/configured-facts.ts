@@ -51,6 +51,22 @@ const errorInfo = (error: any) => ({
   rejectedColumns: error.rejectedColumns,
 });
 
+/** Parent filters apply only to compatible source views; production bases are not warehouse ownership. */
+export function initialFiltersForView(
+  config: AgentSqlConfig,
+  id: string,
+  filters: Record<string, string>,
+) {
+  const view = config.sourceViews?.views.find((view: any) => view.id === id);
+  return Object.fromEntries(
+    Object.entries(filters).filter(
+      ([key]) =>
+        view?.filters.some((field: any) => field.name === key) &&
+        !(key === 'base' && view.inheritProductionBaseFilter === false),
+    ),
+  );
+}
+
 /** A source page is independent of other domains. Display paging never feeds a full-scope calculation. */
 export async function readConfiguredFacts(
   fallback: AgentSqlConfig,

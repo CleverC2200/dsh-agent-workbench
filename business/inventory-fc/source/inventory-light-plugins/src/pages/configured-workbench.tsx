@@ -7,6 +7,7 @@ import {
   businessDay,
   fulfillmentPercent,
   completeValue,
+  completeCount,
   knownNumber,
 } from '../../../../../shared/configured-overview';
 import { updateContext } from '../native/context';
@@ -25,7 +26,7 @@ const views: Record<string, string[]> = {
   orders: ['orders', 'shipments', 'delivery'],
   structure: ['inventory', 'health', 'flows'],
   plan: ['plan'],
-  base: ['base-resources', 'base'],
+  base: ['base-resources', 'base', 'base-shipments'],
   operations: ['cost', 'flows', 'shipments', 'base-stock-flows'],
 };
 const show = (n: number | null, unit = '') =>
@@ -79,6 +80,8 @@ export default function ConfiguredWorkbench() {
         ['订单口径发货量', completeValue(order, 'shipped'), '箱'],
         ['仓库本月正向发货', knownNumber(shipments?.month_ship_positive), '箱'],
         ['仓库近30日正向发货', knownNumber(shipments?.rolling_ship_positive), '箱'],
+        ['仓库近30日净发货', knownNumber(shipments?.rolling_ship_net), '箱'],
+        ['仓库近30日负向发货', knownNumber(shipments?.rolling_ship_negative), '箱'],
       ],
     },
     {
@@ -99,10 +102,30 @@ export default function ConfiguredWorkbench() {
       value: null,
       unit: '箱',
       color: 'amber',
-      scope: '当前待发缺来源 · 下列为本月累计',
+      scope: '当前待发 · 辅助项为本月累计',
       details: [
-        ['涉及订单', null, '单'],
-        ['缺货SKU', null, '个'],
+        [
+          '本月涉及订单',
+          completeCount(order, 'from_order_count', ['missing_order_identity']),
+          '单',
+        ],
+        [
+          '本月缺货SKU',
+          completeCount(order, 'shortage_sku_count', [
+            'missing_shortage',
+            'missing_shortage_sku_identity',
+          ]),
+          '个',
+        ],
+        [
+          '本月缺货订单',
+          completeCount(order, 'affected_from_order_count', [
+            'missing_order_identity',
+            'missing_shortage',
+            'invalid',
+          ]),
+          '单',
+        ],
         ['本月订单量', completeValue(order, 'ordered'), '箱'],
         ['本月缺货量', completeValue(order, 'shortage'), '箱'],
       ],
@@ -155,7 +178,7 @@ export default function ConfiguredWorkbench() {
             <button
               className="warehouse-cycle-context"
               disabled
-              title="新库缺少补货周期，无法计算或调整"
+              title="补货周期属于业务配置，当前页面尚未接入有效配置"
             >
               补货周期 <strong>-</strong>
             </button>
@@ -197,13 +220,13 @@ export default function ConfiguredWorkbench() {
               </h3>
               <p>
                 <b>核心判断：</b>
-                分仓现存、可用、备单占用、冻结和源超龄量已接入库存快照；货龄展示最大值。批次分布、安全目标、补货周期及有效计划不足时，建议补货量仍保持未知。
+                按分仓查看现存、可用、备单占用、冻结与超龄库存；货龄展示最大值。本月履约和近30日发货分别统计，库存快照日期及统计范围随指标列示。
               </p>
               <details className={common.scopeDetails}>
                 <summary>统计范围与口径</summary>
                 <p>
                   <b>数据边界：</b>
-                  订单满足率为所选月截至读取日的分仓履约；调拨量为当前源计划记录，单位与版本未确认，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
+                  订单满足率为所选月截至读取日的分仓履约；调拨量为源计划记录；计划月份、快照日期、版本、单位尚未提供，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
                   {shipments?.warehouse_count ?? '-'} 个仓库、{shipments?.row_count ?? '-'}{' '}
                   个仓库SKU；本月发货有值 {shipments?.month_valid_skus ?? '-'} 行、近30日有值{' '}
                   {shipments?.rolling_valid_skus ?? '-'} 行；末次发货日{' '}
@@ -225,9 +248,7 @@ export default function ConfiguredWorkbench() {
             </nav>
             <div className="business-panel">
               {tab === 'orders' && (
-                <p className={common.note}>
-                  当前待发、分配阶段来源缺失。下方展示本月订单履约与交货记录，不作为当前待发量。
-                </p>
+                <p className={common.note}>下方展示本月订单履约与交货记录，按所选统计日期查询。</p>
               )}
               <ConfiguredFactsPage
                 key={[tab, date, revision].join(':')}
