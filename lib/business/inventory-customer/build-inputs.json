@@ -5,12 +5,12 @@
     "sha256": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66"
   },
   "inputs": {
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\customer-inventory-model.js": "d789e9fd4b91f24fb1367b64a175102a17284431e07715e7abafb4f1f6cda617",
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\metric-definitions.js": "d764f47880fb2dccbb9bc200476af8aa549eb3b984dcb84d4ebbd522563814cd",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\customer-inventory-model.js": "ded96d0684b5ded7c1f87f8fd48a8421c9f19e28facc4224df22daf11b650355",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\metric-definitions.js": "39aea14e194866331f089772a2a9f2f6a970a400129b34cd7e5a9a6a3b557ea3",
     "D:\\dsh-agent-workbench\\business\\shared\\view-state.js": "f97984820b3c079fd88a86f78a6e30433689088ee4fe63212f40380df9c5ac98",
-    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\application.js": "5fda17f030c283d59d11d45f2bc4bba16e528343181584ab7b579dabc1607ec6",
+    "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\application.js": "384d8a3958e4180074cc30819de60846921cc7adea91bb5f991840a5cb3b6644",
     "D:\\dsh-agent-workbench\\business\\shared\\governed-parameters.ts": "1a9e16b857be66afd1c1e446ff0bb6c782df90efce69f33155ed7f0f7402a33f",
-    "D:\\dsh-agent-workbench\\business\\shared\\query-error.js": "2c995437246dd4bc4269eb59c0f200d861c14500d69722473b32aeeb090bef65",
+    "D:\\dsh-agent-workbench\\business\\shared\\query-error.js": "c3a621fbafda738bd1d275b53b847df17140a4a071b83ef31f8e0bb2754848ff",
     "D:\\dsh-agent-workbench\\business\\shared\\channel.js": "ce1055f422b00070d68f84cb099bc9d65ef1cb2bd30709b7d6a2c1a9b018a79e",
     "D:\\dsh-agent-workbench\\business\\shared\\sql-reader.ts": "7ac75378a0bb4639a4666388796e073d3c5c1e42249d03d0dc8520a1fc88b4d1",
     "D:\\dsh-agent-workbench\\prototypes\\inventory-customer\\data-source.js": "a83b019074ff90b7461175f31306d7e9ce862d7c5f6c7269a938f38447520c89",

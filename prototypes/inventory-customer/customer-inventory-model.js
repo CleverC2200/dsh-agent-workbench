@@ -41,13 +41,11 @@ export function mapCustomerInventoryRows(rows) {
     const valueAmount = complete('value_coverage') ? finite(row.stock_amt) : null;
     const sales30 = complete('sales_coverage') ? finite(row.sales_qty_30days) : null;
     const inTransit = complete('transit_coverage') ? finite(row.in_transit_qty) : null;
-    // Preserve the authoritative upstream quantity; invalid stock relationships
-    // block ratios, not the source balance. Never fall back to normal stock.
+    // SKU discrepancies are diagnostics, not a business-risk rule or a reason
+    // to discard a customer's otherwise calculable aggregate.
     const largeDateQty = complete('large_date_coverage') ? finite(row.large_date_qty) : null;
     const largeDateInvalid =
-      finite(row.large_date_invalid_sku) > 0 ||
-      largeDateQty < 0 ||
-      (largeDateQty !== null && quantity !== null && largeDateQty > quantity);
+      largeDateQty < 0 || (largeDateQty !== null && quantity !== null && largeDateQty > quantity);
     const largeDateRatio =
       !largeDateInvalid && largeDateQty !== null && quantity > 0
         ? (largeDateQty / quantity) * 100
@@ -92,6 +90,7 @@ export function mapCustomerInventoryRows(rows) {
       largeDateRatio,
       largeDateEstimated: false,
       largeDateInvalid,
+      largeDateSkuIssueCount: finite(row.large_date_invalid_sku) ?? 0,
       largeDateMessage: largeDateInvalid
         ? '大日期数量与库存不一致，占比及新鲜度暂不计算'
         : largeDateQty === null
@@ -118,10 +117,8 @@ export function summarizeCustomerInventory(rows) {
   const quantity = sum('quantity');
   const sales30 = sum('sales30');
   const anomalous = quantity < 0 || sum('value') < 0;
-  const normalRows = rows.filter((row) => row.quantity > 0 && Number.isFinite(row.normalRatio));
-  const normalQuantity = normalRows.reduce((total, row) => total + row.quantity, 0);
   const largeDateRows = rows.filter(
-    (row) => Number.isFinite(row.largeDateRatio) && row.quantity > 0,
+    (row) => Number.isFinite(row.largeDateQty) && Number.isFinite(row.quantity),
   );
   const largeDateQty = sum('largeDateQty');
   const coveredLargeDateQty = largeDateRows.reduce((total, row) => total + row.largeDateQty, 0);
@@ -143,15 +140,21 @@ export function summarizeCustomerInventory(rows) {
     structureCoverageCount: structureRows.length,
     structureMessage: structureUnavailableMessage(rows),
     largeDateQty,
-    largeDateRatio: largeDateQuantity > 0 ? (coveredLargeDateQty / largeDateQuantity) * 100 : null,
+    largeDateRatio:
+      largeDateQuantity > 0 && coveredLargeDateQty >= 0 && coveredLargeDateQty <= largeDateQuantity
+        ? (coveredLargeDateQty / largeDateQuantity) * 100
+        : null,
     largeDateEstimated: false,
     largeDateCoverageCount: rows.filter((row) => Number.isFinite(row.largeDateQty)).length,
     largeDateRatioCoverageCount: largeDateRows.length,
     largeDateInvalidCount: rows.filter((row) => row.largeDateInvalid).length,
+    largeDateSkuIssueCount: rows.reduce(
+      (total, row) => total + (row.largeDateSkuIssueCount ?? 0),
+      0,
+    ),
     normalRatio:
-      !anomalous && normalQuantity > 0
-        ? normalRows.reduce((total, row) => total + row.quantity * row.normalRatio, 0) /
-          normalQuantity
+      largeDateQuantity > 0 && coveredLargeDateQty >= 0 && coveredLargeDateQty <= largeDateQuantity
+        ? (1 - coveredLargeDateQty / largeDateQuantity) * 100
         : null,
     turnover:
       !anomalous && turnoverSales > 0
@@ -179,7 +182,7 @@ export function summarizeCustomerInventory(rows) {
     missingQuantityCount: rows.filter((row) => !Number.isFinite(row.quantity)).length,
     missingValueCount: rows.filter((row) => !Number.isFinite(row.value)).length,
     abnormalCustomerCount: rows.filter((row) => row.quantity < 0 || row.value < 0).length,
-    normalCoverageCount: normalRows.length,
+    normalCoverageCount: largeDateRows.length,
   };
 }
 
@@ -225,22 +228,11 @@ export function largeDateStatus(row) {
 }
 export function turnoverStatus(row) {
   // No upper turnover warning threshold is defined; do not retain demo 30.7/100.7 lines.
-  return !Number.isFinite(row.turnover)
-    ? 'unknown'
-    : row.turnover < 60
-      ? 'attention'
-      : 'unassessed';
+  return !Number.isFinite(row.turnover) ? 'unknown' : 'unassessed';
 }
 export function customerInventoryStatus(row) {
-  if (row.quantity < 0 || row.value < 0 || row.inTransit < 0) return 'anomaly';
-  if (row.largeDateInvalid) return 'anomaly';
-  const states = [structureStatus(row), largeDateStatus(row), turnoverStatus(row)];
+  const states = [structureStatus(row), largeDateStatus(row)];
   if (states.includes('risk')) return 'risk';
-  if (states.includes('attention') || row.shortageSku > 0) return 'attention';
-  // Missing metrics must not silently establish a healthy customer.
-  return structureStatus(row) === 'healthy' &&
-    largeDateStatus(row) === 'healthy' &&
-    Number.isFinite(row.turnover)
-    ? 'healthy'
-    : 'unknown';
+  if (states.includes('attention')) return 'attention';
+  return states.every((state) => state === 'healthy') ? 'healthy' : 'unknown';
 }
