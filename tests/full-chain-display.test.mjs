@@ -86,3 +86,40 @@ test('missing branch snapshot is explained and never replaced with base or shipm
   );
   assert.deepEqual(cards[0].details[1], ['分仓库存', null, '箱', '缺分仓库存快照']);
 });
+
+test('execution card exposes dated base snapshot orders independently of monthly shipments', () => {
+  const stock = {
+    known_open_orders: 1049341,
+    known_open_orders_count: 3500,
+    known_allocated: 261249,
+    known_allocated_count: 3500,
+    order_snapshot_count: 3500,
+  };
+  const orders = { ordered: 5244000, shipped: 5108900 };
+  const card = fullChainCards(stock, orders, '滚动', '2026-10-19')[4];
+  assert.equal(card.value, 1049341);
+  assert.match(card.scope, /基地未备单量.*2026-10-19.*3500\/3500/);
+  assert.equal(formatChainValue(card.value, card.unit), '104.93万箱');
+  assert.deepEqual(card.details[2], ['基地已备单占用', 261249, '箱']);
+  assert.equal(card.details[0][1], 5244000);
+  assert.equal(card.details[1][1], 5108900);
+  assert.equal(fullChainCards(stock, orders)[4].value, null);
+});
+
+test('snapshot order zero is visible and incomplete quantity coverage is labelled', () => {
+  const stock = {
+    known_open_orders: 0,
+    known_open_orders_count: 1,
+    known_allocated: 5,
+    known_allocated_count: 1,
+    order_snapshot_count: 2,
+  };
+  const card = fullChainCards(stock, null, '', '2026-10-19')[4];
+  assert.equal(card.value, 0);
+  assert.match(card.scope, /范围 1\/2/);
+  assert.match(card.details[2][0], /范围 1\/2/);
+  assert.equal(
+    fullChainCards({ ...stock, known_open_orders_count: 0 }, null, '', '2026-10-19')[4].value,
+    null,
+  );
+});
