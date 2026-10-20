@@ -4,7 +4,11 @@ import type {
   GeaSalesPlanListItem,
   GeaSalesPlanSkuAdjustment,
 } from '../../../bridge.ts';
-import { addExactDecimals, multiplyExactDecimals } from '../regionalApprovalQueryModel.ts';
+import {
+  addExactDecimals,
+  multiplyExactDecimals,
+  subtractExactDecimals,
+} from '../regionalApprovalQueryModel.ts';
 import { salesPlanEditableQuantity } from './salesPlanAccessModel.ts';
 import { salesPlanSkusMatchVersion } from './salesPlanDetailModel.ts';
 import type { ApprovalStageId } from '../salesPlanDomain.ts';
@@ -22,6 +26,31 @@ export type SalesPlanLocalDraft = {
 
 export type SalesPlanLocalDraftStore = Record<string, SalesPlanLocalDraft>;
 const DECIMAL = /^[+-]?\d{1,15}(?:\.\d{1,3})?$/;
+
+export const salesPlanApprovalDraftValues = (
+  detail: GeaSalesPlanDetail | undefined,
+  row: Pick<GeaSalesPlanListItem, 'status' | 'planTypeCode'>,
+  role: ApprovalStageId | undefined,
+  stored: readonly GeaSalesPlanSkuAdjustment[],
+  pendingValues: Record<string, string> = {},
+): Record<string, string> => {
+  const values = Object.fromEntries(stored.map((item) => [item.skuCode, item.adjustQty]));
+  for (const [skuCode, value] of Object.entries(pendingValues)) {
+    const sku = detail?.skus.find((item) => String(item.skuCode) === skuCode);
+    const baseline = sku && salesPlanEditableQuantity(sku, row.status, row.planTypeCode, role);
+    if (
+      baseline === undefined ||
+      baseline === '—' ||
+      !DECIMAL.test(value.trim()) ||
+      (value.trim().startsWith('-') && !/^-0+(?:\.0+)?$/.test(value.trim()))
+    )
+      throw new Error('确认计划数量不合法，请核对本节点调整');
+    const adjustQty = subtractExactDecimals(value.trim(), baseline);
+    if (!DECIMAL.test(adjustQty)) throw new Error('确认计划数量不合法，请核对本节点调整');
+    values[skuCode] = adjustQty;
+  }
+  return values;
+};
 
 /** 只表示本地草稿的新鲜度；绝不作为服务端签发的权威或快照令牌发送。 */
 export const salesPlanDraftSnapshot = (

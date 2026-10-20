@@ -33,6 +33,7 @@ import {
 import type { ApprovalStageId } from './salesPlanDomain.ts';
 import { SALES_PLAN_ROLES, salesPlanWorkflow } from '../../salesPlanWorkflow.ts';
 import { salesPlanAccessForRow, salesPlanEditableQuantity } from './models/salesPlanAccessModel.ts';
+import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
 export type LiveActionKind = 'APPROVE' | 'REJECT' | 'SAVE';
@@ -213,30 +214,24 @@ const RegionalApprovalLiveActionDialog: React.FC<{
           setDraftError('stale');
           return;
         }
-        const stored = Object.fromEntries(
-          (result.draft?.adjustments ?? []).map((item) => [item.skuCode, item.adjustQty]),
+        setAdjustmentValues(
+          salesPlanApprovalDraftValues(
+            snapshot,
+            row,
+            selectedRole,
+            result.draft?.role && result.draft.role !== selectedRole
+              ? []
+              : (result.draft?.adjustments ?? []),
+            selectedRole === approvalStage ? pendingValues : undefined,
+          ),
         );
-        // 页面上刚改、还没等到自动暂存落盘的数字必须一起带上，否则「上一节点改了、下一节点还是旧值」。
-        // 用「确认量 − 本节点基准」换成本次提交要的调整量：改回原值也会正确覆盖成 0。
-        const inline = Object.fromEntries(
-          Object.entries(pendingValues ?? {}).flatMap(([skuCode, value]) => {
-            const sku = snapshot?.skus.find((item) => String(item.skuCode) === skuCode);
-            const baseline = sku
-              ? salesPlanEditableQuantity(sku, row.status, row.planTypeCode, selectedRole)
-              : undefined;
-            if (baseline === undefined || baseline === '—' || !value.trim()) return [];
-            const adjustQty = subtractExactDecimals(value.trim(), baseline);
-            return SIGNED_DECIMAL_PATTERN.test(adjustQty) ? [[skuCode, adjustQty] as const] : [];
-          }),
-        );
-        setAdjustmentValues({ ...stored, ...inline });
         setDraftReady(true);
       })
       .catch(() => {
         if (!controller.signal.aborted) setDraftError('loadFailed');
       });
     return () => controller.abort();
-  }, [row.planId, row.versionId, initialAction, directApproval]);
+  }, [row.planId, row.versionId, initialAction, directApproval, selectedRole]);
   const [confirmedInputs, setConfirmedInputs] = useState<Record<string, string>>({});
   const [adjustmentSkus, setAdjustmentSkus] = useState<AdjustmentSkuState>({ status: 'idle' });
   const action = useSalesPlanAction({ client });

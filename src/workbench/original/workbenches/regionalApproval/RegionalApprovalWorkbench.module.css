@@ -751,6 +751,7 @@
   display: flex;
   min-width: 0;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1620,4 +1621,16 @@
   flex: 0 0 58px;
   border-top: 0;
   flex-wrap: nowrap;
+}
+
+.correctionProgress {
+  position: relative;
+  width: 100%;
+}
+.correctionProgress > i {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: rgb(var(--danger-6));
 }

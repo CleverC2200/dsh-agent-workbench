@@ -146,7 +146,10 @@ async function openWorkbench(t, grouped = false) {
     await browser?.close();
     await new Promise((resolve) => server.close(resolve));
   });
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.GEA_TEST_CHROMIUM,
+  });
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1536, height: 920 } });
   page.setDefaultTimeout(10000);
   const pageErrors = [];

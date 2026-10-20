@@ -5,8 +5,7 @@ import type {
 import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
-import { CorrectionWorkbench } from './CorrectionWorkbench.tsx';
-import type { GeaSalesPlanPeriod } from '../../contracts.ts';
+import type { GeaSalesPlanPeriod, GeaSalesPlanListItem } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 // 版本 / 对比下拉按 2026-09-23 业务反馈退出审批工具栏，避免审批人误操作。
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
@@ -93,7 +92,11 @@ import {
   type RegionalApprovalLiveCategorySummary,
   type RegionalApprovalLiveRow,
 } from './regionalApprovalQueryModel.ts';
-import { correctionDisplay } from './models/salesPlanCorrectionModel.ts';
+import {
+  correctionDisplay,
+  correctionDecimal,
+  correctionNodeQuantities,
+} from './models/salesPlanCorrectionModel.ts';
 import {
   useRegionalApprovalQuery,
   type RegionalApprovalQueryError,
@@ -345,6 +348,7 @@ const livePriority = (row: RegionalApprovalLiveRow) => {
 
 const RegionalApprovalWorkbench: React.FC<{
   headerControls?: React.ReactNode;
+  orderType?: 'M' | 'Z';
   stateScope: string;
   t: TFunction;
   onContextChange: (
@@ -371,6 +375,7 @@ const RegionalApprovalWorkbench: React.FC<{
   onCatalogChange?: (elements: PageElement[]) => void;
 }> = ({
   headerControls,
+  orderType = 'M',
   stateScope,
   t,
   onContextChange,
@@ -442,6 +447,14 @@ const RegionalApprovalWorkbench: React.FC<{
       string,
       {
         versionId?: string;
+        correction?: Pick<
+          GeaSalesPlanListItem,
+          | 'prevAdjAddQty'
+          | 'prevAdjCutQty'
+          | 'corrPlanAmount'
+          | 'corrPlanQty'
+          | 'correctionProgress'
+        >;
         qty: string;
         amount: string;
         baseQty: string;
@@ -580,6 +593,10 @@ const RegionalApprovalWorkbench: React.FC<{
       {},
     ),
   );
+  useEffect(() => {
+    setLivePendingValues({});
+    setLiveAdjustmentMetrics({});
+  }, [liveStageFilter]);
   const liveQueryScope = useMemo(
     () => ({
       areaCode:
@@ -627,12 +644,13 @@ const RegionalApprovalWorkbench: React.FC<{
         const next = metrics
           ? {
               ...row,
+              ...metrics.correction,
               mPlanQty:
-                metrics.versionId === row.versionId
+                row.orderType !== 'Z' && metrics.versionId === row.versionId
                   ? (row.mPlanQty ?? metrics.baseQty)
                   : metrics.baseQty,
               mPlanAmount:
-                metrics.versionId === row.versionId
+                row.orderType !== 'Z' && metrics.versionId === row.versionId
                   ? (row.mPlanAmount ?? metrics.baseAmount)
                   : metrics.baseAmount,
               currentQty: metrics.qty,
@@ -644,14 +662,27 @@ const RegionalApprovalWorkbench: React.FC<{
         return adjusted
           ? {
               ...next,
-              mPlanQty: adjusted.quantity,
-              mPlanAmount: adjusted.amount,
+              mPlanQty: orderType === 'Z' ? next.mPlanQty : adjusted.quantity,
+              mPlanAmount: orderType === 'Z' ? next.mPlanAmount : adjusted.amount,
               currentQty: adjusted.quantity,
               currentAmount: adjusted.amount,
+              ...(orderType === 'Z'
+                ? {
+                    corrPlanAmount: adjusted.amount,
+                    corrPlanQty: adjusted.quantity,
+                    correctionProgress:
+                      Number(next.targetAmount) > 0
+                        ? correctionDecimal(adjusted.amount)
+                            .div(next.targetAmount)
+                            .times(100)
+                            .toFixed(1)
+                        : null,
+                  }
+                : {}),
             }
           : next;
       }),
-    [liveAdjustmentMetrics, allLiveRows, versionMetrics],
+    [liveAdjustmentMetrics, allLiveRows, versionMetrics, orderType],
   );
   const dimensionStage = liveStageFilter ?? 'category';
   const availableDimensions = APPROVAL_DIMENSIONS_BY_STAGE[dimensionStage];
@@ -898,8 +929,10 @@ const RegionalApprovalWorkbench: React.FC<{
       else add(row.plan);
     }
     for (const row of liveRows) if (ids.has(String(row.planId))) add(row);
-    return [...picked.values()];
-  }, [liveRows, liveTableRows, selectedRowIds]);
+    return [...picked.values()].filter(
+      (row) => row.orderType == null || row.orderType === orderType,
+    );
+  }, [liveRows, liveTableRows, selectedRowIds, orderType]);
   const displayStage = liveStageFilter;
   const effectiveStage: SalesPlanContextApprovalStage = liveStageFilter ?? 'all';
   const contextAppliedFilters = useMemo<ApprovalContextFilters>(
@@ -972,8 +1005,12 @@ const RegionalApprovalWorkbench: React.FC<{
           versionId,
           signal: controller.signal,
         });
-        categories[row.planId] = aggregateRegionalApprovalLiveCategories(skus);
-        const aggregate = aggregateRegionalApprovalLiveCategories(skus);
+        const displaySkus =
+          row.orderType === 'Z'
+            ? skus.map((sku) => ({ ...sku, baseQty: sku.corrBaseQty ?? sku.qty, amtBase: sku.amt }))
+            : skus;
+        const aggregate = aggregateRegionalApprovalLiveCategories(displaySkus);
+        categories[row.planId] = aggregate;
         metrics[row.planId] = {
           versionId,
           qty: addExactDecimals(aggregate.map((c) => c.quantity)),
@@ -983,6 +1020,42 @@ const RegionalApprovalWorkbench: React.FC<{
           targetQty: String(primaryOffset ? (chosen?.targetQty ?? '') : row.targetQty),
           targetAmount: String(primaryOffset ? (chosen?.targetAmount ?? '') : row.targetAmount),
         };
+        if (orderType === 'Z' && row.orderType === 'Z') {
+          const lines = skus.map((sku) => {
+            const adjustment = correctionNodeQuantities(
+              sku,
+              row.status,
+              row.planTypeCode,
+              false,
+              undefined,
+              liveStageFilter === 'customer' ? undefined : liveStageFilter,
+            );
+            const add = correctionDecimal(adjustment.addQty),
+              cut = correctionDecimal(adjustment.cutQty),
+              price = correctionDecimal(sku.price);
+            return {
+              add,
+              cut,
+              qty: correctionDecimal(sku.qty).plus(add).minus(cut),
+              amount: correctionDecimal(sku.amt)
+                .plus(add.times(price).toFixed(2))
+                .minus(cut.times(price).toFixed(2)),
+            };
+          });
+          const sum = (field: 'add' | 'cut' | 'qty' | 'amount') =>
+            lines.reduce((value, line) => value.plus(line[field]), correctionDecimal('0'));
+          const amount = sum('amount');
+          metrics[row.planId].correction = {
+            prevAdjAddQty: sum('add').toFixed(),
+            prevAdjCutQty: sum('cut').toFixed(),
+            corrPlanQty: sum('qty').toFixed(),
+            corrPlanAmount: amount.toFixed(2),
+            correctionProgress:
+              Number(row.targetAmount) > 0
+                ? amount.div(row.targetAmount).times(100).toFixed(1)
+                : null,
+          };
+        }
         if (compareOffset !== primaryOffset) {
           const other = compareOffset
             ? versions.find((v) => current && v.seq === current.seq - compareOffset)
@@ -1014,7 +1087,14 @@ const RegionalApprovalWorkbench: React.FC<{
         if (liveCategoriesRequest.current === requestId) setLiveCategoriesLoading(false);
       });
     return () => controller.abort();
-  }, [detailClient, liveRows, scopedPrimaryVersionId, scopedCompareVersionId]);
+  }, [
+    detailClient,
+    liveRows,
+    scopedPrimaryVersionId,
+    scopedCompareVersionId,
+    orderType,
+    liveStageFilter,
+  ]);
   const historicalSummaryUnavailable = Boolean(
     scopedPrimaryVersionId && scopedPrimaryVersionId !== focusedLiveRow?.versionId,
   );
@@ -1030,6 +1110,9 @@ const RegionalApprovalWorkbench: React.FC<{
     detailClient,
     liveActionsEnabled && liveQuery.queueState.status === 'success',
   );
+
+  const sourceTypeReadOnly = (row: RegionalApprovalLiveRow) =>
+    row.orderType != null && row.orderType !== orderType;
 
   // 能审批的节点只来自账号角色：通知、任务、服务端对象能力都不参与身份判定。
   const authorizedStages = roleStages;
@@ -1159,6 +1242,7 @@ const RegionalApprovalWorkbench: React.FC<{
     row: RegionalApprovalLiveRow,
     kind: LiveActionKind = 'APPROVE',
   ) => {
+    if (sourceTypeReadOnly(row)) return 'readOnly';
     if (historicalSummaryUnavailable) return 'queueNotFresh';
     if (!liveActionsEnabled) return 'missingAuthority';
 
@@ -1180,6 +1264,7 @@ const RegionalApprovalWorkbench: React.FC<{
 
   /** 与单笔按钮同源的角色解析：多角色账号按当前节点过滤逐个尝试，取第一个允许该动作的角色。 */
   const liveActionAccessFor = (row: RegionalApprovalLiveRow, kind: LiveActionKind) => {
+    if (sourceTypeReadOnly(row)) return undefined;
     const detail = liveAccess.entries[row.versionId];
     if (!detail) return undefined;
     for (const role of liveActionRolesFor()) {
@@ -1195,7 +1280,12 @@ const RegionalApprovalWorkbench: React.FC<{
     rows.map((row) => {
       const access = liveActionAccessFor(row, kind);
       return access
-        ? { row, access }
+        ? {
+            row,
+            access,
+            detail: liveAccess.entries[row.versionId],
+            pendingValues: livePendingValues[row.planId],
+          }
         : { row, skipReason: liveActionDisabledReason(row, kind) ?? 'missingAuthority' };
     });
   /** 分组内有可按角色审批或退回的成员时允许勾选。 */
@@ -2150,7 +2240,8 @@ const RegionalApprovalWorkbench: React.FC<{
   // 先保留可读的最小宽度，再把面板剩余空间分配给内容列。
   // Keep the approval queue dense once its columns have enough room to scan.
   // The expanded SKU table deliberately follows a separate, roomier layout.
-  const liveMinimumWidths = [220, 112, 112, 136];
+  const liveMinimumWidths =
+    orderType === 'Z' ? [220, 112, 112, 136, 120, 136] : [220, 112, 112, 136];
   // 选择框与展开按钮各占 40px，必须一起计入列宽预算。
   const liveMinimumWidth = liveMinimumWidths.reduce((total, width) => total + width, 80);
   const liveTableWidth = Math.max(
@@ -2158,7 +2249,8 @@ const RegionalApprovalWorkbench: React.FC<{
     Math.min(tableViewportWidth || liveMinimumWidth, 960),
   );
   const liveExtraWidth = Math.max(0, liveTableWidth - liveMinimumWidth);
-  const liveColumnWeights = [0.44, 0.2, 0.2, 0.16];
+  const liveColumnWeights =
+    orderType === 'Z' ? [0.28, 0.14, 0.14, 0.16, 0.12, 0.16] : [0.44, 0.2, 0.2, 0.16];
   const liveColumnWidths = liveMinimumWidths.map(
     (width, index) => width + liveExtraWidth * liveColumnWeights[index],
   );
@@ -2178,18 +2270,31 @@ const RegionalApprovalWorkbench: React.FC<{
         }
         data-testid={`regional-approval-status-${row.planId}`}
       >
-        {tableRow.members && new Set(tableRow.members.map((member) => member.status)).size > 1
-          ? t('common.assistantSurface.regionalApproval.mixedApprovalStatus')
-          : salesPlanQueueStatusText(
-              row.status,
-              row.planTypeCode,
-              liveStageFilter ?? 'category',
-              t,
-            )}
+        {(tableRow.members ? tableRow.members.every(sourceTypeReadOnly) : sourceTypeReadOnly(row))
+          ? `${t(row.orderType === 'M' ? 'common.correction.monthlySourceReadOnly' : 'common.correction.correctionSourceReadOnly')} · ${salesPlanStatusText(row.status, row.planTypeCode, t)}`
+          : tableRow.members && new Set(tableRow.members.map((member) => member.status)).size > 1
+            ? t('common.assistantSurface.regionalApproval.mixedApprovalStatus')
+            : salesPlanQueueStatusText(
+                row.status,
+                row.planTypeCode,
+                liveStageFilter ?? 'category',
+                t,
+              )}
       </Tag>
     );
   };
 
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const month = liveQuery.selectedPeriodMonth;
+  const timeProgress =
+    orderType !== 'Z' || !month || !/^\d{4}-\d{2}$/.test(month)
+      ? undefined
+      : month < currentMonth
+        ? 100
+        : month > currentMonth
+          ? 0
+          : (now.getDate() / new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()) * 100;
   const liveColumns: TableColumnProps<RegionalApprovalLiveTableRow>[] = [
     {
       title: t('common.assistantSurface.regionalApproval.columns.organization'),
@@ -2418,19 +2523,30 @@ const RegionalApprovalWorkbench: React.FC<{
               >
                 {formattedProgress(progress.amount)}
               </strong>
-              <Progress
-                percent={Math.min(Math.max(progress.amount ?? 0, 0), 100)}
-                showText={false}
-                size="small"
-                color={salesPlanProgressBarColor(progress.amount)}
-              />
-              <small>
+              <div
+                className={styles.correctionProgress}
+                role={timeProgress == null ? undefined : 'img'}
+                aria-label={
+                  timeProgress == null
+                    ? undefined
+                    : `月达成进度 ${formattedProgress(progress.amount)}，时间进度 ${timeProgress.toFixed(1)}%`
+                }
+              >
+                <Progress
+                  percent={Math.min(Math.max(progress.amount ?? 0, 0), 100)}
+                  showText={false}
+                  size="small"
+                  color={salesPlanProgressBarColor(progress.amount)}
+                />
+                {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+              </div>
+              <small title={tableRow.plan.shipmentError ?? undefined}>
                 {tableRow.plan.shipAmount == null ? '—' : exactMoney(tableRow.plan.shipAmount)} /{' '}
                 {tableRow.plan.shipQty == null ? (
                   '—'
                 ) : (
                   <span title={correctionDisplay(tableRow.plan.shipQty, 'quantity').exact}>
-                    {quantityText(tableRow.plan.shipQty)}件
+                    {`${quantityText(tableRow.plan.shipQty)} ${t('common.assistantSurface.regionalApproval.scopeTotals.quantityUnit')}`}
                   </span>
                 )}
               </small>
@@ -2465,6 +2581,76 @@ const RegionalApprovalWorkbench: React.FC<{
       },
     },
   ];
+
+  if (orderType === 'Z')
+    liveColumns.push(
+      {
+        title: t('common.correction.adjustment'),
+        width: liveColumnWidths[4],
+        render: (_, tableRow) =>
+          tableRow.kind === 'category' ||
+          sourceTypeReadOnly(tableRow.plan) ||
+          tableRow.plan.prevAdjAddQty == null ||
+          tableRow.plan.prevAdjCutQty == null ? (
+            '—'
+          ) : (
+            <span>
+              <span className={styles.variancePositive}>
+                +{quantityText(tableRow.plan.prevAdjAddQty)}
+              </span>{' '}
+              /{' '}
+              <span className={styles.varianceNegative}>
+                −{quantityText(tableRow.plan.prevAdjCutQty)}
+              </span>
+            </span>
+          ),
+      },
+      {
+        title: t('common.correction.correctedProgress'),
+        width: liveColumnWidths[5],
+        render: (_, tableRow) =>
+          tableRow.kind === 'category' || sourceTypeReadOnly(tableRow.plan) ? (
+            '—'
+          ) : (
+            <div
+              className={styles.categoryProgressCell}
+              title={
+                Number(tableRow.plan.targetAmount) === 0
+                  ? t('common.correction.noTarget')
+                  : undefined
+              }
+            >
+              <strong>
+                {formattedProgress(
+                  tableRow.plan.correctionProgress == null
+                    ? undefined
+                    : Number(tableRow.plan.correctionProgress),
+                )}
+              </strong>
+              <div
+                className={styles.correctionProgress}
+                role="img"
+                aria-label={`纠偏后进度 ${formattedProgress(tableRow.plan.correctionProgress == null ? undefined : Number(tableRow.plan.correctionProgress))}，时间进度 ${timeProgress?.toFixed(1) ?? '—'}%`}
+              >
+                <Progress
+                  percent={Math.max(
+                    0,
+                    Math.min(100, Number(tableRow.plan.correctionProgress ?? 0)),
+                  )}
+                  showText={false}
+                  size="small"
+                  color={salesPlanProgressBarColor(
+                    tableRow.plan.correctionProgress == null
+                      ? undefined
+                      : Number(tableRow.plan.correctionProgress),
+                  )}
+                />
+                {timeProgress != null && <i style={{ left: `${timeProgress}%` }} />}
+              </div>
+            </div>
+          ),
+      },
+    );
 
   const hasReturnedSelection = selectedLiveRows.some((row) => row.status >= 6 && row.status <= 9);
   const submissionItems = (): SalesPlanSubmissionItem[] =>
@@ -2691,7 +2877,7 @@ const RegionalApprovalWorkbench: React.FC<{
       );
     if (!detail) return { detail: undefined, role: undefined, canEdit: false };
     // 能编辑/审批的角色只来自账号角色；没有审批角色时只能靠服务端给的详情可读能力。
-    const accessRoles = roleStages;
+    const accessRoles = liveActionRolesFor();
     const editableRole = accessRoles
       .map((candidate) => ({
         candidate,
@@ -3288,6 +3474,7 @@ const RegionalApprovalWorkbench: React.FC<{
                       const access = inlineSkuAccess(record.plan);
                       return (
                         <InlineSkuDetails
+                          orderType={orderType}
                           key={
                             conversationId
                               ? liveInputKey(
@@ -3297,7 +3484,7 @@ const RegionalApprovalWorkbench: React.FC<{
                                     record.plan.versionId,
                                   access.role,
                                 )
-                              : record.plan.planId
+                              : `${record.plan.planId}:${access.role ?? 'view'}`
                           }
                           initialInputValues={
                             conversationId
@@ -3341,7 +3528,11 @@ const RegionalApprovalWorkbench: React.FC<{
                           t={t}
                           detail={access.detail}
                           approvalRole={access.role}
-                          canEdit={record.kind === 'plan' && Boolean(access.detail)}
+                          canEdit={
+                            record.kind === 'plan' &&
+                            Boolean(access.detail) &&
+                            !sourceTypeReadOnly(record.plan)
+                          }
                           categoryName={
                             record.kind === 'category' ? record.category.categoryName : undefined
                           }
@@ -3544,18 +3735,18 @@ const SalesPlanWorkbench: React.FC<React.ComponentProps<typeof RegionalApprovalW
     [props.onContextChange],
   );
   const host = useWorkbenchHost();
-  const monthlyHost = useMemo(
+  const orderHost = useMemo(
     () => ({
       ...host,
       salesPlan: {
         ...host.salesPlan,
         list: {
           invoke: (query: Parameters<typeof host.salesPlan.list.invoke>[0]) =>
-            host.salesPlan.list.invoke({ ...query, orderType: 'M' }),
+            host.salesPlan.list.invoke({ ...query, orderType }),
         },
       },
     }),
-    [host],
+    [host, orderType],
   );
   const select = (value: 'M' | 'Z') => {
     if (value === orderType) return;
@@ -3586,24 +3777,17 @@ const SalesPlanWorkbench: React.FC<React.ComponentProps<typeof RegionalApprovalW
       ))}
     </div>
   );
-  return orderType === 'M' ? (
-    <WorkbenchHostProvider value={monthlyHost}>
+  return (
+    <WorkbenchHostProvider value={orderHost}>
       <RegionalApprovalWorkbench
         {...props}
+        key={orderType}
+        orderType={orderType}
+        stateScope={orderType === 'M' ? props.stateScope : `${props.stateScope}:correction`}
         headerControls={headerControls}
         onContextChange={onContextChange}
       />
     </WorkbenchHostProvider>
-  ) : (
-    <CorrectionWorkbench
-      headerControls={headerControls}
-      t={props.t}
-      queryClient={host.salesPlan}
-      detailClient={host.salesPlan}
-      actionClient={props.liveActionsEnabled ? host.salesPlan : undefined}
-      onResubmit={props.onResubmit}
-      approvalStages={props.approvalStages}
-    />
   );
 };
 export default SalesPlanWorkbench;

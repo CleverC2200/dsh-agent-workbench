@@ -50,8 +50,8 @@ export const summarizeGroupSkus = (
         pendingValues[plan.planId]?.[code] ??
         salesPlanEditableQuantity(sku, plan.status, plan.planTypeCode, approvalRole) ??
         String(sku.qty);
-      const baseQty = String(sku.baseQty);
-      const baseAmount = String(sku.amtBase);
+      const baseQty = String(plan.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty);
+      const baseAmount = String(plan.orderType === 'Z' ? sku.amt : sku.amtBase);
       const amount = multiplyExactDecimals(qty, String(sku.price));
       if (![qty, baseQty, baseAmount].every(decimal) || amount === undefined)
         throw new Error('INCOMPLETE_GROUP_SKUS');
