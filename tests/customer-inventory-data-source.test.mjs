@@ -1,16 +1,62 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { customerMetricDefinitions } from '../prototypes/inventory-customer/metric-definitions.js';
 import { readFile } from 'node:fs/promises';
 import {
   mapCustomerInventoryRows,
   parseDeliveryCities,
   summarizeCustomerInventory,
+  structureStatus,
+  customerInventoryStatus,
+  largeDateStatus,
 } from '../prototypes/inventory-customer/customer-inventory-model.js';
 
 const source = await readFile(
   new URL('../prototypes/inventory-customer/data-source.js', import.meta.url),
   'utf8',
 );
+
+test('metric dialogs separate formulas, state rules and data caveats', () => {
+  assert.equal(Object.keys(customerMetricDefinitions).length, 6);
+  for (const metric of Object.values(customerMetricDefinitions)) {
+    assert.ok(metric.formula.length > 0);
+    assert.ok(metric.rules.length > 0);
+    assert.ok(metric.notes.length > 0);
+    assert.ok(metric.formula.every((line) => line.includes('＝')));
+    assert.ok(metric.formula.every((line) => !/待确认|待核验|当前取数|缺失/.test(line)));
+  }
+  for (const name of ['value', 'quantity', 'freshness']) {
+    assert.match(customerMetricDefinitions[name].rules[0], /^缺失：/);
+  }
+  assert.equal(customerMetricDefinitions.structure.rules.length, 3);
+  assert.ok(customerMetricDefinitions.largeDate.rules.some((line) => line.includes('≥ 5%')));
+});
+
+test('unscored structure explains negative sales, missing inputs and zero denominators', () => {
+  const base = {
+    snapshot_date: '2026-10-18',
+    cust_code: 'C',
+    cust_name: '客户',
+    sku_rows: 2,
+    stock_coverage: 2,
+    sales_coverage: 2,
+    stock_qty: 10,
+    sales_qty_30days: 5,
+  };
+  const negative = mapCustomerInventoryRows([{ ...base, structure_negative_sales: 1 }]).rows;
+  assert.equal(
+    summarizeCustomerInventory(negative).structureMessage,
+    '销量存在负值，结构分暂不计算',
+  );
+  const missing = mapCustomerInventoryRows([{ ...base, sales_coverage: 1 }]).rows;
+  assert.match(summarizeCustomerInventory(missing).structureMessage, /SKU销量数据缺失/);
+  const zero = mapCustomerInventoryRows([{ ...base, sales_qty_30days: 0 }]).rows;
+  assert.match(summarizeCustomerInventory(zero).structureMessage, /近30日销量为0/);
+  assert.match(
+    summarizeCustomerInventory([...negative, { structureScore: 90 }]).structureMessage,
+    /1家客户未评分/,
+  );
+});
 
 test('negative customer inventory preserves book balances without negative turnover or partial freshness', () => {
   const input = {
@@ -49,6 +95,8 @@ test('customer summary preserves missing coverage and weights valid normal stock
     value: 1,
     sales30: 50,
     normalRatio: 80,
+    inTransit: 0,
+    turnover: 60,
     targetQty: null,
     targetValue: null,
   };
@@ -62,18 +110,25 @@ test('customer summary preserves missing coverage and weights valid normal stock
 });
 
 test('headquarters retains totals when an individual customer is negative or missing', () => {
-  const row = { quantity: 200, value: 4, sales30: 100, normalRatio: 100 };
+  const row = {
+    quantity: 200,
+    value: 4,
+    sales30: 100,
+    normalRatio: 100,
+    inTransit: 0,
+    turnover: 60,
+  };
   const result = summarizeCustomerInventory([
     row,
-    { ...row, quantity: -20, value: -1, normalRatio: null },
-    { ...row, quantity: null, value: null, sales30: null, normalRatio: null },
+    { ...row, quantity: -20, value: -1, normalRatio: null, turnover: null },
+    { ...row, quantity: null, value: null, sales30: null, normalRatio: null, turnover: null },
   ]);
   assert.equal(result.quantity, 180);
   assert.equal(result.totalValue, 3);
   assert.equal(result.anomalous, false);
   assert.equal(result.abnormalCustomerCount, 1);
   assert.equal(result.normalRatio, 100);
-  assert.equal(result.turnover, 27);
+  assert.equal(result.turnover, 60);
 });
 const application = await readFile(
   new URL('../prototypes/inventory-customer/application.js', import.meta.url),
@@ -91,7 +146,12 @@ test('customer inventory maps complete source facts and explicit derived metrics
       stock_qty: '300',
       stock_amt: '60000',
       sales_qty_30days: '150',
+      in_transit_qty: '30',
+      transit_coverage: '3',
+      structure_score: '90',
       normal_stock_qty: '270',
+      large_date_qty: '30',
+      large_date_coverage: '3',
       no_sales_sku: '2',
       sku_rows: '3',
       stock_coverage: '3',
@@ -115,11 +175,53 @@ test('customer inventory maps complete source facts and explicit derived metrics
       normalRatio: result.rows[0].normalRatio,
       turnover: result.rows[0].turnover,
     },
-    { quantity: 300, value: 6, targetValue: null, targetQty: null, normalRatio: 90, turnover: 60 },
+    { quantity: 300, value: 6, targetValue: null, targetQty: null, normalRatio: 90, turnover: 66 },
   );
-  assert.equal(result.rows[0].largeDateQty, null);
-  assert.equal(result.rows[0].structureScore, null);
+  assert.equal(result.rows[0].largeDateQty, 30);
+  assert.equal(result.rows[0].largeDateRatio, 10);
+  assert.equal(result.rows[0].largeDateEstimated, false);
+  assert.equal(result.rows[0].structureScore, 90);
   assert.deepEqual(result.rows[0].cities, ['洛阳市', '郑州市']);
+});
+
+test('authoritative large-date quantities preserve anomalies and never fall back to estimates', () => {
+  const base = {
+    snapshot_date: '2026-10-20',
+    cust_code: 'C1',
+    cust_name: '客户',
+    sku_rows: 1,
+    stock_coverage: 1,
+    stock_qty: 100,
+    large_date_coverage: 1,
+    large_date_qty: 20,
+    normal_stock_qty: 100,
+  };
+  const rows = mapCustomerInventoryRows([
+    base,
+    { ...base, stock_qty: 300, large_date_qty: 30 },
+    { ...base, large_date_qty: 101, large_date_invalid_sku: 1 },
+    { ...base, large_date_qty: -1, large_date_invalid_sku: 1 },
+    { ...base, large_date_qty: null, large_date_coverage: 0 },
+    { ...base, stock_qty: -10 },
+    { ...base, stock_qty: 0, large_date_qty: 0 },
+  ]).rows;
+  assert.deepEqual(
+    rows.map((row) => row.largeDateQty),
+    [20, 30, 101, -1, null, 20, 0],
+  );
+  assert.equal(rows[0].normalRatio, 80);
+  assert.equal(rows[2].largeDateRatio, null);
+  assert.equal(rows[2].normalRatio, null);
+  assert.match(rows[2].largeDateMessage, /不一致/);
+  assert.equal(rows[4].largeDateQty, null);
+  const summary = summarizeCustomerInventory(rows);
+  assert.equal(summary.largeDateQty, 170);
+  assert.equal(summary.largeDateRatio, 12.5);
+  assert.equal(summary.largeDateCoverageCount, 6);
+  assert.equal(summary.largeDateRatioCoverageCount, 2);
+  assert.equal(summary.largeDateInvalidCount, 3);
+  assert.equal(rows[6].largeDateRatio, null);
+  assert.equal(summary.largeDateEstimated, false);
 });
 
 test('delivery-city parsing preserves multi-city membership and rejects malformed values', () => {
@@ -128,6 +230,66 @@ test('delivery-city parsing preserves multi-city membership and rejects malforme
     parseDeliveryCities(JSON.stringify([{ cust_name: '客户（南充市西充县）卸货地' }])),
     ['南充市'],
   );
+});
+
+test('latest metric thresholds, risk totals and arithmetic structure rollup', () => {
+  assert.deepEqual(
+    [80, 79.9, 65, 64.9, null].map((structureScore) => structureStatus({ structureScore })),
+    ['healthy', 'attention', 'attention', 'risk', 'unknown'],
+  );
+  assert.equal(largeDateStatus({ largeDateRatio: 5 }), 'attention');
+  const base = {
+    quantity: 100,
+    value: 2,
+    sales30: 50,
+    inTransit: 10,
+    turnover: 66,
+    structureScore: 90,
+    largeDateRatio: 0,
+    largeDateQty: 0,
+  };
+  const rows = [
+    base,
+    { ...base, structureScore: 70, quantity: 500 },
+    { ...base, structureScore: 60 },
+    { ...base, largeDateRatio: 5 },
+    { ...base, quantity: -1 },
+    { quantity: null },
+  ];
+  const summary = summarizeCustomerInventory(rows);
+  assert.equal(summary.riskCount, 4);
+  assert.equal(summary.highRiskCount, 2);
+  assert.equal(summary.attentionCount, 2);
+  assert.equal(summary.unknownCount, 1);
+  assert.equal(summary.structureScore, 80);
+  assert.equal(customerInventoryStatus({ quantity: null }), 'unknown');
+  assert.match(source, /SUM\(ABS\(/);
+  assert.match(source, /stock_qty \/ \(sales_qty_30days \/ 30\) < 60/);
+});
+
+test('missing transit is explicitly estimated, zero transit is formal, zero sales stays unknown', () => {
+  const base = {
+    snapshot_date: '2026-10-20',
+    cust_code: 'C1',
+    cust_name: '客户',
+    sku_rows: 1,
+    stock_coverage: 1,
+    sales_coverage: 1,
+    stock_qty: 100,
+    sales_qty_30days: 300,
+  };
+  const rows = mapCustomerInventoryRows([
+    base,
+    { ...base, transit_coverage: 1, in_transit_qty: 0 },
+    { ...base, sales_qty_30days: 0 },
+    { ...base, transit_coverage: 1, in_transit_qty: -1 },
+  ]).rows;
+  assert.equal(rows[0].turnover, 10);
+  assert.equal(rows[0].turnoverEstimated, true);
+  assert.equal(rows[1].turnover, 10);
+  assert.equal(rows[1].turnoverEstimated, false);
+  assert.equal(rows[2].turnover, null);
+  assert.equal(rows[3].turnover, null);
 });
 
 test('customer inventory keeps incomplete coverage unknown instead of filling zero', () => {

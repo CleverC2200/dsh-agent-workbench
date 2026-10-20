@@ -9,12 +9,16 @@ export function parseDeliveryCities(value) {
   try {
     const addresses = JSON.parse(value);
     if (!Array.isArray(addresses)) return [];
-    return [...new Set(addresses.flatMap((address) => {
-      const text = String(address?.cust_name ?? '');
-      const location = text.match(/[（(]([^）)]+)[）)]\s*卸货地/)?.[1] ?? '';
-      const city = location.match(/^(.+?市)/)?.[1];
-      return city ? [city] : [];
-    }))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    return [
+      ...new Set(
+        addresses.flatMap((address) => {
+          const text = String(address?.cust_name ?? '');
+          const location = text.match(/[（(]([^）)]+)[）)]\s*卸货地/)?.[1] ?? '';
+          const city = location.match(/^(.+?市)/)?.[1];
+          return city ? [city] : [];
+        }),
+      ),
+    ].sort((a, b) => a.localeCompare(b, 'zh-CN'));
   } catch {
     return [];
   }
@@ -36,7 +40,18 @@ export function mapCustomerInventoryRows(rows) {
     const quantity = complete('stock_coverage') ? finite(row.stock_qty) : null;
     const valueAmount = complete('value_coverage') ? finite(row.stock_amt) : null;
     const sales30 = complete('sales_coverage') ? finite(row.sales_qty_30days) : null;
-    const normalQty = complete('normal_coverage') ? finite(row.normal_stock_qty) : null;
+    const inTransit = complete('transit_coverage') ? finite(row.in_transit_qty) : null;
+    // Preserve the authoritative upstream quantity; invalid stock relationships
+    // block ratios, not the source balance. Never fall back to normal stock.
+    const largeDateQty = complete('large_date_coverage') ? finite(row.large_date_qty) : null;
+    const largeDateInvalid =
+      finite(row.large_date_invalid_sku) > 0 ||
+      largeDateQty < 0 ||
+      (largeDateQty !== null && quantity !== null && largeDateQty > quantity);
+    const largeDateRatio =
+      !largeDateInvalid && largeDateQty !== null && quantity > 0
+        ? (largeDateQty / quantity) * 100
+        : null;
     // The confirmed customer target metrics come from the dealer-side target
     // calculation. Do not derive a substitute from recent sales while that
     // governed source has no rows.
@@ -44,10 +59,14 @@ export function mapCustomerInventoryRows(rows) {
     const targetValue = null;
     const cities = parseDeliveryCities(row.dealer_receive_addr);
     return {
-      key: code, code, name,
+      key: code,
+      code,
+      name,
       region: String(row.region_name ?? '区域未知'),
       province: String(row.province_name ?? '省区未知'),
-      city: cities[0] ?? '卸货城市未知', cities, manager: '负责人未接入',
+      city: cities[0] ?? '卸货城市未知',
+      cities,
+      manager: '负责人未接入',
       value: valueAmount === null ? null : valueAmount / 10000,
       targetValue: targetValue === null ? null : targetValue / 10000,
       quantity,
@@ -55,10 +74,35 @@ export function mapCustomerInventoryRows(rows) {
       targetTurnover: null,
       inventoryGap: null,
       sales30,
-      structureScore: null,
-      normalRatio: quantity !== null && quantity > 0 && normalQty !== null ? (normalQty / quantity) * 100 : null,
-      turnover: sales30 !== null && sales30 > 0 && quantity !== null && quantity >= 0 ? quantity / (sales30 / 30) : null,
-      largeDateQty: null, largeDateRatio: null, shortageSku: null, expirySku: null,
+      dailySales: sales30 === null ? null : sales30 / 30,
+      inTransit,
+      turnoverEstimated: inTransit === null,
+      structureScore: finite(row.structure_score),
+      structureIssues: structureIssues(row),
+      normalRatio: largeDateRatio !== null ? 100 - largeDateRatio : null,
+      turnover:
+        sales30 !== null &&
+        sales30 > 0 &&
+        quantity !== null &&
+        quantity >= 0 &&
+        (inTransit === null || inTransit >= 0)
+          ? (quantity + (inTransit ?? 0)) / (sales30 / 30)
+          : null,
+      largeDateQty,
+      largeDateRatio,
+      largeDateEstimated: false,
+      largeDateInvalid,
+      largeDateMessage: largeDateInvalid
+        ? '大日期数量与库存不一致，占比及新鲜度暂不计算'
+        : largeDateQty === null
+          ? '大日期数量缺失'
+          : quantity === null
+            ? '库存数据缺失，无法计算占比'
+            : quantity === 0
+              ? '库存总量为0，无法计算占比'
+              : '',
+      shortageSku: finite(row.shortage_sku),
+      expirySku: null,
       noSalesSku: finite(row.no_sales_sku),
     };
   });
@@ -68,25 +112,135 @@ export function mapCustomerInventoryRows(rows) {
 /** Preserve book balances; incomplete or anomalous inputs cannot establish healthy KPIs. */
 export function summarizeCustomerInventory(rows) {
   const sum = (field) => {
-    const available = rows.filter(row => Number.isFinite(row[field]));
+    const available = rows.filter((row) => Number.isFinite(row[field]));
     return available.length ? available.reduce((total, row) => total + row[field], 0) : null;
   };
   const quantity = sum('quantity');
   const sales30 = sum('sales30');
   const anomalous = quantity < 0 || sum('value') < 0;
-  const normalRows = rows.filter(row => row.quantity > 0 && Number.isFinite(row.normalRatio));
+  const normalRows = rows.filter((row) => row.quantity > 0 && Number.isFinite(row.normalRatio));
   const normalQuantity = normalRows.reduce((total, row) => total + row.quantity, 0);
+  const largeDateRows = rows.filter(
+    (row) => Number.isFinite(row.largeDateRatio) && row.quantity > 0,
+  );
+  const largeDateQty = sum('largeDateQty');
+  const coveredLargeDateQty = largeDateRows.reduce((total, row) => total + row.largeDateQty, 0);
+  const largeDateQuantity = largeDateRows.reduce((total, row) => total + row.quantity, 0);
+  const turnoverRows = rows.filter((row) => Number.isFinite(row.turnover));
+  const turnoverSales = turnoverRows.reduce((total, row) => total + row.sales30, 0);
+  const structureRows = rows.filter((row) => Number.isFinite(row.structureScore));
   return {
-    totalValue: sum('value'), quantity, sales30,
-    targetValue: sum('targetValue'), targetQty: sum('targetQty'),
-    structureScore: null, largeDateQty: null, largeDateRatio: null,
-    normalRatio: !anomalous && normalQuantity > 0
-      ? normalRows.reduce((total, row) => total + row.quantity * row.normalRatio, 0) / normalQuantity : null,
-    turnover: !anomalous && quantity !== null && sales30 > 0 ? quantity / (sales30 / 30) : null,
+    totalValue: sum('value'),
+    quantity,
+    sales30,
+    targetValue: sum('targetValue'),
+    targetQty: sum('targetQty'),
+    dailySales: sales30 === null ? null : sales30 / 30,
+    inTransit: sum('inTransit'),
+    structureScore: structureRows.length
+      ? structureRows.reduce((total, row) => total + row.structureScore, 0) / structureRows.length
+      : null,
+    structureCoverageCount: structureRows.length,
+    structureMessage: structureUnavailableMessage(rows),
+    largeDateQty,
+    largeDateRatio: largeDateQuantity > 0 ? (coveredLargeDateQty / largeDateQuantity) * 100 : null,
+    largeDateEstimated: false,
+    largeDateCoverageCount: rows.filter((row) => Number.isFinite(row.largeDateQty)).length,
+    largeDateRatioCoverageCount: largeDateRows.length,
+    largeDateInvalidCount: rows.filter((row) => row.largeDateInvalid).length,
+    normalRatio:
+      !anomalous && normalQuantity > 0
+        ? normalRows.reduce((total, row) => total + row.quantity * row.normalRatio, 0) /
+          normalQuantity
+        : null,
+    turnover:
+      !anomalous && turnoverSales > 0
+        ? turnoverRows.reduce((total, row) => total + row.quantity + (row.inTransit ?? 0), 0) /
+          (turnoverSales / 30)
+        : null,
+    turnoverCoverageCount: turnoverRows.length,
+    turnoverEstimated: turnoverRows.some((row) => row.turnoverEstimated),
+    transitCoverageCount: turnoverRows.filter((row) => !row.turnoverEstimated).length,
+    riskCount: rows.filter((row) =>
+      ['risk', 'attention', 'anomaly'].includes(customerInventoryStatus(row)),
+    ).length,
+    highRiskCount: rows.filter((row) => ['risk', 'anomaly'].includes(customerInventoryStatus(row)))
+      .length,
+    attentionCount: rows.filter((row) => customerInventoryStatus(row) === 'attention').length,
+    unknownCount: rows.filter((row) => customerInventoryStatus(row) === 'unknown').length,
+    lowCoverageCount: rows.filter(
+      (row) => row.sales30 > 0 && Number.isFinite(row.turnover) && row.turnover < 60,
+    ).length,
+    shortageSku: sum('shortageSku'),
+    largeDateRiskCount: rows.filter(
+      (row) => Number.isFinite(row.largeDateRatio) && row.largeDateRatio >= 5,
+    ).length,
     anomalous,
-    missingQuantityCount: rows.filter(row => !Number.isFinite(row.quantity)).length,
-    missingValueCount: rows.filter(row => !Number.isFinite(row.value)).length,
-    abnormalCustomerCount: rows.filter(row => row.quantity < 0 || row.value < 0).length,
+    missingQuantityCount: rows.filter((row) => !Number.isFinite(row.quantity)).length,
+    missingValueCount: rows.filter((row) => !Number.isFinite(row.value)).length,
+    abnormalCustomerCount: rows.filter((row) => row.quantity < 0 || row.value < 0).length,
     normalCoverageCount: normalRows.length,
   };
+}
+
+/** Only use thresholds defined in the latest customer knowledge document. */
+export function structureStatus(row) {
+  return !Number.isFinite(row.structureScore)
+    ? 'unknown'
+    : row.structureScore >= 80
+      ? 'healthy'
+      : row.structureScore >= 65
+        ? 'attention'
+        : 'risk';
+}
+
+/** Preserve source diagnostics rather than calling every unscored customer incomplete. */
+function structureIssues(row) {
+  if (finite(row.structure_score) !== null) return [];
+  const issues = [];
+  if (finite(row.structure_negative_sales) > 0) issues.push('销量存在负值');
+  if (finite(row.structure_negative_stock) > 0) issues.push('库存存在负值');
+  if (finite(row.structure_missing_sku) > 0) issues.push('SKU编码缺失');
+  if (finite(row.stock_coverage) !== finite(row.sku_rows)) issues.push('SKU库存数据缺失');
+  if (finite(row.sales_coverage) !== finite(row.sku_rows)) issues.push('SKU销量数据缺失');
+  if (!issues.length && finite(row.stock_qty) === 0) issues.push('库存总量为0');
+  if (!issues.length && finite(row.sales_qty_30days) === 0) issues.push('近30日销量为0');
+  return issues.length ? issues : ['结构分计算所需数据缺失'];
+}
+
+export function structureUnavailableMessage(rows) {
+  const unscored = rows.filter((row) => !Number.isFinite(row.structureScore));
+  if (!unscored.length) return '';
+  const reasons = [
+    ...new Set(unscored.flatMap((row) => row.structureIssues ?? ['结构分计算所需数据缺失'])),
+  ];
+  return `${reasons.join('；')}，${unscored.length === rows.length ? '结构分暂不计算' : `${unscored.length}家客户未评分`}`;
+}
+export function largeDateStatus(row) {
+  return !Number.isFinite(row.largeDateRatio)
+    ? 'unknown'
+    : row.largeDateRatio >= 5
+      ? 'attention'
+      : 'healthy';
+}
+export function turnoverStatus(row) {
+  // No upper turnover warning threshold is defined; do not retain demo 30.7/100.7 lines.
+  return !Number.isFinite(row.turnover)
+    ? 'unknown'
+    : row.turnover < 60
+      ? 'attention'
+      : 'unassessed';
+}
+export function customerInventoryStatus(row) {
+  if (row.quantity < 0 || row.value < 0 || row.inTransit < 0) return 'anomaly';
+  if (row.largeDateInvalid) return 'anomaly';
+  const states = [structureStatus(row), largeDateStatus(row), turnoverStatus(row)];
+  if (states.includes('risk')) return 'risk';
+  if (states.includes('attention') || row.shortageSku > 0) return 'attention';
+  // Missing metrics must not silently establish a healthy customer.
+  return structureStatus(row) === 'healthy' &&
+    largeDateStatus(row) === 'healthy' &&
+    Number.isFinite(row.turnover)
+    ? 'healthy'
+    : 'unknown';
 }
