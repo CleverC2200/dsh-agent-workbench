@@ -17,8 +17,8 @@ WITH sku AS (
     CASE WHEN COUNT(stock_amt) = COUNT(*) THEN SUM(stock_amt) END AS stock_amt,
     CASE WHEN COUNT(pack_unitqty) = COUNT(*) THEN SUM(pack_unitqty) END AS in_transit_qty,
     CASE WHEN COUNT(normal_stock_qty) = COUNT(*) THEN SUM(normal_stock_qty) END AS normal_stock_qty,
-    CASE WHEN COUNT(over120_final_qty) = COUNT(*) THEN SUM(over120_final_qty) END AS large_date_qty,
-    SUM(CASE WHEN over120_final_qty < 0 OR over120_final_qty > stock_qty THEN 1 ELSE 0 END) AS large_date_invalid_sku,
+    CASE WHEN COUNT(big_final_qty) = COUNT(*) THEN SUM(big_final_qty) END AS large_date_qty,
+    SUM(CASE WHEN big_final_qty < 0 OR big_final_qty > stock_qty THEN 1 ELSE 0 END) AS large_date_invalid_sku,
     CASE WHEN COUNT(sales_qty_30days) = COUNT(*) THEN SUM(sales_qty_30days) END AS sales_qty_30days
   FROM agents_scm_cust_jxc_ai_daliy_d
   WHERE stat_date = (SELECT MAX(stat_date) FROM agents_scm_cust_jxc_ai_daliy_d)

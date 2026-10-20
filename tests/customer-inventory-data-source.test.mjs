@@ -317,6 +317,9 @@ test('customer inventory keeps incomplete coverage unknown instead of filling ze
 });
 
 test('customer inventory SQL is fixed to the granted latest snapshot table', () => {
+  assert.match(source, /SUM\(big_final_qty\)/);
+  assert.match(source, /COUNT\(big_final_qty\)/);
+  assert.doesNotMatch(source, /over120_final_qty/);
   assert.match(source, /FROM agents_scm_cust_jxc_ai_daliy_d/);
   assert.match(source, /agents_dim_dealer_data_d/);
   assert.match(source, /SELECT MAX\(stat_date\)/);
