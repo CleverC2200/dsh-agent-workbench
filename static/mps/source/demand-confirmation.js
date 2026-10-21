@@ -313,7 +313,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { className: 'dc-card-head' },
         h('h3', {}, definition.title),
-        h('span', { className: 'dc-status' }, draft.files[type] ? '本地文件' : '未接入'),
+        h('span', { className: 'dc-status' }, draft.files[type] ? '本地文件' : '待建表'),
       ),
       h(
         'div',
@@ -465,7 +465,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h(
         'div',
         { className: 'dc-source-actions' },
-        h('button', { disabled: true, title: '来源合同与读取权限未接入' }, '同步'),
+        h('button', { disabled: true, title: '业务来源表尚未建立' }, '同步'),
         h(Upload, { label: `选择${definition.short}CSV`, read: (file) => read(type, file) }),
         h(
           'button',
@@ -707,7 +707,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     downloadCsv,
     monthOffset,
   });
-  return function DemandConfirmation({ active = true, assistant, step = 'check', onNext }) {
+  return function DemandConfirmation({
+    active = true,
+    assistant,
+    step = 'check',
+    onNext,
+    onScopeChange,
+  }) {
     const [drafts, setDrafts] = react.useState(() => [makeDraft('local-1', currentMonth())]);
     const [selected, setSelected] = react.useState('local-1');
     const [month, setMonth] = react.useState(currentMonth);
@@ -727,6 +733,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
+    const [scopeGeneration, setScopeGeneration] = react.useState(0);
     const generation = react.useRef(0),
       requests = react.useRef({}),
       controllers = react.useRef({});
@@ -821,6 +828,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       }
     };
     const draft = drafts.find((entry) => entry.id === selected) ?? drafts[0];
+    react.useEffect(() => {
+      onScopeChange?.({
+        id: draft.id,
+        month: draft.month,
+        name: draft.name,
+        generation: scopeGeneration,
+      });
+    }, [draft.id, draft.month, draft.name, scopeGeneration, onScopeChange]);
     const resetEditor = () => {
       setProduct(blankProduct());
       setEditing(null);
@@ -832,6 +847,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     react.useEffect(() => {
       const reset = () => {
         clearFiles();
+        setScopeGeneration((value) => value + 1);
         setDrafts([makeDraft('local-1', currentMonth())]);
         setSelected('local-1');
         resetEditor();
@@ -928,6 +944,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {
             period,
             column,
+            businessSource: 'table-not-built',
             localFile: draft.files[type] ?? null,
             rowCount: rows.length,
             quantity: rows.some((row) => row[column] !== '') ? quantity(rows, column) : null,
@@ -966,7 +983,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         productCount: draft.products.length,
         productSource: draft.productSource,
         sourceSummaries,
-        calculation: 'pending-business-rules',
+        calculation: {
+          status: 'waiting-for-source-tables-and-business-rules',
+          parameterInputs: ['report', 'history'],
+          basicIndicatorInputs: ['report', 'history'],
+          monthlyCalculation: 'derived-from-inputs-without-result-table',
+        },
         businessSave: 'not-connected',
         retention: 'memory-only',
       },
