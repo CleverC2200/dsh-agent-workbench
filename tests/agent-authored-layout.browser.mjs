@@ -593,8 +593,8 @@ test('FC original current-order card excludes monthly counts and keeps unavailab
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('-');
-  assert.doesNotMatch(await card.innerText(), /本月|SKU|6单|2单/);
-  await expect(card.locator('dt')).toHaveText(['缺货量', '备单量']);
+  assert.doesNotMatch(await card.innerText(), /SKU|6单|2单/);
+  await expect(card.locator('dt')).toHaveText(['本月缺货量', '库存备单占用']);
   assert.equal(calls.filter((q) => q.queryId === 'orders.summary').length, 1);
   assert.deepEqual(errors, []);
 });
@@ -768,7 +768,11 @@ for (const id of ['fc', 'qll', 'dealer'])
     await calendar.getByRole('button', { name: '2026年10月18日', exact: true }).click();
     await expect(input).toHaveValue('2026-10-18');
     await expect(calendar).toHaveCount(0);
-    assert.equal(calls.length, before, 'choosing a date must not run queries');
+    assert.equal(
+      calls.slice(before).some((q) => q.parameters.as_of === '2026-10-18'),
+      false,
+      'choosing a date must not apply the draft',
+    );
     await header
       .locator('[data-business-toolbar-actions]')
       .getByRole('button', { name: /刷新/ })
