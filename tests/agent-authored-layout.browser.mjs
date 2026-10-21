@@ -998,3 +998,59 @@ test('QLL overview fits five compact cards in a wide row and adapts without clip
   }
   assert.deepEqual(errors, []);
 });
+
+test('AQKC overview fits five compact cards in a wide row and adapts without clipping', async (t) => {
+  const { page, frame, errors } = await mount(t, 'aqkc', 922);
+  const grid = frame.locator('[data-overview-cards="aqkc"]');
+  await expect(grid.locator('article')).toHaveCount(5);
+  for (const [width, columns] of [
+    [1280, 5],
+    [1000, 5],
+    [922, 5],
+    [880, 5],
+    [800, 3],
+    [768, 3],
+    [640, 3],
+    [560, 2],
+    [480, 2],
+    [400, 2],
+    [390, 1],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          width: r.width,
+          height: r.height,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `AQKC column count at ${width}`);
+    assert.ok(layout.scroll <= width + 2, `AQKC page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `AQKC card clips at ${width}`,
+    );
+    assert.ok(
+      layout.cards.every((card) => card.height <= 160),
+      `AQKC cards too tall at ${width}`,
+    );
+    if (columns === 5)
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/aqkc-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});

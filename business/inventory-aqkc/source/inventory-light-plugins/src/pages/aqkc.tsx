@@ -980,7 +980,7 @@ export function InventoryOperationsWorkbench() {
               </DataState>
             ) : overviewWorkspace ? (
               <>
-                <div className={styles.kpiGrid}>
+                <div className={styles.kpiGrid} data-overview-cards="aqkc">
                   {(
                     overviewWorkspace.workbench?.cards ??
                     overviewWorkspace.kpis.map((item) => ({
