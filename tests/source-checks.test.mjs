@@ -17,7 +17,13 @@ const runner = new URL('../scripts/source-checks.mjs', import.meta.url).href;
 function fixture(
   t,
   changed,
-  { sdk = false, repo: owner = 'dsh-agent-workbench', desktopTools = false } = {},
+  {
+    sdk = false,
+    repo: owner = 'dsh-agent-workbench',
+    desktopTools = false,
+    knowledge = false,
+    staticFailure,
+  } = {},
 ) {
   const parent = mkdtempSync(join(tmpdir(), 'source-checks-'));
   t.after(() => rmSync(parent, { recursive: true, force: true }));
@@ -49,6 +55,12 @@ function fixture(
     mkdirSync(path, { recursive: true });
     git(path, 'init', '-q');
     put(path, 'README.md', 'fixture');
+    if (repo === 'dsh-agent-manage')
+      put(
+        path,
+        'scripts/preset-test-lanes.mjs',
+        'export const presetHostOwners = {}; export const presetLanes = {};',
+      );
     if (sdk && repo === 'dsh-gea-plugin') {
       put(path, 'scripts/current-core.json', JSON.stringify({ adaptation: 'b'.repeat(40) }));
       put(
@@ -66,6 +78,33 @@ function fixture(
     return { repo, path, head: commit(path) };
   });
   const root = repositories.find((entry) => entry.repo === owner).path;
+  put(
+    root,
+    'package.json',
+    JSON.stringify({
+      type: 'module',
+      packageManager: owner === 'dsh-agent-workbench' ? 'npm@11.11.0' : 'pnpm@11.7.0',
+      scripts: {
+        'check:knowledge': knowledge
+          ? 'node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json'
+          : 'node --eval ""',
+        lint: 'node --check scripts/tool.mjs',
+        'format:check': 'node --eval ""',
+        ...(staticFailure
+          ? { [staticFailure]: 'node --eval "throw Error(\'OWNER_STATIC_FAILURE\')"' }
+          : {}),
+      },
+    }),
+  );
+  if (knowledge) {
+    put(
+      root,
+      'scripts/check-agent-knowledge.mjs',
+      readFileSync(new URL('../scripts/check-agent-knowledge.mjs', import.meta.url), 'utf8'),
+    );
+    put(root, 'agent-knowledge.json', JSON.stringify({ entries: [], paths: ['docs/required.md'] }));
+    put(root, 'docs/required.md', 'required knowledge');
+  }
   put(
     root,
     'scripts/quality-peer-baseline.json',
@@ -129,6 +168,58 @@ function fixture(
   return { root, run, repositories };
 }
 
+test('nonjoint source checks reject a missing knowledge reference through the owner command', (t) => {
+  const f = fixture(t, { 'scripts/tool.mjs': 'export const value = 2;' }, { knowledge: true });
+  rmSync(join(f.root, 'docs/required.md'));
+  const rejected = f.run('affected-check');
+  assert.notEqual(rejected.status, 0, rejected.stdout + rejected.stderr);
+  assert.match(rejected.stdout + rejected.stderr, /AGENT_REFERENCE_MISSING: docs\/required\.md/);
+  writeFileSync(join(f.root, 'docs/required.md'), 'required knowledge');
+  const accepted = f.run('affected-check');
+  assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+});
+
+test('each owner lint and format failure blocks the source gate with dependency needs declared', async (t) => {
+  for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'])
+    for (const check of ['lint', 'format:check'])
+      await t.test(repo + ' ' + check, (t) => {
+        const f = fixture(
+          t,
+          { 'scripts/tool.mjs': 'export const value = 2;' },
+          { repo, staticFailure: check },
+        );
+        const planned = f.run('affected-plan');
+        assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+        const plan = JSON.parse(planned.stdout);
+        assert.deepEqual(plan.staticChecks, ['check:knowledge', 'lint', 'format:check']);
+        assert.equal(plan.dependencies, true);
+        assert.equal(plan.sdk, false);
+        assert.equal(plan.joint, false);
+        const rejected = f.run('affected-check');
+        assert.notEqual(rejected.status, 0, rejected.stdout + rejected.stderr);
+        assert.match(rejected.stdout + rejected.stderr, /OWNER_STATIC_FAILURE/);
+        assert.doesNotMatch(rejected.stdout, /"status":"passed"/);
+      });
+});
+
+test('knowledge rejection precedes SDK verification and joint checks retain their existing static owner', (t) => {
+  const f = fixture(t, { 'tsconfig.official.json': '{}' }, { knowledge: true, sdk: true });
+  rmSync(join(f.root, 'docs/required.md'));
+  const rejected = f.run('affected-check');
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stdout + rejected.stderr, /AGENT_REFERENCE_MISSING/);
+  assert.doesNotMatch(rejected.stdout + rejected.stderr, /SDK_SELECTED_CORE/);
+  const joint = fixture(t, {
+    'scripts/tool.mjs': 'export const value = 2;',
+    'tests/tool.test.mjs': 'import "../scripts/tool.mjs"; import "../lib/generated.mjs";',
+  });
+  const planned = joint.run('affected-plan');
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+  const plan = JSON.parse(planned.stdout);
+  assert.equal(plan.joint, true);
+  assert.deepEqual(plan.staticChecks, []);
+});
+
 test('a tool-only source change runs its behavior test cold and excludes unrelated required suites', (t) => {
   const f = fixture(t, { 'scripts/tool.mjs': 'export const value = 2;' });
   const planned = f.run('affected-plan');
@@ -136,7 +227,8 @@ test('a tool-only source change runs its behavior test cold and excludes unrelat
   const plan = JSON.parse(planned.stdout);
   assert.deepEqual(plan.files, ['tests/tool.test.mjs']);
   assert.equal(plan.sdk, false);
-  assert.equal(plan.dependencies, false);
+  assert.equal(plan.dependencies, true);
+  assert.deepEqual(plan.staticChecks, ['check:knowledge', 'lint', 'format:check']);
   assert.equal(plan.typecheck, false);
   const executed = f.run('affected-check');
   assert.equal(executed.status, 0, executed.stderr);
