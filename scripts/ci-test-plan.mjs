@@ -463,7 +463,7 @@ export function selectCiTests({
   const selected = new Set(docsOnly ? [] : required),
     reasons = {};
   for (const change of changes) {
-    const rules = policy.rules.filter(
+    const rules = sourceOnly && change.repo === repo && pool.includes(change.file) ? [] : policy.rules.filter(
       (rule) =>
         (!rule.repo || rule.repo === change.repo) && new RegExp(rule.pattern).test(change.file),
     );
@@ -473,7 +473,7 @@ export function selectCiTests({
       change.repo === repo &&
       (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
     const matched =
-      (sourceRules.length || rules.some((rule) => rule.exclusive === true)) && !ownTestInput
+      sourceRules.length && !pool.includes(change.file) || rules.some((rule) => rule.exclusive === true) && !ownTestInput
         ? mapped
         : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
     const files = [...new Set(matched.map(directFile))].sort();

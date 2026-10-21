@@ -91,10 +91,16 @@ export async function checkTypes(root, repositories, repo, changed = []) {
   const require = createRequire(resolve(root, 'package.json'));
   const ts = require('typescript');
   const peerPaths = {};
-  for (const peer of repositories.filter(entry => entry.repo !== repo)) {
+  for (const peer of repositories) {
     const pkg = json(resolve(peer.path, 'package.json'));
     for (const [name, entry] of Object.entries(pkg.exports || {})) {
       const type = typeof entry === 'object' ? entry.types : null;
+      if (peer.repo === 'dsh-agent-workbench' && name === './configured-query' && type === './lib/configured-query-client.d.mts') {
+        const declaration = resolve(peer.path, 'business/shared/configured-query-client.d.mts');
+        if (!existsSync(declaration)) throw Error('SOURCE_PEER_TYPES_REQUIRED: configured-query');
+        peerPaths[pkg.name + '/configured-query'] = [declaration];
+        continue;
+      }
       if (!type?.startsWith('./lib/types/') || name.includes('*')) continue;
       const source = resolve(peer.path, type.replace('./lib/types/', 'src/').replace(/\.d\.ts$/, '.ts'));
       const target = existsSync(source) ? source : source.replace(/\.ts$/, '.tsx');

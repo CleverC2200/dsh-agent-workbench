@@ -1370,3 +1370,22 @@ test('source fixture ownership avoids preparing copied command targets and rejec
     assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/, dependency);
   }
 });
+
+test('source selftests run themselves and explicit helper owners avoid old business suites', t => {
+  const f = fixture(t);
+  f.policy.rules.push({ pattern: '^tests/', tests: ['tests/required.test.mjs'], sourceTests: ['tests/tool.test.mjs'] });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/tool.test.mjs', 'export const checked = 1;');
+  f.put(f.root, 'tests/helper.ts', 'export const helper = 1;');
+  f.put(f.root, 'tests/affected.test.mjs', 'import "./helper.js";');
+  f.checkpoint();
+  f.put(f.root, 'tests/tool.test.mjs', 'export const checked = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, ['tests/tool.test.mjs']);
+  f.put(f.root, 'README.md', 'new comparison base');
+  f.checkpoint();
+  f.put(f.root, 'tests/helper.ts', 'export const helper = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, ['tests/tool.test.mjs']);
+  assert.ok(f.plan().files.includes('tests/affected.test.mjs'));
+});
