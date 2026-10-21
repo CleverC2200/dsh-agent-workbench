@@ -1000,7 +1000,14 @@ test('QLL overview fits five compact cards in a wide row and adapts without clip
 });
 
 test('AQKC overview fits five compact cards in a wide row and adapts without clipping', async (t) => {
-  const { page, frame, errors } = await mount(t, 'aqkc', 922);
+  const { page, frame, errors } = await mount(t, 'aqkc', 922, (query, result) => {
+    if (query.queryId === 'calendar.target_versions')
+      return {
+        ...result,
+        rows: [{ month: '2026-10-01', inventory_version: '月初', source_rows: 1 }],
+      };
+    return result;
+  });
   const grid = frame.locator('[data-overview-cards="aqkc"]');
   await expect(grid.locator('article')).toHaveCount(5);
   for (const [width, columns] of [
