@@ -1829,8 +1829,8 @@
   grid-column: auto;
 }
 .shell .compactKpiGrid .kpiCard {
-  min-height: 126px;
-  padding: 12px;
+  min-height: 110px;
+  padding: 8px;
 }
 .shell .compactKpiGrid .kpiTop {
   min-height: 18px;
@@ -1845,10 +1845,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  min-height: 36px;
-  margin: 4px 0 8px;
+  min-height: 30px;
+  margin: 4px 0 6px;
   padding: 0;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.15;
 }
 .shell .compactKpiGrid .kpiScopeLabel {
@@ -1874,17 +1874,17 @@
   font-size: 9px;
   line-height: 1.4;
 }
-@media (max-width: 879px) {
+@media (max-width: 799px) {
   .shell .kpiGrid.compactKpiGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-@media (max-width: 639px) {
+@media (max-width: 559px) {
   .shell .kpiGrid.compactKpiGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 399px) {
+@media (max-width: 359px) {
   .shell .kpiGrid.compactKpiGrid {
     grid-template-columns: minmax(0, 1fr);
   }

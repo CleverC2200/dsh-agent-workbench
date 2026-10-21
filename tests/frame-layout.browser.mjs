@@ -175,12 +175,16 @@ for (const id of [
       await page.setViewportSize({ width, height: 700 });
       assert.equal((await business.boundingBox()).y, 0);
       await expect(ai.getByRole('toolbar', { name: '对话区视图与会话操作' })).toBeVisible();
+      assert.equal((await ai.boundingBox()).y, 0);
+      assert.equal((await ai.getByRole('toolbar').boundingBox()).y, 0);
       await page.getByRole('button', { name: '中间区域最大，隐藏会话区' }).click();
       await expect(ai).toBeHidden();
       const businessBox = await business.boundingBox();
       const toolbar = page.getByRole('toolbar', { name: '对话区视图与会话操作' });
-      assert.equal(businessBox.y, 0);
-      assert.ok((await toolbar.boundingBox()).y >= businessBox.y + businessBox.height);
+      const toolbarBox = await toolbar.boundingBox();
+      assert.equal(toolbarBox.y, 0, 'controls stay at the upper right');
+      assert.equal(businessBox.y, 58, 'expanded business content starts below controls');
+      assert.ok(toolbarBox.x + toolbarBox.width >= width - 1);
       await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
       await expect(business).toBeHidden();
       await expect(ai.getByRole('toolbar', { name: '对话区视图与会话操作' })).toBeVisible();

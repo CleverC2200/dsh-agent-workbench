@@ -459,8 +459,8 @@
 }
 .kpiValue {
   display: block;
-  min-height: 36px;
-  margin: 4px 0 8px;
+  min-height: 30px;
+  margin: 4px 0 6px;
   color: var(--ink);
   font-size: 24px;
   letter-spacing: -0.04em;
@@ -1156,9 +1156,9 @@
 }
 .kpiCard {
   display: flex;
-  min-height: 126px;
+  min-height: 110px;
   flex-direction: column;
-  padding: 12px;
+  padding: 8px;
   border-radius: 10px;
   box-shadow: var(--ui-shadow);
   transition:
@@ -1174,7 +1174,7 @@
   transform: translateY(-1px);
 }
 .kpiValue {
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.15;
   font-weight: 700;
 }
@@ -1499,17 +1499,17 @@
 }
 
 /* Use the actual business pane width, including the desktop conversation split. */
-@container (max-width: 879px) {
+@container (max-width: 799px) {
   .kpiGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-@container (max-width: 639px) {
+@container (max-width: 559px) {
   .kpiGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@container (max-width: 399px) {
+@container (max-width: 359px) {
   .kpiGrid {
     grid-template-columns: minmax(0, 1fr);
   }

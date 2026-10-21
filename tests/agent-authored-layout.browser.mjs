@@ -900,7 +900,7 @@ test('APS intelligent core cards use one compact row on desktop and adapt to spl
     [1280, 4],
     [922, 4],
     [800, 4],
-    [768, 2],
+    [768, 4],
     [560, 2],
     [480, 2],
     [390, 1],
@@ -934,7 +934,7 @@ test('APS intelligent core cards use one compact row on desktop and adapt to spl
     if (columns === 4) {
       assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
       assert.ok(
-        layout.cards.every((card) => card.height <= 230),
+        layout.cards.every((card) => card.height <= 210),
         'core cards must be compact',
       );
     }
@@ -955,13 +955,13 @@ test('QLL overview fits five compact cards in a wide row and adapts without clip
     [1000, 5],
     [922, 5],
     [880, 5],
-    [800, 3],
+    [800, 5],
     [768, 3],
     [640, 3],
-    [560, 2],
+    [560, 3],
     [480, 2],
     [400, 2],
-    [390, 1],
+    [390, 2],
     [320, 1],
   ]) {
     await page.setViewportSize({ width, height: 900 });
@@ -989,7 +989,7 @@ test('QLL overview fits five compact cards in a wide row and adapts without clip
       `QLL card clips at ${width}`,
     );
     assert.ok(
-      layout.cards.every((card) => card.height <= 160),
+      layout.cards.every((card) => card.height <= 145),
       `QLL cards too tall at ${width}`,
     );
     if (columns === 5)
@@ -1018,13 +1018,13 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
     [1000, 5],
     [922, 5],
     [880, 5],
-    [800, 3],
+    [800, 5],
     [768, 3],
     [640, 3],
-    [560, 2],
+    [560, 3],
     [480, 2],
     [400, 2],
-    [390, 1],
+    [390, 2],
     [320, 1],
   ]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1052,7 +1052,7 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
       `AQKC card clips at ${width}`,
     );
     assert.ok(
-      layout.cards.every((card) => card.height <= 160),
+      layout.cards.every((card) => card.height <= 145),
       `AQKC cards too tall at ${width}`,
     );
     if (columns === 5)
@@ -1239,13 +1239,13 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
     [1000, 5],
     [922, 5],
     [880, 5],
-    [800, 3],
+    [800, 5],
     [768, 3],
     [640, 3],
-    [560, 2],
+    [560, 3],
     [480, 2],
     [400, 2],
-    [390, 1],
+    [390, 2],
     [320, 1],
   ]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1273,7 +1273,7 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
       `FC card clips at ${width}`,
     );
     assert.ok(
-      layout.cards.every((card) => card.height <= 160),
+      layout.cards.every((card) => card.height <= 145),
       `FC cards too tall at ${width}`,
     );
     if (columns === 5)

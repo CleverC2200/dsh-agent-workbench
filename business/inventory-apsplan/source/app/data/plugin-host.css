@@ -28,8 +28,8 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 .intelligent-core-metric-group .period-kpi-card {
   display: flex;
   min-width: 0;
-  min-height: 192px;
-  padding: 12px 12px 0;
+  min-height: 164px;
+  padding: 8px 8px 0;
   flex-direction: column;
   border-color: var(--v02-border);
   background: var(--v02-surface);
@@ -65,13 +65,13 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value {
   display: flex;
-  min-height: 42px;
+  min-height: 32px;
   margin: 4px 0;
   align-items: center;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value strong {
   color: var(--v02-text-strong);
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.15;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value span {
@@ -86,7 +86,7 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 }
 .intelligent-core-metric-group .kpi-comparison-rows {
   display: grid;
-  min-height: 48px;
+  min-height: 40px;
   align-content: center;
   color: var(--v02-text-muted);
   font-size: 9px;
@@ -94,7 +94,7 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 .intelligent-core-metric-group .kpi-comparison-rows > div {
   display: grid;
   min-width: 0;
-  min-height: 24px;
+  min-height: 20px;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
@@ -125,9 +125,9 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
   flex: none;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-foot {
-  min-height: 32px;
+  min-height: 28px;
   margin-top: auto;
-  padding: 7px 0;
+  padding: 5px 0;
   align-items: center;
   font-size: 10px;
 }
@@ -609,7 +609,7 @@ html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
   gap: 4px 8px;
   font-size: 9px;
 }
-@media (max-width: 799px) {
+@media (max-width: 719px) {
   html.aps-plugin-host
     .intelligent-core-metric-group
     .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
@@ -625,7 +625,7 @@ html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
     border-top: 1px solid var(--v02-border);
   }
 }
-@media (max-width: 439px) {
+@media (max-width: 399px) {
   html.aps-plugin-host
     .intelligent-core-metric-group
     .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,

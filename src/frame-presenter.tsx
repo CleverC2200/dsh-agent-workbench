@@ -581,7 +581,7 @@ export function mountFramePresentation(
           { '--workbench-ai-preferred-width': conversationWidth + 'px' } as React.CSSProperties
         }
       >
-        {!titleless && chrome}
+        {(!titleless || view === 'center') && chrome}
         {page.resourceId && identity.error !== undefined && (
           <p className="agent-workbench-page-status" role="alert" title={identity.error}>
             {t('pageIdentityFailed')}
@@ -674,7 +674,6 @@ export function mountFramePresentation(
             )}
           </aside>
         </div>
-        {titleless && view === 'center' && chrome}
       </section>
     );
   }

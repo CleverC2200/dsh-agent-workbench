@@ -4666,9 +4666,9 @@ body,
 }
 .agent-root .fc-compact-kpis .kpi-card {
   display: flex;
-  min-height: 126px;
+  min-height: 110px;
   flex-direction: column;
-  padding: 12px;
+  padding: 8px;
 }
 .agent-root .fc-compact-kpis > :last-child {
   grid-column: auto;
@@ -4679,12 +4679,12 @@ body,
 }
 .agent-root .fc-compact-kpis .kpi-card .kpi-value {
   display: flex;
-  min-height: 36px;
+  min-height: 30px;
   align-items: baseline;
   flex-wrap: wrap;
-  margin: 4px 0 8px;
+  margin: 4px 0 6px;
   padding: 0;
-  font-size: 23px;
+  font-size: 20px;
   line-height: 1.15;
 }
 .agent-root .fc-compact-kpis .kpi-card dl {
@@ -4756,17 +4756,17 @@ body,
 .fc-action-disabled {
   opacity: 0.5;
 }
-@media (max-width: 879px) {
+@media (max-width: 799px) {
   .agent-root .workspace > .kpi-grid.fc-compact-kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-@media (max-width: 639px) {
+@media (max-width: 559px) {
   .agent-root .workspace > .kpi-grid.fc-compact-kpis {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 399px) {
+@media (max-width: 359px) {
   .agent-root .workspace > .kpi-grid.fc-compact-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
