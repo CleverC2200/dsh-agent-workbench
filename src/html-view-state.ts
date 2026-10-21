@@ -221,6 +221,16 @@ export type OrderWorkbenchViewState = {
 };
 export type FulfillmentViewState = {
   version: 1;
+  fulfillmentBaseFilter?: string;
+  deliveryOrgFilter?: string;
+  deliveryChannelFilter?: string;
+  warehouseProviderFilter?: string;
+  deliveryOrderNumberQuery?: string;
+  deliveryCustomerQuery?: string;
+  deliveryRegionQuery?: string;
+  deliveryBaseQuery?: string;
+  deliveryStatusQuery?: string;
+  dimension?: 'deliveryDimensionPanel' | 'warehouseDimensionPanel' | 'itemDimensionPanel';
   order?: string;
   customer?: string;
   warehouse?: string;
@@ -645,6 +655,19 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
         value,
         {
           version,
+          fulfillmentBaseFilter: text,
+          deliveryOrgFilter: text,
+          deliveryChannelFilter: text,
+          warehouseProviderFilter: text,
+          deliveryOrderNumberQuery: text,
+          deliveryCustomerQuery: text,
+          deliveryRegionQuery: text,
+          deliveryBaseQuery: text,
+          deliveryStatusQuery: text,
+          dimension: (v) =>
+            v === 'deliveryDimensionPanel' ||
+            v === 'warehouseDimensionPanel' ||
+            v === 'itemDimensionPanel',
           order: text,
           customer: text,
           warehouse: text,

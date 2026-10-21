@@ -1,0 +1,84 @@
+{
+  "observedAt": "2026-10-21T09:29:10.804703+08:00",
+  "scope": "Read-only source SQL replay; not GEA user authorization or installed runtime acceptance",
+  "source": "doris-oa/ai_db",
+  "period": {
+    "start": "2026-10-20",
+    "endExclusive": "2026-10-21"
+  },
+  "configSha256": "2447e4969dc81581c8f8c30d9bdca699b6986239f8d1dcc7d303c16545f0bd90",
+  "checks": [
+    {
+      "queryId": "orders.detail",
+      "status": "passed",
+      "returnedRows": 20,
+      "sqlSha256": "54a4c829165d7ce9392f5e7352f8b534163efec876568bb9bcf752531243ac93"
+    },
+    {
+      "queryId": "orders.detail.count",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "b0c9b4e851a84e143316c2edc3d2bbee4b25c49aece79dce26dec0eaef824f1b"
+    },
+    {
+      "queryId": "orders.summary",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "d347355347615c4ac8ad3f6b70fb145abd772d73c9a4ef7a68d5da304de33888"
+    },
+    {
+      "queryId": "orders.quantities",
+      "status": "passed",
+      "returnedRows": 20,
+      "sqlSha256": "99bed797d35b663663abbbb56ed772286074c585b8af8773496f294136c1af13"
+    },
+    {
+      "queryId": "orders.quantities.count",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "4c035faf3d2673d76f3fdcefeb11ea0e289d5b043ef0219d7495a36495132126"
+    },
+    {
+      "queryId": "trace.detail",
+      "status": "passed",
+      "returnedRows": 20,
+      "sqlSha256": "8a293b205a09f0f4b44f7152344cbe955dac5649299ba4226e1d11141f2fc7f2"
+    },
+    {
+      "queryId": "trace.detail.count",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "5ce508602a49e80fb39e8ceb396397c28e408491273a6bb3f7d061a5a46a790d"
+    },
+    {
+      "queryId": "trace.summary",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "44dc3a77677483641964a4c297b93d06be6b646bcb78259b8882bf55221fe92b"
+    },
+    {
+      "queryId": "warehouse.detail",
+      "status": "passed",
+      "returnedRows": 20,
+      "sqlSha256": "45a79a8f2ace16d3a65743437d6eae7619891fcdb11c3bcb47d73fbf2418e584"
+    },
+    {
+      "queryId": "warehouse.detail.count",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "eb88558c5c1ce2a2fd3c69d61cb99243eb2ea43bceb111eedb0783f03474f740"
+    },
+    {
+      "queryId": "sku.detail",
+      "status": "passed",
+      "returnedRows": 20,
+      "sqlSha256": "2f63deb8d4e6c6212af956189ca7315a9ac16b96bfadf6680920d7ed02afc7a4"
+    },
+    {
+      "queryId": "sku.detail.count",
+      "status": "passed",
+      "returnedRows": 1,
+      "sqlSha256": "7d5d7266a4b8d23857a1c41259f7322b65e4f8f3e9d48ef13b1ad0f6506e008d"
+    }
+  ]
+}
