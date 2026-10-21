@@ -196,9 +196,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "orders.summary": {
       "title": "orders.summary",
@@ -277,12 +275,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "source_orders",
-        "source_rows",
-        "first_created",
-        "latest_created"
-      ]
+      "resultColumns": ["source_orders", "source_rows", "first_created", "latest_created"]
     },
     "orders.quantities": {
       "title": "orders.quantities",
@@ -471,9 +464,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "trace.detail": {
       "title": "trace.detail",
@@ -665,9 +656,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "trace.summary": {
       "title": "trace.summary",
@@ -941,9 +930,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "sku.detail": {
       "title": "sku.detail",
@@ -1143,9 +1130,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "orders.by_base": {
       "title": "orders.by_base",
@@ -1239,10 +1224,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "group_name",
-        "source_orders"
-      ],
+      "resultColumns": ["group_name", "source_orders"],
       "pagination": {
         "countQuery": "orders.by_base.count"
       }
@@ -1324,9 +1306,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "orders.by_province": {
       "title": "orders.by_province",
@@ -1420,10 +1400,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "group_name",
-        "source_orders"
-      ],
+      "resultColumns": ["group_name", "source_orders"],
       "pagination": {
         "countQuery": "orders.by_province.count"
       }
@@ -1505,9 +1482,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     },
     "orders.by_carrier": {
       "title": "orders.by_carrier",
@@ -1601,10 +1576,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "group_name",
-        "source_orders"
-      ],
+      "resultColumns": ["group_name", "source_orders"],
       "pagination": {
         "countQuery": "orders.by_carrier.count"
       }
@@ -1686,9 +1658,7 @@
         "parameters": {},
         "includeTotal": false
       },
-      "resultColumns": [
-        "total"
-      ]
+      "resultColumns": ["total"]
     }
   },
   "sourceGaps": [
