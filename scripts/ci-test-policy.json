@@ -13,7 +13,9 @@
     "scripts/workflow-preflight.test.mjs": {
       "dependencies": false
     },
-    "tests/hosted-peer-input.test.mjs": { "dependencies": false },
+    "tests/hosted-peer-input.test.mjs": {
+      "dependencies": false
+    },
     "scripts/source-quality.test.mjs": {
       "dependencies": false
     },
@@ -31,6 +33,12 @@
     }
   },
   "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^\\.codex/environments/environment\\.toml$",
+      "tests": ["scripts/source-quality.test.mjs"],
+      "sourceTests": ["scripts/source-quality.test.mjs"]
+    },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^(?:scripts/workflow-preflight(?:\\.test)?\\.mjs|\\.github/workflows/[^/]+\\.ya?ml)$",
