@@ -90,7 +90,8 @@ const filtersIds = [
 ];
 function selectedFilters() {
   const today = shanghaiToday(),
-    org = $('deliveryOrgFilter').value;
+    org = $('deliveryOrgFilter').value,
+    customer = $('deliveryCustomerQuery').value.trim();
   return {
     start: today,
     end_exclusive: nextDay(today),
@@ -101,7 +102,9 @@ function selectedFilters() {
       (org.startsWith('region:') && !org.includes('大区') ? org.slice(7) : null),
     sales_group: org.startsWith('org:') ? org.slice(4) : null,
     channel: $('deliveryChannelFilter').value || null,
-    customer: $('deliveryCustomerQuery').value.trim() || null,
+    customer: customer
+      ? '%' + customer.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_') + '%'
+      : null,
     order: $('deliveryOrderNumberQuery').value.trim() || null,
     sku: null,
     carrier:

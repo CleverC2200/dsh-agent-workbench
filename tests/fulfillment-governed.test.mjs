@@ -81,6 +81,12 @@ test('order01 queries bind business filters only and expose no transport credent
     const values = { ...filters, ...(query.pagination ? { page_size: 20, offset: 0 } : {}) };
     const request = makeRequest(config, id, values);
     assert.ok(request.sql.startsWith('SELECT'));
+    if (request.sql.includes('e.cust_code')) {
+      assert.match(request.sql, /e\.cust_code LIKE :gea_p8 OR e\.cust_name LIKE :gea_p8/);
+      const named = makeRequest(config, id, { ...values, customer: '%佳特%' });
+      assert.equal(named.parameters.gea_p8, '%佳特%');
+      assert.equal(named.sql, request.sql);
+    }
     assert.doesNotMatch(request.sql, /EXISTS\s*\(|\bSUBSTR\s*\(/i);
     assert.throws(() => makeRequest(config, id, { ...values, consumerCode: 'other' }), /参数/);
     assert.throws(() => makeRequest(config, id, { ...values, start: '2026-10-22' }), /日期/);
