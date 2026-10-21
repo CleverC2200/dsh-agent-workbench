@@ -1488,6 +1488,75 @@ test('upstream consumers remain visible through helper imports and executed esbu
   }
 });
 
+test('isolated fixture assets are distinct from actual owner upstream file inputs', (t) => {
+  const f = fixture(t);
+  f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: false } };
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'tests/affected.test.mjs',
+    `import '../src/consumer.js'; import {mkdtempSync, mkdirSync, writeFileSync, readFileSync} from 'node:fs'; import {tmpdir} from 'node:os'; import {join, dirname} from 'node:path'; const job = mkdtempSync(join(tmpdir(), 'upstream-fixture-')); const asset = join(job, 'quality-upstreams/upstream-assets/genui-0.11.3/package.json'); mkdirSync(dirname(asset), {recursive:true}); writeFileSync(asset, '{}'); readFileSync(asset);`,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan(undefined, { sourceOnly: true }).upstreams, 'source-links');
+  for (const path of [
+    '../../upstream-inputs/genui/package.json',
+    '../../quality-upstreams/upstream-assets/genui-0.11.3/package.json',
+    'node_modules/dsh-better-sidebar/lib/index.js',
+  ]) {
+    f.put(
+      f.root,
+      'tests/affected.test.mjs',
+      `import '../src/consumer.js'; import {readFileSync} from 'node:fs'; readFileSync('${path}');`,
+    );
+    f.repositories[0].head = f.commit(f.root);
+    assert.throws(
+      () => f.plan(undefined, { sourceOnly: true }),
+      /CI_TEST_SOURCE_FIXTURE_REJECTED/,
+      path,
+    );
+  }
+  f.put(
+    f.root,
+    'tests/affected.test.mjs',
+    `import '../src/consumer.js'; import {readFileSync} from 'node:fs'; import {join} from 'node:path'; readFileSync(join('../../upstream-inputs', 'genui', 'package.json'));`,
+  );
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/);
+});
+
+test('file URL imports use filesystem edges while package resolution still requires installed packages', (t) => {
+  const f = fixture(t);
+  f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: false } };
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(
+    f.root,
+    'tests/affected.test.mjs',
+    `import '../src/consumer.js'; import {pathToFileURL} from 'node:url'; import {join} from 'node:path'; const tools = join('fixture-output', 'tools'); await import(pathToFileURL(join(tools, 'command.mjs')));`,
+  );
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan(undefined, { sourceOnly: true });
+  assert.equal(plan.dependencies, false);
+  assert.equal(plan.upstreams, 'source-links');
+  for (const name of ['esbuild', 'dsh-better-sidebar', '@deepseek-ai/cordis']) {
+    f.put(
+      f.root,
+      'tests/affected.test.mjs',
+      `import '../src/consumer.js'; import {pathToFileURL} from 'node:url'; import {createRequire} from 'node:module'; const require = createRequire(import.meta.url); await import(pathToFileURL(require.resolve('${name}')));`,
+    );
+    f.repositories[0].head = f.commit(f.root);
+    assert.throws(
+      () => f.plan(undefined, { sourceOnly: true }),
+      /CI_TEST_SOURCE_FIXTURE_REJECTED/,
+      name,
+    );
+  }
+});
+
 test('source tool ownership uses existing selftests while joint checks retain capability rules', (t) => {
   const f = fixture(t);
   f.policy.rules.push({
