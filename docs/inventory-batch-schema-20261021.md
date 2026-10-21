@@ -20,10 +20,14 @@
 
 | 业务 Agent | 数据 | 原来源字段 / 缺口 |
 | --- | --- | --- |
-| 全链、基地、分仓、产销协同 | 超龄库存判定 | agents_scm_inventory_sku_data_d.is_overaged、overaged_qty 已移除；需业务超龄阈值，不能默认用 60/90 天替代 |
-| 全链、基地、分仓、产销协同 | 高低库存判定 | agents_scm_inventory_sku_data_d.is_low_stock、is_high_stock 已移除 |
-| 全链、基地、分仓、产销协同 | 仓库 SKU 安全 / 目标库存 | agents_scm_inventory_sku_data_d.safe_stock_qty、target_stock_qty 已移除；基地计划目标和分仓测算各自沿用现有来源 |
+| 全链、基地、分仓、产销协同 | 超龄库存标志 | agents_scm_inventory_sku_data_d.is_overaged 已移除；需业务超龄阈值，不能默认用 60/90 天替代 |
+| 全链、基地、分仓、产销协同 | 超龄库存数量 | agents_scm_inventory_sku_data_d.overaged_qty 已移除；无业务超龄阈值时不能计算 |
+| 全链、基地、分仓、产销协同 | 低库存标志 | agents_scm_inventory_sku_data_d.is_low_stock 已移除 |
+| 全链、基地、分仓、产销协同 | 高库存标志 | agents_scm_inventory_sku_data_d.is_high_stock 已移除 |
+| 全链、基地、分仓、产销协同 | 仓库 SKU 安全库存 | agents_scm_inventory_sku_data_d.safe_stock_qty 已移除 |
+| 全链、基地、分仓、产销协同 | 仓库 SKU 目标库存 | agents_scm_inventory_sku_data_d.target_stock_qty 已移除；基地计划目标和分仓测算各自沿用现有来源 |
 | 全链、基地、分仓、产销协同 | 旧基地 SKU 总库存字段 | agents_scm_inventory_sku_data_d.current_stock 已移除；现物理库存使用 live_qty 批次合计，不能冒充旧基地粒度 |
-| 全链、基地、分仓、产销协同 | 源更新时间 | agents_scm_inventory_sku_data_d.source_updated_at、update_time 已移除；month_date 是快照日期 |
+| 全链、基地、分仓、产销协同 | 源更新时间 | agents_scm_inventory_sku_data_d.source_updated_at 已移除；month_date 是快照日期 |
+| 全链、基地、分仓、产销协同 | 行更新时间 | agents_scm_inventory_sku_data_d.update_time 已移除；month_date 是快照日期 |
 
-受控 SQL 发布目录必须同步新列 warehouse_classify、month_date、prod_date、live_qty 和相关数量、编码字段，并保留各 Consumer 的返回权限。直连核对通过不代表 GEA 发布和授权已完成。
+2026-10-21 已在正式 GEA 验证四个 Consumer 的库存汇总、分仓补货及产销分仓查询；结果与直连逐列一致，没有返回字段被拒。验证使用 warehouse_classify、month_date、prod_date、live_qty 和相关数量、编码字段；直连结果与正式通道结果分别留证。
