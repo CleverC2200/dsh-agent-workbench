@@ -467,12 +467,13 @@ export function selectCiTests({
       (rule) =>
         (!rule.repo || rule.repo === change.repo) && new RegExp(rule.pattern).test(change.file),
     );
-    const mapped = rules.flatMap((rule) => expand(rule.tests));
+    const sourceRules = sourceOnly ? rules.filter(rule => rule.sourceTests !== undefined) : [];
+    const mapped = sourceRules.length ? sourceRules.flatMap(rule => expand(rule.sourceTests)) : rules.flatMap((rule) => expand(rule.tests));
     const ownTestInput =
       change.repo === repo &&
       (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
     const matched =
-      rules.some((rule) => rule.exclusive === true) && !ownTestInput
+      (sourceRules.length || rules.some((rule) => rule.exclusive === true)) && !ownTestInput
         ? mapped
         : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
     const files = [...new Set(matched.map(directFile))].sort();
@@ -511,7 +512,12 @@ export function selectCiTests({
       dependencies(resolve(root, file), false).has(browserDependency)
     )
       throw Error(`CI_TEST_BROWSER_FIXTURE_REJECTED: real browser consumer ${file}`);
-  const browserFiles = files.filter(
+  const sourceFixtures = sourceOnly ? policy.sourceFixtures ?? {} : {};
+  for (const [file, preparation] of Object.entries(sourceFixtures)) {
+    if (!pool.includes(file) || typeof preparation?.dependencies !== 'boolean' || Object.keys(preparation).join(',') !== 'dependencies' || !preparation.dependencies && dependencies(resolve(root, file), true).has(packageDependency) || runtimeFiles.includes(file) || dependencies(resolve(root, file), true).has(browserDependency) || dependencies(resolve(root, file), true).has(sdkDependency)) throw Error(`CI_TEST_SOURCE_FIXTURE_REJECTED: ${file}`);
+  }
+  const preparedFiles = files.filter(file => !Object.hasOwn(sourceFixtures, file));
+  const browserFiles = preparedFiles.filter(
     (file) =>
       runtimeFiles.includes(file) ||
       (!browserFixtures.includes(file) && reaches(resolve(root, file), browserDependency)),
@@ -537,9 +543,9 @@ export function selectCiTests({
     browserFixtures: browserFixtures.filter((file) => selected.has(file)),
     runtime,
     browser,
-    build: files.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
-    dependencies: files.some((file) => reaches(resolve(root, file), packageDependency)),
-    sdk: runtime || files.some((file) => reaches(resolve(root, file), sdkDependency)),
+    build: preparedFiles.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
+    dependencies: preparedFiles.some((file) => reaches(resolve(root, file), packageDependency)) || files.some(file => sourceFixtures[file]?.dependencies),
+    sdk: runtime || preparedFiles.some((file) => reaches(resolve(root, file), sdkDependency)),
     fullSuite: 'not-run',
   };
 }

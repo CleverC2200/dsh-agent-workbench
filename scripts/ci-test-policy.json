@@ -9,6 +9,32 @@
     "business/inventory-apsplan/source/tests/data/*.test.mjs",
     "tests/final-group-input.contract.mjs"
   ],
+  "sourceFixtures": {
+    "scripts/source-quality.test.mjs": {
+      "dependencies": false
+    },
+    "tests/candidate-input.test.mjs": {
+      "dependencies": false
+    },
+    "tests/ci-test-plan.test.mjs": {
+      "dependencies": false
+    },
+    "tests/final-group-input.contract.mjs": {
+      "dependencies": false
+    },
+    "tests/quality-ci.test.mjs": {
+      "dependencies": false
+    },
+    "tests/quality-cli.test.mjs": {
+      "dependencies": false
+    },
+    "tests/source-checks.test.mjs": {
+      "dependencies": false
+    },
+    "tests/source-typecheck.test.mjs": {
+      "dependencies": true
+    }
+  },
   "rules": [
     {
       "repo": "dsh-agent-workbench",
@@ -165,6 +191,15 @@
         "scripts/source-quality.test.mjs",
         "tests/source-checks.test.mjs",
         "tests/source-typecheck.test.mjs",
+        "tests/ci-test-plan.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:run-quality-ci|ci-test-policy)\\.(?:mjs|json)$",
+      "tests": [],
+      "sourceTests": [
+        "tests/quality-ci.test.mjs",
         "tests/ci-test-plan.test.mjs"
       ]
     }

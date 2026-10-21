@@ -1337,3 +1337,36 @@ test('source preparation follows selected package and SDK consumers', t => {
     assert.equal(plan.sdk, sdk, dependency);
   }
 });
+
+test('source tool ownership uses existing selftests while joint checks retain capability rules', t => {
+  const f = fixture(t);
+  f.policy.rules.push({ pattern: '^scripts/tool\\.mjs$', tests: ['tests/affected.test.mjs'], sourceTests: ['tests/tool.test.mjs'] });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'scripts/tool.mjs', 'export const value = 1;');
+  f.put(f.root, 'tests/tool.test.mjs', 'export const test = true;');
+  f.checkpoint();
+  f.put(f.root, 'scripts/tool.mjs', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, ['tests/tool.test.mjs']);
+  assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
+});
+
+test('source fixture ownership avoids preparing copied command targets and rejects direct SDK consumers', t => {
+  const f = fixture(t);
+  f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: false } };
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/affected.test.mjs', 'import "node:child_process"; import "../src/consumer.js"; execFileSync("node", ["scripts/command.mjs"]);');
+  f.put(f.root, 'scripts/command.mjs', 'import "@playwright/test"; import "@deepseek-ai/cordis";');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan(undefined, { sourceOnly: true });
+  assert.equal(plan.browser, false);
+  assert.equal(plan.sdk, false);
+  assert.equal(plan.dependencies, false);
+  for (const dependency of ['@deepseek-ai/cordis', 'esbuild', '@playwright/test']) {
+    f.put(f.root, 'tests/affected.test.mjs', `import '${dependency}'; import '../src/consumer.js';`);
+    f.repositories[0].head = f.commit(f.root);
+    assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/, dependency);
+  }
+});
