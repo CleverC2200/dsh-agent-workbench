@@ -425,3 +425,20 @@ test('isolated SKU discrepancies do not block customer or city aggregates or imp
     'healthy',
   );
 });
+
+test('customer Agent manifest registers the page bridge and all five supplied Skills in profile order', async () => {
+  const manifest = JSON.parse(
+    await readFile(
+      new URL('../prototypes/inventory-customer/plugin.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(manifest.skills, [
+    'skills/customer/SKILL.md',
+    'skills/customer-inventory-age-risk/SKILL.md',
+    'skills/customer-inventory-change/SKILL.md',
+    'skills/customer-inventory-diagnosis/SKILL.md',
+    'skills/customer-overstock-control/SKILL.md',
+    'skills/customer-stockout-replenishment/SKILL.md',
+  ]);
+});
