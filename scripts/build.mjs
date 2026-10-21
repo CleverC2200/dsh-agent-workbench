@@ -1,10 +1,12 @@
-import { build } from 'esbuild';
 import { mkdir, writeFile, copyFile, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const { values } = parseArgs({ options: { target: { type: 'string' } } });
 if (values.target && values.target !== 'core') throw Error('Unsupported build target');
 (await import('./verify-official-input.mjs')).verifyOfficialInput();
+const { holdBuildAdmission } = await import('../../dsh-gea-plugin/scripts/build-admission.mjs');
+holdBuildAdmission({ operation: 'build' });
+const { build } = await import('esbuild');
 execFileSync(process.execPath, ['scripts/generate-plugin-package-version.mjs'], {
   stdio: 'inherit',
 });
