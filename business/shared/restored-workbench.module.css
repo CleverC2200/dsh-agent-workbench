@@ -188,3 +188,39 @@
   color: var(--ui-accent);
   background: var(--ui-hover);
 }
+
+.controls.cycleForm {
+  display: grid;
+  gap: 16px;
+}
+.cycleForm > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 12px/1.4 var(--ui-font);
+}
+.cycleForm input {
+  width: 88px;
+}
+.cycleForm > p {
+  margin: 0;
+  color: var(--ui-muted);
+  font: 11px/1.4 var(--ui-font);
+}
+.cycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+.cycleForm .cycleActions button[type='submit'] {
+  color: var(--ui-surface);
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+.cycleForm .cycleActions button[type='submit']:hover {
+  background: var(--ui-accent-hover, #c91029);
+}

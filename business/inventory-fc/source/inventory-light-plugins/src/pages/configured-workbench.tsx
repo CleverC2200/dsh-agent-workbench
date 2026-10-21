@@ -263,7 +263,7 @@ export default function ConfiguredWorkbench() {
         style={{ width: 'min(420px, calc(100vw - 32px))' }}
       >
         <LocalQueryForm
-          className={common.controls}
+          className={`${common.controls} ${common.cycleForm}`}
           onSubmit={(event) => {
             event.preventDefault();
             const days = Number(cycleDraft);
@@ -287,16 +287,18 @@ export default function ConfiguredWorkbench() {
             />
           </label>
           <p>备货天数 {config.replenishmentPolicy.preparationDays} 天</p>
-          <button
-            type="button"
-            onClick={() => setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays))}
-          >
-            恢复默认
-          </button>
-          <button type="button" onClick={() => setCycleOpen(false)}>
-            取消
-          </button>
-          <button type="submit">应用</button>
+          <div className={common.cycleActions}>
+            <button
+              type="button"
+              onClick={() => setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays))}
+            >
+              恢复默认
+            </button>
+            <button type="button" onClick={() => setCycleOpen(false)}>
+              取消
+            </button>
+            <button type="submit">应用</button>
+          </div>
         </LocalQueryForm>
       </Modal>
     </main>
