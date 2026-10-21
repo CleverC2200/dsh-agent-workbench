@@ -385,6 +385,7 @@ test('customer inventory SQL is fixed to the granted latest snapshot table', () 
   assert.match(source, /FROM agents_scm_cust_jxc_ai_daliy_d/);
   assert.match(source, /agents_dim_dealer_data_d/);
   assert.match(source, /SELECT MAX\(stat_date\)/);
+  assert.doesNotMatch(source, /SELECT\s+sku\.\*/);
   assert.doesNotMatch(source, /\+\s*request|INSERT|UPDATE|DELETE/i);
 });
 

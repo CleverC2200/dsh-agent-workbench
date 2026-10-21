@@ -88,6 +88,37 @@ test('empty and exact-page totals finish without an unnecessary next page', asyn
   }
 });
 
+test('opted-in parallel pages overlap, retain order and reject changed permissions', async (t) => {
+  for (const changed of [false, true]) {
+    let releaseSecond;
+    const second = new Promise((resolve) => {
+      releaseSecond = resolve;
+    });
+    const f = await fixture(t, async ({ pageNo }) => {
+      if (pageNo === 2) await second;
+      if (pageNo === 3) releaseSecond();
+      const offset = (pageNo - 1) * 200;
+      return {
+        rows: Array.from({ length: Math.min(200, 441 - offset) }, (_, i) => ({
+          sku: offset + i,
+        })),
+        total: 441,
+        returnedColumns: changed && pageNo === 3 ? ['other'] : ['sku'],
+        rejectedColumns: [],
+      };
+    });
+    const result = f.executeAllGeaSqlPages('SELECT sku FROM fixture', {
+      pageConcurrency: 3,
+    });
+    if (changed) await assert.rejects(result, /权限.*变化|不完整/);
+    else
+      assert.deepEqual(
+        (await result).map((row) => row.sku),
+        Array.from({ length: 441 }, (_, i) => i),
+      );
+  }
+});
+
 test('a governed host may return one complete unpaged SQL result', async (t) => {
   const f = await fixture(t, () => ({
     rows: Array.from({ length: 441 }, (_, i) => ({ sku: i })),
@@ -102,7 +133,9 @@ test('a governed host may return one complete unpaged SQL result', async (t) => 
 test('changed permissions/totals, short pages and missing totals never publish partial rows', async (t) => {
   for (const secondTotal of [1, 202, undefined]) {
     const f = await fixture(t, ({ pageNo }) => ({
-      rows: Array.from({ length: pageNo === 1 ? 200 : 1 }, (_, i) => ({ sku: i })),
+      rows: Array.from({ length: pageNo === 1 ? 200 : 1 }, (_, i) => ({
+        sku: i,
+      })),
       total: pageNo === 1 ? 201 : secondTotal,
     }));
     await assert.rejects(
@@ -122,7 +155,10 @@ test('changed permissions/totals, short pages and missing totals never publish p
 test('a later-page failure rejects the complete read without returning the first page', async (t) => {
   const f = await fixture(t, ({ pageNo }) => {
     if (pageNo === 2) throw Error('DATA_PERMISSION_DENIED');
-    return { rows: Array.from({ length: 200 }, (_, i) => ({ sku: i })), total: 201 };
+    return {
+      rows: Array.from({ length: 200 }, (_, i) => ({ sku: i })),
+      total: 201,
+    };
   });
   await assert.rejects(f.executeAllGeaSqlPages('SELECT sku FROM fixture'), /当前账号暂无数据权限/);
   assert.equal(f.calls.length, 2);
@@ -130,7 +166,9 @@ test('a later-page failure rejects the complete read without returning the first
 
 test('changed column permissions reject all pages even when the total stays 201', async (t) => {
   const f = await fixture(t, ({ pageNo }) => ({
-    rows: Array.from({ length: pageNo === 1 ? 200 : 1 }, (_, i) => ({ sku: i })),
+    rows: Array.from({ length: pageNo === 1 ? 200 : 1 }, (_, i) => ({
+      sku: i,
+    })),
     total: 201,
     returnedColumns: pageNo === 1 ? ['sku', 'amount'] : ['sku'],
     rejectedColumns: pageNo === 1 ? [] : [{ alias: 'amount', reason: 'RETURN_PERMISSION_DENIED' }],
@@ -161,14 +199,22 @@ test('caller cancellation and identity/cache invalidation stop a whole multi-pag
     let f;
     f = await fixture(t, ({ pageNo }, signal, controller) => {
       if (pageNo === 1)
-        return { rows: Array.from({ length: 200 }, (_, i) => ({ sku: i })), total: 501 };
+        return {
+          rows: Array.from({ length: 200 }, (_, i) => ({ sku: i })),
+          total: 501,
+        };
       if (reason === 'caller') controller.abort();
       else f.clearReadCache();
       assert.equal(signal.aborted, true);
-      return { rows: Array.from({ length: 200 }, (_, i) => ({ sku: 200 + i })), total: 501 };
+      return {
+        rows: Array.from({ length: 200 }, (_, i) => ({ sku: 200 + i })),
+        total: 501,
+      };
     });
     await assert.rejects(
-      f.executeAllGeaSqlPages('SELECT sku FROM fixture', { signal: f.controller.signal }),
+      f.executeAllGeaSqlPages('SELECT sku FROM fixture', {
+        signal: f.controller.signal,
+      }),
       (error) => error.name === 'AbortError',
     );
     assert.equal(f.calls.length, 2);

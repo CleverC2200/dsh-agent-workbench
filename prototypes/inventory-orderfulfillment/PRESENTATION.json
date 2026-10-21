@@ -1,0 +1,8 @@
+{
+  "source": "user attachment: 订单履约agent.html",
+  "receivedAt": "2026-10-20",
+  "sourceSha256": "478cc87e7164ee9dd700a1fca65445df5e7978242da5af82a7d11ff5bcee39b8",
+  "authoredFile": "presentation.html",
+  "scope": "Fulfillment only: delivery/sales, warehousing, item views and mock interaction. Workbench section, external script and persistent Workbench tasks excluded.",
+  "data": "mock; no real database, model, sales confirmation or fulfillment execution"
+}

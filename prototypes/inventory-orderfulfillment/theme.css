@@ -1,145 +1,27 @@
-/* Shared theme owns neutral/brand styles; order status retains semantic colors. */
-body {
-  --bg: var(--dsw-alias-bg-base);
-  --surface: var(--dsw-alias-bg-layer-1);
-  --line: var(--dsw-alias-border-l3);
-  --text: var(--dsw-alias-label-primary);
-  --muted: var(--dsw-alias-label-tertiary);
-  --faint: var(--dsw-alias-label-tertiary);
-  --brand: var(--dsw-alias-state-business-primary);
-  --brand-soft: var(--workbench-brand-soft);
-  font-size: var(--workbench-font-size);
+/* Preserve the user-provided fulfillment presentation; shared theme tokens are
+   still loaded by the host, but do not flatten the sample's cards or typography. */
+#prototypeStatus {
+  display: none;
 }
-.shell {
+html,
+body {
+  height: auto;
+  overflow: visible;
+}
+.shell,
+.main,
+.workspace {
+  height: auto;
   min-height: 0;
 }
+.main,
+.layout {
+  display: block;
+}
 .layout,
-.workspace,
-.content {
-  min-width: 0;
+.workspace {
+  overflow: visible;
 }
-.workspace,
-.content {
-  background: var(--bg);
-}
-#prototypeStatus {
-  margin: 0;
-  padding: 8px 16px;
-  color: var(--workbench-body);
-  background: var(--workbench-subtle);
-  font-size: 0.85em;
-}
-.content {
-  padding: 12px 16px;
-}
-.card,
-.metric {
-  border-color: var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-}
-.metric strong {
-  color: var(--text);
-  font-size: calc(var(--workbench-font-size) * 24 / 14);
-}
-.metric span,
-.orders,
-.orders strong,
-.order-pagination {
-  font-size: calc(var(--workbench-font-size) * 12 / 14);
-}
-.order-filters > input,
-.warehouse-picker input,
-.order-filters > select,
-.warehouse-options button,
-.orders-count {
-  font-size: calc(var(--workbench-font-size) * 11 / 14);
-}
-.card h2 {
-  font-size: calc(var(--workbench-font-size) * 15 / 14);
-}
-.order-page-status strong {
-  font-size: calc(var(--workbench-font-size) * 13 / 14);
-}
-.metric:hover,
-.orders tbody tr[data-order-row]:hover td {
-  background: var(--workbench-hover);
-}
-.orders th {
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--muted);
-  border-color: var(--line);
-}
-.orders td,
-.orders-card-head h2 {
-  color: var(--text);
-  border-color: var(--line);
-}
-.order-filters :is(input, select),
-.order-page-size select,
-.warehouse-options,
-.warehouse-options button {
-  color: var(--dsw-alias-label-secondary);
-  background: var(--surface);
-  border-color: var(--dsw-alias-border-l4);
-  border-radius: 8px;
-}
-.warehouse-options button:hover,
-.warehouse-options button[aria-selected='true'],
-.order-page-button:hover:not(:disabled) {
-  background: var(--workbench-hover);
-  color: var(--brand);
-}
-button:focus-visible,
-input:focus-visible,
-select:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.table-wrap {
-  overflow-x: auto;
-}
-.orders {
-  min-width: 1000px;
-}
-.order-pagination {
-  border-color: var(--line);
-  color: var(--muted);
-}
-.order-page-status strong {
-  color: var(--text);
-}
-body[data-ds-dark-theme] .status {
-  color: #8ddbb2;
-  background: #20382c;
-}
-body[data-ds-dark-theme] .status.progress {
-  color: #93bdff;
-  background: #24334b;
-}
-body[data-ds-dark-theme] .status.pending {
-  color: #edd18c;
-  background: #3b321f;
-}
-body[data-ds-dark-theme] .status.issue {
-  color: #ff9aa8;
-  background: #442630;
-}
-@media (max-width: 720px) {
-  .orders-card-head {
-    flex-wrap: wrap;
-  }
-  .order-filters {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-  .order-filters input,
-  .warehouse-picker {
-    width: 100%;
-  }
-}
-@media (max-width: 520px) {
-  .summary {
-    grid-template-columns: 1fr;
-  }
+.topbar {
+  display: none;
 }

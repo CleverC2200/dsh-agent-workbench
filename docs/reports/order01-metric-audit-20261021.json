@@ -1,0 +1,242 @@
+{
+  "checkedAt": "2026-10-21T05:12:33.372Z",
+  "date": "2026-10-21",
+  "queries": {
+    "orders.detail": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "order_no",
+        "customer_code",
+        "sku",
+        "created_at",
+        "customer_name",
+        "base",
+        "region",
+        "province",
+        "sales_group",
+        "channel",
+        "source_status",
+        "source_reason",
+        "material_name",
+        "sales_person",
+        "order_person",
+        "source_rows"
+      ]
+    },
+    "orders.detail.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "orders.summary": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "source_orders",
+        "source_rows",
+        "first_created",
+        "latest_created"
+      ]
+    },
+    "orders.quantities": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "order_no",
+        "customer_code",
+        "sku",
+        "base",
+        "source_rows",
+        "latest_created",
+        "original_qty",
+        "adjusted_qty",
+        "allocated_qty",
+        "shipped_qty",
+        "source_short_qty",
+        "ordered_qty"
+      ]
+    },
+    "orders.quantities.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "trace.detail": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "order_no",
+        "customer_code",
+        "source_kind",
+        "execute_no",
+        "sku",
+        "need_billing_at",
+        "pickup_point",
+        "source_stage",
+        "prepare_status",
+        "dispatch_status",
+        "loading_status",
+        "transit_status",
+        "source_rows",
+        "after_inventory_short_qty",
+        "final_short_qty"
+      ]
+    },
+    "trace.detail.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "trace.summary": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "matched_orders",
+        "overdue_orders",
+        "warning_orders",
+        "allocation_overdue",
+        "allocation_warning",
+        "dispatch_overdue",
+        "dispatch_warning",
+        "loading_overdue",
+        "loading_warning",
+        "transit_overdue",
+        "transit_warning"
+      ]
+    },
+    "warehouse.detail": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "order_no",
+        "customer_code",
+        "base",
+        "carrier",
+        "waybill_no",
+        "waybill_status"
+      ]
+    },
+    "warehouse.detail.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "sku.detail": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "base",
+        "sku",
+        "material_name",
+        "stock_date",
+        "source_rows",
+        "stock_qty",
+        "available_qty",
+        "over60_source_qty",
+        "production_plan",
+        "production_in_qty",
+        "product_item",
+        "series",
+        "main_plan_initial",
+        "bp_plan_initial",
+        "main_plan_adjusted",
+        "bp_plan_adjusted",
+        "transfer_plan_initial",
+        "transfer_plan_adjusted",
+        "next_month_sales_plan",
+        "next_month_out_plan",
+        "month_days",
+        "product_tag",
+        "transfer_tag"
+      ]
+    },
+    "sku.detail.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "orders.by_base": {
+      "status": 200,
+      "rows": 7,
+      "columns": [
+        "group_name",
+        "source_orders"
+      ]
+    },
+    "orders.by_base.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "orders.by_province": {
+      "status": 200,
+      "rows": 20,
+      "columns": [
+        "group_name",
+        "source_orders"
+      ]
+    },
+    "orders.by_province.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    },
+    "orders.by_carrier": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "group_name",
+        "source_orders"
+      ]
+    },
+    "orders.by_carrier.count": {
+      "status": 200,
+      "rows": 1,
+      "columns": [
+        "total"
+      ]
+    }
+  },
+  "nodeCounts": [
+    {
+      "matched_orders": "49",
+      "overdue_orders": "2",
+      "warning_orders": "0",
+      "allocation_overdue": "1",
+      "allocation_warning": "0",
+      "dispatch_overdue": "0",
+      "dispatch_warning": "0",
+      "loading_overdue": "1",
+      "loading_warning": "0",
+      "transit_overdue": "0",
+      "transit_warning": "0"
+    }
+  ],
+  "inventoryCoverage": {
+    "rows": 20,
+    "stockDates": [
+      "2026-10-20"
+    ],
+    "withItem": 20,
+    "withSeries": 20,
+    "withTag": 20,
+    "withTransferTag": 0,
+    "withPlannedDays": 20,
+    "zeroPlanRows": 0
+  }
+}
