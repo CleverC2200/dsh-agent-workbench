@@ -1,5 +1,6 @@
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { Fragment, useState, useEffect } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
@@ -129,9 +130,8 @@ export default function ConfiguredWorkbench() {
                 refresh((n) => n + 1);
               }}
             >
-              <input
+              <BusinessDateInput
                 aria-label="读取时点"
-                type="date"
                 value={draft}
                 max={businessDay()}
                 required

@@ -200,6 +200,18 @@ test('QLL changing the date stays local until submit, then reads the new date', 
     .toBe(true);
   assert.deepEqual(errors, []);
 });
+test('FC uses the same Chinese date display and retains explicit refresh', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 560);
+  await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
+  await frame.getByLabel('读取时点').fill('2026-10-18');
+  await expect(frame.getByText('2026年10月18日', { exact: true })).toBeVisible();
+  const before = calls.length;
+  await frame.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect
+    .poll(() => calls.slice(before).some((query) => query.parameters.as_of === '2026-10-18'))
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
 for (const [quantity, count, display] of [
   [1234, 190, '1,234箱'],
   [0, 201, '0箱'],
