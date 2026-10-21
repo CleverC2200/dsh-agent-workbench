@@ -74,6 +74,9 @@ export const configuredCycleState = {
     view.update({ replenishmentCycleDays: days });
   },
   subscribe(listener: () => void) {
-    return view.subscribe(listener);
+    const stop = view.subscribe(listener);
+    return () => {
+      stop();
+    };
   },
 };
