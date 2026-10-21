@@ -38,10 +38,12 @@ const css = await readFile(new URL('../src/workbench/api-log.css', import.meta.u
 const nativeUi = await build({
   stdin: {
     contents: `import React from 'react';import{createRoot}from'react-dom/client';import{mountBusinessViews}from'./src/business-views.tsx';
- const root=createRoot(document.getElementById('root'));let LogPage, SettingsLogPage;
+ const root=createRoot(document.getElementById('root'));let LogPage, SettingsLogPage, selectPanel;window.fixtureOpenedPanels=[];
  let identity={state:'confirmed',scope:'fixture-principal',status:{authenticated:true,environment:'test',user:{name:'Fixture'}}};const identityListeners=new Set();window.setFixtureIdentity=value=>{identity=value;for(const listener of identityListeners)listener();};
- const ctx={effect:fn=>fn(),inject:(_requirements,fn)=>fn(ctx),locale:{register:()=>()=>{},bind:()=>key=>key,getSnapshot:()=>({active:'zh'})},businessAccount:{subscribe:fn=>{identityListeners.add(fn);return()=>identityListeners.delete(fn);},getSnapshot:()=>identity},agentWorkbench:{register:()=>()=>{},registerFrame:()=>()=>{},open:async()=>root.unmount()},slots:{inject:(slot,fn)=>fn(),register:(slot,component)=>{if(slot.key==='gea-api-log')LogPage=component;if(slot.name==='settings.section'&&slot.id==='gea-api-log')SettingsLogPage=component;return()=>{};}}};
- mountBusinessViews(ctx);window.fixtureSettingsRegistered=Boolean(SettingsLogPage);const Page=window.fixtureUseSettings?SettingsLogPage:LogPage;root.render(<Page close={window.fixtureUseSettings?()=>{window.fixtureSettingsClosed=true;root.unmount();}:undefined}/>);`,
+ const ctx={effect:fn=>fn(),inject:(_requirements,fn)=>fn(ctx),locale:{register:()=>()=>{},bind:()=>key=>key,getSnapshot:()=>({active:'zh'})},businessAccount:{subscribe:fn=>{identityListeners.add(fn);return()=>identityListeners.delete(fn);},getSnapshot:()=>identity},agentWorkbench:{register:()=>()=>{},registerFrame:()=>()=>{},open:async id=>{window.fixtureOpenedPanels.push(id);selectPanel(id);}},slots:{inject:(slot,fn)=>fn(),register:(slot,component)=>{if(slot.key==='gea-api-log')LogPage=component;if(slot.name==='settings.section'&&slot.id==='gea-api-log')SettingsLogPage=component;return()=>{};}}};
+ mountBusinessViews(ctx);window.fixtureSettingsRegistered=Boolean(SettingsLogPage);
+ function Shell(){const[panel,setPanel]=React.useState(window.fixtureUseSettings?'settings':'gea-api-log');selectPanel=setPanel;return panel==='settings'?<div role="dialog" aria-label="设置" style={{width:640,height:600}}><SettingsLogPage close={()=>{window.fixtureSettingsClosed=true;setPanel(current=>current==='settings'?null:current);}}/></div>:panel==='gea-api-log'?<LogPage/>:null;}
+ root.render(<Shell/>);`,
     resolveDir: process.cwd(),
     loader: 'tsx',
   },
@@ -393,9 +395,23 @@ test('Native identity scope changes cancel the old batch even when the user stay
   assert.equal(f.requests.length, 2);
 });
 
-test('Settings log reuses identity ownership and closes its Settings container', async (t) => {
+test('Settings entry closes the dialog and opens the standalone log page with identity ownership', async (t) => {
   const f = await open(t, { native: true, settings: true });
   assert.equal(await f.page.evaluate(() => window.fixtureSettingsRegistered), true);
+  assert.equal(await f.page.evaluate(() => window.fixtureSettingsClosed), true);
+  assert.deepEqual(await f.page.evaluate(() => window.fixtureOpenedPanels), ['gea-api-log']);
+  await expect(f.page.getByRole('dialog')).toHaveCount(0);
+  const logBounds = await f.page.locator('.gea-api-log-center').boundingBox();
+  assert.ok(
+    logBounds.width > 1000,
+    'the log uses the main page width rather than the settings content column',
+  );
+  if (process.env.GEA_API_LOG_EVIDENCE_DIR) {
+    await mkdir(process.env.GEA_API_LOG_EVIDENCE_DIR, { recursive: true });
+    await f.page.screenshot({
+      path: process.env.GEA_API_LOG_EVIDENCE_DIR + '/settings-opens-log-page.png',
+    });
+  }
   await f.page.evaluate(() =>
     window.setFixtureIdentity({
       state: 'confirmed',
@@ -414,6 +430,9 @@ test('Settings log reuses identity ownership and closes its Settings container',
   );
   await expect(f.page.locator('.gea-api-layout')).toBeVisible();
   await f.page.getByRole('button', { name: '返回工作台', exact: true }).click();
-  assert.equal(await f.page.evaluate(() => window.fixtureSettingsClosed), true);
+  assert.deepEqual(await f.page.evaluate(() => window.fixtureOpenedPanels), [
+    'gea-api-log',
+    'gea-proof',
+  ]);
   await expect(f.page.locator('.gea-native-page')).toHaveCount(0);
 });
