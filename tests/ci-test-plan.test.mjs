@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   copyFileSync,
+  globSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -1632,4 +1633,74 @@ test('source selftests run themselves and explicit helper owners avoid old busin
   f.repositories[0].head = f.commit(f.root);
   assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, ['tests/tool.test.mjs']);
   assert.ok(f.plan().files.includes('tests/affected.test.mjs'));
+});
+
+test('workflow source plans retain behavior contracts alongside semantic preflight', async (t) => {
+  for (const [repo, workflow, consumers] of [
+    [
+      'dsh-agent-workbench',
+      'quality',
+      [
+        'tests/quality-ci.test.mjs',
+        'tests/candidate-input.test.mjs',
+        'tests/quality-cli.test.mjs',
+        'tests/ci-test-plan.test.mjs',
+        'tests/final-group-input.contract.mjs',
+      ],
+    ],
+    [
+      'dsh-agent-workbench',
+      'source-quality',
+      [
+        'scripts/source-quality.test.mjs',
+        'tests/source-checks.test.mjs',
+        'tests/source-typecheck.test.mjs',
+        'tests/ci-test-plan.test.mjs',
+      ],
+    ],
+  ]) {
+    await t.test(`${repo}/${workflow}`, (t) => {
+      const f = fixture(t, repo);
+      const original = new URL(`../../${repo}/`, import.meta.url);
+      Object.assign(
+        f.policy,
+        JSON.parse(readFileSync(new URL('scripts/ci-test-policy.json', original))),
+      );
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      for (const pattern of f.policy.tests)
+        for (const file of globSync(pattern, { cwd: original }))
+          f.put(f.root, file, 'export const fixture = true;');
+      const file = `.github/workflows/${workflow}.yml`;
+      f.put(f.root, file, 'permissions: {contents: read}\n');
+      f.checkpoint();
+      f.put(f.root, file, 'permissions: {contents: write}\n');
+      f.repositories.find((entry) => entry.repo === repo).head = f.commit(f.root);
+      const plan = f.plan(undefined, { sourceOnly: true });
+      for (const consumer of ['scripts/workflow-preflight.test.mjs', ...consumers])
+        assert.ok(plan.files.includes(consumer), `${consumer}: ${JSON.stringify(plan)}`);
+    });
+  }
+});
+
+test('preflight module source changes select their own regression without workflow contracts', async (t) => {
+  for (const repo of ['dsh-agent-workbench'])
+    await t.test(repo, (t) => {
+      const f = fixture(t, repo);
+      const original = new URL(`../../${repo}/`, import.meta.url);
+      Object.assign(
+        f.policy,
+        JSON.parse(readFileSync(new URL('scripts/ci-test-policy.json', original))),
+      );
+      f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+      for (const pattern of f.policy.tests)
+        for (const file of globSync(pattern, { cwd: original }))
+          f.put(f.root, file, 'export const fixture = true;');
+      f.put(f.root, 'scripts/workflow-preflight.mjs', 'export const revision = 1;');
+      f.checkpoint();
+      f.put(f.root, 'scripts/workflow-preflight.mjs', 'export const revision = 2;');
+      f.repositories.find((entry) => entry.repo === repo).head = f.commit(f.root);
+      assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, [
+        'scripts/workflow-preflight.test.mjs',
+      ]);
+    });
 });

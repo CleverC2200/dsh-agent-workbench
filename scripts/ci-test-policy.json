@@ -41,9 +41,14 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^(?:scripts/workflow-preflight(?:\\.test)?\\.mjs|\\.github/workflows/[^/]+\\.ya?ml)$",
+      "pattern": "^scripts/workflow-preflight(?:\\.test)?\\.mjs$",
       "tests": ["scripts/workflow-preflight.test.mjs"],
       "sourceTests": ["scripts/workflow-preflight.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^\\.github/workflows/[^/]+\\.ya?ml$",
+      "tests": ["scripts/workflow-preflight.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
@@ -197,6 +202,7 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^(?:scripts/(?:source-quality|source-checks|ci-test-plan)\\.mjs|\\.github/workflows/source-quality\\.yml)$",
       "sourceTests": [
+        "scripts/workflow-preflight.test.mjs",
         "scripts/source-quality.test.mjs",
         "tests/source-checks.test.mjs",
         "tests/source-typecheck.test.mjs",

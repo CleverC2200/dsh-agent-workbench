@@ -8,7 +8,7 @@ import {
   symlinkSync,
   realpathSync,
 } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { selectCiTests } from './ci-test-plan.mjs';
@@ -337,9 +337,26 @@ export async function sourceChecks(result, phase) {
 export async function checkTypes(root, repositories, repo, changed = []) {
   const require = createRequire(resolve(root, 'package.json'));
   const ts = require('typescript');
-  const peerPaths = {};
+  const parseConfig = (file) => {
+    const parsed = ts.getParsedCommandLineOfConfigFile(
+      file,
+      { noEmit: true, emitDeclarationOnly: false },
+      {
+        ...ts.sys,
+        onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+          throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+        },
+      },
+    );
+    if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
+    return parsed;
+  };
+  const core = resolve(root, '../../official-latest-standard');
+  const peerPaths = {},
+    peerCorePaths = {};
   for (const peer of repositories) {
     const pkg = json(resolve(peer.path, 'package.json'));
+    let mapsSource = false;
     for (const [name, entry] of Object.entries(pkg.exports || {})) {
       const type = typeof entry === 'object' ? entry.types : null;
       if (
@@ -358,7 +375,26 @@ export async function checkTypes(root, repositories, repo, changed = []) {
         type.replace('./lib/types/', 'src/').replace(/\.d\.ts$/, '.ts'),
       );
       const target = existsSync(source) ? source : source.replace(/\.ts$/, '.tsx');
-      if (existsSync(target)) peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [target];
+      if (existsSync(target)) {
+        peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [target];
+        mapsSource = true;
+      }
+    }
+    const config = resolve(peer.path, 'tsconfig.official.json');
+    if (peer.repo === repo || !mapsSource || !existsSync(config)) continue;
+    const parsed = parseConfig(config);
+    for (const [name, paths] of Object.entries(parsed.options.paths ?? {})) {
+      const targets = paths.map((path) =>
+        resolve(parsed.options.baseUrl ?? parsed.options.pathsBasePath ?? peer.path, path),
+      );
+      if (
+        targets.length &&
+        targets.every(
+          (target) =>
+            target.startsWith(core + sep) && /[/\\]lib[/\\]types[/\\].*\.d\.[cm]?ts$/.test(target),
+        )
+      )
+        peerCorePaths[name] = targets;
     }
   }
   const configs =
@@ -366,18 +402,8 @@ export async function checkTypes(root, repositories, repo, changed = []) {
       ? ['tsconfig.json', 'tsconfig.client.json']
       : ['tsconfig.official.json'];
   for (const file of configs) {
-    const parsed = ts.getParsedCommandLineOfConfigFile(
-      resolve(root, file),
-      { noEmit: true, emitDeclarationOnly: false },
-      {
-        ...ts.sys,
-        onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-          throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
-        },
-      },
-    );
-    if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
-    parsed.options.paths = { ...parsed.options.paths, ...peerPaths };
+    const parsed = parseConfig(resolve(root, file));
+    parsed.options.paths = { ...peerCorePaths, ...parsed.options.paths, ...peerPaths };
     parsed.options.rootDir = resolve(root, '../..');
     parsed.options.typeRoots = [resolve(root, 'node_modules/@types')];
     const ambient = repositories
