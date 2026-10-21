@@ -12,7 +12,10 @@
     "skills/production-fulfillment-progress/SKILL.md",
     "skills/warehouse-logistics-fulfillment/SKILL.md",
     "skills/sales-organization-analysis/SKILL.md",
-    "skills/fulfillment-sales-confirmation-automation/SKILL.md"
+    "skills/fulfillment-sales-confirmation-automation/SKILL.md",
+    "skills/operations-kpi-performance-analysis/SKILL.md",
+    "skills/operations-exception-root-cause/SKILL.md",
+    "skills/improvement-action-closure/SKILL.md"
   ],
   "mcp": "mcp.json",
   "pageContext": "live",
