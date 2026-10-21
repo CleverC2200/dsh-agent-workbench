@@ -4,7 +4,7 @@ PR 与 main push 由 `.github/workflows/source-quality.yml` 按实际 Git 差异
 
 `scripts/source-quality.mjs --phase plan|check|final` 是冷目录入口，不要求安装依赖。`plan` 从事件文件读取 PR 的 base/head 或 push 的 before/after，校验检出 HEAD，PR 按 merge-base 比较，push 按实际推送区间比较。未提供差异范围时保守选择代码检查；已提供的基线无法解析或 HEAD 不符时拒绝继续。输出 `mode=docs|resources|code` 与 `engineering`、`dependency-review`、`codeql`，供 workflow 选择适用 job；`final` 重算分类并核实际结果，不修改分支保护。
 
-资源检查覆盖变更资源组的 JSON、JS/Python 语法、Skill 元数据、相对文件引用与声明的打包字节摘要。Skill 删除或改名时同时核包内 Prompt/能力声明的 Skill 引用。资源组中的依赖清单和锁仍按代码处理。Markdown 双空格换行不再参与差分空白阻断。工程检查的具体集合由 workflow 维护。
+资源检查覆盖变更资源组的 JSON、JS/Python 语法、Skill 元数据、相对文件引用与声明的打包字节摘要。Skill 删除或改名时同时核包内 Prompt/能力声明的 Skill 引用。资源组中的依赖清单和锁仍按代码处理。Markdown 双空格换行不再参与差分空白阻断。CodeQL 开关独立于资源分类；已有 CodeQL 的仓在资源中新增、修改或删除 JavaScript/TypeScript 源码时仍需执行现有扫描。Python 资源执行语法检查，现有 CodeQL 语言配置不覆盖 Python。工程检查的具体集合由 workflow 维护。
 
 三仓冻结、SDK 准备、完整类型/构建、受影响集成与浏览器测试改由 `.github/workflows/quality.yml` 的手动 `workflow_dispatch` 执行，最终检查名为 `joint-quality`，不再作为日常合并条件。手动 alpha compatibility 入口保留。日常绿灯只证明上述本仓检查，不能表示三仓或客户端验收通过。
 
