@@ -240,51 +240,129 @@
         font-size: 12px;
         font-weight: 700;
       }
-      .period-switch {
-        display: inline-flex;
-        padding: 3px;
-        border: 1px solid #e6eaf1;
-        border-radius: 8px;
-        background: #f6f8fb;
+      .period-picker {
+        position: relative;
+        z-index: 20;
       }
-      .period-switch button {
-        min-width: 58px;
-        height: 29px;
-        padding: 0 11px;
-        border: 0;
-        border-radius: 6px;
-        color: #6e7785;
-        background: transparent;
-        font-size: 12px;
-      }
-      .period-switch button.active {
-        color: var(--brand);
-        background: #fff;
-        box-shadow: 0 1px 5px rgba(35, 44, 62, 0.12);
-        font-weight: 700;
-      }
-      .period-control {
+      .period-picker-trigger {
         display: flex;
         align-items: center;
-        gap: 7px;
-        color: #667080;
-        font-size: 12px;
+        justify-content: space-between;
+        gap: 18px;
+        width: 210px;
+        min-width: 180px;
+        height: 36px;
+        padding: 0 11px;
+        border: 1px solid #c9ced7;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        box-shadow: 0 1px 2px #1822300a;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
       }
-      .period-control[hidden] {
+      .period-picker-trigger:hover {
+        border-color: #e8a4ae;
+        background: #fff7f8;
+        box-shadow: 0 2px 8px #df173214;
+      }
+      .period-picker-trigger:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .period-picker-trigger svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        color: #697386;
+        transition: transform 160ms ease;
+      }
+      .period-picker-trigger[aria-expanded='true'] {
+        border-color: #ce7280;
+        box-shadow: 0 0 0 3px #df173212;
+      }
+      .period-picker-trigger[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+      .period-picker-menu {
+        position: absolute;
+        top: calc(100% + 7px);
+        left: 0;
+        z-index: 90;
+        display: grid;
+        grid-template-columns: minmax(132px, 0.78fr) minmax(220px, 1.22fr);
+        width: min(440px, calc(100vw - 32px));
+        max-height: min(310px, calc(100vh - 100px));
+        overflow: auto;
+        padding: 5px;
+        border: 1px solid #e7e9ee;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow:
+          0 14px 38px #18223024,
+          0 2px 8px #1822300a;
+      }
+      .period-picker-menu[hidden] {
         display: none;
       }
-      .period-control input,
-      .period-control select {
-        min-height: 32px;
-        padding: 4px 9px;
-        border: 1px solid #dce2eb;
-        border-radius: 6px;
-        color: #343b47;
-        background: #fff;
-        font-size: 12px;
+      .period-picker-months,
+      .period-picker-weeks {
+        display: grid;
+        align-content: start;
+        gap: 3px;
       }
-      .period-control select {
-        max-width: 245px;
+      .period-picker-months {
+        padding-right: 4px;
+        border-right: 1px solid #eceef1;
+      }
+      .period-picker-weeks {
+        padding-left: 4px;
+      }
+      .period-picker-option {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        min-width: 0;
+        min-height: 36px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 6px;
+        color: #343b46;
+        background: #fff;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
+      }
+      .period-picker-option:hover,
+      .period-picker-option:focus-visible {
+        outline: 0;
+        color: #343b46;
+        background: #ffedf0;
+      }
+      .period-picker-option[aria-pressed='true'] {
+        color: #fff;
+        background: #df1732;
+      }
+      .period-picker-weeks .period-picker-option[aria-pressed='true'] {
+        color: #c91029;
+        background: #fff5f6;
+      }
+      .period-picker-option:focus-visible {
+        box-shadow: inset 0 0 0 2px #df1732;
+      }
+      .period-picker-weeks .period-picker-option {
+        white-space: nowrap;
       }
       .period-meta {
         position: absolute;
@@ -309,6 +387,10 @@
         min-height: 0;
         overflow: auto;
         background: #fff;
+        scrollbar-width: none;
+      }
+      .workspace::-webkit-scrollbar {
+        display: none;
       }
       .content {
         max-width: 1500px;
@@ -616,9 +698,10 @@
         }
       }
       .fulfillment-summary.delivery-summary {
-        grid-template-columns:
-          minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(0, 1fr)
-          minmax(0, 0.95fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(
+            0,
+            1fr
+          ) minmax(0, 0.95fr);
       }
       @media (max-width: 1050px) {
         .fulfillment-summary.delivery-summary {
@@ -652,8 +735,10 @@
       .delivery-summary .metric {
         min-height: 160px;
         padding: 0 0 8px;
-        border-color: #d8d8d8;
-        border-radius: 11px;
+        border: 1px solid #d9dde3;
+        border-radius: 10px;
+        background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
       }
       .delivery-summary .metric::after {
         display: none;
@@ -667,16 +752,16 @@
         justify-content: flex-start;
         gap: 6px;
         min-height: 80px;
-        padding: 12px 10px 8px;
-        border-bottom: 1px dashed #d8d8d8;
+        padding: 11px 8px 8px;
+        border-bottom: 1px dashed #cfd2d6;
       }
       .delivery-summary .metric .metric-head > span {
         display: block;
         min-width: 0;
         overflow: hidden;
-        color: #596576;
-        font-size: 12px;
-        font-weight: 650;
+        color: #24324a;
+        font-size: 13px;
+        font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -684,13 +769,13 @@
         flex: 0 0 auto;
         margin: 0;
         color: #10264a;
-        font-size: 24px;
-        line-height: 1.2;
-        letter-spacing: -0.3px;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
       }
       .delivery-summary .metric .metric-head .metric-unit {
         margin-left: 3px;
-        font-size: 12px;
+        font-size: 13px;
       }
       .fulfillment-summary .metric::after {
         content: '';
@@ -762,9 +847,9 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px 9px;
-        margin: 8px 6px 0;
-        color: #a0a0a0;
-        font-size: 14px;
+        margin: 8px 8px 0;
+        color: #a0a4ac;
+        font-size: 11px;
         line-height: 1.5;
       }
       .metric-breakdown > span {
@@ -784,8 +869,8 @@
       }
       .metric-breakdown strong {
         margin: 0 !important;
-        color: #929292 !important;
-        font-size: 14px !important;
+        color: #a0a4ac !important;
+        font-size: 11px !important;
         font-weight: 500;
       }
       .fulfillment-grid {
@@ -2260,12 +2345,6 @@
         flex-wrap: wrap;
         margin-bottom: 8px;
       }
-      .wb-hero > .wb-link {
-        margin-left: auto;
-      }
-      .wb-hero .wb-context {
-        margin: 0;
-      }
       .wb-hero-main {
         min-width: 0;
       }
@@ -2365,23 +2444,35 @@
       }
       .wb-kpis {
         display: grid;
-        grid-template-columns: repeat(8, minmax(140px, 1fr));
-        gap: 9px;
-        overflow-x: auto;
-        padding-bottom: 2px;
+        grid-auto-flow: row;
+        grid-auto-columns: auto;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-rows: auto;
+        gap: 12px;
+        overflow: visible;
+        padding: 2px 2px 8px;
       }
       .wb-kpi {
         min-width: 0;
-        min-height: 220px;
-        padding: 14px 13px 12px;
-        border: 1px solid #e5e9ef;
+        min-height: 200px;
+        padding: 11px 8px 10px;
+        border: 1px solid #d9dde3;
         border-radius: 10px;
         background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
         text-align: left;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease;
       }
       .wb-kpi:hover {
-        border-color: #d7dde6;
-        box-shadow: 0 8px 22px rgba(32, 43, 61, 0.07);
+        border-color: #efabb4;
+        background: #fffafb;
+        box-shadow: 0 8px 20px #20273312;
+      }
+      .wb-kpi:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
       }
       .wb-kpi-head {
         display: flex;
@@ -2392,9 +2483,9 @@
       .wb-kpi-title {
         min-width: 0;
         overflow: hidden;
-        color: #252c37;
+        color: #24324a;
         font-size: 13px;
-        font-weight: 750;
+        font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -2402,122 +2493,112 @@
         display: inline-flex;
         align-items: center;
         flex: 0 0 auto;
-        padding: 4px 7px;
-        border-radius: 12px;
-        color: #278565;
-        background: #eaf8f1;
-        font-size: 9px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        color: #fff;
+        background: #00bd12;
+        font-size: 11px;
         font-weight: 700;
       }
       .wb-kpi .wb-kpi-state.bad {
-        color: #c74455;
-        background: #fff0f2;
+        color: #fff;
+        background: #f00000;
       }
       .wb-kpi .wb-kpi-state.unknown {
-        color: #667487;
-        background: #f0f3f7;
-      }
-      .wb-kpi-meta {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 10px;
-        overflow: hidden;
-        color: #7f8998;
-        font-size: 9px;
-        white-space: nowrap;
-      }
-      .wb-kpi-badge {
-        padding: 3px 6px;
-        border-radius: 10px;
-        color: #647184;
-        background: #f1f4f7;
-        font-weight: 700;
-      }
-      .wb-kpi.urgent .wb-kpi-badge {
-        color: #bb4152;
-        background: #fff1f3;
+        color: #667085;
+        background: #eef1f5;
       }
       .wb-kpi-value {
         display: flex;
-        align-items: flex-end;
-        gap: 4px;
-        min-height: 51px;
-        margin-top: 9px;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 48px;
+        margin-top: 3px;
+        padding: 5px 2px 10px;
+        border-bottom: 1px dashed #cfd2d6;
+      }
+      .wb-kpi-main {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        min-width: 0;
       }
       .wb-kpi-value strong {
-        color: #17202e;
-        font-size: 34px;
-        line-height: 1;
-        letter-spacing: -1px;
+        color: #10264b;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
       }
       .wb-kpi-value em {
-        padding-bottom: 3px;
-        color: #778294;
+        color: #10264b;
         font-size: 13px;
         font-style: normal;
       }
+      .wb-kpi-target {
+        flex: 0 0 auto;
+        color: #a0a4ac;
+        font-size: 11px;
+        white-space: nowrap;
+      }
       .wb-kpi-compare {
         display: grid;
-        gap: 6px;
-        padding: 10px 0 9px;
-        border-top: 1px dashed #e4e8ee;
-        border-bottom: 1px dashed #e4e8ee;
+        gap: 0;
+        padding: 3px 2px 2px;
+        border-bottom: 0;
+      }
+      .wb-kpi-compare-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 8px 0;
+      }
+      .wb-kpi-compare-group + .wb-kpi-compare-group {
+        border-top: 1px dashed #cfd2d6;
       }
       .wb-kpi-compare-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
-        align-items: center;
-        color: #697586;
-        font-size: 9px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 5px;
+        min-width: 0;
+        padding: 0;
+        color: #a0a4ac;
+        font-size: 11px;
       }
       .wb-kpi-compare-row > span {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .wb-kpi-compare-row.head {
-        color: #a0a8b4;
       }
       .wb-kpi-compare-row b {
-        color: #778294;
-        font-weight: 700;
+        color: #a0a4ac;
+        font-size: 11px;
+        font-weight: 500;
         white-space: nowrap;
       }
-      .wb-kpi-compare-row b.good {
-        color: #238b68;
+      .wb-kpi-compare-row:first-child {
+        justify-content: flex-start;
+        gap: 8px;
       }
-      .wb-kpi-compare-row b.bad {
-        color: #c63f50;
+      .wb-kpi-compare-row:last-child {
+        justify-content: flex-end;
+        gap: 8px;
       }
       .wb-kpi-foot {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
-        align-items: center;
-        margin-top: 10px;
-        color: #596576;
-        font-size: 9px;
-        font-weight: 650;
+        min-height: 31px;
+        display: flex;
+        align-items: flex-start;
+        margin-top: 0;
+        padding: 2px 5px 0;
+        color: #858c96;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
       }
       .wb-kpi-foot > span {
-        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .wb-kpi-foot b {
-        color: #667487;
-        text-align: right;
-        white-space: nowrap;
-      }
-      .wb-kpi-foot b.good {
-        color: #238b68;
-      }
-      .wb-kpi-foot b.bad {
-        color: #c63f50;
       }
       .wb-card {
         min-width: 0;
@@ -2531,6 +2612,287 @@
         color: #7a8290;
         font-size: 11px;
         line-height: 1.6;
+      }
+      .wb-improvement-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .wb-reference-head h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-reference-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-reference-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-reference-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-list {
+        display: grid;
+        gap: 8px;
+      }
+      .wb-reference-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .wb-reference-main {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        flex: 1;
+      }
+      .wb-reference-main strong {
+        overflow: hidden;
+        color: #343b46;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a {
+        overflow: hidden;
+        color: #65758b;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a:hover {
+        color: #df1732;
+      }
+      .wb-reference-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .wb-reference-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-reference-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-reference-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-reference-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-reference-empty {
+        margin: 0;
+        padding: 14px;
+        border: 1px dashed #d9dde3;
+        border-radius: 8px;
+        color: #858c96;
+        background: #fafafa;
+        font-size: 11px;
+        text-align: center;
+      }
+      .wb-improvement-section > h2 {
+        margin: 0 0 16px;
+        color: #20232a;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+      .wb-improvement-block + .wb-improvement-block {
+        margin-top: 20px;
+      }
+      .wb-improvement-block-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 12px;
+      }
+      .wb-improvement-block h3 {
+        margin: 0;
+        color: #343d4b;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .wb-improvement-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-improvement-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-improvement-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #d9dde3;
+        border-radius: 6px;
+      }
+      .wb-improvement-table {
+        width: 100%;
+        min-width: 1080px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        color: #303844;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-improvement-table th,
+      .wb-improvement-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #d9dde3;
+        border-bottom: 1px solid #d9dde3;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      .wb-improvement-table th:last-child,
+      .wb-improvement-table td:last-child {
+        border-right: 0;
+      }
+      .wb-improvement-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-improvement-table th {
+        color: #343b46;
+        background: #f1f2f4;
+        font-weight: 700;
+      }
+      .wb-improvement-table .direction,
+      .wb-improvement-table .issue,
+      .wb-improvement-table .goal,
+      .wb-improvement-table .status {
+        width: auto;
+      }
+      .wb-improvement-table td.status {
+        display: table-cell;
+        padding: 8px 10px;
+        border-radius: 0;
+        color: #303844;
+        background: #fff;
+        white-space: normal;
+      }
+      .wb-improvement-table .actions {
+        width: 82px;
+        text-align: center;
+      }
+      .wb-improvement-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .wb-improvement-action {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-improvement-action:hover {
+        border-color: #dbe2ea;
+        color: #df1732;
+        background: #fff7f8;
+      }
+      .wb-improvement-action.delete:hover {
+        border-color: #f5d1d6;
+        color: #d92d42;
+        background: #fff3f4;
+      }
+      .wb-improvement-action:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-action svg {
+        width: 15px;
+        height: 15px;
+      }
+      .wb-improvement-table td.is-editing {
+        outline: 2px solid #91caff;
+        outline-offset: -2px;
+        background: #f7fbff;
+      }
+      .wb-improvement-table.long-term {
+        min-width: 1122px;
+        table-layout: auto;
+      }
+      .wb-improvement-table.long-term .direction {
+        width: 112px;
+      }
+      .wb-improvement-table.long-term .goal {
+        width: 135px;
+      }
+      .wb-improvement-table.long-term .status {
+        width: 72px;
+      }
+      .wb-improvement-table strong {
+        color: #303844;
+        font-weight: 700;
       }
       .wb-analysis {
         border-color: #f0d8dc;
@@ -2733,39 +3095,6 @@
         height: 2px;
         background: var(--brand);
       }
-      .wb-context {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin: 0 0 5px;
-        color: #788391;
-        font-size: 11px;
-      }
-      .wb-context strong {
-        color: #425066;
-        font-size: 12px;
-      }
-      .wb-context span {
-        padding: 6px 10px;
-        border: 1px solid #e3e8f0;
-        border-radius: 6px;
-        background: #fff;
-      }
-      .wb-context select {
-        height: 31px;
-        padding: 0 25px 0 9px;
-        border: 1px solid #e3e8f0;
-        border-radius: 6px;
-        color: #596779;
-        background: #fff;
-        font-size: 11px;
-      }
-      .wb-context-note {
-        margin: 0 0 12px;
-        color: #99a2af;
-        font-size: 10px;
-      }
       .wb-dimension-table .category-toggle,
       .wb-dimension-table .region-change-toggle {
         padding: 0;
@@ -2836,12 +3165,6 @@
         color: #8d98a8 !important;
         text-align: center;
       }
-      .wb-report-date {
-        margin: 0 0 15px;
-        color: #a0a8b5;
-        font-size: 10px;
-        text-align: right;
-      }
       .wb-analysis {
         position: relative;
       }
@@ -2868,6 +3191,93 @@
         color: #8390a2;
         background: #fff;
         font-size: 10px;
+      }
+      .wb-metric-analysis {
+        border-color: #e3e6ea;
+        background: #fff;
+      }
+      .wb-metric-analysis::before {
+        display: none;
+      }
+      .wb-metric-analysis .wb-analysis-head {
+        align-items: center;
+        padding: 16px 18px 4px;
+      }
+      .wb-analysis-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .wb-analysis-label i {
+        display: inline-block;
+        color: inherit;
+        font-size: 18px;
+        font-style: normal;
+        line-height: 1;
+      }
+      .wb-analysis-label h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-analysis-label small {
+        display: block;
+        margin-top: 3px;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-summary-edit {
+        min-height: 30px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 0;
+        color: #df1732;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-summary-edit:hover {
+        color: #b91229;
+        background: transparent;
+      }
+      .wb-summary-edit:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-metric-analysis .wb-analysis-body {
+        padding: 0 18px 16px;
+      }
+      .wb-summary-lines {
+        display: grid;
+        gap: 4px;
+      }
+      .wb-summary-lines p {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 6px;
+        margin: 0;
+        color: #303844;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .wb-summary-lines strong {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-summary-lines [data-wb-summary-content] {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-summary-icon {
+        text-align: center;
+        white-space: nowrap;
+      }
+      .wb-summary-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
       }
       .wb-panels {
         align-items: stretch;
@@ -3523,6 +3933,7 @@
         display: flex;
         gap: 25px;
         overflow-x: auto;
+        overflow-y: hidden;
         padding: 0 18px;
         border-top: 1px solid #eef0f3;
         border-bottom: 1px solid #eef0f3;
@@ -3550,7 +3961,7 @@
         content: '';
         position: absolute;
         right: 0;
-        bottom: -1px;
+        bottom: 0;
         left: 0;
         height: 2px;
         background: var(--brand);
@@ -4509,11 +4920,11 @@
         .content {
           padding: 20px;
         }
-        .wb-kpis {
-          grid-template-columns: repeat(8, minmax(140px, 1fr));
-        }
         .wb-panels {
           grid-template-columns: 1fr;
+        }
+        .wb-kpis {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
       @media (max-width: 1100px) {
@@ -4575,8 +4986,13 @@
           min-width: 0;
           flex: 1;
         }
-        .period-control select {
-          max-width: 200px;
+        .period-picker-trigger {
+          width: min(210px, calc(100vw - 150px));
+          min-width: 165px;
+        }
+        .period-picker-menu {
+          grid-template-columns: minmax(115px, 0.78fr) minmax(190px, 1.22fr);
+          width: min(390px, calc(100vw - 24px));
         }
         .content {
           padding: 16px 12px;
@@ -4598,14 +5014,30 @@
           gap: 8px;
         }
         .wb-kpis {
-          grid-template-columns: repeat(8, minmax(140px, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .wb-kpi-value {
+          gap: 4px;
+        }
+        .wb-kpi-target {
+          font-size: 10px;
+        }
+        .wb-kpi-compare-group {
+          grid-template-columns: 1fr;
+          gap: 6px;
+          padding: 5px 0;
+        }
+        .wb-kpi-compare-row {
+          justify-content: flex-start;
+          gap: 8px;
+          font-size: 10px;
+        }
+        .wb-kpi-compare-row b {
+          font-size: 10px;
         }
         .wb-boundary {
           flex-direction: column;
-        }
-        .wb-context small {
-          width: 100%;
-          margin-left: 0;
         }
         .wb-adopt-overlay {
           padding: 10px;
@@ -4693,6 +5125,425 @@
       .wb-region-customer-table th:nth-child(3),
       .wb-region-customer-table th:nth-child(4) {
         width: 14%;
+      }
+      .wb-performance-period + .wb-performance-period {
+        margin-top: 22px;
+      }
+      #wbDimensionSection > .wb-dimension-head {
+        display: none;
+      }
+      .wb-performance-period h3 {
+        margin: 0 0 9px;
+        color: #303844;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .wb-performance-table-wrap {
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid #e3e6ea;
+        border-radius: 7px;
+        scrollbar-width: thin;
+      }
+      .wb-performance-table {
+        width: 100%;
+        min-width: 1120px;
+        border-collapse: collapse;
+        table-layout: auto;
+        text-align: left;
+        font-size: 11px;
+      }
+      .wb-performance-table.wide {
+        min-width: 1320px;
+      }
+      .wb-performance-table th,
+      .wb-performance-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #e3e6ea;
+        border-bottom: 1px solid #e3e6ea;
+        white-space: nowrap;
+      }
+      .wb-performance-table th {
+        color: #4d5765;
+        background: #f2f3f5;
+        font-weight: 700;
+      }
+      .wb-performance-table thead tr:first-child th {
+        height: 38px;
+      }
+      .wb-performance-table thead tr:nth-child(2) th {
+        height: 34px;
+        font-weight: 600;
+      }
+      .wb-performance-table td {
+        height: 36px;
+        color: #4f5967;
+        background: #fff;
+      }
+      .wb-performance-table tbody tr:hover td {
+        background: #fffafb;
+      }
+      .wb-performance-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-performance-table th:last-child,
+      .wb-performance-table td:last-child {
+        border-right: 0;
+      }
+      .wb-performance-table td:first-child {
+        color: #303844;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-good {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-warning {
+        color: #956900;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-bad {
+        color: #c8112a;
+        font-weight: 700;
+      }
+      .wb-performance-marker {
+        display: inline-grid;
+        place-items: center;
+        width: 14px;
+        height: 14px;
+        margin-right: 4px;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 10px;
+        line-height: 14px;
+        vertical-align: -2px;
+      }
+      .wb-performance-marker.warning {
+        border-radius: 3px 3px 5px 5px;
+        color: #624400;
+        background: #ffd34d;
+      }
+      .wb-performance-marker.bad {
+        border-radius: 50%;
+        color: #fff;
+        background: #df3038;
+        font-size: 8px;
+      }
+      .wb-performance-empty {
+        color: #858c96 !important;
+        text-align: center;
+      }
+      .wb-performance-filter-note {
+        display: block;
+        margin-top: 4px;
+        color: #667085;
+      }
+      .wb-performance-note {
+        margin: 9px 0 0;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-unmet-section {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .wb-unmet-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .wb-unmet-section-head h3 {
+        margin: 0;
+        color: #303844;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+      .wb-unmet-section-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .wb-unmet-add-button,
+      .wb-unmet-ai-button {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-add-button {
+        color: #555d68;
+      }
+      .wb-unmet-ai-button {
+        color: #df1732;
+      }
+      .wb-unmet-add-button:hover {
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-ai-button:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-unmet-add-button:focus-visible,
+      .wb-unmet-ai-button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-add-fields {
+        display: grid;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .wb-unmet-add-fields label {
+        display: grid;
+        gap: 7px;
+        color: #555d68;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select,
+      .wb-unmet-add-fields textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 11px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        font:
+          400 12px/1.5 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select {
+        height: 40px;
+      }
+      .wb-unmet-add-fields textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      .wb-unmet-add-fields input:focus-visible,
+      .wb-unmet-add-fields select:focus-visible,
+      .wb-unmet-add-fields textarea:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+        border-color: #df1732;
+      }
+      .wb-unmet-add-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 16px 28px;
+        border-top: 1px solid #edf0f4;
+      }
+      .wb-unmet-add-foot button {
+        min-height: 36px;
+        padding: 0 15px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #555d68;
+        background: #fff;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .wb-unmet-add-foot button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-add-foot button.primary {
+        border-color: #df1732;
+        color: #fff;
+        background: #df1732;
+      }
+      .wb-unmet-add-foot button.primary:hover {
+        border-color: #c91029;
+        background: #c91029;
+      }
+      .wb-unmet-add-foot button.danger {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff;
+      }
+      .wb-unmet-add-foot button.danger:hover {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-add-foot button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card {
+        padding: 14px 16px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+      .wb-unmet-card {
+        position: relative;
+      }
+      .wb-unmet-card h4 {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 78px 10px 0;
+        color: #303844;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .wb-unmet-card-actions {
+        position: absolute;
+        top: 10px;
+        right: 11px;
+        display: flex;
+        gap: 4px;
+      }
+      .wb-unmet-card-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-card-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-card-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-card-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-unmet-delete-copy {
+        margin: 0;
+        padding: 6px 0;
+        color: #555d68;
+        font-size: 13px;
+        line-height: 1.7;
+      }
+      .wb-unmet-dot {
+        flex: 0 0 auto;
+        color: #cf2633;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+      .wb-unmet-analysis {
+        margin: 0 0 8px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-analysis strong {
+        color: #303844;
+      }
+      .wb-unmet-card ul {
+        display: grid;
+        gap: 5px;
+        margin: 0 0 10px;
+        padding-left: 21px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-card li {
+        padding-left: 2px;
+      }
+      .wb-unmet-card li::marker {
+        color: #3972c4;
+      }
+      .wb-director-note-content {
+        margin: 0;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-unmet-measures {
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        color: #3972c4;
+        font-size: 12px;
+        line-height: 1.75;
+      }
+      .wb-unmet-measures > strong {
+        flex: 0 0 auto;
+        font-weight: 600;
+      }
+      .wb-unmet-measures > strong span {
+        color: #168e58;
+      }
+      .wb-unmet-measures > div {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 9px;
+        row-gap: 2px;
+      }
+      .wb-unmet-measures i {
+        margin-right: 3px;
+        color: #3972c4;
+        font-style: normal;
+      }
+      .wb-unmet-empty {
+        margin: 0;
+        padding: 15px;
+        border: 1px dashed #d9dde3;
+        border-radius: 7px;
+        color: #858c96;
+        font-size: 12px;
+      }
+      @media (max-width: 720px) {
+        .wb-dimension-tabs {
+          gap: 18px;
+          scrollbar-width: none;
+        }
+        .wb-dimension-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .wb-dimension-head {
+          flex-wrap: wrap;
+        }
+        .wb-performance-table {
+          min-width: 1120px;
+        }
+        .wb-unmet-add-foot {
+          padding-left: 17px;
+          padding-right: 17px;
+        }
       }
 
       /* Shared workbench resource 1.1.1. State belongs to DSH ui-theme.
@@ -4796,47 +5647,123 @@ html body[data-ds-dark-theme] {
           <div class="wb-hero">
             <div class="period-bar" role="group" aria-label="订单数据统计周期">
               <span class="period-label">统计周期</span>
-              <div class="period-switch" role="group" aria-label="月度或周度">
-                <button id="monthMode" class="active" type="button" aria-pressed="true">月度</button
-                ><button id="weekMode" type="button" aria-pressed="false">周度</button>
+              <div class="period-picker" id="periodPicker">
+                <button
+                  class="period-picker-trigger"
+                  id="periodPickerTrigger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="periodPickerMenu"
+                >
+                  <span id="periodPickerValue"></span
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </button>
+                <div
+                  class="period-picker-menu"
+                  id="periodPickerMenu"
+                  role="dialog"
+                  aria-label="选择统计周期"
+                  hidden=""
+                >
+                  <div
+                    class="period-picker-months"
+                    id="periodPickerMonths"
+                    role="group"
+                    aria-label="选择月份"
+                  ></div>
+                  <div
+                    class="period-picker-weeks"
+                    id="periodPickerWeeks"
+                    role="group"
+                    aria-label="选择周次"
+                  ></div>
+                </div>
               </div>
-              <label class="period-control"
-                >选择月份
-                <input id="periodMonth" type="month" value="2026-09" aria-label="选择月份" /></label
-              ><label class="period-control" id="weekControl" hidden
-                >选择周次
-                <select id="periodWeek" aria-label="选择周次"></select></label
-              ><span class="period-meta" id="periodMeta" aria-live="polite"></span>
+              <span class="period-meta" id="periodMeta" aria-live="polite"></span>
             </div>
-            <div class="wb-context">
-              <strong>当前场景</strong><span>订单质量与交付协同</span
-              ><label for="wbBaseFilter">基地</label
-              ><select id="wbBaseFilter" aria-label="按基地筛选维度分析">
-                <option value="">全部基地</option>
-                <option>郑州</option>
-                <option>遂平</option>
-                <option>西南</option>
-                <option>华东</option>
-                <option>华南</option></select
-              ><label for="wbOwnerFilter">基地负责人</label
-              ><select id="wbOwnerFilter" aria-label="按基地负责人筛选维度分析">
-                <option value="">全部负责人</option>
-                <option value="郑州">郑州基地负责人（演示选项）</option>
-                <option value="遂平">遂平基地负责人（演示选项）</option>
-                <option value="西南">西南基地负责人（演示选项）</option>
-                <option value="华东">华东基地负责人（演示选项）</option>
-                <option value="华南">华南基地负责人（演示选项）</option>
-              </select>
-            </div>
-            <p class="wb-context-note" id="wbContextNote">
-              基地/负责人筛选仅作用于基地交叉分析；汇总指标与品类汇总按报告整体口径显示。负责人选项为原型维度演示。
-            </p>
-            <button class="wb-link" type="button" data-order-workbench-page>查看订单履约 →</button>
           </div>
-          <div class="period-empty" id="wbPeriodEmpty" role="status" hidden></div>
-          <div class="wb-report-date">月度报告截至 2026-09-13</div>
+          <div class="period-empty" id="wbPeriodEmpty" role="status" hidden=""></div>
           <section class="wb-section" aria-label="订单核心指标">
             <div class="wb-kpis" id="wbKpis"></div>
+          </section>
+          <section
+            class="wb-card wb-analysis wb-metric-analysis"
+            id="wbMetricAnalysis"
+            aria-labelledby="wbMetricAnalysisTitle"
+          >
+            <div class="wb-analysis-head">
+              <div class="wb-analysis-label">
+                <i aria-hidden="true">📋</i>
+                <div><h2 id="wbMetricAnalysisTitle">本期结论摘要</h2></div>
+              </div>
+              <div class="wb-summary-actions">
+                <button
+                  class="wb-unmet-ai-button"
+                  type="button"
+                  data-wb-summary-ai=""
+                  aria-label="AI分析本期结论摘要"
+                >
+                  ✦ AI 分析</button
+                ><button
+                  class="wb-summary-edit"
+                  type="button"
+                  data-wb-summary-edit=""
+                  aria-label="编辑本期结论摘要"
+                >
+                  编辑
+                </button>
+              </div>
+            </div>
+            <div class="wb-analysis-body">
+              <div class="wb-summary-lines">
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">✅</span
+                  ><span
+                    ><strong>正向：</strong
+                    ><span data-wb-summary-content="positive"
+                      >满足率 95.27%（目标&gt;95%）本期达成，环比 +0.97pct、同比 +7.97pct；准交率
+                      99.15% 持续高位（环比 +2.23pct），各基地准交率全面达标；60天+货龄占比 2.21%
+                      较上期 -1.45pct 持续压降，汤圆环比 -3.87pct 改善明显。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">🔴</span
+                  ><span
+                    ><strong>风险：</strong
+                    ><span data-wb-summary-content="risk"
+                      >改单率 2.60% 未达目标（缺口 0.60pct），华东经销 3.41%、华南事业部
+                      3.78%、餐饮雪套 5.25%、高势能渠道 21.4% 为拐点；可发货天数 14.5
+                      天大幅超标（环比 +3.96 天、同比 +5.50 天），郑州 15.28、华南 13.20、西南
+                      16.32、遂平 13.73 均超 11 天阈值，库存沉淀明显；面点 91.56%、预制食材 88.76%
+                      为品项最弱两环。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">📋</span
+                  ><span
+                    ><strong>旬/周节奏：</strong
+                    ><span data-wb-summary-content="rhythm"
+                      >本周满足率 96.17%（周环比
+                      +1.63pct），较上期改善，这达标口径进一步扩大；西南本周 94.93%（周环比
+                      +6.31pct）修复显著；华东本周 95.01%（周环比 +1.15pct）已步入目标线上方。</span
+                    ></span
+                  >
+                </p>
+              </div>
+            </div>
           </section>
           <section
             class="wb-card wb-dimensions"
@@ -4846,73 +5773,53 @@ html body[data-ds-dark-theme] {
             <div class="wb-dimension-head">
               <div>
                 <h2 id="wbDimensionsTitle">多维分析</h2>
-                <p>从品类、区域与基地交叉维度查看月度指标</p>
+                <p>基地、应责总监与品项月度及周度达成情况</p>
               </div>
               <span>月度报告 · 截至 2026-09-13</span>
             </div>
             <div class="wb-dimension-tabs" role="tablist" aria-label="订单工作台多维分析">
               <button
                 class="active"
-                id="wbDimensionCategoryFillTab"
+                id="wbDimensionBasePerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="true"
                 aria-controls="wbDimensionPanel"
                 tabindex="0"
-                data-wb-dimension-tab="category-fill"
+                data-wb-dimension-tab="base-performance"
               >
-                品类满足率维度</button
+                基地维度达成分析</button
               ><button
-                id="wbDimensionCategoryDaysTab"
+                id="wbDimensionDirectorPerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="false"
                 aria-controls="wbDimensionPanel"
                 tabindex="-1"
-                data-wb-dimension-tab="category-days"
+                data-wb-dimension-tab="director-performance"
               >
-                品类可发货天数维度</button
+                应责总监维度达成分析</button
               ><button
-                id="wbDimensionRegionChangeTab"
+                id="wbDimensionItemPerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="false"
                 aria-controls="wbDimensionPanel"
                 tabindex="-1"
-                data-wb-dimension-tab="region-change"
+                data-wb-dimension-tab="item-performance"
               >
-                大区省区改单率维度</button
-              ><button
-                id="wbDimensionBaseCategoryTab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="wbDimensionPanel"
-                tabindex="-1"
-                data-wb-dimension-tab="base-category"
-              >
-                满足率-基地和品类交叉维度</button
-              ><button
-                id="wbDimensionBaseCategoryDaysTab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="wbDimensionPanel"
-                tabindex="-1"
-                data-wb-dimension-tab="base-category-days"
-              >
-                可发货天数-基地和品类交叉维度
+                品项维度达成分析
               </button>
             </div>
             <div
               class="wb-dimension-panel"
               id="wbDimensionPanel"
               role="tabpanel"
-              aria-labelledby="wbDimensionCategoryFillTab"
+              aria-labelledby="wbDimensionBasePerformanceTab"
               aria-live="polite"
             ></div>
           </section>
-          <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle">
+          <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle" hidden="">
             <div class="wb-task-head">
               <div>
                 <h2 id="wbTasksTitle">任务追踪</h2>
@@ -4920,7 +5827,7 @@ html body[data-ds-dark-theme] {
               </div>
               <div class="wb-task-summary">
                 <span id="wbTaskSummary"></span
-                ><button type="button" data-wb-export>⇩ 导出清单</button>
+                ><button type="button" data-wb-export="">⇩ 导出清单</button>
               </div>
             </div>
             <div class="wb-filters" role="group" aria-label="筛选任务">
@@ -4950,19 +5857,237 @@ html body[data-ds-dark-theme] {
               问题及改进输入与改进任务保存在本机浏览器；不会连接真实任务系统。
             </div>
           </section>
-          <section class="wb-card wb-boundary">
-            <div>
-              <strong>数据边界</strong>
-              <p>
-                9 月报告指标与异常事项 → 人工核实 → 改善建议 → 演示任务；订单明细仍在“订单履约”页
-              </p>
+          <section class="wb-improvement-section" aria-labelledby="wbImprovementTitle">
+            <h2 id="wbImprovementTitle">改善措施：短期追进 + 长期机制</h2>
+            <section class="wb-improvement-block" aria-labelledby="wbShortTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbShortTermTitle">短期追进措施</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="short">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table">
+                  <colgroup>
+                    <col style="width: 10%" />
+                    <col style="width: 62%" />
+                    <col style="width: 18%" />
+                    <col style="width: 10%" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="direction">追进方向</th>
+                      <th>改善措施</th>
+                      <th class="issue">对应问题</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">高库存压降<br />（最紧急）</td>
+                      <td>
+                        可发货天数合计 14.5 天、环比 +3.96 天、同比 +5.50 天；西南 16.3 天（环比
+                        +7.16 天，全国最高）、郑州 15.3 天（环比 +4.70
+                        天）为主要拖累。本期定四条硬动作：① <strong>分级停排</strong>——对烤肠 39.2
+                        天、240g 水饺 35.3 天、ODM 水饺 32.0 天、玉汤圆 32.1 天、312 元宝汤圆 34.6
+                        天、大黄米汤圆 30.0 天、柿子组合装 122.4 天等超 30 天
+                        SKU，本周起增加休息停排安排，只做发货消化；② <strong>西南专项</strong>——10
+                        月底前把 16.3 天压到 13 天以内（日产再降，已排 25–27 日连续停产 3 天）；③
+                        <strong>每日监控</strong>——超 20 天 SKU 逐日跟进、逐日销号。
+                      </td>
+                      <td class="issue">可发货天数 14.5 天；烤肠 39.2 天；240g 水饺 35.3 天</td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">60天+货龄<br />结构治理</td>
+                      <td>
+                        全国 2.21%、环比 -1.45pct，但同比 +0.82pct，仍高于去年同期。需结构性处理：①
+                        <strong>郑州汤圆专项</strong>——郑州基地口径下汤圆 60天+ 达 7.85%（环比
+                        -15.24pct，已有大幅改善，但仍高于该基地其他品项；全国汤圆口径为 3.34%），318
+                        速玉汤圆 1.5 万件未按节点发货是根因，限期 10 月底发完；②
+                        <strong>刘成胜线烤肠恶化</strong>——本期 2.42%、环比
+                        +1.77pct，是唯一三项全升的线，纳入周会红牌督办；③
+                        <strong>火锅料回升</strong>——本期 2.42%、环比 +1.54pct，500g 烤肠新滚入
+                        8,000 件需单独消化；④ <strong>粽子清零</strong>——粽子 60天+ 占比
+                        100%，须跟进处理措施，尽快清零。
+                      </td>
+                      <td class="issue">
+                        60天+货龄 2.21%（同比 +0.82pct）；郑州汤圆 7.85%；刘成胜 2.42%
+                      </td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">满足率缺口<br />（西南 / 华东）</td>
+                      <td>
+                        全国 95.3% 达标，但西南 93.6%（低于目标 1.4pct）、华东 94.2%（低于目标
+                        0.8pct）仍未收口，且西南是唯一修复中的缺口（本周已回到 96.9%、周环比
+                        +7.64pct）。① <strong>西南</strong>——前两周下单进度仅 52%、发货进度
+                        36%，需求确认滞后是主因，改为每周两次省区需求确认 + 下单进度日通报；②
+                        <strong>华东</strong>——水饺食材 80.2%、火锅料 89.2%、预制食材 80.2%、火锅料
+                        89.6% 等指标需跟进，盒马水饺 6,283 件缺货锁定购买点；③
+                        <strong>郑州</strong>——庞丽娟 96.7%、张培 96.7% 已达标，刘成胜 92.5%
+                        为全国最低，需单独复盘订单结构。
+                      </td>
+                      <td class="issue">西南 93.6%；华东 94.2%；刘成胜 92.5%；预制食材 88.8%</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">预制食材<br />产能缺口</td>
+                      <td>
+                        预制食材 88.8% 为八大品项最低，缺口 6.2pct，其中鸡调品（鸡米花 / 雪花鸡柳 /
+                        川香鸡柳）占缺货 70%、饭团糯米鸡占 18%。① 鸡米花 1–18 日累计欠产 11,500
+                        件，锁定代工厂全月产能并每日跟踪日产；② ODM 新代工资源本月内落地 1
+                        家，先补饭团 / 糯米鸡；③ 泰正第三条产线已开，月底前验证日产效果。
+                      </td>
+                      <td class="issue">预制食材 88.8%（全国最低品项）</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">面点 / 馄饨<br />结构性缺货</td>
+                      <td>
+                        面点 91.6%、馄饨 94.0%。面点缺口集中在散装圆包 0.7 万、寿桃包 0.6
+                        万件；散装圆包郑州外协厂截至 18 日日产仅完成 47%、落后 10%。馄饨主因 2.5kg
+                        订单集中爆发（纠偏下单 91%）与 305g 同资源挤占，且 500g 馄饨周转 25.2
+                        天、170 遇见小面 20.5 天、金牌虾云吞 19.6 天。① 2.5kg 与 305g
+                        产线错峰排产，本周内排开；② 卡通包湖州基地缺货预计 25 日解决，需确认 25
+                        日前不断货；③ 寿桃包 / 切黄包 10 月底消化完并关闭补货入口。
+                      </td>
+                      <td class="issue">面点 91.6%；馄饨 94.0%；500g 馄饨 25.2 天</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section class="wb-improvement-block" aria-labelledby="wbLongTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbLongTermTitle">长期机制建设</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="long">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table long-term">
+                  <thead>
+                    <tr>
+                      <th class="direction">机制</th>
+                      <th>机制内容（问题→对策）</th>
+                      <th class="goal">目标</th>
+                      <th class="status">状态</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">机制一<br />高库存 SKU<br />退出机制</td>
+                      <td>
+                        <strong>问题：</strong>本期可发货天数 14.5 天、同比 +5.50
+                        天，高库存不是偶发而是结构性的——烤肠 39.2 天、240g 水饺 35.3 天、312
+                        元宝汤圆 34.6 天等超过 30 天 SKU 长期占据产线，挤占短缺品产能。<br /><strong
+                          >机制：</strong
+                        >建立 SKU 分级退出制度。按可发货天数设四档：&gt;30 天自动停产待评审；20–30
+                        天强制提报去化方案（降价 / 调拨 / 渠道促销三选一）；15–20
+                        天纳入周会销号；&lt;15 天正常排产。每月对 &gt;30 天 SKU
+                        做一次产线腾挪复盘，把产能让给满足率缺口品。
+                      </td>
+                      <td class="goal">治理“高库存长期占产”</td>
+                      <td class="status">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+          <section class="wb-reference-section" aria-labelledby="wbReferenceTitle">
+            <div class="wb-reference-head">
+              <h2 id="wbReferenceTitle">参考链接</h2>
+              <button class="wb-reference-add" type="button" data-wb-reference-add="">
+                ＋ 添加
+              </button>
             </div>
-            <span>报告摘录 · 非实时</span>
+            <div class="wb-reference-list" id="wbReferenceList" aria-live="polite"></div>
           </section>
         </section>
       </div>
     </main>
-    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden>
+    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden="">
       <div class="wb-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="wbDetailTitle">
         <div class="wb-detail-head">
           <h2 id="wbDetailTitle"></h2>
@@ -4971,7 +6096,7 @@ html body[data-ds-dark-theme] {
         <div id="wbDetailBody"></div>
       </div>
     </div>
-    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden>
+    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden="">
       <div
         class="wb-adopt-dialog"
         role="dialog"
@@ -4999,9 +6124,9 @@ html body[data-ds-dark-theme] {
             </div>
             <div class="wb-adopt-fields">
               <label class="wb-adopt-field"
-                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required /></label
+                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required="" /></label
               ><label class="wb-adopt-field"
-                >预计截止日期<input id="wbAdoptDue" type="date" required
+                >预计截止日期<input id="wbAdoptDue" type="date" required=""
               /></label>
             </div>
             <label class="wb-adopt-field note"
@@ -5020,7 +6145,7 @@ html body[data-ds-dark-theme] {
         </form>
       </div>
     </div>
-    <div class="wb-adopt-overlay" id="wbIssueOverlay" hidden>
+    <div class="wb-adopt-overlay" id="wbIssueOverlay" hidden="">
       <div
         class="wb-adopt-dialog"
         role="dialog"
@@ -5043,7 +6168,7 @@ html body[data-ds-dark-theme] {
               编辑内容仅保存在本机浏览器；生成任务后可在“任务追踪”中继续修改。
             </div>
             <div class="wb-issue-modal-fields">
-              <label>品类<select id="wbIssueCategory" required></select></label>
+              <label>品类<select id="wbIssueCategory" required=""></select></label>
               <div class="wb-adopt-fields">
                 <label class="wb-adopt-field"
                   >责任角色<input
@@ -5059,14 +6184,14 @@ html body[data-ds-dark-theme] {
                 >问题<textarea
                   id="wbIssueAnalysis"
                   maxlength="1000"
-                  required
+                  required=""
                   placeholder="填写问题分析"
                 ></textarea></label
               ><label
                 >改进<textarea
                   id="wbIssueMeasure"
                   maxlength="1000"
-                  required
+                  required=""
                   placeholder="填写改进措施"
                 ></textarea>
               </label>
@@ -5081,7 +6206,260 @@ html body[data-ds-dark-theme] {
         </form>
       </div>
     </div>
-    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="wb-adopt-overlay" id="wbUnmetAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetAddTitle"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetAddTitle">添加未达成项</h2>
+            <p id="wbUnmetAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbUnmetAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label
+                ><span id="wbUnmetEntityLabel">基地</span
+                ><select id="wbUnmetEntity" required=""></select></label
+              ><label
+                >标题<input
+                  id="wbUnmetTitleInput"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写未达成项标题" /></label
+              ><label
+                >未达成原因<textarea
+                  id="wbUnmetReasonInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="描述未达成原因"
+                ></textarea></label
+              ><label
+                >改善措施<textarea
+                  id="wbUnmetMeasureInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="填写改善措施"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbUnmetAddCancel" type="button">取消</button
+            ><button class="primary" id="wbUnmetAddSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbDirectorNoteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbDirectorNoteTitle"
+        aria-describedby="wbDirectorNoteSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbDirectorNoteTitle">添加应责总监备注</h2>
+            <p id="wbDirectorNoteSubtitle">
+              选择应责总监并填写备注标题和内容；备注保存在本机浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbDirectorNoteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbDirectorNoteForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbDirectorNoteDirector"
+                >应责总监<select id="wbDirectorNoteDirector" required=""></select></label
+              ><label for="wbDirectorNoteHeading"
+                >标题<input
+                  id="wbDirectorNoteHeading"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写标题" /></label
+              ><label for="wbDirectorNoteContent"
+                >内容<textarea
+                  id="wbDirectorNoteContent"
+                  maxlength="3000"
+                  required=""
+                  placeholder="填写备注内容"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbDirectorNoteCancel" type="button">取消</button
+            ><button class="primary" id="wbDirectorNoteSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbUnmetDeleteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetDeleteTitle"
+        aria-describedby="wbUnmetDeleteCopy"
+        style="width: min(460px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetDeleteTitle">确认删除</h2>
+            <p>删除后该未达成项将从列表中移除。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetDeleteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <div class="wb-adopt-body">
+          <p class="wb-unmet-delete-copy" id="wbUnmetDeleteCopy">确认删除该未达成项吗？</p>
+        </div>
+        <div class="wb-unmet-add-foot">
+          <button id="wbUnmetDeleteCancel" type="button">取消</button
+          ><button class="danger" id="wbUnmetDeleteConfirm" type="button">确认删除</button>
+        </div>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbImprovementAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbImprovementAddTitle"
+        style="width: min(680px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbImprovementAddTitle">添加改善措施</h2>
+            <p id="wbImprovementAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbImprovementAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbImprovementAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields" id="wbImprovementAddFields"></div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbImprovementAddCancel" type="button">取消</button
+            ><button class="primary" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbReferenceOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbReferenceFormTitle"
+        aria-describedby="wbReferenceFormSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbReferenceFormTitle">添加参考链接</h2>
+            <p id="wbReferenceFormSubtitle">填写名称和网页地址；链接仅保存在本机浏览器。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbReferenceClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbReferenceForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbReferenceName"
+                >链接名称<input
+                  id="wbReferenceName"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="例如：月度履约报告" /></label
+              ><label for="wbReferenceUrl"
+                >参考链接<input
+                  id="wbReferenceUrl"
+                  type="url"
+                  maxlength="2048"
+                  required=""
+                  placeholder="https://example.com"
+              /></label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbReferenceCancel" type="button">取消</button
+            ><button class="primary" id="wbReferenceSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbSummaryEditOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbSummaryEditTitle"
+        aria-describedby="wbSummaryEditSubtitle"
+        style="width: min(760px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbSummaryEditTitle">编辑本期结论摘要</h2>
+            <p id="wbSummaryEditSubtitle">
+              修改正向、风险和旬/周节奏内容；保存后保留在当前浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbSummaryEditClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbSummaryEditForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbSummaryPositiveInput"
+                >正向内容<textarea
+                  id="wbSummaryPositiveInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRiskInput"
+                >风险内容<textarea
+                  id="wbSummaryRiskInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRhythmInput"
+                >旬/周节奏内容<textarea
+                  id="wbSummaryRhythmInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbSummaryEditCancel" type="button">取消</button
+            ><button class="primary" id="wbSummaryEditSubmit" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" hidden=""></div>
     <script>
       "use strict";
 (() => {
@@ -5107,7 +6485,7 @@ html body[data-ds-dark-theme] {
     let binding, dirty = false;
     const listeners = /* @__PURE__ */ new Set();
     const releasedChannels = /* @__PURE__ */ new Set();
-    const send = () => {
+    const send2 = () => {
       if (binding)
         window.parent.postMessage(
           { protocol: PROTOCOL, type: "save", page, version: 1, ...binding, state },
@@ -5141,7 +6519,7 @@ html body[data-ds-dark-theme] {
       state = dirty ? { ...value.state, ...state } : { ...value.state, version: 1 };
       dirty = false;
       for (const listener of listeners) listener(state, "restore");
-      send();
+      send2();
     };
     window.addEventListener("message", receive);
     window.addEventListener(
@@ -5163,7 +6541,7 @@ html body[data-ds-dark-theme] {
       update: (changes) => {
         state = { ...state, ...changes, version: 1 };
         if (binding || !sessionPage) dirty = true;
-        send();
+        send2();
       }
     };
   }
@@ -5432,6 +6810,9 @@ html body[data-ds-dark-theme] {
       });
     });
   }
+  function draft(text, options) {
+    return call("draft", { text }, options);
+  }
 
   // prototypes/inventory-orderworkbench/publication.js
   function publishReport(snapshot, disposePage) {
@@ -5548,26 +6929,16 @@ html body[data-ds-dark-theme] {
   // prototypes/inventory-orderworkbench/entry.js
   var view = createPageViewState("inventory-orderworkbench");
   var restoringView = false;
-  var workbenchView = document.getElementById("workbenchView");
-  var activePage = "workbench";
   var pageTimeouts = /* @__PURE__ */ new Set();
   var downloadUrls = /* @__PURE__ */ new Set();
-  function schedule(callback, delay) {
-    const handle = setTimeout(() => {
-      pageTimeouts.delete(handle);
-      callback();
-    }, delay);
-    pageTimeouts.add(handle);
-    return handle;
-  }
+  var workbenchView = document.getElementById("workbenchView");
+  var activePage = "workbench";
   var periodMode = "month";
   var selectedMonth = "2026-09";
-  var selectedWeek = "2026-09-14";
-  var weekInitialized = false;
+  var selectedWeek = "2026-08-31";
   var eventFilter = "focus";
   var taskFilter = "all";
-  var dimensionTab = "category-fill";
-  var selectedWorkbenchBase = "";
+  var dimensionTab = "base-performance";
   var expandedSkuCategories = /* @__PURE__ */ new Set();
   var expandedRegionChangeGroups = /* @__PURE__ */ new Set();
   var createdWorkbenchTasks = /* @__PURE__ */ new Map();
@@ -5575,7 +6946,105 @@ html body[data-ds-dark-theme] {
   var dimensionIssueEdits = /* @__PURE__ */ new Map();
   var editingWorkbenchTaskId = "";
   var pendingIssueEdit = null;
+  var pendingWorkbenchUnmet = null;
   var workbenchLocalStateKey = "order-workbench-improvements-v1";
+  var workbenchSummaryStorageKey = "order-workbench-summary-v1";
+  var defaultWorkbenchSummary = {
+    positive: "\u6EE1\u8DB3\u7387 95.27%\uFF08\u76EE\u6807>95%\uFF09\u672C\u671F\u8FBE\u6210\uFF0C\u73AF\u6BD4 +0.97pct\u3001\u540C\u6BD4 +7.97pct\uFF1B\u51C6\u4EA4\u7387 99.15% \u6301\u7EED\u9AD8\u4F4D\uFF08\u73AF\u6BD4 +2.23pct\uFF09\uFF0C\u5404\u57FA\u5730\u51C6\u4EA4\u7387\u5168\u9762\u8FBE\u6807\uFF1B60\u5929+\u8D27\u9F84\u5360\u6BD4 2.21% \u8F83\u4E0A\u671F -1.45pct \u6301\u7EED\u538B\u964D\uFF0C\u6C64\u5706\u73AF\u6BD4 -3.87pct \u6539\u5584\u660E\u663E\u3002",
+    risk: "\u6539\u5355\u7387 2.60% \u672A\u8FBE\u76EE\u6807\uFF08\u7F3A\u53E3 0.60pct\uFF09\uFF0C\u534E\u4E1C\u7ECF\u9500 3.41%\u3001\u534E\u5357\u4E8B\u4E1A\u90E8 3.78%\u3001\u9910\u996E\u96EA\u5957 5.25%\u3001\u9AD8\u52BF\u80FD\u6E20\u9053 21.4% \u4E3A\u62D0\u70B9\uFF1B\u53EF\u53D1\u8D27\u5929\u6570 14.5 \u5929\u5927\u5E45\u8D85\u6807\uFF08\u73AF\u6BD4 +3.96 \u5929\u3001\u540C\u6BD4 +5.50 \u5929\uFF09\uFF0C\u90D1\u5DDE 15.28\u3001\u534E\u5357 13.20\u3001\u897F\u5357 16.32\u3001\u9042\u5E73 13.73 \u5747\u8D85 11 \u5929\u9608\u503C\uFF0C\u5E93\u5B58\u6C89\u6DC0\u660E\u663E\uFF1B\u9762\u70B9 91.56%\u3001\u9884\u5236\u98DF\u6750 88.76% \u4E3A\u54C1\u9879\u6700\u5F31\u4E24\u73AF\u3002",
+    rhythm: "\u672C\u5468\u6EE1\u8DB3\u7387 96.17%\uFF08\u5468\u73AF\u6BD4 +1.63pct\uFF09\uFF0C\u8F83\u4E0A\u671F\u6539\u5584\uFF0C\u8FD9\u8FBE\u6807\u53E3\u5F84\u8FDB\u4E00\u6B65\u6269\u5927\uFF1B\u897F\u5357\u672C\u5468 94.93%\uFF08\u5468\u73AF\u6BD4 +6.31pct\uFF09\u4FEE\u590D\u663E\u8457\uFF1B\u534E\u4E1C\u672C\u5468 95.01%\uFF08\u5468\u73AF\u6BD4 +1.15pct\uFF09\u5DF2\u6B65\u5165\u76EE\u6807\u7EBF\u4E0A\u65B9\u3002"
+  };
+  var workbenchSummaryContent = { ...defaultWorkbenchSummary };
+  var pendingWorkbenchSummaryTrigger = null;
+  var workbenchUnmetEntriesKey = "order-workbench-unmet-entries-v1";
+  var workbenchDirectorNotesKey = "order-workbench-director-notes-v1";
+  var workbenchDirectorNotes = [];
+  var pendingWorkbenchDirectorNote = null;
+  var workbenchReferenceLinksKey = "order-workbench-reference-links-v1";
+  var workbenchReferenceLinks = [];
+  var pendingWorkbenchReference = null;
+  var addedWorkbenchUnmetEntries = [];
+  var workbenchUnmetOverrides = /* @__PURE__ */ new Map();
+  var deletedWorkbenchUnmetKeys = /* @__PURE__ */ new Set();
+  var pendingWorkbenchUnmetDelete = null;
+  try {
+    const savedSummary = JSON.parse(localStorage.getItem(workbenchSummaryStorageKey) || "null");
+    if (savedSummary && typeof savedSummary === "object")
+      workbenchSummaryContent = Object.fromEntries(
+        Object.keys(defaultWorkbenchSummary).map((key) => [
+          key,
+          typeof savedSummary[key] === "string" ? savedSummary[key] : defaultWorkbenchSummary[key]
+        ])
+      );
+  } catch {
+  }
+  function saveWorkbenchSummary() {
+    try {
+      localStorage.setItem(workbenchSummaryStorageKey, JSON.stringify(workbenchSummaryContent));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const savedUnmetEntries = JSON.parse(localStorage.getItem(workbenchUnmetEntriesKey) || "[]");
+    if (Array.isArray(savedUnmetEntries)) addedWorkbenchUnmetEntries = savedUnmetEntries;
+    else if (savedUnmetEntries && typeof savedUnmetEntries === "object") {
+      addedWorkbenchUnmetEntries = Array.isArray(savedUnmetEntries.entries) ? savedUnmetEntries.entries : [];
+      (savedUnmetEntries.overrides || []).forEach(
+        ([key, value]) => workbenchUnmetOverrides.set(key, value)
+      );
+      (savedUnmetEntries.deleted || []).forEach((key) => deletedWorkbenchUnmetKeys.add(key));
+    }
+  } catch {
+  }
+  try {
+    const savedDirectorNotes = JSON.parse(localStorage.getItem(workbenchDirectorNotesKey) || "[]");
+    if (Array.isArray(savedDirectorNotes))
+      workbenchDirectorNotes = savedDirectorNotes.filter(
+        (note) => note && typeof note.id === "string" && typeof note.director === "string" && typeof note.title === "string" && typeof note.content === "string"
+      );
+  } catch {
+  }
+  function saveWorkbenchDirectorNotes() {
+    try {
+      localStorage.setItem(workbenchDirectorNotesKey, JSON.stringify(workbenchDirectorNotes));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  try {
+    const savedReferenceLinks = JSON.parse(localStorage.getItem(workbenchReferenceLinksKey) || "[]");
+    if (Array.isArray(savedReferenceLinks))
+      workbenchReferenceLinks = savedReferenceLinks.filter(
+        (link) => link && typeof link.id === "string" && typeof link.name === "string" && typeof link.url === "string"
+      );
+  } catch {
+  }
+  function saveWorkbenchReferenceLinks() {
+    try {
+      localStorage.setItem(workbenchReferenceLinksKey, JSON.stringify(workbenchReferenceLinks));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  function saveWorkbenchUnmetState() {
+    try {
+      localStorage.setItem(
+        workbenchUnmetEntriesKey,
+        JSON.stringify({
+          entries: addedWorkbenchUnmetEntries,
+          overrides: [...workbenchUnmetOverrides.entries()],
+          deleted: [...deletedWorkbenchUnmetKeys]
+        })
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
   try {
     const savedWorkbenchState = JSON.parse(localStorage.getItem(workbenchLocalStateKey) || "{}");
     (savedWorkbenchState.tasks || []).forEach((task) => improvementTasks.set(task.key, task.value));
@@ -5612,8 +7081,8 @@ html body[data-ds-dark-theme] {
       same: "\u540C\u671F 11.37%",
       sameChange: "\u2193 -9.33pp",
       sameTone: "good",
-      target: "\u22646%",
-      targetLabel: "\u5065\u5EB7 \u2264 6%",
+      target: "<6%",
+      targetLabel: "\u5065\u5EB7 < 6%",
       gap: "\u4F4E\u4E8E\u4E0A\u9650 3.95pp",
       gapTone: "good",
       trend: "\u8F83\u4E0A\u671F -3.55pp",
@@ -5635,8 +7104,8 @@ html body[data-ds-dark-theme] {
       same: "\u540C\u671F \u2014",
       sameChange: "\u2014",
       sameTone: "",
-      target: "\u22642%",
-      targetLabel: "\u5065\u5EB7 \u2264 2%",
+      target: "<2%",
+      targetLabel: "\u5065\u5EB7 < 2%",
       gap: "\u9AD8\u4E8E\u4E0A\u9650 0.20pp",
       gapTone: "bad",
       trend: "\u8F83\u4E0A\u671F -0.85pp",
@@ -5817,8 +7286,8 @@ html body[data-ds-dark-theme] {
       focus: true,
       kind: "\u5173\u6CE8",
       title: "\u6539\u5355\u7387\u4ECD\u9AD8\u4E8E\u76EE\u6807",
-      summary: "\u6574\u4F53 2.20%\uFF0C\u76EE\u6807 \u22642%\uFF1B\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E\u6539\u5355\u7387 27.55% \u5C5E\u660E\u663E\u5F02\u5E38\u3002",
-      evidence: "\u6838\u5FC3 KPI \u62A5\u544A\uFF1A\u6539\u5355\u7387\u7531 3.05% \u964D\u81F3 2.20%\uFF0C\u4F46\u672A\u8FBE \u22642% \u76EE\u6807\uFF1B\u5927\u533A/\u7701\u533A\u62A5\u544A\u5217\u51FA\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E 27.55%\u3002",
+      summary: "\u6574\u4F53 2.20%\uFF0C\u76EE\u6807 <2%\uFF1B\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E\u6539\u5355\u7387 27.55% \u5C5E\u660E\u663E\u5F02\u5E38\u3002",
+      evidence: "\u6838\u5FC3 KPI \u62A5\u544A\uFF1A\u6539\u5355\u7387\u7531 3.05% \u964D\u81F3 2.20%\uFF0C\u4F46\u672A\u8FBE <2% \u76EE\u6807\uFF1B\u5927\u533A/\u7701\u533A\u62A5\u544A\u5217\u51FA\u9AD8\u52BF\u80FD\u6E20\u9053\u9500\u552E 27.55%\u3002",
       action: "\u5148\u6838\u5BF9\u6E20\u9053\u53E3\u5F84\u53CA\u6539\u5355\u539F\u56E0\uFF0C\u518D\u5206\u6E20\u9053\u590D\u76D8\u9501\u5355\u4E0E\u9700\u6C42\u53D8\u66F4\u6D41\u7A0B\u3002"
     },
     {
@@ -5917,8 +7386,8 @@ html body[data-ds-dark-theme] {
       same: "\u540C\u671F 8.80%",
       sameChange: "\u2193 -7.19pp",
       sameTone: "good",
-      target: "\u22646%",
-      targetLabel: "\u5065\u5EB7 \u2264 6%",
+      target: "<6%",
+      targetLabel: "\u5065\u5EB7 < 6%",
       gap: "\u4F4E\u4E8E\u4E0A\u9650 4.39pp",
       gapTone: "good",
       trend: "\u5468\u73AF\u6BD4 -1.69pp",
@@ -5940,15 +7409,15 @@ html body[data-ds-dark-theme] {
       same: "\u540C\u671F \u2014",
       sameChange: "\u2014",
       sameTone: "",
-      target: "\u22642%",
-      targetLabel: "\u5065\u5EB7 \u2264 2%",
-      gap: "\u4F4D\u4E8E\u76EE\u6807\u4E0A\u9650",
-      gapTone: "good",
+      target: "<2%",
+      targetLabel: "\u5065\u5EB7 < 2%",
+      gap: "\u8FBE\u5230\u76EE\u6807\u8FB9\u754C\uFF0C\u672A\u6EE1\u8DB3\u4E25\u683C\u5C0F\u4E8E\u76EE\u6807",
+      gapTone: "bad",
       trend: "\u5468\u73AF\u6BD4 +0.02pp",
-      status: "\u8FBE\u6807",
-      tone: "",
+      status: "\u672A\u8FBE\u6807",
+      tone: "urgent",
       formula: "\u5468\u5185\u6539\u5355\u91CF \xF7 \u540C\u5468\u6709\u6548\u6295\u5355\u91CF \xD7 100%",
-      note: "\u672C\u5468 2.00%\uFF0C\u6070\u5728\u76EE\u6807\u4E0A\u9650\uFF1B\u4E0A\u5468 1.97%\u3002\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u503C 2.02%\uFF0C\u72B6\u6001\u4E3A\u57FA\u672C\u8FBE\u6807\uFF0C\u4E24\u4E2A\u53E3\u5F84\u4E0D\u53EF\u6DF7\u7528\u3002"
+      note: "\u672C\u5468 2.00%\uFF0C\u8FBE\u5230\u76EE\u6807\u8FB9\u754C\u4F46\u4E0D\u6EE1\u8DB3\u4E25\u683C\u5C0F\u4E8E 2%\uFF1B\u4E0A\u5468 1.97%\u3002\u5468\u62A5\u672C\u671F\u7D2F\u8BA1\u503C 2.02%\uFF0C\u4E24\u4E2A\u53E3\u5F84\u4E0D\u53EF\u6DF7\u7528\u3002"
     },
     {
       key: "\u8BA2\u5355\u6EE1\u8DB3\u7387",
@@ -6571,6 +8040,720 @@ html body[data-ds-dark-theme] {
       }
     }
   };
+  var performanceValue = (text, state = "") => ({ text, state });
+  var workbenchPerformance = {
+    "base-performance": {
+      title: "\u57FA\u5730\u7EF4\u5EA6\u8FBE\u6210\u5206\u6790",
+      baseColumnIndex: 0,
+      summary: "\u6708\u5EA6\u6EE1\u8DB3\u7387\u5408\u8BA1 95.3%\u3001\u51C6\u4EA4\u7387 99.1%\uFF1B\u90D1\u5DDE\u3001\u9042\u5E73\u3001\u534E\u5357\u548C\u897F\u5357\u53EF\u53D1\u8D27\u5929\u6570\u9AD8\u4E8E\u57FA\u5730 11 \u5929\u53C2\u8003\u7EBF\uFF0C\u534E\u4E1C\u4E3A 8.2 \u5929\u3002\u5468\u5EA6\u6EE1\u8DB3\u7387\u5408\u8BA1 96.2%\uFF0C\u53EF\u53D1\u8D27\u5929\u6570\u5408\u8BA1 14.5 \u5929\u3002",
+      monthly: {
+        title: "\u57FA\u5730\u6708\u5EA6\u8FBE\u6210\uFF08\u672C\u671F / \u73AF\u6BD4 / \u540C\u6BD4\uFF09",
+        groups: [
+          { label: "\u57FA\u5730", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387 >95%", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] },
+          { label: "\u51C6\u4EA4\u7387 >98.5%", columns: ["\u672C\u671F", "\u73AF\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u671F", "\u73AF\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570 <\uFF08\u5168\u56FD+\u90D1\u5DDE12.5\u5929\uFF0C\u57FA\u573011\u5929\uFF09", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] }
+        ],
+        rows: [
+          [
+            "\u90D1\u5DDE",
+            performanceValue("95.5%", "good"),
+            "+0.02pct",
+            "+8.73pct",
+            performanceValue("98.8%", "good"),
+            "+1.30pct",
+            performanceValue("3.3%", "warning"),
+            "-1.71pct",
+            performanceValue("15.3", "bad"),
+            "+4.70\u5929",
+            "+5.92\u5929"
+          ],
+          [
+            "\u9042\u5E73",
+            performanceValue("95.5%", "good"),
+            "+0.46pct",
+            "+8.72pct",
+            performanceValue("99.1%", "good"),
+            "+2.27pct",
+            performanceValue("1.7%", "good"),
+            "-2.08pct",
+            performanceValue("13.7", "bad"),
+            "+2.67\u5929",
+            "+5.93\u5929"
+          ],
+          [
+            "\u534E\u4E1C",
+            performanceValue("94.2%", "bad"),
+            "-1.39pct",
+            "+4.22pct",
+            performanceValue("100.0%", "good"),
+            "+0.00pct",
+            performanceValue("0.2%", "good"),
+            "-3.66pct",
+            performanceValue("8.2", "good"),
+            "-4.33\u5929",
+            "+2.40\u5929"
+          ],
+          [
+            "\u534E\u5357",
+            performanceValue("97.0%", "good"),
+            "+1.06pct",
+            "+4.16pct",
+            performanceValue("98.8%", "good"),
+            "-1.18pct",
+            performanceValue("1.8%", "good"),
+            "-0.05pct",
+            performanceValue("13.2", "bad"),
+            "+2.69\u5929",
+            "+3.63\u5929"
+          ],
+          [
+            "\u897F\u5357",
+            performanceValue("93.6%", "bad"),
+            "+4.66pct",
+            "+7.60pct",
+            performanceValue("99.9%", "good"),
+            "+6.71pct",
+            performanceValue("1.1%", "good"),
+            "-0.06pct",
+            performanceValue("16.3", "bad"),
+            "+7.16\u5929",
+            "+5.33\u5929"
+          ],
+          [
+            "\u5408\u8BA1",
+            performanceValue("95.3%", "good"),
+            "+0.97pct",
+            "+7.97pct",
+            performanceValue("99.1%", "good"),
+            "+2.23pct",
+            performanceValue("2.2%", "good"),
+            "-1.45pct",
+            performanceValue("14.5", "bad"),
+            "+3.96\u5929",
+            "+5.50\u5929"
+          ]
+        ]
+      },
+      weekly: {
+        title: "\u57FA\u5730\u5468\u5EA6\u8FBE\u6210\uFF08\u672C\u5468 / \u5468\u73AF\u6BD4 / \u5468\u540C\u6BD4\uFF09",
+        groups: [
+          { label: "\u57FA\u5730", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4", "\u5468\u540C\u6BD4"] },
+          { label: "\u51C6\u4EA4\u7387", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] }
+        ],
+        rows: [
+          [
+            "\u90D1\u5DDE",
+            performanceValue("95.7%", "good"),
+            "+0.00pct",
+            "+9.63pct",
+            performanceValue("99.3%", "good"),
+            "-0.05pct",
+            performanceValue("3.3%", "warning"),
+            "-0.16pct",
+            performanceValue("15.3", "bad"),
+            "+1.79\u5929"
+          ],
+          [
+            "\u9042\u5E73",
+            performanceValue("96.5%", "good"),
+            "+1.88pct",
+            "+9.33pct",
+            performanceValue("99.8%", "good"),
+            "+0.48pct",
+            performanceValue("1.7%", "good"),
+            "-0.12pct",
+            performanceValue("13.7", "bad"),
+            "+1.51\u5929"
+          ],
+          [
+            "\u534E\u4E1C",
+            performanceValue("96.4%", "good"),
+            "+2.78pct",
+            "+6.74pct",
+            performanceValue("100.0%", "good"),
+            "+0.00pct",
+            performanceValue("0.2%", "good"),
+            "-1.31pct",
+            performanceValue("8.2", "good"),
+            "+0.52\u5929"
+          ],
+          [
+            "\u534E\u5357",
+            performanceValue("96.6%", "good"),
+            "-0.24pct",
+            "+3.72pct",
+            performanceValue("100.0%", "good"),
+            "+0.57pct",
+            performanceValue("1.8%", "good"),
+            "+0.12pct",
+            performanceValue("13.2", "bad"),
+            "+1.65\u5929"
+          ],
+          [
+            "\u897F\u5357",
+            performanceValue("96.9%", "good"),
+            "+7.64pct",
+            "+9.21pct",
+            performanceValue("99.7%", "good"),
+            "-0.26pct",
+            performanceValue("1.1%", "good"),
+            "+0.08pct",
+            performanceValue("16.3", "bad"),
+            "+2.25\u5929"
+          ],
+          [
+            "\u5408\u8BA1",
+            performanceValue("96.2%", "good"),
+            "+1.63pct",
+            "+8.82pct",
+            performanceValue("99.6%", "good"),
+            "+0.12pct",
+            performanceValue("2.2%", "good"),
+            "-0.13pct",
+            performanceValue("14.5", "bad"),
+            "+1.67\u5929"
+          ]
+        ]
+      }
+    },
+    "director-performance": {
+      title: "\u5E94\u8D23\u603B\u76D1\u7EF4\u5EA6\u8FBE\u6210\u5206\u6790",
+      baseColumnIndex: 1,
+      summary: "\u6708\u5EA6\u5168\u56FD\u6EE1\u8DB3\u7387 95.3%\u3001\u51C6\u4EA4\u7387 99.1%\uFF1B\u5218\u5A01\u80DC\u6EE1\u8DB3\u7387 92.5%\uFF0C\u90D1\u5DDE\u4E09\u4F4D\u603B\u76D1\u53EF\u53D1\u8D27\u5929\u6570\u5747\u9AD8\u4E8E 12.5 \u5929\u53C2\u8003\u7EBF\u3002\u5468\u5EA6\u5168\u56FD\u6EE1\u8DB3\u7387 96.2%\uFF0C\u5404\u603B\u76D1\u6570\u636E\u6309\u5BF9\u5E94\u57FA\u5730\u5C55\u5F00\u3002",
+      monthly: {
+        title: "\u5E94\u8D23\u603B\u76D1\u6708\u5EA6\u8FBE\u6210",
+        groups: [
+          { label: "\u5E94\u8D23\u603B\u76D1", rowspan: true },
+          { label: "\u5BF9\u5E94\u57FA\u5730", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387 >95%", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] },
+          { label: "\u51C6\u4EA4\u7387 >98.5%", columns: ["\u672C\u671F", "\u73AF\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u671F", "\u73AF\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] }
+        ],
+        rows: [
+          [
+            "\u5E9E\u4E3D\u5A1F",
+            "\u90D1\u5DDE",
+            performanceValue("96.7%", "good"),
+            "+8.32pct",
+            "+10.75pct",
+            performanceValue("98.8%", "good"),
+            "+1.30pct",
+            performanceValue("3.8%", "warning"),
+            "-3.33pct",
+            performanceValue("14.5", "bad"),
+            "+5.14\u5929",
+            "+5.79\u5929"
+          ],
+          [
+            "\u5F20\u57F9",
+            "\u90D1\u5DDE",
+            performanceValue("96.7%", "good"),
+            "+9.44pct",
+            "+8.96pct",
+            "\u2014",
+            "\u2014",
+            performanceValue("2.1%", "good"),
+            "-1.89pct",
+            performanceValue("15.4", "bad"),
+            "+3.75\u5929",
+            "+6.73\u5929"
+          ],
+          [
+            "\u5218\u5A01\u80DC",
+            "\u90D1\u5DDE",
+            performanceValue("92.5%", "bad"),
+            "-2.71pct",
+            "+1.66pct",
+            "\u2014",
+            "\u2014",
+            performanceValue("2.4%", "good"),
+            "+1.77pct",
+            performanceValue("18.4", "bad"),
+            "+2.25\u5929",
+            "+4.43\u5929"
+          ],
+          [
+            "\u6BB7\u79D1\u57F9",
+            "\u9042\u5E73",
+            performanceValue("95.5%", "good"),
+            "+2.31pct",
+            "+8.72pct",
+            performanceValue("99.1%", "good"),
+            "+2.27pct",
+            performanceValue("1.7%", "good"),
+            "-2.08pct",
+            performanceValue("13.7", "bad"),
+            "+2.67\u5929",
+            "+5.93\u5929"
+          ],
+          [
+            "\u59DA\u5C0F\u4F1F",
+            "\u534E\u4E1C",
+            performanceValue("94.2%", "bad"),
+            "+2.47pct",
+            "+4.22pct",
+            performanceValue("100.0%", "good"),
+            "+0.00pct",
+            performanceValue("0.2%", "good"),
+            "-3.66pct",
+            performanceValue("8.2", "good"),
+            "-4.33\u5929",
+            "+2.40\u5929"
+          ],
+          [
+            "\u8D75\u66FC\u5A01",
+            "\u534E\u5357",
+            performanceValue("97.0%", "good"),
+            "+2.39pct",
+            "+4.16pct",
+            performanceValue("98.8%", "good"),
+            "-1.18pct",
+            performanceValue("1.8%", "good"),
+            "-0.05pct",
+            performanceValue("13.2", "bad"),
+            "+2.69\u5929",
+            "+3.63\u5929"
+          ],
+          [
+            "\u7518\u5EFA\u52C7",
+            "\u897F\u5357",
+            performanceValue("93.6%", "bad"),
+            "+5.14pct",
+            "+7.60pct",
+            performanceValue("99.9%", "good"),
+            "+6.71pct",
+            performanceValue("1.1%", "good"),
+            "-0.06pct",
+            performanceValue("16.3", "bad"),
+            "+7.16\u5929",
+            "+5.33\u5929"
+          ],
+          [
+            "\u5168\u56FD\u5408\u8BA1",
+            "\u2014",
+            performanceValue("95.3%", "good"),
+            "+0.97pct",
+            "+7.97pct",
+            performanceValue("99.1%", "good"),
+            "+2.23pct",
+            performanceValue("2.2%", "good"),
+            "-1.45pct",
+            performanceValue("14.5", "bad"),
+            "+3.96\u5929",
+            "+5.50\u5929"
+          ]
+        ]
+      },
+      weekly: {
+        title: "\u5E94\u8D23\u603B\u76D1\u5468\u5EA6\u8FBE\u6210",
+        groups: [
+          { label: "\u5E94\u8D23\u603B\u76D1", rowspan: true },
+          { label: "\u5BF9\u5E94\u57FA\u5730", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4", "\u5468\u540C\u6BD4"] },
+          { label: "\u51C6\u4EA4\u7387", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] }
+        ],
+        rows: [
+          [
+            "\u5E9E\u4E3D\u5A1F",
+            "\u90D1\u5DDE",
+            performanceValue("97.1%", "good"),
+            "+0.59pct",
+            "+11.65pct",
+            performanceValue("99.3%", "good"),
+            "-0.05pct",
+            performanceValue("3.8%", "warning"),
+            "-0.48pct",
+            performanceValue("14.5", "bad"),
+            "+1.82\u5929"
+          ],
+          [
+            "\u5F20\u57F9",
+            "\u90D1\u5DDE",
+            performanceValue("96.8%", "good"),
+            "-0.36pct",
+            "+10.88pct",
+            "\u2014",
+            "\u2014",
+            performanceValue("2.1%", "good"),
+            "-0.17pct",
+            performanceValue("15.4", "bad"),
+            "+2.64\u5929"
+          ],
+          [
+            "\u5218\u5A01\u80DC",
+            "\u90D1\u5DDE",
+            performanceValue("91.3%", "bad"),
+            "-2.40pct",
+            "+2.07pct",
+            "\u2014",
+            "\u2014",
+            performanceValue("2.4%", "good"),
+            "+0.77pct",
+            performanceValue("18.4", "bad"),
+            "+1.42\u5929"
+          ],
+          [
+            "\u6BB7\u79D1\u57F9",
+            "\u9042\u5E73",
+            performanceValue("96.5%", "good"),
+            "+1.88pct",
+            "+9.33pct",
+            performanceValue("99.8%", "good"),
+            "+0.48pct",
+            performanceValue("1.7%", "good"),
+            "-0.12pct",
+            performanceValue("13.7", "bad"),
+            "+1.51\u5929"
+          ],
+          [
+            "\u59DA\u5C0F\u4F1F",
+            "\u534E\u4E1C",
+            performanceValue("96.4%", "good"),
+            "+2.78pct",
+            "+6.74pct",
+            performanceValue("100.0%", "good"),
+            "+0.00pct",
+            performanceValue("0.2%", "good"),
+            "-1.31pct",
+            performanceValue("8.2", "good"),
+            "+0.52\u5929"
+          ],
+          [
+            "\u8D75\u66FC\u5A01",
+            "\u534E\u5357",
+            performanceValue("96.6%", "good"),
+            "-0.24pct",
+            "+3.72pct",
+            performanceValue("100.0%", "good"),
+            "+0.57pct",
+            performanceValue("1.8%", "good"),
+            "+0.12pct",
+            performanceValue("13.2", "bad"),
+            "+1.65\u5929"
+          ],
+          [
+            "\u7518\u5EFA\u52C7",
+            "\u897F\u5357",
+            performanceValue("96.9%", "good"),
+            "+7.64pct",
+            "+9.21pct",
+            performanceValue("99.7%", "good"),
+            "-0.26pct",
+            performanceValue("1.1%", "good"),
+            "+0.08pct",
+            performanceValue("16.3", "bad"),
+            "+2.25\u5929"
+          ],
+          [
+            "\u5168\u56FD\u5408\u8BA1",
+            "\u2014",
+            performanceValue("96.2%", "good"),
+            "+1.63pct",
+            "+8.82pct",
+            performanceValue("99.6%", "good"),
+            "+0.12pct",
+            performanceValue("2.2%", "good"),
+            "-0.13pct",
+            performanceValue("14.5", "bad"),
+            "+1.67\u5929"
+          ]
+        ]
+      }
+    },
+    "item-performance": {
+      title: "\u54C1\u9879\u7EF4\u5EA6\u8FBE\u6210\u5206\u6790",
+      summary: "\u6708\u5EA6 7 \u4E2A\u5E38\u89C4\u54C1\u9879\u4E2D\uFF0C\u706B\u9505\u6599\u3001\u9984\u9968\u3001\u9762\u70B9\u548C\u9884\u5236\u98DF\u6750\u6EE1\u8DB3\u7387\u672A\u8FBE 95%\uFF1B\u6C64\u5706\u3001\u6C34\u997A\u3001\u4F11\u95F2\u7B49\u591A\u4E2A\u54C1\u9879\u53EF\u53D1\u8D27\u5929\u6570\u8D85\u8FC7\u53C2\u8003\u7EBF\u3002\u7CBD\u5B50\u4E3A\u5B63\u8282\u6027\u5E93\u5B58\uFF0C\u62A5\u544A\u663E\u793A\u53EF\u53D1\u8D27\u5929\u6570\u4E3A\u221E\u3002",
+      monthly: {
+        title: "\u54C1\u9879\u6708\u5EA6\u8FBE\u6210",
+        groups: [
+          { label: "\u54C1\u9879", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387 >95%", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u671F", "\u73AF\u6BD4", "\u540C\u6BD4"] },
+          { label: "\u672A\u8FBE\u6210\u9879", rowspan: true }
+        ],
+        rows: [
+          [
+            "\u6C64\u5706",
+            performanceValue("97.2%", "good"),
+            "+0.28pct",
+            "+7.94pct",
+            performanceValue("19.0", "bad"),
+            "+3.59\u5929",
+            "+8.09\u5929",
+            performanceValue("3.3%", "warning"),
+            "-3.87pct",
+            "+3.26pct",
+            "\u53EF\u53D1\u8D27\u5929\u6570 19.0"
+          ],
+          [
+            "\u6C34\u997A",
+            performanceValue("97.2%", "good"),
+            "+3.48pct",
+            "+7.47pct",
+            performanceValue("15.6", "bad"),
+            "+5.11\u5929",
+            "+5.10\u5929",
+            performanceValue("1.0%", "good"),
+            "-0.54pct",
+            "-0.76pct",
+            "\u53EF\u53D1\u8D27\u5929\u6570 15.6"
+          ],
+          [
+            "\u4F11\u95F2",
+            performanceValue("97.0%", "good"),
+            "+1.98pct",
+            "+9.77pct",
+            performanceValue("17.3", "bad"),
+            "+5.70\u5929",
+            "+7.46\u5929",
+            performanceValue("0.6%", "good"),
+            "-0.75pct",
+            "-0.85pct",
+            "\u53EF\u53D1\u8D27\u5929\u6570 17.3"
+          ],
+          [
+            "\u706B\u9505\u6599",
+            performanceValue("93.0%", "bad"),
+            "-2.38pct",
+            "+3.58pct",
+            performanceValue("22.4", "bad"),
+            "+2.17\u5929",
+            "+8.39\u5929",
+            performanceValue("2.4%", "good"),
+            "+1.54pct",
+            "+0.07pct",
+            "\u6EE1\u8DB3\u7387 93.0%\u3001\u53EF\u53D1\u8D27\u5929\u6570 22.4"
+          ],
+          [
+            "\u9984\u9968",
+            performanceValue("94.0%", "bad"),
+            "+0.44pct",
+            "-0.06pct",
+            performanceValue("13.6", "bad"),
+            "+5.53\u5929",
+            "+3.83\u5929",
+            performanceValue("0.5%", "good"),
+            "-4.71pct",
+            "-4.43pct",
+            "\u6EE1\u8DB3\u7387 94.0%\u3001\u53EF\u53D1\u8D27\u5929\u6570 13.6"
+          ],
+          [
+            "\u9762\u70B9",
+            performanceValue("91.6%", "bad"),
+            "-1.98pct",
+            "+26.27pct",
+            performanceValue("11.7", "good"),
+            "+0.49\u5929",
+            "+3.52\u5929",
+            performanceValue("2.3%", "good"),
+            "-1.48pct",
+            "+2.07pct",
+            "\u6EE1\u8DB3\u7387 91.6%"
+          ],
+          [
+            "\u9884\u5236\u98DF\u6750",
+            performanceValue("88.8%", "bad"),
+            "+0.30pct",
+            "-0.17pct",
+            performanceValue("11.2", "good"),
+            "+1.96\u5929",
+            "-0.52\u5929",
+            performanceValue("1.5%", "good"),
+            "-0.28pct",
+            "+0.89pct",
+            "\u6EE1\u8DB3\u7387 88.8%"
+          ],
+          [
+            "\u7CBD\u5B50",
+            performanceValue("100.0%", "good"),
+            "\u2014",
+            "\u2014",
+            performanceValue("\u221E", "bad"),
+            "\u2014",
+            "\u2014",
+            performanceValue("100.0%", "bad"),
+            "+0.00pct",
+            "\u2014",
+            "\u53EF\u53D1\u8D27\u5929\u6570 \u221E\u300160\u5929+\u5360\u6BD4 100%"
+          ]
+        ]
+      },
+      weekly: {
+        title: "\u54C1\u9879\u5468\u5EA6\u8FBE\u6210",
+        groups: [
+          { label: "\u54C1\u9879", rowspan: true },
+          { label: "\u6EE1\u8DB3\u7387", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4", "\u5468\u540C\u6BD4"] },
+          { label: "\u53EF\u53D1\u8D27\u5929\u6570", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] },
+          { label: "60\u5929+\u5360\u6BD4", columns: ["\u672C\u5468", "\u5468\u73AF\u6BD4"] }
+        ],
+        rows: [
+          [
+            "\u6C64\u5706",
+            performanceValue("98.1%", "good"),
+            "+1.94pct",
+            "+8.45pct",
+            performanceValue("19.0", "bad"),
+            "+2.92\u5929",
+            performanceValue("3.3%", "warning"),
+            "-1.01pct"
+          ],
+          [
+            "\u6C34\u997A",
+            performanceValue("98.1%", "good"),
+            "+1.72pct",
+            "+8.46pct",
+            performanceValue("15.6", "bad"),
+            "+1.24\u5929",
+            performanceValue("1.0%", "good"),
+            "+0.16pct"
+          ],
+          [
+            "\u4F11\u95F2",
+            performanceValue("98.4%", "good"),
+            "+1.92pct",
+            "+10.18pct",
+            performanceValue("17.3", "bad"),
+            "+2.60\u5929",
+            performanceValue("0.6%", "good"),
+            "+0.13pct"
+          ],
+          [
+            "\u706B\u9505\u6599",
+            performanceValue("93.1%", "bad"),
+            "+0.14pct",
+            "+4.83pct",
+            performanceValue("22.4", "bad"),
+            "+3.16\u5929",
+            performanceValue("2.4%", "good"),
+            "+0.64pct"
+          ],
+          [
+            "\u9984\u9968",
+            performanceValue("95.4%", "good"),
+            "+3.18pct",
+            "+2.04pct",
+            performanceValue("13.6", "bad"),
+            "+2.78\u5929",
+            performanceValue("0.5%", "good"),
+            "+0.01pct"
+          ],
+          [
+            "\u9762\u70B9",
+            performanceValue("92.4%", "bad"),
+            "+1.11pct",
+            "+27.93pct",
+            performanceValue("11.7", "good"),
+            "+0.81\u5929",
+            performanceValue("2.3%", "good"),
+            "+0.05pct"
+          ],
+          [
+            "\u9884\u5236\u98DF\u6750",
+            performanceValue("87.7%", "bad"),
+            "-2.75pct",
+            "-0.98pct",
+            performanceValue("11.2", "good"),
+            "+0.03\u5929",
+            performanceValue("1.5%", "good"),
+            "-0.05pct"
+          ],
+          [
+            "\u7CBD\u5B50",
+            performanceValue("100.0%", "good"),
+            "\u2014",
+            "\u2014",
+            performanceValue("\u221E", "bad"),
+            "\u2014",
+            performanceValue("100.0%", "bad"),
+            "+0.00pct"
+          ],
+          [
+            "\u5408\u8BA1",
+            performanceValue("96.2%", "good"),
+            "+1.63pct",
+            "+8.82pct",
+            performanceValue("14.5", "bad"),
+            "+1.67\u5929",
+            performanceValue("2.2%", "good"),
+            "-0.13pct"
+          ]
+        ]
+      }
+    }
+  };
+  var workbenchBaseUnmetItems = [
+    {
+      title: "\u897F\u5357\u57FA\u5730\uFF5C\u6EE1\u8DB3\u7387 93.62%\uFF08\u672A\u8FBE\u6807\uFF09+ \u53EF\u53D1\u8D27\u5929\u6570 16.3\u5929\uFF08\u8D85\u6807 5.3\u5929\uFF09",
+      analysis: "\u6EE1\u8DB3\u7387 93.62%\uFF08\u73AF\u6BD4 +3.93pct\uFF0C\u4ECD\u4F4E\u4E8E 95%\uFF09\uFF1B\u53EF\u53D1\u8D27\u5929\u6570 16.32\u5929\uFF08\u73AF\u6BD4 +2.25\u5929\uFF0C\u8D85\u9608\u503C 5.32\u5929\uFF0C\u5168\u56FD\u6700\u9AD8\uFF09\u3002",
+      reasons: [
+        "1\u20134\u53F7\u53D1\u8D27\u91CF\u5747\u4E3A 9 \u6708\u5E95\u5907\u5355\uFF0C\u8BA2\u5355\u7387\u5728 85% \u5DE6\u53F3\uFF0C\u62C9\u4F4E\u6EE1\u8DB3\u7387\uFF1B\u9E21\u8089\u5236\u54C1\u3001\u9762\u70B9\u7C7B\u7F3A\u8D27\u3002",
+        "10 \u6708\u521D\u7248\u8BA1\u5212 200 \u4E07\u4EF6\uFF0C\u4EA7\u54C1\u7EC4\u53C8\u8FFD\u52A0 18 \u4E07\u4EF6\u6C64\u5706\uFF1B\u622A\u81F3 10 \u6708 19 \u65E5\u6574\u4F53\u4E0B\u5355\u8FDB\u5EA6 52%\uFF0C\u5B9E\u9645\u53D1\u8D27\u8FDB\u5EA6\u53EA\u6709 36%\u3002\u56E0\u53D1\u8D27\u8FDB\u5EA6\u504F\u4F4E\uFF0C\u9700\u6309\u5468\u5BF9\u63A5\u5404\u7701\u533A\u786E\u8BA4\u9700\u6C42\u3002"
+      ],
+      measures: [
+        "\u81EA\u4EA7\u54C1\u8DDF\u8FDB\u5C3D\u5FEB\u6295\u4EA7",
+        "\u9E21\u8089\u5236\u54C1\u7ED3\u5408\u6392\u4EA7\u8FDB\u884C\u8C03\u62E8",
+        "19 \u65E5\u5DDD\u5357\u7701\u533A\u8C03\u51CF 15 \u4E07\u4EF6\uFF0C\u751F\u4EA7\u5BF9\u5E94\u505A\u7D27\u6025\u8C03\u6574",
+        "\u8FC7\u7A0B\u591A\u9891\u6B21\u8054\u52A8\u5404\u7701\u533A\u786E\u8BA4\u9700\u6C42\uFF0C\u53CA\u65F6\u83B7\u53D6\u4FE1\u606F\u5E76\u8C03\u6574"
+      ]
+    },
+    {
+      title: "\u534E\u4E1C\u57FA\u5730\uFF5C\u6EE1\u8DB3\u7387 94.16%\uFF08\u672A\u8FBE\u6807\uFF0C\u5DEE\u8DDD\u6536\u655B\uFF09",
+      analysis: "\u6EE1\u8DB3\u7387 94.16%\uFF08\u73AF\u6BD4 +1.72pct\uFF0C\u8DDD\u76EE\u6807 95% \u5DEE\u8DDD 0.84pct\uFF09\uFF1B\u53EF\u53D1\u8D27\u5929\u6570 8.19\u5929\uFF08\u6700\u4F18\uFF0C\u8FBE\u6807\uFF09\u3002",
+      reasons: [
+        "\u8BA2\u5355\u6EE1\u8DB3\u7387 94.16%\uFF1A\u805A\u7126\u6C34\u997A 92.15%\u3001\u9884\u5236\u98DF\u6750 80.15%\u3001\u706B\u9505\u6599 89.59%\u3002",
+        "\u6C34\u997A\u7F3A\u8D27\u96C6\u4E2D\u5728\u76D2\u9A6C\u6C34\u997A\uFF0C\u7F3A\u8D27 6,283 \u4EF6\uFF1B9 \u6708\u5E95\u81F3 10 \u6708\u4E0A\u65EC\u76D2\u9A6C\u6C34\u997A\u6301\u7EED\u7F3A\u8D27\u3002",
+        "\u9884\u5236\u98DF\u6750\u805A\u7126\u7096\u998D 640 \u4EF6\uFF08\u56FD\u5E86\u671F\u95F4\u8C03\u62E8\u7269\u6D41 4 \u53F7\u53D1\u8FD0\uFF0C\u9020\u6210\u76F4\u8425\u7F3A\u8D27\uFF09\u3001\u91D1\u724C\u9E21\u8089\u5C0F\u98DF 763 \u4EF6\u3001BP \u996D\u56E2 385 \u4EF6\uFF1B\u8FC7\u7A0B\u4E2D\u8C03\u62E8\u8D27\u6302\u5355\u7B49\u5F85\u3002",
+        "\u706B\u9505\u6599\uFF1A0 \u7CFB\u5217\u4E38\u5B50 1 \u5343\u4EF6\u8C03\u62E8\u7F3A\u8D27\u53CA\u8BA1\u5212\u9700\u6C42\u504F\u5DEE\uFF1B\u725B\u7F8A\u8089\u5377 325 \u4EF6\u8C03\u62E8\u7F3A\u8D27\uFF1B400g/500g \u771F\u7A7A\u4E38\u5B50 400 \u4EF6\u56E0\u8BA1\u5212\u9700\u6C42\u504F\u5DEE\u8FC7\u5927\u9020\u6210\u7F3A\u8D27\u3002"
+      ],
+      measures: [
+        "\u76D2\u9A6C\u6C34\u997A\u5DF2\u90E8\u5206\u7F13\u89E3",
+        "\u9884\u5236\u98DF\u6750\u6709\u6240\u7F13\u89E3\uFF0C\u4F46\u8FC7\u7A0B\u4E2D\u4ECD\u6709\u5355\u54C1\u7F3A\u8D27",
+        "0 \u7CFB\u5217\u4E38\u5B50\u548C\u725B\u7F8A\u8089\u5377\u5BF9\u63A5\u76F4\u5C5E\u90E8\uFF0C\u90E8\u5206\u7F13\u89E3",
+        "\u6301\u7EED\u5BF9\u63A5\u9500\u552E\u8BA1\u5212\u9884\u6D4B\u5E76\u8C03\u6574\u8BA1\u5212\u9700\u6C42\u504F\u5DEE\uFF0C\u76D1\u63A7\u53D1\u8D27\u8FDB\u5EA6",
+        "\u7F3A\u8D27\u54C1\u524D\u7F6E\u4E0B\u5355\u7B49\u5F85"
+      ]
+    }
+  ];
+  var workbenchItemUnmetItems = [
+    {
+      title: "\u9884\u5236\u98DF\u6750\uFF5C\u6EE1\u8DB3\u7387 88.76%\uFF08\u54C1\u9879\u6700\u4F4E\uFF0C\u7F3A\u53E3 6.24pct\uFF09",
+      reasons: [
+        "\u9E21\u8C03\u54C1\u7F3A\u8D27\uFF08\u9E21\u7C73\u82B1 / \u96EA\u82B1\u9E21\u67F3 / \u5DDD\u9999\u9E21\u67F3\uFF09\uFF1A10 \u6708 1\u201318 \u65E5\u7F3A\u8D27 19,668 \u4EF6\uFF0C\u5360\u9884\u5236\u98DF\u6750\u7F3A\u8D27 70%\uFF1BODM \u4EE3\u5DE5\u4EA7\u80FD\u7EA6\u675F\u4E0E\u8BA2\u5355\u8D85\u524D\u662F\u53CC\u91CD\u56E0\u7D20\u3002",
+        "\u996D\u56E2 / \u7CEF\u7C73\u9E21\u7F3A\u8D27\uFF1A10 \u6708 1\u201318 \u65E5\u7F3A\u8D27 4,773 \u4EF6\uFF0C\u5360 18%\uFF1BODM \u4EE3\u5DE5\u4EA7\u80FD\u7EA6\u675F\uFF0C\u56E0\u5DE5\u4EBA\u95EE\u9898\u7A3B\u5723\u4EA7\u80FD\u4EC5\u4E3A\u539F\u4EA7\u80FD 50%\u3002",
+        "\u8C03\u62E8\u539F\u56E0\u7F3A\u8D27\uFF1A2,200 \u4EF6\uFF0C\u5360 9%\u3002"
+      ],
+      measures: [
+        "\u6316\u6398\u73B0\u6709\u4EA7\u80FD\uFF0C\u5DF2\u9501\u5B9A\u4EE3\u5DE5\u5382\u5168\u6708\u4EA7\u80FD\u5E76\u6BCF\u65E5\u8DDF\u8E2A\u65E5\u4EA7\u8FBE\u6210\uFF1B\u9E21\u7C73\u82B1\u5B9E\u9648\u751F\u4EA7 1\u201318 \u65E5\u7D2F\u8BA1\u6B20\u4EA7 11,500 \u4EF6",
+        "ODM \u7BA1\u7406\u6B63\u5728\u63A8\u52A8\u65B0\u7684\u4EE3\u5DE5\u8D44\u6E90\u8865\u5145\u4EA7\u80FD",
+        "\u6CF0\u6B63\u5DF2\u589E\u52A0\u7B2C\u4E09\u6761\u4EA7\u7EBF",
+        "\u957F\u671F\u89C4\u5212\uFF1AODM \u7BA1\u7406\u63A8\u52A8\u65B0\u4EE3\u5DE5\u8D44\u6E90\u3001\u50A8\u5907\u5907\u9009\u5DE5\u5382\uFF1B\u6708\u9500\u91CF\u6309\u4EE3\u5DE5\u5382\u4EA7\u80FD 85% \u4E0B\u8FBE\uFF0C\u907F\u514D\u8D85\u80FD\u529B\u63A5\u5355\uFF1B\u65B0\u54C1\u5148\u5907\u5B89\u5168\u5E93\u5B58\u518D\u5F00\u653E\u4E0B\u5355\u6743\u9650"
+      ]
+    },
+    {
+      title: "\u9762\u70B9\uFF5C\u6EE1\u8DB3\u7387 91.56%\uFF08\u7F3A\u53E3 3.44pct\uFF0C\u4ECD\u672A\u4FEE\u590D\uFF09",
+      reasons: [
+        "\u4E3B\u8981\u96C6\u4E2D\u5728\u6563\u88C5\u5706\u5305 0.7 \u4E07\u4EF6\u3001\u5BFF\u6843\u5305 0.6 \u4E07\u4EF6\u3001\u5361\u901A\u5305 0.25 \u4E07\u4EF6\u3001\u5927\u5E08\u5706\u5305 0.22 \u4E07\u4EF6\u3002",
+        "\u6563\u88C5\u5706\u5305\uFF1A\u90D1\u5DDE\u57FA\u5730 0.4 \u4E07\u4EF6\uFF0C\u5916\u534F\u5382\u672A\u8FBE\u5230\u89C4\u5212\u65E5\u4EA7\u76EE\u6807\uFF0C\u751F\u4EA7\u8FDB\u5EA6\u6EDE\u540E\uFF08\u622A\u81F3 18 \u65E5 47%\uFF0C\u843D\u540E 10%\uFF09\uFF1B\u9042\u5E73\u57FA\u5730 0.22 \u4E07\u4EF6\u672A\u8FBE\u89C4\u5212\u65E5\u4EA7\u3002",
+        "\u5BFF\u6843\u5305\uFF1A\u8BA2\u5355\u524D\u7F6E\uFF0C\u5F53\u524D\u8BA2\u5355\u7EA0\u504F\u62A5\u5355\u8FDB\u5EA6 92%\uFF0C\u89C4\u5212\u672C\u6708\u5E95\u4E0B\u5E02\uFF0C\u53EF\u6EE1\u8DB3\u76EE\u524D\u7CFB\u7EDF\u7F3A\u8D27\u8BA2\u5355\u3002",
+        "\u5361\u901A\u5305\uFF1A\u6E56\u5DDE\u57FA\u5730\u672A\u8FBE\u5230\u89C4\u5212\u65E5\u4EA7\uFF0C\u7F3A\u8D27\u9884\u8BA1 25 \u53F7\u53EF\u6EE1\u8DB3\u3002",
+        "60 \u5929\u4EE5\u4E0A\u5E93\u5B58\uFF1A510 \u5706\u5305\uFF08\u9042\u5E73\u57FA\u5730\uFF097 \u6708\u4EFD\u65E5\u671F\u4EA7\u54C1\u8D28\u91CF\u95EE\u9898\u5C01\u5B58\uFF0C\u5DF2\u5BF9\u63A5\u9042\u5E73\u57FA\u5730\u6838\u5B9E\u8F6C\u4E2D\u8BD5\u4EA7\u54C1\u3002"
+      ],
+      measures: [
+        "\u5BFF\u6843\u5305 / \u5207\u9EC4\u5305 10 \u6708\u5E95\u6D88\u5316\u5B8C",
+        "\u5355\u54C1\u5DF2\u6253\u6807\u7B7E\u63A7\u5236\u4E0B\u5355",
+        "\u957F\u671F\u89C4\u5212\uFF1A\u5361\u901A\u5305\u7B49\u4E0B\u5E02\u54C1\u9879 10 \u6708\u5E95\u6E05\u96F6\uFF1B\u9762\u70B9\u5C01\u5B58\u7B56\u7565\u4E0E\u5468\u8F6C\u5E73\u8861\u8BC4\u4F30"
+      ]
+    }
+  ];
   var workbenchSkuExamples = {
     \u6C64\u5706: [
       {
@@ -6761,19 +8944,62 @@ html body[data-ds-dark-theme] {
       weeks.push({ start, end: addDays(start, 6) });
     return weeks;
   }
-  function syncWeekOptions() {
-    const select = document.getElementById("periodWeek");
-    const weeks = weeksInMonth(selectedMonth);
-    if (!weeks.some((week) => week.start === selectedWeek)) selectedWeek = weeks[0].start;
-    select.replaceChildren(
-      ...weeks.map((week, index) => {
-        const option = document.createElement("option");
-        option.value = week.start;
-        option.textContent = `\u7B2C ${index + 1} \u5468 \xB7 ${week.start} \u81F3 ${week.end}`;
-        return option;
+  function formatMonthName(month) {
+    const [year, number] = month.split("-").map(Number);
+    return `${year}\u5E74${number}\u6708`;
+  }
+  function formatMonthDay(iso) {
+    return iso.slice(5).replace("-", "");
+  }
+  function renderPeriodPicker() {
+    const monthList = document.getElementById("periodPickerMonths");
+    const weekList = document.getElementById("periodPickerWeeks");
+    const monthDate = parseIsoDate(`${selectedMonth}-01`);
+    const months = Array.from({ length: 3 }, (_, index) => {
+      const date = new Date(monthDate.getFullYear(), monthDate.getMonth() - index, 1);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    });
+    monthList.replaceChildren(
+      ...months.map((month) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "period-picker-option";
+        button.dataset.periodMonth = month;
+        button.setAttribute("aria-pressed", String(month === selectedMonth));
+        button.textContent = formatMonthName(month);
+        return button;
       })
     );
-    select.value = selectedWeek;
+    const allButton = document.createElement("button");
+    allButton.type = "button";
+    allButton.className = "period-picker-option";
+    allButton.dataset.periodAll = "";
+    allButton.setAttribute("aria-pressed", String(periodMode === "month"));
+    allButton.textContent = "\u5168\u90E8";
+    const weekButtons = weeksInMonth(selectedMonth).map((week, index) => {
+      const firstInMonth = `${selectedMonth}-01`;
+      const [year, number] = selectedMonth.split("-").map(Number);
+      const lastInMonth = toIsoDate(new Date(year, number, 0));
+      const start = week.start < firstInMonth ? firstInMonth : week.start;
+      const end = week.end > lastInMonth ? lastInMonth : week.end;
+      const weekNumber = ["\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D"][index] || String(index + 1);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "period-picker-option";
+      button.dataset.periodWeek = week.start;
+      button.setAttribute(
+        "aria-pressed",
+        String(periodMode === "week" && selectedWeek === week.start)
+      );
+      button.textContent = `\u7B2C${weekNumber}\u5468\uFF08${formatMonthDay(start)}\u2013${formatMonthDay(end)}\uFF09`;
+      return button;
+    });
+    weekList.replaceChildren(allButton, ...weekButtons);
+    const currentWeekIndex = weeksInMonth(selectedMonth).findIndex(
+      (week) => week.start === selectedWeek
+    );
+    const selectedLabel = periodMode === "month" ? "\u5168\u90E8" : `\u7B2C${["\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D"][currentWeekIndex] || currentWeekIndex + 1}\u5468`;
+    document.getElementById("periodPickerValue").textContent = `${formatMonthName(selectedMonth)} \xB7 ${selectedLabel}`;
   }
   function selectedPeriodLabel() {
     if (periodMode === "month") {
@@ -6786,17 +9012,9 @@ html body[data-ds-dark-theme] {
     return activeReport() !== null;
   }
   function renderSelectedPeriod() {
-    document.getElementById("monthMode").classList.toggle("active", periodMode === "month");
-    document.getElementById("weekMode").classList.toggle("active", periodMode === "week");
-    document.getElementById("monthMode").setAttribute("aria-pressed", String(periodMode === "month"));
-    document.getElementById("weekMode").setAttribute("aria-pressed", String(periodMode === "week"));
-    document.getElementById("periodMonth").value = selectedMonth;
-    document.getElementById("weekControl").hidden = periodMode !== "week";
-    syncWeekOptions();
+    renderPeriodPicker();
     const reportAvailable = hasWorkbenchReport();
-    workbenchView.querySelectorAll(
-      ".wb-context, .wb-context-note, .wb-report-date, .wb-note, .wb-section, .wb-analysis, .wb-panels, #wbTaskSection, #wbDimensionSection, .wb-boundary"
-    ).forEach((node) => {
+    workbenchView.querySelectorAll(".wb-note, .wb-section, .wb-analysis, .wb-panels, #wbDimensionSection").forEach((node) => {
       node.hidden = !reportAvailable;
     });
     const empty = document.getElementById("wbPeriodEmpty");
@@ -6805,32 +9023,45 @@ html body[data-ds-dark-theme] {
     if (reportAvailable && activePage === "workbench") renderWorkbench();
     document.getElementById("periodMeta").textContent = reportAvailable ? activeReport().kind === "week" ? "\u5468\u62A5 \xB7 \u622A\u81F3 09-06" : "\u6708\u62A5 \xB7 \u622A\u81F3 09-13" : "\u6682\u65E0\u5BF9\u5E94\u62A5\u544A";
   }
-  document.getElementById("monthMode").addEventListener("click", () => {
-    if (periodMode !== "month") {
+  var periodPicker = document.getElementById("periodPicker");
+  var periodPickerTrigger = document.getElementById("periodPickerTrigger");
+  var periodPickerMenu = document.getElementById("periodPickerMenu");
+  function setPeriodPickerOpen(open, returnFocus = false) {
+    periodPickerMenu.hidden = !open;
+    periodPickerTrigger.setAttribute("aria-expanded", String(open));
+    if (returnFocus) periodPickerTrigger.focus();
+  }
+  periodPickerTrigger.addEventListener("click", () => setPeriodPickerOpen(periodPickerMenu.hidden));
+  periodPickerMenu.addEventListener("click", (event) => {
+    const monthOption = event.target.closest("[data-period-month]");
+    if (monthOption) {
+      selectedMonth = monthOption.dataset.periodMonth;
       periodMode = "month";
+      const weeks = weeksInMonth(selectedMonth);
+      if (!weeks.some((week) => week.start === selectedWeek)) selectedWeek = weeks[0].start;
       renderSelectedPeriod();
-    }
-  });
-  document.getElementById("weekMode").addEventListener("click", () => {
-    if (periodMode !== "week") {
-      periodMode = "week";
-      if (!weekInitialized && selectedMonth === "2026-09") selectedWeek = "2026-08-31";
-      weekInitialized = true;
-      renderSelectedPeriod();
-    }
-  });
-  document.getElementById("periodMonth").addEventListener("change", (event) => {
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
-      event.target.value = selectedMonth;
+      periodPickerMenu.querySelector(`[data-period-month="${selectedMonth}"]`)?.focus();
       return;
     }
-    selectedMonth = event.target.value;
-    selectedWeek = "";
-    renderSelectedPeriod();
+    if (event.target.closest("[data-period-all]")) {
+      periodMode = "month";
+      renderSelectedPeriod();
+      setPeriodPickerOpen(false, true);
+      return;
+    }
+    const weekOption = event.target.closest("[data-period-week]");
+    if (weekOption) {
+      periodMode = "week";
+      selectedWeek = weekOption.dataset.periodWeek;
+      renderSelectedPeriod();
+      setPeriodPickerOpen(false, true);
+    }
   });
-  document.getElementById("periodWeek").addEventListener("change", (event) => {
-    selectedWeek = event.target.value;
-    renderSelectedPeriod();
+  document.addEventListener("click", (event) => {
+    if (!periodPicker.contains(event.target)) setPeriodPickerOpen(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !periodPickerMenu.hidden) setPeriodPickerOpen(false, true);
   });
   function escapeHtml(value) {
     return String(value).replace(
@@ -6838,18 +9069,97 @@ html body[data-ds-dark-theme] {
       (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]
     );
   }
+  function renderWorkbenchSummary() {
+    document.querySelectorAll("[data-wb-summary-content]").forEach((node) => {
+      node.textContent = workbenchSummaryContent[node.dataset.wbSummaryContent] || "";
+    });
+  }
+  function renderWorkbenchReferenceLinks() {
+    const list = document.getElementById("wbReferenceList");
+    if (!list) return;
+    const safeLinks = workbenchReferenceLinks.map((link) => {
+      try {
+        const url = new URL(link.url);
+        return ["http:", "https:"].includes(url.protocol) ? { ...link, href: url.href } : null;
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+    if (!safeLinks.length) {
+      list.innerHTML = '<p class="wb-reference-empty">\u6682\u65E0\u53C2\u8003\u94FE\u63A5\uFF0C\u70B9\u51FB\u201C\u6DFB\u52A0\u201D\u586B\u5199\u3002</p>';
+      return;
+    }
+    list.innerHTML = safeLinks.map(
+      (link) => `<article class="wb-reference-row"><div class="wb-reference-main"><strong title="${escapeHtml(link.name)}">${escapeHtml(link.name)}</strong><a href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.href)}">${escapeHtml(link.href)}</a></div><div class="wb-reference-actions"><button type="button" data-wb-edit-reference="${escapeHtml(link.id)}" aria-label="\u7F16\u8F91${escapeHtml(link.name)}" title="\u7F16\u8F91"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"/></svg></button><button class="delete" type="button" data-wb-delete-reference="${escapeHtml(link.id)}" aria-label="\u5220\u9664${escapeHtml(link.name)}" title="\u5220\u9664"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button></div></article>`
+    ).join("");
+  }
   function renderWorkbench() {
+    renderWorkbenchSummary();
     const report = activeReport();
     if (!report) return;
-    const weekly = report.kind === "week";
-    workbenchView.querySelector(".wb-report-date").textContent = weekly ? "\u5468\u5EA6\u62A5\u544A\u622A\u81F3 2026-09-06" : "\u6708\u5EA6\u62A5\u544A\u622A\u81F3 2026-09-13";
-    document.getElementById("wbKpis").innerHTML = report.metrics.map(
-      (metric) => `<button class="wb-kpi ${metric.tone}" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="\u67E5\u770B${escapeHtml(metric.key)}\u53E3\u5F84"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.key)}</span><span class="wb-kpi-state ${metric.status === "\u672A\u8FBE\u6807" ? "bad" : metric.status === "\u5F85\u6838\u7B97" ? "unknown" : ""}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-meta"><span class="wb-kpi-badge">${escapeHtml(metric.badge)}</span><span>${escapeHtml(metric.scope)}</span></span><span class="wb-kpi-value"><strong>${escapeHtml(metric.display)}</strong>${metric.unit ? `<em>${escapeHtml(metric.unit)}</em>` : ""}</span><span class="wb-kpi-compare"><span class="wb-kpi-compare-row head"><span>\u5BF9\u6BD4\u6307\u6807</span><span>\u53D8\u5316\u91CF</span></span><span class="wb-kpi-compare-row"><span>${escapeHtml(metric.previous)}</span><b class="${escapeHtml(metric.changeTone)}">${escapeHtml(metric.change)}</b></span><span class="wb-kpi-compare-row"><span>${escapeHtml(metric.same)}</span><b class="${escapeHtml(metric.sameTone)}">${escapeHtml(metric.sameChange)}</b></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.targetLabel)}</span><b class="${escapeHtml(metric.gapTone)}">${escapeHtml(metric.gap)}</b></span></button>`
-    ).join("");
-    workbenchView.querySelector(".wb-boundary p").textContent = weekly ? "9.6 \u5468\u62A5\u672C\u5468\u6307\u6807\u4E0E\u54C1\u7C7B/\u57FA\u5730\u5F02\u5E38 \u2192 \u4EBA\u5DE5\u6838\u5B9E \u2192 \u6539\u5584\u5EFA\u8BAE \u2192 \u91C7\u7EB3\u540E\u5EFA\u4EFB\u52A1\uFF1B\u8BA2\u5355\u660E\u7EC6\u4ECD\u5728\u201C\u8BA2\u5355\u5C65\u7EA6\u201D\u9875" : "9 \u6708\u62A5\u544A\u6307\u6807\u4E0E\u5F02\u5E38\u4E8B\u9879 \u2192 \u4EBA\u5DE5\u6838\u5B9E \u2192 \u6539\u5584\u5EFA\u8BAE \u2192 \u91C7\u7EB3\u540E\u5EFA\u4EFB\u52A1\uFF1B\u8BA2\u5355\u660E\u7EC6\u4ECD\u5728\u201C\u8BA2\u5355\u5C65\u7EA6\u201D\u9875";
-    workbenchView.querySelector(".wb-boundary > span").textContent = weekly ? "\u5468\u62A5\u6458\u5F55 \xB7 \u975E\u5B9E\u65F6" : "\u62A5\u544A\u6458\u5F55 \xB7 \u975E\u5B9E\u65F6";
+    const topMetricCards = [
+      {
+        key: "\u4F5C\u5E9F\u7387",
+        label: "\u4F5C\u5E9F\u7387",
+        value: "2.05",
+        unit: "%",
+        target: "<6%",
+        status: "\u8FBE\u6807",
+        footer: "\u672C\u5468\u4F5C\u5E9F\u7387 1.90%"
+      },
+      {
+        key: "\u6539\u5355\u7387",
+        label: "\u6539\u5355\u7387",
+        value: "2.05",
+        unit: "%",
+        target: "<6%",
+        status: "\u672A\u8FBE",
+        footer: "\u672C\u5468\u6539\u5355\u7387 1.90%"
+      },
+      {
+        key: "\u8BA2\u5355\u6EE1\u8DB3\u7387",
+        label: "\u6EE1\u8DB3\u7387",
+        value: "2.05",
+        unit: "%",
+        target: ">95%\uFF08\u6311\u6218 97%\uFF09",
+        status: "\u8FBE\u6807",
+        footer: "\u672C\u5468\u6EE1\u8DB3\u7387 1.90%"
+      },
+      {
+        key: "\u51C6\u4EA4\u7387",
+        label: "\u51C6\u4EA4\u7387",
+        value: "2.05",
+        unit: "%",
+        target: ">95%\uFF08\u6311\u6218 97%\uFF09",
+        status: "\u8FBE\u6807",
+        footer: "\u672C\u5468\u51C6\u4EA4\u7387 1.90%"
+      },
+      {
+        key: "\u8D27\u9F84\uFF08>60\u5929\u5E93\u5B58\u5360\u6BD4\uFF09",
+        label: "60\u5929\u4EE5\u4E0A\u8D27\u9F84\u5360\u6BD4",
+        value: "2.05",
+        unit: "%",
+        target: "\u8D8A\u4F4E\u8D8A\u597D",
+        status: "\u8FBE\u6807",
+        footer: "\u672C\u5468\u8D27\u9F84\u5360\u6BD4 1.90%"
+      },
+      {
+        key: "\u5468\u8F6C\u5929\u6570",
+        label: "\u53EF\u53D1\u8D27\u5929\u6570",
+        value: "14.5",
+        unit: "\u5929",
+        target: "<12.5\u5929\uFF08\u57FA\u5730<11\u5929\uFF09",
+        status: "\u8FBE\u6807",
+        footer: "\u672C\u5468\u53EF\u53D1\u8D27\u5929\u6570 14.5\u5929"
+      }
+    ];
+    document.getElementById("wbKpis").innerHTML = topMetricCards.map((metric) => {
+      const statusClass = metric.status === "\u672A\u8FBE" ? "bad" : "";
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="\u67E5\u770B${escapeHtml(metric.label)}\u53E3\u5F84"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">\u76EE\u6807 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>\u672C\u671F\u73AF\u6BD4</span><b>\u22121.9pct</b></span><span class="wb-kpi-compare-row"><span>\u672C\u671F\u540C\u6BD4</span><b>1.9pct</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>\u5468\u73AF\u6BD4</span><b>\u22121.9pct</b></span><span class="wb-kpi-compare-row"><span>\u5468\u540C\u6BD4</span><b>1.9pct</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+    }).join("");
     renderWorkbenchTasks();
     renderWorkbenchDimensions();
+    renderWorkbenchReferenceLinks();
   }
   function renderWorkbenchEvents() {
     const events = activeReport()?.events || [];
@@ -6860,9 +9170,6 @@ html body[data-ds-dark-theme] {
     ).join("");
   }
   function renderWorkbenchTasks() {
-    workbenchView.querySelectorAll("[data-wb-task-filter]").forEach(
-      (button) => button.classList.toggle("active", button.dataset.wbTaskFilter === taskFilter)
-    );
     const tasks = currentCreatedTasks();
     const pending2 = tasks.filter((task) => task.status !== "\u5DF2\u5B8C\u6210").length;
     const done = tasks.length - pending2;
@@ -6939,20 +9246,10 @@ html body[data-ds-dark-theme] {
     const samples = workbenchSkuExamples[category] || [];
     if (!samples.length)
       return `<div class="wb-sku-detail"><p>${escapeHtml(category)}\u6682\u65E0\u8BA2\u5355\u6837\u4F8B SKU\uFF1B\u8BF7\u63A5\u5165\u5546\u54C1\u4E3B\u6570\u636E\u53CA\u8BA2\u5355\u660E\u7EC6\u3002</p></div>`;
-    const showOwner = Boolean(selectedWorkbenchBase);
-    const baseOwners = {
-      \u90D1\u5DDE: "\u90D1\u5DDE\u57FA\u5730\u8D1F\u8D23\u4EBA\uFF08\u6F14\u793A\uFF09",
-      \u9042\u5E73: "\u9042\u5E73\u57FA\u5730\u8D1F\u8D23\u4EBA\uFF08\u6F14\u793A\uFF09",
-      \u897F\u5357: "\u897F\u5357\u57FA\u5730\u8D1F\u8D23\u4EBA\uFF08\u6F14\u793A\uFF09",
-      \u534E\u4E1C: "\u534E\u4E1C\u57FA\u5730\u8D1F\u8D23\u4EBA\uFF08\u6F14\u793A\uFF09",
-      \u534E\u5357: "\u534E\u5357\u57FA\u5730\u8D1F\u8D23\u4EBA\uFF08\u6F14\u793A\uFF09"
-    };
-    const ownerCell = showOwner ? `<td>${escapeHtml(baseOwners[selectedWorkbenchBase] || "\u5F85\u8865\u5145")}</td>` : "";
-    const ownerHeader = showOwner ? "<th>\u57FA\u5730\u8D1F\u8D23\u4EBA</th>" : "";
     const rows = samples.map(
-      (sku) => `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td>${ownerCell}<td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`
+      (sku) => `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`
     ).join("");
-    return `<div class="wb-sku-detail"><p>SKU \u5E93\u5B58\u3001\u9500\u552E\u8BA1\u5212\u53CA\u53EF\u53D1\u8D27\u5929\u6570\u4E3A\u539F\u578B\u6F14\u793A\u6837\u4F8B\uFF0C\u5B9E\u9645\u6570\u636E\u9700\u63A5\u5165\u5546\u54C1\u4E3B\u6570\u636E\u53CA\u8BA2\u5355\u660E\u7EC6\u3002${showOwner ? `\u5F53\u524D\u7B5B\u9009\u57FA\u5730\uFF1A${escapeHtml(selectedWorkbenchBase)}\u3002` : ""}</p><table class="wb-sku-table ${showOwner ? "has-owner" : ""}"><thead><tr><th>SKU\u540D\u79F0</th><th>\u7F16\u7801</th>${ownerHeader}<th>\u5E93\u5B58</th><th>\u9500\u552E\u8BA1\u5212</th><th>\u53EF\u53D1\u8D27\u5929\u6570</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<div class="wb-sku-detail"><p>SKU \u5E93\u5B58\u3001\u9500\u552E\u8BA1\u5212\u53CA\u53EF\u53D1\u8D27\u5929\u6570\u4E3A\u539F\u578B\u6F14\u793A\u6837\u4F8B\uFF0C\u5B9E\u9645\u6570\u636E\u9700\u63A5\u5165\u5546\u54C1\u4E3B\u6570\u636E\u53CA\u8BA2\u5355\u660E\u7EC6\u3002</p><table class="wb-sku-table"><thead><tr><th>SKU\u540D\u79F0</th><th>\u7F16\u7801</th><th>\u5E93\u5B58</th><th>\u9500\u552E\u8BA1\u5212</th><th>\u53EF\u53D1\u8D27\u5929\u6570</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   function renderWorkbenchRegionCustomerDetail(regionIndex) {
     const dimension = workbenchDimensions["region-change"];
@@ -6961,6 +9258,118 @@ html body[data-ds-dark-theme] {
       (customer, customerIndex) => `<tr><td>${escapeHtml(customer.name)}\uFF08<span class="customer-code">${escapeHtml(customer.code)}</span>\uFF09</td><td>${escapeHtml(customer.manager)}</td><td><button type="button" class="wb-region-order-count" data-wb-customer-orders="${regionIndex}:${customerIndex}" aria-label="\u67E5\u770B${escapeHtml(customer.name)}\u7684${escapeHtml(String(customer.changedOrders))}\u5F20\u6539\u5355\u8BA2\u5355">${escapeHtml(String(customer.changedOrders))} \u5F20</button></td><td>${escapeHtml(String(customer.totalOrders))} \u5F20</td></tr>`
     ).join("") : '<tr><td class="wb-region-customer-empty" colspan="4">\u6682\u65E0\u5BA2\u6237\u660E\u7EC6</td></tr>';
     return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>\u5BA2\u6237\u540D\u79F0\uFF08\u7F16\u7801\uFF09</th><th>\u5BA2\u6237\u7ECF\u7406</th><th>\u6539\u5355\u8BA2\u5355\u6570</th><th>\u8BA2\u5355\u603B\u6570</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
+    const firstHeader = table.groups.map(
+      (group) => group.rowspan ? `<th scope="col" rowspan="2">${escapeHtml(group.label)}</th>` : `<th scope="colgroup" colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`
+    ).join("");
+    const secondHeader = table.groups.filter((group) => !group.rowspan).flatMap((group) => group.columns).map((label) => `<th scope="col">${escapeHtml(label)}</th>`).join("");
+    const rows = table.rows.filter(
+      (row) => !selectedBase || baseColumnIndex == null || row[baseColumnIndex] === selectedBase
+    );
+    const body = rows.map((row) => {
+      const cells = row.map((value) => {
+        if (value && typeof value === "object" && "text" in value) {
+          const marker = value.state && value.state !== "good" ? `<span class="wb-performance-marker ${escapeHtml(value.state)}" aria-label="${value.state === "warning" ? "\u5173\u6CE8" : "\u8D85\u51FA\u53C2\u8003\u7EBF"}">${value.state === "warning" ? "!" : "\u25CF"}</span>` : "";
+          return `<td class="${value.state ? `performance-${escapeHtml(value.state)}` : ""}">${marker}${escapeHtml(value.text)}</td>`;
+        }
+        return `<td>${escapeHtml(String(value))}</td>`;
+      }).join("");
+      return `<tr>${cells}</tr>`;
+    }).join("");
+    const empty = rows.length ? "" : `<tr><td class="wb-performance-empty" colspan="${table.rows[0]?.length || 1}">\u5F53\u524D\u57FA\u5730\u7B5B\u9009\u4E0B\u6682\u65E0\u6570\u636E</td></tr>`;
+    const tableClass = `wb-performance-table ${table.groups.length > 5 ? "wide" : ""}`;
+    return `<div class="wb-performance-table-wrap" role="region" aria-label="${escapeHtml(table.title)}\u8868\u683C\uFF0C\u53EF\u6A2A\u5411\u6EDA\u52A8" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr><tr>${secondHeader}</tr></thead><tbody>${body || empty}</tbody></table></div>`;
+  }
+  function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
+    const cards = items.map((item) => {
+      const reasons = item.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join("");
+      const measures = item.measures.map(
+        (measure, index) => `<span><i>${"\u2460\u2461\u2462\u2463\u2464\u2465"[index] || `${index + 1}.`}</i>${escapeHtml(measure)}</span>`
+      ).join("");
+      const tools = `<div class="wb-unmet-card-actions"><button type="button" aria-label="\u7F16\u8F91${escapeHtml(item.title)}" title="\u7F16\u8F91" data-wb-edit-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="\u5220\u9664${escapeHtml(item.title)}" title="\u5220\u9664" data-wb-delete-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div>`;
+      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">\u25CF</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>\u672A\u8FBE\u6210\u6307\u6807\uFF1A</strong>${escapeHtml(item.analysis)}</p>` : ""}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">\u2713</span> \u6539\u5584\uFF08\u6267\u884C\u60C5\u51B5\uFF09\uFF1A</strong><div>${measures}</div></div></article>`;
+    }).join("");
+    const kind = sectionTitle.startsWith("\u57FA\u5730") ? "base" : "item";
+    return `<section class="wb-unmet-section"><div class="wb-unmet-section-head"><h3>${escapeHtml(sectionTitle)}</h3><div class="wb-unmet-section-actions"><button class="wb-unmet-ai-button" type="button" data-wb-unmet-ai="${kind}">\u2726 AI \u5206\u6790</button><button class="wb-unmet-add-button" type="button" data-wb-add-unmet="${kind}">\u6DFB\u52A0</button></div></div>${cards || `<p class="wb-unmet-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+  }
+  function unmetTextLines(value) {
+    return String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  }
+  function getWorkbenchUnmetItems(kind, selectedBase = "") {
+    const sourceItems = kind === "base" ? workbenchBaseUnmetItems : workbenchItemUnmetItems;
+    const staticItems = sourceItems.map((item, index) => {
+      const key = `${kind}:static:${index}`;
+      const separator = item.title.indexOf("\uFF5C");
+      const prefix = separator >= 0 ? item.title.slice(0, separator) : "";
+      const entity = kind === "base" ? prefix.replace(/基地$/, "") : prefix;
+      const formTitle = separator >= 0 ? item.title.slice(separator + 1) : item.title;
+      const baseReason = [item.analysis ? `\u672A\u8FBE\u6210\u6307\u6807\uFF1A${item.analysis}` : "", ...item.reasons].filter(Boolean).join("\n");
+      const override = workbenchUnmetOverrides.get(key);
+      const entry = override ? {
+        ...item,
+        title: `${override.entity}${kind === "base" ? "\u57FA\u5730\uFF5C" : "\uFF5C"}${override.title}`,
+        analysis: "",
+        reasons: unmetTextLines(override.reason),
+        measures: unmetTextLines(override.measure),
+        entity: override.entity,
+        formTitle: override.title,
+        formReason: override.reason,
+        formMeasure: override.measure,
+        key
+      } : {
+        ...item,
+        entity,
+        formTitle,
+        formReason: baseReason,
+        formMeasure: item.measures.join("\n"),
+        key
+      };
+      return entry;
+    });
+    const addedItems = addedWorkbenchUnmetEntries.filter((entry) => entry.kind === kind).map((entry) => {
+      const key = `${kind}:added:${entry.id}`;
+      const override = workbenchUnmetOverrides.get(key);
+      const current = override || entry;
+      return {
+        title: `${current.entity}${kind === "base" ? "\u57FA\u5730\uFF5C" : "\uFF5C"}${current.title}`,
+        reasons: unmetTextLines(current.reason),
+        measures: unmetTextLines(current.measure),
+        entity: current.entity,
+        formTitle: current.title,
+        formReason: current.reason,
+        formMeasure: current.measure,
+        key
+      };
+    });
+    return [...staticItems, ...addedItems].filter(
+      (item) => !deletedWorkbenchUnmetKeys.has(item.key) && (kind !== "base" || !selectedBase || item.entity === selectedBase)
+    );
+  }
+  function renderWorkbenchBaseUnmet() {
+    return renderWorkbenchUnmetCards(
+      "\u57FA\u5730\u672A\u8FBE\u6210\u9879\uFF1A\u539F\u56E0\u5206\u6790\u4E0E\u6539\u5584\u63AA\u65BD",
+      getWorkbenchUnmetItems("base"),
+      "\u5F53\u524D\u6682\u65E0\u57FA\u5730\u672A\u8FBE\u6210\u4E8B\u9879\u3002"
+    );
+  }
+  function renderWorkbenchItemUnmet() {
+    return renderWorkbenchUnmetCards(
+      "\u54C1\u9879\u672A\u8FBE\u6210\u9879\uFF1A\u539F\u56E0\u5206\u6790\u4E0E\u6539\u5584\u63AA\u65BD",
+      getWorkbenchUnmetItems("item"),
+      "\u5F53\u524D\u6682\u65E0\u54C1\u9879\u672A\u8FBE\u6210\u4E8B\u9879\u3002"
+    );
+  }
+  function renderWorkbenchDirectorNotes() {
+    const cards = workbenchDirectorNotes.map(
+      (note) => `<article class="wb-unmet-card wb-director-note-card" data-wb-director-note="${escapeHtml(note.id)}"><div class="wb-unmet-card-actions"><button type="button" aria-label="\u7F16\u8F91${escapeHtml(note.title)}" title="\u7F16\u8F91" data-wb-edit-director-note="${escapeHtml(note.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="\u5220\u9664${escapeHtml(note.title)}" title="\u5220\u9664" data-wb-delete-director-note="${escapeHtml(note.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div><h4><span class="wb-unmet-dot" aria-hidden="true">\u25CF</span>${escapeHtml(note.director)}\uFF5C${escapeHtml(note.title)}</h4><p class="wb-director-note-content">${escapeHtml(note.content)}</p></article>`
+    ).join("");
+    return `<section class="wb-unmet-section wb-director-notes"><div class="wb-unmet-section-head"><h3>\u5E94\u8D23\u603B\u76D1\u5907\u6CE8</h3><button class="wb-unmet-add-button" type="button" data-wb-add-director-note>\u6DFB\u52A0</button></div>${cards || '<p class="wb-unmet-empty">\u5F53\u524D\u6682\u65E0\u5E94\u8D23\u603B\u76D1\u5907\u6CE8\u3002</p>'}</section>`;
+  }
+  function renderWorkbenchPerformance(dimension) {
+    const panel = document.getElementById("wbDimensionPanel");
+    const bottomSection = dimensionTab === "base-performance" ? renderWorkbenchBaseUnmet() : dimensionTab === "item-performance" ? renderWorkbenchItemUnmet() : dimensionTab === "director-performance" ? renderWorkbenchDirectorNotes() : "";
+    panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ""))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, "", dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ""))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, "", dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">\u6570\u636E\u6309\u622A\u56FE\u62A5\u544A\u5C55\u793A\uFF1B\u201C\u2014\u201D\u8868\u793A\u672A\u63D0\u4F9B\u6570\u636E\uFF0C\u7CBD\u5B50\u4E3A\u5B63\u8282\u6027\u54C1\u9879\u3002</p>`;
   }
   function renderWorkbenchDimensions() {
     const panel = document.getElementById("wbDimensionPanel");
@@ -6976,27 +9385,20 @@ html body[data-ds-dark-theme] {
     });
     panel.setAttribute("aria-labelledby", selectedButton.id);
     const headingMeta = workbenchView.querySelector(".wb-dimension-head > span");
+    const performanceDimension = workbenchPerformance[dimensionTab];
+    if (performanceDimension) {
+      headingMeta.textContent = "\u6708\u5EA6\u4E0E\u5468\u5EA6\u62A5\u544A \xB7 \u622A\u81F3 2026-09-13";
+      renderWorkbenchPerformance(performanceDimension);
+      return;
+    }
     if (activeReport()?.kind !== "month") {
       headingMeta.textContent = "\u5468\u5EA6\u62A5\u544A \xB7 \u6682\u65E0\u5BF9\u5E94\u7EF4\u5EA6\u6570\u636E";
-      panel.innerHTML = '<div class="wb-dimension-empty">\u5F53\u524D\u5206\u6790\u9875\u7B7E\u4EC5\u6709\u622A\u81F3 2026-09-13 \u7684\u6708\u5EA6\u62A5\u544A\u6570\u636E\u3002<br>\u8BF7\u5207\u6362\u5230\u201C\u6708\u5EA6\u201D\u67E5\u770B\uFF0C\u4E0D\u80FD\u5C06\u6708\u5EA6\u7EF4\u5EA6\u503C\u79FB\u4F5C\u5468\u5EA6\u503C\u3002</div>';
+      panel.innerHTML = `<div class="wb-dimension-empty">\u5F53\u524D\u5206\u6790\u9875\u7B7E\u4EC5\u6709\u622A\u81F3 2026-09-13 \u7684\u6708\u5EA6\u62A5\u544A\u6570\u636E\u3002<br>\u8BF7\u5207\u6362\u5230\u201C\u6708\u5EA6\u201D\u67E5\u770B\uFF0C\u4E0D\u80FD\u5C06\u6708\u5EA6\u7EF4\u5EA6\u503C\u79FB\u4F5C\u5468\u5EA6\u503C\u3002</div>${dimensionTab === "director-performance" ? renderWorkbenchDirectorNotes() : ""}`;
       return;
     }
     headingMeta.textContent = "\u6708\u5EA6\u62A5\u544A \xB7 \u622A\u81F3 2026-09-13";
     const dimension = workbenchDimensions[dimensionTab];
-    const baseFiltered = ["base-category", "base-category-days"].includes(dimensionTab) && selectedWorkbenchBase;
-    const visibleRows = baseFiltered ? dimension.rows.filter((row) => row[0] === selectedWorkbenchBase) : dimension.rows;
-    let summaryText = dimension.summary;
-    if (baseFiltered && visibleRows[0]) {
-      const row = visibleRows[0];
-      const problemLimit = dimensionTab === "base-category" ? 90 : 12;
-      const problemItems = row.slice(1).map((value, index) => ({
-        category: dimension.columns[index + 1],
-        value: Number.parseFloat(value)
-      })).filter(
-        (item) => dimensionTab === "base-category" ? item.value < problemLimit : item.value > problemLimit
-      );
-      summaryText = problemItems.length ? `${selectedWorkbenchBase}\u57FA\u5730\u6709 ${problemItems.length} \u9879${dimensionTab === "base-category" ? "\u6EE1\u8DB3\u7387\u4F4E\u4E8E 90%" : "\u53EF\u53D1\u8D27\u5929\u6570\u8D85\u8FC7 12 \u5929"}\uFF1A${problemItems.map((item) => `${item.category} ${item.value}${dimensionTab === "base-category" ? "%" : " \u5929"}`).join("\u3001")}\u3002` : `${selectedWorkbenchBase}\u57FA\u5730\u5F53\u524D\u6CA1\u6709${dimensionTab === "base-category" ? "\u6EE1\u8DB3\u7387\u4F4E\u4E8E 90%" : "\u53EF\u53D1\u8D27\u5929\u6570\u8D85\u8FC7 12 \u5929"}\u7684\u54C1\u7C7B\u3002`;
-    }
+    const visibleRows = dimension.rows;
     const header = `${dimension.columns.map((column) => `<th scope="col">${escapeHtml(column)}</th>`).join("")}<th class="issue-col" scope="col">\u95EE\u9898\u53CA\u6539\u8FDB</th>`;
     const body = visibleRows.map((row) => {
       const rowIndex = dimension.rows.indexOf(row);
@@ -7015,8 +9417,7 @@ html body[data-ds-dark-theme] {
       const customerDetail = regionExpandable && regionExpanded ? `<tr class="region-customer-detail-row"><td colspan="${dimension.columns.length + 1}">${renderWorkbenchRegionCustomerDetail(rowIndex)}</td></tr>` : "";
       return `<tr>${values}<td class="issue-cell">${renderWorkbenchDimensionIssues(risk, row[0], dimensionTab, rowIndex)}</td></tr>${detail}${customerDetail}`;
     }).join("");
-    const filterNote = baseFiltered ? `\u5F53\u524D\u57FA\u5730\u7B5B\u9009\uFF1A${escapeHtml(selectedWorkbenchBase)}` : "";
-    panel.innerHTML = `<div class="wb-dimension-summary"><strong>${escapeHtml(dimension.title)}</strong><span>${escapeHtml(dimension.note)} ${filterNote}</span></div><div class="wb-dimension-insight"><strong>\u603B\u7ED3\u5206\u6790</strong><span>${escapeHtml(summaryText)}</span></div><div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === "region-change" ? "region-change-table" : ""}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+    panel.innerHTML = `<div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === "region-change" ? "region-change-table" : ""}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
     panel.querySelectorAll("[data-wb-sku-toggle]").forEach(
       (button) => button.addEventListener("click", () => {
         const key = `${dimensionTab}:${button.dataset.wbSkuToggle}`;
@@ -7034,19 +9435,6 @@ html body[data-ds-dark-theme] {
       })
     );
   }
-  var wbBaseFilter = document.getElementById("wbBaseFilter");
-  var wbOwnerFilter = document.getElementById("wbOwnerFilter");
-  wbBaseFilter.addEventListener("change", () => {
-    selectedWorkbenchBase = wbBaseFilter.value;
-    wbOwnerFilter.value = selectedWorkbenchBase;
-    document.getElementById("wbContextNote").textContent = "\u57FA\u5730/\u8D1F\u8D23\u4EBA\u7B5B\u9009\u4EC5\u4F5C\u7528\u4E8E\u57FA\u5730\u4EA4\u53C9\u5206\u6790\uFF1B\u6C47\u603B\u6307\u6807\u4E0E\u54C1\u7C7B\u6C47\u603B\u6309\u62A5\u544A\u6574\u4F53\u53E3\u5F84\u663E\u793A\u3002\u8D1F\u8D23\u4EBA\u9009\u9879\u4E3A\u539F\u578B\u7EF4\u5EA6\u6F14\u793A\u3002";
-    renderWorkbenchDimensions();
-  });
-  wbOwnerFilter.addEventListener("change", () => {
-    selectedWorkbenchBase = wbOwnerFilter.value;
-    wbBaseFilter.value = selectedWorkbenchBase;
-    renderWorkbenchDimensions();
-  });
   var wbDimensionTabButtons = [...workbenchView.querySelectorAll("[data-wb-dimension-tab]")];
   wbDimensionTabButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -7059,7 +9447,7 @@ html body[data-ds-dark-theme] {
     toast.textContent = message;
     toast.hidden = false;
     clearTimeout(window.toastTimer);
-    window.toastTimer = schedule(() => {
+    window.toastTimer = setTimeout(() => {
       toast.hidden = true;
     }, 3e3);
   }
@@ -7119,10 +9507,7 @@ html body[data-ds-dark-theme] {
     renderWorkbenchTasks();
     closeIssueEditor();
     renderWorkbenchDimensions();
-    document.getElementById("wbTaskSection").scrollIntoView({ block: "start", behavior: "smooth" });
-    showWorkbenchToast(
-      existing ? "\u95EE\u9898\u53CA\u6539\u8FDB\u5DF2\u66F4\u65B0\u5230\u4EFB\u52A1\u8FFD\u8E2A\u3002" : "\u5DF2\u751F\u6210\u6539\u8FDB\u4EFB\u52A1\uFF0C\u53EF\u5728\u4EFB\u52A1\u8FFD\u8E2A\u4E2D\u7EE7\u7EED\u4FEE\u6539\u3002"
-    );
+    showWorkbenchToast(existing ? "\u95EE\u9898\u53CA\u6539\u8FDB\u5DF2\u66F4\u65B0\u5230\u672C\u5730\u6539\u8FDB\u4EFB\u52A1\u3002" : "\u5DF2\u751F\u6210\u672C\u5730\u6539\u8FDB\u4EFB\u52A1\u3002");
   }
   function saveIssueEditor(generateTask) {
     if (!pendingIssueEdit) return;
@@ -7147,6 +9532,184 @@ html body[data-ds-dark-theme] {
     renderWorkbenchDimensions();
     showWorkbenchToast("\u95EE\u9898\u53CA\u6539\u8FDB\u5DF2\u4FDD\u5B58\u3002");
   }
+  function openWorkbenchUnmetAdd(kind, trigger, itemKey = "") {
+    const isBase = kind === "base";
+    const entitySelect = document.getElementById("wbUnmetEntity");
+    const item = itemKey ? getWorkbenchUnmetItems(kind).find((entry) => entry.key === itemKey) : null;
+    const options = isBase ? workbenchPerformance["base-performance"].monthly.rows.map((row) => row[0]).filter((base) => base !== "\u5408\u8BA1") : workbenchIssueCategories();
+    document.getElementById("wbUnmetAddForm").reset();
+    document.getElementById("wbUnmetAddTitle").textContent = item ? isBase ? "\u7F16\u8F91\u57FA\u5730\u672A\u8FBE\u6210\u9879" : "\u7F16\u8F91\u54C1\u7C7B\u672A\u8FBE\u6210\u9879" : isBase ? "\u6DFB\u52A0\u57FA\u5730\u672A\u8FBE\u6210\u9879" : "\u6DFB\u52A0\u54C1\u7C7B\u672A\u8FBE\u6210\u9879";
+    document.getElementById("wbUnmetAddSubtitle").textContent = item ? "\u4FEE\u6539\u672A\u8FBE\u6210\u9879\u7684\u539F\u56E0\u5206\u6790\u4E0E\u6539\u5584\u63AA\u65BD" : isBase ? "\u8865\u5145\u57FA\u5730\u672A\u8FBE\u6210\u539F\u56E0\u4E0E\u6539\u5584\u63AA\u65BD" : "\u8865\u5145\u54C1\u7C7B\u672A\u8FBE\u6210\u539F\u56E0\u4E0E\u6539\u5584\u63AA\u65BD";
+    document.getElementById("wbUnmetEntityLabel").textContent = isBase ? "\u9009\u62E9\u57FA\u5730" : "\u9009\u62E9\u54C1\u7C7B";
+    entitySelect.innerHTML = `<option value="">${isBase ? "\u8BF7\u9009\u62E9\u57FA\u5730" : "\u8BF7\u9009\u62E9\u54C1\u7C7B"}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}`;
+    document.getElementById("wbUnmetTitleInput").value = item?.formTitle || "";
+    document.getElementById("wbUnmetReasonInput").value = item?.formReason || "";
+    document.getElementById("wbUnmetMeasureInput").value = item?.formMeasure || "";
+    document.getElementById("wbUnmetAddSubmit").textContent = item ? "\u4FDD\u5B58" : "\u63D0\u4EA4";
+    pendingWorkbenchUnmet = { kind, trigger, key: itemKey };
+    document.getElementById("wbUnmetAddOverlay").hidden = false;
+    entitySelect.focus();
+  }
+  function closeWorkbenchUnmetAdd() {
+    document.getElementById("wbUnmetAddOverlay").hidden = true;
+    const { kind, trigger } = pendingWorkbenchUnmet || {};
+    pendingWorkbenchUnmet = null;
+    const fallback = kind ? workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`) : null;
+    if (trigger?.isConnected) trigger.focus();
+    else fallback?.focus();
+  }
+  document.getElementById("wbUnmetAddForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pendingWorkbenchUnmet || !event.currentTarget.reportValidity()) return;
+    const entry = {
+      id: globalThis.crypto?.randomUUID?.() || `unmet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: pendingWorkbenchUnmet.kind,
+      entity: document.getElementById("wbUnmetEntity").value,
+      title: document.getElementById("wbUnmetTitleInput").value.trim(),
+      reason: document.getElementById("wbUnmetReasonInput").value.trim(),
+      measure: document.getElementById("wbUnmetMeasureInput").value.trim(),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (!entry.entity || !entry.title || !entry.reason || !entry.measure) {
+      showWorkbenchToast("\u8BF7\u5B8C\u6574\u586B\u5199\u6807\u9898\u3001\u672A\u8FBE\u6210\u539F\u56E0\u548C\u6539\u5584\u63AA\u65BD\u3002");
+      return;
+    }
+    const context2 = pendingWorkbenchUnmet;
+    if (context2.key)
+      workbenchUnmetOverrides.set(context2.key, {
+        entity: entry.entity,
+        title: entry.title,
+        reason: entry.reason,
+        measure: entry.measure
+      });
+    else addedWorkbenchUnmetEntries.push(entry);
+    const persisted = saveWorkbenchUnmetState();
+    const kind = context2.kind;
+    const focusKey = context2.key;
+    document.getElementById("wbUnmetAddOverlay").hidden = true;
+    pendingWorkbenchUnmet = null;
+    renderWorkbenchDimensions();
+    if (focusKey)
+      workbenchView.querySelector(`[data-wb-edit-unmet="${encodeURIComponent(focusKey)}"]`)?.focus();
+    else workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`)?.focus();
+    showWorkbenchToast(
+      persisted ? focusKey ? "\u672A\u8FBE\u6210\u9879\u5DF2\u4FEE\u6539\u5E76\u4FDD\u5B58\u5728\u672C\u673A\u3002" : "\u672A\u8FBE\u6210\u9879\u5DF2\u6DFB\u52A0\u5E76\u4FDD\u5B58\u5728\u672C\u673A\u3002" : "\u5185\u5BB9\u5DF2\u66F4\u65B0\uFF1B\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u5237\u65B0\u540E\u4E0D\u4F1A\u4FDD\u7559\u3002"
+    );
+  });
+  document.getElementById("wbUnmetAddClose").addEventListener("click", closeWorkbenchUnmetAdd);
+  document.getElementById("wbUnmetAddCancel").addEventListener("click", closeWorkbenchUnmetAdd);
+  document.getElementById("wbUnmetAddOverlay").addEventListener("click", (event) => {
+    if (event.target.id === "wbUnmetAddOverlay") closeWorkbenchUnmetAdd();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !document.getElementById("wbUnmetAddOverlay").hidden)
+      closeWorkbenchUnmetAdd();
+  });
+  var directorNoteOverlay = document.getElementById("wbDirectorNoteOverlay");
+  var directorNoteForm = document.getElementById("wbDirectorNoteForm");
+  var directorNoteDirector = document.getElementById("wbDirectorNoteDirector");
+  var directorNoteHeading = document.getElementById("wbDirectorNoteHeading");
+  var directorNoteContent = document.getElementById("wbDirectorNoteContent");
+  function openWorkbenchDirectorNote(trigger, id = "") {
+    const existing = id ? workbenchDirectorNotes.find((note) => note.id === id) : null;
+    const directors = workbenchPerformance["director-performance"].monthly.rows.map((row) => row[0]).filter((name) => name !== "\u5168\u56FD\u5408\u8BA1");
+    directorNoteForm.reset();
+    directorNoteDirector.innerHTML = `<option value="">\u8BF7\u9009\u62E9\u5E94\u8D23\u603B\u76D1</option>${directors.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
+    directorNoteDirector.value = existing?.director || "";
+    directorNoteHeading.value = existing?.title || "";
+    directorNoteContent.value = existing?.content || "";
+    document.getElementById("wbDirectorNoteTitle").textContent = existing ? "\u7F16\u8F91\u5E94\u8D23\u603B\u76D1\u5907\u6CE8" : "\u6DFB\u52A0\u5E94\u8D23\u603B\u76D1\u5907\u6CE8";
+    document.getElementById("wbDirectorNoteSubmit").textContent = existing ? "\u4FDD\u5B58" : "\u63D0\u4EA4";
+    pendingWorkbenchDirectorNote = { id: existing?.id || "", trigger };
+    directorNoteOverlay.hidden = false;
+    directorNoteDirector.focus();
+  }
+  function closeWorkbenchDirectorNote() {
+    directorNoteOverlay.hidden = true;
+    const trigger = pendingWorkbenchDirectorNote?.trigger;
+    pendingWorkbenchDirectorNote = null;
+    if (trigger?.isConnected) trigger.focus();
+  }
+  directorNoteForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pendingWorkbenchDirectorNote || !directorNoteForm.reportValidity()) return;
+    const values = {
+      director: directorNoteDirector.value,
+      title: directorNoteHeading.value.trim(),
+      content: directorNoteContent.value.trim()
+    };
+    if (!values.director || !values.title || !values.content) {
+      showWorkbenchToast("\u8BF7\u5B8C\u6574\u586B\u5199\u5E94\u8D23\u603B\u76D1\u3001\u6807\u9898\u548C\u5185\u5BB9\u3002");
+      return;
+    }
+    const id = pendingWorkbenchDirectorNote.id;
+    if (id)
+      workbenchDirectorNotes = workbenchDirectorNotes.map(
+        (note) => note.id === id ? { ...note, ...values } : note
+      );
+    else
+      workbenchDirectorNotes.push({
+        id: globalThis.crypto?.randomUUID?.() || `director-note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        ...values
+      });
+    const persisted = saveWorkbenchDirectorNotes();
+    directorNoteOverlay.hidden = true;
+    pendingWorkbenchDirectorNote = null;
+    renderWorkbenchDimensions();
+    const action = id ? "[data-wb-edit-director-note]" : "[data-wb-add-director-note]";
+    if (id)
+      [...workbenchView.querySelectorAll(action)].find((button) => button.dataset.wbEditDirectorNote === id)?.focus();
+    else workbenchView.querySelector(action)?.focus();
+    showWorkbenchToast(
+      persisted ? id ? "\u5E94\u8D23\u603B\u76D1\u5907\u6CE8\u5DF2\u4FEE\u6539\u5E76\u4FDD\u5B58\u5728\u672C\u673A\u3002" : "\u5E94\u8D23\u603B\u76D1\u5907\u6CE8\u5DF2\u6DFB\u52A0\u5E76\u4FDD\u5B58\u5728\u672C\u673A\u3002" : "\u5907\u6CE8\u5DF2\u66F4\u65B0\uFF1B\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u5237\u65B0\u540E\u4E0D\u4F1A\u4FDD\u7559\u3002"
+    );
+  });
+  document.getElementById("wbDirectorNoteClose").addEventListener("click", closeWorkbenchDirectorNote);
+  document.getElementById("wbDirectorNoteCancel").addEventListener("click", closeWorkbenchDirectorNote);
+  directorNoteOverlay.addEventListener("click", (event) => {
+    if (event.target === directorNoteOverlay) closeWorkbenchDirectorNote();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !directorNoteOverlay.hidden) closeWorkbenchDirectorNote();
+  });
+  function openWorkbenchUnmetDelete(key, trigger) {
+    const kind = key.startsWith("base:") ? "base" : "item";
+    const item = getWorkbenchUnmetItems(kind).find((entry) => entry.key === key);
+    if (!item) return;
+    document.getElementById("wbUnmetDeleteCopy").textContent = `\u786E\u8BA4\u5220\u9664\u201C${item.title}\u201D\u5417\uFF1F\u5220\u9664\u540E\u53EF\u91CD\u65B0\u6DFB\u52A0\uFF0C\u4F46\u5F53\u524D\u5220\u9664\u65E0\u6CD5\u64A4\u9500\u3002`;
+    pendingWorkbenchUnmetDelete = { key, kind, trigger };
+    document.getElementById("wbUnmetDeleteOverlay").hidden = false;
+    document.getElementById("wbUnmetDeleteConfirm").focus();
+  }
+  function closeWorkbenchUnmetDelete() {
+    document.getElementById("wbUnmetDeleteOverlay").hidden = true;
+    const trigger = pendingWorkbenchUnmetDelete?.trigger;
+    pendingWorkbenchUnmetDelete = null;
+    if (trigger?.isConnected) trigger.focus();
+  }
+  function confirmWorkbenchUnmetDelete() {
+    if (!pendingWorkbenchUnmetDelete) return;
+    const { key, kind } = pendingWorkbenchUnmetDelete;
+    deletedWorkbenchUnmetKeys.add(key);
+    const persisted = saveWorkbenchUnmetState();
+    document.getElementById("wbUnmetDeleteOverlay").hidden = true;
+    pendingWorkbenchUnmetDelete = null;
+    renderWorkbenchDimensions();
+    workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`)?.focus();
+    showWorkbenchToast(
+      persisted ? "\u672A\u8FBE\u6210\u9879\u5DF2\u5220\u9664\u3002" : "\u672A\u8FBE\u6210\u9879\u5DF2\u4ECE\u5F53\u524D\u5217\u8868\u79FB\u9664\uFF1B\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u5237\u65B0\u540E\u4F1A\u6062\u590D\u3002"
+    );
+  }
+  document.getElementById("wbUnmetDeleteClose").addEventListener("click", closeWorkbenchUnmetDelete);
+  document.getElementById("wbUnmetDeleteCancel").addEventListener("click", closeWorkbenchUnmetDelete);
+  document.getElementById("wbUnmetDeleteConfirm").addEventListener("click", confirmWorkbenchUnmetDelete);
+  document.getElementById("wbUnmetDeleteOverlay").addEventListener("click", (event) => {
+    if (event.target.id === "wbUnmetDeleteOverlay") closeWorkbenchUnmetDelete();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !document.getElementById("wbUnmetDeleteOverlay").hidden)
+      closeWorkbenchUnmetDelete();
+  });
   document.getElementById("wbIssueClose").addEventListener("click", closeIssueEditor);
   document.getElementById("wbIssueCancel").addEventListener("click", closeIssueEditor);
   document.getElementById("wbIssueSave").addEventListener("click", () => saveIssueEditor(false));
@@ -7158,11 +9721,386 @@ html body[data-ds-dark-theme] {
     if (event.key === "Escape" && !document.getElementById("wbIssueOverlay").hidden)
       closeIssueEditor();
   });
+  var improvementEditIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"/></svg>';
+  var improvementSaveIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+  var improvementDeleteIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>';
+  function createImprovementAction(label, icon, className, attribute) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `wb-improvement-action${className ? ` ${className}` : ""}`;
+    button.setAttribute(attribute, "");
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.innerHTML = icon;
+    return button;
+  }
+  function appendImprovementActions(row) {
+    if (row.querySelector("td.actions")) return;
+    const cell = document.createElement("td");
+    cell.className = "actions";
+    const actions = document.createElement("div");
+    actions.className = "wb-improvement-actions";
+    actions.append(
+      createImprovementAction("\u7F16\u8F91", improvementEditIcon, "", "data-wb-improvement-edit")
+    );
+    actions.append(
+      createImprovementAction("\u5220\u9664", improvementDeleteIcon, "delete", "data-wb-improvement-delete")
+    );
+    cell.append(actions);
+    row.append(cell);
+  }
+  workbenchView.querySelectorAll(".wb-improvement-table").forEach((table) => {
+    const header = table.tHead?.rows[0];
+    if (header && !header.querySelector(".actions")) {
+      const cell = document.createElement("th");
+      cell.className = "actions";
+      cell.textContent = "\u64CD\u4F5C";
+      header.append(cell);
+    }
+    table.tBodies[0]?.querySelectorAll("tr").forEach((row) => {
+      appendImprovementActions(row);
+    });
+  });
+  var improvementAddOverlay = document.getElementById("wbImprovementAddOverlay");
+  var improvementAddForm = document.getElementById("wbImprovementAddForm");
+  var improvementAddFields = document.getElementById("wbImprovementAddFields");
+  var improvementAddSchemas = {
+    short: [
+      { key: "direction", label: "\u8FFD\u8FDB\u65B9\u5411", multiline: false },
+      { key: "measure", label: "\u6539\u5584\u63AA\u65BD", multiline: true },
+      { key: "issue", label: "\u5BF9\u5E94\u95EE\u9898", multiline: true }
+    ],
+    long: [
+      { key: "mechanism", label: "\u673A\u5236", multiline: false },
+      { key: "content", label: "\u673A\u5236\u5185\u5BB9\uFF08\u95EE\u9898\u2192\u5BF9\u7B56\uFF09", multiline: true },
+      { key: "goal", label: "\u76EE\u6807", multiline: true },
+      { key: "status", label: "\u72B6\u6001", multiline: false }
+    ]
+  };
+  var pendingImprovementAdd = null;
+  function openImprovementAdd(kind, trigger) {
+    const schema = improvementAddSchemas[kind];
+    if (!schema) return;
+    pendingImprovementAdd = { kind, trigger };
+    document.getElementById("wbImprovementAddTitle").textContent = kind === "short" ? "\u6DFB\u52A0\u77ED\u671F\u8FFD\u8FDB\u63AA\u65BD" : "\u6DFB\u52A0\u957F\u671F\u673A\u5236";
+    document.getElementById("wbImprovementAddSubtitle").textContent = kind === "short" ? "\u586B\u5199\u8FFD\u8FDB\u65B9\u5411\u3001\u6539\u5584\u63AA\u65BD\u53CA\u5BF9\u5E94\u95EE\u9898\u3002" : "\u586B\u5199\u673A\u5236\u3001\u673A\u5236\u5185\u5BB9\uFF08\u95EE\u9898\u2192\u5BF9\u7B56\uFF09\u53CA\u76EE\u6807\u3002";
+    improvementAddFields.replaceChildren();
+    schema.forEach((field) => {
+      const label = document.createElement("label");
+      label.append(document.createTextNode(field.label));
+      const control = document.createElement(field.multiline ? "textarea" : "input");
+      control.dataset.improvementField = field.key;
+      control.required = true;
+      control.maxLength = field.multiline ? 4e3 : 160;
+      control.placeholder = `\u586B\u5199${field.label}`;
+      label.append(control);
+      improvementAddFields.append(label);
+    });
+    improvementAddOverlay.hidden = false;
+    improvementAddFields.querySelector("input,textarea")?.focus();
+  }
+  function closeImprovementAdd() {
+    improvementAddOverlay.hidden = true;
+    const trigger = pendingImprovementAdd?.trigger;
+    pendingImprovementAdd = null;
+    if (trigger?.isConnected) trigger.focus();
+  }
+  improvementAddForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pendingImprovementAdd || !improvementAddForm.reportValidity()) return;
+    const { kind, trigger } = pendingImprovementAdd;
+    const table = workbenchView.querySelector(
+      kind === "short" ? ".wb-improvement-table:not(.long-term)" : ".wb-improvement-table.long-term"
+    );
+    const row = document.createElement("tr");
+    improvementAddSchemas[kind].forEach((field) => {
+      const cell = document.createElement("td");
+      if (field.key === "direction" || field.key === "mechanism") cell.className = "direction";
+      if (field.key === "issue") cell.className = "issue";
+      if (field.key === "goal") cell.className = "goal";
+      if (field.key === "status") cell.className = "status";
+      cell.textContent = improvementAddFields.querySelector(`[data-improvement-field="${field.key}"]`).value.trim();
+      row.append(cell);
+    });
+    appendImprovementActions(row);
+    table?.tBodies[0]?.append(row);
+    closeImprovementAdd();
+    if (!table) trigger?.focus();
+    showWorkbenchToast("\u6539\u5584\u63AA\u65BD\u5DF2\u6DFB\u52A0\u5230\u5F53\u524D\u9875\u9762\u3002");
+  });
+  document.getElementById("wbImprovementAddClose").addEventListener("click", closeImprovementAdd);
+  document.getElementById("wbImprovementAddCancel").addEventListener("click", closeImprovementAdd);
+  improvementAddOverlay.addEventListener("click", (event) => {
+    if (event.target === improvementAddOverlay) closeImprovementAdd();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !improvementAddOverlay.hidden) closeImprovementAdd();
+  });
+  var referenceOverlay = document.getElementById("wbReferenceOverlay");
+  var referenceForm = document.getElementById("wbReferenceForm");
+  var referenceNameInput = document.getElementById("wbReferenceName");
+  var referenceUrlInput = document.getElementById("wbReferenceUrl");
+  function openWorkbenchReference(trigger, id = "") {
+    const existing = id ? workbenchReferenceLinks.find((link) => link.id === id) : null;
+    pendingWorkbenchReference = { id: existing?.id || "", trigger };
+    referenceForm.reset();
+    referenceNameInput.value = existing?.name || "";
+    referenceUrlInput.value = existing?.url || "";
+    document.getElementById("wbReferenceFormTitle").textContent = existing ? "\u7F16\u8F91\u53C2\u8003\u94FE\u63A5" : "\u6DFB\u52A0\u53C2\u8003\u94FE\u63A5";
+    document.getElementById("wbReferenceSubmit").textContent = existing ? "\u4FDD\u5B58" : "\u63D0\u4EA4";
+    referenceOverlay.hidden = false;
+    referenceNameInput.focus();
+  }
+  function closeWorkbenchReference() {
+    referenceOverlay.hidden = true;
+    const trigger = pendingWorkbenchReference?.trigger;
+    pendingWorkbenchReference = null;
+    if (trigger?.isConnected) trigger.focus();
+  }
+  referenceForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pendingWorkbenchReference || !referenceForm.reportValidity()) return;
+    const name = referenceNameInput.value.trim();
+    let url;
+    try {
+      url = new URL(referenceUrlInput.value.trim());
+    } catch {
+      showWorkbenchToast("\u8BF7\u8F93\u5165\u6709\u6548\u7684\u7F51\u9875\u94FE\u63A5\uFF08\u9700\u5305\u542B https:// \u6216 http://\uFF09\u3002");
+      referenceUrlInput.focus();
+      return;
+    }
+    if (!["http:", "https:"].includes(url.protocol)) {
+      showWorkbenchToast("\u53C2\u8003\u94FE\u63A5\u4EC5\u652F\u6301 http \u6216 https \u5730\u5740\u3002");
+      referenceUrlInput.focus();
+      return;
+    }
+    const { id } = pendingWorkbenchReference;
+    if (id) {
+      workbenchReferenceLinks = workbenchReferenceLinks.map(
+        (link) => link.id === id ? { ...link, name, url: url.href } : link
+      );
+    } else {
+      const newId = globalThis.crypto?.randomUUID?.() || `reference-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      workbenchReferenceLinks.push({ id: newId, name, url: url.href });
+    }
+    const saved = saveWorkbenchReferenceLinks();
+    closeWorkbenchReference();
+    renderWorkbenchReferenceLinks();
+    showWorkbenchToast(
+      saved ? id ? "\u53C2\u8003\u94FE\u63A5\u5DF2\u66F4\u65B0\u3002" : "\u53C2\u8003\u94FE\u63A5\u5DF2\u6DFB\u52A0\u3002" : "\u53C2\u8003\u94FE\u63A5\u5DF2\u66F4\u65B0\uFF0C\u4F46\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF1B\u5237\u65B0\u540E\u4E0D\u4F1A\u4FDD\u7559\u3002"
+    );
+  });
+  document.getElementById("wbReferenceClose").addEventListener("click", closeWorkbenchReference);
+  document.getElementById("wbReferenceCancel").addEventListener("click", closeWorkbenchReference);
+  referenceOverlay.addEventListener("click", (event) => {
+    if (event.target === referenceOverlay) closeWorkbenchReference();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !referenceOverlay.hidden) closeWorkbenchReference();
+  });
+  var summaryEditOverlay = document.getElementById("wbSummaryEditOverlay");
+  var summaryEditForm = document.getElementById("wbSummaryEditForm");
+  var summaryInputs = {
+    positive: document.getElementById("wbSummaryPositiveInput"),
+    risk: document.getElementById("wbSummaryRiskInput"),
+    rhythm: document.getElementById("wbSummaryRhythmInput")
+  };
+  function openWorkbenchSummaryEdit(trigger) {
+    Object.entries(summaryInputs).forEach(([key, input]) => {
+      input.value = workbenchSummaryContent[key];
+    });
+    pendingWorkbenchSummaryTrigger = trigger;
+    summaryEditOverlay.hidden = false;
+    summaryInputs.positive.focus();
+  }
+  function closeWorkbenchSummaryEdit() {
+    summaryEditOverlay.hidden = true;
+    const trigger = pendingWorkbenchSummaryTrigger;
+    pendingWorkbenchSummaryTrigger = null;
+    if (trigger?.isConnected) trigger.focus();
+  }
+  summaryEditForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!pendingWorkbenchSummaryTrigger || !summaryEditForm.reportValidity()) return;
+    const updated = Object.fromEntries(
+      Object.entries(summaryInputs).map(([key, input]) => [key, input.value.trim()])
+    );
+    if (Object.values(updated).some((value) => !value)) {
+      showWorkbenchToast("\u8BF7\u5B8C\u6574\u586B\u5199\u4E09\u6BB5\u6458\u8981\u5185\u5BB9\u3002");
+      return;
+    }
+    workbenchSummaryContent = updated;
+    const persisted = saveWorkbenchSummary();
+    renderWorkbenchSummary();
+    closeWorkbenchSummaryEdit();
+    showWorkbenchToast(
+      persisted ? "\u672C\u671F\u7ED3\u8BBA\u6458\u8981\u5DF2\u66F4\u65B0\u5E76\u4FDD\u5B58\u5728\u672C\u673A\u3002" : "\u6458\u8981\u5DF2\u66F4\u65B0\uFF1B\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u5237\u65B0\u540E\u4E0D\u4F1A\u4FDD\u7559\u3002"
+    );
+  });
+  document.getElementById("wbSummaryEditClose").addEventListener("click", closeWorkbenchSummaryEdit);
+  document.getElementById("wbSummaryEditCancel").addEventListener("click", closeWorkbenchSummaryEdit);
+  summaryEditOverlay.addEventListener("click", (event) => {
+    if (event.target === summaryEditOverlay) closeWorkbenchSummaryEdit();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !summaryEditOverlay.hidden) closeWorkbenchSummaryEdit();
+  });
   workbenchView.addEventListener("click", (event) => {
+    const summaryAi = event.target.closest("[data-wb-summary-ai]");
+    if (summaryAi) {
+      send(
+        `\u8BF7\u57FA\u4E8E\u8BA2\u5355\u5DE5\u4F5C\u53F0\u5F53\u524D\u7684\u672C\u671F\u7ED3\u8BBA\u6458\u8981\u8FDB\u884C AI \u5206\u6790\uFF0C\u68B3\u7406\u5173\u952E\u7ED3\u8BBA\u3001\u4E3B\u8981\u98CE\u9669\u3001\u53D8\u5316\u8D8B\u52BF\u53CA\u4F18\u5148\u6539\u5584\u65B9\u5411\uFF1B\u533A\u5206\u62A5\u544A\u4E8B\u5B9E\u4E0E\u63A8\u65AD\uFF0C\u4E0D\u8865\u9020\u6570\u636E\u3002
+
+\u6B63\u5411\uFF1A${workbenchSummaryContent.positive}
+
+\u98CE\u9669\uFF1A${workbenchSummaryContent.risk}
+
+\u65EC/\u5468\u8282\u594F\uFF1A${workbenchSummaryContent.rhythm}`
+      );
+      return;
+    }
+    const summaryEdit = event.target.closest("[data-wb-summary-edit]");
+    if (summaryEdit) {
+      openWorkbenchSummaryEdit(summaryEdit);
+      return;
+    }
+    const referenceAdd = event.target.closest("[data-wb-reference-add]");
+    if (referenceAdd) {
+      openWorkbenchReference(referenceAdd);
+      return;
+    }
+    const referenceEdit = event.target.closest("[data-wb-edit-reference]");
+    if (referenceEdit) {
+      openWorkbenchReference(referenceEdit, referenceEdit.dataset.wbEditReference);
+      return;
+    }
+    const referenceDelete = event.target.closest("[data-wb-delete-reference]");
+    if (referenceDelete) {
+      const item = workbenchReferenceLinks.find(
+        (link) => link.id === referenceDelete.dataset.wbDeleteReference
+      );
+      if (!item || !window.confirm(`\u786E\u8BA4\u5220\u9664\u53C2\u8003\u94FE\u63A5\u201C${item.name}\u201D\u5417\uFF1F`)) return;
+      workbenchReferenceLinks = workbenchReferenceLinks.filter((link) => link.id !== item.id);
+      const saved = saveWorkbenchReferenceLinks();
+      renderWorkbenchReferenceLinks();
+      document.querySelector("[data-wb-reference-add]")?.focus();
+      showWorkbenchToast(
+        saved ? "\u53C2\u8003\u94FE\u63A5\u5DF2\u5220\u9664\u3002" : "\u53C2\u8003\u94FE\u63A5\u5DF2\u4ECE\u5F53\u524D\u9875\u9762\u79FB\u9664\uFF0C\u4F46\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF1B\u5237\u65B0\u540E\u53EF\u80FD\u6062\u590D\u3002"
+      );
+      return;
+    }
+    const improvementAdd = event.target.closest("[data-wb-improvement-add]");
+    if (improvementAdd) {
+      openImprovementAdd(improvementAdd.dataset.wbImprovementAdd, improvementAdd);
+      return;
+    }
+    const improvementEdit = event.target.closest("[data-wb-improvement-edit]");
+    if (improvementEdit) {
+      const row = improvementEdit.closest("tr");
+      const isEditing = improvementEdit.dataset.editing === "true";
+      row.querySelectorAll("td:not(.actions)").forEach((cell) => {
+        if (isEditing) {
+          const text = String(cell.innerText || cell.textContent || "").trim();
+          cell.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+          cell.contentEditable = "false";
+          cell.classList.remove("is-editing");
+        } else {
+          cell.contentEditable = "true";
+          cell.spellcheck = false;
+          cell.classList.add("is-editing");
+        }
+      });
+      improvementEdit.dataset.editing = String(!isEditing);
+      improvementEdit.innerHTML = isEditing ? improvementEditIcon : improvementSaveIcon;
+      improvementEdit.setAttribute("aria-label", isEditing ? "\u7F16\u8F91\u6539\u5584\u63AA\u65BD" : "\u4FDD\u5B58\u6539\u5584\u63AA\u65BD");
+      improvementEdit.title = isEditing ? "\u7F16\u8F91" : "\u4FDD\u5B58";
+      if (!isEditing) row.querySelector("td:not(.actions)")?.focus();
+      else showWorkbenchToast("\u6539\u5584\u63AA\u65BD\u5DF2\u5728\u5F53\u524D\u9875\u9762\u66F4\u65B0\u3002");
+      return;
+    }
+    const improvementDelete = event.target.closest("[data-wb-improvement-delete]");
+    if (improvementDelete) {
+      if (!window.confirm("\u786E\u8BA4\u5220\u9664\u8FD9\u6761\u6539\u5584\u63AA\u65BD\u5417\uFF1F\u5220\u9664\u540E\u4EC5\u4ECE\u5F53\u524D\u9875\u9762\u79FB\u9664\u3002")) return;
+      improvementDelete.closest("tr")?.remove();
+      showWorkbenchToast("\u6539\u5584\u63AA\u65BD\u5DF2\u4ECE\u5F53\u524D\u9875\u9762\u79FB\u9664\u3002");
+      return;
+    }
+    const editUnmet = event.target.closest("[data-wb-edit-unmet]");
+    if (editUnmet) {
+      const key = decodeURIComponent(editUnmet.dataset.wbEditUnmet);
+      openWorkbenchUnmetAdd(key.startsWith("base:") ? "base" : "item", editUnmet, key);
+      return;
+    }
+    const deleteUnmet = event.target.closest("[data-wb-delete-unmet]");
+    if (deleteUnmet) {
+      openWorkbenchUnmetDelete(decodeURIComponent(deleteUnmet.dataset.wbDeleteUnmet), deleteUnmet);
+      return;
+    }
+    const addUnmet = event.target.closest("[data-wb-add-unmet]");
+    if (addUnmet) {
+      openWorkbenchUnmetAdd(addUnmet.dataset.wbAddUnmet, addUnmet);
+      return;
+    }
+    const unmetAi = event.target.closest("[data-wb-unmet-ai]");
+    if (unmetAi) {
+      const kind = unmetAi.dataset.wbUnmetAi;
+      const items = getWorkbenchUnmetItems(kind);
+      if (!items.length) {
+        showWorkbenchToast("\u5F53\u524D\u6CA1\u6709\u672A\u8FBE\u6210\u9879\u53EF\u4F9B\u5206\u6790\u3002");
+        return;
+      }
+      const title = kind === "base" ? "\u57FA\u5730\u672A\u8FBE\u6210\u9879" : "\u54C1\u9879\u672A\u8FBE\u6210\u9879";
+      const details = items.map(
+        (item) => [
+          item.title,
+          item.analysis ? `\u672A\u8FBE\u6210\u6307\u6807\uFF1A${item.analysis}` : "",
+          ...item.reasons.map((reason) => `\u539F\u56E0\uFF1A${reason}`),
+          ...item.measures.map((measure) => `\u6539\u5584\u63AA\u65BD\uFF1A${measure}`)
+        ].filter(Boolean).join("\n")
+      ).join("\n\n");
+      send(
+        `\u8BF7\u57FA\u4E8E\u8BA2\u5355\u5DE5\u4F5C\u53F0\u7684\u3010${title}\uFF1A\u539F\u56E0\u5206\u6790\u4E0E\u6539\u5584\u63AA\u65BD\u3011\u5206\u6790\u4EE5\u4E0B\u5185\u5BB9\uFF0C\u5F52\u7EB3\u5171\u6027\u539F\u56E0\u3001\u4F18\u5148\u7EA7\u548C\u53EF\u6267\u884C\u7684\u6539\u5584\u5EFA\u8BAE\u3002\u8BF7\u533A\u5206\u62A5\u544A\u5DF2\u63D0\u4F9B\u7684\u4FE1\u606F\u4E0E\u63A8\u65AD\uFF0C\u4E0D\u8981\u8865\u9020\u4E8B\u5B9E\u3002
+
+${details}`
+      );
+      return;
+    }
+    const addDirectorNote = event.target.closest("[data-wb-add-director-note]");
+    if (addDirectorNote) {
+      openWorkbenchDirectorNote(addDirectorNote);
+      return;
+    }
+    const editDirectorNote = event.target.closest("[data-wb-edit-director-note]");
+    if (editDirectorNote) {
+      openWorkbenchDirectorNote(editDirectorNote, editDirectorNote.dataset.wbEditDirectorNote);
+      return;
+    }
+    const deleteDirectorNote = event.target.closest("[data-wb-delete-director-note]");
+    if (deleteDirectorNote) {
+      const note = workbenchDirectorNotes.find(
+        (item) => item.id === deleteDirectorNote.dataset.wbDeleteDirectorNote
+      );
+      if (!note || !window.confirm(`\u786E\u8BA4\u5220\u9664\u201C${note.director}\uFF5C${note.title}\u201D\u5417\uFF1F`)) return;
+      workbenchDirectorNotes = workbenchDirectorNotes.filter((item) => item.id !== note.id);
+      const persisted = saveWorkbenchDirectorNotes();
+      renderWorkbenchDimensions();
+      workbenchView.querySelector("[data-wb-add-director-note]")?.focus();
+      showWorkbenchToast(
+        persisted ? "\u5E94\u8D23\u603B\u76D1\u5907\u6CE8\u5DF2\u5220\u9664\u3002" : "\u5907\u6CE8\u5DF2\u4ECE\u5F53\u524D\u9875\u9762\u79FB\u9664\uFF1B\u6D4F\u89C8\u5668\u5B58\u50A8\u4E0D\u53EF\u7528\uFF0C\u5237\u65B0\u540E\u53EF\u80FD\u6062\u590D\u3002"
+      );
+      return;
+    }
     const customerOrders = event.target.closest("[data-wb-customer-orders]");
     if (customerOrders) {
       const [regionIndex, customerIndex] = customerOrders.dataset.wbCustomerOrders.split(":").map(Number);
       openChangedOrderList(regionIndex, customerIndex, customerOrders);
+      return;
+    }
+    if (event.target.closest("[data-wb-analysis-chat]")) {
+      const report = activeReport();
+      send(
+        `\u8BF7\u57FA\u4E8E\u5F53\u524D${report?.kind === "week" ? "\u5468\u5EA6" : "\u6708\u5EA6"}\u62A5\u544A\uFF0C\u8FDB\u4E00\u6B65\u5206\u6790\u9876\u90E8\u6838\u5FC3\u6307\u6807\u7684\u8FBE\u6807\u60C5\u51B5\u3001\u4E3B\u8981\u98CE\u9669\u53CA\u6539\u8FDB\u5EFA\u8BAE\u3002`
+      );
       return;
     }
     const eventTab = event.target.closest("[data-wb-event-filter]");
@@ -7194,7 +10132,7 @@ html body[data-ds-dark-theme] {
       const report = activeReport();
       const item = report?.events.find((entry) => entry.id === eventAi.dataset.wbEventAi);
       if (item) {
-        openWorkbenchDetail("event", item.id);
+        send(`${item.title}\u7684\u98CE\u9669\u539F\u56E0\u548C\u6539\u5584\u5EFA\u8BAE`);
       }
       return;
     }
@@ -7286,7 +10224,7 @@ html body[data-ds-dark-theme] {
     if (row) {
       row.classList.add("is-linked");
       row.scrollIntoView({ block: "center", behavior: "smooth" });
-      schedule(() => row.classList.remove("is-linked"), 2800);
+      setTimeout(() => row.classList.remove("is-linked"), 2800);
     }
   }
   var wbAdoptOverlay = document.getElementById("wbAdoptOverlay");
@@ -7353,7 +10291,7 @@ html body[data-ds-dark-theme] {
     toast.textContent = "\u5DF2\u5728\u672C\u9875\u521B\u5EFA\u8DDF\u8FDB\u4EFB\u52A1\uFF1B\u672A\u540C\u6B65\u5230\u771F\u5B9E\u4EFB\u52A1\u7CFB\u7EDF\u3002";
     toast.hidden = false;
     clearTimeout(window.toastTimer);
-    window.toastTimer = schedule(() => {
+    window.toastTimer = setTimeout(() => {
       toast.hidden = true;
     }, 3e3);
   });
@@ -7419,7 +10357,15 @@ html body[data-ds-dark-theme] {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    schedule(() => URL.revokeObjectURL(url), 1e3);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
+  }
+  async function send(text) {
+    try {
+      await draft(text);
+      showWorkbenchToast("\u5206\u6790\u95EE\u9898\u5DF2\u586B\u5165\u53F3\u4FA7\u8F93\u5165\u6846\uFF0C\u8BF7\u786E\u8BA4\u540E\u53D1\u9001\u3002");
+    } catch (error) {
+      showWorkbenchToast("\u65E0\u6CD5\u586B\u5165\u5206\u6790\u95EE\u9898\uFF1A" + error.message);
+    }
   }
   function openMetricDetail(key) {
     const metric = activeReport()?.metrics.find((item) => item.key === key);
@@ -7441,7 +10387,6 @@ html body[data-ds-dark-theme] {
     if (state.mode !== void 0) periodMode = state.mode;
     if (state.month !== void 0) selectedMonth = state.month;
     if (state.week !== void 0) selectedWeek = state.week;
-    if (state.weekInitialized !== void 0) weekInitialized = state.weekInitialized;
     if (state.event !== void 0) eventFilter = state.event;
     if (state.task !== void 0) taskFilter = state.task;
     renderSelectedPeriod();
@@ -7457,7 +10402,7 @@ html body[data-ds-dark-theme] {
           mode: periodMode,
           month: selectedMonth,
           week: selectedWeek,
-          weekInitialized,
+          weekInitialized: true,
           event: eventFilter,
           task: taskFilter
         });
@@ -7478,7 +10423,7 @@ html body[data-ds-dark-theme] {
           event: eventFilter,
           task: taskFilter,
           dimension: dimensionTab,
-          base: selectedWorkbenchBase
+          base: ""
         },
         metrics: report?.metrics ?? [],
         events: (report?.events ?? []).filter((event) => eventFilter !== "focus" || event.focus),

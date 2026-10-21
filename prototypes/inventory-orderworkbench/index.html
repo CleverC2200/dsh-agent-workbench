@@ -240,51 +240,129 @@
         font-size: 12px;
         font-weight: 700;
       }
-      .period-switch {
-        display: inline-flex;
-        padding: 3px;
-        border: 1px solid #e6eaf1;
-        border-radius: 8px;
-        background: #f6f8fb;
+      .period-picker {
+        position: relative;
+        z-index: 20;
       }
-      .period-switch button {
-        min-width: 58px;
-        height: 29px;
-        padding: 0 11px;
-        border: 0;
-        border-radius: 6px;
-        color: #6e7785;
-        background: transparent;
-        font-size: 12px;
-      }
-      .period-switch button.active {
-        color: var(--brand);
-        background: #fff;
-        box-shadow: 0 1px 5px rgba(35, 44, 62, 0.12);
-        font-weight: 700;
-      }
-      .period-control {
+      .period-picker-trigger {
         display: flex;
         align-items: center;
-        gap: 7px;
-        color: #667080;
-        font-size: 12px;
+        justify-content: space-between;
+        gap: 18px;
+        width: 210px;
+        min-width: 180px;
+        height: 36px;
+        padding: 0 11px;
+        border: 1px solid #c9ced7;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        box-shadow: 0 1px 2px #1822300a;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
       }
-      .period-control[hidden] {
+      .period-picker-trigger:hover {
+        border-color: #e8a4ae;
+        background: #fff7f8;
+        box-shadow: 0 2px 8px #df173214;
+      }
+      .period-picker-trigger:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .period-picker-trigger svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        color: #697386;
+        transition: transform 160ms ease;
+      }
+      .period-picker-trigger[aria-expanded='true'] {
+        border-color: #ce7280;
+        box-shadow: 0 0 0 3px #df173212;
+      }
+      .period-picker-trigger[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+      .period-picker-menu {
+        position: absolute;
+        top: calc(100% + 7px);
+        left: 0;
+        z-index: 90;
+        display: grid;
+        grid-template-columns: minmax(132px, 0.78fr) minmax(220px, 1.22fr);
+        width: min(440px, calc(100vw - 32px));
+        max-height: min(310px, calc(100vh - 100px));
+        overflow: auto;
+        padding: 5px;
+        border: 1px solid #e7e9ee;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow:
+          0 14px 38px #18223024,
+          0 2px 8px #1822300a;
+      }
+      .period-picker-menu[hidden] {
         display: none;
       }
-      .period-control input,
-      .period-control select {
-        min-height: 32px;
-        padding: 4px 9px;
-        border: 1px solid #dce2eb;
-        border-radius: 6px;
-        color: #343b47;
-        background: #fff;
-        font-size: 12px;
+      .period-picker-months,
+      .period-picker-weeks {
+        display: grid;
+        align-content: start;
+        gap: 3px;
       }
-      .period-control select {
-        max-width: 245px;
+      .period-picker-months {
+        padding-right: 4px;
+        border-right: 1px solid #eceef1;
+      }
+      .period-picker-weeks {
+        padding-left: 4px;
+      }
+      .period-picker-option {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        min-width: 0;
+        min-height: 36px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 6px;
+        color: #343b46;
+        background: #fff;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
+      }
+      .period-picker-option:hover,
+      .period-picker-option:focus-visible {
+        outline: 0;
+        color: #343b46;
+        background: #ffedf0;
+      }
+      .period-picker-option[aria-pressed='true'] {
+        color: #fff;
+        background: #df1732;
+      }
+      .period-picker-weeks .period-picker-option[aria-pressed='true'] {
+        color: #c91029;
+        background: #fff5f6;
+      }
+      .period-picker-option:focus-visible {
+        box-shadow: inset 0 0 0 2px #df1732;
+      }
+      .period-picker-weeks .period-picker-option {
+        white-space: nowrap;
       }
       .period-meta {
         position: absolute;
@@ -309,6 +387,10 @@
         min-height: 0;
         overflow: auto;
         background: #fff;
+        scrollbar-width: none;
+      }
+      .workspace::-webkit-scrollbar {
+        display: none;
       }
       .content {
         max-width: 1500px;
@@ -616,9 +698,10 @@
         }
       }
       .fulfillment-summary.delivery-summary {
-        grid-template-columns:
-          minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(0, 1fr)
-          minmax(0, 0.95fr);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(
+            0,
+            1fr
+          ) minmax(0, 0.95fr);
       }
       @media (max-width: 1050px) {
         .fulfillment-summary.delivery-summary {
@@ -652,8 +735,10 @@
       .delivery-summary .metric {
         min-height: 160px;
         padding: 0 0 8px;
-        border-color: #d8d8d8;
-        border-radius: 11px;
+        border: 1px solid #d9dde3;
+        border-radius: 10px;
+        background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
       }
       .delivery-summary .metric::after {
         display: none;
@@ -667,16 +752,16 @@
         justify-content: flex-start;
         gap: 6px;
         min-height: 80px;
-        padding: 12px 10px 8px;
-        border-bottom: 1px dashed #d8d8d8;
+        padding: 11px 8px 8px;
+        border-bottom: 1px dashed #cfd2d6;
       }
       .delivery-summary .metric .metric-head > span {
         display: block;
         min-width: 0;
         overflow: hidden;
-        color: #596576;
-        font-size: 12px;
-        font-weight: 650;
+        color: #24324a;
+        font-size: 13px;
+        font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -684,13 +769,13 @@
         flex: 0 0 auto;
         margin: 0;
         color: #10264a;
-        font-size: 24px;
-        line-height: 1.2;
-        letter-spacing: -0.3px;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
       }
       .delivery-summary .metric .metric-head .metric-unit {
         margin-left: 3px;
-        font-size: 12px;
+        font-size: 13px;
       }
       .fulfillment-summary .metric::after {
         content: '';
@@ -762,9 +847,9 @@
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px 9px;
-        margin: 8px 6px 0;
-        color: #a0a0a0;
-        font-size: 14px;
+        margin: 8px 8px 0;
+        color: #a0a4ac;
+        font-size: 11px;
         line-height: 1.5;
       }
       .metric-breakdown > span {
@@ -784,8 +869,8 @@
       }
       .metric-breakdown strong {
         margin: 0 !important;
-        color: #929292 !important;
-        font-size: 14px !important;
+        color: #a0a4ac !important;
+        font-size: 11px !important;
         font-weight: 500;
       }
       .fulfillment-grid {
@@ -2260,12 +2345,6 @@
         flex-wrap: wrap;
         margin-bottom: 8px;
       }
-      .wb-hero > .wb-link {
-        margin-left: auto;
-      }
-      .wb-hero .wb-context {
-        margin: 0;
-      }
       .wb-hero-main {
         min-width: 0;
       }
@@ -2365,23 +2444,35 @@
       }
       .wb-kpis {
         display: grid;
-        grid-template-columns: repeat(8, minmax(140px, 1fr));
-        gap: 9px;
-        overflow-x: auto;
-        padding-bottom: 2px;
+        grid-auto-flow: row;
+        grid-auto-columns: auto;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-rows: auto;
+        gap: 12px;
+        overflow: visible;
+        padding: 2px 2px 8px;
       }
       .wb-kpi {
         min-width: 0;
-        min-height: 220px;
-        padding: 14px 13px 12px;
-        border: 1px solid #e5e9ef;
+        min-height: 200px;
+        padding: 11px 8px 10px;
+        border: 1px solid #d9dde3;
         border-radius: 10px;
         background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
         text-align: left;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease;
       }
       .wb-kpi:hover {
-        border-color: #d7dde6;
-        box-shadow: 0 8px 22px rgba(32, 43, 61, 0.07);
+        border-color: #efabb4;
+        background: #fffafb;
+        box-shadow: 0 8px 20px #20273312;
+      }
+      .wb-kpi:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
       }
       .wb-kpi-head {
         display: flex;
@@ -2392,9 +2483,9 @@
       .wb-kpi-title {
         min-width: 0;
         overflow: hidden;
-        color: #252c37;
+        color: #24324a;
         font-size: 13px;
-        font-weight: 750;
+        font-weight: 700;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
@@ -2402,122 +2493,112 @@
         display: inline-flex;
         align-items: center;
         flex: 0 0 auto;
-        padding: 4px 7px;
-        border-radius: 12px;
-        color: #278565;
-        background: #eaf8f1;
-        font-size: 9px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        color: #fff;
+        background: #00bd12;
+        font-size: 11px;
         font-weight: 700;
       }
       .wb-kpi .wb-kpi-state.bad {
-        color: #c74455;
-        background: #fff0f2;
+        color: #fff;
+        background: #f00000;
       }
       .wb-kpi .wb-kpi-state.unknown {
-        color: #667487;
-        background: #f0f3f7;
-      }
-      .wb-kpi-meta {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-top: 10px;
-        overflow: hidden;
-        color: #7f8998;
-        font-size: 9px;
-        white-space: nowrap;
-      }
-      .wb-kpi-badge {
-        padding: 3px 6px;
-        border-radius: 10px;
-        color: #647184;
-        background: #f1f4f7;
-        font-weight: 700;
-      }
-      .wb-kpi.urgent .wb-kpi-badge {
-        color: #bb4152;
-        background: #fff1f3;
+        color: #667085;
+        background: #eef1f5;
       }
       .wb-kpi-value {
         display: flex;
-        align-items: flex-end;
-        gap: 4px;
-        min-height: 51px;
-        margin-top: 9px;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 48px;
+        margin-top: 3px;
+        padding: 5px 2px 10px;
+        border-bottom: 1px dashed #cfd2d6;
+      }
+      .wb-kpi-main {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        min-width: 0;
       }
       .wb-kpi-value strong {
-        color: #17202e;
-        font-size: 34px;
-        line-height: 1;
-        letter-spacing: -1px;
+        color: #10264b;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
       }
       .wb-kpi-value em {
-        padding-bottom: 3px;
-        color: #778294;
+        color: #10264b;
         font-size: 13px;
         font-style: normal;
       }
+      .wb-kpi-target {
+        flex: 0 0 auto;
+        color: #a0a4ac;
+        font-size: 11px;
+        white-space: nowrap;
+      }
       .wb-kpi-compare {
         display: grid;
-        gap: 6px;
-        padding: 10px 0 9px;
-        border-top: 1px dashed #e4e8ee;
-        border-bottom: 1px dashed #e4e8ee;
+        gap: 0;
+        padding: 3px 2px 2px;
+        border-bottom: 0;
+      }
+      .wb-kpi-compare-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 8px 0;
+      }
+      .wb-kpi-compare-group + .wb-kpi-compare-group {
+        border-top: 1px dashed #cfd2d6;
       }
       .wb-kpi-compare-row {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
-        align-items: center;
-        color: #697586;
-        font-size: 9px;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 5px;
+        min-width: 0;
+        padding: 0;
+        color: #a0a4ac;
+        font-size: 11px;
       }
       .wb-kpi-compare-row > span {
         min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .wb-kpi-compare-row.head {
-        color: #a0a8b4;
       }
       .wb-kpi-compare-row b {
-        color: #778294;
-        font-weight: 700;
+        color: #a0a4ac;
+        font-size: 11px;
+        font-weight: 500;
         white-space: nowrap;
       }
-      .wb-kpi-compare-row b.good {
-        color: #238b68;
+      .wb-kpi-compare-row:first-child {
+        justify-content: flex-start;
+        gap: 8px;
       }
-      .wb-kpi-compare-row b.bad {
-        color: #c63f50;
+      .wb-kpi-compare-row:last-child {
+        justify-content: flex-end;
+        gap: 8px;
       }
       .wb-kpi-foot {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        gap: 6px;
-        align-items: center;
-        margin-top: 10px;
-        color: #596576;
-        font-size: 9px;
-        font-weight: 650;
+        min-height: 31px;
+        display: flex;
+        align-items: flex-start;
+        margin-top: 0;
+        padding: 2px 5px 0;
+        color: #858c96;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
       }
       .wb-kpi-foot > span {
-        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .wb-kpi-foot b {
-        color: #667487;
-        text-align: right;
-        white-space: nowrap;
-      }
-      .wb-kpi-foot b.good {
-        color: #238b68;
-      }
-      .wb-kpi-foot b.bad {
-        color: #c63f50;
       }
       .wb-card {
         min-width: 0;
@@ -2531,6 +2612,287 @@
         color: #7a8290;
         font-size: 11px;
         line-height: 1.6;
+      }
+      .wb-improvement-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .wb-reference-head h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-reference-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-reference-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-reference-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-list {
+        display: grid;
+        gap: 8px;
+      }
+      .wb-reference-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .wb-reference-main {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        flex: 1;
+      }
+      .wb-reference-main strong {
+        overflow: hidden;
+        color: #343b46;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a {
+        overflow: hidden;
+        color: #65758b;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a:hover {
+        color: #df1732;
+      }
+      .wb-reference-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .wb-reference-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-reference-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-reference-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-reference-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-reference-empty {
+        margin: 0;
+        padding: 14px;
+        border: 1px dashed #d9dde3;
+        border-radius: 8px;
+        color: #858c96;
+        background: #fafafa;
+        font-size: 11px;
+        text-align: center;
+      }
+      .wb-improvement-section > h2 {
+        margin: 0 0 16px;
+        color: #20232a;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+      .wb-improvement-block + .wb-improvement-block {
+        margin-top: 20px;
+      }
+      .wb-improvement-block-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 12px;
+      }
+      .wb-improvement-block h3 {
+        margin: 0;
+        color: #343d4b;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .wb-improvement-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-improvement-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-improvement-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #d9dde3;
+        border-radius: 6px;
+      }
+      .wb-improvement-table {
+        width: 100%;
+        min-width: 1080px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        color: #303844;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-improvement-table th,
+      .wb-improvement-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #d9dde3;
+        border-bottom: 1px solid #d9dde3;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      .wb-improvement-table th:last-child,
+      .wb-improvement-table td:last-child {
+        border-right: 0;
+      }
+      .wb-improvement-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-improvement-table th {
+        color: #343b46;
+        background: #f1f2f4;
+        font-weight: 700;
+      }
+      .wb-improvement-table .direction,
+      .wb-improvement-table .issue,
+      .wb-improvement-table .goal,
+      .wb-improvement-table .status {
+        width: auto;
+      }
+      .wb-improvement-table td.status {
+        display: table-cell;
+        padding: 8px 10px;
+        border-radius: 0;
+        color: #303844;
+        background: #fff;
+        white-space: normal;
+      }
+      .wb-improvement-table .actions {
+        width: 82px;
+        text-align: center;
+      }
+      .wb-improvement-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .wb-improvement-action {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-improvement-action:hover {
+        border-color: #dbe2ea;
+        color: #df1732;
+        background: #fff7f8;
+      }
+      .wb-improvement-action.delete:hover {
+        border-color: #f5d1d6;
+        color: #d92d42;
+        background: #fff3f4;
+      }
+      .wb-improvement-action:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-action svg {
+        width: 15px;
+        height: 15px;
+      }
+      .wb-improvement-table td.is-editing {
+        outline: 2px solid #91caff;
+        outline-offset: -2px;
+        background: #f7fbff;
+      }
+      .wb-improvement-table.long-term {
+        min-width: 1122px;
+        table-layout: auto;
+      }
+      .wb-improvement-table.long-term .direction {
+        width: 112px;
+      }
+      .wb-improvement-table.long-term .goal {
+        width: 135px;
+      }
+      .wb-improvement-table.long-term .status {
+        width: 72px;
+      }
+      .wb-improvement-table strong {
+        color: #303844;
+        font-weight: 700;
       }
       .wb-analysis {
         border-color: #f0d8dc;
@@ -2733,39 +3095,6 @@
         height: 2px;
         background: var(--brand);
       }
-      .wb-context {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin: 0 0 5px;
-        color: #788391;
-        font-size: 11px;
-      }
-      .wb-context strong {
-        color: #425066;
-        font-size: 12px;
-      }
-      .wb-context span {
-        padding: 6px 10px;
-        border: 1px solid #e3e8f0;
-        border-radius: 6px;
-        background: #fff;
-      }
-      .wb-context select {
-        height: 31px;
-        padding: 0 25px 0 9px;
-        border: 1px solid #e3e8f0;
-        border-radius: 6px;
-        color: #596779;
-        background: #fff;
-        font-size: 11px;
-      }
-      .wb-context-note {
-        margin: 0 0 12px;
-        color: #99a2af;
-        font-size: 10px;
-      }
       .wb-dimension-table .category-toggle,
       .wb-dimension-table .region-change-toggle {
         padding: 0;
@@ -2836,12 +3165,6 @@
         color: #8d98a8 !important;
         text-align: center;
       }
-      .wb-report-date {
-        margin: 0 0 15px;
-        color: #a0a8b5;
-        font-size: 10px;
-        text-align: right;
-      }
       .wb-analysis {
         position: relative;
       }
@@ -2868,6 +3191,93 @@
         color: #8390a2;
         background: #fff;
         font-size: 10px;
+      }
+      .wb-metric-analysis {
+        border-color: #e3e6ea;
+        background: #fff;
+      }
+      .wb-metric-analysis::before {
+        display: none;
+      }
+      .wb-metric-analysis .wb-analysis-head {
+        align-items: center;
+        padding: 16px 18px 4px;
+      }
+      .wb-analysis-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .wb-analysis-label i {
+        display: inline-block;
+        color: inherit;
+        font-size: 18px;
+        font-style: normal;
+        line-height: 1;
+      }
+      .wb-analysis-label h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-analysis-label small {
+        display: block;
+        margin-top: 3px;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-summary-edit {
+        min-height: 30px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 0;
+        color: #df1732;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-summary-edit:hover {
+        color: #b91229;
+        background: transparent;
+      }
+      .wb-summary-edit:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-metric-analysis .wb-analysis-body {
+        padding: 0 18px 16px;
+      }
+      .wb-summary-lines {
+        display: grid;
+        gap: 4px;
+      }
+      .wb-summary-lines p {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 6px;
+        margin: 0;
+        color: #303844;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .wb-summary-lines strong {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-summary-lines [data-wb-summary-content] {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-summary-icon {
+        text-align: center;
+        white-space: nowrap;
+      }
+      .wb-summary-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
       }
       .wb-panels {
         align-items: stretch;
@@ -3523,6 +3933,7 @@
         display: flex;
         gap: 25px;
         overflow-x: auto;
+        overflow-y: hidden;
         padding: 0 18px;
         border-top: 1px solid #eef0f3;
         border-bottom: 1px solid #eef0f3;
@@ -3550,7 +3961,7 @@
         content: '';
         position: absolute;
         right: 0;
-        bottom: -1px;
+        bottom: 0;
         left: 0;
         height: 2px;
         background: var(--brand);
@@ -4509,11 +4920,11 @@
         .content {
           padding: 20px;
         }
-        .wb-kpis {
-          grid-template-columns: repeat(8, minmax(140px, 1fr));
-        }
         .wb-panels {
           grid-template-columns: 1fr;
+        }
+        .wb-kpis {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
       }
       @media (max-width: 1100px) {
@@ -4575,8 +4986,13 @@
           min-width: 0;
           flex: 1;
         }
-        .period-control select {
-          max-width: 200px;
+        .period-picker-trigger {
+          width: min(210px, calc(100vw - 150px));
+          min-width: 165px;
+        }
+        .period-picker-menu {
+          grid-template-columns: minmax(115px, 0.78fr) minmax(190px, 1.22fr);
+          width: min(390px, calc(100vw - 24px));
         }
         .content {
           padding: 16px 12px;
@@ -4598,14 +5014,30 @@
           gap: 8px;
         }
         .wb-kpis {
-          grid-template-columns: repeat(8, minmax(140px, 1fr));
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .wb-kpi-value {
+          gap: 4px;
+        }
+        .wb-kpi-target {
+          font-size: 10px;
+        }
+        .wb-kpi-compare-group {
+          grid-template-columns: 1fr;
+          gap: 6px;
+          padding: 5px 0;
+        }
+        .wb-kpi-compare-row {
+          justify-content: flex-start;
+          gap: 8px;
+          font-size: 10px;
+        }
+        .wb-kpi-compare-row b {
+          font-size: 10px;
         }
         .wb-boundary {
           flex-direction: column;
-        }
-        .wb-context small {
-          width: 100%;
-          margin-left: 0;
         }
         .wb-adopt-overlay {
           padding: 10px;
@@ -4694,6 +5126,425 @@
       .wb-region-customer-table th:nth-child(4) {
         width: 14%;
       }
+      .wb-performance-period + .wb-performance-period {
+        margin-top: 22px;
+      }
+      #wbDimensionSection > .wb-dimension-head {
+        display: none;
+      }
+      .wb-performance-period h3 {
+        margin: 0 0 9px;
+        color: #303844;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .wb-performance-table-wrap {
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid #e3e6ea;
+        border-radius: 7px;
+        scrollbar-width: thin;
+      }
+      .wb-performance-table {
+        width: 100%;
+        min-width: 1120px;
+        border-collapse: collapse;
+        table-layout: auto;
+        text-align: left;
+        font-size: 11px;
+      }
+      .wb-performance-table.wide {
+        min-width: 1320px;
+      }
+      .wb-performance-table th,
+      .wb-performance-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #e3e6ea;
+        border-bottom: 1px solid #e3e6ea;
+        white-space: nowrap;
+      }
+      .wb-performance-table th {
+        color: #4d5765;
+        background: #f2f3f5;
+        font-weight: 700;
+      }
+      .wb-performance-table thead tr:first-child th {
+        height: 38px;
+      }
+      .wb-performance-table thead tr:nth-child(2) th {
+        height: 34px;
+        font-weight: 600;
+      }
+      .wb-performance-table td {
+        height: 36px;
+        color: #4f5967;
+        background: #fff;
+      }
+      .wb-performance-table tbody tr:hover td {
+        background: #fffafb;
+      }
+      .wb-performance-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-performance-table th:last-child,
+      .wb-performance-table td:last-child {
+        border-right: 0;
+      }
+      .wb-performance-table td:first-child {
+        color: #303844;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-good {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-warning {
+        color: #956900;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-bad {
+        color: #c8112a;
+        font-weight: 700;
+      }
+      .wb-performance-marker {
+        display: inline-grid;
+        place-items: center;
+        width: 14px;
+        height: 14px;
+        margin-right: 4px;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 10px;
+        line-height: 14px;
+        vertical-align: -2px;
+      }
+      .wb-performance-marker.warning {
+        border-radius: 3px 3px 5px 5px;
+        color: #624400;
+        background: #ffd34d;
+      }
+      .wb-performance-marker.bad {
+        border-radius: 50%;
+        color: #fff;
+        background: #df3038;
+        font-size: 8px;
+      }
+      .wb-performance-empty {
+        color: #858c96 !important;
+        text-align: center;
+      }
+      .wb-performance-filter-note {
+        display: block;
+        margin-top: 4px;
+        color: #667085;
+      }
+      .wb-performance-note {
+        margin: 9px 0 0;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-unmet-section {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .wb-unmet-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .wb-unmet-section-head h3 {
+        margin: 0;
+        color: #303844;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+      .wb-unmet-section-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .wb-unmet-add-button,
+      .wb-unmet-ai-button {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-add-button {
+        color: #555d68;
+      }
+      .wb-unmet-ai-button {
+        color: #df1732;
+      }
+      .wb-unmet-add-button:hover {
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-ai-button:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-unmet-add-button:focus-visible,
+      .wb-unmet-ai-button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-add-fields {
+        display: grid;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .wb-unmet-add-fields label {
+        display: grid;
+        gap: 7px;
+        color: #555d68;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select,
+      .wb-unmet-add-fields textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 11px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        font:
+          400 12px/1.5 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select {
+        height: 40px;
+      }
+      .wb-unmet-add-fields textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      .wb-unmet-add-fields input:focus-visible,
+      .wb-unmet-add-fields select:focus-visible,
+      .wb-unmet-add-fields textarea:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+        border-color: #df1732;
+      }
+      .wb-unmet-add-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 16px 28px;
+        border-top: 1px solid #edf0f4;
+      }
+      .wb-unmet-add-foot button {
+        min-height: 36px;
+        padding: 0 15px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #555d68;
+        background: #fff;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .wb-unmet-add-foot button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-add-foot button.primary {
+        border-color: #df1732;
+        color: #fff;
+        background: #df1732;
+      }
+      .wb-unmet-add-foot button.primary:hover {
+        border-color: #c91029;
+        background: #c91029;
+      }
+      .wb-unmet-add-foot button.danger {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff;
+      }
+      .wb-unmet-add-foot button.danger:hover {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-add-foot button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card {
+        padding: 14px 16px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+      .wb-unmet-card {
+        position: relative;
+      }
+      .wb-unmet-card h4 {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 78px 10px 0;
+        color: #303844;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .wb-unmet-card-actions {
+        position: absolute;
+        top: 10px;
+        right: 11px;
+        display: flex;
+        gap: 4px;
+      }
+      .wb-unmet-card-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-card-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-card-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-card-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-unmet-delete-copy {
+        margin: 0;
+        padding: 6px 0;
+        color: #555d68;
+        font-size: 13px;
+        line-height: 1.7;
+      }
+      .wb-unmet-dot {
+        flex: 0 0 auto;
+        color: #cf2633;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+      .wb-unmet-analysis {
+        margin: 0 0 8px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-analysis strong {
+        color: #303844;
+      }
+      .wb-unmet-card ul {
+        display: grid;
+        gap: 5px;
+        margin: 0 0 10px;
+        padding-left: 21px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-card li {
+        padding-left: 2px;
+      }
+      .wb-unmet-card li::marker {
+        color: #3972c4;
+      }
+      .wb-director-note-content {
+        margin: 0;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-unmet-measures {
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        color: #3972c4;
+        font-size: 12px;
+        line-height: 1.75;
+      }
+      .wb-unmet-measures > strong {
+        flex: 0 0 auto;
+        font-weight: 600;
+      }
+      .wb-unmet-measures > strong span {
+        color: #168e58;
+      }
+      .wb-unmet-measures > div {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 9px;
+        row-gap: 2px;
+      }
+      .wb-unmet-measures i {
+        margin-right: 3px;
+        color: #3972c4;
+        font-style: normal;
+      }
+      .wb-unmet-empty {
+        margin: 0;
+        padding: 15px;
+        border: 1px dashed #d9dde3;
+        border-radius: 7px;
+        color: #858c96;
+        font-size: 12px;
+      }
+      @media (max-width: 720px) {
+        .wb-dimension-tabs {
+          gap: 18px;
+          scrollbar-width: none;
+        }
+        .wb-dimension-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .wb-dimension-head {
+          flex-wrap: wrap;
+        }
+        .wb-performance-table {
+          min-width: 1120px;
+        }
+        .wb-unmet-add-foot {
+          padding-left: 17px;
+          padding-right: 17px;
+        }
+      }
 
       /* SHARED_THEME_RESOURCE */
       /* ORDER_THEME */
@@ -4708,47 +5559,123 @@
           <div class="wb-hero">
             <div class="period-bar" role="group" aria-label="订单数据统计周期">
               <span class="period-label">统计周期</span>
-              <div class="period-switch" role="group" aria-label="月度或周度">
-                <button id="monthMode" class="active" type="button" aria-pressed="true">月度</button
-                ><button id="weekMode" type="button" aria-pressed="false">周度</button>
+              <div class="period-picker" id="periodPicker">
+                <button
+                  class="period-picker-trigger"
+                  id="periodPickerTrigger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="periodPickerMenu"
+                >
+                  <span id="periodPickerValue"></span
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </button>
+                <div
+                  class="period-picker-menu"
+                  id="periodPickerMenu"
+                  role="dialog"
+                  aria-label="选择统计周期"
+                  hidden=""
+                >
+                  <div
+                    class="period-picker-months"
+                    id="periodPickerMonths"
+                    role="group"
+                    aria-label="选择月份"
+                  ></div>
+                  <div
+                    class="period-picker-weeks"
+                    id="periodPickerWeeks"
+                    role="group"
+                    aria-label="选择周次"
+                  ></div>
+                </div>
               </div>
-              <label class="period-control"
-                >选择月份
-                <input id="periodMonth" type="month" value="2026-09" aria-label="选择月份" /></label
-              ><label class="period-control" id="weekControl" hidden
-                >选择周次
-                <select id="periodWeek" aria-label="选择周次"></select></label
-              ><span class="period-meta" id="periodMeta" aria-live="polite"></span>
+              <span class="period-meta" id="periodMeta" aria-live="polite"></span>
             </div>
-            <div class="wb-context">
-              <strong>当前场景</strong><span>订单质量与交付协同</span
-              ><label for="wbBaseFilter">基地</label
-              ><select id="wbBaseFilter" aria-label="按基地筛选维度分析">
-                <option value="">全部基地</option>
-                <option>郑州</option>
-                <option>遂平</option>
-                <option>西南</option>
-                <option>华东</option>
-                <option>华南</option></select
-              ><label for="wbOwnerFilter">基地负责人</label
-              ><select id="wbOwnerFilter" aria-label="按基地负责人筛选维度分析">
-                <option value="">全部负责人</option>
-                <option value="郑州">郑州基地负责人（演示选项）</option>
-                <option value="遂平">遂平基地负责人（演示选项）</option>
-                <option value="西南">西南基地负责人（演示选项）</option>
-                <option value="华东">华东基地负责人（演示选项）</option>
-                <option value="华南">华南基地负责人（演示选项）</option>
-              </select>
-            </div>
-            <p class="wb-context-note" id="wbContextNote">
-              基地/负责人筛选仅作用于基地交叉分析；汇总指标与品类汇总按报告整体口径显示。负责人选项为原型维度演示。
-            </p>
-            <button class="wb-link" type="button" data-order-workbench-page>查看订单履约 →</button>
           </div>
-          <div class="period-empty" id="wbPeriodEmpty" role="status" hidden></div>
-          <div class="wb-report-date">月度报告截至 2026-09-13</div>
+          <div class="period-empty" id="wbPeriodEmpty" role="status" hidden=""></div>
           <section class="wb-section" aria-label="订单核心指标">
             <div class="wb-kpis" id="wbKpis"></div>
+          </section>
+          <section
+            class="wb-card wb-analysis wb-metric-analysis"
+            id="wbMetricAnalysis"
+            aria-labelledby="wbMetricAnalysisTitle"
+          >
+            <div class="wb-analysis-head">
+              <div class="wb-analysis-label">
+                <i aria-hidden="true">📋</i>
+                <div><h2 id="wbMetricAnalysisTitle">本期结论摘要</h2></div>
+              </div>
+              <div class="wb-summary-actions">
+                <button
+                  class="wb-unmet-ai-button"
+                  type="button"
+                  data-wb-summary-ai=""
+                  aria-label="AI分析本期结论摘要"
+                >
+                  ✦ AI 分析</button
+                ><button
+                  class="wb-summary-edit"
+                  type="button"
+                  data-wb-summary-edit=""
+                  aria-label="编辑本期结论摘要"
+                >
+                  编辑
+                </button>
+              </div>
+            </div>
+            <div class="wb-analysis-body">
+              <div class="wb-summary-lines">
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">✅</span
+                  ><span
+                    ><strong>正向：</strong
+                    ><span data-wb-summary-content="positive"
+                      >满足率 95.27%（目标&gt;95%）本期达成，环比 +0.97pct、同比 +7.97pct；准交率
+                      99.15% 持续高位（环比 +2.23pct），各基地准交率全面达标；60天+货龄占比 2.21%
+                      较上期 -1.45pct 持续压降，汤圆环比 -3.87pct 改善明显。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">🔴</span
+                  ><span
+                    ><strong>风险：</strong
+                    ><span data-wb-summary-content="risk"
+                      >改单率 2.60% 未达目标（缺口 0.60pct），华东经销 3.41%、华南事业部
+                      3.78%、餐饮雪套 5.25%、高势能渠道 21.4% 为拐点；可发货天数 14.5
+                      天大幅超标（环比 +3.96 天、同比 +5.50 天），郑州 15.28、华南 13.20、西南
+                      16.32、遂平 13.73 均超 11 天阈值，库存沉淀明显；面点 91.56%、预制食材 88.76%
+                      为品项最弱两环。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">📋</span
+                  ><span
+                    ><strong>旬/周节奏：</strong
+                    ><span data-wb-summary-content="rhythm"
+                      >本周满足率 96.17%（周环比
+                      +1.63pct），较上期改善，这达标口径进一步扩大；西南本周 94.93%（周环比
+                      +6.31pct）修复显著；华东本周 95.01%（周环比 +1.15pct）已步入目标线上方。</span
+                    ></span
+                  >
+                </p>
+              </div>
+            </div>
           </section>
           <section
             class="wb-card wb-dimensions"
@@ -4758,73 +5685,53 @@
             <div class="wb-dimension-head">
               <div>
                 <h2 id="wbDimensionsTitle">多维分析</h2>
-                <p>从品类、区域与基地交叉维度查看月度指标</p>
+                <p>基地、应责总监与品项月度及周度达成情况</p>
               </div>
               <span>月度报告 · 截至 2026-09-13</span>
             </div>
             <div class="wb-dimension-tabs" role="tablist" aria-label="订单工作台多维分析">
               <button
                 class="active"
-                id="wbDimensionCategoryFillTab"
+                id="wbDimensionBasePerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="true"
                 aria-controls="wbDimensionPanel"
                 tabindex="0"
-                data-wb-dimension-tab="category-fill"
+                data-wb-dimension-tab="base-performance"
               >
-                品类满足率维度</button
+                基地维度达成分析</button
               ><button
-                id="wbDimensionCategoryDaysTab"
+                id="wbDimensionDirectorPerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="false"
                 aria-controls="wbDimensionPanel"
                 tabindex="-1"
-                data-wb-dimension-tab="category-days"
+                data-wb-dimension-tab="director-performance"
               >
-                品类可发货天数维度</button
+                应责总监维度达成分析</button
               ><button
-                id="wbDimensionRegionChangeTab"
+                id="wbDimensionItemPerformanceTab"
                 type="button"
                 role="tab"
                 aria-selected="false"
                 aria-controls="wbDimensionPanel"
                 tabindex="-1"
-                data-wb-dimension-tab="region-change"
+                data-wb-dimension-tab="item-performance"
               >
-                大区省区改单率维度</button
-              ><button
-                id="wbDimensionBaseCategoryTab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="wbDimensionPanel"
-                tabindex="-1"
-                data-wb-dimension-tab="base-category"
-              >
-                满足率-基地和品类交叉维度</button
-              ><button
-                id="wbDimensionBaseCategoryDaysTab"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="wbDimensionPanel"
-                tabindex="-1"
-                data-wb-dimension-tab="base-category-days"
-              >
-                可发货天数-基地和品类交叉维度
+                品项维度达成分析
               </button>
             </div>
             <div
               class="wb-dimension-panel"
               id="wbDimensionPanel"
               role="tabpanel"
-              aria-labelledby="wbDimensionCategoryFillTab"
+              aria-labelledby="wbDimensionBasePerformanceTab"
               aria-live="polite"
             ></div>
           </section>
-          <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle">
+          <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle" hidden="">
             <div class="wb-task-head">
               <div>
                 <h2 id="wbTasksTitle">任务追踪</h2>
@@ -4832,7 +5739,7 @@
               </div>
               <div class="wb-task-summary">
                 <span id="wbTaskSummary"></span
-                ><button type="button" data-wb-export>⇩ 导出清单</button>
+                ><button type="button" data-wb-export="">⇩ 导出清单</button>
               </div>
             </div>
             <div class="wb-filters" role="group" aria-label="筛选任务">
@@ -4862,19 +5769,237 @@
               问题及改进输入与改进任务保存在本机浏览器；不会连接真实任务系统。
             </div>
           </section>
-          <section class="wb-card wb-boundary">
-            <div>
-              <strong>数据边界</strong>
-              <p>
-                9 月报告指标与异常事项 → 人工核实 → 改善建议 → 演示任务；订单明细仍在“订单履约”页
-              </p>
+          <section class="wb-improvement-section" aria-labelledby="wbImprovementTitle">
+            <h2 id="wbImprovementTitle">改善措施：短期追进 + 长期机制</h2>
+            <section class="wb-improvement-block" aria-labelledby="wbShortTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbShortTermTitle">短期追进措施</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="short">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table">
+                  <colgroup>
+                    <col style="width: 10%" />
+                    <col style="width: 62%" />
+                    <col style="width: 18%" />
+                    <col style="width: 10%" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="direction">追进方向</th>
+                      <th>改善措施</th>
+                      <th class="issue">对应问题</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">高库存压降<br />（最紧急）</td>
+                      <td>
+                        可发货天数合计 14.5 天、环比 +3.96 天、同比 +5.50 天；西南 16.3 天（环比
+                        +7.16 天，全国最高）、郑州 15.3 天（环比 +4.70
+                        天）为主要拖累。本期定四条硬动作：① <strong>分级停排</strong>——对烤肠 39.2
+                        天、240g 水饺 35.3 天、ODM 水饺 32.0 天、玉汤圆 32.1 天、312 元宝汤圆 34.6
+                        天、大黄米汤圆 30.0 天、柿子组合装 122.4 天等超 30 天
+                        SKU，本周起增加休息停排安排，只做发货消化；② <strong>西南专项</strong>——10
+                        月底前把 16.3 天压到 13 天以内（日产再降，已排 25–27 日连续停产 3 天）；③
+                        <strong>每日监控</strong>——超 20 天 SKU 逐日跟进、逐日销号。
+                      </td>
+                      <td class="issue">可发货天数 14.5 天；烤肠 39.2 天；240g 水饺 35.3 天</td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">60天+货龄<br />结构治理</td>
+                      <td>
+                        全国 2.21%、环比 -1.45pct，但同比 +0.82pct，仍高于去年同期。需结构性处理：①
+                        <strong>郑州汤圆专项</strong>——郑州基地口径下汤圆 60天+ 达 7.85%（环比
+                        -15.24pct，已有大幅改善，但仍高于该基地其他品项；全国汤圆口径为 3.34%），318
+                        速玉汤圆 1.5 万件未按节点发货是根因，限期 10 月底发完；②
+                        <strong>刘成胜线烤肠恶化</strong>——本期 2.42%、环比
+                        +1.77pct，是唯一三项全升的线，纳入周会红牌督办；③
+                        <strong>火锅料回升</strong>——本期 2.42%、环比 +1.54pct，500g 烤肠新滚入
+                        8,000 件需单独消化；④ <strong>粽子清零</strong>——粽子 60天+ 占比
+                        100%，须跟进处理措施，尽快清零。
+                      </td>
+                      <td class="issue">
+                        60天+货龄 2.21%（同比 +0.82pct）；郑州汤圆 7.85%；刘成胜 2.42%
+                      </td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">满足率缺口<br />（西南 / 华东）</td>
+                      <td>
+                        全国 95.3% 达标，但西南 93.6%（低于目标 1.4pct）、华东 94.2%（低于目标
+                        0.8pct）仍未收口，且西南是唯一修复中的缺口（本周已回到 96.9%、周环比
+                        +7.64pct）。① <strong>西南</strong>——前两周下单进度仅 52%、发货进度
+                        36%，需求确认滞后是主因，改为每周两次省区需求确认 + 下单进度日通报；②
+                        <strong>华东</strong>——水饺食材 80.2%、火锅料 89.2%、预制食材 80.2%、火锅料
+                        89.6% 等指标需跟进，盒马水饺 6,283 件缺货锁定购买点；③
+                        <strong>郑州</strong>——庞丽娟 96.7%、张培 96.7% 已达标，刘成胜 92.5%
+                        为全国最低，需单独复盘订单结构。
+                      </td>
+                      <td class="issue">西南 93.6%；华东 94.2%；刘成胜 92.5%；预制食材 88.8%</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">预制食材<br />产能缺口</td>
+                      <td>
+                        预制食材 88.8% 为八大品项最低，缺口 6.2pct，其中鸡调品（鸡米花 / 雪花鸡柳 /
+                        川香鸡柳）占缺货 70%、饭团糯米鸡占 18%。① 鸡米花 1–18 日累计欠产 11,500
+                        件，锁定代工厂全月产能并每日跟踪日产；② ODM 新代工资源本月内落地 1
+                        家，先补饭团 / 糯米鸡；③ 泰正第三条产线已开，月底前验证日产效果。
+                      </td>
+                      <td class="issue">预制食材 88.8%（全国最低品项）</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">面点 / 馄饨<br />结构性缺货</td>
+                      <td>
+                        面点 91.6%、馄饨 94.0%。面点缺口集中在散装圆包 0.7 万、寿桃包 0.6
+                        万件；散装圆包郑州外协厂截至 18 日日产仅完成 47%、落后 10%。馄饨主因 2.5kg
+                        订单集中爆发（纠偏下单 91%）与 305g 同资源挤占，且 500g 馄饨周转 25.2
+                        天、170 遇见小面 20.5 天、金牌虾云吞 19.6 天。① 2.5kg 与 305g
+                        产线错峰排产，本周内排开；② 卡通包湖州基地缺货预计 25 日解决，需确认 25
+                        日前不断货；③ 寿桃包 / 切黄包 10 月底消化完并关闭补货入口。
+                      </td>
+                      <td class="issue">面点 91.6%；馄饨 94.0%；500g 馄饨 25.2 天</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+            <section class="wb-improvement-block" aria-labelledby="wbLongTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbLongTermTitle">长期机制建设</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="long">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table long-term">
+                  <thead>
+                    <tr>
+                      <th class="direction">机制</th>
+                      <th>机制内容（问题→对策）</th>
+                      <th class="goal">目标</th>
+                      <th class="status">状态</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">机制一<br />高库存 SKU<br />退出机制</td>
+                      <td>
+                        <strong>问题：</strong>本期可发货天数 14.5 天、同比 +5.50
+                        天，高库存不是偶发而是结构性的——烤肠 39.2 天、240g 水饺 35.3 天、312
+                        元宝汤圆 34.6 天等超过 30 天 SKU 长期占据产线，挤占短缺品产能。<br /><strong
+                          >机制：</strong
+                        >建立 SKU 分级退出制度。按可发货天数设四档：&gt;30 天自动停产待评审；20–30
+                        天强制提报去化方案（降价 / 调拨 / 渠道促销三选一）；15–20
+                        天纳入周会销号；&lt;15 天正常排产。每月对 &gt;30 天 SKU
+                        做一次产线腾挪复盘，把产能让给满足率缺口品。
+                      </td>
+                      <td class="goal">治理“高库存长期占产”</td>
+                      <td class="status">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+          <section class="wb-reference-section" aria-labelledby="wbReferenceTitle">
+            <div class="wb-reference-head">
+              <h2 id="wbReferenceTitle">参考链接</h2>
+              <button class="wb-reference-add" type="button" data-wb-reference-add="">
+                ＋ 添加
+              </button>
             </div>
-            <span>报告摘录 · 非实时</span>
+            <div class="wb-reference-list" id="wbReferenceList" aria-live="polite"></div>
           </section>
         </section>
       </div>
     </main>
-    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden>
+    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden="">
       <div class="wb-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="wbDetailTitle">
         <div class="wb-detail-head">
           <h2 id="wbDetailTitle"></h2>
@@ -4883,7 +6008,7 @@
         <div id="wbDetailBody"></div>
       </div>
     </div>
-    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden>
+    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden="">
       <div
         class="wb-adopt-dialog"
         role="dialog"
@@ -4911,9 +6036,9 @@
             </div>
             <div class="wb-adopt-fields">
               <label class="wb-adopt-field"
-                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required /></label
+                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required="" /></label
               ><label class="wb-adopt-field"
-                >预计截止日期<input id="wbAdoptDue" type="date" required
+                >预计截止日期<input id="wbAdoptDue" type="date" required=""
               /></label>
             </div>
             <label class="wb-adopt-field note"
@@ -4932,7 +6057,7 @@
         </form>
       </div>
     </div>
-    <div class="wb-adopt-overlay" id="wbIssueOverlay" hidden>
+    <div class="wb-adopt-overlay" id="wbIssueOverlay" hidden="">
       <div
         class="wb-adopt-dialog"
         role="dialog"
@@ -4955,7 +6080,7 @@
               编辑内容仅保存在本机浏览器；生成任务后可在“任务追踪”中继续修改。
             </div>
             <div class="wb-issue-modal-fields">
-              <label>品类<select id="wbIssueCategory" required></select></label>
+              <label>品类<select id="wbIssueCategory" required=""></select></label>
               <div class="wb-adopt-fields">
                 <label class="wb-adopt-field"
                   >责任角色<input
@@ -4971,14 +6096,14 @@
                 >问题<textarea
                   id="wbIssueAnalysis"
                   maxlength="1000"
-                  required
+                  required=""
                   placeholder="填写问题分析"
                 ></textarea></label
               ><label
                 >改进<textarea
                   id="wbIssueMeasure"
                   maxlength="1000"
-                  required
+                  required=""
                   placeholder="填写改进措施"
                 ></textarea>
               </label>
@@ -4993,7 +6118,260 @@
         </form>
       </div>
     </div>
-    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="wb-adopt-overlay" id="wbUnmetAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetAddTitle"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetAddTitle">添加未达成项</h2>
+            <p id="wbUnmetAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbUnmetAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label
+                ><span id="wbUnmetEntityLabel">基地</span
+                ><select id="wbUnmetEntity" required=""></select></label
+              ><label
+                >标题<input
+                  id="wbUnmetTitleInput"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写未达成项标题" /></label
+              ><label
+                >未达成原因<textarea
+                  id="wbUnmetReasonInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="描述未达成原因"
+                ></textarea></label
+              ><label
+                >改善措施<textarea
+                  id="wbUnmetMeasureInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="填写改善措施"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbUnmetAddCancel" type="button">取消</button
+            ><button class="primary" id="wbUnmetAddSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbDirectorNoteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbDirectorNoteTitle"
+        aria-describedby="wbDirectorNoteSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbDirectorNoteTitle">添加应责总监备注</h2>
+            <p id="wbDirectorNoteSubtitle">
+              选择应责总监并填写备注标题和内容；备注保存在本机浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbDirectorNoteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbDirectorNoteForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbDirectorNoteDirector"
+                >应责总监<select id="wbDirectorNoteDirector" required=""></select></label
+              ><label for="wbDirectorNoteHeading"
+                >标题<input
+                  id="wbDirectorNoteHeading"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写标题" /></label
+              ><label for="wbDirectorNoteContent"
+                >内容<textarea
+                  id="wbDirectorNoteContent"
+                  maxlength="3000"
+                  required=""
+                  placeholder="填写备注内容"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbDirectorNoteCancel" type="button">取消</button
+            ><button class="primary" id="wbDirectorNoteSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbUnmetDeleteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetDeleteTitle"
+        aria-describedby="wbUnmetDeleteCopy"
+        style="width: min(460px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetDeleteTitle">确认删除</h2>
+            <p>删除后该未达成项将从列表中移除。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetDeleteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <div class="wb-adopt-body">
+          <p class="wb-unmet-delete-copy" id="wbUnmetDeleteCopy">确认删除该未达成项吗？</p>
+        </div>
+        <div class="wb-unmet-add-foot">
+          <button id="wbUnmetDeleteCancel" type="button">取消</button
+          ><button class="danger" id="wbUnmetDeleteConfirm" type="button">确认删除</button>
+        </div>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbImprovementAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbImprovementAddTitle"
+        style="width: min(680px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbImprovementAddTitle">添加改善措施</h2>
+            <p id="wbImprovementAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbImprovementAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbImprovementAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields" id="wbImprovementAddFields"></div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbImprovementAddCancel" type="button">取消</button
+            ><button class="primary" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbReferenceOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbReferenceFormTitle"
+        aria-describedby="wbReferenceFormSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbReferenceFormTitle">添加参考链接</h2>
+            <p id="wbReferenceFormSubtitle">填写名称和网页地址；链接仅保存在本机浏览器。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbReferenceClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbReferenceForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbReferenceName"
+                >链接名称<input
+                  id="wbReferenceName"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="例如：月度履约报告" /></label
+              ><label for="wbReferenceUrl"
+                >参考链接<input
+                  id="wbReferenceUrl"
+                  type="url"
+                  maxlength="2048"
+                  required=""
+                  placeholder="https://example.com"
+              /></label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbReferenceCancel" type="button">取消</button
+            ><button class="primary" id="wbReferenceSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbSummaryEditOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbSummaryEditTitle"
+        aria-describedby="wbSummaryEditSubtitle"
+        style="width: min(760px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbSummaryEditTitle">编辑本期结论摘要</h2>
+            <p id="wbSummaryEditSubtitle">
+              修改正向、风险和旬/周节奏内容；保存后保留在当前浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbSummaryEditClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbSummaryEditForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbSummaryPositiveInput"
+                >正向内容<textarea
+                  id="wbSummaryPositiveInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRiskInput"
+                >风险内容<textarea
+                  id="wbSummaryRiskInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRhythmInput"
+                >旬/周节奏内容<textarea
+                  id="wbSummaryRhythmInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbSummaryEditCancel" type="button">取消</button
+            ><button class="primary" id="wbSummaryEditSubmit" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" hidden=""></div>
     <script>
       /* ORDER_ENTRY */
     </script>
