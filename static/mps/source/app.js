@@ -1,15 +1,8 @@
 import { createDemandConfirmation } from './demand-confirmation.js';
+import { createRelations } from './relations-view.js';
 import { mpsView, useMpsPart, useMpsNavigation } from './context.js';
 import { AuthorQuestions, useAuthorQuote } from '../../../business/shared/author-questions.js';
 import { usePageViewField } from '../../../business/shared/view-state.js';
-const changedRows = (rows, baseline) =>
-  rows.filter(
-    (row) => JSON.stringify(row) !== JSON.stringify(baseline.find((item) => item.id === row.id)),
-  );
-const restoredRows = (changes, baseline) => [
-  ...baseline.map((row) => changes.find((item) => item.id === row.id) ?? row),
-  ...changes.filter((row) => !baseline.some((item) => item.id === row.id)),
-];
 function kO(e, t) {
   const [n, r] = e.split('-').map(Number),
     a = new Date(n, r - 1 + t, 1);
@@ -1202,15 +1195,6 @@ const Ud = [
         c.jsx('path', { d: 'M9 11.8 11.2 14 15.4 9.8' }),
       ],
     }),
-  jf = () =>
-    c.jsx('svg', {
-      ...dn,
-      width: 13,
-      height: 13,
-      children: c.jsx('path', {
-        d: 'M12 2.6 13.9 9l6.4 1.9-6.4 1.9L12 19.2l-1.9-6.4L3.7 10.9 10.1 9 12 2.6Z',
-      }),
-    }),
   If = () =>
     c.jsxs('svg', {
       ...dn,
@@ -1272,6 +1256,7 @@ const Ud = [
 void k1;
 void IO;
 const DemandConfirmation = createDemandConfirmation(y, useMpsPart, mpsView);
+const Relations = createRelations(y, useMpsPart);
 function sH(e, t) {
   const n = [
       { v: e.report, weight: t.report },
@@ -1518,774 +1503,6 @@ function uH() {
                 '\u6700\u7EC8\u9700\u6C42 ',
                 c.jsx('b', { children: '\u9ED8\u8BA4\u7B49\u4E8E\u521D\u7248\u9700\u6C42' }),
                 '\uFF0C\u53EF\u9010\u884C\u4EBA\u5DE5\u8C03\u6574\uFF1B\u7CFB\u7EDF\u53EA\u505A\u63D0\u793A\u3001\u4E0D\u88C1\u51B3\uFF0C\u6700\u7EC8\u4EE5\u54C1\u7C7B\u8BC4\u4F30\u7ED3\u679C\u4E3A\u51C6\u3002',
-              ],
-            }),
-          }),
-        ],
-      }),
-    ],
-  });
-}
-const Zd = bV.map((e) => ({ label: e, value: e })),
-  $1 = xV.map((e) => ({ label: e, value: e }));
-function cH(e) {
-  const {
-      visible: t,
-      tab: n,
-      onTab: r,
-      onClose: a,
-      skus: i,
-      onSkus: o,
-      lines: l,
-      onLines: s,
-      transfers: u,
-      onTransfers: d,
-      blanksOnly: v,
-      onBlanksOnly: p,
-    } = e,
-    [h, m] = usePageViewField(y, mpsView, 'masterSearch', ''),
-    [g, w] = usePageViewField(
-      y,
-      mpsView,
-      'masterSelected',
-      undefined,
-      (value) => value ?? null,
-      (value) =>
-        value == null
-          ? undefined
-          : [...i, ...l, ...u].some((row) => row.id === value)
-            ? value
-            : undefined,
-    ),
-    b = y.useRef(null);
-  y.useEffect(() => {
-    var z;
-    t && ((z = b.current) == null || z.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  }, [t]);
-  const x = (z) => {
-      var R;
-      return !z.base || !z.shop || !z.lineId || !((R = ju(z.lineId)) != null && R.series) || !z.net;
-    },
-    C = (z) => !z.base || !z.shop || !z.center || !z.tunnel || !z.series || !z.ton || !z.dayPcs,
-    _ = (z) => !z.from || !z.to || !z.code || !z.name,
-    E = y.useMemo(
-      () =>
-        i.filter((z) => {
-          var R, K;
-          return !(
-            (h && !(z.code.includes(h) || z.name.includes(h))) ||
-            (g && ((K = (R = ju(z.lineId)) == null ? void 0 : R.series) != null ? K : '') !== g) ||
-            (v && !x(z))
-          );
-        }),
-      [i, h, g, v],
-    ),
-    O = y.useMemo(() => (v ? l.filter(C) : l), [l, v]),
-    P = y.useMemo(() => (v ? u.filter(_) : u), [u, v]),
-    N = (z, R) => {
-      o(i.map((K) => (K.id === z ? { ...K, ...R } : K)));
-    },
-    S = (z) =>
-      Array.from(new Set(l.filter((R) => R.base === z).map((R) => R.shop))).map((R) => ({
-        label: R,
-        value: R,
-      })),
-    j = (z, R) =>
-      l
-        .filter((K) => K.base === z && K.shop === R)
-        .map((K) => ({ label: `${K.center} \xB7 ${K.tunnel}`, value: K.id })),
-    I = [
-      {
-        title: '\u7269\u6599\u53F7',
-        dataIndex: 'code',
-        width: 96,
-        render: (z) => c.jsx('span', { style: { whiteSpace: 'nowrap' }, children: z }),
-      },
-      { title: '\u7269\u6599\u540D\u79F0', dataIndex: 'name', width: 178, ellipsis: true },
-      {
-        title: '\u7CFB\u5217',
-        dataIndex: 'lineId',
-        width: 126,
-        render: (z) => {
-          var K;
-          const R = (K = ju(z)) == null ? void 0 : K.series;
-          return R
-            ? c.jsx(ut, { size: 'small', bordered: true, children: R })
-            : c.jsx('span', { className: 'ap-muted', children: '\u2014' });
-        },
-      },
-      { title: '\u51C0\u91CD(kg)', dataIndex: 'net', width: 84, align: 'right' },
-      {
-        title: '\u57FA\u5730',
-        dataIndex: 'base',
-        width: 98,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: '\u8BF7\u9009\u62E9',
-            allowClear: true,
-            options: Zd,
-            style: { width: '100%' },
-            onChange: (K) => N(R.id, { base: K || '', shop: '', lineId: '' }),
-          }),
-      },
-      {
-        title: '\u8F66\u95F4',
-        dataIndex: 'shop',
-        width: 148,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: R.base ? '\u8BF7\u9009\u62E9' : '\u5148\u9009\u57FA\u5730',
-            allowClear: true,
-            disabled: !R.base,
-            options: S(R.base),
-            style: { width: '100%' },
-            onChange: (K) => N(R.id, { shop: K || '', lineId: '' }),
-          }),
-      },
-      {
-        title: '\u4EA7\u7EBF',
-        dataIndex: 'lineId',
-        width: 164,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: R.shop ? '\u8BF7\u9009\u62E9' : '\u5148\u9009\u8F66\u95F4',
-            allowClear: true,
-            disabled: !R.shop,
-            options: j(R.base, R.shop),
-            style: { width: '100%' },
-            onChange: (K) => N(R.id, { lineId: K || '' }),
-          }),
-      },
-    ],
-    $ = new Set(i.map((z) => z.code)),
-    T = i.filter(x).length,
-    D = l.filter(C).length,
-    B = u.filter(_).length,
-    M = (z, R) => {
-      s(l.map((K) => (K.id === z ? { ...K, ...R } : K)));
-    },
-    A = [
-      { title: '\u57FA\u5730', dataIndex: 'base', width: 76 },
-      { title: '\u5DE5\u4F5C\u4E2D\u5FC3', dataIndex: 'center', width: 96 },
-      { title: '\u8F66\u95F4', dataIndex: 'shop', width: 158 },
-      { title: '\u96A7\u9053', dataIndex: 'tunnel', width: 70 },
-      {
-        title: '\u5428\u4F4D\uFF08\u5428\uFF09',
-        dataIndex: 'ton',
-        width: 118,
-        render: (z, R) =>
-          c.jsx(hi, {
-            size: 'small',
-            min: 0,
-            step: 0.5,
-            value: z,
-            style: { width: '100%' },
-            onChange: (K) => M(R.id, { ton: Number(K) || 0 }),
-          }),
-      },
-      {
-        title: '\u7CFB\u5217\uFF08\u53EF\u9009\uFF09',
-        dataIndex: 'series',
-        width: 208,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: '\u8BF7\u9009\u62E9\u7CFB\u5217',
-            allowClear: true,
-            showSearch: true,
-            options: $1,
-            style: { width: '100%' },
-            onChange: (K) => M(R.id, { series: K || '' }),
-          }),
-      },
-      {
-        title: '\u6807\u51C6\u65E5\u4EA7\uFF08\u4EF6/\u65E5\uFF09',
-        dataIndex: 'dayPcs',
-        width: 178,
-        render: (z, R) =>
-          c.jsx(hi, {
-            size: 'small',
-            min: 0,
-            step: 100,
-            value: z,
-            style: { width: '100%' },
-            onChange: (K) => M(R.id, { dayPcs: Number(K) || 0 }),
-          }),
-      },
-    ],
-    k = () => {
-      void (d([...u, { id: `T${Date.now()}`, from: '', to: '', code: '', name: '' }]),
-      kt.info(
-        '\u5DF2\u65B0\u589E\u4E00\u884C\uFF0C\u8BF7\u9009\u62E9\u53D1\u51FA / \u63A5\u6536\u57FA\u5730\u5E76\u586B\u7269\u6599',
-      ));
-    },
-    L = (z, R) => {
-      d(u.map((K) => (K.id === z ? { ...K, ...R } : K)));
-    },
-    F = [
-      {
-        title: '\u53D1\u51FA\u57FA\u5730',
-        dataIndex: 'from',
-        width: 150,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: '\u8BF7\u9009\u62E9',
-            options: Zd,
-            style: { width: '100%' },
-            onChange: (K) => L(R.id, { from: K || '' }),
-          }),
-      },
-      {
-        title: '\u63A5\u6536\u57FA\u5730',
-        dataIndex: 'to',
-        width: 150,
-        render: (z, R) =>
-          c.jsx(kn, {
-            size: 'small',
-            value: z || void 0,
-            placeholder: '\u8BF7\u9009\u62E9',
-            options: Zd.filter((K) => K.value !== R.from),
-            style: { width: '100%' },
-            onChange: (K) => L(R.id, { to: K || '' }),
-          }),
-      },
-      {
-        title: '\u7269\u6599\u7F16\u7801',
-        dataIndex: 'code',
-        width: 140,
-        render: (z, R) =>
-          c.jsx(Zt, {
-            size: 'small',
-            value: z,
-            placeholder: '\u7269\u6599\u7F16\u7801',
-            onChange: (K) => L(R.id, { code: K }),
-          }),
-      },
-      {
-        title: '\u7269\u6599\u63CF\u8FF0',
-        dataIndex: 'name',
-        width: 300,
-        render: (z, R) =>
-          c.jsx(Zt, {
-            size: 'small',
-            value: z,
-            placeholder: '\u7269\u6599\u63CF\u8FF0',
-            onChange: (K) => L(R.id, { name: K }),
-          }),
-      },
-      {
-        title: '\u64CD\u4F5C',
-        dataIndex: 'op',
-        width: 80,
-        render: (z, R) =>
-          c.jsx(Ke, {
-            size: 'mini',
-            type: 'text',
-            status: 'danger',
-            onClick: () => d(u.filter((K) => K.id !== R.id)),
-            children: '\u5220\u9664',
-          }),
-      },
-    ],
-    W = [
-      '\u5355\u54C1 \u2013 \u4EA7\u7EBF\u5F52\u5C5E',
-      '\u4EA7\u7EBF \u2013 \u7CFB\u5217 / \u4EA7\u80FD\u53C2\u6570',
-      '\u57FA\u5730 \u2013 \u8C03\u62E8\u8303\u56F4',
-    ],
-    U = n === 0 ? i.length : n === 1 ? l.length : u.length,
-    V = () =>
-      kt.success(`\u5DF2\u5BFC\u51FA\u300A${W[n]}\u300B\u5171 ${U} \u6761\uFF08\u6A21\u62DF\uFF09`),
-    H = () =>
-      kt.info(
-        `\u5DF2\u6253\u5F00\u300A${W[n]}\u300B\u7684\u4E0A\u4F20\u5165\u53E3\uFF0C\u6309\u6A21\u677F\u6279\u91CF\u5BFC\u5165\u5373\u53EF\uFF08\u6A21\u62DF\uFF09`,
-      ),
-    J =
-      n === 0
-        ? `\u672C\u9875 ${E.length} / ${i.length} \u884C\uFF08${$.size} \u4E2A\u5355\u54C1 \xB7 \u6309\u5355\u54C1\xD7\u4EA7\u7EBF\u5C55\u5F00\uFF09\xB7 \u4E0D\u5B8C\u6574 ${T} \u884C`
-        : n === 1
-          ? `\u672C\u9875 ${O.length} / ${l.length} \u6761\u4EA7\u7EBF \xB7 \u4E0D\u5B8C\u6574\uFF08\u7F3A\u57FA\u5730/\u8F66\u95F4/\u96A7\u9053/\u7CFB\u5217/\u5428\u4F4D/\u65E5\u4EA7\u80FD\uFF09${D} \u6761`
-          : `\u672C\u9875 ${P.length} / ${u.length} \u6761\u8C03\u62E8\u5173\u7CFB \xB7 \u4E0D\u5B8C\u6574 ${B} \u6761`;
-  return t
-    ? c.jsx('div', {
-        ref: b,
-        children: c.jsxs('section', {
-          className: 'ap-board-card ap-maint-card',
-          children: [
-            c.jsxs('div', {
-              className: 'ap-card-head',
-              children: [
-                c.jsx('h3', { children: '\u4E3B\u6570\u636E\u7EF4\u62A4' }),
-                c.jsx('span', {
-                  style: { fontSize: 11.5, color: 'var(--ap-ink-3)' },
-                  children:
-                    '\u6539\u52A8\u5373\u65F6\u4FDD\u5B58\u751F\u6548\uFF0C\u4E0D\u9700\u8981\u53E6\u8D70\u63D0\u4EA4',
-                }),
-                c.jsx('span', { style: { flex: 1 } }),
-                c.jsx(Ke, { size: 'small', onClick: a, children: '\u6536\u8D77' }),
-              ],
-            }),
-            c.jsxs('div', {
-              className: 'ap-card-body',
-              children: [
-                c.jsxs(Ji, {
-                  activeTab: String(n),
-                  onChange: (z) => r(Number(z)),
-                  extra: c.jsxs('span', {
-                    style: { display: 'inline-flex', gap: 12, alignItems: 'center' },
-                    children: [
-                      c.jsx(Mr, {
-                        checked: v,
-                        onChange: p,
-                        children: '\u53EA\u770B\u4E0D\u5B8C\u6574',
-                      }),
-                      c.jsxs('span', {
-                        style: { display: 'inline-flex', gap: 8, alignItems: 'center' },
-                        children: [
-                          c.jsx(Ke, { size: 'small', onClick: V, children: '\u4E0B\u8F7D' }),
-                          c.jsx(Ke, {
-                            size: 'small',
-                            type: 'primary',
-                            onClick: H,
-                            children: '\u4E0A\u4F20',
-                          }),
-                        ],
-                      }),
-                    ],
-                  }),
-                  children: [
-                    c.jsxs(
-                      Ji.TabPane,
-                      {
-                        title: '\u5355\u54C1 \u2013 \u4EA7\u7EBF\u5F52\u5C5E',
-                        children: [
-                          c.jsxs('div', {
-                            className: 'ap-maint-bar',
-                            children: [
-                              c.jsx(Zt, {
-                                size: 'small',
-                                allowClear: true,
-                                placeholder: '\u641C\u7269\u6599\u53F7\u6216\u54C1\u540D',
-                                value: h,
-                                onChange: m,
-                                style: { width: 200 },
-                              }),
-                              c.jsx(kn, {
-                                size: 'small',
-                                placeholder: '\u5168\u90E8\u7CFB\u5217',
-                                allowClear: true,
-                                showSearch: true,
-                                value: g,
-                                options: $1,
-                                onChange: (z) => w(z),
-                                style: { width: 168 },
-                              }),
-                              c.jsx('span', { className: 'ap-maint-stat', children: J }),
-                              c.jsx('span', { style: { flex: 1 } }),
-                              c.jsx('span', {
-                                style: { fontSize: 12, color: 'var(--ap-ink-3)' },
-                                children:
-                                  '\u57FA\u5730 / \u8F66\u95F4 / \u4EA7\u7EBF\u53EF\u4E0B\u62C9\u9009\u62E9\uFF1B\u9009\u4E0A\u4E00\u7EA7\u4F1A\u6E05\u6389\u4E0B\u4E00\u7EA7',
-                              }),
-                            ],
-                          }),
-                          c.jsx(ku, {
-                            size: 'small',
-                            border: true,
-                            rowKey: 'id',
-                            columns: I,
-                            data: E,
-                            pagination: false,
-                            noDataElement: c.jsx('span', {
-                              style: { fontSize: 12.5, color: 'var(--ap-ink-3)' },
-                              children: v
-                                ? '\u5F53\u524D\u6CA1\u6709\u4E0D\u5B8C\u6574\u7684\u8BB0\u5F55 \u2014\u2014 \u8FD9\u4E2A\u5217\u8868\u7684\u6570\u636E\u662F\u5B8C\u6574\u7684'
-                                : '\u6682\u65E0\u6570\u636E',
-                            }),
-                            scroll: { x: 900, y: 460 },
-                          }),
-                        ],
-                      },
-                      '0',
-                    ),
-                    c.jsxs(
-                      Ji.TabPane,
-                      {
-                        title: '\u4EA7\u7EBF \u2013 \u7CFB\u5217 / \u4EA7\u80FD\u53C2\u6570',
-                        children: [
-                          c.jsxs('div', {
-                            className: 'ap-maint-bar',
-                            children: [
-                              c.jsx('span', { className: 'ap-maint-stat', children: J }),
-                              c.jsx('span', { style: { flex: 1 } }),
-                              c.jsx('span', {
-                                style: { fontSize: 12, color: 'var(--ap-ink-3)' },
-                                children:
-                                  '\u7CFB\u5217\u4ECE\u4EA7\u54C1\u7CFB\u5217\u6E05\u5355\u91CC\u9009\uFF1B\u5428\u4F4D\u4E0E\u6807\u51C6\u65E5\u4EA7\uFF08\u4EF6/\u65E5\uFF09\u53EF\u76F4\u63A5\u6539',
-                              }),
-                            ],
-                          }),
-                          c.jsx(ku, {
-                            size: 'small',
-                            border: true,
-                            rowKey: 'id',
-                            columns: A,
-                            data: O,
-                            pagination: false,
-                            noDataElement: c.jsx('span', {
-                              style: { fontSize: 12.5, color: 'var(--ap-ink-3)' },
-                              children: v
-                                ? '\u5F53\u524D\u6CA1\u6709\u4E0D\u5B8C\u6574\u7684\u8BB0\u5F55 \u2014\u2014 \u8FD9\u4E2A\u5217\u8868\u7684\u6570\u636E\u662F\u5B8C\u6574\u7684'
-                                : '\u6682\u65E0\u6570\u636E',
-                            }),
-                            scroll: { x: 904, y: 460 },
-                          }),
-                        ],
-                      },
-                      '1',
-                    ),
-                    c.jsxs(
-                      Ji.TabPane,
-                      {
-                        title: '\u57FA\u5730 \u2013 \u8C03\u62E8\u8303\u56F4',
-                        children: [
-                          c.jsxs('div', {
-                            className: 'ap-maint-bar',
-                            children: [
-                              c.jsx('h4', {
-                                style: { margin: 0, fontSize: 13.5 },
-                                children: '\u8C03\u62E8\u5173\u7CFB',
-                              }),
-                              c.jsx('span', {
-                                className: 'ap-maint-stat',
-                                children:
-                                  '\u53D1\u51FA\u57FA\u5730 \xB7 \u63A5\u6536\u57FA\u5730 \xB7 \u7269\u6599\u7F16\u7801 \xB7 \u7269\u6599\u63CF\u8FF0',
-                              }),
-                              c.jsx('span', { style: { flex: 1 } }),
-                              c.jsx(Ke, {
-                                size: 'small',
-                                type: 'primary',
-                                onClick: k,
-                                children: '\u65B0\u589E\u8C03\u62E8\u5173\u7CFB',
-                              }),
-                            ],
-                          }),
-                          c.jsx(ku, {
-                            size: 'small',
-                            border: true,
-                            rowKey: 'id',
-                            columns: F,
-                            data: P,
-                            pagination: false,
-                            noDataElement: c.jsx('span', {
-                              style: { fontSize: 12.5, color: 'var(--ap-ink-3)' },
-                              children: v
-                                ? '\u5F53\u524D\u6CA1\u6709\u4E0D\u5B8C\u6574\u7684\u8BB0\u5F55 \u2014\u2014 \u8FD9\u4E2A\u5217\u8868\u7684\u6570\u636E\u662F\u5B8C\u6574\u7684'
-                                : '\u6682\u65E0\u6570\u636E',
-                            }),
-                            scroll: { x: 828, y: 460 },
-                          }),
-                        ],
-                      },
-                      '2',
-                    ),
-                  ],
-                }),
-                c.jsxs('div', {
-                  className: 'ap-notice',
-                  'data-kind': 'info',
-                  style: { marginTop: 14, marginBottom: 0 },
-                  children: [
-                    c.jsx(jf, {}),
-                    c.jsx('span', {
-                      children:
-                        '\u7B2C\u4E00\u671F\u4E0D\u7EB3\u5165\u300C\u4E13\u7EBF / \u67D4\u7EBF\u300D\u6807\u7B7E\u2014\u2014\u7B49\u5E74\u5EA6\u89C4\u5212\u7684\u4EA7\u7EBF\u5C5E\u6027\u786E\u5B9A\u540E\u518D\u4F5C\u4E3A\u72EC\u7ACB\u5B57\u6BB5\u8865\u5145\u3002\u5217\u8868\u53EF\u4E0B\u8F7D\u6A21\u677F\u3001\u7EBF\u4E0B\u8865\u5168\u540E\u4E0A\u4F20\u56DE\u5199\u3002',
-                    }),
-                  ],
-                }),
-              ],
-            }),
-          ],
-        }),
-      })
-    : null;
-}
-// prettier-ignore
-const fH = { sku: 0, line: 1, base: 2 };
-function dH() {
-  const [e, t] = usePageViewField(y, mpsView, 'masterOpen', false),
-    [n, r] = usePageViewField(y, mpsView, 'masterTab', 0),
-    [a, i] = usePageViewField(
-      y,
-      mpsView,
-      'masterSkus',
-      wV,
-      (value) => changedRows(value, wV),
-      (value) => restoredRows(value, wV),
-    ),
-    [o, l] = usePageViewField(
-      y,
-      mpsView,
-      'masterLines',
-      NO,
-      (value) => changedRows(value, NO),
-      (value) => restoredRows(value, NO),
-    ),
-    [s, u] = usePageViewField(
-      y,
-      mpsView,
-      'masterTransfers',
-      _V,
-      (value) => changedRows(value, _V),
-      (value) => restoredRows(value, _V),
-    ),
-    [d, v] = usePageViewField(y, mpsView, 'masterBlanks', false);
-  y.useEffect(() => {
-    const m = () => {
-      const g = window.location.hash.match(/maint-(\d)/);
-      void (g && (r(Number(g[1])), v(/blanks/.test(window.location.hash)), t(true)));
-    };
-    return (
-      m(),
-      window.addEventListener('hashchange', m),
-      () => window.removeEventListener('hashchange', m)
-    );
-  }, []);
-  const p = (m) => {
-      var g;
-      void (v(false), r((g = fH[m]) != null ? g : 0), t(true));
-    },
-    h = Math.round(
-      (Wd.reduce((m, g) => m + g.done, 0) / Wd.reduce((m, g) => m + g.total, 0)) * 100,
-    );
-  useMpsPart(
-    y,
-    'masterdata',
-    {
-      skuMappings: a,
-      lineMappings: o,
-      transferMappings: s,
-      maintenanceOpen: e,
-      maintenanceTab: n,
-      onlyBlanks: d,
-      completionPercent: h,
-      groups: Wd,
-    },
-    pV['masterdata'] ?? vV['masterdata'],
-  );
-  return c.jsxs(c.Fragment, {
-    children: [
-      c.jsxs('div', {
-        className: 'ap-notice',
-        'data-kind': 'warn',
-        style: { marginBottom: 16 },
-        children: [
-          c.jsx(og, {}),
-          c.jsxs('span', {
-            children: [
-              '\u8FD9\u662F\u4EA7\u80FD\u8BC4\u4F30\u7684',
-              c.jsx('b', { children: '\u524D\u63D0' }),
-              '\uFF1A\u5355\u54C1\u5230\u4EA7\u80FD\u8D44\u6E90\u7684\u5BF9\u5E94\u5173\u7CFB\u4E0D\u9F50\uFF0C\u8BC4\u4F30\u5C31\u65E0\u4ECE\u8C08\u8D77\u3002\u5F53\u524D\u6574\u4F53\u5B8C\u6210\u5EA6',
-              ' ',
-              c.jsxs('b', { children: [h, '%'] }),
-              '\uFF0C\u672A\u8865\u5168\u90E8\u5206\u5728\u8BC4\u4F30\u65F6\u4F1A\u663E\u5F0F\u6807\u4E3A\u300C\u53E3\u5F84\u672A\u5B9A\u300D\uFF0C\u4E0D\u7528\u4F30\u7B97\u503C\u66FF\u4EE3\u3002 \u70B9\u5361\u7247\u53F3\u4E0B\u89D2\u7684',
-              c.jsx('b', { children: '\u53BB\u7EF4\u62A4' }),
-              '\u53EF\u4EE5\u76F4\u63A5\u8865\u5168\u3002',
-            ],
-          }),
-        ],
-      }),
-      c.jsx('div', {
-        className: 'ap-grid-3',
-        style: { marginBottom: 16 },
-        children: Wd.map((m) => {
-          const g = Math.round((m.done / m.total) * 100);
-          return c.jsxs(
-            'section',
-            {
-              className: 'ap-board-card ap-source-card',
-              children: [
-                c.jsxs('div', {
-                  className: 'ap-card-head',
-                  children: [
-                    c.jsx('h3', { children: m.name }),
-                    c.jsxs(ut, {
-                      color: g >= 90 ? 'green' : g >= 70 ? 'orange' : 'red',
-                      size: 'small',
-                      bordered: true,
-                      children: [g, '%'],
-                    }),
-                  ],
-                }),
-                c.jsxs('div', {
-                  className: 'ap-card-body ap-source-body',
-                  children: [
-                    c.jsx('p', {
-                      style: {
-                        fontSize: 12.4,
-                        color: 'var(--ap-ink-2)',
-                        lineHeight: 1.66,
-                        margin: '0 0 14px',
-                      },
-                      children: m.desc,
-                    }),
-                    c.jsx('div', {
-                      className: 'ap-bar',
-                      children: c.jsx('i', {
-                        style: {
-                          width: `${g}%`,
-                          background: g >= 90 ? void 0 : 'linear-gradient(90deg,#F0A97F,#D2712C)',
-                        },
-                      }),
-                    }),
-                    c.jsxs('div', {
-                      style: {
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'baseline',
-                        marginTop: 10,
-                      },
-                      children: [
-                        c.jsxs('span', {
-                          style: { fontSize: 12.3, color: 'var(--ap-ink-2)' },
-                          children: [
-                            '\u5DF2\u5B8C\u6210 ',
-                            c.jsx('b', { style: { fontSize: 15 }, children: m.done }),
-                            ' / ',
-                            m.total,
-                            ' ',
-                            m.unit,
-                          ],
-                        }),
-                        c.jsx(Ke, {
-                          size: 'mini',
-                          type: 'primary',
-                          onClick: () => p(m.id),
-                          children: '\u53BB\u7EF4\u62A4',
-                        }),
-                      ],
-                    }),
-                    c.jsx('div', {
-                      style: {
-                        fontSize: 11.5,
-                        color: 'var(--ap-ink-3)',
-                        marginTop: 8,
-                        lineHeight: 1.6,
-                      },
-                      children: m.detail,
-                    }),
-                  ],
-                }),
-              ],
-            },
-            m.id,
-          );
-        }),
-      }),
-      c.jsx(cH, {
-        visible: e,
-        tab: n,
-        onTab: r,
-        onClose: () => t(false),
-        skus: a,
-        onSkus: i,
-        lines: o,
-        onLines: l,
-        transfers: s,
-        onTransfers: u,
-        blanksOnly: d,
-        onBlanksOnly: v,
-      }),
-      c.jsxs('section', {
-        className: 'ap-board-card',
-        children: [
-          c.jsxs('div', {
-            className: 'ap-card-head',
-            children: [
-              c.jsxs('h3', {
-                children: [
-                  '\u5B58\u91CF\u5355\u54C1\u6807\u7B7E\u8865\u5168',
-                  c.jsx(ut, {
-                    color: 'orange',
-                    size: 'small',
-                    bordered: true,
-                    children: '\u8FDB\u884C\u4E2D',
-                  }),
-                ],
-              }),
-              c.jsx('span', {
-                style: { fontSize: 11.5, color: 'var(--ap-ink-3)' },
-                children:
-                  '\u5728\u4EA7\u5355\u54C1\u7531\u5404\u54C1\u7C7B\u8D1F\u8D23\u4EBA\u9010\u4E00\u6838\u5BF9',
-              }),
-              c.jsx('span', { style: { flex: 1 } }),
-              c.jsx(Ke, {
-                size: 'small',
-                type: 'primary',
-                onClick: () => {
-                  void (v(true), r(0), t(true));
-                },
-                children: '\u53BB\u8865\u5168',
-              }),
-            ],
-          }),
-          c.jsx('div', {
-            className: 'ap-card-body flush',
-            style: { overflowX: 'auto' },
-            children: c.jsxs('table', {
-              className: 'ap-table',
-              children: [
-                c.jsx('thead', {
-                  children: c.jsxs('tr', {
-                    children: [
-                      c.jsx('th', { children: '\u54C1\u7C7B' }),
-                      c.jsx('th', { children: '\u5E94\u8865\u5355\u54C1' }),
-                      c.jsx('th', { children: '\u5DF2\u5B8C\u6210' }),
-                      c.jsx('th', { children: '\u5B8C\u6210\u5EA6' }),
-                    ],
-                  }),
-                }),
-                c.jsx('tbody', {
-                  children: yV.map((m) => {
-                    const g = Math.round((m.done / m.total) * 100);
-                    return c.jsxs(
-                      'tr',
-                      {
-                        children: [
-                          c.jsx('td', {
-                            className: 'ap-left',
-                            style: { fontWeight: 600 },
-                            children: m.cat,
-                          }),
-                          c.jsx('td', { className: 'ap-num', children: m.total }),
-                          c.jsx('td', { className: 'ap-num', children: m.done }),
-                          c.jsx('td', {
-                            style: { width: 180 },
-                            children: c.jsx('div', {
-                              className: 'ap-bar',
-                              children: c.jsx('i', {
-                                style: {
-                                  width: `${g}%`,
-                                  background:
-                                    g === 100 ? void 0 : 'linear-gradient(90deg,#F0A97F,#D2712C)',
-                                },
-                              }),
-                            }),
-                          }),
-                        ],
-                      },
-                      m.cat,
-                    );
-                  }),
-                }),
               ],
             }),
           }),
@@ -3394,7 +2611,11 @@ const mpsSteps = [
   label,
   step: String(index + 1),
   hint:
-    index < 2 ? '本地隔离输入核对，正式保存未接入' : '后续步骤保留旧模拟内容，本轮未实现业务计算',
+    index === 3
+      ? '授权主数据关系只读核对'
+      : index < 2
+        ? '本地隔离输入核对，正式保存未接入'
+        : '后续步骤保留旧模拟内容，本轮未实现业务计算',
 }));
 const bH = [...mpsSteps.map((step) => step.key), 'plans', 'gap'];
 function A1() {
@@ -3411,6 +2632,7 @@ function CH() {
       (value) => (bH.includes(value) ? value : 'check'),
     ),
     [draft, setDraft] = usePageViewField(y, mpsView, 'assistantDraft', ''),
+    [evaluationScope, setEvaluationScope] = y.useState(null),
     actions = useAuthorQuote(y);
   f.useEffect(() => {
     const g = () => t(A1());
@@ -3435,11 +2657,19 @@ function CH() {
     {
       tab: e,
       title: mpsSteps.find((step) => step.key === e)?.label ?? vV[e],
-      description: ['check', 'ship'].includes(e)
-        ? '前两步为本地隔离核对，真实取数与正式保存未接入。'
-        : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
+      description:
+        e === 'masterdata'
+          ? '授权主数据关系只读核对，源缺项与待确认标签保留。'
+          : ['check', 'ship'].includes(e)
+            ? '前两步为本地隔离核对，真实取数与正式保存未接入。'
+            : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
       tabs: mpsSteps,
-      version: ['check', 'ship'].includes(e) ? { scope: 'local-check-only' } : No,
+      version:
+        e === 'masterdata'
+          ? evaluationScope
+          : ['check', 'ship'].includes(e)
+            ? { scope: 'local-check-only' }
+            : No,
     },
     h,
   );
@@ -3505,7 +2735,7 @@ function CH() {
                       className: 'ap-board-title',
                       children: mpsSteps.find((step) => step.key === e)?.label ?? vV[e],
                     }),
-                    !['check', 'ship'].includes(e) &&
+                    !['check', 'ship', 'masterdata'].includes(e) &&
                       c.jsxs('div', {
                         className: 'ap-version-switch',
                         children: [
@@ -3534,9 +2764,11 @@ function CH() {
                 c.jsx('p', {
                   className: 'ap-board-sub',
                   children:
-                    e === 'check'
-                      ? '核对当前隔离草稿；业务取数、测算口径与正式保存尚未接入。'
-                      : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
+                    e === 'masterdata'
+                      ? '按当前评估月份核对候选关系与源缺项。'
+                      : e === 'check'
+                        ? '核对当前隔离草稿；业务取数、测算口径与正式保存尚未接入。'
+                        : '后续步骤保留旧模拟内容，本轮未实现业务计算。',
                 }),
               !['check', 'ship'].includes(e) &&
                 c.jsxs('div', {
@@ -3574,7 +2806,7 @@ function CH() {
             children: [
               !['check', 'ship'].includes(e) && assistant,
               e === 'process' && c.jsx(uH, {}),
-              e === 'masterdata' && c.jsx(dH, {}),
+              e === 'masterdata' && c.jsx(Relations, { scope: evaluationScope }),
               e === 'constraints' && c.jsx(gH, {}),
               e === 'plans' && c.jsx(pH, {}),
               e === 'capacity' &&
@@ -3593,6 +2825,7 @@ function CH() {
                 }),
               e === 'gap' && c.jsx(mH, {}),
               c.jsx(DemandConfirmation, {
+                onScopeChange: setEvaluationScope,
                 active: ['check', 'ship'].includes(e),
                 step: e,
                 onNext: () => h(e === 'check' ? 'ship' : 'process'),

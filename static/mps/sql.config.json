@@ -1,0 +1,375 @@
+{
+  "schemaVersion": 1,
+  "agentId": "inventory-mps",
+  "label": "月主计划主数据",
+  "source": "ai_db",
+  "dialect": "GEA PostgreSQL subset",
+  "templates": {},
+  "queries": {
+    "products.detail": {
+      "title": "products",
+      "grain": [
+        "sub_category",
+        "series",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "responsible_item",
+        "replacement_product",
+        "replacement_material_code"
+      ],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi GROUP BY sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code ORDER BY sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "products.count"
+      },
+      "columns": [
+        "sub_category",
+        "series",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "responsible_item",
+        "replacement_product",
+        "replacement_material_code",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "products.count": {
+      "parameterSpec": {},
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_product_list_mi GROUP BY sub_category, series, product_item, product_item_name, material_code, material_name, responsible_item, replacement_product, replacement_material_code) AS mps_rows"
+      }
+    },
+    "annual.detail": {
+      "title": "annual",
+      "grain": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty ORDER BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "annual.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_rows"
+      }
+    },
+    "tunnels.detail": {
+      "title": "tunnels",
+      "grain": [
+        "belong_base",
+        "production_unit",
+        "tunnel_no",
+        "tunnel_tonnage",
+        "tunnel_type",
+        "production_category",
+        "standard_daily_output_pc",
+        "standard_daily_output_ton",
+        "series"
+      ],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, production_unit, tunnel_no, tunnel_tonnage, tunnel_type, production_category, standard_daily_output_pc, standard_daily_output_ton, series, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_tunnel_capacity_mi GROUP BY belong_base, production_unit, tunnel_no, tunnel_tonnage, tunnel_type, production_category, standard_daily_output_pc, standard_daily_output_ton, series ORDER BY belong_base, production_unit, tunnel_no, tunnel_tonnage, tunnel_type, production_category, standard_daily_output_pc, standard_daily_output_ton, series LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "tunnels.count"
+      },
+      "columns": [
+        "belong_base",
+        "production_unit",
+        "tunnel_no",
+        "tunnel_tonnage",
+        "tunnel_type",
+        "production_category",
+        "standard_daily_output_pc",
+        "standard_daily_output_ton",
+        "series",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "tunnels.count": {
+      "parameterSpec": {},
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, production_unit, tunnel_no, tunnel_tonnage, tunnel_type, production_category, standard_daily_output_pc, standard_daily_output_ton, series, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_tunnel_capacity_mi GROUP BY belong_base, production_unit, tunnel_no, tunnel_tonnage, tunnel_type, production_category, standard_daily_output_pc, standard_daily_output_ton, series) AS mps_rows"
+      }
+    },
+    "sku_capacity.detail": {
+      "title": "sku_capacity",
+      "grain": [
+        "belong_base",
+        "workshop",
+        "tunnel_no",
+        "tunnel_tonnage",
+        "tunnel_type",
+        "production_category",
+        "combined_series",
+        "standard_daily_output_pc",
+        "standard_daily_output_ton",
+        "series",
+        "material_code",
+        "material_name"
+      ],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, workshop, tunnel_no, tunnel_tonnage, tunnel_type, production_category, combined_series, standard_daily_output_pc, standard_daily_output_ton, series, material_code, material_name, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_production_line_sku_capacity_mi GROUP BY belong_base, workshop, tunnel_no, tunnel_tonnage, tunnel_type, production_category, combined_series, standard_daily_output_pc, standard_daily_output_ton, series, material_code, material_name ORDER BY belong_base, workshop, tunnel_no, tunnel_tonnage, tunnel_type, production_category, combined_series, standard_daily_output_pc, standard_daily_output_ton, series, material_code, material_name LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "sku_capacity.count"
+      },
+      "columns": [
+        "belong_base",
+        "workshop",
+        "tunnel_no",
+        "tunnel_tonnage",
+        "tunnel_type",
+        "production_category",
+        "combined_series",
+        "standard_daily_output_pc",
+        "standard_daily_output_ton",
+        "series",
+        "material_code",
+        "material_name",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "sku_capacity.count": {
+      "parameterSpec": {},
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, workshop, tunnel_no, tunnel_tonnage, tunnel_type, production_category, combined_series, standard_daily_output_pc, standard_daily_output_ton, series, material_code, material_name, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_production_line_sku_capacity_mi GROUP BY belong_base, workshop, tunnel_no, tunnel_tonnage, tunnel_type, production_category, combined_series, standard_daily_output_pc, standard_daily_output_ton, series, material_code, material_name) AS mps_rows"
+      }
+    },
+    "transfers.detail": {
+      "title": "transfers",
+      "grain": [
+        "stat_period",
+        "material_code",
+        "sap_category",
+        "old_category",
+        "production_category",
+        "material_name",
+        "series",
+        "target_base",
+        "transfer_tag",
+        "transfer_direction"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "period",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM"
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = :gea_p1 GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction ORDER BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "transfers.count"
+      },
+      "columns": [
+        "stat_period",
+        "material_code",
+        "sap_category",
+        "old_category",
+        "production_category",
+        "material_name",
+        "series",
+        "target_base",
+        "transfer_tag",
+        "transfer_direction",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "transfers.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "period",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_transfer_direction_mi WHERE stat_period = :gea_p1 GROUP BY stat_period, material_code, sap_category, old_category, production_category, material_name, series, target_base, transfer_tag, transfer_direction) AS mps_rows"
+      }
+    },
+    "annual.summary": {
+      "title": "年度需求源数量核对",
+      "grain": ["belong_base", "sub_category", "stat_month"],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(source_rows - quantity_rows) AS missing_qty, SUM(CASE WHEN source_rows > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN source_rows = 1 AND quantity_rows = 1 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, COUNT(*) AS source_rows, COUNT(demand_qty) AS quantity_rows, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual.summary.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "stat_month",
+        "source_rows",
+        "missing_qty",
+        "duplicate_rows",
+        "demand_qty",
+        "update_time"
+      ]
+    },
+    "annual.summary.count": {
+      "parameterSpec": {},
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(source_rows - quantity_rows) AS missing_qty, SUM(CASE WHEN source_rows > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN source_rows = 1 AND quantity_rows = 1 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, COUNT(*) AS source_rows, COUNT(demand_qty) AS quantity_rows, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
+      }
+    }
+  }
+}
