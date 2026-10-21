@@ -160,16 +160,16 @@ test('successful empty inventory is explicit rather than a loading or permission
   assert.deepEqual(errors, []);
 });
 
-test('refresh reloads the inventory document instead of reporting a demo success', async (t) => {
-  const { page, frame, errors } = await fixture(t, { error: 'DATA_PERMISSION_DENIED' });
+test('inventory has no whole-document refresh button and retains its permission-denied shell', async (t) => {
+  const { frame, errors } = await fixture(t, { error: 'DATA_PERMISSION_DENIED' });
   await expect(frame.locator('#customer-load-status')).toContainText(
     '当前用户暂无客户库存数据权限',
   );
-  const reloaded = page.waitForEvent('framenavigated', (item) => item.url().endsWith('/customer'));
-  await frame.getByRole('button', { name: '刷新', exact: true }).click();
-  await reloaded;
+  await expect(frame.getByRole('button', { name: '刷新', exact: true })).toHaveCount(0);
   await expect(frame.locator('.metric-card')).toHaveCount(6);
-  await expect(frame.locator('#customer-load-status')).toContainText('正在连接客户库存');
+  await expect(frame.locator('#customer-load-status')).toContainText(
+    '当前用户暂无客户库存数据权限',
+  );
   assert.deepEqual(errors, []);
 });
 
