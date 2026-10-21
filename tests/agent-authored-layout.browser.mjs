@@ -1312,7 +1312,7 @@ test('FC refused export reads never download a partial file or retry authorizati
 test('FC DMS export keeps warehouses separate and preserves another warehouse draft', async (t) => {
   const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
     const value = fcWorkflowRows(query, result);
-    if (/^replenishment\.detail/.test(query.queryId))
+    if (query.queryId.startsWith('replenishment.detail'))
       value.rows = value.rows.map((row) => {
         const second = Number(String(row.sku).slice(-3)) >= 10;
         return {
