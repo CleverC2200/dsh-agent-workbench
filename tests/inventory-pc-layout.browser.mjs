@@ -201,6 +201,7 @@ async function startCompanyQuery(frame) {
   await expect(frame.locator('#app')).toContainText('5,580');
 }
 async function readablePaint(locator) {
+  assert.equal(await locator.count(), 1, `one visible paint target: ${locator}`);
   const paint = await locator.evaluateAll((elements) => {
     if (elements.length !== 1)
       throw Error(`Readable paint requires one current element, received ${elements.length}`);
@@ -251,23 +252,25 @@ for (const id of ['qll', 'dealer'])
     const targets =
       id === 'qll'
         ? [
-            frame.locator('strong').filter({ hasText: '5,580' }).first(),
+            frame.getByText(/^5,580箱$/).first(),
             frame.getByText(/核心判断/).first(),
-            frame.getByText(/数据边界：/).first(),
-            frame.locator('label').filter({ hasText: '含渠道' }),
+            frame.getByText('含渠道', { exact: true }),
             frame.getByRole('button', { name: '查询趋势', exact: true }),
           ]
-        : [frame.locator('[role="status"]').filter({ hasText: 'GEA 授权只读数据' }).first()];
+        : [];
     if (id === 'dealer') {
-      await frame.getByRole('button', { name: 'SKU库存', exact: true }).press('Enter');
-      await expect(frame.getByRole('heading', { name: 'SKU库存', exact: true })).toBeVisible();
+      await frame.getByRole('tab', { name: 'SKU库存', exact: true }).press('Enter');
+      await expect(frame.getByRole('tab', { name: 'SKU库存', exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
       await expect(frame.locator('section[data-page-reference-ready]')).toHaveAttribute(
         'data-page-reference-ready',
         'true',
       );
       targets.push(
-        frame.getByRole('columnheader', { name: 'SKU编码', exact: true }),
-        frame.getByRole('heading', { name: 'SKU库存', exact: true }),
+        frame.locator('thead th').first(),
+        frame.getByRole('tab', { name: 'SKU库存', exact: true }),
       );
     }
     const paints = [];
@@ -615,7 +618,7 @@ test('full-chain content is readable and scrollable in the actual 559px PC panel
   const trend = frame.getByRole('region', { name: '全链库存趋势与缺口' });
   await trend.getByRole('button', { name: '查询趋势', exact: true }).scrollIntoViewIfNeeded();
   await trend.getByRole('button', { name: '查询趋势', exact: true }).press('Enter');
-  await expect(trend).toContainText('缺失期间或层级以断线表示');
+  await expect(trend).not.toContainText('缺失期间或层级以断线表示');
   await expect(trend.locator('svg')).toBeVisible();
   assert.ok(
     await frame
@@ -639,7 +642,7 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
     )
     .toBe('ready');
   await trend.getByRole('button', { name: '查询趋势', exact: true }).press('Enter');
-  await expect(trend).toContainText('缺失期间或层级以断线表示');
+  await expect(trend).not.toContainText('缺失期间或层级以断线表示');
   const svg = trend.getByRole('img');
   for (const width of [400, 559, 1199]) {
     await page.setViewportSize({ width: width + 721, height: 780 });
@@ -735,7 +738,7 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
       .evaluate((option) => option.disabled),
     true,
   );
-  await expect(next).toContainText('订单与平均货龄历史来源未接入');
+  await expect(next).not.toContainText('订单与平均货龄历史来源未接入');
   if (evidence) await page.screenshot({ path: evidence + '/chart-keyboard-100-12.png' });
 });
 

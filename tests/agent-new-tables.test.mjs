@@ -35,16 +35,19 @@ for (const [agent, viewId, field] of [
     const execute = async (_, call) => {
       calls.push(call);
       const q = config.queries[call.queryId];
-      const rows = call.queryId.endsWith('.count')
-        ? [{ total: 21 }]
-        : Array.from({ length: 10 }, (_, i) =>
-            Object.fromEntries(
-              q.resultColumns.map((key) => [
-                key,
-                key === field ? 0 : key === 'source_rows' ? 1 : String(i + call.values.offset),
-              ]),
-            ),
-          );
+      const rows =
+        call.queryId === 'source.customer-analysis-date'
+          ? [{ day: '2026-10-18' }]
+          : call.queryId.endsWith('.count')
+            ? [{ total: 21 }]
+            : Array.from({ length: 10 }, (_, i) =>
+                Object.fromEntries(
+                  q.resultColumns.map((key) => [
+                    key,
+                    key === field ? 0 : key === 'source_rows' ? 1 : String(i + call.values.offset),
+                  ]),
+                ),
+              );
       return {
         rows,
         returnedColumns: q.resultColumns,
@@ -105,10 +108,13 @@ for (const agent of ['aqkc', 'fc', 'qll', 'apsplan'])
     }
   });
 
-test('unpublished empty customer analysis stays unavailable without a denied query or fallback', async () => {
+test('unpublished customer analysis stays unavailable without a denied query or fallback', async () => {
+  const config = structuredClone(configs.dealer);
+  config.agentId = 'inventory-unpublished-fixture';
+  delete config.sourceViews.views.find((view) => view.id === 'customer-plan-analysis').queryId;
   let calls = 0;
   const result = await readConfiguredFacts(
-    configs.dealer,
+    config,
     'customer-plan-analysis',
     { asOf: '2026-10-19', customer: 'C1' },
     {

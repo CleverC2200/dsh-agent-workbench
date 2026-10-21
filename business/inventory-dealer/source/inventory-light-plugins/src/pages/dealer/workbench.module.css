@@ -668,3 +668,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+:global(body[data-ds-dark-theme]) .shell th {
+  color: var(--ui-muted);
+}
