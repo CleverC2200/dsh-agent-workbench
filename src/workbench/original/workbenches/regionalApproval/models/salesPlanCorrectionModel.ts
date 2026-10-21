@@ -5,7 +5,9 @@ import {
   type SalesPlanWorkflowRow,
   type SalesPlanRole,
 } from '../../../salesPlanWorkflow.ts';
-import type { GeaSalesPlanSku } from '../../../contracts.ts';
+import type { GeaSalesPlanDetail, GeaSalesPlanSku } from '../../../contracts.ts';
+import type { ApprovalStageId } from '../salesPlanDomain.ts';
+import { salesPlanAccessForRow } from './salesPlanAccessModel.ts';
 
 const Exact = Decimal.clone({ precision: 60, rounding: Decimal.ROUND_HALF_UP });
 /** 纠偏量使用高精度十进制；缺失字段表示继承，显式 0 表示用户确实选择了零。 */
@@ -124,4 +126,61 @@ export function correctionDisplay(value: string | null | undefined, kind: 'money
   } catch {
     return { display: '—', exact: '—' };
   }
+}
+
+/** @deprecated Retained unchanged for existing Host peers; current UI uses the shared approval flow. */
+export function correctionAccess(
+  detail: GeaSalesPlanDetail,
+  workflowRows?: readonly SalesPlanWorkflowRow[],
+  selectedRole?: CorrectionNode,
+  stages: readonly ApprovalStageId[] = [],
+) {
+  const v = detail.currentVersion;
+  const flow = salesPlanWorkflow(v.planTypeCode, workflowRows);
+  const actor = flow.actor(v.status);
+  const role = selectedRole ?? actor;
+  if (
+    v.orderType !== 'Z' ||
+    !v.effective ||
+    detail.correctionContext?.monthlyApproved === false ||
+    detail.correctionContext?.approvalOpen === false ||
+    !role ||
+    role === 'customer' ||
+    role !== actor ||
+    !stages.includes(role)
+  )
+    return undefined;
+  return salesPlanAccessForRow(
+    { planId: v.planId, versionId: v.id, status: v.status, planTypeCode: v.planTypeCode },
+    detail,
+    stages,
+    role,
+    workflowRows,
+  );
+}
+
+/** @deprecated Compatibility export for existing Host peers; preserves absolute decisions and explicit zero. */
+export function correctionAdjustments(
+  detail: GeaSalesPlanDetail,
+  edits: Record<string, string>,
+  workflowRows?: readonly SalesPlanWorkflowRow[],
+  selectedRole?: CorrectionNode,
+) {
+  return detail.skus.flatMap((sku) => {
+    const delta =
+      edits[sku.skuCode] ??
+      (sku.nodeAdjAddQty != null && sku.nodeAdjCutQty != null
+        ? correctionDecimal(sku.nodeAdjAddQty).minus(sku.nodeAdjCutQty).toFixed()
+        : undefined) ??
+      correctionDecision(
+        sku,
+        detail.currentVersion.status,
+        detail.currentVersion.planTypeCode,
+        true,
+        workflowRows,
+        selectedRole,
+      );
+    const line = correctionLine(sku, delta);
+    return [{ skuCode: sku.skuCode, adjustQty: line.delta }];
+  });
 }

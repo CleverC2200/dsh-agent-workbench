@@ -12,6 +12,11 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^src/workbench/original/workbenches/regionalApproval/models/salesPlanCorrectionModel\\.ts$",
+      "tests": ["tests/sales-plan-legacy-exports.test.mjs", "tests/correction-rules.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^scripts/build\\.mjs$",
       "tests": ["tests/core-resource-build.test.mjs", "tests/plugin-package-version.test.mjs"]
     },
