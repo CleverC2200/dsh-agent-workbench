@@ -1,3 +1,4 @@
+import { readCurrentShortage } from '../../../../shared/current-shortage';
 import sqlConfiguration from '../../../sql.config.json';
 import { agentSqlConfig, usesConfiguredSql } from '../../../../shared/sql-config';
 import { readWorkspaceQuery } from '../../../../shared/workspace-query';
@@ -189,6 +190,22 @@ export function createGeaWorkspace(transport: SqlTransport) {
       ratio_group: 'warehouse_examine',
     };
     async function read(name: string): Promise<Row[]> {
+      if (usesConfiguredSql() && name === 'pending') {
+        const result = await readCurrentShortage(
+          sqlConfiguration,
+          'current-shortage.locations',
+          {},
+          { signal: input.signal },
+        );
+        return result.rows.map((row: Row) => ({
+          ...row,
+          scope: row.location_type,
+          warehouse: row.warehouse_code,
+          stage: 'PREPARING',
+          ordered: row.demand,
+          source_date: row.snapshot_date,
+        }));
+      }
       if (usesConfiguredSql()) {
         const config = agentSqlConfig(sqlConfiguration);
         const binding =

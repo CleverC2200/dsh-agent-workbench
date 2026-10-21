@@ -3,6 +3,7 @@ import unittest
 import sqlite3
 import re
 import sqlglot
+from test_current_shortage_source import SourceFormula
 from unittest.mock import patch
 from agent_sql import ContractError, bind, inspect, validate_parameters, Executor, direct_preview_document, config_for
 

@@ -1,5 +1,5 @@
 name: source-quality
-run-name: "Repository source quality — ${{ github.sha }}"
+run-name: 'Repository source quality — ${{ github.sha }}'
 
 on:
   push:

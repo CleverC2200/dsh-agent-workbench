@@ -224,3 +224,39 @@
 .cycleForm .cycleActions button[type='submit']:hover {
   background: var(--ui-accent-hover, #c91029);
 }
+
+.currentShortageTable {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+  font: 12px/1.7 var(--ui-font);
+}
+.currentShortageTable th,
+.currentShortageTable td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--ui-border);
+  text-align: left;
+}
+.currentShortageTable th {
+  color: var(--ui-secondary);
+  background: var(--ui-soft);
+  font-size: 10px;
+  font-weight: 600;
+}
+.currentShortageTable tbody tr:hover {
+  background: var(--ui-hover);
+}
+.shortageControls {
+  padding: 12px;
+  gap: 12px;
+}
+.shortageControls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ui-secondary);
+  font: 11px var(--ui-font);
+}
+.shortageControls input {
+  width: 160px;
+}
