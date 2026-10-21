@@ -25,7 +25,7 @@ export async function sourceChecks(result, phase) {
   const gea = repositories.find(entry => entry.repo === 'dsh-gea-plugin').path;
   const testOwners = repo === 'dsh-agent-manage' ? (await import(pathToFileURL(resolve(manage, 'scripts/preset-test-lanes.mjs')))).presetHostOwners : json(resolve(root, 'scripts/ci-test-policy.json')).testOwners || {};
   const selected = selectCiTests({ repositories, repo, base: result.base, testOwners, sourceOnly: true });
-  const typecheck = result.files.some(file => /\.(?:ts|tsx|mts|cts)$/.test(file) && !file.startsWith('tests/') && !file.startsWith('scripts/') || /^(?:tsconfig|package\.json$|(?:pnpm|package)-lock)/.test(file));
+  const typecheck = result.files.some(file => /^(?:src|packages|business)\//.test(file) && /\.(?:ts|tsx|mts|cts)$/.test(file) || /^(?:tsconfig|package\.json$|(?:pnpm|package)-lock)/.test(file));
   const lanes = repo === 'dsh-agent-manage' ? (await import(pathToFileURL(resolve(manage, 'scripts/preset-test-lanes.mjs')))).presetLanes : {};
   const joint = selected.runtime || selected.build || selected.files.some(file => Object.values(lanes).some(lane => file in lane));
   const plan = { ...selected, typecheck, dependencies: typecheck || joint || selected.dependencies || selected.files.some(file => file.endsWith('.ts')), sdk: typecheck || joint || selected.sdk || repo === 'dsh-agent-manage' && selected.files.some(file => file.endsWith('.ts')), joint };

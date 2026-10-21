@@ -10,6 +10,7 @@
     "tests/final-group-input.contract.mjs"
   ],
   "sourceFixtures": {
+    "tests/hosted-peer-input.test.mjs": { "dependencies": false },
     "scripts/source-quality.test.mjs": {
       "dependencies": false
     },
@@ -193,6 +194,14 @@
       "sourceTests": [
         "tests/quality-ci.test.mjs",
         "tests/ci-test-plan.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/quality-peer-baseline\\.json$",
+      "tests": [],
+      "sourceTests": [
+        "tests/hosted-peer-input.test.mjs"
       ]
     }
   ]
