@@ -57,15 +57,18 @@ export default function ConfiguredWorkbench() {
     orders = parts.orders?.summary;
   const branch = parts['branch-stock']?.summary;
   const customer = parts['channel-overview']?.summary;
-  const baseQty = knownNumber(stock?.known_inventory),
+  const baseQty = knownNumber(parts.health?.summary?.total_qty),
     branchAvailable = knownNumber(branch?.available_qty);
-  const companyQty =
-    baseQty === null || branchAvailable === null ? null : baseQty + branchAvailable;
+  const companyQty = baseQty;
   const workspace: any = {
     scope: channel ? 'all-channel' : 'company',
     customerObservationRisks: [],
     structure: [
-      { layer: 'base', currentQty: baseQty, availableQty: knownNumber(stock?.known_available) },
+      {
+        layer: 'base',
+        currentQty: baseQty,
+        availableQty: knownNumber(parts.health?.summary?.available_qty),
+      },
       {
         layer: 'branch',
         currentQty: knownNumber(branch?.total_qty),

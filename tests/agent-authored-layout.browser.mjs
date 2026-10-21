@@ -44,6 +44,21 @@ async function mount(t, id, width, override) {
   const frame = page.frameLocator('iframe');
   return { page, frame, errors, calls, diagnostics };
 }
+test('QLL counts one inventory snapshot once across base and warehouse dimensions', async (t) => {
+  const { frame, errors, calls } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'health.summary') {
+      result.rows[0].total_qty = 100;
+      result.rows[0].available_qty = 40;
+    }
+    return result;
+  });
+  const inventoryCard = frame.locator('[data-overview-cards="qll"]').locator('button').first();
+  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*箱/);
+  for (const call of calls.filter((c) => c.queryId.startsWith('health.'))) {
+    assert.equal('warehouse_type' in call.parameters, false);
+  }
+  assert.deepEqual(errors, []);
+});
 test('APS source limitations do not masquerade as query failures', async (t) => {
   const { frame, calls, errors } = await mount(t, 'apsplan', 1280);
   await expect.poll(() => calls.length).toBeGreaterThan(10);
