@@ -4,12 +4,20 @@
   "name": "订单履约",
   "version": "0.1.0-preview.3-split.22",
   "html": "index.html",
-  "skills": ["skills/orderfulfillment/SKILL.md"],
+  "skills": [
+    "skills/orderfulfillment/SKILL.md",
+    "skills/fulfillment-query-orchestrator/SKILL.md",
+    "skills/order-fulfillment-risk/SKILL.md",
+    "skills/sku-inventory-shortage/SKILL.md",
+    "skills/production-fulfillment-progress/SKILL.md",
+    "skills/warehouse-logistics-fulfillment/SKILL.md",
+    "skills/sales-organization-analysis/SKILL.md",
+    "skills/fulfillment-sales-confirmation-automation/SKILL.md"
+  ],
   "mcp": "mcp.json",
-  "mode": "mock",
   "pageContext": "live",
   "gea": {
-    "consumerCode": "orderfulfillment-preview",
+    "consumerCode": "order01",
     "readonly": true,
     "contract": "gea-html-v2"
   },
@@ -21,5 +29,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "sqlConfig": "sql.config.json"
 }

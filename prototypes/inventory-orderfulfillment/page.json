@@ -1,7 +1,9 @@
 {
   "surface": "gea-html-inventory-orderfulfillment",
   "protocol": "self-report",
-  "pageIds": ["inventory-orderfulfillment"],
-  "consumerCode": "orderfulfillment-preview",
+  "pageIds": [
+    "inventory-orderfulfillment"
+  ],
+  "consumerCode": "order01",
   "maxEffect": "view"
 }

@@ -92,6 +92,28 @@ html body {
   flex: 1;
   overflow: auto;
 }
+html,
+body,
+#app,
+#root {
+  height: auto;
+  overflow: visible;
+}
+#customer-load-status[data-state='waiting'],
+#customer-load-status[data-state='loading'],
+#customer-load-status[data-state='ready'] {
+  display: none;
+}
+.app-shell,
+.app-shell > .app-main,
+.workspace {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+.page-content {
+  min-height: 0;
+}
 /* These tooltips contain read-only text and must not block the role menu. */
 .arco-tooltip,
 .arco-tooltip * {
