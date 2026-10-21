@@ -192,7 +192,7 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
   await expect(view).toContainText('共29条');
   denied = true;
   await view.getByRole('button', { name: '重新读取', exact: true }).click();
-  await expect(view.getByRole('alert')).toContainText('AGENT_ACCESS_DENIED');
+  await expect(view.getByRole('alert')).toHaveText('当前账号暂无数据权限');
   await expect(view.locator('tbody tr')).toHaveCount(0);
   denied = false;
   hold = true;
