@@ -2,5 +2,5 @@
   "repo": "dsh-agent-orderworkbench-plugin",
   "commit": "b824e7a10844da6c0330834030badea4fb04fd6a",
   "htmlSha256": "d1dcb4523781666ab2a56b00a085db9bc32af48652a5390e28d1fab9e580e55e",
-  "behavior": "Report datasets/calculations/local tasks unchanged; v2 navigation and explicit state publication; shared theme added. Report periods are filters of default page instance, not individual order IDs."
+  "behavior": "Order workbench UI and local improvement workflows adapted from 订单履约agent.html; existing page channel, period restoration and fulfillment navigation retained. Agent resources remain owned by Manage."
 }

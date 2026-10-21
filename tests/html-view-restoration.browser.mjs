@@ -215,27 +215,26 @@ for (const [taskFilter, taskLabel] of [
   ['pending', '待跟进'],
   ['done', '已完成'],
 ]) {
-  test(`received order report restores all events and the ${taskLabel} task filter highlight with their visible lists`, async (t) => {
+  test(`received order report restores the ${taskLabel} task filter and its visible list`, async (t) => {
     const page = await fixture(t, ['orderworkbench']);
     await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
     const frame = page.frameLocator('iframe');
-    await frame.getByRole('button', { name: '全部事项', exact: true }).click();
     await frame.getByRole('button', { name: new RegExp(`^${taskLabel}`) }).click();
     await expect
-      .poll(() => page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.filters))
-      .toEqual({ event: 'all', task: taskFilter });
-    await expect(frame.locator('[data-wb-event-filter].active')).toHaveText('全部事项');
+      .poll(() =>
+        page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.filters.task),
+      )
+      .toBe(taskFilter);
     await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
-    await expect(frame.locator('#wbEvents .wb-event')).toHaveCount(5);
-    await expect(frame.locator('#wbEvents')).toContainText('火锅料与汤圆可发货天数偏高');
     await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
     await page.evaluate(() => window.hidePage());
     await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
-    await expect(frame.locator('[data-wb-event-filter].active')).toHaveText('全部事项');
     await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
-    await expect(frame.locator('#wbEvents .wb-event')).toHaveCount(5);
-    await expect(frame.locator('#wbEvents')).toContainText('火锅料与汤圆可发货天数偏高');
     await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
+    await expect(frame.getByRole('tab', { name: '品类满足率维度', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
   });
 }
