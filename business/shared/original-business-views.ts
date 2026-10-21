@@ -50,7 +50,7 @@ export function originalFcView(config: any, tab: string) {
         'missing_actualQty',
         'category',
         'material_group',
-        ['missing_forecast_turnover', '展望周转天数'],
+        ['forecast_turnover_days', '展望周转天数'],
         ['month_out_plan', '本月出货计划'],
         'planned_daily_shipment',
         'month_ship_positive',

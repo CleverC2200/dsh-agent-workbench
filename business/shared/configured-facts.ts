@@ -77,6 +77,7 @@ export async function readConfiguredFacts(
     signal?: AbortSignal;
     execute?: any;
     summaryOnly?: boolean;
+    detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
@@ -273,7 +274,7 @@ export async function readConfiguredFacts(
   if (!countId) return fail('INVALID_COLLECTION_CONTRACT', '分页缺少配对计数');
   // The aggregate reads the full filter scope independently of the ten-row page.
   const readSummary = async () => {
-    if (!view.summaryId) return { summary: null, summaryError: null };
+    if (!view.summaryId || options.detailsOnly) return { summary: null, summaryError: null };
     try {
       const aggregate = await read(view.summaryId, subset(view.summaryId));
       if (aggregate.rows.length !== 1) return fail('INVALID_SUMMARY', '汇总未返回唯一记录');

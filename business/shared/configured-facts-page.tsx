@@ -48,7 +48,9 @@ export function ConfiguredFactsPage({
   currentPageSize,
   onPageSizeChange,
   presentation,
+  businessList,
 }: {
+  businessList?: React.ComponentType<React.ComponentProps<typeof OriginalBusinessList>>;
   config: AgentSqlConfig;
   presentation?: { title: string; columns: any[]; filters?: string[] };
   onRead?: (value: any) => void;
@@ -186,9 +188,11 @@ export function ConfiguredFactsPage({
   const businessTitleId = React.useId();
   const titleId = presentation ? businessTitleId : 'source-view-title';
   const totalPages = result?.total == null ? null : Math.max(1, Math.ceil(result.total / pageSize));
+  const BusinessList = businessList ?? OriginalBusinessList;
   if (presentation)
     return (
-      <OriginalBusinessList
+      <BusinessList
+        actionScope={{ config, viewId, input: { asOf, filters, cycleDays } }}
         agentId={config.agentId}
         view={view}
         columns={columns}

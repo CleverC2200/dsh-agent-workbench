@@ -1,3 +1,9 @@
+import {
+  FcConfiguredList,
+  FcWorkflowProvider,
+  fcTrialScope,
+  useFcWorkflow,
+} from './configured-fc-list';
 import { configuredCycleState } from '../native/memory-storage';
 import { Modal } from '../dsh-ui/controls';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
@@ -38,6 +44,14 @@ const views: Record<string, string[]> = {
 const show = (n: number | null, unit = '') =>
   n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 export default function ConfiguredWorkbench() {
+  return (
+    <FcWorkflowProvider>
+      <WorkbenchBody />
+    </FcWorkflowProvider>
+  );
+}
+function WorkbenchBody() {
+  const { trial, setTrial } = useFcWorkflow();
   const [tab, setTab] = useState('replenishment'),
     [date, setDate] = useState(businessDay),
     [draft, setDraft] = useState(businessDay),
@@ -47,6 +61,7 @@ export default function ConfiguredWorkbench() {
     ),
     [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
     [cycleOpen, setCycleOpen] = useState(false);
+  useEffect(() => setTrial(null), [date, cycleDays, revision, setTrial]);
   useEffect(
     () =>
       configuredCycleState.subscribe(() =>
@@ -73,7 +88,16 @@ export default function ConfiguredWorkbench() {
       color: 'blue',
       details: [
         ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
-        ['展望周转', null, '天'],
+        [
+          '展望周转',
+          trial?.scope === fcTrialScope(date, cycleDays)
+            ? trial.forwardTurnover
+            : knownNumber(plan?.calculation_daily) && Number(plan?.calculation_daily) > 0
+              ? (Number(plan.available_qty ?? 0) + Number(plan.open_transfer_reported_qty ?? 0)) /
+                Number(plan.calculation_daily)
+              : null,
+          '天',
+        ],
       ],
     },
     {
@@ -98,7 +122,10 @@ export default function ConfiguredWorkbench() {
     },
     {
       title: '待补货量',
-      value: knownNumber(plan?.recommended_qty),
+      value:
+        trial?.scope === fcTrialScope(date, cycleDays)
+          ? trial.recommended
+          : knownNumber(plan?.recommended_qty),
       unit: '箱',
       color: 'red',
       details: [
@@ -108,11 +135,11 @@ export default function ConfiguredWorkbench() {
     },
     {
       title: '当前订单',
-      value: null,
+      value: order ? 0 : null,
       unit: '箱',
       color: 'amber',
       description:
-        '当前待发订单仍缺分仓阶段快照。下方分别为本月累计缺货量与库存快照中的备单占用量，不能相加或推算当前待发量。',
+        '分仓当前待发快照尚未提供，按缺失值规则显示0，不代表实际没有待发订单。下方月累计缺货与库存备单占用不能相加推算当前待发。',
       details: [
         ['本月缺货量', completeValue(order, 'shortage'), '箱'],
         ['库存备单占用', knownNumber(branchStock?.pack_unit_qty), '箱'],
@@ -185,7 +212,11 @@ export default function ConfiguredWorkbench() {
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
             <QueryErrors errors={errors} />
-            <div className={`kpi-grid safety-stock-kpis ${common.kpis}`} aria-busy={busy}>
+            <div
+              className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
+              data-overview-cards="fc"
+              aria-busy={busy}
+            >
               {cards.map((c) => (
                 <article
                   key={c.title}
@@ -245,6 +276,7 @@ export default function ConfiguredWorkbench() {
                   config={config}
                   embedded
                   presentation={originalFcView(config, tab)}
+                  businessList={FcConfiguredList}
                   viewIds={views[tab]}
                   date={date}
                   cycleDays={cycleDays}

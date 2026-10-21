@@ -32,6 +32,7 @@ export function OriginalBusinessList({
   onPage,
   onPageSize,
   renderCell,
+  toolbarActions,
 }: any) {
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
@@ -152,6 +153,7 @@ export function OriginalBusinessList({
               </Button>
             </>
           )}
+          {toolbarActions}
           {fc && (
             <details className={css.columns}>
               <summary>显示列（{columns.length}）</summary>
