@@ -6,214 +6,32 @@ html body {
   --muted: var(--workbench-muted);
   --brand: var(--workbench-brand);
   --brand-soft: var(--workbench-brand-soft);
-  font-family: var(--workbench-font-family);
-  font-size: var(--workbench-font-size);
   display: flex;
   flex-direction: column;
   height: 100vh;
 }
-.prototype-notice,
-#pageSyncStatus {
+.shell {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+.prototype-notice {
   margin: 0;
-  padding: 8px 16px;
-  background: var(--workbench-subtle);
-  color: var(--workbench-body);
+  padding: 6px 20px;
+  color: var(--muted);
+  background: var(--bg);
   font-size: 11px;
 }
 #pageSyncStatus {
   position: fixed;
   top: 8px;
   right: 16px;
-  z-index: 10;
-  max-width: calc(100% - 32px);
-  border-radius: 8px;
-  color: #956900;
-  background: #fff4d9;
-  pointer-events: none;
-}
-.shell {
-  flex: 1;
-  height: auto;
-  min-height: 0;
+  z-index: 30;
+  padding: 8px;
+  background: var(--surface);
+  color: var(--text);
 }
 .workspace,
-.content,
-.wb-card,
-.wb-kpi,
-.wb-adopt-dialog,
-.wb-detail-dialog {
-  background: var(--surface);
-  color: var(--text);
-}
 .content {
-  padding: 16px;
-}
-.wb-kpi,
-.wb-card {
-  border-color: var(--line);
-  border-radius: 10px;
-}
-.wb-kpi strong {
-  font-size: 23px;
-}
-.period-switch,
-.wb-events-tabs,
-.wb-filters {
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
   background: var(--surface);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.period-switch {
-  padding: 0;
-}
-.period-switch button,
-.wb-events-tabs button,
-.wb-filters button {
-  min-height: 31px;
-  border-radius: 0;
-  border-bottom: 2px solid transparent;
-  background: var(--surface);
-  color: var(--workbench-body);
-  font-size: 11px;
-  box-shadow: none;
-}
-.period-switch button.active,
-.wb-events-tabs button.active,
-.wb-filters button.active {
-  color: var(--brand);
-  border-bottom-color: var(--brand);
-  background: var(--surface);
-  box-shadow: none;
-  font-weight: 800;
-}
-.wb-events-tabs button.active::after,
-.wb-filters button.active::after {
-  display: none;
-}
-button:hover {
-  background: var(--workbench-hover);
-  color: var(--brand);
-}
-.primary,
-.wb-action-links button.primary,
-.wb-adopt-foot button.primary {
-  background: var(--brand);
-  color: #fff;
-  border-color: var(--brand);
-}
-.primary:hover,
-.wb-action-links button.primary:hover,
-.wb-adopt-foot button.primary:hover {
-  background: var(--workbench-brand-hover);
-  color: #fff;
-  border-color: var(--workbench-brand-hover);
-}
-button,
-input,
-select,
-textarea {
-  border-radius: 8px;
-}
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible,
-a:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.wb-kpi .wb-kpi-state.bad {
-  color: #c8112a;
-  background: #ffe9ec;
-}
-.wb-kpi .wb-kpi-state.unknown {
-  color: #956900;
-  background: #fff4d9;
-}
-.wb-task-status.done {
-  color: #168e58;
-  background: #eaf7ef;
-}
-.wb-task-table,
-.wb-table {
-  min-width: 800px;
-}
-.wb-task-table th {
-  background: var(--workbench-muted-surface);
-  color: var(--muted);
-  border-color: var(--line);
-}
-.wb-task-table td {
-  color: var(--workbench-body);
-  border-color: var(--line);
-}
-.wb-task-table strong {
-  color: var(--text);
-}
-.wb-task-table tr.is-linked {
-  background: var(--workbench-brand-soft);
-}
-.wb-table-wrap {
-  overflow-x: auto;
-}
-body[data-ds-dark-theme] .wb-context span,
-body[data-ds-dark-theme] .wb-definition,
-body[data-ds-dark-theme] .period-empty,
-body[data-ds-dark-theme] .toast,
-body[data-ds-dark-theme] .wb-adopt-content {
-  background: var(--workbench-subtle);
-  color: var(--text);
-  border-color: var(--line);
-}
-body[data-ds-dark-theme] .wb-table th {
-  background: var(--workbench-muted-surface);
-}
-body[data-ds-dark-theme] .wb-adopt-head,
-body[data-ds-dark-theme] .wb-adopt-foot {
-  background: var(--surface);
-  border-color: var(--line);
-}
-body[data-ds-dark-theme] .wb-card p,
-body[data-ds-dark-theme] .wb-event-top strong,
-body[data-ds-dark-theme] .wb-action strong,
-body[data-ds-dark-theme] .wb-definition strong,
-body[data-ds-dark-theme] .wb-definition span,
-body[data-ds-dark-theme] .wb-definition small,
-body[data-ds-dark-theme] .wb-context strong,
-body[data-ds-dark-theme] .period-label,
-body[data-ds-dark-theme] .wb-table td,
-body[data-ds-dark-theme] .wb-table td strong,
-body[data-ds-dark-theme] .wb-adopt-field,
-body[data-ds-dark-theme] .wb-adopt-head h2,
-body[data-ds-dark-theme] .wb-detail-dialog h2,
-body[data-ds-dark-theme] .wb-detail-dialog h3 {
-  color: var(--workbench-body);
-}
-body[data-ds-dark-theme] .wb-action,
-body[data-ds-dark-theme] .wb-event,
-body[data-ds-dark-theme] .wb-boundary,
-body[data-ds-dark-theme] input,
-body[data-ds-dark-theme] select,
-body[data-ds-dark-theme] textarea {
-  background: var(--workbench-subtle);
-  color: var(--text);
-  border-color: var(--line);
-}
-@media (max-width: 900px) {
-  .wb-panels {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 520px) {
-  .wb-kpis,
-  .wb-actions,
-  .wb-adopt-fields {
-    grid-template-columns: 1fr;
-  }
-  .content {
-    padding: 12px;
-  }
 }
