@@ -49,6 +49,15 @@ export async function sourceChecks(result, phase) {
     }
     if (plan.dependencies && !joint) {
       const { acquireBuild } = await import(pathToFileURL(resolve(gea, 'scripts/build-admission.mjs')));
+      if (repo === 'dsh-gea-plugin' && typecheck) {
+        for (const peer of [workbench, manage]) {
+          const release = acquireBuild({ operation: 'prepare', cwd: peer });
+          try {
+            if (peer === workbench) run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'], peer);
+            else run('corepack', ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'], peer);
+          } finally { release(); }
+        }
+      }
       const release = acquireBuild({ operation: 'prepare', cwd: root });
       try {
         if (repo === 'dsh-agent-workbench') run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund']);
@@ -111,7 +120,7 @@ export async function checkTypes(root, repositories, repo, changed = []) {
   for (const file of configs) {
     const parsed = ts.getParsedCommandLineOfConfigFile(resolve(root, file), { noEmit: true, emitDeclarationOnly: false }, { ...ts.sys, onUnRecoverableConfigFileDiagnostic: diagnostic => { throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')); } });
     if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
-    parsed.options.paths = { ...parsed.options.paths, ...peerPaths, '*': [resolve(root, 'node_modules/*')] };
+    parsed.options.paths = { ...parsed.options.paths, ...peerPaths };
     parsed.options.rootDir = resolve(root, '../..');
     parsed.options.typeRoots = [resolve(root, 'node_modules/@types')];
     const ambient = repositories.filter(entry => entry.repo !== repo).flatMap(entry => ts.sys.readDirectory(resolve(entry.path, 'src'), ['.d.ts']));
