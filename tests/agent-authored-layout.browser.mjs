@@ -888,3 +888,57 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
   await expect(modal).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
+
+test('APS intelligent core cards use one compact row on desktop and adapt to split panes', async (t) => {
+  const { page, frame, errors } = await mount(t, 'apsplan', 922);
+  const grid = frame.locator('.intelligent-core-metric-group .scope-kpi-count-4');
+  await expect(grid.locator('.period-kpi-card')).toHaveCount(4);
+  for (const [width, columns] of [
+    [1280, 4],
+    [922, 4],
+    [800, 4],
+    [768, 2],
+    [560, 2],
+    [480, 2],
+    [390, 1],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      viewport: innerWidth,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          height: r.height,
+          width: r.width,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `column count at ${width}`);
+    assert.ok(layout.scroll <= layout.viewport + 2, `page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `card content clips at ${width}`,
+    );
+    if (columns === 4) {
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+      assert.ok(
+        layout.cards.every((card) => card.height <= 230),
+        'core cards must be compact',
+      );
+    }
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/aps-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
