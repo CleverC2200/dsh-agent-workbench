@@ -78,7 +78,7 @@ function fixture(t, repo = 'dsh-agent-workbench') {
       base = commit(root);
       own.head = base;
     },
-    plan: (testOwners) => selectCiTests({ repositories, repo: own.repo, base, testOwners }),
+    plan: (testOwners, options = {}) => selectCiTests({ repositories, repo: own.repo, base, testOwners, ...options }),
   };
 }
 
@@ -1303,4 +1303,37 @@ test('adjacent SQL configs preserve dynamic page and computation consumers in th
   assert.equal(plan.browser, true);
   assert.equal(plan.build, true);
   assert.ok(!plan.files.includes('tests/inventory-storage-build.test.mjs'));
+});
+
+ test('source events select affected own consumers without required or changed peer suites', t => {
+  const f = fixture(t);
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  f.put(f.repositories[1].path, 'src/value.ts', 'export const value = 3;');
+  f.repositories[1].head = f.commit(f.repositories[1].path);
+  const plan = f.plan(undefined, { sourceOnly: true });
+  assert.deepEqual(plan.files, ['tests/affected.test.mjs']);
+  assert.deepEqual(plan.required, []);
+  assert.deepEqual(plan.changes, [{ repo: 'dsh-agent-workbench', file: 'src/value.ts' }]);
+ });
+ test('unknown source deletion blocks source-event checks before preparation', t => {
+  const f = fixture(t);
+  f.put(f.root, 'src/unknown.ts', 'export const unknown = 1;');
+  f.checkpoint();
+  unlinkSync(join(f.root, 'src/unknown.ts'));
+  f.repositories[0].head = f.commit(f.root);
+  assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_IMPACT_UNMAPPED/);
+ });
+
+test('source preparation follows selected package and SDK consumers', t => {
+  for (const [dependency, packages, sdk] of [['node:assert/strict', false, false], ['esbuild', true, false], ['@deepseek-ai/cordis', true, true]]) {
+    const f = fixture(t);
+    f.put(f.root, 'tests/affected.test.mjs', `import '../src/consumer.js'; import '${dependency}';`);
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly: true });
+    assert.equal(plan.dependencies, packages, dependency);
+    assert.equal(plan.sdk, sdk, dependency);
+  }
 });

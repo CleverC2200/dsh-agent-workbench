@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, globSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { isBuiltin } from 'node:module';
 
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const git = (root, ...args) =>
@@ -13,6 +14,8 @@ const git = (root, ...args) =>
 const sourceFile = /\.(?:[cm]?[jt]sx?|css|html|json|ya?ml)$/;
 const browserDependency = '@ci/playwright';
 const workbenchBuildDependency = '@ci/workbench-build';
+const packageDependency = '@ci/packages';
+const sdkDependency = '@ci/sdk';
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
 function references(file, roots, known, importsOnly = false) {
@@ -283,6 +286,8 @@ function references(file, roots, known, importsOnly = false) {
     for (const name of pathNames(start, endOf(start))) names.push([name, recursive]);
   }
   for (const [name, recursive, module] of names) {
+    if (module && !name.startsWith('.') && !name.startsWith('/') && !isBuiltin(name)) result.set(packageDependency, true);
+    if (name.includes('official-latest-standard') || module && name.startsWith('@deepseek-ai/')) result.set(sdkDependency, true);
     if (module && /^(?:@playwright\/test|playwright(?:-core)?)(?:\/|$)/.test(name)) {
       result.set(browserDependency, true);
       continue;
@@ -322,6 +327,7 @@ export function selectCiTests({
   repo,
   base,
   testOwners = {},
+  sourceOnly = false,
   root = repositories.find((entry) => entry.repo === repo)?.path,
 }) {
   if (!root || !/^[a-f0-9]{40}$/.test(base ?? ''))
@@ -371,7 +377,7 @@ export function selectCiTests({
     executedBy[file] = testOwners[file];
     return testOwners[file];
   };
-  const required = [...new Set(expand(policy.required).map(directFile))].sort();
+  const required = sourceOnly ? [] : [...new Set(expand(policy.required).map(directFile))].sort();
   if (
     policy.browserFixtures !== undefined &&
     (!Array.isArray(policy.browserFixtures) ||
@@ -380,15 +386,15 @@ export function selectCiTests({
     throw Error('CI_TEST_BROWSER_FIXTURE_REJECTED: explicit test-pool files required');
   const browserFixtures = [...new Set(policy.browserFixtures ?? [])].sort();
   const own = repositories.find((entry) => entry.repo === repo);
-  const diffBase = git(root, 'merge-base', base, own.head).trim();
+  const diffBase = sourceOnly ? base : git(root, 'merge-base', base, own.head).trim();
   let baselineBytes;
   try {
-    baselineBytes = git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
+    baselineBytes = sourceOnly ? '{"repositories":[]}' : git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
   } catch {
     throw Error('CI_TEST_PEER_BASE_REQUIRED: committed peer baseline at comparison base');
   }
   const baseline = JSON.parse(baselineBytes);
-  const changes = repositories.flatMap((entry) => {
+  const changes = repositories.filter(entry => !sourceOnly || entry.repo === repo).flatMap((entry) => {
     const before =
       entry.repo === repo
         ? diffBase
@@ -474,8 +480,8 @@ export function selectCiTests({
     if (
       !files.length &&
       !rules.length &&
-      existsSync(change.path) &&
-      ((ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
+      (sourceOnly || existsSync(change.path)) &&
+      (sourceOnly || (ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
         /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
           change.file,
         )) &&
@@ -513,14 +519,14 @@ export function selectCiTests({
   const browser = browserFiles.length > 0;
   return {
     schemaVersion: 1,
-    mode: 'required-and-affected',
+    mode: sourceOnly ? 'source-affected' : 'required-and-affected',
     applicability,
     repo,
     head: own.head,
     base,
     diffBase,
     policySha256: digest(policyBytes),
-    peerBaselineSha256: digest(baselineBytes),
+    peerBaselineSha256: sourceOnly ? null : digest(baselineBytes),
     changes: changes.map(({ repo, file }) => ({ repo, file })),
     required,
     files,
@@ -532,6 +538,8 @@ export function selectCiTests({
     runtime,
     browser,
     build: files.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
+    dependencies: files.some((file) => reaches(resolve(root, file), packageDependency)),
+    sdk: runtime || files.some((file) => reaches(resolve(root, file), sdkDependency)),
     fullSuite: 'not-run',
   };
 }

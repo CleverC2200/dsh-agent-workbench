@@ -157,6 +157,16 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^business/inventory-qll/source/inventory-light-plugins/src/pages/configured-workbench\\.tsx$",
       "tests": ["tests/agent-authored-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:scripts/(?:source-quality|source-checks|ci-test-plan)\\.mjs|\\.github/workflows/source-quality\\.yml)$",
+      "tests": [
+        "scripts/source-quality.test.mjs",
+        "tests/source-checks.test.mjs",
+        "tests/source-typecheck.test.mjs",
+        "tests/ci-test-plan.test.mjs"
+      ]
     }
   ]
 }
