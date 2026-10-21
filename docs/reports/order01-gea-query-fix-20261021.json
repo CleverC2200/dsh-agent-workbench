@@ -1,0 +1,197 @@
+{
+  "checkedAt": "2026-10-21T06:46:28.271Z",
+  "environment": "https://gea.synear.cn/gea-boot",
+  "consumerCodes": [
+    "order01",
+    "customer_inventory"
+  ],
+  "changes": {
+    "customer": "Replace sku.* with explicit CTE output fields",
+    "fulfillment": "Replace correlated EXISTS with JOIN on DISTINCT keys; SUBSTR with approved SUBSTRING"
+  },
+  "gatewayQueries": [
+    {
+      "id": "orders.detail",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 20
+    },
+    {
+      "id": "orders.detail.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.summary",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.quantities",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 20
+    },
+    {
+      "id": "orders.quantities.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "trace.detail",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 20
+    },
+    {
+      "id": "trace.detail.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "trace.summary",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "warehouse.detail",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 20
+    },
+    {
+      "id": "warehouse.detail.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "sku.detail",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 20
+    },
+    {
+      "id": "sku.detail.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.by_base",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.by_base.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.by_province",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 17
+    },
+    {
+      "id": "orders.by_province.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.by_carrier",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    },
+    {
+      "id": "orders.by_carrier.count",
+      "success": true,
+      "error": null,
+      "failure": null,
+      "rowCount": 1
+    }
+  ],
+  "equivalence": [
+    {
+      "id": "trace.detail",
+      "equal": true,
+      "rows": 20
+    },
+    {
+      "id": "trace.detail.count",
+      "equal": true,
+      "rows": 1
+    },
+    {
+      "id": "trace.summary",
+      "equal": true,
+      "rows": 1
+    },
+    {
+      "id": "sku.detail",
+      "equal": true,
+      "rows": 20
+    },
+    {
+      "id": "sku.detail.count",
+      "equal": true,
+      "rows": 1
+    }
+  ],
+  "scope": {
+    "resource": "agents_scm_execute_detail_d",
+    "action": "QUERY",
+    "filter": {
+      "belong_base": "郑州"
+    },
+    "basis": "Existing current-user stock-detail read scope copied to the new execution-detail resource",
+    "sourceType": "MANUAL_JOB",
+    "organizationAutoSyncVerified": false,
+    "outsideBaseReturnedRows": 0
+  },
+  "customer": {
+    "explicitQuerySucceeded": true,
+    "count": 441,
+    "uiDataVisible": true
+  },
+  "tests": {
+    "passed": 29
+  },
+  "uiLayoutChanged": false,
+  "ui": {
+    "customerDataVisible": true,
+    "fulfillmentDataVisible": true,
+    "fulfillmentSourceOrders": 163,
+    "matchedTraceOrders": 50,
+    "overdueOrders": 4,
+    "warningOrders": 6,
+    "scope": "郑州",
+    "remainingGaps": "Business metrics without required source data remain unknown; see order-fulfillment-data.md"
+  }
+}

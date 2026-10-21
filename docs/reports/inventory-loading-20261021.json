@@ -1,0 +1,49 @@
+{
+  "checkedAt": "2026-10-21T07:04:53.135Z",
+  "environment": "https://gea.synear.cn/gea-boot",
+  "customer": {
+    "measure": "same-user controlled SQL, complete 441 rows, same query and page size; sequential versus bounded parallel subsequent pages",
+    "runs": [
+      {
+        "mode": "serial",
+        "ms": 3661,
+        "rows": 441,
+        "pages": 3
+      },
+      {
+        "mode": "parallel",
+        "ms": 2413,
+        "rows": 441,
+        "pages": 3
+      },
+      {
+        "mode": "serial",
+        "ms": 3860,
+        "rows": 441,
+        "pages": 3
+      },
+      {
+        "mode": "parallel",
+        "ms": 2525,
+        "rows": 441,
+        "pages": 3
+      }
+    ],
+    "resultsEqual": true
+  },
+  "fulfillment": {
+    "measure": "gateway request interval for actual page entry; summary completion versus all query completion",
+    "queryCount": 26,
+    "summaryQueryCount": 2,
+    "metricsReadyMs": 950,
+    "allQueriesReadyMs": 6482,
+    "failed": 0
+  },
+  "checks": {
+    "unitAndDom": 38,
+    "customerBrowser": 11,
+    "fulfillmentBrowser": 1,
+    "scope": "ordered complete pagination, changed permissions, cancellation, early rendering, preserved business layout, single vertical scroll at narrow width"
+  },
+  "scopeAndCredentialsChanged": false
+}

@@ -1,0 +1,142 @@
+{
+  "checkedAt": "2026-10-21T06:22:48.601Z",
+  "authenticated": true,
+  "agentAccess": [
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "order01",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    },
+    {
+      "consumerCode": "customer_inventory",
+      "allowed": true
+    }
+  ],
+  "failures": [
+    {
+      "tables": [
+        "agents_scm_cust_jxc_ai_daliy_d",
+        "agents_dim_dealer_data_d"
+      ],
+      "errorCode": "AI_GATEWAY_SQL_EXECUTION_FAILED",
+      "message": "数据库拒绝受控 SQL 查询",
+      "stage": "COUNT",
+      "requestId": "2dea9de0-b9f1-47be-ba3b-97764d76774f",
+      "traceId": "659c250f-a7f5-4a0b-88ac-90c03bfe69cc"
+    },
+    {
+      "tables": [
+        "agents_scm_execute_detail_d"
+      ],
+      "errorCode": "AI_GATEWAY_DATA_PERMISSION_DENIED",
+      "message": "数据表不在当前租户启用数据集范围内",
+      "stage": "AUTHORIZATION_REWRITE",
+      "requestId": "5208f7b9-c5be-4cb4-b214-d3274cd2dfc1",
+      "traceId": "1f98bea8-dbe3-4377-82d8-ffe932b7b92f"
+    },
+    {
+      "tables": [
+        "agents_scm_stock_detail_d",
+        "agents_scm_execute_detail_d"
+      ],
+      "errorCode": "AI_GATEWAY_DATA_PERMISSION_DENIED",
+      "message": "数据表不在当前租户启用数据集范围内",
+      "stage": "AUTHORIZATION_REWRITE",
+      "requestId": "a9c54232-e0c6-4e68-9f47-803017948a49",
+      "traceId": "5b8df251-5091-4c6e-b609-31a9e869c4ad"
+    },
+    {
+      "tables": [
+        "agents_scm_shortage_trace_f",
+        "agents_scm_execute_detail_d"
+      ],
+      "errorCode": "AI_GATEWAY_DATA_PERMISSION_DENIED",
+      "message": "数据表不在当前租户启用数据集范围内",
+      "stage": "AUTHORIZATION_REWRITE",
+      "requestId": "397c00f9-8131-4f39-93fe-4b7adcae9a22",
+      "traceId": "6e4afe2d-3850-42ab-8d5f-5e87434d7082"
+    },
+    {
+      "tables": [
+        "agents_scm_cust_jxc_ai_daliy_d",
+        "agents_dim_dealer_data_d"
+      ],
+      "errorCode": "AI_GATEWAY_PARAMETER_CONSTRAINT_VIOLATED",
+      "message": "字段不在当前来源的发布目录或输出中",
+      "stage": "AUTHORIZATION_REWRITE",
+      "requestId": "76865e57-9424-4512-87b1-bbcff4724c37",
+      "traceId": "25c9911a-3d5f-4717-9f76-5b2d540419e4"
+    }
+  ]
+}

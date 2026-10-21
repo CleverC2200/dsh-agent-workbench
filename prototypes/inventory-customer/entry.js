@@ -113,7 +113,7 @@ function report(value) {
   if (!attached) return;
   unregister();
   publication++;
-  syncStatus('页面上下文同步中…');
+  syncStatus('');
   if (!publishing) void publishLatest();
 }
 ready
@@ -122,11 +122,14 @@ ready
     showLoadState('loading');
     const generation = ++loadGeneration;
     loadController = new AbortController();
+    void readAuthorizationScope().then((scope) => {
+      if (!attached || generation !== loadGeneration) return;
+      authorizationScope = scope;
+      if (snapshot) report(snapshot);
+    });
     const inventory = await loadCustomerInventory({
       signal: AbortSignal.any([loadController.signal, AbortSignal.timeout(90000)]),
     });
-    if (!attached || generation !== loadGeneration) return;
-    authorizationScope = await readAuthorizationScope();
     if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
     hasData = true;

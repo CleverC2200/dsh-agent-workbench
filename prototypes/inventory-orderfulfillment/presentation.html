@@ -1,0 +1,1503 @@
+<!DOCTYPE html><html lang="zh-CN"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GEA平台 · 订单履约agent</title>
+  <style>
+    :root { --bg:#f6f7f9; --surface:#fff; --line:#e8ebf0; --text:#20242c; --muted:#6b7280; --faint:#9aa2af; --brand:#f5222d; --brand-soft:#fff1f0; font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
+    * { box-sizing:border-box; }
+    html, body { margin:0; min-height:100%; color:var(--text); background:var(--bg); font-size:14px; }
+    button, input, select, textarea { font:inherit; }
+    button { cursor:pointer; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:2px solid rgba(245,34,45,.38); outline-offset:2px; }
+    [hidden] { display:none !important; }
+    .shell { height:100vh; min-height:650px; }
+    .sidebar { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:#fff; }
+    .brand { display:flex; align-items:center; gap:10px; height:56px; padding:0 18px; border-bottom:1px solid var(--line); color:var(--brand); font-weight:800; }
+    .brand-mark { display:grid; place-items:center; width:28px; height:28px; border-radius:7px; color:#fff; background:var(--brand); box-shadow:0 7px 18px rgba(245,34,45,.22); font-size:11px; }
+    .brand-ai { margin-left:auto; color:#3a404b; font-size:11px; }
+    .nav { flex:1; padding:15px 10px; }
+    .nav-head, .nav-item { display:flex; align-items:center; width:100%; min-height:35px; border:0; border-radius:7px; background:transparent; color:#3a404b; text-align:left; font-size:13px; }
+    .nav-head { gap:8px; padding:0 10px; font-weight:700; }
+    .nav-head svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+    .nav-head .chevron { margin-left:auto; font-size:15px; color:#8b94a2; }
+    .nav-head:hover, .nav-item:hover { background:#fff7f7; }
+    .nav-item { padding:0 10px 0 37px; color:#565e6c; }
+    .nav-item.active { color:var(--brand); background:#fff7f7; font-weight:700; }
+    .nav.is-collapsed .nav-item { display:none; }
+    .nav.is-collapsed .chevron { transform:rotate(-90deg); }
+    .account { display:flex; align-items:center; gap:10px; min-height:70px; padding:12px 16px; border-top:1px solid var(--line); }
+    .avatar { display:grid; place-items:center; width:32px; height:32px; border-radius:50%; color:#fff; background:#8d97a7; font-weight:700; }
+    .account div { display:grid; gap:2px; }
+    .account strong { font-size:12px; }.account small { color:var(--muted); font-size:11px; }
+    .main { display:grid; grid-template-rows:56px minmax(0,1fr); height:100%; min-width:0; min-height:0; }
+    .topbar { position:relative; display:flex; align-items:center; justify-content:center; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
+    .topbar > #toggleAssistant { position:absolute; right:20px; min-height:32px; padding:0 12px; border:1px solid #dce2eb; border-radius:6px; color:#687486; background:#fff; font-size:11px; }
+    .topbar > #toggleAssistant:hover { border-color:#f2aab0; color:var(--brand); background:#fff8f8; }
+    .page-tabs { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .page-tab { min-width:104px; height:32px; padding:0 16px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .page-tab.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-bar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .period-label { color:#5c6573; font-size:12px; font-weight:700; }
+    .period-switch { display:inline-flex; padding:3px; border:1px solid #e6eaf1; border-radius:8px; background:#f6f8fb; }
+    .period-switch button { min-width:58px; height:29px; padding:0 11px; border:0; border-radius:6px; color:#6e7785; background:transparent; font-size:12px; }
+    .period-switch button.active { color:var(--brand); background:#fff; box-shadow:0 1px 5px rgba(35,44,62,.12); font-weight:700; }
+    .period-control { display:flex; align-items:center; gap:7px; color:#667080; font-size:12px; }
+    .period-control[hidden] { display:none; }
+    .period-control input,.period-control select { min-height:32px; padding:4px 9px; border:1px solid #dce2eb; border-radius:6px; color:#343b47; background:#fff; font-size:12px; }
+    .period-control select { max-width:245px; }
+    .period-meta { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    .layout { display:grid; grid-template-columns:minmax(0,1fr) 420px; min-height:0; overflow:hidden; }
+    .layout.assistant-hidden { grid-template-columns:minmax(0,1fr); }
+    .workspace { height:100%; min-width:0; min-height:0; overflow:auto; background:#fff; }
+    .content { max-width:1500px; margin:0 auto; padding:24px 28px 36px; background:#fff; }
+    .card { margin-bottom:16px; padding:18px 20px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .card h2 { margin:0 0 14px; font-size:15px; }
+    .summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+    .metric { padding:15px 17px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .metric span { display:block; color:var(--muted); font-size:12px; }.metric strong { display:block; margin:7px 0 3px; font-size:24px; }.metric small { color:var(--faint); }
+    .table-wrap { overflow-x:auto; }
+    .orders { width:100%; min-width:1000px; border-collapse:collapse; font-size:12px; }
+    .fulfillment-page .orders { min-width:1320px; }
+    .orders th { padding:11px 12px; border-bottom:1px solid var(--line); color:#66707e; background:#fafbfc; text-align:left; font-weight:600; }
+    .orders td { padding:13px 12px; border-bottom:1px solid #f0f2f5; vertical-align:top; }
+    .orders tbody tr:last-child td { border-bottom:0; }.orders strong { display:block; font-size:12px; }.orders small { display:block; margin-top:3px; color:var(--faint); }
+    .orders-card-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .orders-card-head h2 { margin:0; }
+    .orders-count { color:#8b96a5; font-size:11px; white-space:nowrap; }
+    .order-filters { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-left:auto; }
+    .order-filters > input,.warehouse-picker input,.order-filters > select { height:34px; padding:0 10px; border:1px solid #dce2eb; border-radius:6px; color:#364050; background:#fff; font-size:11px; }
+    .order-filters > input::placeholder,.warehouse-picker input::placeholder { color:#9aa4b1; }
+    .order-filters > input:focus,.warehouse-picker input:focus,.order-filters > select:focus { border-color:#f2aab0; outline:2px solid #fff0f1; }
+    #orderNumberSearch { width:150px; } #customerSearch { width:192px; }
+    .warehouse-picker { position:relative; width:148px; }
+    #omsStatusFilter { width:142px; cursor:pointer; }
+    .warehouse-picker input { width:100%; padding-right:30px; }
+    .warehouse-picker > button { position:absolute; top:1px; right:1px; width:30px; height:32px; border:0; border-radius:0 6px 6px 0; color:#8490a0; background:transparent; font-size:14px; }
+    .warehouse-options { position:absolute; top:calc(100% + 4px); left:0; z-index:5; width:100%; padding:4px; border:1px solid #e0e5ed; border-radius:7px; background:#fff; box-shadow:0 8px 24px rgba(32,44,62,.12); }
+    .warehouse-options button { display:block; width:100%; min-height:30px; padding:5px 8px; border:0; border-radius:4px; color:#4b5666; background:#fff; text-align:left; font-size:11px; }
+    .warehouse-options button:hover,.warehouse-options button[aria-selected="true"] { color:var(--brand); background:#fff5f5; }
+    .warehouse-options .no-option { padding:8px; color:#9aa4b1; font-size:11px; }
+    .orders-empty td { padding:24px 12px; color:#8d98a6; text-align:center; }
+    .order-pagination { display:flex; justify-content:flex-end; align-items:center; gap:17px; padding:17px 4px 0; border-top:1px solid #f0f2f5; color:#5f6978; font-size:12px; }
+    .order-page-size select { padding:3px 18px 3px 3px; border:0; color:#5f6978; background:#fff; font:inherit; cursor:pointer; }
+    .order-page-size select:focus { border-radius:4px; outline:2px solid #fff0f1; }
+    .order-page-button { width:26px; height:26px; padding:0; border:0; border-radius:5px; color:#8a95a4; background:transparent; font-size:20px; line-height:1; }
+    .order-page-button:hover:not(:disabled) { color:var(--brand); background:#fff5f5; }
+    .order-page-button:disabled { color:#cbd1d9; cursor:not-allowed; }
+    .order-page-status { display:inline-flex; align-items:center; gap:7px; min-width:44px; justify-content:center; }
+    .order-page-status strong { color:#273140; font-size:13px; }
+    @media(max-width:1050px) { .fulfillment-summary { grid-template-columns:repeat(3,minmax(0,1fr)); }.fulfillment-grid { grid-template-columns:1fr; }.order-filters { width:100%; margin-left:0; }.order-filters > input { flex:1 1 150px; }.warehouse-picker { flex:1 1 148px; } #omsStatusFilter,#shortageWindowFilter { flex:1 1 124px; } }
+    .period-empty { margin:0 0 16px; padding:18px 20px; border:1px dashed #d9e0ea; border-radius:8px; color:#637084; background:#fff; font-size:12px; line-height:1.7; }
+    .status { display:inline-block; padding:3px 8px; border-radius:4px; color:#13854a; background:#e8f7ee; white-space:nowrap; }
+    .status.issue { color:#c83239; background:#fff0ef; }.status.progress { color:#2266d8; background:#eaf4ff; }.status.pending { color:#a96900; background:#fff5e5; }
+    .fulfillment-summary { grid-template-columns:repeat(6,minmax(0,1fr)); gap:4.5px; margin-bottom:4px; }
+    @media(max-width:1050px) { .fulfillment-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    .fulfillment-summary.delivery-summary { grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.9fr) minmax(0,1fr) minmax(0,.95fr); }
+    @media(max-width:1050px) { .fulfillment-summary.delivery-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media(max-width:800px) { .fulfillment-summary.delivery-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .fulfillment-summary.warehouse-summary { grid-template-columns:minmax(0,1fr) minmax(0,1.9fr) minmax(0,1.9fr) minmax(0,.95fr); }
+    @media(max-width:1050px) { .fulfillment-summary.warehouse-summary { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media(max-width:800px) { .fulfillment-summary.warehouse-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .fulfillment-summary .metric { position:relative; min-height:116px; padding:14px 14px 12px; overflow:hidden; }
+    .delivery-summary .metric { min-height:160px; padding:0 0 8px; border-color:#d8d8d8; border-radius:11px; }
+    .delivery-summary .metric::after { display:none; }
+    .delivery-summary .metric .metric-head { position:relative; z-index:1; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; gap:6px; min-height:80px; padding:12px 10px 8px; border-bottom:1px dashed #d8d8d8; }
+    .delivery-summary .metric .metric-head > span { display:block; min-width:0; overflow:hidden; color:#596576; font-size:12px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+    .delivery-summary .metric .metric-head > strong { flex:0 0 auto; margin:0; color:#10264a; font-size:24px; line-height:1.2; letter-spacing:-.3px; }
+    .delivery-summary .metric .metric-head .metric-unit { margin-left:3px; font-size:12px; }
+    .fulfillment-summary .metric::after { content:""; position:absolute; right:-18px; bottom:-22px; width:72px; height:72px; border-radius:50%; background:#f6f8fb; }
+    .fulfillment-summary .metric.danger::after { background:#fff1f2; }.fulfillment-summary .metric.warning::after { background:#fff7e9; }.fulfillment-summary .metric.info::after { background:#eef5ff; }
+    .fulfillment-summary .metric strong { position:relative; z-index:1; margin:9px 0 4px; font-size:25px; }
+    .fulfillment-summary .metric.danger strong { color:#d83d49; }.fulfillment-summary .metric.warning strong { color:#c67b20; }.fulfillment-summary .metric.info strong { color:#2f70c9; }
+    .delivery-summary .metric .metric-head > strong { margin:0; color:#10264a; font-size:24px; }
+    .delivery-summary .metric.info .metric-head > strong { color:#2f70c9; }
+    .delivery-summary .metric.danger .metric-head > strong { color:#d83d49; }
+    .delivery-summary .metric.warning .metric-head > strong { color:#c67b20; }
+    .fulfillment-summary .metric small { position:relative; z-index:1; display:block; line-height:1.55; }
+    .fulfillment-summary .metric strong { white-space:nowrap; }
+    .fulfillment-summary .metric .metric-unit { display:inline; margin-left:4px; color:#66707e; font-size:11px; font-weight:500; }
+    .metric-breakdown { position:relative; z-index:1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 9px; margin:8px 6px 0; color:#a0a0a0; font-size:14px; line-height:1.5; }
+    .metric-breakdown > span { display:flex; justify-content:flex-start; align-items:center; gap:5px; white-space:nowrap; }
+    .metric-breakdown[data-breakdown="open-total"] { grid-template-columns:1fr; gap:8px; }
+    .metric-breakdown[data-breakdown="open-total"] > span { justify-content:flex-start; gap:6px; }
+    .metric-breakdown strong { margin:0 !important; color:#929292 !important; font-size:14px !important; font-weight:500; }
+    .fulfillment-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr); gap:14px; margin-bottom:16px; }
+    .fulfillment-grid .card { margin:0; }
+    .fulfillment-grid.single-column { grid-template-columns:minmax(0,1fr); }
+    .fulfillment-tabs-card { padding:0; overflow:hidden; }
+    .fulfillment-tabs { display:flex; gap:26px; overflow-x:auto; padding:0 20px; border-bottom:1px solid var(--line); background:#fff; }
+    .fulfillment-tabs [role="tab"] { position:relative; flex:0 0 auto; min-height:52px; padding:0 2px; border:0; color:#7b8696; background:transparent; font-size:13px; white-space:nowrap; }
+    .fulfillment-tabs [role="tab"].active { color:var(--brand); font-weight:700; }
+    .fulfillment-tabs [role="tab"].active::after { content:""; position:absolute; left:0; right:0; bottom:0; height:3px; border-radius:3px 3px 0 0; background:var(--brand); }
+    .fulfillment-tabs [role="tab"]:focus-visible { outline:2px solid #e79aa5; outline-offset:-5px; }
+    .fulfillment-tab-panel { min-width:0; padding:20px; }
+    .fulfillment-analysis { margin-bottom:16px; padding:18px 20px; border:1px solid #f1cfd5; border-radius:9px; background:linear-gradient(110deg,#fff9fa,#fff 65%); }
+    .fulfillment-analysis-head,.fulfillment-analysis-foot { display:flex; align-items:center; justify-content:space-between; gap:14px; }
+    .fulfillment-analysis-label { display:flex; align-items:center; gap:9px; }
+    .fulfillment-analysis-label i { display:grid; place-items:center; width:25px; height:25px; border-radius:7px; color:#ef526c; background:#fff0f3; font-style:normal; }
+    .fulfillment-analysis-label h2 { margin:0; font-size:14px; }.fulfillment-analysis-label small { display:block; margin-top:3px; color:#8992a1; font-size:10px; }
+    .fulfillment-analysis-head > span { color:#9aa3b0; font-size:10px; }
+    .fulfillment-analysis h3 { margin:15px 0 7px; color:#343d4b; font-size:16px; }.fulfillment-analysis > p { margin:0; color:#768194; font-size:11px; line-height:1.8; }
+    .fulfillment-analysis-copy { display:grid; gap:7px; margin:13px 0 17px; color:#768194; font-size:11px; line-height:1.85; }
+    .fulfillment-analysis-copy p { margin:0; }.fulfillment-analysis-copy strong { color:#4c586b; font-weight:600; }
+    .fulfillment-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; color:#626e80; font-size:12px; }
+    .fulfillment-toolbar select { min-width:160px; padding:8px 30px 8px 11px; border:1px solid #dce3ed; border-radius:6px; color:#748195; background:#fff; font-size:10px; }
+    .fulfillment-toolbar small { color:#939dab; font-size:10px; }
+    .fulfillment-toolbar .freshness { margin-left:auto; color:#8792a3; }
+    .fulfillment-toolbar #fulfillmentBaseScope,.fulfillment-toolbar .freshness { display:none; }
+    .fulfillment-dimensions { margin:0 0 16px; padding:0; overflow:hidden; }
+    .fulfillment-dimensions.delivery-dimension-active { padding:0; overflow:visible; border:0; background:transparent; }
+    .fulfillment-dimensions.delivery-dimension-active > #deliveryDimensionPanel { padding:0; }
+    .fulfillment-dimensions.item-dimension-active { padding:0; overflow:visible; border:0; background:transparent; }
+    .fulfillment-dimensions.item-dimension-active > #itemDimensionPanel { padding:0; }
+    .delivery-order-detail-card { margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .delivery-order-head { align-items:flex-start; gap:16px; }
+    .delivery-order-tools { display:grid; justify-items:end; gap:7px; flex:1; min-width:0; }
+    .delivery-order-tools > small { color:#8d98a8; font-size:10px; white-space:nowrap; }
+    .delivery-order-searches { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:7px; width:min(100%,800px); }
+    .delivery-order-searches input,.delivery-order-searches select { width:100%; min-width:0; height:32px; padding:0 9px; border:1px solid #dce3ed; border-radius:6px; color:#748195; background:#fff; font-size:10px; }
+    .delivery-order-searches input::placeholder { color:#748195; opacity:1; }
+    .delivery-order-panel-tools > small#deliveryOrderCount { display:none; }
+    @media(max-width:900px) { .delivery-order-head { flex-wrap:wrap; }.delivery-order-tools { flex-basis:100%; }.delivery-order-searches { width:100%; } }
+    @media(max-width:560px) { .delivery-order-searches { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    .sales-confirm-trigger { padding:5px 9px; border:1px solid #d8e6fb; border-radius:5px; color:#2673cc; background:#f5f9ff; font-size:10px; white-space:nowrap; cursor:pointer; }
+    .sales-confirm-trigger:hover { border-color:#8eb9ed; background:#edf5ff; }
+    .confirmation-status { padding:4px 0; border:0; border-radius:0; font-size:10px; white-space:nowrap; cursor:pointer; background:transparent; }
+    .confirmation-status.status-pending { color:#b17a1f; background:transparent; }
+    .confirmation-status.status-confirming { color:#287ac3; background:transparent; }
+    .confirmation-status.status-confirmed { color:#258262; background:transparent; }
+    .confirmation-status.status-hold { color:#c64e5c; background:transparent; }
+    .fulfillment-dimension-tabs { display:flex; gap:24px; padding:0 18px; border-bottom:1px solid var(--line); overflow-x:auto; }
+    .fulfillment-header { display:flex; align-items:center; justify-content:space-between; gap:14px; margin:0 0 12px; border-bottom:1px solid var(--line); }
+    .fulfillment-view-tabs { display:flex; flex:0 0 auto; gap:20px; margin:0; padding:0; border:0; border-radius:0; background:transparent; }
+    .fulfillment-view-tabs button { min-width:90px; }
+    .fulfillment-header .fulfillment-toolbar { flex:0 1 auto; justify-content:flex-end; gap:7px; margin:0; }
+    .fulfillment-header .fulfillment-toolbar select { min-width:125px; padding:7px 25px 7px 9px; }
+    .fulfillment-dimension-tabs button { position:relative; min-width:0; min-height:48px; padding:0 3px; border:0; color:#758195; background:transparent; font-size:13px; text-align:center; }
+    .fulfillment-dimension-tabs button.active { color:var(--brand); font-weight:700; }
+    .fulfillment-dimension-tabs button.active::after { content:""; position:absolute; right:0; bottom:0; left:0; height:3px; border-radius:3px 3px 0 0; background:var(--brand); }
+    .fulfillment-dimension-panel { padding:18px; }
+    .dimension-panel-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+    .dimension-panel-head h2 { margin:0 0 5px; font-size:15px; }
+    .dimension-panel-head p { margin:0; color:#8490a2; font-size:11px; line-height:1.6; }
+    .dimension-panel-head small { color:#8d98a8; font-size:10px; white-space:nowrap; }
+    .dimension-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .dimension-card { min-width:0; padding:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+    .dimension-card h3 { margin:0 0 5px; font-size:12px; }
+    .dimension-card > p { margin:0 0 12px; color:#8792a3; font-size:10px; line-height:1.6; }
+    .dimension-table-wrap { overflow:auto; }
+    .item-summary { grid-template-columns:repeat(3,minmax(0,1fr)); margin-bottom:14px; }
+    #itemMetricFilters[hidden] { display:none !important; }
+    .item-analysis { margin:0 0 14px; }
+    .item-detail-card { margin-bottom:12px; }
+    .item-progress-bar { display:flex; justify-content:space-between; align-items:center; gap:14px; width:100%; min-width:0; margin:0 0 12px; padding:0 0 8px; border-bottom:1px solid #e5e8ed; }
+    .item-progress-tabs { display:flex; align-items:center; justify-content:flex-start; gap:5px; flex:0 1 auto; min-width:0; overflow-x:auto; }
+    .item-progress-tabs button { flex:0 0 auto; min-height:30px; padding:5px 13px; border:1px solid transparent; border-radius:6px; color:#748195; background:transparent; font-size:11px; white-space:nowrap; cursor:pointer; }
+    .item-progress-tabs button[aria-selected="true"] { border-color:#d7e8ff; color:#1677d2; background:#f4f9ff; font-weight:600; }
+    .item-coordination-filters { display:flex; align-items:center; gap:8px; flex:0 0 auto; margin-left:auto; }
+    .item-coordination-filters[hidden] { display:none !important; }
+    .item-coordination-filters input,.item-coordination-filters select { min-width:150px; height:30px; padding:0 9px; border:1px solid #dce3ec; border-radius:6px; color:#748195; background:#fff; font:inherit; font-size:10px; }
+    .item-coordination-filters input::placeholder { color:#748195; opacity:1; }
+    .item-progress-panel { margin:0; padding:0; border:0; }
+    .item-content-panel[hidden] { display:none !important; }
+    .item-detail-table { min-width:1900px; }
+    .item-order-progress-table { min-width:4200px; }
+    .item-coordination-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 10px; color:#7b8798; font-size:11px; }
+    .item-coordination-table { min-width:5600px; }
+    .item-coordination-table thead tr:first-child th { position:sticky; top:0; z-index:2; text-align:center; color:#435064; background:#edf2f8; }
+    .item-coordination-table thead tr:nth-child(2) th { position:sticky; top:34px; z-index:1; }
+    .item-coordination-table thead tr:first-child .coord-group-1 { background:#e8f0ff !important; }
+    .item-coordination-table thead tr:first-child .coord-group-2 { background:#e8f7f1 !important; }
+    .item-coordination-table thead tr:first-child .coord-group-3 { background:#f1ebff !important; }
+    .item-coordination-table thead tr:first-child .coord-group-4 { background:#fff3df !important; }
+    .item-coordination-table thead tr:nth-child(2) .coord-group-1 { background:#f3f7ff !important; }
+    .item-coordination-table thead tr:nth-child(2) .coord-group-2 { background:#f1faf6 !important; }
+    .item-coordination-table thead tr:nth-child(2) .coord-group-3 { background:#f7f4ff !important; }
+    .item-coordination-table thead tr:nth-child(2) .coord-group-4 { background:#fff9ef !important; }
+    .item-coordination-table .coord-group-start { border-left:2px solid #d6deea !important; }
+    .item-coordination-table tbody td { background:#fff !important; }
+    .item-coordination-pagination { display:flex; align-items:center; justify-content:flex-end; gap:8px; margin-top:10px; color:#7b8798; font-size:11px; }
+    .item-coordination-pagination button { min-height:28px; padding:4px 10px; border:1px solid #dce3ec; border-radius:5px; color:#435064; background:#fff; cursor:pointer; }
+    .item-coordination-pagination button:disabled { color:#aab2bf; background:#f7f8fa; cursor:not-allowed; }
+    @media(max-width:760px) { .item-summary { grid-template-columns:1fr; }.item-progress-bar { align-items:flex-start; flex-wrap:wrap; }.item-progress-tabs { width:100%; }.item-coordination-filters { margin-left:0; } }
+    .dimension-table { width:100%; border-collapse:collapse; font-size:11px; white-space:nowrap; }
+    .dimension-table th,.dimension-table td { padding:9px 8px; border-bottom:1px solid #edf0f4; text-align:left; }
+    .dimension-table th { color:#748094; background:#f8f9fb; font-weight:600; }
+    .dimension-table td { color:#384252; }
+    .dimension-table .pending-cell { color:#9aa3b1; }
+    .delivery-line-chart { display:block; width:100%; min-width:390px; height:auto; margin:4px 0 0; overflow:visible; }
+    .delivery-line-chart .chart-grid { stroke:#edf0f4; stroke-width:1; }
+    .delivery-line-chart .chart-axis { fill:#8a95a4; font:11px ui-sans-serif,system-ui,sans-serif; }
+    .delivery-line-chart .chart-line { fill:none; stroke:#f05a6a; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+    .delivery-line-chart .chart-line.total { stroke:#687b95; stroke-width:2.5; }
+    .delivery-line-chart .chart-line.warning { stroke:#e9a02b; stroke-width:2.5; stroke-dasharray:6 4; }
+    .delivery-line-chart .chart-line.timeout { stroke:#e5485d; stroke-width:2.5; stroke-dasharray:2 4; }
+    .delivery-line-chart .chart-line.normal { stroke:#2ca77a; stroke-width:2.5; }
+    .delivery-line-chart .chart-line.placeholder { stroke:#bac3cf; stroke-width:2; stroke-dasharray:6 6; }
+    .delivery-line-chart .chart-dot { fill:#fff; stroke:#ed5363; stroke-width:3; }
+    .delivery-line-chart .chart-dot.total { stroke:#687b95; }
+    .delivery-line-chart .chart-dot.warning { stroke:#e9a02b; }
+    .delivery-line-chart .chart-dot.timeout { stroke:#e5485d; }
+    .delivery-line-chart .chart-dot.normal { stroke:#2ca77a; }
+    .delivery-line-chart .chart-legend { font:10px ui-sans-serif,system-ui,sans-serif; }
+    .delivery-line-chart .chart-dot.placeholder { stroke:#aeb8c5; stroke-dasharray:3 2; }
+    .delivery-line-chart .chart-value { fill:#313b49; font:600 12px ui-sans-serif,system-ui,sans-serif; text-anchor:middle; }
+    .delivery-line-chart .chart-value.placeholder { fill:#929dad; font-weight:500; }
+    .order-status-chart .chart-status-hit { fill:transparent; stroke:transparent; cursor:pointer; }
+    .order-status-chart .chart-status-hit:focus-visible { fill:rgba(59,130,246,.06); stroke:#3b82f6; stroke-width:1.5; outline:none; }
+    .order-status-chart-detail { display:flex; flex-wrap:wrap; align-items:center; gap:8px 18px; margin:0 18px 12px; padding:10px 12px; border-radius:8px; background:#f5f8fc; color:#687b95; font-size:11px; }
+    .order-status-chart-detail[hidden] { display:none; }
+    .order-status-chart-detail strong { color:#263447; }
+    .order-status-chart-detail b { color:#263447; }
+    .dimension-table-wrap:has(.delivery-order-table) { overflow-x:hidden; }
+    .delivery-order-table { width:100%; min-width:0; table-layout:fixed; font-size:9px; white-space:normal; }
+    .delivery-order-table th,.delivery-order-table td { min-width:0 !important; padding:7px 3px; line-height:1.35; white-space:normal; overflow-wrap:anywhere; word-break:break-word; }
+    .delivery-order-table th { font-size:8px; }
+    .delivery-order-table th:nth-child(1),.delivery-order-table td:nth-child(1) { width:2.5%; }
+    .delivery-order-table th:nth-child(2),.delivery-order-table td:nth-child(2) { width:7%; }
+    .delivery-order-table th:nth-child(3),.delivery-order-table td:nth-child(3) { width:7%; }
+    .delivery-order-table th:nth-child(4),.delivery-order-table td:nth-child(4) { width:9%; }
+    .delivery-order-table th:nth-child(5),.delivery-order-table td:nth-child(5) { width:5%; }
+    .delivery-order-table th:nth-child(6),.delivery-order-table td:nth-child(6) { width:4%; }
+    .delivery-order-table th:nth-child(7),.delivery-order-table td:nth-child(7) { width:4%; }
+    .delivery-order-table th:nth-child(8),.delivery-order-table td:nth-child(8) { width:5%; }
+    .delivery-order-table th:nth-child(9),.delivery-order-table td:nth-child(9) { width:4%; }
+    .delivery-order-table th:nth-child(10),.delivery-order-table td:nth-child(10) { width:4%; }
+    .delivery-order-table th:nth-child(11),.delivery-order-table td:nth-child(11) { width:4%; }
+    .delivery-order-table th:nth-child(12),.delivery-order-table td:nth-child(12) { width:5%; }
+    .delivery-order-table th:nth-child(13),.delivery-order-table td:nth-child(13) { width:4%; }
+    .delivery-order-table th:nth-child(14),.delivery-order-table td:nth-child(14) { width:5%; }
+    .delivery-order-table th:nth-child(15),.delivery-order-table td:nth-child(15) { width:4%; }
+    .delivery-order-table th:nth-child(n+16):nth-child(-n+20),.delivery-order-table td:nth-child(n+16):nth-child(-n+20) { width:3.5%; }
+    .delivery-order-table th:nth-child(21),.delivery-order-table td:nth-child(21),.delivery-order-table th:nth-child(22),.delivery-order-table td:nth-child(22) { width:4.5%; }
+    .delivery-order-table .sales-confirm-trigger { width:100%; min-width:0; padding:3px 1px; font-size:8px; }
+    .delivery-order-expander { display:inline-grid; place-items:center; width:28px; height:28px; padding:0; appearance:none; border:0 !important; border-radius:0; box-shadow:none; color:#59677a; background:transparent; cursor:pointer; }
+    .delivery-order-expander:hover,.delivery-order-expander:focus-visible { color:#d94c5c; background:transparent; }
+    .delivery-order-expander:focus-visible { outline:0; }
+    .delivery-order-expander svg { width:14px; height:14px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; transition:transform .16s ease; }
+    .delivery-order-expander[aria-expanded="true"] svg { transform:rotate(180deg); }
+    .delivery-order-sku-row[hidden] { display:none; }
+    .delivery-order-sku-row > td { padding:12px 16px 14px !important; background:#fbfcfe; }
+    .delivery-order-sku-table { width:min(100%,calc(100vw - 500px)); table-layout:fixed; border-collapse:collapse; font-size:11px; white-space:normal; }
+    .delivery-order-sku-table th,.delivery-order-sku-table td { min-width:0 !important; padding:8px 10px; border:1px solid #e8edf3; text-align:left; overflow-wrap:anywhere; }
+    .delivery-order-sku-table th:first-child,.delivery-order-sku-table td:first-child { width:52%; }
+    .layout.assistant-hidden .delivery-order-sku-table { width:min(100%,calc(100vw - 100px)); }
+    @media(max-width:800px) { .delivery-order-sku-table,.layout.assistant-hidden .delivery-order-sku-table { width:min(100%,calc(100vw - 40px)); } }
+    .delivery-order-sku-table th { color:#738096; background:#f3f6fa; font-weight:600; }
+    .warehouse-base-table { min-width:900px; }
+    .warehouse-base-fields-table { min-width:4300px; }
+    .warehouse-waybill-table { min-width:1350px; }
+    .warehouse-carrier-table { min-width:900px; }
+    .warehouse-heading-row { display:flex; align-items:center; gap:14px; }
+    .warehouse-detail-tabs,.delivery-order-view-tabs { display:flex; align-items:center; justify-content:flex-start; gap:5px; width:100%; min-width:0; margin:0 0 12px; padding-bottom:8px; border-bottom:1px solid var(--line); }
+    .warehouse-detail-tabs button,.delivery-order-view-tabs button { min-height:30px; padding:5px 13px; border:1px solid transparent; border-radius:6px; color:#748195; background:transparent; font-size:11px; cursor:pointer; }
+    .warehouse-detail-tabs button[aria-selected="true"],.delivery-order-view-tabs button[aria-selected="true"] { border-color:#d7e8ff; color:#1677d2; background:#f4f9ff; font-weight:600; }
+    .delivery-order-view-toolbar { display:flex; justify-content:space-between; align-items:center; gap:14px; width:100%; margin:0 0 12px; padding:0 0 8px; border-bottom:1px solid #e5e8ed; }
+    .delivery-order-view-tabs { display:flex; flex:0 0 auto; align-items:center; gap:4px; width:auto; min-width:0; margin:0; padding:0; border:0; }
+    .delivery-order-view-tabs button { position:relative; flex:0 0 auto; width:auto; min-width:96px; min-height:40px; padding:0 12px; border:0 !important; border-radius:0; color:#667386; background:transparent; font-size:13px; text-align:center; }
+    .delivery-order-view-tabs button[aria-selected="true"] { border:0; color:var(--brand); background:transparent; font-weight:700; }
+    .delivery-order-view-tabs button:focus-visible { outline:2px solid #e79aa5; outline-offset:-4px; }
+    .warehouse-detail-tabs.delivery-order-view-tabs { width:100%; margin:0 0 12px; padding:0 0 8px; border:0; border-bottom:1px solid var(--line); }
+    .delivery-order-view-panel[hidden] { display:none !important; }
+    .delivery-base-compare-table,.delivery-region-compare-table { width:100%; min-width:0; table-layout:fixed; }
+    .delivery-chart-grid-single { grid-template-columns:minmax(0,1fr); }
+    .delivery-chart-grid-single > .dimension-card:has(.order-status-chart) { display:none; }
+    .delivery-base-compare-table th,.delivery-base-compare-table td,.delivery-region-compare-table th,.delivery-region-compare-table td { padding:7px 5px; font-size:10px; line-height:1.35; white-space:normal; }
+    .compare-drilldown { padding:0; border:0; color:inherit; background:transparent; font:inherit; white-space:nowrap; cursor:pointer; }
+    .compare-drilldown:hover,.compare-drilldown:focus-visible { color:var(--brand); text-decoration:underline; text-underline-offset:2px; }
+    .compare-drilldown:focus-visible { outline:2px solid #f2a0a8; outline-offset:3px; }
+    .delivery-base-compare-table th:first-child,.delivery-base-compare-table td:first-child,.delivery-region-compare-table th:first-child,.delivery-region-compare-table td:first-child { width:4%; min-width:0; }
+    .delivery-base-compare-table th:nth-child(2),.delivery-base-compare-table td:nth-child(2),.delivery-region-compare-table th:nth-child(2),.delivery-region-compare-table td:nth-child(2) { width:9%; }
+    .delivery-base-compare-table th:nth-child(n+3):nth-child(-n+8),.delivery-base-compare-table td:nth-child(n+3):nth-child(-n+8),.delivery-region-compare-table th:nth-child(n+3):nth-child(-n+8),.delivery-region-compare-table td:nth-child(n+3):nth-child(-n+8) { width:7.5%; }
+    .delivery-base-compare-table th:nth-child(n+9),.delivery-base-compare-table td:nth-child(n+9),.delivery-region-compare-table th:nth-child(n+9),.delivery-region-compare-table td:nth-child(n+9) { width:8.4%; }
+    .delivery-base-compare-table thead tr:first-child th:last-child,.delivery-region-compare-table thead tr:first-child th:last-child { width:42%; }
+    .delivery-base-compare-detail[hidden],.delivery-region-compare-detail[hidden] { display:none; }
+    .delivery-base-compare-detail > td,.delivery-region-compare-detail > td { padding:8px 12px !important; background:#fbfcfe; }
+    .base-status-detail-wrap { padding:8px; border-radius:6px; background:#fbfcfe; }
+    .base-status-detail-table { width:100%; min-width:0; table-layout:fixed; background:#fff; }
+    .base-status-detail-table th,.base-status-detail-table td { padding:7px 8px; font-size:10px; }
+    .delivery-order-panel-tools { display:flex; flex:1 1 auto; justify-content:flex-end; align-items:center; gap:10px; min-width:0; margin:0; }
+    .delivery-order-panel-tools[hidden] { display:none !important; }
+    .warehouse-detail-panel[hidden] { display:none !important; }
+    .warehouse-base-detail-panel[hidden] { display:none !important; }
+    .warehouse-status-detail[hidden] { display:none; }
+    @media(max-width:900px) { .delivery-order-view-toolbar { align-items:flex-start; flex-wrap:wrap; }.delivery-order-view-tabs { width:100%; }.delivery-order-panel-tools { flex-basis:100%; align-items:flex-start; flex-direction:column; } }
+    @media(max-width:760px) { .warehouse-detail-tabs { overflow-x:auto; } }
+    .dimension-note { margin:12px 0 0; padding:9px 11px; border-radius:6px; color:#718096; background:#f5f7fa; font-size:10px; line-height:1.65; }
+    .dimension-links { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+    .dimension-links button { padding:7px 10px; border:1px solid #dce3ed; border-radius:6px; color:#53647b; background:#fff; font-size:10px; }
+    .dimension-links button:hover { border-color:#eaa5af; color:#d94c5c; }
+    .fulfillment-analysis-dimension { min-width:0; padding:11px 12px; border:1px solid #eee5e9; border-radius:7px; background:rgba(255,255,255,.8); }
+    .fulfillment-analysis-dimension > span { display:block; color:#7e8998; font-size:11px; }.fulfillment-analysis-dimension strong { display:block; margin:7px 0 4px; color:#3b4554; font-size:17px; }.fulfillment-analysis-dimension.risk strong { color:#d74a5d; }.fulfillment-analysis-dimension.pending strong { color:#939cab; font-size:14px; }
+    .fulfillment-analysis-dimension p { margin:0; color:#8791a0; font-size:10px; line-height:1.65; }
+    .fulfillment-analysis-foot > span { color:#9aa3b0; font-size:10px; }.fulfillment-analysis-foot button { flex-shrink:0; padding:7px 11px; border:1px solid #efcbd2; border-radius:5px; color:#df5264; background:#fff; font-size:11px; }.fulfillment-analysis-foot button:hover { background:#fff1f3; }
+    @media(max-width:1200px) { .fulfillment-analysis-dimensions { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+    @media(max-width:560px) { .fulfillment-analysis-dimensions { grid-template-columns:repeat(2,minmax(0,1fr)); }.fulfillment-analysis { padding:15px; }.fulfillment-analysis-head,.fulfillment-analysis-foot { align-items:flex-start; flex-wrap:wrap; } }
+    .card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:15px; }
+    .card-head h2 { margin:0 0 5px; }.card-head p { margin:0; color:#8a94a2; font-size:11px; line-height:1.5; }.card-head > span { color:#9aa4b1; font-size:10px; white-space:nowrap; }
+    .trace-steps { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+    .trace-step { position:relative; min-width:0; padding:13px 12px; border:1px solid #e8ebf0; border-radius:8px; background:#fbfcfd; }
+    .trace-step:not(:last-child)::after { content:"›"; position:absolute; top:38px; right:-7px; z-index:1; display:grid; place-items:center; width:14px; height:20px; color:#b5bdc9; background:#fff; }
+    .trace-step span,.trace-step small { display:block; }.trace-step span { color:#667180; font-size:11px; }.trace-step strong { display:block; margin:8px 0 6px; font-size:22px; }.trace-step small { color:#9aa4b1; font-size:10px; line-height:1.5; }
+    .trace-step b { color:#d64a55; font-weight:600; }.trace-step.done strong { color:#2d9b70; }
+    .trace-rule { margin:13px 0 0; padding:9px 11px; border-radius:6px; color:#718096; background:#f5f7fa; font-size:10px; line-height:1.6; }
+    .shortage-formula { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; align-items:stretch; }
+    .formula-item { padding:11px 10px; border:1px solid #e8ebf0; border-radius:7px; background:#fbfcfd; text-align:center; }
+    .formula-item span,.formula-item small { display:block; color:#87919f; font-size:10px; }.formula-item strong { display:block; margin:7px 0 3px; font-size:18px; }.formula-item.final { border-color:#f0cfd3; background:#fff7f8; }.formula-item.final strong { color:#d93f4c; }
+    .shortage-bars { display:grid; gap:9px; margin-top:14px; }
+    .shortage-bar { display:grid; grid-template-columns:80px minmax(0,1fr) 58px; align-items:center; gap:9px; color:#687484; font-size:10px; }
+    .shortage-bar-track { height:8px; overflow:hidden; border-radius:4px; background:#f0f2f5; }.shortage-bar-track i { display:block; height:100%; border-radius:4px; background:linear-gradient(90deg,#ffb5bc,#ef5968); }
+    .shortage-bar b { color:#4b5664; text-align:right; }
+    .risk-list { display:grid; gap:9px; }
+    .risk-item { display:grid; grid-template-columns:28px minmax(0,1fr) auto; align-items:center; gap:10px; padding:10px 11px; border:1px solid #e9edf2; border-radius:8px; background:#fbfcfd; }
+    .risk-item > span { display:grid; place-items:center; width:28px; height:28px; border-radius:8px; color:#d84754; background:#fff0f1; font-size:11px; font-weight:700; }.risk-item strong,.risk-item small { display:block; }.risk-item strong { color:#3d4653; font-size:11px; }.risk-item small { margin-top:4px; color:#8d97a5; font-size:10px; line-height:1.45; }.risk-item b { color:#d84754; font-size:11px; white-space:nowrap; }
+    .fulfillment-rules { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; margin:0 0 16px; }
+    .fulfillment-rule { padding:12px 13px; border:1px solid #e8ebf0; border-radius:8px; background:#fff; }.fulfillment-rule strong { display:block; margin-bottom:6px; color:#3d4653; font-size:11px; }.fulfillment-rule p { margin:0; color:#838e9c; font-size:10px; line-height:1.6; }
+    .orders .quantity-cell strong { color:#3a4553; }.orders .quantity-cell b { display:block; margin-top:4px; color:#d84754; font-size:11px; }.orders .quantity-cell small { line-height:1.45; }
+    .orders .alert-tag { display:inline-block; margin-top:5px; padding:2px 6px; border-radius:4px; color:#cb4450; background:#fff0f1; font-size:10px; }.orders .alert-tag.warning { color:#b87722; background:#fff5e7; }.orders .alert-tag.normal { color:#278663; background:#eaf8f1; }
+    #shortageWindowFilter { width:124px; cursor:pointer; }
+    .wb-hero { display:flex; align-items:center; gap:20px; flex-wrap:wrap; margin-bottom:8px; }
+    .wb-hero > .wb-link { margin-left:auto; }
+    .wb-hero .wb-context { margin:0; }
+    .wb-hero-main { min-width:0; }
+    .wb-title-line { display:flex; align-items:center; gap:24px; flex-wrap:wrap; }
+    .wb-title-line .period-bar { padding:0; border:0; background:none; }
+    .wb-title-line .period-control input { width:126px; }
+    .wb-title-line .period-control select { max-width:190px; }
+    .wb-hero h1 { margin:8px 0; font-size:26px; }.wb-hero p,.wb-section p { margin:0; color:#7a8290; font-size:12px; line-height:1.6; }
+    .wb-eyebrow { color:#bf2330; font-size:12px; font-weight:700; }.wb-eyebrow::before { content:""; display:inline-block; width:7px; height:7px; margin-right:9px; border-radius:50%; background:var(--brand); box-shadow:0 0 0 4px #ffe5e7; }
+    .wb-link,.wb-priority button { padding:3px 0; border:0; color:var(--brand); background:none; font-size:11px; white-space:nowrap; }.wb-link:hover,.wb-priority button:hover { text-decoration:underline; }
+    .wb-note { padding:10px 13px; margin-bottom:14px; border:1px solid #dce8fa; border-radius:7px; color:#617590; background:#f4f8ff; font-size:11px; line-height:1.6; }
+    .wb-section { margin-bottom:14px; }.wb-section-head,.wb-card-title,.wb-task-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:10px; }
+    .wb-section h2,.wb-card h2 { margin:0 0 4px; font-size:16px; }.wb-section-head > span,.wb-card-title > span,.wb-task-head > span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .wb-kicker { color:#8b93a0; font-size:11px; }.wb-kpis { display:grid; grid-template-columns:repeat(8,minmax(140px,1fr)); gap:9px; overflow-x:auto; padding-bottom:2px; }
+    .wb-kpi { min-width:0; min-height:220px; padding:14px 13px 12px; border:1px solid #e5e9ef; border-radius:10px; background:#fff; text-align:left; }.wb-kpi:hover { border-color:#d7dde6; box-shadow:0 8px 22px rgba(32,43,61,.07); }
+    .wb-kpi-head { display:flex; align-items:center; justify-content:space-between; gap:7px; }.wb-kpi-title { min-width:0; overflow:hidden; color:#252c37; font-size:13px; font-weight:750; text-overflow:ellipsis; white-space:nowrap; }
+    .wb-kpi .wb-kpi-state { display:inline-flex; align-items:center; flex:0 0 auto; padding:4px 7px; border-radius:12px; color:#278565; background:#eaf8f1; font-size:9px; font-weight:700; }.wb-kpi .wb-kpi-state.bad { color:#c74455; background:#fff0f2; }.wb-kpi .wb-kpi-state.unknown { color:#667487; background:#f0f3f7; }
+    .wb-kpi-meta { display:flex; align-items:center; gap:6px; margin-top:10px; overflow:hidden; color:#7f8998; font-size:9px; white-space:nowrap; }.wb-kpi-badge { padding:3px 6px; border-radius:10px; color:#647184; background:#f1f4f7; font-weight:700; }.wb-kpi.urgent .wb-kpi-badge { color:#bb4152; background:#fff1f3; }
+    .wb-kpi-value { display:flex; align-items:flex-end; gap:4px; min-height:51px; margin-top:9px; }.wb-kpi-value strong { color:#17202e; font-size:34px; line-height:1; letter-spacing:-1px; }.wb-kpi-value em { padding-bottom:3px; color:#778294; font-size:13px; font-style:normal; }
+    .wb-kpi-compare { display:grid; gap:6px; padding:10px 0 9px; border-top:1px dashed #e4e8ee; border-bottom:1px dashed #e4e8ee; }.wb-kpi-compare-row { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; align-items:center; color:#697586; font-size:9px; }.wb-kpi-compare-row > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-kpi-compare-row.head { color:#a0a8b4; }.wb-kpi-compare-row b { color:#778294; font-weight:700; white-space:nowrap; }.wb-kpi-compare-row b.good { color:#238b68; }.wb-kpi-compare-row b.bad { color:#c63f50; }
+    .wb-kpi-foot { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px; align-items:center; margin-top:10px; color:#596576; font-size:9px; font-weight:650; }.wb-kpi-foot > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-kpi-foot b { color:#667487; text-align:right; white-space:nowrap; }.wb-kpi-foot b.good { color:#238b68; }.wb-kpi-foot b.bad { color:#c63f50; }
+    .wb-card { min-width:0; margin-bottom:14px; border:1px solid var(--line); border-radius:8px; background:#fff; }.wb-card p { margin:0; color:#7a8290; font-size:11px; line-height:1.6; }
+    .wb-analysis { border-color:#f0d8dc; background:linear-gradient(105deg,#fffafa,#fff 56%,#fffdfd); }.wb-analysis-head,.wb-analysis-body,.wb-analysis-foot { padding:15px 20px; }.wb-analysis-head,.wb-analysis-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; }.wb-analysis-head { padding-bottom:0; }.wb-analysis-head h2 { margin:0; font-size:14px; }.wb-analysis-head span,.wb-analysis-foot span { color:#9fa8b5; font-size:11px; }.wb-analysis-body h3 { margin:0 0 8px; font-size:17px; }.wb-analysis-body p { margin:0; color:#707a89; font-size:12px; line-height:1.7; }.wb-analysis-foot { padding-top:0; }
+    .wb-spark { display:inline-grid; place-items:center; width:25px; height:25px; margin-right:8px; border-radius:7px; color:#ed5268; background:#fff0f2; }.wb-tags { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }.wb-tags span { padding:4px 9px; border:1px solid #f1dadd; border-radius:5px; color:#9a7180; background:#fffafb; font-size:11px; }.wb-tags b { color:#df5161; }
+    .wb-panels { display:none; grid-template-columns:minmax(0,1.12fr) minmax(300px,.88fr); gap:14px; }.wb-card-title { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-priority { display:flex; align-items:center; gap:10px; min-height:62px; padding:10px 17px; border-top:1px solid #f0f1f4; }.wb-priority > div { min-width:0; flex:1; }.wb-priority strong,.wb-priority small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.wb-priority strong { font-size:12px; }.wb-priority small { margin-top:5px; color:#8b93a0; font-size:11px; }
+    .wb-status { display:inline-flex; align-items:center; gap:5px; padding:4px 7px; border-radius:5px; color:#4a86d8; background:#edf5ff; font-size:11px; white-space:nowrap; }.wb-status::before { content:""; width:5px; height:5px; border-radius:50%; background:currentColor; }.wb-status.issue { color:#d94d58; background:#fff0f1; }.wb-status.pending { color:#ba7928; background:#fff5e8; }.wb-status.ready { color:#39a078; background:#eaf8f1; }
+    .wb-flow { padding:4px 18px 12px; }.wb-flow-item { display:flex; gap:12px; padding:13px 0; border-top:1px solid #f0f1f4; }.wb-flow-item:first-child { border-top:0; }.wb-flow-item b { display:grid; place-items:center; width:25px; height:25px; flex:0 0 auto; border-radius:7px; color:#d84b57; background:#fff0f2; font-size:11px; }.wb-flow-item strong { font-size:12px; }.wb-flow-item p { margin:4px 0 0; color:#7a8290; font-size:11px; line-height:1.5; }
+    .wb-task-head { align-items:flex-start; margin:0; padding:17px 18px 15px; }.wb-filters { display:flex; gap:16px; overflow-x:auto; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-filters button { position:relative; flex:0 0 auto; height:34px; border:0; color:#8b93a0; background:none; font-size:11px; }.wb-filters button.active { color:var(--brand); font-weight:700; }.wb-filters button.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; background:var(--brand); }
+    .wb-context { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 5px; color:#788391; font-size:11px; }.wb-context strong { color:#425066; font-size:12px; }.wb-context span { padding:6px 10px; border:1px solid #e3e8f0; border-radius:6px; background:#fff; }.wb-context select { height:31px; padding:0 25px 0 9px; border:1px solid #e3e8f0; border-radius:6px; color:#596779; background:#fff; font-size:11px; }.wb-context-note { margin:0 0 12px; color:#99a2af; font-size:10px; }
+    .wb-dimension-table .category-toggle,.wb-dimension-table .region-change-toggle { padding:0; border:0; color:#435267; background:none; font:inherit; text-align:left; cursor:pointer; }.wb-dimension-table .category-toggle::before,.wb-dimension-table .region-change-toggle::before { display:inline-block; width:16px; color:#8d98a8; content:"▸"; }.wb-dimension-table .category-toggle[aria-expanded="true"]::before,.wb-dimension-table .region-change-toggle[aria-expanded="true"]::before { content:"▾"; }.wb-dimension-table .sku-detail-row td,.wb-dimension-table .region-customer-detail-row td { padding:0; background:#fafbfd; }.wb-sku-detail,.wb-region-customer-detail { padding:11px 13px 13px 29px; }.wb-sku-detail > p,.wb-region-customer-detail > p { margin:0 0 8px; color:#9aa3af; font-size:10px; }.wb-sku-table,.wb-region-customer-table { width:100%; border-collapse:collapse; text-align:left; font-size:10px; }.wb-sku-table th,.wb-sku-table td,.wb-region-customer-table th,.wb-region-customer-table td { padding:7px 8px; border:1px solid #e9edf2; }.wb-sku-table th,.wb-region-customer-table th { color:#778395; background:#f2f4f7; font-weight:600; }.wb-sku-table td,.wb-region-customer-table td { color:#586475; background:#fff; }.wb-sku-table .sku-code,.wb-region-customer-table .customer-code { color:#94a0ae; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }.wb-region-customer-empty { color:#8d98a8!important; text-align:center; }
+    .wb-report-date { margin:0 0 15px; color:#a0a8b5; font-size:10px; text-align:right; }
+    .wb-analysis { position:relative; }.wb-analysis::before { content:""; position:absolute; top:17px; bottom:17px; left:0; width:3px; border-radius:0 3px 3px 0; background:#ef6b80; }.wb-analysis-evidence { display:flex; gap:7px; flex-wrap:wrap; margin-top:13px; }.wb-analysis-evidence span { padding:4px 8px; border:1px solid #e9edf4; border-radius:5px; color:#8390a2; background:#fff; font-size:10px; }
+    .wb-panels { align-items:stretch; }.wb-panels > .wb-card { display:flex; flex-direction:column; }.wb-events-tabs { display:flex; gap:16px; padding:0 18px; border-bottom:1px solid #eef0f3; }.wb-events-tabs button { position:relative; height:32px; padding:0; border:0; color:#8b93a0; background:transparent; font-size:11px; }.wb-events-tabs button.active { color:var(--brand); font-weight:700; }.wb-events-tabs button.active::after { content:""; position:absolute; bottom:-1px; right:0; left:0; height:2px; background:var(--brand); }
+    .wb-event { padding:13px 17px; border-bottom:1px solid #eef0f3; }.wb-event:last-child { border-bottom:0; }.wb-event-top { display:flex; align-items:center; gap:7px; }.wb-event-top strong { min-width:0; flex:1; color:#343c49; font-size:12px; }.wb-event-top time { color:#a0a8b5; font-size:10px; }.wb-event p { margin:6px 0 5px 21px; color:#7d8796; font-size:11px; line-height:1.55; }.wb-event-foot { display:flex; align-items:center; gap:9px; margin-left:21px; }.wb-event-foot button { padding:0; border:0; color:#818b9a; background:none; font-size:10px; }.wb-event-foot button:hover { color:var(--brand); }.wb-event-foot button:last-child { color:#cf5765; }.wb-event-kind { flex:0 0 auto; padding:2px 5px; border-radius:4px; color:#d45462; background:#fff0f2; font-size:10px; }.wb-event-kind.focus { color:#c28636; background:#fff6e7; }
+    .wb-action { padding:14px 17px; border-bottom:1px solid #eef0f3; }.wb-action:last-child { border-bottom:0; }.wb-action-main { display:flex; gap:9px; }.wb-action-icon { display:grid; place-items:center; width:23px; height:23px; flex:0 0 auto; border-radius:7px; color:#e28a43; background:#fff2e4; }.wb-action strong { display:block; color:#343c49; font-size:12px; }.wb-action small { display:block; margin-top:4px; color:#9aa3af; font-size:10px; }.wb-action p { margin:7px 0 0 32px; color:#7d8796; font-size:11px; line-height:1.6; }.wb-action-links { display:flex; gap:8px; margin:10px 0 0 32px; }.wb-action-links button { padding:5px 8px; border:1px solid #dfe5ee; border-radius:5px; color:#7b8797; background:#fff; font-size:10px; }.wb-action-links button.primary { color:#fff; border-color:#d84959; background:#d84959; }.wb-panel-foot { margin-top:auto; padding:10px 17px; border-top:1px solid #eef0f3; color:#a0a8b5; font-size:10px; }
+    .wb-task-summary { display:flex; align-items:center; gap:12px; color:#9aa3af; font-size:10px; }.wb-task-summary button { padding:0; border:0; color:#8c96a4; background:none; font-size:10px; }.wb-task-summary button:hover { color:var(--brand); }.wb-task-table { width:100%; border-collapse:collapse; table-layout:fixed; text-align:left; font-size:11px; }.wb-task-table th { padding:10px 16px; border-bottom:1px solid #eef0f3; color:#9ca6b3; background:#fbfcfd; font-weight:500; }.wb-task-table td { padding:11px 16px; border-bottom:1px solid #eef0f3; color:#6d7787; }.wb-task-table tr:last-child td { border-bottom:0; }.wb-task-table th:first-child { width:38%; }.wb-task-table th:nth-child(2) { width:20%; }.wb-task-table th:nth-child(3) { width:16%; }.wb-task-table th:nth-child(4) { width:15%; }.wb-task-table th:nth-child(5) { width:11%; }.wb-task-table strong { display:block; color:#3c4552; font-size:11px; }.wb-task-table small { display:block; margin-top:3px; color:#9ca6b2; font-size:10px; }.wb-task-status { display:inline-block; padding:4px 7px; border-radius:5px; color:#bb842f; background:#fff6e9; font-size:10px; }.wb-task-status.done { color:#3c9b78; background:#eaf8f1; }.wb-task-link { padding:0; border:0; color:#7d8b9c; background:none; font-size:10px; }.wb-task-link:hover { color:var(--brand); }.wb-task-table-wrap { overflow-x:auto; }.wb-task-table { min-width:650px; }
+    .wb-detail-overlay { position:fixed; inset:0; z-index:12; display:grid; place-items:center; padding:20px; background:rgba(30,38,54,.32); }.wb-detail-dialog { width:min(580px,100%); max-height:80vh; overflow:auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(30,38,54,.18); }.wb-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }.wb-detail-head h2 { margin:0; font-size:17px; }.wb-detail-head button { border:0; color:#7d8796; background:none; font-size:21px; }.wb-detail-dialog p { color:#687486; font-size:12px; line-height:1.7; }.wb-detail-dialog h3 { margin:16px 0 5px; font-size:12px; }
+    .wb-region-order-count { padding:0; border:0; color:#48566b; background:transparent; font:inherit; text-align:left; cursor:pointer; }.wb-region-order-count:hover { color:#e43d52; text-decoration:underline; }.wb-region-order-count:focus-visible { outline:2px solid #4f9cf8; outline-offset:3px; border-radius:2px; }
+    .wb-detail-dialog.order-list-dialog { display:flex; width:min(1000px,96vw); max-height:85vh; flex-direction:column; overflow:hidden; padding:0; }.order-list-dialog .wb-detail-head { flex:none; padding:19px 22px; border-bottom:1px solid #edf0f4; }.order-list-dialog #wbDetailBody { min-height:0; overflow:auto; padding:0 22px 22px; }.wb-changed-order-note { margin:14px 0 12px; padding:9px 12px; border:1px solid #dce8fb; border-radius:6px; color:#6e7f98; background:#f7faff; }.wb-changed-order-wrap { overflow:auto; border:1px solid #e5e9ef; border-radius:7px; }.wb-changed-order-table { width:100%; min-width:780px; border-collapse:collapse; text-align:left; font-size:12px; }.wb-changed-order-table th,.wb-changed-order-table td { padding:10px 12px; border-bottom:1px solid #e9edf2; white-space:nowrap; }.wb-changed-order-table th { position:sticky; top:0; z-index:1; color:#596679; background:#f2f4f7; font-weight:600; }.wb-changed-order-table td { color:#465368; background:#fff; }.wb-changed-order-table tbody tr:last-child td { border-bottom:0; }.wb-changed-order-table .order-code { color:#75859b; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .wb-adopt-overlay { position:fixed; inset:0; z-index:14; display:grid; place-items:center; padding:20px; background:rgba(34,39,52,.34); }
+    .wb-adopt-dialog { width:min(850px,100%); max-height:min(90vh,760px); display:flex; flex-direction:column; overflow:hidden; border:1px solid #e7eaf0; border-radius:16px; background:#fff; box-shadow:0 20px 55px rgba(27,35,50,.18); }
+    .wb-adopt-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:25px 28px 21px; border-bottom:1px solid #edf0f4; }
+    .wb-adopt-head h2 { margin:0; color:#2f3744; font-size:19px; }.wb-adopt-head p { margin:7px 0 0; color:#9aa4b2; font-size:12px; }
+    .wb-adopt-close { width:38px; height:38px; flex:0 0 auto; border:1px solid #e2e7ef; border-radius:11px; color:#8793a3; background:#fff; font-size:21px; line-height:1; }
+    .wb-adopt-close:hover { border-color:#e6a4ae; color:#cb4051; }
+    .wb-adopt-form { display:flex; flex-direction:column; min-height:0; }
+    .wb-adopt-body { overflow:auto; padding:36px 28px 52px; }
+    .wb-adopt-notice { padding:15px 16px; border:1px solid #f4dce2; border-radius:9px; color:#ad8790; background:#fff8fa; font-size:12px; line-height:1.6; }
+    .wb-adopt-content { margin-top:15px; padding:16px; border:1px solid #dfe7f5; border-radius:9px; }
+    .wb-adopt-content strong { display:block; margin-bottom:9px; color:#657183; font-size:12px; }.wb-adopt-content p { margin:0; color:#8793a3; font-size:12px; line-height:1.8; white-space:pre-line; }
+    .wb-adopt-fields { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px; }
+    .wb-adopt-field { display:grid; gap:8px; color:#919baa; font-size:12px; }.wb-adopt-field input,.wb-adopt-field textarea { width:100%; padding:10px 11px; border:1px solid #dce4f2; border-radius:7px; color:#596779; background:#fff; font-size:13px; }.wb-adopt-field input { height:40px; }.wb-adopt-field textarea { min-height:102px; resize:vertical; }.wb-adopt-field.note { margin-top:18px; }
+    .wb-adopt-foot { display:flex; align-items:center; gap:8px; padding:17px 28px; border-top:1px solid #edf0f4; }.wb-adopt-foot p { flex:1; margin:0; color:#a0aabb; font-size:11px; line-height:1.5; }.wb-adopt-foot button { min-height:36px; padding:0 15px; border:1px solid #dce4f0; border-radius:7px; color:#778397; background:#fff; font-size:12px; white-space:nowrap; }.wb-adopt-foot button.primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .wb-definitions { padding:17px 18px 18px; }.wb-definitions > p { margin:0 0 13px; color:#7a8290; font-size:11px; line-height:1.6; }.wb-definition-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }.wb-definition { padding:12px 13px; border:1px solid #e8ebf0; border-radius:7px; background:#fbfcfd; }.wb-definition strong { display:block; margin-bottom:6px; color:#384252; font-size:12px; }.wb-definition span,.wb-definition small { display:block; color:#687486; font-size:11px; line-height:1.65; }.wb-definition small { margin-top:6px; color:#9aa2af; }
+    .wb-table-wrap { overflow-x:auto; }.wb-table { width:100%; min-width:800px; border-collapse:collapse; text-align:left; font-size:11px; }.wb-table th { padding:10px 14px; border-bottom:1px solid #eef0f3; color:#9aa3af; background:#fbfcfd; font-weight:500; }.wb-table td { padding:11px 14px; border-bottom:1px solid #f0f1f4; color:#626d7b; vertical-align:middle; }.wb-table tr:last-child td { border-bottom:0; }.wb-table td strong,.wb-table td small { display:block; }.wb-table td strong { color:#3c4552; }.wb-table td small { margin-top:4px; color:#9ca5b2; font-size:10px; }.wb-foot { padding:12px 18px; border-top:1px solid #f0f1f4; color:#9aa2af; font-size:11px; }.wb-boundary { display:flex; justify-content:space-between; gap:12px; padding:17px 18px; }.wb-boundary strong { font-size:13px; }.wb-boundary p { margin:5px 0 0; color:#7a8290; font-size:11px; }.wb-boundary span { color:#9aa2af; font-size:11px; white-space:nowrap; }
+    .wb-dimensions { overflow:hidden; }.wb-dimension-head { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; padding:17px 18px 14px; }.wb-dimension-head h2 { margin:0; color:#303844; font-size:15px; }.wb-dimension-head p { margin:5px 0 0; color:#8a94a2; font-size:11px; }.wb-dimension-head > span { color:#9aa3af; font-size:10px; white-space:nowrap; }.wb-dimension-tabs { display:flex; gap:25px; overflow-x:auto; padding:0 18px; border-top:1px solid #eef0f3; border-bottom:1px solid #eef0f3; }.wb-dimension-tabs button { position:relative; min-height:42px; flex:0 0 auto; padding:0; border:0; color:#7e8897; background:transparent; font-size:11px; white-space:nowrap; cursor:pointer; }.wb-dimension-tabs button:hover { color:#d64656; }.wb-dimension-tabs button.active { color:var(--brand); font-weight:700; }.wb-dimension-tabs button.active::after { content:""; position:absolute; right:0; bottom:-1px; left:0; height:2px; background:var(--brand); }.wb-dimension-panel { min-height:270px; padding:18px; }.wb-dimension-summary { display:flex; align-items:flex-start; justify-content:space-between; gap:15px; margin:0 0 11px; }.wb-dimension-summary strong { color:#384252; font-size:13px; }.wb-dimension-summary span { color:#98a1ae; font-size:10px; }.wb-dimension-insight { display:flex; align-items:flex-start; gap:10px; margin:0 0 14px; padding:11px 13px; border:1px solid #f1d9de; border-radius:7px; color:#687485; background:#fff8f9; font-size:11px; line-height:1.65; }.wb-dimension-insight strong { flex:0 0 auto; color:#d24757; }.wb-dimension-table-wrap { overflow-x:auto; border:1px solid #e4e8ee; border-radius:7px; }.wb-dimension-table { width:100%; min-width:1280px; border-collapse:collapse; text-align:left; font-size:11px; }.wb-dimension-table.region-change-table { min-width:100%; table-layout:fixed; }.wb-dimension-table.region-change-table th:nth-child(1) { width:22%; }.wb-dimension-table.region-change-table th:nth-child(2) { width:14%; }.wb-dimension-table.region-change-table th:nth-child(3) { width:11%; }.wb-dimension-table.region-change-table th:nth-child(4) { width:14%; }.wb-dimension-table.region-change-table th:nth-child(5) { width:16%; }.wb-dimension-table.region-change-table th:nth-child(6) { width:23%; }.wb-dimension-table.region-change-table .issue-col { min-width:0; }.wb-dimension-table th { padding:10px 12px; border-right:1px solid #e4e8ee; border-bottom:1px solid #dfe4ea; color:#4d5765; background:#f4f5f7; font-weight:600; white-space:nowrap; }.wb-dimension-table td { padding:10px 12px; border-right:1px solid #edf0f3; border-bottom:1px solid #edf0f3; color:#4f5967; line-height:1.55; vertical-align:top; }.wb-dimension-table th:last-child,.wb-dimension-table td:last-child { border-right:0; }.wb-dimension-table tbody tr:last-child td { border-bottom:0; }.wb-dimension-table tbody tr:hover { background:#fffafb; }.wb-dimension-table .good-value { color:#1264d8; font-weight:700; }.wb-dimension-table .risk-value { color:#e0313b; font-weight:700; }.wb-dimension-table .status-ok { color:#13a24f; font-weight:700; }.wb-dimension-table .status-warn { color:#d58a15; font-weight:700; }.wb-dimension-table .status-bad { color:#e0313b; font-weight:700; }.wb-dimension-table .status-muted { color:#9aa3af; }.wb-dimension-table .issue-col { width:38%; min-width:350px; white-space:normal; }.wb-dimension-table td.issue-cell { color:#687485; }.wb-dimension-issue + .wb-dimension-issue { margin-top:12px; padding-top:12px; border-top:1px dashed #e4e8ee; }.wb-dimension-issue-title { display:block; margin-bottom:5px; color:#384252; font-size:11px; }.wb-dimension-issue > div + div { margin-top:5px; }.wb-dimension-issue b { color:#526174; font-weight:600; }.wb-dimension-empty { display:grid; place-items:center; min-height:230px; padding:30px; border:1px dashed #dfe4ec; border-radius:8px; color:#8792a2; background:#fbfcfd; text-align:center; font-size:12px; line-height:1.8; }
+    .wb-dimension-issue { position:relative; padding-right:34px; }.wb-issue-edit-button { position:absolute; top:0; right:0; display:inline-grid; place-items:center; width:30px; height:30px; padding:0; border:1px solid transparent; border-radius:50%; color:#7d8b9c; background:transparent; cursor:pointer; }.wb-issue-edit-button:hover,.wb-issue-edit-button.saved { border-color:#f0d6da; color:#cf4354; background:#fff5f6; }.wb-issue-edit-button svg { width:16px; height:16px; }.wb-issue-category-label { display:block; margin:0 0 7px; color:#8994a3; font-size:10px; }
+    .wb-issue-modal-fields { display:grid; gap:16px; margin-top:18px; }.wb-issue-modal-fields select,.wb-issue-modal-fields textarea { width:100%; padding:10px 11px; border:1px solid #dce4f2; border-radius:7px; color:#596779; background:#fff; font:400 13px sans-serif; }.wb-issue-modal-fields select { height:42px; }.wb-issue-modal-fields textarea { min-height:105px; resize:vertical; line-height:1.6; }.wb-issue-modal-fields textarea:focus,.wb-issue-modal-fields select:focus { outline:2px solid #dce8ff; border-color:#9bb9f4; }.wb-issue-modal-fields label { display:grid; gap:8px; color:#748195; font-size:12px; }.wb-issue-modal-foot { display:flex; align-items:center; gap:9px; padding:17px 28px; border-top:1px solid #edf0f4; }.wb-issue-modal-foot p { flex:1; margin:0; color:#9aa4b2; font-size:11px; }.wb-issue-modal-foot button { min-height:36px; padding:0 15px; border:1px solid #dce4f0; border-radius:7px; color:#778397; background:#fff; font-size:12px; white-space:nowrap; }.wb-issue-modal-foot button.primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .wb-task-edit-row td { background:#fbfcfe; }.wb-task-edit-form { display:grid; grid-template-columns:repeat(4,minmax(120px,1fr)); gap:10px; padding:5px; }.wb-task-edit-form label { display:grid; gap:5px; color:#7a8798; font-size:10px; }.wb-task-edit-form input,.wb-task-edit-form textarea,.wb-task-edit-form select { width:100%; min-height:34px; padding:7px 8px; border:1px solid #dfe5ed; border-radius:5px; color:#4f5c6d; background:#fff; font:400 11px sans-serif; }.wb-task-edit-form .wide { grid-column:1/-1; }.wb-task-edit-form textarea { resize:vertical; }.wb-task-edit-actions { display:flex; justify-content:flex-end; gap:7px; grid-column:1/-1; }.wb-task-edit-actions button { padding:7px 11px; border:1px solid #dfe5ed; border-radius:5px; color:#788497; background:white; font-size:10px; }.wb-task-edit-actions .primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .orders tr.is-linked, .wb-task-table tr.is-linked { background:#fff8ea; }
+    .assistant { display:grid; grid-template-rows:42px minmax(0,1fr) auto; min-width:0; min-height:0; margin:8px 10px 8px 0; overflow:hidden; border:1px solid #e6e2ec; border-radius:18px; background:linear-gradient(155deg,#fff5f6 0%,#fff9fb 27%,#f7faff 62%,#f3f8ff 100%); }
+    .assistant-head { display:flex; align-items:center; gap:5px; padding:0 16px; color:#828c9c; font-size:12px; }
+    .assistant-head strong { margin-right:auto; font-weight:700; }
+    .assistant-head button { width:28px; height:28px; border:0; border-radius:6px; color:#718095; background:transparent; font-size:17px; }
+    .assistant-head button:hover { color:var(--brand); background:rgba(255,255,255,.72); }
+    .assistant-body { min-height:0; overflow:auto; padding:0 19px 14px; }
+    .hero { display:grid; justify-items:center; padding:17px 4px 26px; text-align:center; }
+    .robot { position:relative; display:grid; place-items:center; width:82px; height:68px; margin:8px 0 22px; border:6px solid #fff; border-radius:31px; background:linear-gradient(150deg,#fff,#ffe3e8); box-shadow:0 12px 24px rgba(205,89,110,.19),inset 0 -4px 9px rgba(236,120,144,.14); }
+    .robot::before,.robot::after { content:""; position:absolute; top:22px; width:10px; height:23px; border:2px solid #fff; border-radius:9px; background:#ff859b; }
+    .robot::before { left:-14px; }.robot::after { right:-14px; }
+    .robot i { position:absolute; top:-15px; left:34px; width:5px; height:13px; border-radius:5px; background:#ffd5dd; }
+    .robot i::after { content:""; position:absolute; left:-3px; top:-5px; width:11px; height:11px; border:2px solid #fff; border-radius:50%; background:#ffa3b3; }
+    .robot span { display:flex; align-items:center; justify-content:center; gap:16px; width:59px; height:36px; border-radius:18px; background:radial-gradient(circle at 50% 0%,#ff7280,#9f0d27 65%,#650b1f); box-shadow:inset 0 2px 5px rgba(255,255,255,.7),0 3px 8px rgba(142,10,36,.27); }
+    .robot span::before,.robot span::after { content:""; width:4px; height:10px; border-radius:50%; background:#fff; box-shadow:0 0 7px #fff; }
+    .hero h2 { margin:0 0 8px; font-size:19px; }.hero p { margin:0; color:#77849a; font-size:13px; line-height:1.8; }
+    .assistant-suggested-questions { display:grid; gap:8px; padding:0 0 14px; }
+    .assistant-suggested-questions h3 { margin:0 0 2px; color:#303946; font-size:12px; }
+    .assistant-suggested-questions button { width:100%; min-height:39px; padding:9px 11px; border:1px solid #dce4f5; border-radius:11px; color:#74839b; background:rgba(255,255,255,.88); font-size:11px; line-height:1.55; text-align:left; white-space:normal; cursor:pointer; }
+    .assistant-suggested-questions button:hover { border-color:#b8cdfa; color:#4e72b8; background:#fff; }
+    .ai-snapshot { margin:0 0 16px; padding:12px; border:1px solid #ecdfe3; border-radius:12px; background:rgba(255,255,255,.72); }
+    .ai-snapshot-head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:9px; color:#434d5b; font-size:12px; font-weight:700; }
+    .ai-snapshot-head span { color:#a18b94; font-size:9px; font-weight:500; }
+    .ai-snapshot-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+    .ai-snapshot-grid button { min-width:0; padding:9px 10px; border:1px solid #e8eaf0; border-radius:8px; background:#fff; text-align:left; }
+    .ai-snapshot-grid button:hover { border-color:#efb3bb; background:#fffafb; }
+    .ai-snapshot-grid small,.ai-snapshot-grid strong { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .ai-snapshot-grid small { color:#8994a4; font-size:9px; }.ai-snapshot-grid strong { margin-top:4px; color:#303946; font-size:14px; }
+    .ai-snapshot-grid button:nth-child(3) strong,.ai-snapshot-grid button:nth-child(4) strong { color:#d24755; }
+    .ai-query-builder { margin:0 0 14px; padding:12px; border:1px solid #e2e8f3; border-radius:11px; background:rgba(255,255,255,.76); }
+    .ai-query-builder h3 { margin:0 0 9px; color:#424d5d; font-size:12px; }
+    .ai-query-row { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+    .ai-query-builder select,.ai-query-builder input { width:100%; min-width:0; height:35px; padding:0 9px; border:1px solid #dce3ed; border-radius:7px; color:#465367; background:#fff; font-size:10px; }
+    .ai-query-object { grid-column:1 / -1; }
+    .ai-query-submit { width:100%; min-height:35px; grid-column:1 / -1; border:0; border-radius:7px; color:#fff; background:linear-gradient(100deg,#fb6e83,#e94764); font-size:11px; font-weight:700; }
+    .ai-query-submit:hover { filter:brightness(.97); }
+    .ai-query-hint { margin:8px 0 0; color:#8c98a9; font-size:9px; line-height:1.55; }
+    .assistant-foot { padding:10px 12px 12px; }
+    .composer { display:grid; grid-template-columns:38px minmax(0,1fr) 38px; align-items:center; height:58px; padding:0 10px; border:1px solid #dbe3f5; border-radius:17px; background:#fff; box-shadow:0 4px 14px rgba(77,105,155,.05); }
+    .composer button { display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:50%; color:#8290a4; background:#f0f3f8; font-size:22px; }
+    .composer .send { color:#73a3fc; background:#eef4ff; font-size:19px; }.composer .send:disabled { opacity:.7; cursor:default; }
+    .composer input { width:100%; min-width:0; border:0; outline:0; color:var(--text); background:transparent; font-size:11px; }
+    .composer input::placeholder { color:#9ba5b5; }
+    .disclaimer { margin:7px 0 0; color:#abb1ba; font-size:10px; text-align:center; }
+    .chat { display:grid; gap:12px; padding-top:12px; }.chat .question { justify-self:end; max-width:92%; padding:9px 12px; border-radius:10px; background:#f0f3f8; color:#455064; font-size:12px; line-height:1.5; overflow-wrap:anywhere; }
+    .answer { padding:14px; border:1px solid #e2e8f3; border-radius:10px; background:rgba(255,255,255,.94); font-size:12px; line-height:1.65; }
+    .answer h3 { margin:0 0 8px; font-size:14px; }.answer p { margin:7px 0; }.answer ul { margin:8px 0; padding-left:18px; }.answer li { margin:5px 0; }
+    .answer small { display:block; margin-top:12px; color:var(--faint); }.back-home { margin:4px 0 10px; padding:0; border:0; color:#657a9b; background:none; font-size:11px; }
+    .history-overlay { position:fixed; inset:0; z-index:10; display:grid; place-items:center; background:rgba(26,35,50,.28); }
+    .history-dialog { width:min(420px,calc(100vw - 32px)); max-height:70vh; overflow:auto; padding:18px; border-radius:12px; background:#fff; box-shadow:0 18px 50px rgba(25,31,45,.16); }
+    .history-dialog header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }.history-dialog h2 { margin:0; font-size:16px; }
+    .history-dialog header button { border:0; background:none; font-size:20px; }.history-dialog .empty { color:var(--muted); font-size:12px; }
+    .history-row { display:block; width:100%; padding:10px; border:1px solid var(--line); border-radius:7px; margin:7px 0; background:#fff; text-align:left; font-size:12px; }.history-row small { display:block; margin-top:4px; color:var(--faint); }
+    .confirmation-overlay { position:fixed; inset:0; z-index:35; display:grid; place-items:center; padding:18px; background:rgba(26,35,50,.34); }
+    .confirmation-dialog { width:min(820px,100%); max-height:88vh; overflow:auto; padding:22px; border:1px solid #e5eaf2; border-radius:13px; background:#fff; box-shadow:0 20px 60px rgba(25,31,45,.2); }
+    #salesConfirmOverlay .confirmation-dialog { width:min(520px,100%); }
+    .confirmation-dialog header { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; margin-bottom:16px; }
+    .confirmation-dialog h2 { margin:0; color:#2f3948; font-size:17px; }
+    .confirmation-dialog header p { margin:6px 0 0; color:#8792a3; font-size:11px; }
+    #salesConfirmOrder { white-space:pre-line; line-height:1.9; color:#566276 !important; font-size:13px !important; }
+    .confirmation-dialog header button { width:30px; height:30px; border:0; color:#8994a3; background:none; font-size:22px; cursor:pointer; }
+    .confirmation-dialog label { display:grid; gap:7px; margin:12px 0 8px; color:#647186; font-size:11px; }
+    .confirmation-dialog input { width:100%; height:36px; padding:0 10px; border:1px solid #dce3ed; border-radius:6px; color:#3c4859; font-size:12px; }
+    .sales-options { display:grid; gap:6px; max-height:230px; overflow:auto; }
+    .sales-option { display:grid; grid-template-columns:minmax(120px,1fr) 1fr 110px; align-items:center; gap:10px; padding:10px; border:1px solid #e7ebf2; border-radius:7px; color:#59677a; background:#fff; text-align:left; font-size:11px; cursor:pointer; }
+    .sales-option:hover,.sales-option[aria-selected="true"] { border-color:#93baf0; background:#f4f8ff; }
+    .sales-option strong { color:#334052; }.sales-option small { color:#8b96a6; font-size:10px; }
+    .sales-selected { margin-top:11px; padding:10px 12px; border-radius:7px; color:#5d6f88; background:#f4f7fb; font-size:11px; line-height:1.7; }
+    .sales-selected[hidden] { display:none; }
+    .confirmation-error { margin:8px 0 0; color:#c84958; font-size:11px; }
+    .confirmation-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; padding-top:14px; border-top:1px solid #edf0f4; }
+    .confirmation-actions button { min-height:34px; padding:0 14px; border:1px solid #dce3ed; border-radius:6px; color:#6f7c90; background:#fff; font-size:11px; cursor:pointer; }
+    .confirmation-actions .primary { border-color:#d84456; color:#fff; background:#d84456; }
+    .confirmation-log-table-wrap { max-height:56vh; overflow:auto; border:1px solid #e8edf4; border-radius:8px; }
+    .confirmation-log-table { width:100%; min-width:640px; border-collapse:collapse; table-layout:fixed; font-size:11px; }
+    .confirmation-log-table th,.confirmation-log-table td { padding:11px 12px; border-bottom:1px solid #edf0f4; text-align:left; vertical-align:top; }
+    .confirmation-log-table th { position:sticky; top:0; color:#748094; background:#f6f8fb; font-weight:600; }
+    .confirmation-log-table td { color:#3f4c5f; line-height:1.6; overflow-wrap:anywhere; }
+    .confirmation-log-table th:nth-child(1),.confirmation-log-table td:nth-child(1) { width:22%; }
+    .confirmation-log-table th:nth-child(2),.confirmation-log-table td:nth-child(2) { width:18%; }
+    .confirmation-log-table th:nth-child(3),.confirmation-log-table td:nth-child(3) { width:20%; }
+    .confirmation-log-table th:nth-child(4),.confirmation-log-table td:nth-child(4) { width:40%; }
+    .confirmation-log-empty { padding:20px !important; color:#8994a3 !important; text-align:center !important; }
+    .toast { position:fixed; right:20px; bottom:18px; z-index:20; padding:10px 14px; border:1px solid var(--line); border-radius:7px; background:#fff; box-shadow:0 8px 25px rgba(25,31,45,.1); font-size:12px; }
+    @media(max-width:1200px) { .layout { grid-template-columns:minmax(0,1fr) 360px; }.content { padding:20px; }.wb-kpis { grid-template-columns:repeat(8,minmax(140px,1fr)); }.wb-panels { grid-template-columns:1fr; } }
+    @media(max-width:1100px) { .fulfillment-header { align-items:stretch; flex-direction:column; gap:4px; }.fulfillment-view-tabs { justify-content:flex-start; }.fulfillment-header .fulfillment-toolbar { justify-content:flex-start; } }
+    @media(max-width:800px) { .layout { grid-template-columns:minmax(0,1fr); overflow:auto; }.workspace { height:auto; }.assistant { min-height:680px; margin:0 12px 12px; }.summary { grid-template-columns:repeat(2,minmax(0,1fr)); }.trace-steps { grid-template-columns:repeat(5,minmax(150px,1fr)); overflow-x:auto; padding-bottom:4px; }.fulfillment-rules { grid-template-columns:repeat(2,minmax(0,1fr)); }.dimension-grid { grid-template-columns:1fr; }.fulfillment-toolbar .freshness { margin-left:0; width:100%; } }
+    @media(max-width:560px) { .topbar { height:48px; padding:0 132px 0 12px; }.topbar > #toggleAssistant { right:12px; }.page-tabs { width:100%; }.page-tab { min-width:0; flex:1; }.period-control select { max-width:200px; }.content { padding:16px 12px; }.shortage-formula { grid-template-columns:repeat(2,minmax(0,1fr)); }.fulfillment-rules { grid-template-columns:1fr; }.wb-definition-grid { grid-template-columns:1fr; }.wb-hero { align-items:flex-start; flex-direction:column; }.wb-title-line { gap:8px; }.wb-kpis { grid-template-columns:repeat(8,minmax(140px,1fr)); }.wb-boundary { flex-direction:column; }.wb-context small { width:100%; margin-left:0; }.wb-adopt-overlay { padding:10px; }.wb-adopt-head,.wb-adopt-body,.wb-adopt-foot { padding-left:17px; padding-right:17px; }.wb-adopt-body { padding-top:20px; padding-bottom:24px; }.wb-adopt-fields { grid-template-columns:1fr; }.wb-adopt-foot { flex-wrap:wrap; }.wb-adopt-foot p { flex-basis:100%; } }
+    @media(max-width:560px) { .wb-issue-modal-foot { flex-wrap:wrap; padding-left:17px; padding-right:17px; }.wb-issue-modal-foot p { flex-basis:100%; } }
+
+    .wb-sku-table { table-layout:fixed; }
+    .wb-sku-table th,.wb-sku-table td { overflow-wrap:anywhere; }
+    .wb-sku-table:not(.has-owner) th:nth-child(1) { width:28%; }
+    .wb-sku-table:not(.has-owner) th:nth-child(2) { width:18%; }
+    .wb-sku-table:not(.has-owner) th:nth-child(3) { width:18%; }
+    .wb-sku-table:not(.has-owner) th:nth-child(4) { width:20%; }
+    .wb-sku-table:not(.has-owner) th:nth-child(5) { width:16%; }
+    .wb-sku-table.has-owner th:nth-child(1) { width:23%; }
+    .wb-sku-table.has-owner th:nth-child(2) { width:15%; }
+    .wb-sku-table.has-owner th:nth-child(3) { width:18%; }
+    .wb-sku-table.has-owner th:nth-child(4) { width:14%; }
+    .wb-sku-table.has-owner th:nth-child(5) { width:16%; }
+    .wb-sku-table.has-owner th:nth-child(6) { width:14%; }
+    .wb-region-customer-table { table-layout:fixed; }
+    .wb-region-customer-table th:nth-child(1) { width:44%; }
+    .wb-region-customer-table th:nth-child(2) { width:28%; }
+    .wb-region-customer-table th:nth-child(3),.wb-region-customer-table th:nth-child(4) { width:14%; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="main fulfillment-page" id="mainPage">
+      <header class="topbar"></header>
+      <div class="layout assistant-hidden" id="layout">
+        <div class="workspace">
+          
+          <section class="content" id="fulfillmentView" aria-label="订单履约">
+            <div class="fulfillment-header">
+              <div class="fulfillment-dimension-tabs fulfillment-view-tabs" role="tablist" aria-label="订单履约分析维度">
+                <button class="active" type="button" role="tab" aria-selected="true" aria-controls="deliveryDimensionPanel" tabindex="0" data-fulfillment-dimension="deliveryDimensionPanel">交付/销售</button>
+                <button type="button" role="tab" aria-selected="false" aria-controls="warehouseDimensionPanel" tabindex="-1" data-fulfillment-dimension="warehouseDimensionPanel">仓配</button>
+                <button type="button" role="tab" aria-selected="false" aria-controls="itemDimensionPanel" tabindex="-1" data-fulfillment-dimension="itemDimensionPanel">品项</button>
+              </div>
+              <div class="fulfillment-toolbar"><label for="fulfillmentBaseFilter">基地</label><select id="fulfillmentBaseFilter" aria-label="筛选履约基地"><option value="">全部基地</option><option value="郑州">郑州</option><option value="遂平">遂平</option><option value="西南">西南</option><option value="华东">华东</option><option value="华南">华南</option></select><label class="delivery-filter-only" for="deliveryOrgFilter">销售组织</label><select class="delivery-filter-only" id="deliveryOrgFilter" aria-label="按销售组织或省区/大区筛选"><option value="">全部</option><optgroup label="销售组织"><option value="org:华北销售一部">华北销售一部</option><option value="org:华中销售部">华中销售部</option><option value="org:华东销售部">华东销售部</option><option value="org:华南销售部">华南销售部</option><option value="org:西南销售部">西南销售部</option></optgroup><optgroup label="省区 / 大区"><option value="region:河南省区">河南省区</option><option value="region:四川省区">四川省区</option><option value="region:广东省区">广东省区</option><option value="region:浙江省区">浙江省区</option><option value="region:江苏省区">江苏省区</option><option value="region:湖北省区">湖北省区</option><option value="region:上海市区">上海市区</option><option value="region:华北大区">华北大区</option><option value="region:华中大区">华中大区</option><option value="region:华东大区">华东大区</option><option value="region:华南大区">华南大区</option><option value="region:西南大区">西南大区</option></optgroup></select><label class="delivery-filter-only" for="deliveryChannelFilter">客户类型</label><select class="delivery-filter-only" id="deliveryChannelFilter" aria-label="按客户类型筛选"><option value="">全部客户类型</option><option>经销商</option><option>KA-DC</option><option>KA-MD</option><option>电商仓</option></select><label id="warehouseProviderLabel" for="warehouseProviderFilter" hidden="">承运商</label><select id="warehouseProviderFilter" aria-label="筛选承运商" hidden=""><option value="">全部承运商</option><option>顺丰冷运</option><option>京东冷链</option><option>安能冷链</option><option>跨越速运</option></select><small id="fulfillmentBaseScope">全部基地 · 演示快照</small><small class="freshness">演示数据：订单/运单事件更新 · 库存/排产/调拨每小时 · 快照 2026-10-12</small></div>
+            </div>
+            <div class="summary fulfillment-summary item-summary" id="itemMetricFilters" aria-label="品项指标" hidden="">
+              <div class="metric info"><span>未开订单数</span><strong>28<span class="metric-unit">张</span></strong><small>已进入履约、尚未生成有效 OMS 执行单</small></div>
+              <div class="metric danger"><span>缺货量</span><strong>6,320<span class="metric-unit">件</span></strong><small>当前演示快照终缺总量</small></div>
+              <div class="metric warning"><span>未来五日排产量</span><strong>8,450<span class="metric-unit">件</span></strong><small>按 SKU、基地汇总 · 演示排产量</small></div>
+            </div>
+            <div class="summary fulfillment-summary delivery-summary">
+              <div class="metric info"><div class="metric-head"><span>未开订单数</span><strong>28<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="open-total"><span>已开<strong>32 张</strong></span><span>总数<strong>60 张</strong></span></div></div>
+              <div class="metric danger"><div class="metric-head"><span>超时订单</span><strong>7<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="overdue-stages"><span>备单<strong>3 张</strong></span><span>派车<strong>3 张</strong></span><span>装车<strong>0 张</strong></span><span>在途<strong>1 张</strong></span></div></div>
+              <div class="metric warning"><div class="metric-head"><span>预警订单</span><strong>9<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="warning-stages"><span>备单<strong>4 张</strong></span><span>派车<strong>3 张</strong></span><span>装车<strong>0 张</strong></span><span>在途<strong>2 张</strong></span></div></div>
+              <div class="metric danger"><div class="metric-head"><span>未开订单缺货量</span><strong>6,320<span class="metric-unit">件</span></strong></div><div class="metric-breakdown" data-breakdown="open-total"><span>已开<strong>32 张</strong></span><span>总数<strong>60 张</strong></span></div></div>
+              <div class="metric warning"><div class="metric-head"><span>未开订单满足率</span><strong>94.6<span class="metric-unit">%</span></strong></div><div class="metric-breakdown" data-breakdown="open-total"><span>已开<strong>32 张</strong></span><span>总数<strong>60 张</strong></span></div></div>
+            </div>
+            <div class="summary fulfillment-summary warehouse-summary delivery-summary" hidden="">
+              <div class="metric info"><div class="metric-head"><span>已开订单数</span><strong>32<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="open-total"><span>未开<strong>28 张</strong></span><span>总数<strong>60 张</strong></span></div></div>
+              <div class="metric danger"><div class="metric-head"><span>超时订单</span><strong>7<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="overdue-stages"><span>备单<strong>3 张</strong></span><span>派车<strong>3 张</strong></span><span>装车<strong>0 张</strong></span><span>在途<strong>1 张</strong></span></div></div>
+              <div class="metric warning"><div class="metric-head"><span>预警订单</span><strong>9<span class="metric-unit">张</span></strong></div><div class="metric-breakdown" data-breakdown="warning-stages"><span>备单<strong>4 张</strong></span><span>派车<strong>3 张</strong></span><span>装车<strong>0 张</strong></span><span>在途<strong>2 张</strong></span></div></div>
+              <div class="metric warning"><div class="metric-head"><span>已开订单满足率</span><strong>94.6<span class="metric-unit">%</span></strong></div><div class="metric-breakdown" data-breakdown="open-total"><span>未开<strong>28 张</strong></span><span>总数<strong>60 张</strong></span></div></div>
+            </div>
+            <section class="fulfillment-analysis" aria-labelledby="fulfillmentAnalysisTitle">
+              <div class="fulfillment-analysis-head"><div class="fulfillment-analysis-label"><i aria-hidden="true">✦</i><div><h2 id="fulfillmentAnalysisTitle">AI 分析</h2><small>订单质量 · 供应满足 · 交付时效 · 库存保障</small></div></div><span>演示快照 2026-10-12</span></div>
+              <h3>优先协调当天缺货，复盘交付延迟</h3>
+              <p>演示履约状态共 60 张，未开订单 28 张、需求量 12,480 件；去重后超时订单 7 张、预警订单 9 张（分别命中 9 次、12 次节点事件）。订单满足率为 94.6%，未开订单终缺 6,320 件。建议优先协调当天缺口，再按区域、渠道复盘延期与缺货原因。</p>
+              <div class="fulfillment-analysis-copy" id="fulfillmentAnalysisDimensions"></div>
+              <div class="fulfillment-analysis-foot"><span>✦ 依据当前履约快照分析 · 准交率为已完成订单样本口径</span><button type="button" id="fulfillmentAnalysisChat">在会话中深入分析 →</button></div>
+            <details class="author-questions"><summary>快捷分析问题</summary><button type="button" data-fulfillment-question="帮我查河南省区冷鲜肉水饺的缺货订单，未来 5 日排产能否补足？">帮我查河南省区冷鲜肉水饺的缺货订单，未来 5 日排产能否补足？</button><button type="button" data-fulfillment-question="今天有哪些订单已超时或处于预警，分别卡在哪个履约节点？">今天有哪些订单已超时或处于预警，分别卡在哪个履约节点？</button><button type="button" data-fulfillment-question="郑州基地冷鲜肉水饺 当前可用库存多少、可发货几天、影响哪些订单？">郑州基地冷鲜肉水饺 当前可用库存多少、可发货几天、影响哪些订单？</button><button type="button" data-fulfillment-question="遂平基地纸皮烧麦未来 5 日排产能覆盖未满足订单吗？">遂平基地纸皮烧麦未来 5 日排产能覆盖未满足订单吗？</button><button type="button" data-fulfillment-question="仓华东基地有哪些订单尚未发车或运输超时，分别对应哪个物流商？">仓华东基地有哪些订单尚未发车或运输超时，分别对应哪个物流商？</button></details><p id="fulfillmentQuoteStatus" role="status"></p></section>
+            <section class="card fulfillment-dimensions delivery-dimension-active" aria-label="订单履约多维分析">
+              <p class="dimension-note" id="fulfillmentDimensionScope" style="margin:12px 18px 0" hidden="">全部基地 · 订单、区域、仓库、生产、调拨及库存货龄均为模拟数据。</p>
+              <section class="fulfillment-dimension-panel" id="deliveryDimensionPanel" role="tabpanel">
+                <div class="dimension-panel-head" hidden=""><div><h2>交付 / 销售分析</h2><p>按销售组织、省区/大区、渠道分析订单履约；区域筛选待销售组织映射接入</p></div><small>订单口径 · 张</small></div>
+                <div class="dimension-grid delivery-chart-grid-single">
+                  <article class="dimension-card"><h3>订单状态分布</h3><p>按订单状态统计去重订单数；预警、超时、正常为互斥演示分类。点击状态可查看数量明细。</p><div class="dimension-table-wrap"><svg class="delivery-line-chart order-status-chart" viewBox="0 0 640 250" role="img" aria-labelledby="orderStatusChartTitle orderStatusChartDesc"><title id="orderStatusChartTitle">订单状态及风险数量折线图</title><desc id="orderStatusChartDesc">演示数据，仅展示备单中、派车中、装车中和在途。各状态下分别显示订单总量、预警数量、超时数量和正常数量。</desc>
+                    <g class="chart-legend"><line class="chart-line total" x1="72" y1="24" x2="91" y2="24"></line><text x="97" y="28" fill="#687b95">订单总量</text><line class="chart-line warning" x1="190" y1="24" x2="209" y2="24"></line><text x="215" y="28" fill="#b77b17">预警数量</text><line class="chart-line timeout" x1="315" y1="24" x2="334" y2="24"></line><text x="340" y="28" fill="#d13b50">超时数量</text><line class="chart-line normal" x1="440" y1="24" x2="459" y2="24"></line><text x="465" y="28" fill="#21845f">正常数量</text></g>
+                    <line class="chart-grid" x1="56" y1="180" x2="610" y2="180"></line><line class="chart-grid" x1="56" y1="128" x2="610" y2="128"></line><line class="chart-grid" x1="56" y1="76" x2="610" y2="76"></line><text class="chart-axis" x="18" y="184">0</text><text class="chart-axis" x="12" y="132">6</text><text class="chart-axis" x="12" y="80">12</text>
+                    <polyline class="chart-line total" points="115,76 255,102 395,119.3 535,84.7"></polyline><polyline class="chart-line warning" points="115,145.3 255,154 395,162.7 535,154"></polyline><polyline class="chart-line timeout" points="115,154 255,162.7 395,162.7 535,162.7"></polyline><polyline class="chart-line normal" points="115,136.7 255,145.3 395,154 535,128"></polyline>
+                    <circle class="chart-dot total" cx="115" cy="76" r="4.5"></circle><circle class="chart-dot total" cx="255" cy="102" r="4.5"></circle><circle class="chart-dot total" cx="395" cy="119.3" r="4.5"></circle><circle class="chart-dot total" cx="535" cy="84.7" r="4.5"></circle>
+                    <circle class="chart-dot warning" cx="115" cy="145.3" r="3.5"></circle><circle class="chart-dot warning" cx="255" cy="154" r="3.5"></circle><circle class="chart-dot warning" cx="395" cy="162.7" r="3.5"></circle><circle class="chart-dot warning" cx="535" cy="154" r="3.5"></circle>
+                    <circle class="chart-dot timeout" cx="115" cy="154" r="3.5"></circle><circle class="chart-dot timeout" cx="255" cy="162.7" r="3.5"></circle><circle class="chart-dot timeout" cx="395" cy="162.7" r="3.5"></circle><circle class="chart-dot timeout" cx="535" cy="162.7" r="3.5"></circle>
+                    <circle class="chart-dot normal" cx="115" cy="136.7" r="3.5"></circle><circle class="chart-dot normal" cx="255" cy="145.3" r="3.5"></circle><circle class="chart-dot normal" cx="395" cy="154" r="3.5"></circle><circle class="chart-dot normal" cx="535" cy="128" r="3.5"></circle>
+                    <text class="chart-value" x="115" y="61">12 张</text><text class="chart-value" x="255" y="87">9 张</text><text class="chart-value" x="395" y="104">7 张</text><text class="chart-value" x="535" y="70">11 张</text>
+                    <text class="chart-axis" x="115" y="215" text-anchor="middle">备单中</text><text class="chart-axis" x="255" y="215" text-anchor="middle">派车中</text><text class="chart-axis" x="395" y="215" text-anchor="middle">装车中</text><text class="chart-axis" x="535" y="215" text-anchor="middle">在途</text><text class="chart-axis" x="333" y="241" text-anchor="middle">订单数量（张） · 点击状态查看数量</text>
+                    <rect class="chart-status-hit" x="80" y="54" width="70" height="166" data-order-status="备单中" data-total="12" data-warning="4" data-timeout="3" data-normal="5" tabindex="0" role="button" aria-label="备单中：订单总量 12 张，预警 4 张，超时 3 张，正常 5 张"></rect><rect class="chart-status-hit" x="220" y="54" width="70" height="166" data-order-status="派车中" data-total="9" data-warning="3" data-timeout="2" data-normal="4" tabindex="0" role="button" aria-label="派车中：订单总量 9 张，预警 3 张，超时 2 张，正常 4 张"></rect><rect class="chart-status-hit" x="360" y="54" width="70" height="166" data-order-status="装车中" data-total="7" data-warning="2" data-timeout="2" data-normal="3" tabindex="0" role="button" aria-label="装车中：订单总量 7 张，预警 2 张，超时 2 张，正常 3 张"></rect><rect class="chart-status-hit" x="500" y="54" width="70" height="166" data-order-status="在途" data-total="11" data-warning="3" data-timeout="2" data-normal="6" tabindex="0" role="button" aria-label="在途：订单总量 11 张，预警 3 张，超时 2 张，正常 6 张"></rect></svg></div><div class="order-status-chart-detail" id="orderStatusChartDetail" aria-live="polite" hidden=""></div></article>
+                  <article class="dimension-card" hidden=""><h3>满足率区间分布</h3><p>按订单商品需求量与实际发货量计算订单满足率，再按区间统计订单数。</p><div class="dimension-table-wrap"><svg class="delivery-line-chart" viewBox="0 0 640 250" role="img" aria-labelledby="fillRateChartTitle fillRateChartDesc"><title id="fillRateChartTitle">满足率区间分布折线图</title><desc id="fillRateChartDesc">五个满足率区间的演示订单数依次为 1、3、8、25、23 张。</desc><line class="chart-grid" x1="56" y1="180" x2="610" y2="180"></line><line class="chart-grid" x1="56" y1="128" x2="610" y2="128"></line><line class="chart-grid" x1="56" y1="76" x2="610" y2="76"></line><text class="chart-axis" x="18" y="184">0</text><text class="chart-axis" x="12" y="132">30</text><text class="chart-axis" x="12" y="80">60</text><polyline class="chart-line" points="85,179.1 205,177.4 325,173.1 445,157.5 565,160.9"></polyline><circle class="chart-dot" cx="85" cy="179.1" r="5"></circle><circle class="chart-dot" cx="205" cy="177.4" r="5"></circle><circle class="chart-dot" cx="325" cy="173.1" r="5"></circle><circle class="chart-dot" cx="445" cy="157.5" r="5"></circle><circle class="chart-dot" cx="565" cy="160.9" r="5"></circle><text class="chart-value" x="85" y="163">1</text><text class="chart-value" x="205" y="161">3</text><text class="chart-value" x="325" y="157">8</text><text class="chart-value" x="445" y="142">25</text><text class="chart-value" x="565" y="145">23</text><text class="chart-axis" x="85" y="215" text-anchor="middle">70%以下</text><text class="chart-axis" x="205" y="215" text-anchor="middle">70%–80%</text><text class="chart-axis" x="325" y="215" text-anchor="middle">80%–90%</text><text class="chart-axis" x="445" y="215" text-anchor="middle">90%–95%</text><text class="chart-axis" x="565" y="215" text-anchor="middle">95%以上</text><text class="chart-axis" x="333" y="241" text-anchor="middle">订单数量（张） · 演示数据</text></svg></div><p class="dimension-note">满足率 = min（实际发货量 ÷ 订单需求量，100%）；合计 60 张订单。</p></article>
+                  <article class="dimension-card" hidden=""><h3>未开订单与缺货</h3><p>未开订单指已进入履约流程、但尚未生成有效 OMS 执行单的有效订单。</p><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>未开订单数</th><th>未开需求量</th><th>可用库存</th><th>未开订单缺货量</th><th>计算口径</th></tr></thead><tbody><tr><td>28 张</td><td>12,480 件</td><td>6,160 件</td><td>6,320 件</td><td>MAX（需求量 − 可用库存量，0）</td></tr></tbody></table></div></article>
+                  <article class="dimension-card" hidden=""><h3>交付原因分析</h3><p>按超时/预警节点归因，并支持下钻至订单；同一订单跨多个节点时，原因可多选，订单数需去重。</p><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>原因环节</th><th>待分析内容</th><th>涉及订单</th><th>占比</th></tr></thead><tbody><tr><td>备单 / 库存不足</td><td>库存覆盖不足、需开单时间临近</td><td>8 张</td><td>38%</td></tr><tr><td>派车 / 装车延迟</td><td>车辆确认和装车等待时间偏长</td><td>7 张</td><td>33%</td></tr><tr><td>在途 / 到货延迟</td><td>承诺到货晚于客户签收时点</td><td>6 张</td><td>29%</td></tr></tbody></table></div></article>
+                </div>
+                <div class="dimension-panel-head" style="margin:22px 0 12px" hidden=""><div><h2>订单明细与销售组织维度</h2><p>明细支持从订单号、客户和商品下钻，并关联销售区域、人员、基地与物流商</p></div><small>来源订单 / 执行单</small></div>
+                <div class="dimension-grid" hidden="">
+                  <article class="dimension-card"><h3>订单明细字段</h3><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>字段组</th><th>展示字段</th><th>演示字段覆盖</th></tr></thead><tbody><tr><td>订单标识</td><td>订单号、订单创建时间</td><td>完整展示，创建时间精确到分钟</td></tr><tr><td>客户 / 销售</td><td>客户名称编码、销售组、省区、大区、客户类型（渠道）、销售人员、订单人员</td><td>组织、区域、渠道及人员均为演示映射</td></tr><tr><td>履约资源</td><td>所属基地、所属物流商（一单一物流商）</td><td>基地、提货点和承运物流商均为演示数据</td></tr><tr><td>订单与商品</td><td>订单状态、交付状态、SKU 名称及编码、SKU 订单数量、SKU 缺货数量、整单满足率</td><td>订单及 SKU 明细按演示样本展示</td></tr></tbody></table></div></article>
+                  <article class="dimension-card"><h3>省区 / 大区风险分布</h3><p>按销售组织聚合超时订单、预警订单、未开订单、满足率区间及缺货订单/缺货品。</p><div class="dimension-table-wrap"><table class="dimension-table"><thead><tr><th>统计层级</th><th>超时 / 预警</th><th>未开订单</th><th>满足率区间</th><th>缺货订单 / 品</th></tr></thead><tbody><tr><td>华北大区</td><td>2 / 3 张</td><td>8 张</td><td>90%–95%</td><td>6 张 / 5 个 SKU</td></tr><tr><td>河南省区</td><td>2 / 2 张</td><td>6 张</td><td>90%–95%</td><td>4 张 / 3 个 SKU</td></tr><tr><td>华北销售一部 / 经销商</td><td>1 / 2 张</td><td>5 张</td><td>95% 以上</td><td>3 张 / 3 个 SKU</td></tr></tbody></table></div></article>
+                </div><p class="dimension-note" hidden="">超时订单和预警订单以订单去重后计数；同单多个 SKU 可分别统计缺货量，但整单满足率按订单需求量汇总。销售组织、区域、渠道筛选使用演示映射。</p>
+                <div class="delivery-order-detail-card">
+                  <div class="delivery-order-view-tabs" role="tablist" aria-label="订单明细视图"><button id="deliveryOrderListTab" type="button" role="tab" aria-selected="true" aria-controls="deliveryOrderListPanel" tabindex="0" data-delivery-order-tab="deliveryOrderListPanel">订单明细</button><button id="deliveryBaseCompareTab" type="button" role="tab" aria-selected="false" aria-controls="deliveryBaseComparePanel" tabindex="-1" data-delivery-order-tab="deliveryBaseComparePanel">基地对比</button><button id="deliveryRegionCompareTab" type="button" role="tab" aria-selected="false" aria-controls="deliveryRegionComparePanel" tabindex="-1" data-delivery-order-tab="deliveryRegionComparePanel">省区对比</button></div>
+                  <section class="delivery-order-view-panel" id="deliveryOrderListPanel" role="tabpanel" aria-labelledby="deliveryOrderListTab"><div class="delivery-order-panel-tools"><small id="deliveryOrderCount" aria-live="polite">演示数据 · 17 张</small><div class="delivery-order-searches" role="search" aria-label="筛选订单明细"><input id="deliveryOrderNumberQuery" type="search" placeholder="订单单号" aria-label="查询订单单号" autocomplete="off"><input id="deliveryCustomerQuery" type="search" placeholder="客户名称 / 编码" aria-label="查询客户信息" autocomplete="off"><input id="deliveryRegionQuery" type="search" placeholder="省区" aria-label="查询省区" autocomplete="off"><select id="deliveryStatusQuery" aria-label="按交付状态筛选"><option value="">全部交付状态</option><option value="正常">正常</option><option value="预警">预警</option><option value="超时">超时</option></select><select id="deliveryBaseQuery" aria-label="按基地筛选"><option value="">全部基地</option><option>郑州</option><option>遂平</option><option>西南</option><option>华东</option><option>华南</option></select></div></div>
+                <div class="dimension-table-wrap" role="region" aria-label="订单明细表，可横向滚动" tabindex="0"><table class="dimension-table delivery-order-table"><thead><tr><th>展开</th><th>订单单号</th><th>订单创建时间</th><th>客户名称编码</th><th>销售组</th><th>省区</th><th>大区</th><th>客户类型</th><th>销售人员</th><th>订单人员</th><th>所属基地</th><th>所属物流商</th><th>订单状态</th><th>交付状态</th><th>订单满足率</th><th>原始数量</th><th>调整数量</th><th>实占数量</th><th>发货数量</th><th>下单数量</th><th>确认状态</th><th>操作</th></tr></thead><tbody id="deliveryOrderDetailRows"></tbody></table></div>
+                    <p class="dimension-note">本表中的客户、组织、区域、人员、物流商及时间均为演示样例；数量为模拟展示，实际口径以业务系统字段定义为准。整单满足率按 1 − 缺货数量 ÷ 订货数量计算。</p></section>
+                  <section class="delivery-order-view-panel" id="deliveryBaseComparePanel" role="tabpanel" aria-labelledby="deliveryBaseCompareTab" hidden=""><div class="dimension-table-wrap"><table class="dimension-table delivery-base-compare-table"><thead><tr><th rowspan="2">展开</th><th rowspan="2">基地</th><th rowspan="2">订单总数</th><th rowspan="2">超时订单</th><th rowspan="2">预警订单</th><th rowspan="2">未开订单数</th><th rowspan="2">未开订单缺货量</th><th rowspan="2">订单满足率</th><th colspan="5">满足率区间（订单数）</th></tr><tr><th>70%以下</th><th>70%-80%</th><th>80%-90%</th><th>90%-95%</th><th>95%以上</th></tr></thead><tbody id="deliveryBaseCompareRows"></tbody></table></div><p class="dimension-note">基地维度的订单及履约指标为演示数据，可使用顶部基地筛选缩小对比范围；满足率区间按订单数统计，合计与订单总数一致。</p></section>
+                  <section class="delivery-order-view-panel" id="deliveryRegionComparePanel" role="tabpanel" aria-labelledby="deliveryRegionCompareTab" hidden=""><div class="dimension-table-wrap"><table class="dimension-table delivery-region-compare-table"><thead><tr><th rowspan="2">展开</th><th rowspan="2">省区</th><th rowspan="2">订单总数</th><th rowspan="2">超时订单</th><th rowspan="2">预警订单</th><th rowspan="2">未开订单数</th><th rowspan="2">未开订单缺货量</th><th rowspan="2">订单满足率</th><th colspan="5">满足率区间（订单数）</th></tr><tr><th>70%以下</th><th>70%-80%</th><th>80%-90%</th><th>90%-95%</th><th>95%以上</th></tr></thead><tbody id="deliveryRegionCompareRows"></tbody></table></div><p class="dimension-note">省区维度的订单及履约指标为演示数据；展开可按订单状态查看汇总，满足率区间按订单数统计。</p></section>
+                </div>
+              </section>
+              <section class="fulfillment-dimension-panel" id="warehouseDimensionPanel" role="tabpanel" hidden="">
+                <div class="warehouse-detail-tabs delivery-order-view-tabs" role="tablist" aria-label="仓配情况类型"><button id="warehouseBaseTab" type="button" role="tab" aria-selected="true" aria-controls="warehouseBaseDetailPanel" data-warehouse-detail-tab="warehouseBaseDetailPanel">基地情况</button><button id="warehouseLogisticsTab" type="button" role="tab" aria-selected="false" aria-controls="warehouseLogisticsDetailPanel" data-warehouse-detail-tab="warehouseLogisticsDetailPanel" tabindex="-1">承运商情况</button><button id="warehouseOrderTab" type="button" role="tab" aria-selected="false" aria-controls="warehouseOrderDetailPanel" data-warehouse-detail-tab="warehouseOrderDetailPanel" tabindex="-1">订单明细</button></div>
+                <div class="warehouse-detail-panel warehouse-base-detail-panel" id="warehouseBaseDetailPanel" role="tabpanel" aria-labelledby="warehouseBaseTab">
+                <div class="dimension-table-wrap"><table class="dimension-table warehouse-base-table"><thead><tr><th>展开</th><th>基地</th><th>超时订单</th><th>预警订单</th><th>未开订单数</th><th>订单满足率</th><th>缺货订单数</th></tr></thead><tbody><tr data-warehouse-base="郑州"><td>郑州</td><td>2 张</td><td>2 张</td><td>8 张</td><td>93.8%</td><td>5 张</td></tr><tr data-warehouse-base="遂平"><td>遂平</td><td>1 张</td><td>2 张</td><td>5 张</td><td>94.3%</td><td>3 张</td></tr><tr data-warehouse-base="西南"><td>西南</td><td>1 张</td><td>2 张</td><td>4 张</td><td>95.1%</td><td>3 张</td></tr><tr data-warehouse-base="华东"><td>华东</td><td>2 张</td><td>2 张</td><td>7 张</td><td>94.8%</td><td>4 张</td></tr><tr data-warehouse-base="华南"><td>华南</td><td>1 张</td><td>1 张</td><td>4 张</td><td>95.7%</td><td>2 张</td></tr></tbody></table></div>
+                <p class="dimension-note">五基地数据为演示快照，订单满足率按需求量与实际满足量计算；超时、预警及缺货订单均按订单去重。新增字段暂未配置数据，以“—”占位。</p>
+                </div>
+                <div class="warehouse-detail-panel" id="warehouseLogisticsDetailPanel" role="tabpanel" aria-labelledby="warehouseLogisticsTab" aria-label="承运商情况" hidden="">
+                  <div class="dimension-table-wrap"><table class="dimension-table warehouse-carrier-table"><thead><tr><th>展开</th><th>承运商</th><th>超时订单</th><th>预警订单</th><th>未开订单数</th><th>订单满足率</th><th>缺货订单数</th></tr></thead><tbody><tr data-warehouse-carrier="顺丰冷运"><td>顺丰冷运</td><td>2 张</td><td>3 张</td><td>8 张</td><td>93.8%</td><td>5 张</td></tr><tr data-warehouse-carrier="京东冷链"><td>京东冷链</td><td>1 张</td><td>2 张</td><td>6 张</td><td>94.2%</td><td>4 张</td></tr><tr data-warehouse-carrier="安能冷链"><td>安能冷链</td><td>2 张</td><td>2 张</td><td>7 张</td><td>94.8%</td><td>4 张</td></tr><tr data-warehouse-carrier="跨越速运"><td>跨越速运</td><td>2 张</td><td>2 张</td><td>7 张</td><td>95.1%</td><td>4 张</td></tr></tbody></table></div><p class="dimension-note">承运商维度按订单去重统计超时、预警、未开、满足率及缺货订单；样例为演示数据。</p>
+                </div>
+                <div class="warehouse-detail-panel" id="warehouseOrderDetailPanel" role="tabpanel" aria-labelledby="warehouseOrderTab" aria-label="订单明细" hidden="">
+                  <div class="dimension-table-wrap" role="region" aria-label="仓配订单明细表，可横向滚动" tabindex="0"><table class="dimension-table delivery-order-table"><thead><tr><th>展开</th><th>订单单号</th><th>订单创建时间</th><th>客户名称编码</th><th>销售组</th><th>省区</th><th>大区</th><th>客户类型</th><th>销售人员</th><th>订单人员</th><th>所属基地</th><th>所属物流商</th><th>订单状态</th><th>交付状态</th><th>订单满足率</th><th>原始数量</th><th>调整数量</th><th>实占数量</th><th>发货数量</th><th>下单数量</th></tr></thead><tbody id="warehouseOrderDetailRows"></tbody></table></div>
+                  <p class="dimension-note">订单字段及数量口径与交付/销售订单明细保持一致；新增数量为演示数据，实际以业务系统字段定义为准。</p>
+                </div>
+              </section>
+              <section class="fulfillment-dimension-panel" id="itemDimensionPanel" role="tabpanel" hidden="">
+                <section class="fulfillment-analysis item-analysis" aria-label="品项维度 AI 分析">
+                  <div class="fulfillment-analysis-head"><div class="fulfillment-analysis-label"><i aria-hidden="true">✦</i><div><h2>AI 分析</h2><small>SKU 缺货 · 库存保障 · 生产与订单进度</small></div></div><span>演示快照 2026-10-12</span></div>
+                  <h3>优先核实终缺 SKU 的基地库存与未来排产</h3>
+                  <p>演示快照显示整体终缺量为 6,320 件，当前五日排产量 8,450 件。郑州骨肉相连库存可发 6.2 天、遂平纸皮烧麦 4.8 天；建议优先保障低库存天数 SKU，并结合未来排产与长货龄库存安排调拨或补产。</p>
+                  <div class="fulfillment-analysis-foot"><span>✦ SKU 库存、货龄、销售、生产与订单进度均为模拟演示数据</span><button type="button" id="itemAnalysisChat">在会话中分析品项风险 →</button></div>
+                </section>
+                <div class="dimension-card item-detail-card">
+                  <div class="item-progress-bar"><div class="item-progress-tabs delivery-order-view-tabs" role="tablist" aria-label="SKU明细类型"><button id="itemInventoryTab" type="button" role="tab" aria-selected="true" aria-controls="itemInventoryPanel" data-item-progress-tab="itemInventoryPanel" tabindex="0">SKU 库存明细</button><button id="itemCoordinationTab" type="button" role="tab" aria-selected="false" aria-controls="itemCoordinationPanel" data-item-progress-tab="itemCoordinationPanel" tabindex="-1">产销协同表</button></div><div class="item-coordination-filters" id="itemCoordinationFilters" hidden=""><input id="itemCoordinationSearch" type="search" placeholder="搜索产品编号、名称、品项" aria-label="搜索产销协同表"><select id="itemCoordinationBase" aria-label="按提货点筛选"><option value="">全部提货点</option></select></div></div>
+                  <div class="dimension-table-wrap item-content-panel" id="itemInventoryPanel" role="tabpanel" aria-labelledby="itemInventoryTab"><table class="dimension-table item-detail-table"><thead><tr><th>SKU名称编码</th><th>应责总监</th><th>品项</th><th>系列</th><th>产品标签</th><th>自产品标签</th><th>所属基地</th><th>基地库存数</th><th>OEM库存数</th><th>可发货天数</th><th>货龄 40 天以内</th><th>货龄 40–60 天</th><th>货龄 60–90 天</th><th>货龄 90–120 天</th><th>货龄 120 天以上</th></tr></thead><tbody><tr><td>预制食材 · 骨肉相连 1kg（SKU-PR-001）</td><td>—</td><td>预制食材</td><td>—</td><td>—</td><td>—</td><td>郑州</td><td>2,480 件</td><td>360 件</td><td>6.2 天</td><td>1,120 件</td><td>720 件</td><td>420 件</td><td>160 件</td><td>60 件</td></tr><tr><td>面点 · 纸皮烧麦（SKU-DM-014）</td><td>—</td><td>面点</td><td>—</td><td>—</td><td>—</td><td>遂平</td><td>1,860 件</td><td>240 件</td><td>4.8 天</td><td>820 件</td><td>560 件</td><td>310 件</td><td>120 件</td><td>50 件</td></tr><tr><td>水饺 · 猪肉白菜水饺（SKU-DU-032）</td><td>—</td><td>水饺</td><td>—</td><td>—</td><td>—</td><td>西南</td><td>3,240 件</td><td>520 件</td><td>8.1 天</td><td>1,540 件</td><td>920 件</td><td>520 件</td><td>190 件</td><td>70 件</td></tr><tr><td>火锅料 · 鱼豆腐 2.5kg（SKU-HG-008）</td><td>—</td><td>火锅料</td><td>—</td><td>—</td><td>—</td><td>华东</td><td>1,420 件</td><td>180 件</td><td>3.6 天</td><td>560 件</td><td>390 件</td><td>280 件</td><td>130 件</td><td>60 件</td></tr></tbody></table></div>
+                  <article class="item-progress-panel item-content-panel" id="itemCoordinationPanel" role="tabpanel" aria-labelledby="itemCoordinationTab" hidden="">
+                    <div class="dimension-table-wrap" role="region" aria-label="产销协同表，可横向滚动" tabindex="0"><table class="dimension-table item-coordination-table" id="itemCoordinationTable"><thead></thead><tbody></tbody></table></div>
+                    <div class="item-coordination-pagination"><span id="itemCoordinationCount">产销协同数据</span><span id="itemCoordinationPageInfo"></span><button id="itemCoordinationPrev" type="button">上一页</button><button id="itemCoordinationNext" type="button">下一页</button></div>
+                    <p class="dimension-note">数据来源：按基缺货排产联动表（交期）工作簿；按基本信息、销售信息、生产信息、库存信息分组展示。</p>
+                  </article>
+                </div>
+                <p class="dimension-note">SKU 库存明细为模拟数据；产销协同表展示工作簿数据。库存货龄区间按 SKU 批次库存量展示。</p>
+              </section>
+            </section>
+            <section class="card fulfillment-tabs-card" aria-label="订单风险专题与穿透明细" hidden="">
+              <div class="dimension-panel-head" style="padding:16px 18px 0;margin-bottom:0"><div><h2>风险专题与订单穿透</h2><p>按上方分析维度定位问题后，可在这里查看节点、风险、缺货形成过程和订单级明细</p></div><small>订单 / 运单明细</small></div>
+              <div class="fulfillment-tab-panel" id="fulfillmentTracePanel" role="region" aria-label="订单节点追踪"><div class="card-head"><div><h2 id="traceTitle">订单节点追踪</h2><p>按最晚节点时间提前 2 小时预警；超出最晚时间标记超时</p></div><span>60 张在途履约订单</span></div><div class="trace-steps"><article class="trace-step"><span>备单中</span><strong>12</strong><small><b>4 预警 · 3 超时</b><br>最晚开单时间</small></article><article class="trace-step"><span>派车中</span><strong>9</strong><small><b>3 预警 · 2 超时</b><br>最晚到厂时间</small></article><article class="trace-step"><span>装车中</span><strong>7</strong><small><b>2 预警 · 2 超时</b><br>最晚发车时间</small></article><article class="trace-step"><span>在途</span><strong>11</strong><small><b>3 预警 · 2 超时</b><br>开单确认到货时间</small></article><article class="trace-step done"><span>已完成</span><strong>21</strong><small>18 准交 · 3 延迟<br>GPS 围栏／到货确认</small></article></div><p class="trace-rule">夜间规则：当最晚节点时间位于 18:00 至次日 10:30，订单在当天下午 14:00 后进入预警；整张订单任一应有节点时间为空时标记为异常订单。</p></div>
+              <div class="fulfillment-tab-panel" id="fulfillmentRiskPanel" role="tabpanel" aria-labelledby="fulfillmentRiskTab" tabindex="0" hidden=""><div class="card-head"><div><h2 id="riskTitle">终端缺货风险</h2><p>按终缺量与无法满足判断排序</p></div><span>Top 4</span></div><div class="risk-list"><article class="risk-item"><span>1</span><div><strong>郑州 · 预制食材</strong><small>排产与调拨仍无法覆盖</small></div><b>1,540 件</b></article><article class="risk-item"><span>2</span><div><strong>遂平 · 面点</strong><small>白班 +60h / 夜班 +72h</small></div><b>1,280 件</b></article><article class="risk-item"><span>3</span><div><strong>西南 · 水饺</strong><small>在途到货晚于需开单时间</small></div><b>980 件</b></article><article class="risk-item"><span>4</span><div><strong>华东 · 火锅料</strong><small>库存不足，待排产补位</small></div><b>760 件</b></article></div></div>
+
+
+              <div class="fulfillment-tab-panel" id="fulfillmentShortagePanel" role="tabpanel" aria-labelledby="fulfillmentShortageTab" tabindex="0" hidden=""><div class="card-head"><div><h2 id="shortageTitle">缺货穿透</h2><p>订单按需开单时间排序，库存优先分配，再按入库时间分配 5 日内排产与调拨</p></div><span>单位：件</span></div><div class="shortage-formula"><div class="formula-item"><span>原始缺货</span><strong>9,860</strong><small>调整需求 - 占单</small></div><div class="formula-item"><span>库存补位</span><strong>-2,310</strong><small>良品可用库存</small></div><div class="formula-item"><span>排产／调拨补位</span><strong>-1,230</strong><small>排产 980 · 调拨 250</small></div><div class="formula-item final"><span>最终终缺</span><strong>6,320</strong><small>仍需立即解决</small></div></div><div class="shortage-bars"><div class="shortage-bar"><span>当天及之前</span><div class="shortage-bar-track"><i style="width:34.5%"></i></div><b>2,180</b></div><div class="shortage-bar"><span>未来 5 日</span><div class="shortage-bar-track"><i style="width:77.1%"></i></div><b>4,870</b></div><div class="shortage-bar"><span>预计无法满足</span><div class="shortage-bar-track"><i style="width:24.4%"></i></div><b>1,540</b></div></div></div>
+
+            <div class="fulfillment-tab-panel" id="fulfillmentDetailPanel" role="tabpanel" aria-labelledby="fulfillmentDetailTab" tabindex="0" hidden=""><div class="orders-card-head"><h2>缺货订单穿透明细</h2><span class="orders-count" id="ordersCount">显示 17 / 17 条</span><div class="order-filters" role="search" aria-label="筛选缺货订单"><input id="orderNumberSearch" type="search" autocomplete="off" placeholder="来源单号 / 执行单号" aria-label="按来源单号或执行单号模糊查询"><input id="customerSearch" type="search" autocomplete="off" placeholder="客户名称 / 编码" aria-label="按客户名称或客户编码模糊查询"><div class="warehouse-picker" id="warehousePicker"><input id="warehouseSearch" type="search" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="warehouseOptions" placeholder="全部基地 / 提货点" aria-label="搜索并单选基地或提货点"><button id="warehouseToggle" type="button" aria-label="展开基地或提货点选项">⌄</button><div class="warehouse-options" id="warehouseOptions" role="listbox" hidden=""></div></div><select id="omsStatusFilter" aria-label="按履约节点筛选"><option value="">全部履约节点</option><option value="备单中">备单中</option><option value="派车中">派车中</option><option value="装车中">装车中</option><option value="在途">在途</option></select><select id="shortageWindowFilter" aria-label="按缺货时间窗口筛选"><option value="">全部时间窗口</option><option value="当天及之前">当天及之前</option><option value="未来5日">未来 5 日</option><option value="5日后">5 日后</option></select></div></div><div class="table-wrap"><table class="orders"><thead><tr><th>来源单 / 执行单</th><th>客户 / 类型</th><th>基地 / 提货点</th><th>品类 / 产品</th><th>需求 / 占单 / 终缺</th><th>需开单 / 预计满足</th><th>履约节点 / 预警</th><th>当前关注点</th></tr></thead><tbody>
+              <tr data-order-row="" data-customer-code="10020101" data-stage="备单中" data-window="未来5日"><td><strong>DMS-1012-001</strong><small>E2600120011</small></td><td><strong>郑州核心经销商</strong><small>经销商 · 10020101</small></td><td><strong>郑州</strong><small>思念食品工厂</small></td><td><strong>预制食材</strong><small>骨肉相连 1kg</small></td><td class="quantity-cell"><strong>1,800 / 1,150</strong><b>终缺 650</b></td><td><strong>10-13 08:30</strong><small>10-15 16:00</small></td><td><span class="status pending">备单中</span><small class="alert-tag warning">预警 · 1.4h</small></td><td>排产与调拨不足，需补充供应方案</td></tr>
+              <tr data-order-row="" data-customer-code="10020102" data-stage="派车中" data-window="未来5日"><td><strong>DMS-1012-002</strong><small>E2600120018</small></td><td><strong>遂平餐饮渠道</strong><small>经销商 · 10020102</small></td><td><strong>遂平</strong><small>新遂平生产基地</small></td><td><strong>面点</strong><small>纸皮烧麦</small></td><td class="quantity-cell"><strong>1,600 / 1,010</strong><b>终缺 590</b></td><td><strong>10-13 10:30</strong><small>10-15 20:00</small></td><td><span class="status issue">派车中</span><small class="alert-tag">超时 · 0.8h</small></td><td>面点排产完成时间需按班次延后</td></tr>
+              <tr data-order-row="" data-customer-code="10020103" data-stage="装车中" data-window="未来5日"><td><strong>DMS-1012-003</strong><small>E2600120026</small></td><td><strong>川北冷链经销商</strong><small>经销商 · 10020103</small></td><td><strong>西南</strong><small>四川生产基地</small></td><td><strong>水饺</strong><small>猪肉白菜水饺</small></td><td class="quantity-cell"><strong>1,480 / 960</strong><b>终缺 520</b></td><td><strong>10-13 14:00</strong><small>10-14 09:30</small></td><td><span class="status progress">装车中</span><small class="alert-tag warning">预警 · 1.7h</small></td><td>装车时效与可用库存同时承压</td></tr>
+              <tr data-order-row="" data-customer-code="10020104" data-stage="在途" data-window="未来5日"><td><strong>DMS-1012-004</strong><small>E2600120032</small></td><td><strong>广州商超配送中心</strong><small>KA-DC · 10020104</small></td><td><strong>华南</strong><small>广州生产基地</small></td><td><strong>汤圆</strong><small>黑芝麻汤圆</small></td><td class="quantity-cell"><strong>1,320 / 840</strong><b>终缺 480</b></td><td><strong>10-14 08:30</strong><small>10-14 17:30</small></td><td><span class="status progress">在途</span><small class="alert-tag warning">预警 · 1.9h</small></td><td>预计到货晚于客户要求时点</td></tr>
+              <tr data-order-row="" data-customer-code="10020105" data-stage="备单中" data-window="未来5日"><td><strong>DMS-1012-005</strong><small>E2600120041</small></td><td><strong>湖州区域经销商</strong><small>经销商 · 10020105</small></td><td><strong>华东</strong><small>湖州生产基地</small></td><td><strong>火锅料</strong><small>鱼豆腐 2.5kg</small></td><td class="quantity-cell"><strong>1,250 / 800</strong><b>终缺 450</b></td><td><strong>10-14 10:30</strong><small>10-16 08:00</small></td><td><span class="status pending">备单中</span><small class="alert-tag normal">正常 · 6.3h</small></td><td>库存不足，等待 5 日内排产补位</td></tr>
+              <tr data-order-row="" data-customer-code="10020106" data-stage="备单中" data-window="5日后"><td><strong>DMS-1012-006</strong><small>E2600120047</small></td><td><strong>南京电商仓</strong><small>电商仓 · 10020106</small></td><td><strong>华东</strong><small>南京分仓</small></td><td><strong>休闲</strong><small>酥皮馅饼</small></td><td class="quantity-cell"><strong>1,180 / 760</strong><b>终缺 420</b></td><td><strong>10-18 08:30</strong><small>10-18 08:30</small></td><td><span class="status pending">备单中</span><small class="alert-tag normal">正常 · 28h</small></td><td>远期缺口，等待后续排产释放</td></tr>
+              <tr data-order-row="" data-customer-code="10020107" data-stage="派车中" data-window="5日后"><td><strong>DMS-1012-007</strong><small>E2600120055</small></td><td><strong>豫南冷链客户</strong><small>经销商 · 10020107</small></td><td><strong>遂平</strong><small>遂平生产基地</small></td><td><strong>馄饨</strong><small>鲜肉小馄饨</small></td><td class="quantity-cell"><strong>1,100 / 710</strong><b>终缺 390</b></td><td><strong>10-18 14:00</strong><small>10-19 08:00</small></td><td><span class="status progress">派车中</span><small class="alert-tag warning">预警 · 1.8h</small></td><td>最晚到厂时间临近，车辆未确认</td></tr>
+              <tr data-order-row="" data-customer-code="10020108" data-stage="装车中" data-window="5日后"><td><strong>DMS-1012-008</strong><small>E2600120063</small></td><td><strong>上海直营门店组</strong><small>KA-MD · 10020108</small></td><td><strong>华东</strong><small>上海分仓</small></td><td><strong>面点</strong><small>春饼皮</small></td><td class="quantity-cell"><strong>1,050 / 690</strong><b>终缺 360</b></td><td><strong>10-19 08:30</strong><small>预计无法满足</small></td><td><span class="status issue">装车中</span><small class="alert-tag">超时 · 2.1h</small></td><td>装车完成时间缺失，订单标记异常</td></tr>
+              <tr data-order-row="" data-customer-code="10020109" data-stage="备单中" data-window="当天及之前"><td><strong>DMS-1012-009</strong><small>E2600120070</small></td><td><strong>洛阳重点经销商</strong><small>经销商 · 10020109</small></td><td><strong>郑州</strong><small>郑州分仓</small></td><td><strong>预制食材</strong><small>炖馍</small></td><td class="quantity-cell"><strong>980 / 640</strong><b>终缺 340</b></td><td><strong>10-12 08:30</strong><small>预计无法满足</small></td><td><span class="status issue">备单中</span><small class="alert-tag">超时 · 3.6h</small></td><td>当天缺货，未匹配可用排产或调拨</td></tr>
+              <tr data-order-row="" data-customer-code="10020110" data-stage="在途" data-window="当天及之前"><td><strong>DMS-1012-010</strong><small>E2600120078</small></td><td><strong>鄂东商贸客户</strong><small>经销商 · 10020110</small></td><td><strong>郑州</strong><small>思念食品工厂</small></td><td><strong>水饺</strong><small>玉米蔬菜水饺</small></td><td class="quantity-cell"><strong>940 / 620</strong><b>终缺 320</b></td><td><strong>10-12 10:30</strong><small>10-12 15:00</small></td><td><span class="status progress">在途</span><small class="alert-tag warning">预警 · 1.2h</small></td><td>GPS 围栏时间为空，待到货确认</td></tr>
+              <tr data-order-row="" data-customer-code="10020111" data-stage="派车中" data-window="当天及之前"><td><strong>DMS-1012-011</strong><small>E2600120084</small></td><td><strong>成都餐饮渠道</strong><small>经销商 · 10020111</small></td><td><strong>西南</strong><small>成都分仓</small></td><td><strong>火锅料</strong><small>撒尿牛丸</small></td><td class="quantity-cell"><strong>900 / 600</strong><b>终缺 300</b></td><td><strong>10-12 10:30</strong><small>预计无法满足</small></td><td><span class="status pending">派车中</span><small class="alert-tag warning">预警 · 1.5h</small></td><td>库存和在途均不足，需跨仓核实</td></tr>
+              <tr data-order-row="" data-customer-code="10020112" data-stage="备单中" data-window="5日后"><td><strong>DMS-1012-012</strong><small>E2600120091</small></td><td><strong>杭州电商仓</strong><small>电商仓 · 10020112</small></td><td><strong>华东</strong><small>杭州分仓</small></td><td><strong>汤圆</strong><small>花生汤圆</small></td><td class="quantity-cell"><strong>860 / 580</strong><b>终缺 280</b></td><td><strong>10-20 08:30</strong><small>预计无法满足</small></td><td><span class="status issue">备单中</span><small class="alert-tag">超时 · 0.6h</small></td><td>最晚开单时间字段异常，需人工复核</td></tr>
+              <tr data-order-row="" data-customer-code="10020113" data-stage="装车中" data-window="当天及之前"><td><strong>DMS-1012-013</strong><small>E2600120098</small></td><td><strong>南阳食品经销商</strong><small>经销商 · 10020113</small></td><td><strong>郑州</strong><small>郑州分仓</small></td><td><strong>预制食材</strong><small>香酥鸡排</small></td><td class="quantity-cell"><strong>820 / 560</strong><b>终缺 260</b></td><td><strong>10-12 14:00</strong><small>预计无法满足</small></td><td><span class="status progress">装车中</span><small class="alert-tag warning">预警 · 1.1h</small></td><td>调拨在途未覆盖全部缺口</td></tr>
+              <tr data-order-row="" data-customer-code="10020114" data-stage="在途" data-window="当天及之前"><td><strong>DMS-1012-014</strong><small>E2600120106</small></td><td><strong>华南直营门店组</strong><small>KA-MD · 10020114</small></td><td><strong>华南</strong><small>广州生产基地</small></td><td><strong>面点</strong><small>手抓饼</small></td><td class="quantity-cell"><strong>780 / 540</strong><b>终缺 240</b></td><td><strong>10-12 08:30</strong><small>10-12 18:00</small></td><td><span class="status issue">在途</span><small class="alert-tag">超时 · 1.4h</small></td><td>实际到货晚于预计到货时间</td></tr>
+              <tr data-order-row="" data-customer-code="10020115" data-stage="备单中" data-window="当天及之前"><td><strong>DMS-1012-015</strong><small>E2600120113</small></td><td><strong>开封区域客户</strong><small>经销商 · 10020115</small></td><td><strong>郑州</strong><small>思念食品工厂</small></td><td><strong>休闲</strong><small>红糖发糕</small></td><td class="quantity-cell"><strong>740 / 520</strong><b>终缺 220</b></td><td><strong>10-12 14:00</strong><small>10-13 08:00</small></td><td><span class="status pending">备单中</span><small class="alert-tag warning">预警 · 1.8h</small></td><td>需核对封存库存是否可释放</td></tr>
+              <tr data-order-row="" data-customer-code="10020116" data-stage="派车中" data-window="当天及之前"><td><strong>DMS-1012-016</strong><small>E2600120120</small></td><td><strong>武汉商超配送中心</strong><small>KA-DC · 10020116</small></td><td><strong>郑州</strong><small>武汉分仓</small></td><td><strong>水饺</strong><small>三鲜水饺</small></td><td class="quantity-cell"><strong>700 / 510</strong><b>终缺 190</b></td><td><strong>10-12 10:30</strong><small>10-12 17:00</small></td><td><span class="status progress">派车中</span><small class="alert-tag warning">预警 · 1.6h</small></td><td>派车未确认，夜间预警规则已触发</td></tr>
+              <tr data-order-row="" data-customer-code="10020117" data-stage="备单中" data-window="当天及之前"><td><strong>DMS-1012-017</strong><small>E2600120128</small></td><td><strong>西南区域经销商</strong><small>经销商 · 10020117</small></td><td><strong>西南</strong><small>四川生产基地</small></td><td><strong>馄饨</strong><small>荠菜馄饨</small></td><td class="quantity-cell"><strong>760 / 450</strong><b>终缺 310</b></td><td><strong>10-12 08:30</strong><small>10-14 12:00</small></td><td><span class="status issue">备单中</span><small class="alert-tag">超时 · 2.7h</small></td><td>库存与 5 日内排产无法完全覆盖</td></tr>
+              <tr class="orders-empty" id="ordersNoMatch" hidden=""><td colspan="8">未找到符合条件的缺货订单，请调整筛选条件。</td></tr>
+            </tbody></table></div><div class="order-pagination" id="ordersPagination" aria-label="缺货订单分页"><span id="ordersTotal">共17条</span><label class="order-page-size"><select id="ordersPageSize" aria-label="每页显示数量"><option value="10">10条/页</option><option value="20">20条/页</option><option value="50">50条/页</option></select></label><button class="order-page-button" id="ordersPrevPage" type="button" aria-label="上一页">‹</button><span class="order-page-status" aria-live="polite"><strong id="ordersCurrentPage">1</strong><span>/</span><span id="ordersPageCount">2</span></span><button class="order-page-button" id="ordersNextPage" type="button" aria-label="下一页">›</button></div></div>
+            </section>
+          </section>
+        </div>
+        
+      </div>
+    </main>
+  </div>
+  
+  
+  
+  
+  <div class="confirmation-overlay" id="salesConfirmOverlay" hidden=""><section class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="salesConfirmTitle"><header><div><h2 id="salesConfirmTitle">销售确认</h2><p id="salesConfirmOrder"></p></div><button type="button" data-close-sales-confirm="" aria-label="关闭">×</button></header><form id="salesConfirmForm"><div class="confirmation-actions"><button type="button" data-close-sales-confirm="">取消</button><button class="primary" type="submit">确认</button></div></form></section></div>
+  <div class="confirmation-overlay" id="confirmationHistoryOverlay" hidden=""><section class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmationHistoryTitle"><header><div><h2 id="confirmationHistoryTitle">确认状态操作记录</h2><p id="confirmationHistoryStatus"></p></div><button type="button" data-close-confirmation-history="" aria-label="关闭">×</button></header><div id="confirmationHistoryDetails"></div><div class="confirmation-actions"><button type="button" data-close-confirmation-history="">关闭</button></div></section></div>
+  <div class="toast" id="toast" role="status" hidden=""></div>
+  
+  
+
+
+<script>const fulfillmentView = document.getElementById('fulfillmentView');
+const fulfillmentAnalysisDimensions = [
+      { key:'作废率', value:'1.8%', tone:'', detail:'本期模拟作废 23 张 / 接收订单 1,278 张；低于 6% 预警线。', action:'复核作废原因、重复报单及客户撤单情况。' },
+      { key:'改单率', value:'2.4%', tone:'risk', detail:'本期模拟改单 30 张 / 有效投单 1,250 张；高于 2% 管控目标。', action:'按客户与品类复盘数量、交期变更，优先减少重复改单。' },
+      { key:'满足率', value:'94.6%', tone:'risk', detail:'发货 110,680 / 需求 117,000 件；优先跟进当天缺口。', action:'先处置当天及之前 8 张、2,180 件终缺，再协调未来 5 日累计 4,870 件缺口。' },
+      { key:'准交率', value:'85.7%（样本）', tone:'risk', detail:'已完成 21 张，18 张准交、3 张延迟；不代表全量准交率。', action:'逐单核对承诺到货时间与实际到货时间，定位备单、派车、装车或运输延迟。' },
+      { key:'可发货天数', value:'11.7 天', tone:'', detail:'模拟可用库存 128,700 件 / 日均需求 11,000 件；低于 12 天上限。', action:'优先保障低于 7 天的 SKU，并监控火锅料、汤圆等高库存品类。' }
+    ];
+document.getElementById('fulfillmentAnalysisDimensions').innerHTML = fulfillmentAnalysisDimensions.map(item => `<p><strong>${item.key}：</strong>${item.detail} ${item.action}</p>`).join('');
+const orderStatusChart = document.querySelector('.order-status-chart');
+const orderStatusChartDetail = document.getElementById('orderStatusChartDetail');
+const showOrderStatusSummary = target => {
+      const hit = target.closest('.chart-status-hit');
+      if (!hit || !orderStatusChartDetail) return;
+      orderStatusChart.querySelectorAll('.chart-status-hit').forEach(item => item.classList.remove('selected'));
+      hit.classList.add('selected');
+      orderStatusChartDetail.innerHTML = `<strong>${hit.dataset.orderStatus}</strong><span>订单总量 <b>${hit.dataset.total} 张</b></span><span>预警数量 <b>${hit.dataset.warning} 张</b></span><span>超时数量 <b>${hit.dataset.timeout} 张</b></span><span>正常数量 <b>${hit.dataset.normal} 张</b></span>`;
+      orderStatusChartDetail.hidden = false;
+    };
+if (orderStatusChart) {
+      orderStatusChart.addEventListener('click', event => showOrderStatusSummary(event.target));
+      orderStatusChart.addEventListener('keydown', event => {
+        if (event.target.matches('.chart-status-hit') && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          showOrderStatusSummary(event.target);
+        }
+      });
+    }
+const fulfillmentDimensionTabs = [...document.querySelectorAll('[data-fulfillment-dimension]')];
+function selectFulfillmentDimension(selected, focus = false) {
+      const warehouseActive = selected.dataset.fulfillmentDimension === 'warehouseDimensionPanel';
+      const itemActive = selected.dataset.fulfillmentDimension === 'itemDimensionPanel';
+      document.querySelector('.fulfillment-dimensions').classList.toggle('delivery-dimension-active', selected.dataset.fulfillmentDimension === 'deliveryDimensionPanel');
+      document.querySelector('.fulfillment-dimensions').classList.toggle('item-dimension-active', itemActive);
+      fulfillmentDimensionTabs.forEach(tab => {
+        const active = tab === selected;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active ? 0 : -1;
+        document.getElementById(tab.dataset.fulfillmentDimension).hidden = !active;
+      });
+      fulfillmentView.querySelector('.fulfillment-summary:not(.warehouse-summary):not(.item-summary)').hidden = warehouseActive || itemActive;
+      fulfillmentView.querySelector('.warehouse-summary').hidden = !warehouseActive;
+      document.getElementById('itemMetricFilters').hidden = !itemActive;
+      fulfillmentView.querySelector('.fulfillment-analysis:not(.item-analysis)').hidden = itemActive;
+      document.querySelectorAll('.delivery-filter-only').forEach(filter => { filter.hidden = warehouseActive; });
+      document.getElementById('warehouseProviderLabel').hidden = !warehouseActive;
+      document.getElementById('warehouseProviderFilter').hidden = !warehouseActive;
+      document.getElementById('warehouseProviderLabel').textContent = '承运商';
+      renderFulfillmentBase();
+      if (focus) selected.focus();
+    }
+fulfillmentDimensionTabs.forEach((tab,index) => {
+      tab.addEventListener('click', () => selectFulfillmentDimension(tab));
+      tab.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % fulfillmentDimensionTabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + fulfillmentDimensionTabs.length) % fulfillmentDimensionTabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = fulfillmentDimensionTabs.length - 1;
+        else return;
+        event.preventDefault();
+        selectFulfillmentDimension(fulfillmentDimensionTabs[next], true);
+      });
+    });
+const warehouseDetailTabs = [...document.querySelectorAll('[data-warehouse-detail-tab]')];
+warehouseDetailTabs.forEach((tab,index) => {
+      tab.addEventListener('click', () => {
+        warehouseDetailTabs.forEach(candidate => {
+          const active = candidate === tab;
+          candidate.setAttribute('aria-selected', String(active));
+          candidate.tabIndex = active ? 0 : -1;
+          document.getElementById(candidate.dataset.warehouseDetailTab).hidden = !active;
+        });
+      });
+      tab.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % warehouseDetailTabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + warehouseDetailTabs.length) % warehouseDetailTabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = warehouseDetailTabs.length - 1;
+        else return;
+        event.preventDefault();
+        warehouseDetailTabs[next].click();
+        warehouseDetailTabs[next].focus();
+      });
+    });
+const deliveryOrderTabs = [...document.querySelectorAll('[data-delivery-order-tab]')];
+const deliveryOrderTabList = document.querySelector('.delivery-order-view-tabs');
+const deliveryOrderTools = document.querySelector('.delivery-order-panel-tools');
+const deliveryOrderToolbar = document.createElement('div');
+deliveryOrderToolbar.className = 'delivery-order-view-toolbar';
+deliveryOrderTabList.before(deliveryOrderToolbar);
+deliveryOrderToolbar.append(deliveryOrderTabList,deliveryOrderTools);
+deliveryOrderTabs.forEach((tab,index) => {
+      tab.addEventListener('click', () => {
+        deliveryOrderTools.hidden = tab.dataset.deliveryOrderTab !== 'deliveryOrderListPanel';
+        deliveryOrderTabs.forEach(candidate => {
+          const active = candidate === tab;
+          candidate.setAttribute('aria-selected', String(active));
+          candidate.tabIndex = active ? 0 : -1;
+          document.getElementById(candidate.dataset.deliveryOrderTab).hidden = !active;
+        });
+      });
+      tab.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % deliveryOrderTabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + deliveryOrderTabs.length) % deliveryOrderTabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = deliveryOrderTabs.length - 1;
+        else return;
+        event.preventDefault();
+        deliveryOrderTabs[next].click();
+        deliveryOrderTabs[next].focus();
+      });
+    });
+const itemProgressTabs = [...document.querySelectorAll('[data-item-progress-tab]')];
+const coordinationFilters = document.getElementById('itemCoordinationFilters');
+const itemOrderProgressFields = [
+      '月评估计划','分仓下单量','工厂下单量','下单量合计','订单月报单进度','应报单进度',
+      '自然月下单量','自然月报单进度','自然月应报单进度','自然月开单量','自然月开单进度','自然月应开单进度',
+      '自然月发货量','自然月发货进度','自然月应发货进度','未开订单合计','缺货因素','销售因素','管控开单','正常订单',
+      '未到交期未开量','超期未开量','承诺超期未开量','待发货量','已开未派','已派未到','装车中','95%以上','90-95%',
+      '80-90%','70-80%','70%以下','未占用','今日开单量','分仓开单量','工厂开单量'
+    ];
+let activeItemProgressTab = itemProgressTabs[0] || null;
+function selectItemProgressTab(selected, focus = false) {
+      activeItemProgressTab = selected;
+      itemProgressTabs.forEach(tab => {
+        const active = tab === activeItemProgressTab;
+        tab.setAttribute('aria-selected', String(active));
+        tab.tabIndex = active || (!activeItemProgressTab && tab === itemProgressTabs[0]) ? 0 : -1;
+        document.getElementById(tab.dataset.itemProgressTab).hidden = !active;
+      });
+      coordinationFilters.hidden = selected.dataset.itemProgressTab !== 'itemCoordinationPanel';
+      if (focus) selected.focus();
+    }
+itemProgressTabs.forEach((tab,index) => {
+      tab.addEventListener('click', () => selectItemProgressTab(tab));
+      tab.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % itemProgressTabs.length;
+        else if (event.key === 'ArrowLeft') next = (index - 1 + itemProgressTabs.length) % itemProgressTabs.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = itemProgressTabs.length - 1;
+        else return;
+        event.preventDefault();
+        selectItemProgressTab(itemProgressTabs[next], true);
+      });
+    });
+const coordinationData = window.orderProductionSalesData;
+if (coordinationData) {
+      const coordinationTable = document.getElementById('itemCoordinationTable');
+      const coordinationSearch = document.getElementById('itemCoordinationSearch');
+      const coordinationBase = document.getElementById('itemCoordinationBase');
+      const coordinationCount = document.getElementById('itemCoordinationCount');
+      const coordinationPageInfo = document.getElementById('itemCoordinationPageInfo');
+      const coordinationPrev = document.getElementById('itemCoordinationPrev');
+      const coordinationNext = document.getElementById('itemCoordinationNext');
+      const coordinationPageSize = 25;
+      let coordinationPage = 0;
+      const coordinationRows = coordinationData.rows || [];
+      const coordinationColumnGroups = coordinationData.groups.flatMap((group,index) => Array(group.count).fill(`coord-group-${index + 1}`));
+      const escapeCoordinationText = value => String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+      const formatCoordinationValue = value => {
+        if (value === null || value === undefined || value === '') return '—';
+        if (typeof value === 'number') return value.toLocaleString('zh-CN',{maximumFractionDigits:2});
+        return String(value);
+      };
+      const pickupPoints = [...new Set(coordinationRows.map(row => row[0]).filter(value => value !== null && value !== undefined && value !== ''))].sort((a,b) => String(a).localeCompare(String(b),'zh-CN'));
+      pickupPoints.forEach(point => {
+        const option = document.createElement('option');
+        option.value = String(point);
+        option.textContent = String(point);
+        coordinationBase.appendChild(option);
+      });
+      const firstHeaderRow = document.createElement('tr');
+      coordinationData.groups.forEach((group,index) => {
+        const th = document.createElement('th');
+        th.colSpan = group.count;
+        th.className = `coord-group-${index + 1}${index ? ' coord-group-start' : ''}`;
+        th.textContent = group.name;
+        firstHeaderRow.appendChild(th);
+      });
+      const secondHeaderRow = document.createElement('tr');
+      coordinationData.headers.forEach((header,index) => {
+        const th = document.createElement('th');
+        th.className = `${coordinationColumnGroups[index]}${index && coordinationColumnGroups[index] !== coordinationColumnGroups[index - 1] ? ' coord-group-start' : ''}`;
+        th.textContent = header;
+        secondHeaderRow.appendChild(th);
+      });
+      coordinationTable.tHead.replaceChildren(firstHeaderRow,secondHeaderRow);
+      function renderCoordinationTable() {
+        const keyword = coordinationSearch.value.trim().toLocaleLowerCase();
+        const selectedBase = coordinationBase.value;
+        const filtered = coordinationRows.filter(row => {
+          if (selectedBase && String(row[0]) !== selectedBase) return false;
+          if (!keyword) return true;
+          return row.slice(0,8).some(value => String(value ?? '').toLocaleLowerCase().includes(keyword));
+        });
+        const pageCount = Math.max(1,Math.ceil(filtered.length / coordinationPageSize));
+        coordinationPage = Math.min(coordinationPage,pageCount - 1);
+        const start = coordinationPage * coordinationPageSize;
+        const visibleRows = filtered.slice(start,start + coordinationPageSize);
+        coordinationTable.tBodies[0].innerHTML = visibleRows.map(row => `<tr>${row.map((value,index) => `<td class="${coordinationColumnGroups[index]}${index && coordinationColumnGroups[index] !== coordinationColumnGroups[index - 1] ? ' coord-group-start' : ''}">${escapeCoordinationText(formatCoordinationValue(value))}</td>`).join('')}</tr>`).join('');
+        coordinationCount.textContent = `共 ${filtered.length.toLocaleString('zh-CN')} 条${filtered.length !== coordinationRows.length ? `（全部 ${coordinationRows.length.toLocaleString('zh-CN')} 条）` : ''}`;
+        coordinationPageInfo.textContent = `第 ${coordinationPage + 1} / ${pageCount} 页 · 每页 ${coordinationPageSize} 条`;
+        coordinationPrev.disabled = coordinationPage === 0;
+        coordinationNext.disabled = coordinationPage >= pageCount - 1;
+      }
+      coordinationSearch.addEventListener('input',() => { coordinationPage = 0; renderCoordinationTable(); });
+      coordinationBase.addEventListener('change',() => { coordinationPage = 0; renderCoordinationTable(); });
+      coordinationPrev.addEventListener('click',() => { coordinationPage -= 1; renderCoordinationTable(); });
+      coordinationNext.addEventListener('click',() => { coordinationPage += 1; renderCoordinationTable(); });
+      renderCoordinationTable();
+    }
+document.querySelectorAll('.fulfillment-tabs-card .fulfillment-tab-panel').forEach(panel => {
+      panel.hidden = false;
+      panel.setAttribute('role','region');
+      panel.removeAttribute('aria-labelledby');
+      panel.removeAttribute('tabindex');
+    });
+document.querySelectorAll('[data-open-fulfillment-tab]').forEach(button => button.addEventListener('click', () => {
+      const panelId = button.dataset.openFulfillmentTab.replace(/Tab$/,'Panel');
+      document.getElementById(panelId)?.scrollIntoView({ behavior:'smooth', block:'center' });
+    }));
+function readOrders() {
+      return [...document.querySelectorAll('.orders tbody tr[data-order-row]')].map(row => ({
+        id: row.cells[0].querySelector('strong').textContent,
+        execute: row.cells[0].querySelector('small').textContent,
+        customer: row.cells[1].querySelector('strong').textContent,
+        source: row.cells[1].querySelector('small').textContent,
+        base: row.cells[2].querySelector('strong').textContent,
+        pickup: row.cells[2].querySelector('small').textContent,
+        product: row.cells[3].textContent.trim(),
+        category: row.cells[3].querySelector('strong').textContent,
+        quantity: row.cells[4].textContent.trim(),
+        shortage: Number(row.cells[4].querySelector('b').textContent.replace(/\D/g,'')),
+        timing: row.cells[5].textContent.trim(),
+        stage: row.dataset.stage,
+        window: row.dataset.window,
+        alert: row.cells[6].textContent.trim(),
+        issue: row.cells[7].textContent.trim()
+      }));
+    }
+const fulfillmentRows = [...fulfillmentView.querySelectorAll('.orders tbody tr[data-order-row]')];
+const deliveryOrderDetailRows = document.getElementById('deliveryOrderDetailRows');
+const warehouseOrderDetailRows = document.getElementById('warehouseOrderDetailRows');
+const orderDetailBodies = [deliveryOrderDetailRows, warehouseOrderDetailRows].filter(Boolean);
+document.querySelectorAll('.dimension-table-wrap[aria-label*="横向滚动"]').forEach(wrap => {
+      if (!wrap.querySelector('.delivery-order-table')) return;
+      wrap.setAttribute('aria-label',wrap.closest('#warehouseOrderDetailPanel') ? '仓配订单明细表，所有列在当前页面显示' : '订单明细表，所有列在当前页面显示');
+      wrap.removeAttribute('tabindex');
+    });
+if (deliveryOrderDetailRows) {
+      const demoOrderMeta = [
+        ['2026-10-12 08:16','华北销售一部','河南省区','华北大区','王琳','赵凯','顺丰冷运'],['2026-10-12 08:24','华中销售部','河南省区','华北大区','陈涛','李倩','京东冷链'],['2026-10-12 08:31','西南销售部','四川省区','西南大区','杨雪','周宁','安能冷链'],['2026-10-12 08:42','华南销售部','广东省区','华南大区','刘敏','吴凡','跨越速运'],['2026-10-12 08:50','华东销售部','浙江省区','华东大区','孙悦','郑浩','顺丰冷运'],['2026-10-12 09:02','华东销售部','江苏省区','华东大区','蒋宁','顾晨','京东冷链'],['2026-10-12 09:13','华中销售部','河南省区','华北大区','许峰','梁静','安能冷链'],['2026-10-12 09:26','华东销售部','上海市区','华东大区','沈佳','许涛','跨越速运'],['2026-10-12 09:34','华北销售一部','河南省区','华北大区','王琳','赵凯','顺丰冷运'],['2026-10-12 09:47','华中销售部','湖北省区','华中大区','何平','刘芳','京东冷链'],['2026-10-12 10:01','西南销售部','四川省区','西南大区','杨雪','周宁','安能冷链'],['2026-10-12 10:12','华东销售部','浙江省区','华东大区','孙悦','郑浩','跨越速运'],['2026-10-12 10:19','华北销售一部','河南省区','华北大区','许峰','梁静','顺丰冷运'],['2026-10-12 10:28','华南销售部','广东省区','华南大区','刘敏','吴凡','京东冷链'],['2026-10-12 10:39','华北销售一部','河南省区','华北大区','王琳','赵凯','安能冷链'],['2026-10-12 10:46','华中销售部','湖北省区','华中大区','何平','刘芳','跨越速运'],['2026-10-12 10:55','西南销售部','四川省区','西南大区','杨雪','周宁','顺丰冷运']
+      ];
+      const demoSkuCodes = ['PR-001','DM-014','DU-032','TY-006','HG-008','XX-021','HT-017','MD-003','PR-009','DU-011','HG-013','TY-012','PR-016','MD-026','XX-004','DU-019','HT-008'];
+      const demoConfirmationStatuses = ['待确认','确认中','已确认','暂缓发货','待确认','确认中','待确认','已确认','待确认','暂缓发货','确认中','已确认','待确认','确认中','待确认','已确认','待确认'];
+      const confirmationRecords = new Map();
+      const statusClassName = status => ({ '待确认':'status-pending','确认中':'status-confirming','已确认':'status-confirmed','暂缓发货':'status-hold' }[status] || 'status-pending');
+      const statusDescription = status => ({
+        '待确认':'订单已进入销售确认队列，等待销售核对订单及商品数量。',
+        '确认中':'销售已收到确认任务，正在核对订单内容。',
+        '已确认':'销售已核对并确认该订单内容及满足率。',
+        '暂缓发货':'销售提出暂缓发货，等待后续处理。'
+      }[status] || '订单确认状态更新。');
+      deliveryOrderDetailRows.innerHTML = fulfillmentRows.map((row,index) => {
+        const cells = row.cells;
+        const quantities = cells[4].querySelector('strong').textContent.split('/').map(value => Number(value.replace(/\D/g,'')));
+        const demand = quantities[0];
+        const occupied = quantities[1] || 0;
+        const shortage = Number(cells[4].querySelector('b').textContent.replace(/\D/g,''));
+        const customerCode = row.dataset.customerCode || `10020${String(index + 101).slice(-3)}`;
+        const customerType = cells[1].querySelector('small').textContent.split('·')[0].trim();
+        const sku = `${cells[3].querySelector('strong').textContent} · ${cells[3].querySelector('small').textContent}（SKU-${demoSkuCodes[index]}）`;
+        const fillRate = demand > 0 ? `${Math.max(0, (1 - shortage / demand) * 100).toFixed(1)}%` : '0.0%';
+        const [created,group,region,area,salesperson,orderClerk,carrier] = demoOrderMeta[index];
+        row.dataset.orderDate = created.slice(0,10);
+        row.dataset.salesOrg = group;
+        row.dataset.provinceRegion = region;
+        row.dataset.region = area;
+        row.dataset.channel = customerType;
+        const values = [
+          cells[0].querySelector('strong').textContent,
+          created,
+          `${cells[1].querySelector('strong').textContent} / ${customerCode}`,
+          group, region, area, customerType,
+          salesperson, orderClerk, cells[2].querySelector('strong').textContent,
+          carrier, row.querySelector('.status').textContent,
+          row.querySelector('.alert-tag').textContent
+        ];
+        const skuValues = [sku,`${demand.toLocaleString('zh-CN')} 件`,`${shortage.toLocaleString('zh-CN')} 件`,fillRate];
+        const shipped = row.dataset.stage === '已完成' || row.dataset.stage === '在途'
+          ? occupied
+          : row.dataset.stage === '装车中' ? Math.round(occupied * 0.6)
+          : row.dataset.stage === '派车中' ? Math.round(occupied * 0.25) : 0;
+        const quantityCell = quantity => `${quantity.toLocaleString('zh-CN')} 件`;
+        const mainValues = [...values,fillRate,quantityCell(demand),quantityCell(0),quantityCell(occupied),quantityCell(shipped),quantityCell(demand)];
+        const openStatus = row.dataset.stage === '备单中' ? '未开' : '已开';
+        return `<tr class="delivery-order-main-row" data-fulfillment-stage="${escapeHtml(row.dataset.stage)}" data-open-status="${openStatus}" data-shortage="${shortage}" data-fill-rate="${parseFloat(fillRate)}"><td><button class="delivery-order-expander" type="button" aria-expanded="false" aria-label="展开 SKU 明细" title="展开 SKU 明细"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></button></td>${mainValues.map(value => `<td>${escapeHtml(value)}</td>`).join('')}<td class="confirmation-status-cell"></td><td class="confirmation-operation-cell"></td></tr><tr class="delivery-order-sku-row" hidden><td colspan="22"><table class="delivery-order-sku-table"><thead><tr><th>SKU 名称及编码</th><th>SKU 订货数量</th><th>SKU 缺货数量</th><th>商品满足率</th></tr></thead><tbody><tr>${skuValues.map(value => `<td>${escapeHtml(value)}</td>`).join('')}</tr></tbody></table></td></tr>`;
+      }).join('');
+      [...deliveryOrderDetailRows.querySelectorAll('.delivery-order-main-row')].forEach((row,index) => {
+        const orderNumber = row.cells[1].textContent.trim();
+        const status = demoConfirmationStatuses[index] || '待确认';
+        const operator = '订单履约专员（演示）';
+        const time = row.cells[2].textContent.trim();
+        confirmationRecords.set(orderNumber,[{ operator,time,content:statusDescription(status),orderNumber }]);
+        const confirmButton = document.createElement('button');
+        confirmButton.type = 'button';
+        confirmButton.className = 'sales-confirm-trigger';
+        confirmButton.dataset.orderNumber = orderNumber;
+        confirmButton.textContent = '销售确认';
+        row.cells[21].appendChild(confirmButton);
+        const statusButton = document.createElement('button');
+        statusButton.type = 'button';
+        statusButton.className = `confirmation-status ${statusClassName(status)}`;
+        statusButton.dataset.orderNumber = orderNumber;
+        statusButton.textContent = status;
+        statusButton.setAttribute('aria-label',`${orderNumber}，确认状态：${status}，点击查看操作记录`);
+        row.cells[20].appendChild(statusButton);
+      });
+      if (warehouseOrderDetailRows) {
+        warehouseOrderDetailRows.innerHTML = deliveryOrderDetailRows.innerHTML;
+        warehouseOrderDetailRows.querySelectorAll('.delivery-order-main-row').forEach(row => {
+          row.cells[row.cells.length - 1].remove();
+          row.cells[row.cells.length - 1].remove();
+        });
+        warehouseOrderDetailRows.querySelectorAll('.delivery-order-sku-row td[colspan]').forEach(cell => { cell.colSpan = 20; });
+      }
+      const toggleSkuDetails = event => {
+        const button = event.target.closest('.delivery-order-expander');
+        if (!button) return;
+        const details = button.closest('tr').nextElementSibling;
+        const expanded = button.getAttribute('aria-expanded') !== 'true';
+        details.hidden = !expanded;
+        button.setAttribute('aria-expanded',String(expanded));
+        button.setAttribute('aria-label',expanded ? '收起 SKU 明细' : '展开 SKU 明细');
+        button.title = expanded ? '收起 SKU 明细' : '展开 SKU 明细';
+      };
+      orderDetailBodies.forEach(body => body.addEventListener('click',toggleSkuDetails));
+      const salesConfirmOverlay = document.getElementById('salesConfirmOverlay');
+      const salesConfirmForm = document.getElementById('salesConfirmForm');
+      const confirmationHistoryOverlay = document.getElementById('confirmationHistoryOverlay');
+      let activeConfirmationOrder = '';
+      let activeConfirmationSeller = '';
+      const closeSalesConfirm = () => { salesConfirmOverlay.hidden = true; activeConfirmationOrder = ''; activeConfirmationSeller = ''; };
+      const openSalesConfirm = button => {
+        activeConfirmationOrder = button.dataset.orderNumber;
+        const row = button.closest('.delivery-order-main-row');
+        const dealerName = row.cells[3].textContent.split('/')[0].trim();
+        activeConfirmationSeller = row.cells[8].textContent.trim();
+        document.getElementById('salesConfirmOrder').textContent = `订单号：${activeConfirmationOrder}\n经销商名称：${dealerName}\n确认推送给${activeConfirmationSeller}销售？`;
+        salesConfirmOverlay.hidden = false;
+      };
+      const openConfirmationHistory = button => {
+        const orderNumber = button.dataset.orderNumber;
+        const logs = confirmationRecords.get(orderNumber) || [];
+        document.getElementById('confirmationHistoryStatus').textContent = `当前状态：${button.textContent.trim()}`;
+        const rows = logs.slice().reverse().map(log => `<tr><td>${escapeHtml(log.orderNumber || orderNumber)}</td><td>${escapeHtml(log.operator)}</td><td>${escapeHtml(log.time)}</td><td>${escapeHtml(log.content)}</td></tr>`).join('');
+        document.getElementById('confirmationHistoryDetails').innerHTML = `<div class="confirmation-log-table-wrap" role="region" aria-label="订单 ${escapeHtml(orderNumber)} 的全部操作记录" tabindex="0"><table class="confirmation-log-table"><thead><tr><th scope="col">订单号</th><th scope="col">操作人</th><th scope="col">操作时间</th><th scope="col">操作内容</th></tr></thead><tbody>${rows || '<tr><td class="confirmation-log-empty" colspan="4">暂无操作记录</td></tr>'}</tbody></table></div>`;
+        confirmationHistoryOverlay.hidden = false;
+      };
+      orderDetailBodies.forEach(body => body.addEventListener('click',event => {
+        const confirmButton = event.target.closest('.sales-confirm-trigger');
+        if (confirmButton) { openSalesConfirm(confirmButton); return; }
+        const statusButton = event.target.closest('.confirmation-status');
+        if (statusButton) openConfirmationHistory(statusButton);
+      }));
+      salesConfirmForm.addEventListener('submit',event => {
+        event.preventDefault();
+        const orderNumber = activeConfirmationOrder;
+        const time = new Date().toLocaleString('zh-CN',{hour12:false});
+        const content = `已确认推送给${activeConfirmationSeller}销售，通知其核对订单。`;
+        const history = confirmationRecords.get(orderNumber) || [];
+        confirmationRecords.set(orderNumber,[...history,{ operator:'订单履约专员（演示）',time,content,orderNumber }]);
+        const row = [...deliveryOrderDetailRows.querySelectorAll('.delivery-order-main-row')].find(item => item.cells[1].textContent.trim() === orderNumber);
+        if (row) {
+          const statusButton = row.querySelector('.confirmation-status');
+          statusButton.textContent = '确认中';
+          statusButton.className = `confirmation-status ${statusClassName('确认中')}`;
+          statusButton.setAttribute('aria-label',`${orderNumber}，确认状态：确认中，点击查看操作记录`);
+        }
+        closeSalesConfirm();
+      });
+      document.querySelectorAll('[data-close-sales-confirm]').forEach(button => button.addEventListener('click',closeSalesConfirm));
+      document.querySelectorAll('[data-close-confirmation-history]').forEach(button => button.addEventListener('click',() => { confirmationHistoryOverlay.hidden = true; }));
+      salesConfirmOverlay.addEventListener('click',event => { if (event.target === salesConfirmOverlay) closeSalesConfirm(); });
+      confirmationHistoryOverlay.addEventListener('click',event => { if (event.target === confirmationHistoryOverlay) confirmationHistoryOverlay.hidden = true; });
+      document.addEventListener('keydown',event => {
+        if (event.key !== 'Escape') return;
+        if (!salesConfirmOverlay.hidden) closeSalesConfirm();
+        if (!confirmationHistoryOverlay.hidden) confirmationHistoryOverlay.hidden = true;
+      });
+      const orderQueryInputs = ['deliveryOrderNumberQuery','deliveryCustomerQuery','deliveryRegionQuery'].map(id => document.getElementById(id));
+      const deliveryStatusQuery = document.getElementById('deliveryStatusQuery');
+      const deliveryBaseQuery = document.getElementById('deliveryBaseQuery');
+      const orderCount = document.getElementById('deliveryOrderCount');
+      let orderDrilldownCriteria = null;
+      const normalizeOrderQuery = value => value.trim().toLocaleLowerCase('zh-CN');
+      const filterDeliveryOrderDetails = () => {
+        const [orderQuery,customerQuery,regionQuery] = orderQueryInputs.map(input => normalizeOrderQuery(input.value));
+        const selectedDeliveryStatus = normalizeOrderQuery(deliveryStatusQuery.value);
+        const selectedDeliveryBase = normalizeOrderQuery(deliveryBaseQuery.value);
+        const rows = [...deliveryOrderDetailRows.querySelectorAll('.delivery-order-main-row')];
+        let visibleCount = 0;
+        rows.forEach(row => {
+          const cells = row.cells;
+          const match = normalizeOrderQuery(cells[1].textContent).includes(orderQuery)
+            && normalizeOrderQuery(cells[3].textContent).includes(customerQuery)
+            && normalizeOrderQuery(`${cells[5].textContent} ${cells[6].textContent}`).includes(regionQuery)
+            && (!selectedDeliveryStatus || normalizeOrderQuery(cells[13].textContent).includes(selectedDeliveryStatus))
+            && (!selectedDeliveryBase || normalizeOrderQuery(cells[10].textContent) === selectedDeliveryBase)
+            && (!orderDrilldownCriteria || (orderDrilldownCriteria.axis !== 'base' || cells[10].textContent.trim() === orderDrilldownCriteria.value))
+            && (!orderDrilldownCriteria || (orderDrilldownCriteria.axis !== 'region' || `${cells[5].textContent} ${cells[6].textContent}`.includes(orderDrilldownCriteria.value)))
+            && (!orderDrilldownCriteria?.stage || row.dataset.fulfillmentStage === orderDrilldownCriteria.stage)
+            && (!orderDrilldownCriteria?.fillMin || Number(row.dataset.fillRate) >= orderDrilldownCriteria.fillMin)
+            && (!orderDrilldownCriteria?.fillMax || (orderDrilldownCriteria.fillMaxInclusive ? Number(row.dataset.fillRate) <= orderDrilldownCriteria.fillMax : Number(row.dataset.fillRate) < orderDrilldownCriteria.fillMax))
+            && (!orderDrilldownCriteria?.unopenedOnly || row.dataset.openStatus === '未开')
+            && (!orderDrilldownCriteria?.shortageOnly || Number(row.dataset.shortage) > 0);
+          row.hidden = !match;
+          const details = row.nextElementSibling;
+          if (!match && details) {
+            details.hidden = true;
+            const button = row.querySelector('.delivery-order-expander');
+            button.setAttribute('aria-expanded','false');
+            button.setAttribute('aria-label','展开 SKU 明细');
+            button.title = '展开 SKU 明细';
+          }
+          if (match) visibleCount++;
+        });
+        orderCount.textContent = `显示 ${visibleCount} / ${rows.length} 张`;
+      };
+      orderQueryInputs.forEach(input => input.addEventListener('input',() => {
+        orderDrilldownCriteria = null;
+        filterDeliveryOrderDetails();
+      }));
+      [deliveryStatusQuery,deliveryBaseQuery].forEach(select => select.addEventListener('change',() => {
+        orderDrilldownCriteria = null;
+        filterDeliveryOrderDetails();
+      }));
+      window.openDeliveryOrderDrilldown = criteria => {
+        orderDrilldownCriteria = criteria;
+        orderQueryInputs.forEach(input => { input.value = ''; });
+        deliveryBaseQuery.value = criteria.axis === 'base' ? criteria.value : '';
+        orderQueryInputs[2].value = criteria.axis === 'region' ? criteria.value : '';
+        deliveryStatusQuery.value = criteria.deliveryStatus || '';
+        deliveryOrderTabs[0].click();
+        filterDeliveryOrderDetails();
+        document.getElementById('deliveryOrderListPanel').scrollIntoView({ behavior:'smooth',block:'start' });
+      };
+    }
+const fulfillmentBaseFilter = document.getElementById('fulfillmentBaseFilter');
+const baseOriginal = {
+      summary:fulfillmentView.querySelector('.fulfillment-summary:not(.item-summary):not(.warehouse-summary)').innerHTML,
+      trace:document.getElementById('fulfillmentTracePanel').innerHTML,
+      risk:document.getElementById('fulfillmentRiskPanel').innerHTML,
+      shortage:document.getElementById('fulfillmentShortagePanel').innerHTML,
+      analysisTitle:fulfillmentView.querySelector('.fulfillment-analysis h3').textContent,
+      analysisSummary:fulfillmentView.querySelector('.fulfillment-analysis > p').textContent,
+      analysisCopy:document.getElementById('fulfillmentAnalysisDimensions').innerHTML,
+      analysisFoot:fulfillmentView.querySelector('.fulfillment-analysis-foot > span').textContent,
+      warehouseSummary:fulfillmentView.querySelector('.warehouse-summary').innerHTML
+    };
+function setWarehouseAnalysis(active) {
+      const analysis = fulfillmentView.querySelector('.fulfillment-analysis');
+      if (!active) {
+        analysis.querySelector('.fulfillment-analysis-label small').textContent = '订单质量 · 供应满足 · 交付时效 · 库存保障';
+        analysis.querySelector('h3').textContent = baseOriginal.analysisTitle;
+        analysis.querySelector(':scope > p').textContent = baseOriginal.analysisSummary;
+        document.getElementById('fulfillmentAnalysisDimensions').innerHTML = baseOriginal.analysisCopy;
+        analysis.querySelector('.fulfillment-analysis-foot > span').textContent = baseOriginal.analysisFoot;
+        return;
+      }
+      analysis.querySelector('.fulfillment-analysis-label small').textContent = '仓配时效 · 基地缺货 · 物流运单';
+      analysis.querySelector('h3').textContent = '优先跟进仓配超时与基地缺货风险';
+      analysis.querySelector(':scope > p').textContent = '演示快照中五个基地共 60 张订单，超时 7 张、预警 9 张，整体满足率 94.6%；终缺 6,320 件分布在 17 张缺货订单中。物流商明细展示运单状态、客户及销售归属，数值仅用于页面功能演示。';
+      document.getElementById('fulfillmentAnalysisDimensions').innerHTML = '<p><strong>基地履约：</strong>郑州、遂平、西南、华东、华南分别统计超时、预警、未开、满足率及缺货订单；五基地缺货量合计 6,320 件。</p><p><strong>缺货口径：</strong>未开订单缺货量 = MAX（未开订单需求量 12,480 − 可用库存量 6,160，0）= 6,320 件；缺货订单按订单号去重共 17 张。</p><p><strong>物流商与运单：</strong>演示顺丰冷运、京东冷链、安能冷链、跨越速运承运记录，包含订单、客户及销售归属信息。</p>';
+      analysis.querySelector('.fulfillment-analysis-foot > span').textContent = '✦ 仓配指标与物流商明细均为模拟演示数据';
+    }
+function scopedFulfillmentOrders() {
+      return readOrders().filter(order => !fulfillmentBaseFilter.value || order.base === fulfillmentBaseFilter.value);
+    }
+const demoBaseStats = {
+      '郑州':{total:14,overdue:2,warning:2,unopened:8,unopenedByStage:[4,2,1,1],fillRate:93.8,fillRateBands:[0,1,2,6,5],shortage:1980,shortageOrders:5,sku:4,completed:3,delayed:1,production:1700,stages:[4,3,2,2],stageWarnings:[1,1,0,0],stageOverdues:[1,1,0,0]},
+      '遂平':{total:12,overdue:1,warning:2,unopened:5,unopenedByStage:[2,1,1,1],fillRate:94.3,fillRateBands:[0,1,2,5,4],shortage:980,shortageOrders:3,sku:2,completed:4,delayed:1,production:1320,stages:[2,2,2,2],stageWarnings:[1,1,0,0],stageOverdues:[0,1,0,0]},
+      '西南':{total:10,overdue:1,warning:2,unopened:4,unopenedByStage:[2,1,1,0],fillRate:95.1,fillRateBands:[0,0,1,4,5],shortage:1130,shortageOrders:3,sku:2,completed:5,delayed:1,production:1540,stages:[2,1,1,1],stageWarnings:[1,1,0,0],stageOverdues:[0,1,0,0]},
+      '华东':{total:14,overdue:2,warning:2,unopened:7,unopenedByStage:[3,2,1,1],fillRate:94.8,fillRateBands:[1,1,2,6,4],shortage:1510,shortageOrders:4,sku:3,completed:4,delayed:0,production:2410,stages:[2,2,1,5],stageWarnings:[1,0,0,1],stageOverdues:[1,0,0,1]},
+      '华南':{total:10,overdue:1,warning:1,unopened:4,unopenedByStage:[2,1,1,0],fillRate:95.7,fillRateBands:[0,0,1,4,5],shortage:720,shortageOrders:2,sku:1,completed:5,delayed:0,production:1480,stages:[2,1,1,1],stageWarnings:[0,0,0,1],stageOverdues:[1,0,0,0]}
+    };
+const warehouseBaseTable = document.querySelector('.warehouse-base-table');
+warehouseBaseTable.classList.add('warehouse-base-fields-table');
+itemOrderProgressFields.forEach(field => {
+      const header = document.createElement('th');
+      header.textContent = field;
+      warehouseBaseTable.tHead.rows[0].appendChild(header);
+    });
+warehouseBaseTable.querySelectorAll('tbody tr[data-warehouse-base]').forEach(row => itemOrderProgressFields.forEach(() => {
+      const cell = document.createElement('td');
+      cell.textContent = '—';
+      row.appendChild(cell);
+    }));
+const warehouseBaseColumnCount = warehouseBaseTable.tHead.rows[0].cells.length;
+const warehouseVisibleStages = ['派车中','装车中','在途'];
+const demoCarrierStageStats = {
+      '顺丰冷运':[{total:3,overdue:1,warning:1,unopened:2},{total:2,overdue:0,warning:1,unopened:1},{total:3,overdue:0,warning:1,unopened:2}],
+      '京东冷链':[{total:3,overdue:1,warning:1,unopened:1},{total:2,overdue:0,warning:0,unopened:1},{total:3,overdue:0,warning:1,unopened:2}],
+      '安能冷链':[{total:3,overdue:1,warning:1,unopened:1},{total:2,overdue:1,warning:1,unopened:1},{total:3,overdue:0,warning:0,unopened:2}],
+      '跨越速运':[{total:3,overdue:1,warning:1,unopened:1},{total:3,overdue:0,warning:0,unopened:2},{total:3,overdue:1,warning:1,unopened:1}]
+    };
+const warehouseStatusDetailMarkup = (dimension,value,stageStats) => {
+      const detailRows = warehouseVisibleStages.map((stage,index) => {
+        const stats = stageStats[index];
+        return `<tr><td>${stage}</td><td>${stats.total} 张</td><td>${stats.overdue} 张</td><td>${stats.warning} 张</td><td>${stats.unopened} 张</td></tr>`;
+      }).join('');
+      const colspan = dimension === 'base' ? warehouseBaseColumnCount : 7;
+      return `<tr class="warehouse-status-detail" data-warehouse-${dimension}="${escapeHtml(value)}" hidden><td colspan="${colspan}"><div class="base-status-detail-wrap"><table class="dimension-table base-status-detail-table"><thead><tr><th>状态</th><th>订单总数</th><th>超时订单</th><th>预警订单</th><th>未开订单数</th></tr></thead><tbody>${detailRows}</tbody></table></div></td></tr>`;
+    };
+document.querySelectorAll('.warehouse-base-table tbody tr[data-warehouse-base]').forEach(row => {
+      const base = row.dataset.warehouseBase;
+      const stats = demoBaseStats[base];
+      row.insertAdjacentHTML('afterbegin','<td><button class="delivery-order-expander warehouse-status-expander" type="button" aria-expanded="false" aria-label="展开状态明细" title="展开状态明细"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></button></td>');
+      row.insertAdjacentHTML('afterend',warehouseStatusDetailMarkup('base',base,warehouseVisibleStages.map((_,index) => ({
+        total:stats.stages[index+1],overdue:stats.stageOverdues[index+1],warning:stats.stageWarnings[index+1],unopened:stats.unopenedByStage[index+1]
+      }))));
+    });
+document.querySelectorAll('.warehouse-carrier-table tbody tr[data-warehouse-carrier]').forEach(row => {
+      const carrier = row.dataset.warehouseCarrier;
+      row.insertAdjacentHTML('afterbegin','<td><button class="delivery-order-expander warehouse-status-expander" type="button" aria-expanded="false" aria-label="展开状态明细" title="展开状态明细"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></button></td>');
+      row.insertAdjacentHTML('afterend',warehouseStatusDetailMarkup('carrier',carrier,demoCarrierStageStats[carrier]));
+    });
+document.querySelectorAll('.warehouse-base-table tbody,.warehouse-carrier-table tbody').forEach(tbody => tbody.addEventListener('click',event => {
+      const button = event.target.closest('.warehouse-status-expander');
+      if (!button) return;
+      const mainRow = button.closest('tr');
+      const detailRow = mainRow.nextElementSibling;
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      detailRow.hidden = !expanded;
+      button.setAttribute('aria-expanded',String(expanded));
+      const label = mainRow.dataset.warehouseBase || mainRow.dataset.warehouseCarrier;
+      button.setAttribute('aria-label',`${expanded ? '收起' : '展开'} ${label} 状态明细`);
+      button.title = expanded ? '收起状态明细' : '展开状态明细';
+    }));
+const deliveryBaseCompareRows = document.getElementById('deliveryBaseCompareRows');
+const compareStageLabels = ['备单中','派车中','装车中','在途'];
+const compareFillRateRanges = [{fillMax:70,fillMaxInclusive:true},{fillMin:70,fillMax:80},{fillMin:80,fillMax:90},{fillMin:90,fillMax:95},{fillMin:95}];
+const compareDrilldownLink = (label,axis,value,filters = {}) => {
+      const filterAttributes = Object.entries({
+        'delivery-status':filters.deliveryStatus,
+        stage:filters.stage,
+        'fill-min':filters.fillMin,
+        'fill-max':filters.fillMax,
+        'fill-max-inclusive':filters.fillMaxInclusive ? 'true' : '',
+        'unopened-only':filters.unopenedOnly ? 'true' : '',
+        'shortage-only':filters.shortageOnly ? 'true' : ''
+      }).filter(([,filterValue]) => filterValue !== undefined && filterValue !== '').map(([name,filterValue]) => `data-${name}="${escapeHtml(String(filterValue))}"`).join(' ');
+      return `<button type="button" class="compare-drilldown" aria-label="查看符合条件的订单明细：${escapeHtml(label)}" data-drilldown-axis="${axis}" data-drilldown-value="${escapeHtml(value)}" ${filterAttributes}>${label}</button>`;
+    };
+deliveryBaseCompareRows.innerHTML = Object.entries(demoBaseStats).map(([base,stats]) => {
+      const statusRows = compareStageLabels.map((status,index) => {
+        const total = stats.stages[index];
+        const overdue = stats.stageOverdues[index];
+        const warning = stats.stageWarnings[index];
+        const unopened = stats.unopenedByStage[index];
+        return `<tr><td>${compareDrilldownLink(status,'base',base,{stage:status})}</td><td>${compareDrilldownLink(`${total} 张`,'base',base,{stage:status})}</td><td>${compareDrilldownLink(`${overdue} 张`,'base',base,{stage:status,deliveryStatus:'超时'})}</td><td>${compareDrilldownLink(`${warning} 张`,'base',base,{stage:status,deliveryStatus:'预警'})}</td><td>${compareDrilldownLink(`${unopened} 张`,'base',base,{stage:status,unopenedOnly:true})}</td></tr>`;
+      }).join('');
+      const fillRateBandCells = stats.fillRateBands.map((count,index) => `<td>${compareDrilldownLink(`${count} 张`,'base',base,compareFillRateRanges[index])}</td>`).join('');
+      return `<tr data-fulfillment-base="${base}"><td><button class="delivery-order-expander delivery-base-expander" type="button" aria-expanded="false" aria-label="展开 ${base} 状态明细" title="展开状态明细"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></button></td><td>${compareDrilldownLink(base,'base',base)}</td><td>${compareDrilldownLink(`${stats.total} 张`,'base',base)}</td><td>${compareDrilldownLink(`${stats.overdue} 张`,'base',base,{deliveryStatus:'超时'})}</td><td>${compareDrilldownLink(`${stats.warning} 张`,'base',base,{deliveryStatus:'预警'})}</td><td>${compareDrilldownLink(`${stats.unopened} 张`,'base',base,{unopenedOnly:true})}</td><td>${compareDrilldownLink(`${stats.shortage.toLocaleString('zh-CN')} 件`,'base',base,{shortageOnly:true})}</td><td>${compareDrilldownLink(`${stats.fillRate.toFixed(1)}%`,'base',base)}</td>${fillRateBandCells}</tr><tr class="delivery-base-compare-detail" data-fulfillment-base="${base}" hidden><td colspan="13"><div class="base-status-detail-wrap"><table class="dimension-table base-status-detail-table"><thead><tr><th>状态</th><th>订单总数</th><th>超时订单</th><th>预警订单</th><th>未开订单数</th></tr></thead><tbody>${statusRows}</tbody></table></div></td></tr>`;
+    }).join('');
+deliveryBaseCompareRows.addEventListener('click',event => {
+      const button = event.target.closest('.delivery-base-expander');
+      if (!button) return;
+      const detailRow = button.closest('tr').nextElementSibling;
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      detailRow.hidden = !expanded;
+      button.setAttribute('aria-expanded',String(expanded));
+      button.setAttribute('aria-label',`${expanded ? '收起' : '展开'} ${button.closest('tr').dataset.fulfillmentBase} 状态明细`);
+      button.title = expanded ? '收起状态明细' : '展开状态明细';
+    });
+const demoRegionStats = [
+      {name:'河南省区',total:24,overdue:2,warning:3,unopened:13,shortage:2960,fillRate:93.8,bands:[0,1,3,10,10],stages:[5,3,3,5],stageOverdues:[1,1,0,0],stageWarnings:[1,1,0,1],unopenedByStage:[6,3,2,2]},
+      {name:'四川省区',total:10,overdue:1,warning:2,unopened:4,shortage:1130,fillRate:95.1,bands:[0,0,1,4,5],stages:[2,1,1,2],stageOverdues:[0,1,0,0],stageWarnings:[1,0,0,1],unopenedByStage:[2,1,1,0]},
+      {name:'广东省区',total:10,overdue:1,warning:1,unopened:4,shortage:720,fillRate:95.7,bands:[0,0,1,4,5],stages:[2,1,1,2],stageOverdues:[0,0,1,0],stageWarnings:[0,1,0,0],unopenedByStage:[2,1,1,0]},
+      {name:'浙江省区',total:8,overdue:1,warning:1,unopened:4,shortage:790,fillRate:94.8,bands:[1,1,1,3,2],stages:[2,2,1,1],stageOverdues:[1,0,0,0],stageWarnings:[0,0,1,0],unopenedByStage:[2,1,1,0]},
+      {name:'江苏省区',total:8,overdue:2,warning:2,unopened:3,shortage:720,fillRate:95.0,bands:[0,1,2,4,1],stages:[1,2,1,1],stageOverdues:[1,0,0,1],stageWarnings:[1,0,0,1],unopenedByStage:[1,1,0,1]}
+    ];
+const deliveryRegionCompareRows = document.getElementById('deliveryRegionCompareRows');
+deliveryRegionCompareRows.innerHTML = demoRegionStats.map(stats => {
+      const statusRows = compareStageLabels.map((status,index) => `<tr><td>${compareDrilldownLink(status,'region',stats.name,{stage:status})}</td><td>${compareDrilldownLink(`${stats.stages[index]} 张`,'region',stats.name,{stage:status})}</td><td>${compareDrilldownLink(`${stats.stageOverdues[index]} 张`,'region',stats.name,{stage:status,deliveryStatus:'超时'})}</td><td>${compareDrilldownLink(`${stats.stageWarnings[index]} 张`,'region',stats.name,{stage:status,deliveryStatus:'预警'})}</td><td>${compareDrilldownLink(`${stats.unopenedByStage[index]} 张`,'region',stats.name,{stage:status,unopenedOnly:true})}</td></tr>`).join('');
+      const fillRateBandCells = stats.bands.map((count,index) => `<td>${compareDrilldownLink(`${count} 张`,'region',stats.name,compareFillRateRanges[index])}</td>`).join('');
+      return `<tr data-fulfillment-region="${stats.name}"><td><button class="delivery-order-expander delivery-region-expander" type="button" aria-expanded="false" aria-label="展开 ${stats.name} 状态明细" title="展开状态明细"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3.5 6 4.5 4.5L12.5 6"/></svg></button></td><td>${compareDrilldownLink(stats.name,'region',stats.name)}</td><td>${compareDrilldownLink(`${stats.total} 张`,'region',stats.name)}</td><td>${compareDrilldownLink(`${stats.overdue} 张`,'region',stats.name,{deliveryStatus:'超时'})}</td><td>${compareDrilldownLink(`${stats.warning} 张`,'region',stats.name,{deliveryStatus:'预警'})}</td><td>${compareDrilldownLink(`${stats.unopened} 张`,'region',stats.name,{unopenedOnly:true})}</td><td>${compareDrilldownLink(`${stats.shortage.toLocaleString('zh-CN')} 件`,'region',stats.name,{shortageOnly:true})}</td><td>${compareDrilldownLink(`${stats.fillRate.toFixed(1)}%`,'region',stats.name)}</td>${fillRateBandCells}</tr><tr class="delivery-region-compare-detail" data-fulfillment-region="${stats.name}" hidden><td colspan="13"><div class="base-status-detail-wrap"><table class="dimension-table base-status-detail-table"><thead><tr><th>状态</th><th>订单总数</th><th>超时订单</th><th>预警订单</th><th>未开订单数</th></tr></thead><tbody>${statusRows}</tbody></table></div></td></tr>`;
+    }).join('');
+deliveryRegionCompareRows.addEventListener('click',event => {
+      const button = event.target.closest('.delivery-region-expander');
+      if (!button) return;
+      const detailRow = button.closest('tr').nextElementSibling;
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      detailRow.hidden = !expanded;
+      button.setAttribute('aria-expanded',String(expanded));
+      button.setAttribute('aria-label',`${expanded ? '收起' : '展开'} ${button.closest('tr').dataset.fulfillmentRegion} 状态明细`);
+      button.title = expanded ? '收起状态明细' : '展开状态明细';
+    });
+document.querySelector('.delivery-order-detail-card').addEventListener('click',event => {
+      const button = event.target.closest('.compare-drilldown');
+      if (!button) return;
+      const criteria = { axis:button.dataset.drilldownAxis,value:button.dataset.drilldownValue };
+      if (button.dataset.deliveryStatus) criteria.deliveryStatus = button.dataset.deliveryStatus;
+      if (button.dataset.stage) criteria.stage = button.dataset.stage;
+      if (button.dataset.fillMin) criteria.fillMin = Number(button.dataset.fillMin);
+      if (button.dataset.fillMax) criteria.fillMax = Number(button.dataset.fillMax);
+      if (button.dataset.fillMaxInclusive === 'true') criteria.fillMaxInclusive = true;
+      if (button.dataset.unopenedOnly === 'true') criteria.unopenedOnly = true;
+      if (button.dataset.shortageOnly === 'true') criteria.shortageOnly = true;
+      window.openDeliveryOrderDrilldown(criteria);
+    });
+function baseShortageStats() {
+      const rows = scopedFulfillmentOrders();
+      const today = rows.filter(order => order.window === '当天及之前');
+      const fiveDays = rows.filter(order => order.window !== '5日后');
+      const unable = rows.filter(order => order.timing.includes('预计无法满足'));
+      const sum = orders => orders.reduce((total, order) => total + order.shortage, 0);
+      return { rows,today,fiveDays,unable,sum };
+    }
+function renderFulfillmentBase() {
+      const base = fulfillmentBaseFilter.value;
+      const {rows,today,fiveDays,unable,sum} = baseShortageStats();
+      const warehouseActive = fulfillmentView.querySelector('.warehouse-summary').hidden === false;
+      const baseStats = demoBaseStats[base];
+      document.getElementById('fulfillmentBaseScope').textContent = warehouseActive ? `${base || '全部基地'} · 仓配演示数据` : base ? `${base} · 缺货高风险样本 ${rows.length} 张` : '全部基地 · 演示快照';
+      document.querySelectorAll('.warehouse-base-table tbody tr[data-warehouse-base]:not(.warehouse-status-detail)').forEach(row => {
+        const hidden = Boolean(base && row.dataset.warehouseBase !== base);
+        row.hidden = hidden;
+        if (hidden && row.nextElementSibling?.classList.contains('warehouse-status-detail')) {
+          row.nextElementSibling.hidden = true;
+          row.querySelector('.warehouse-status-expander')?.setAttribute('aria-expanded','false');
+        }
+      });
+      document.querySelectorAll('.delivery-base-compare-table tbody tr').forEach(row => { row.hidden = Boolean(base && row.dataset.fulfillmentBase !== base); });
+      document.querySelectorAll('#itemDimensionPanel tbody tr').forEach(row => { row.hidden = Boolean(base && row.cells[1]?.textContent.trim() !== base); });
+      const itemMetrics = [...document.querySelectorAll('#itemMetricFilters .metric strong')];
+      const itemValues = baseStats ? [baseStats.unopened,baseStats.shortage,baseStats.production] : [28,6320,8450];
+      const itemUnits = ['张','件','件'];
+      itemMetrics.forEach((node,index) => { node.innerHTML = `${itemValues[index].toLocaleString('zh-CN')}<span class="metric-unit">${itemUnits[index]}</span>`; });
+      const summary = fulfillmentView.querySelector(warehouseActive ? '.warehouse-summary' : '.fulfillment-summary:not(.warehouse-summary):not(.item-summary)');
+      summary.innerHTML = warehouseActive ? baseOriginal.warehouseSummary : baseOriginal.summary;
+      const analysis = fulfillmentView.querySelector('.fulfillment-analysis');
+      if (!base) {
+        document.getElementById('fulfillmentTracePanel').innerHTML = baseOriginal.trace;
+        document.getElementById('fulfillmentRiskPanel').innerHTML = baseOriginal.risk;
+        document.getElementById('fulfillmentShortagePanel').innerHTML = baseOriginal.shortage;
+        analysis.querySelector('h3').textContent = baseOriginal.analysisTitle;
+        analysis.querySelector(':scope > p').textContent = baseOriginal.analysisSummary;
+        document.getElementById('fulfillmentAnalysisDimensions').innerHTML = baseOriginal.analysisCopy;
+        analysis.querySelector('.fulfillment-analysis-foot > span').textContent = baseOriginal.analysisFoot;
+        document.getElementById('fulfillmentDimensionScope').textContent = '全部基地 · 订单、区域、仓库、生产、调拨及库存货龄均为模拟数据。';
+      } else {
+        const metrics = [...summary.querySelectorAll('.metric')];
+        const deliveryValues = [baseStats.unopened,baseStats.overdue,baseStats.warning,baseStats.shortage,baseStats.fillRate];
+        const warehouseValues = [baseStats.total-baseStats.unopened,baseStats.overdue,baseStats.warning,baseStats.fillRate];
+        const values = warehouseActive ? warehouseValues : deliveryValues;
+        const units = warehouseActive ? ['张','张','张','%'] : ['张','张','张','件','%'];
+        metrics.forEach((metric,index) => {
+          metric.querySelector('strong').innerHTML = `${Number(values[index]).toLocaleString('zh-CN')}<span class="metric-unit">${units[index]}</span>`;
+          if (warehouseActive) {
+            metric.querySelector('small').textContent = `演示统计 · ${base}基地`;
+            return;
+          }
+          const breakdown = metric.querySelector('.metric-breakdown');
+          if (!breakdown) return;
+          let detailValues;
+          if (breakdown.dataset.breakdown === 'open-total') {
+            detailValues = [`${(baseStats.total-baseStats.unopened).toLocaleString('zh-CN')} 张`,`${baseStats.total.toLocaleString('zh-CN')} 张`];
+          } else {
+            const stageCounts = breakdown.dataset.breakdown === 'overdue-stages' ? baseStats.stageOverdues : baseStats.stageWarnings;
+            detailValues = stageCounts.map(count => `${count.toLocaleString('zh-CN')} 张`);
+          }
+          breakdown.querySelectorAll('strong').forEach((node,detailIndex) => { node.textContent = detailValues[detailIndex]; });
+        });
+        analysis.querySelector('h3').textContent = `${base}：${today.length ? '优先协调当天缺货' : '提前协调近期供应'}`;
+        analysis.querySelector(':scope > p').textContent = `${base}缺货高风险样本共 ${rows.length} 张，终缺 ${sum(rows).toLocaleString('zh-CN')} 件；当天及之前 ${today.length} 张、${sum(today).toLocaleString('zh-CN')} 件，未来 5 日累计 ${fiveDays.length} 张、${sum(fiveDays).toLocaleString('zh-CN')} 件。建议按需开单时间协调库存、排产与调拨，优先复核预计无法满足的 ${unable.length} 张订单。`;
+        document.getElementById('fulfillmentDimensionScope').textContent = `${base} · 全量订单、区域、仓库、生产、调拨及库存货龄均为模拟数据。`;
+        document.getElementById('fulfillmentAnalysisDimensions').innerHTML = `<p><strong>作废率与改单率：</strong>${base}演示作废率 1.8%、改单率 2.4%；改单偏高，建议按客户与 SKU 复盘需求变更。</p><p><strong>满足率：</strong>${base}订单满足率 ${baseStats.fillRate}%，终缺 ${baseStats.shortage.toLocaleString('zh-CN')} 件；优先协调当天缺口。</p><p><strong>准交率：</strong>${base}演示准交率 ${Math.max(80,baseStats.fillRate-8.9).toFixed(1)}%，节点超时 ${baseStats.overdue} 张；建议复核派车和到货时间。</p><p><strong>可发货天数：</strong>${base}重点 SKU 平均可发货 5.7 天，低于 7 天的 SKU 优先安排补产或调拨。</p>`;
+        analysis.querySelector('.fulfillment-analysis-foot > span').textContent = `✦ 当前范围：${base} · 缺货明细样本分析`;
+        const stages = ['备单中','派车中','装车中','在途'];
+        const deadlines = ['最晚开单时间','最晚到厂时间','最晚发车时间','开单确认到货时间'];
+        document.getElementById('fulfillmentTracePanel').innerHTML = `<div class="card-head"><div><h2>订单节点追踪</h2><p>${base}节点状态与风险订单 · 演示快照</p></div><span>${baseStats.total} 张订单</span></div><div class="trace-steps">${stages.map((stage,index) => `<article class="trace-step"><span>${stage}</span><strong>${baseStats.stages[index]}</strong><small><b>${baseStats.stageWarnings[index]} 预警 · ${baseStats.stageOverdues[index]} 超时</b><br>${deadlines[index]}</small></article>`).join('')}<article class="trace-step done"><span>已完成</span><strong>${baseStats.completed}</strong><small>${baseStats.completed-baseStats.delayed} 准交 · ${baseStats.delayed} 延迟<br>GPS 围栏／到货确认</small></article></div><p class="trace-rule">普通节点提前 2 小时预警；夜间节点按当日 14:00 预警规则判断。</p>`;
+        const grouped = new Map();
+        rows.forEach(order => grouped.set(order.category,(grouped.get(order.category) || 0)+order.shortage));
+        const risks = [...grouped].sort((a,b) => b[1]-a[1]).slice(0,4);
+        document.getElementById('fulfillmentRiskPanel').innerHTML = `<div class="card-head"><div><h2>终端缺货风险</h2><p>${base} · 按当前缺货样本的品类终缺量排序</p></div><span>Top ${risks.length}</span></div><div class="risk-list">${risks.map(([category,quantity],index) => `<article class="risk-item"><span>${index+1}</span><div><strong>${base} · ${escapeHtml(category)}</strong><small>缺货明细汇总 · 建议协调库存/排产</small></div><b>${quantity.toLocaleString('zh-CN')} 件</b></article>`).join('')}</div>`;
+        document.getElementById('fulfillmentShortagePanel').innerHTML = baseOriginal.shortage;
+        const shortagePanel = document.getElementById('fulfillmentShortagePanel');
+        shortagePanel.querySelector('.card-head p').textContent = `${base}缺货样本汇总；库存、排产与调拨补位量为模拟分配`;
+        [...shortagePanel.querySelectorAll('.formula-item')].forEach((item,index) => {
+          const total = baseStats.shortage;
+          const values = [Math.round(total * 1.45),-Math.round(total * 0.35),-Math.round(total * 0.10),total];
+          item.querySelector('strong').textContent = values[index].toLocaleString('zh-CN');
+          item.querySelector('small').textContent = ['调整需求 − 占单','良品可用库存补位','排产与调拨补位','演示终缺量'][index];
+        });
+        [today,fiveDays,unable].forEach((orders,index) => {
+          const bar = shortagePanel.querySelectorAll('.shortage-bar')[index];
+          bar.querySelector('b').textContent = sum(orders).toLocaleString('zh-CN');
+          bar.querySelector('i').style.width = `${sum(rows) ? sum(orders)/sum(rows)*100 : 0}%`;
+        });
+      }
+      filterFulfillmentRows(true);
+      setWarehouseAnalysis(warehouseActive);
+    }
+const orderNumberSearch = document.getElementById('orderNumberSearch');
+const customerSearch = document.getElementById('customerSearch');
+const warehousePicker = document.getElementById('warehousePicker');
+const warehouseSearch = document.getElementById('warehouseSearch');
+const warehouseOptions = document.getElementById('warehouseOptions');
+const omsStatusFilter = document.getElementById('omsStatusFilter');
+const shortageWindowFilter = document.getElementById('shortageWindowFilter');
+const ordersPageSize = document.getElementById('ordersPageSize');
+const ordersPrevPage = document.getElementById('ordersPrevPage');
+const ordersNextPage = document.getElementById('ordersNextPage');
+const warehouseNames = [...new Set(fulfillmentRows.map(row => `${row.cells[2].querySelector('strong').textContent} · ${row.cells[2].querySelector('small').textContent}`))];
+let selectedWarehouse = '';
+let currentOrderPage = 1;
+function normalizeSearch(value) { return String(value).trim().toLocaleLowerCase('zh-CN'); }
+function filterFulfillmentRows(resetPage = false) {
+      const numberQuery = normalizeSearch(orderNumberSearch.value);
+      const customerQuery = normalizeSearch(customerSearch.value);
+      const selectedStatus = omsStatusFilter.value;
+      const selectedWindow = shortageWindowFilter.value;
+      const [selectedDimension, selectedOrgOrRegion = ''] = document.getElementById('deliveryOrgFilter').value.split(':');
+      const selectedChannel = document.getElementById('deliveryChannelFilter').value;
+      if (resetPage) currentOrderPage = 1;
+      const matchedRows = fulfillmentRows.filter(row => {
+        const sourceNumber = normalizeSearch(row.cells[0].querySelector('strong').textContent);
+        const executeNumber = normalizeSearch(row.cells[0].querySelector('small').textContent);
+        const customerName = normalizeSearch(row.cells[1].querySelector('strong').textContent);
+        const customerCode = normalizeSearch(row.dataset.customerCode);
+        const warehouse = `${row.cells[2].querySelector('strong').textContent} · ${row.cells[2].querySelector('small').textContent}`;
+        const fulfillmentStage = row.dataset.stage;
+        const matchesNumber = !numberQuery || sourceNumber.includes(numberQuery) || executeNumber.includes(numberQuery);
+        const matchesCustomer = !customerQuery || customerName.includes(customerQuery) || customerCode.includes(customerQuery);
+        const matchesWarehouse = !selectedWarehouse || warehouse === selectedWarehouse;
+        const matchesStatus = !selectedStatus || fulfillmentStage === selectedStatus;
+        const matchesWindow = !selectedWindow || (selectedWindow === '未来5日' ? row.dataset.window !== '5日后' : row.dataset.window === selectedWindow);
+        const matchesBase = !fulfillmentBaseFilter.value || row.cells[2].querySelector('strong').textContent === fulfillmentBaseFilter.value;
+        const matchesOrg = selectedDimension !== 'org' || row.dataset.salesOrg === selectedOrgOrRegion;
+        const matchesRegion = selectedDimension !== 'region' || row.dataset.provinceRegion === selectedOrgOrRegion || row.dataset.region === selectedOrgOrRegion;
+        const matchesChannel = !selectedChannel || row.dataset.channel === selectedChannel;
+        return matchesBase && matchesNumber && matchesCustomer && matchesWarehouse && matchesStatus && matchesWindow && matchesOrg && matchesRegion && matchesChannel;
+      });
+      const pageSize = Number(ordersPageSize.value);
+      const pageCount = Math.max(1, Math.ceil(matchedRows.length / pageSize));
+      currentOrderPage = Math.min(currentOrderPage, pageCount);
+      const pageStart = (currentOrderPage - 1) * pageSize;
+      const pageRows = new Set(matchedRows.slice(pageStart, pageStart + pageSize));
+      fulfillmentRows.forEach(row => { row.hidden = !pageRows.has(row); });
+      document.getElementById('ordersNoMatch').hidden = matchedRows.length !== 0;
+      document.getElementById('ordersCount').textContent = `显示 ${matchedRows.length} / ${scopedFulfillmentOrders().length} 条`;
+      document.getElementById('ordersTotal').textContent = `共${matchedRows.length}条`;
+      document.getElementById('ordersCurrentPage').textContent = currentOrderPage;
+      document.getElementById('ordersPageCount').textContent = pageCount;
+      ordersPrevPage.disabled = currentOrderPage <= 1;
+      ordersNextPage.disabled = currentOrderPage >= pageCount || matchedRows.length === 0;
+    }
+fulfillmentBaseFilter.addEventListener('change', () => {
+      selectedWarehouse = '';
+      closeWarehouseOptions();
+      
+      renderFulfillmentBase();
+    });
+['deliveryOrgFilter','deliveryChannelFilter'].forEach(id => document.getElementById(id).addEventListener('change', () => filterFulfillmentRows(true)));
+function closeWarehouseOptions() {
+      warehouseOptions.hidden = true;
+      warehouseSearch.setAttribute('aria-expanded', 'false');
+      warehouseSearch.value = selectedWarehouse;
+    }
+function openWarehouseOptions() {
+      const search = normalizeSearch(warehouseSearch.value);
+      warehouseOptions.replaceChildren();
+      const options = [{ label:'全部基地 / 提货点', value:'' }, ...warehouseNames.map(value => ({ label:value, value }))]
+        .filter(option => !search || normalizeSearch(option.label).includes(search));
+      if (!options.length) { const empty = document.createElement('div'); empty.className = 'no-option'; empty.textContent = '无匹配基地或提货点'; warehouseOptions.appendChild(empty); }
+      options.forEach(option => {
+        const button = document.createElement('button'); button.type = 'button'; button.setAttribute('role', 'option');
+        button.textContent = option.label; button.setAttribute('aria-selected', String(option.value === selectedWarehouse));
+        button.addEventListener('click', () => { selectedWarehouse = option.value; warehouseSearch.focus(); closeWarehouseOptions(); filterFulfillmentRows(true); });
+        warehouseOptions.appendChild(button);
+      });
+      warehouseOptions.hidden = false;
+      warehouseSearch.setAttribute('aria-expanded', 'true');
+    }
+orderNumberSearch.addEventListener('input', () => filterFulfillmentRows(true));
+customerSearch.addEventListener('input', () => filterFulfillmentRows(true));
+omsStatusFilter.addEventListener('change', () => filterFulfillmentRows(true));
+shortageWindowFilter.addEventListener('change', () => filterFulfillmentRows(true));
+document.getElementById('warehouseProviderFilter').addEventListener('change', event => {
+      const provider = event.target.value;
+      document.querySelectorAll('.warehouse-carrier-table tbody tr[data-warehouse-carrier]:not(.warehouse-status-detail)').forEach(row => {
+        const hidden = Boolean(provider && row.dataset.warehouseCarrier !== provider);
+        row.hidden = hidden;
+        if (hidden && row.nextElementSibling?.classList.contains('warehouse-status-detail')) {
+          row.nextElementSibling.hidden = true;
+          row.querySelector('.warehouse-status-expander')?.setAttribute('aria-expanded','false');
+        }
+      });
+    });
+warehouseSearch.addEventListener('focus', openWarehouseOptions);
+warehouseSearch.addEventListener('input', () => { if (warehouseSearch.value !== selectedWarehouse) { selectedWarehouse = ''; filterFulfillmentRows(true); } openWarehouseOptions(); });
+warehouseSearch.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closeWarehouseOptions(); warehouseSearch.blur(); }
+      if (event.key === 'ArrowDown' && !warehouseOptions.hidden) { const first = warehouseOptions.querySelector('button'); if (first) { event.preventDefault(); first.focus(); } }
+      if (event.key === 'Enter' && !warehouseOptions.hidden) { const first = warehouseOptions.querySelector('button'); if (first) { event.preventDefault(); first.click(); } }
+    });
+document.getElementById('warehouseToggle').addEventListener('click', () => { if (warehouseOptions.hidden) { warehouseSearch.value = ''; openWarehouseOptions(); warehouseSearch.focus(); } else closeWarehouseOptions(); });
+warehousePicker.addEventListener('focusout', () => { setTimeout(() => { if (!warehousePicker.contains(document.activeElement)) closeWarehouseOptions(); }, 0); });
+document.addEventListener('click', event => { if (!warehousePicker.contains(event.target)) closeWarehouseOptions(); });
+ordersPageSize.addEventListener('change', () => filterFulfillmentRows(true));
+ordersPrevPage.addEventListener('click', () => { if (currentOrderPage > 1) { currentOrderPage--; filterFulfillmentRows(); } });
+ordersNextPage.addEventListener('click', () => { currentOrderPage++; filterFulfillmentRows(); });
+filterFulfillmentRows();
+function escapeHtml(value) { return String(value).replace(/[&<>"']/g, char => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[char])); }
+</script>
+</body></html>

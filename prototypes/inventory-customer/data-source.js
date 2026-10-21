@@ -24,7 +24,10 @@ WITH sku AS (
   WHERE stat_date = (SELECT MAX(stat_date) FROM agents_scm_cust_jxc_ai_daliy_d)
   GROUP BY stat_date, cust_code, material_code
 ), weighted AS (
-  SELECT sku.*,
+  SELECT sku.stat_date, sku.cust_code, sku.material_code,
+    sku.cust_name, sku.region_name, sku.province_region_name,
+    sku.stock_qty, sku.stock_amt, sku.in_transit_qty, sku.normal_stock_qty,
+    sku.large_date_qty, sku.large_date_invalid_sku, sku.sales_qty_30days,
     SUM(stock_qty) OVER (PARTITION BY stat_date, cust_code) AS total_stock,
     SUM(sales_qty_30days) OVER (PARTITION BY stat_date, cust_code) AS total_sales
   FROM sku
@@ -85,6 +88,7 @@ export async function loadCustomerInventory(options = {}) {
   const rows = await executeAllGeaSqlPages(`/*customer-inventory:latest*/\n${input.sql}`, {
     parameters: input.parameters,
     signal: options.signal,
+    pageConcurrency: 3,
   });
   return mapCustomerInventoryRows(rows);
 }
