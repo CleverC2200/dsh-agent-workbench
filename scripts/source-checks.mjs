@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, appendFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
@@ -50,6 +50,9 @@ export async function sourceChecks(result, phase) {
     if (plan.dependencies && !joint) {
       const { acquireBuild } = await import(pathToFileURL(resolve(gea, 'scripts/build-admission.mjs')));
       if (repo === 'dsh-gea-plugin' && typecheck) {
+        const linkedWorkbench = resolve(root, '../dsh-agent-workbench');
+        if (!existsSync(linkedWorkbench)) symlinkSync(workbench, linkedWorkbench, 'dir');
+        if (realpathSync(linkedWorkbench) !== realpathSync(workbench)) throw Error('SOURCE_PEER_LINK_MISMATCH');
         for (const peer of [workbench, manage]) {
           const release = acquireBuild({ operation: 'prepare', cwd: peer });
           try {
