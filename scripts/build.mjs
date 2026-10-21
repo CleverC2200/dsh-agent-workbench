@@ -1,6 +1,7 @@
 import { mkdir, writeFile, copyFile, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { replaceBuildDirectory, syncAgentResources } from './build-output.mjs';
 const { values } = parseArgs({ options: { target: { type: 'string' } } });
 if (values.target && values.target !== 'core') throw Error('Unsupported build target');
 (await import('./verify-official-input.mjs')).verifyOfficialInput();
@@ -17,18 +18,15 @@ for (const file of ['configured-query-client.mjs', 'configured-query-client.d.mt
 await mkdir('lib/theme', { recursive: true });
 await copyFile('theme/tokens.css', 'lib/theme/tokens.css');
 await copyFile('theme/html-defaults.css', 'lib/theme/html-defaults.css');
-for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
-  await cp(
-    `../dsh-agent-manage/business-resources/category-plan/${name}`,
-    `lib/static/category/${name}`,
-    { recursive: true },
-  );
-for (const file of ['prompt.json', 'capability.json', 'mcp.json', 'skills', 'SOURCE.json'])
-  await cp(
-    `../dsh-agent-manage/business-resources/inventory-mps/${file}`,
-    `lib/static/mps/${file}`,
-    { recursive: true },
-  );
+await syncAgentResources(
+  '../dsh-agent-manage/business-resources/category-plan',
+  'lib/static/category',
+);
+await syncAgentResources('../dsh-agent-manage/business-resources/inventory-mps', 'lib/static/mps');
+await cp(
+  '../dsh-agent-manage/business-resources/inventory-mps/SOURCE.json',
+  'lib/static/mps/SOURCE.json',
+);
 await build({
   entryPoints: ['src/host.ts', 'src/shared/notifications.ts', 'src/sales-plan.ts'],
   bundle: true,
@@ -101,19 +99,23 @@ await writeFile(
   `window.__ModuleLoader__.load({id:"@cleverc2200/dsh-agent-workbench",factory:(require)=>{var module={exports:{}};var exports=module.exports;const WORKBENCH_MODULE_STYLES=${JSON.stringify(workbenchStyles)};${workbenchCode}\nreturn module.exports;}});\n`,
 );
 
-execFileSync(
-  process.execPath,
-  [
-    'node_modules/typescript/bin/tsc',
-    '-p',
-    'tsconfig.official.json',
-    '--noEmit',
-    'false',
-    '--emitDeclarationOnly',
-    'true',
-  ],
-  { stdio: 'inherit' },
-);
+await replaceBuildDirectory('lib/types', (staging) => {
+  execFileSync(
+    process.execPath,
+    [
+      'node_modules/typescript/bin/tsc',
+      '-p',
+      'tsconfig.official.json',
+      '--noEmit',
+      'false',
+      '--emitDeclarationOnly',
+      'true',
+      '--outDir',
+      staging,
+    ],
+    { stdio: 'inherit' },
+  );
+});
 
 await import('./build-html-sample.mjs');
 await import('./build-customer-prototype.mjs');

@@ -1,3 +1,4 @@
+import { syncAgentResources } from './build-output.mjs';
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
@@ -31,7 +32,10 @@ const result = await build({
   outfile: 'inventory-apsplan.js',
   loader: { '.module.css': 'local-css' },
   // Shared source panels must use the same React instance as the APS renderer.
-  alias: { react: join(ui, 'node_modules/react'), 'react-dom': join(ui, 'node_modules/react-dom') },
+  alias: {
+    react: join(ui, 'node_modules/react'),
+    'react-dom': join(ui, 'node_modules/react-dom'),
+  },
   bundle: true,
   minify: true,
   write: false,
@@ -88,8 +92,7 @@ await writeFile(join(out, 'index.html'), html);
 for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
   await cp(join(resource, file), join(out, file));
 const agent = join(root, '../dsh-agent-manage/business-resources/inventory-apsplan');
-for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-  await cp(join(agent, file), join(out, file), { recursive: true });
+await syncAgentResources(agent, out);
 if (mock) {
   const plugin = JSON.parse(await readFile(join(out, 'plugin.json'), 'utf8'));
   plugin.mode = 'mock';

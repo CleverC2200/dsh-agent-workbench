@@ -1,3 +1,4 @@
+import { syncAgentResources } from './build-output.mjs';
 /** Assemble the retained prototype with current shared channel/theme and Manage resources. */
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
@@ -43,15 +44,8 @@ await writeFile(resolve(out, 'index.html'), html);
 await writeFile(resolve(out, 'sql.config.json'), sqlConfig);
 for (const file of ['plugin.json', 'page.json'])
   await cp(resolve(source, file), resolve(out, file));
-for (const file of [
-  'capability.json',
-  'prompt.json',
-  'mcp.json',
-  'skills',
-  'agent-prompt.md',
-  'SOURCE.json',
-  'README.md',
-])
+await syncAgentResources(agent, out);
+for (const file of ['agent-prompt.md', 'SOURCE.json', 'README.md'])
   await cp(resolve(agent, file), resolve(out, file), { recursive: true });
 await writeFile(
   resolve(out, 'build-inputs.json'),

@@ -5,6 +5,7 @@ import { build } from 'esbuild';
 import { fileURLToPath } from 'node:url';
 import { compileHtmlAuthor } from './html-author.mjs';
 import { verifyFixedAuthoredData } from './static-author-provenance.mjs';
+import { syncAgentResources } from './build-output.mjs';
 const questionStyles = await readFile(
   new URL('../business/shared/author-questions.css', import.meta.url),
   'utf8',
@@ -70,9 +71,7 @@ await writeFile(
   ),
 );
 // Manage remains the owner of the original declared resource; the installed page carries its files.
-for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
-  await cp(
-    new URL(`../../dsh-agent-manage/business-resources/plan-regional/${name}`, import.meta.url),
-    new URL(`regional/${name}`, outputs),
-    { recursive: true },
-  );
+await syncAgentResources(
+  new URL('../../dsh-agent-manage/business-resources/plan-regional/', import.meta.url),
+  new URL('regional/', outputs),
+);

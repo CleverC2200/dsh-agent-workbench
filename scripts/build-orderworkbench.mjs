@@ -1,3 +1,4 @@
+import { syncAgentResources } from './build-output.mjs';
 /** Assemble the original report UI, current page channel and Agent-owned resources. */
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
@@ -28,8 +29,7 @@ await writeFile(resolve(out, 'index.html'), html);
 for (const name of ['plugin.json', 'page.json', 'SOURCE.json'])
   await cp(resolve(source, name), resolve(out, name));
 const agent = resolve(root, '../dsh-agent-manage/business-resources/inventory-orderworkbench');
-for (const name of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-  await cp(resolve(agent, name), resolve(out, name), { recursive: true });
+await syncAgentResources(agent, out);
 await writeFile(
   resolve(out, 'build-inputs.json'),
   JSON.stringify({ themeSha256: digest(theme), htmlSha256: digest(html) }, null, 2) + '\n',

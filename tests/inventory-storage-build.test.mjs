@@ -12,8 +12,11 @@ test('the opaque inventory build keeps memory storage after repository formattin
   await mkdir(join(workbench, 'scripts'), { recursive: true });
   await cp('scripts/build-inventory-fc.mjs', join(workbench, 'scripts/build-inventory-fc.mjs'));
   await cp('scripts/build-inventory.mjs', join(workbench, 'scripts/build-inventory.mjs'));
+  await cp('scripts/build-output.mjs', join(workbench, 'scripts/build-output.mjs'));
   await cp('scripts/sql-config-build.mjs', join(workbench, 'scripts/sql-config-build.mjs'));
-  await cp('business/shared', join(workbench, 'business/shared'), { recursive: true });
+  await cp('business/shared', join(workbench, 'business/shared'), {
+    recursive: true,
+  });
   await cp('theme', join(workbench, 'theme'), { recursive: true });
   await cp('business/inventory-fc', join(workbench, 'business/inventory-fc'), {
     recursive: true,
