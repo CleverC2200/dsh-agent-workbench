@@ -40,6 +40,7 @@ export function ConfiguredFactsPage({
   viewIds,
   initialFilters = {},
   date,
+  cycleDays,
   customerCode,
   onChooseCustomer,
   currentPage,
@@ -55,6 +56,7 @@ export function ConfiguredFactsPage({
   viewIds?: string[];
   initialFilters?: Record<string, string>;
   date?: string;
+  cycleDays?: number;
   customerCode?: string;
   onChooseCustomer?: (code: string) => void;
   currentPage?: number;
@@ -114,7 +116,15 @@ export function ConfiguredFactsPage({
     columnChoices[viewId] ?? view.defaultColumns ?? view.columns.map((c: any) => c.field);
   const columns = view.columns.filter((c: any) => chosenColumns.includes(c.field));
   const snapshot = useRef<{ key: string; context: any } | undefined>(undefined);
-  const scopeKey = JSON.stringify([config.agentId, viewId, asOf, customer, filters, revision]);
+  const scopeKey = JSON.stringify([
+    config.agentId,
+    viewId,
+    asOf,
+    customer,
+    cycleDays,
+    filters,
+    revision,
+  ]);
   useEffect(() => {
     const controller = new AbortController();
     setResult(null);
@@ -126,7 +136,7 @@ export function ConfiguredFactsPage({
     void readConfiguredFacts(
       config,
       viewId,
-      { asOf, page, pageSize, filters, customer, readContext },
+      { asOf, page, pageSize, filters, customer, cycleDays, readContext },
       { signal: controller.signal },
     )
       .then((value) => {

@@ -94,6 +94,7 @@ export type FcViewState = {
   cycles: Entry<FcCycle>[];
   preferences: Entry<FcPreferences>[];
   cycleEdits?: Entry<FcCycleEdit>[];
+  replenishmentCycleDays?: number;
 };
 export type AqkcViewState = {
   version: 1;
@@ -732,6 +733,8 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
           cycles: entries('cycle-preview', cycle),
           preferences: entries('preferences', preferences),
           cycleEdits: entries('cycle-edit', cycleEdit),
+          replenishmentCycleDays: (v) =>
+            typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 365,
         },
         ['version', 'filters', 'drafts', 'plans', 'cycles', 'preferences'],
       );

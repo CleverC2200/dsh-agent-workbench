@@ -7,6 +7,7 @@ export function useConfiguredOverview(
   customer: string,
   revision: number,
   onRead?: (data: any) => void,
+  cycleDays?: number,
 ) {
   const [state, setState] = useState<any>({ parts: {}, busy: true, errors: [] });
   useEffect(() => {
@@ -14,6 +15,7 @@ export function useConfiguredOverview(
     setState({ parts: {}, busy: true, errors: [] });
     void readConfiguredOverview(config, date, customer, {
       signal: controller.signal,
+      cycleDays,
       onProgress: (parts) => {
         if (!controller.signal.aborted)
           setState({
@@ -36,6 +38,7 @@ export function useConfiguredOverview(
           date,
           customer,
           overview: parts,
+          cycleDays,
           coverage: '各来源独立统计；基地库存不等于全链库存，累计订单不等于当前待发',
         });
       })
@@ -46,6 +49,6 @@ export function useConfiguredOverview(
         }
       });
     return () => controller.abort();
-  }, [config.agentId, date, customer, revision]);
+  }, [config.agentId, date, customer, revision, cycleDays]);
   return state;
 }

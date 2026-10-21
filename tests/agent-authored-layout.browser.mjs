@@ -819,3 +819,59 @@ for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
     await expect(root.getByRole('alert')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
+
+test('FC cycle dialog applies one setting to its card and fresh ten-row pages', async (t) => {
+  const { frame, calls, errors, page } = await mount(t, 'fc', 390, (query, result) => {
+    if (query.queryId === 'replenishment.summary')
+      Object.assign(result.rows[0], {
+        recommended_qty: 10 * (query.parameters.cycle_days + 3) - 20,
+      });
+    return result;
+  });
+  const trigger = frame.getByRole('button', { name: '补货周期配置', exact: true });
+  const card = frame.locator('.kpi-card').filter({ hasText: '待补货量' });
+  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await expect(trigger).toContainText('7天（默认）');
+  await trigger.click();
+  const modal = frame.getByRole('dialog', { name: '补货周期配置', exact: true });
+  const input = modal.getByRole('spinbutton', { name: '补货周期（天）', exact: true });
+  await input.fill('14');
+  await modal.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(trigger).toContainText('7天（默认）');
+  await trigger.click();
+  await input.fill('0');
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(modal).toBeVisible();
+  await expect(trigger).toContainText('7天（默认）');
+  await input.fill('14');
+  const before = calls.length;
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(trigger).toContainText('14天');
+  await expect(card.locator('.kpi-value')).toHaveText('150箱');
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.queryId === 'replenishment.detail.atomic' &&
+            query.parameters.cycle_days === 14 &&
+            query.parameters.page_size === 10 &&
+            query.parameters.offset === 0,
+        ),
+    )
+    .toBe(true);
+  await trigger.click();
+  await modal.getByRole('button', { name: '恢复默认', exact: true }).click();
+  await expect(input).toHaveValue('7');
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await page.setViewportSize({ width: 320, height: 900 });
+  await trigger.click();
+  const box = await modal.boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= 320);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});

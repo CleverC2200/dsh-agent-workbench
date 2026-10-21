@@ -445,3 +445,33 @@ test('customer analysis resolves a month-specific source date and queries each t
   assert.equal(calls.at(-1).values.page_size, 10);
   assert.equal(calls.at(-1).values.offset, 10);
 });
+
+test('FC cycle setting binds the same integer to detail, count and whole-scope summary', async () => {
+  const io = source(configs.fc, (call, result) => {
+    if (call.queryId === 'replenishment.count') result.rows = [{ total: 25 }];
+    if (call.queryId === 'replenishment.detail')
+      result.rows = Array.from({ length: 10 }, () => ({ ...result.rows[0] }));
+    if (call.queryId === 'replenishment.summary') result.rows[0].row_count = 25;
+  });
+  for (const cycleDays of [7, 14, 365]) {
+    await readConfiguredFacts(configs.fc, 'replenishment', { ...input, cycleDays, page: 2 }, io);
+    await readConfiguredFacts(
+      configs.fc,
+      'replenishment',
+      { ...input, cycleDays },
+      { ...io, summaryOnly: true },
+    );
+    const reads = io.calls.filter((call) => call.queryId.startsWith('replenishment.')).splice(-3);
+    assert.ok(reads.some((call) => call.queryId === 'replenishment.summary'));
+    for (const call of reads) {
+      assert.equal(call.values.cycle_days, cycleDays);
+      assert.equal(call.values.preparation_days, 3);
+    }
+  }
+  for (const cycleDays of [0, -1, 1.5, 366]) {
+    await assert.rejects(
+      readConfiguredFacts(configs.fc, 'replenishment', { ...input, cycleDays }, source(configs.fc)),
+      (error) => error.code === 'PARAMETER_TYPE_MISMATCH',
+    );
+  }
+});

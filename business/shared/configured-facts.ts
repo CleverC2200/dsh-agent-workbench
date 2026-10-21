@@ -5,6 +5,7 @@ import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 export type FactReadContext = { key: string; snapshotDate: string; configVersion: string };
 export type FactInput = {
   asOf: string;
+  cycleDays?: number;
   page?: number;
   pageSize?: number;
   filters?: Record<string, string>;
@@ -128,6 +129,7 @@ export async function readConfiguredFacts(
     viewId,
     input.asOf,
     input.customer?.trim() ?? '',
+    input.cycleDays,
     Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
   ]);
   let snapshotDate: string | null = null;
@@ -196,6 +198,7 @@ export async function readConfiguredFacts(
         Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
       ).getUTCDate();
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
+    if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = pageSize;
     if (name === 'offset') value = (page - 1) * pageSize;
     if (spec.format === 'YYYYMM' && typeof value === 'string')

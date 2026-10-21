@@ -60,3 +60,20 @@ export const memoryStorage = {
   clear: () => values.clear(),
 };
 window.addEventListener('gea-identity-changed', () => values.clear());
+
+/** Workbench persists only the current page's calculation setting, within its identity/session scope. */
+export const configuredCycleState = {
+  read() {
+    const value: unknown = view.get().replenishmentCycleDays;
+    return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 365
+      ? value
+      : undefined;
+  },
+  save(days: number) {
+    publish();
+    view.update({ replenishmentCycleDays: days });
+  },
+  subscribe(listener: () => void) {
+    return view.subscribe(listener);
+  },
+};

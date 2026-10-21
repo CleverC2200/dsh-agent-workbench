@@ -1,3 +1,5 @@
+import { configuredCycleState } from '../native/memory-storage';
+import { Modal } from '../dsh-ui/controls';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
@@ -39,9 +41,26 @@ export default function ConfiguredWorkbench() {
   const [tab, setTab] = useState('replenishment'),
     [date, setDate] = useState(businessDay),
     [draft, setDraft] = useState(businessDay),
-    [revision, refresh] = useState(0);
-  const { parts, errors, busy } = useConfiguredOverview(config, date, '', revision, (value) =>
-    updateContext('overview', value),
+    [revision, refresh] = useState(0),
+    [cycleDays, setCycleDays] = useState(
+      () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
+    ),
+    [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
+    [cycleOpen, setCycleOpen] = useState(false);
+  useEffect(
+    () =>
+      configuredCycleState.subscribe(() =>
+        setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays),
+      ),
+    [],
+  );
+  const { parts, errors, busy } = useConfiguredOverview(
+    config,
+    date,
+    '',
+    revision,
+    (value) => updateContext('overview', value),
+    cycleDays,
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
@@ -108,11 +127,20 @@ export default function ConfiguredWorkbench() {
             <>
               <span className="warehouse-switch">全部分仓</span>
               <button
+                type="button"
                 className="warehouse-cycle-context"
-                disabled
-                title="沿用原分仓固化规则默认7天，备货3天；个别仓库/SKU配置仍需业务配置接入"
+                aria-label="补货周期配置"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCycleDraft(String(cycleDays));
+                  setCycleOpen(true);
+                }}
               >
-                补货周期 <strong>{config.replenishmentPolicy.defaultCycleDays}天（默认）</strong>
+                补货周期{' '}
+                <strong>
+                  {cycleDays}天
+                  {cycleDays === config.replenishmentPolicy.defaultCycleDays ? '（默认）' : ''}
+                </strong>
               </button>
             </>
           }
@@ -213,12 +241,13 @@ export default function ConfiguredWorkbench() {
                 <OriginalOperations config={config} date={date} revision={revision} />
               ) : (
                 <ConfiguredFactsPage
-                  key={[tab, date, revision].join(':')}
+                  key={[tab, date, revision, cycleDays].join(':')}
                   config={config}
                   embedded
                   presentation={originalFcView(config, tab)}
                   viewIds={views[tab]}
                   date={date}
+                  cycleDays={cycleDays}
                   onRead={(v) => updateContext('data', v)}
                 />
               )}
@@ -226,6 +255,50 @@ export default function ConfiguredWorkbench() {
           </section>
         </div>
       </div>
+      <Modal
+        visible={cycleOpen}
+        title="补货周期配置"
+        footer={null}
+        onCancel={() => setCycleOpen(false)}
+        style={{ width: 'min(420px, calc(100vw - 32px))' }}
+      >
+        <LocalQueryForm
+          className={common.controls}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const days = Number(cycleDraft);
+            if (!Number.isInteger(days) || days < 1 || days > 365) return;
+            configuredCycleState.save(days);
+            setCycleDays(days);
+            setCycleOpen(false);
+          }}
+        >
+          <label>
+            补货周期（天）{' '}
+            <input
+              aria-label="补货周期（天）"
+              type="number"
+              min={1}
+              max={365}
+              step={1}
+              required
+              value={cycleDraft}
+              onChange={(event) => setCycleDraft(event.target.value)}
+            />
+          </label>
+          <p>备货天数 {config.replenishmentPolicy.preparationDays} 天</p>
+          <button
+            type="button"
+            onClick={() => setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays))}
+          >
+            恢复默认
+          </button>
+          <button type="button" onClick={() => setCycleOpen(false)}>
+            取消
+          </button>
+          <button type="submit">应用</button>
+        </LocalQueryForm>
+      </Modal>
     </main>
   );
 }
