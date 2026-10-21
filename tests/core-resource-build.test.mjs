@@ -1,7 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink } from 'node:fs/promises';
+import {
+  access,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
@@ -13,12 +23,16 @@ test('the core build assembles current inventory Agent resources without recompi
   const fixture = await mkdtemp(resolve('.runtime/core-resource-build-'));
   const workbench = join(fixture, 'jobs/dsh-agent-workbench');
   await mkdir(join(fixture, 'jobs'));
-  execFileSync('git', ['worktree', 'add', '--detach', workbench, 'HEAD'], { stdio: 'pipe' });
+  execFileSync('git', ['worktree', 'add', '--detach', workbench, 'HEAD'], {
+    stdio: 'pipe',
+  });
   t.after(async () => {
-    execFileSync('git', ['worktree', 'remove', '--force', workbench], { stdio: 'pipe' });
+    execFileSync('git', ['worktree', 'remove', '--force', workbench], {
+      stdio: 'pipe',
+    });
     await rm(fixture, { recursive: true, force: true });
   });
-  for (const file of ['build.mjs', 'build-inventory.mjs'])
+  for (const file of ['build.mjs', 'build-inventory.mjs', 'build-output.mjs'])
     await cp(join(source, 'scripts', file), join(workbench, 'scripts', file));
   const manage = await realpath(
     resolve(process.env.WORKBENCH_TEST_MANAGE_ROOT ?? '../dsh-agent-manage'),
@@ -40,11 +54,17 @@ test('the core build assembles current inventory Agent resources without recompi
       readFile(join(workbench, `lib/business/inventory-${id}/index.html`)),
     ),
   );
+  const obsoleteType = join(workbench, 'lib/types/removed-module.d.ts');
+  const obsoleteSkill = join(workbench, 'lib/business/inventory-fc/skills/removed-skill.md');
+  await writeFile(obsoleteType, 'export declare const retired: true;\n');
+  await writeFile(obsoleteSkill, 'retired Skill\n');
   execFileSync('npm', ['run', 'build:core'], {
     cwd: workbench,
     stdio: 'pipe',
     env: { ...process.env, APS_BUILD_MODE: 'mock' },
   });
+  await assert.rejects(access(obsoleteType), { code: 'ENOENT' });
+  await assert.rejects(access(obsoleteSkill), { code: 'ENOENT' });
   for (const [index, id] of ['fc', 'aqkc'].entries()) {
     assert.deepEqual(
       await readFile(join(workbench, `lib/business/inventory-${id}/index.html`)),
