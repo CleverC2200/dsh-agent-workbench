@@ -10,6 +10,9 @@
     "tests/final-group-input.contract.mjs"
   ],
   "sourceFixtures": {
+    "scripts/workflow-preflight.test.mjs": {
+      "dependencies": false
+    },
     "tests/hosted-peer-input.test.mjs": { "dependencies": false },
     "scripts/source-quality.test.mjs": {
       "dependencies": false
@@ -28,6 +31,12 @@
     }
   },
   "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:scripts/workflow-preflight(?:\\.test)?\\.mjs|\\.github/workflows/[^/]+\\.ya?ml)$",
+      "tests": ["scripts/workflow-preflight.test.mjs"],
+      "sourceTests": ["scripts/workflow-preflight.test.mjs"]
+    },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^src/workbench/original/workbenches/regionalApproval/models/salesPlanCorrectionModel\\.ts$",
@@ -179,7 +188,12 @@
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^(?:scripts/(?:source-quality|source-checks|ci-test-plan)\\.mjs|\\.github/workflows/source-quality\\.yml)$",
-      "sourceTests": ["scripts/source-quality.test.mjs", "tests/source-checks.test.mjs", "tests/source-typecheck.test.mjs", "tests/ci-test-plan.test.mjs"],
+      "sourceTests": [
+        "scripts/source-quality.test.mjs",
+        "tests/source-checks.test.mjs",
+        "tests/source-typecheck.test.mjs",
+        "tests/ci-test-plan.test.mjs"
+      ],
       "tests": [
         "scripts/source-quality.test.mjs",
         "tests/source-checks.test.mjs",
@@ -191,18 +205,13 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/(?:run-quality-ci|ci-test-policy)\\.(?:mjs|json)$",
       "tests": [],
-      "sourceTests": [
-        "tests/quality-ci.test.mjs",
-        "tests/ci-test-plan.test.mjs"
-      ]
+      "sourceTests": ["tests/quality-ci.test.mjs", "tests/ci-test-plan.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^scripts/quality-peer-baseline\\.json$",
       "tests": [],
-      "sourceTests": [
-        "tests/hosted-peer-input.test.mjs"
-      ]
+      "sourceTests": ["tests/hosted-peer-input.test.mjs"]
     }
   ]
 }
