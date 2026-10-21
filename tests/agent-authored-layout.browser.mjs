@@ -129,13 +129,75 @@ test('qll original current-order card retains new base snapshot quantities witho
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card).toContainText('104.93万箱');
-  await expect(card).toContainText('基地缺货量');
-  await expect(card).toContainText('分仓缺货量');
+  await expect(card).toContainText('基地本月缺货量');
+  await expect(card).toContainText('分仓本月缺货量');
   assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
   assert.equal(
     calls.some((query) => query.queryId.startsWith('inventory.detail')),
     false,
   );
+  assert.deepEqual(errors, []);
+});
+test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'replenishment.summary')
+      Object.assign(result.rows[0], { historical_turnover_days: 12.5, turnover_count: 30 });
+    return result;
+  });
+  const card = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('库存周转', { exact: true }) });
+  await expect(card).toContainText('12.5天');
+  assert.ok(calls.some((query) => query.queryId === 'replenishment.summary'));
+  await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
+  await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+test('QLL cards retain layer maximum ages and monthly shortage values, including zero', async (t) => {
+  const { frame, errors } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'health.summary')
+      Object.assign(result.rows[0], {
+        base_max_age: 405,
+        max_age: query.parameters.warehouse_type === '分仓' ? 381 : 405,
+      });
+    if (query.queryId === 'orders.summary')
+      Object.assign(result.rows[0], {
+        shortage: query.parameters.pickup_type === '分仓' ? 0 : 12345,
+      });
+    return result;
+  });
+  const age = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('当前货龄', { exact: true }) });
+  await expect(age).toContainText('基地货龄405.0天');
+  await expect(age).toContainText('分仓货龄381.0天');
+  const orders = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('当前订单', { exact: true }) });
+  await expect(orders).toContainText('基地本月缺货量1.23万箱');
+  await expect(orders).toContainText('分仓本月缺货量0箱');
+  assert.deepEqual(errors, []);
+});
+test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'qll', 560);
+  await expect(
+    frame.locator('div[aria-busy]').filter({ has: frame.getByText('当前库存', { exact: true }) }),
+  ).toHaveAttribute('aria-busy', 'false');
+  const before = calls.length;
+  await frame.getByLabel('读取时点').fill('2026-10-18');
+  await expect(frame.getByText('2026年10月18日', { exact: true })).toBeVisible();
+  assert.equal(calls.length, before);
+  await frame.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.queryId === 'source.stock-date' && query.parameters.as_of === '2026-10-18',
+        ),
+    )
+    .toBe(true);
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [

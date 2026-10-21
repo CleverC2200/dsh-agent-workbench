@@ -1,0 +1,58 @@
+.control {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  font: 12px/1.4 var(--ui-font);
+  white-space: nowrap;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+.control svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+.control:hover {
+  border-color: var(--ui-accent-line);
+  background: var(--ui-hover);
+}
+.control:focus-within {
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 3px var(--ui-accent-soft);
+}
+.control > input[type='date'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.control input::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+.control[data-disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}

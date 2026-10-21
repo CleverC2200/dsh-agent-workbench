@@ -1,5 +1,6 @@
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import React, { useState, useEffect } from 'react';
 import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
 import { ConfiguredTrends } from './configured-trends';
@@ -100,13 +101,14 @@ export default function ConfiguredWorkbench() {
       aging: {
         current: knownNumber(parts.health?.summary?.max_age),
         unit: '天',
-        explanation: '当前货龄取库存健康数据的最大库龄；平均货龄未提供。',
+        explanation: '当前货龄及基地、分仓货龄分别取对应库存健康快照的最大库龄，不作为平均货龄。',
       },
       fulfillment: { current: fulfillmentPercent(orders), unit: '%' },
       orderGap: {
         current: knownNumber(stock?.known_open_orders),
         unit: '件',
-        explanation: '当前可取得的基地未备单量；不含已备单占用，分仓当前待发阶段尚无等价来源。',
+        explanation:
+          '当前可取得的基地未备单量；不含已备单占用，分仓当前待发阶段尚无等价来源。下方缺货量为所选日期所在月截至该日的累计值。',
       },
     },
   };
@@ -139,8 +141,7 @@ export default function ConfiguredWorkbench() {
                   refresh((n) => n + 1);
                 }}
               >
-                <input
-                  type="date"
+                <BusinessDateInput
                   aria-label="读取时点"
                   required
                   max={businessDay()}
@@ -161,6 +162,14 @@ export default function ConfiguredWorkbench() {
                     metricKey={key}
                     metric={workspace.kpis[key]}
                     workspace={workspace}
+                    maximumAges={{
+                      base: knownNumber(parts.health?.summary?.base_max_age),
+                      branch: knownNumber(branch?.max_age),
+                    }}
+                    periodShortages={{
+                      base: knownNumber(parts['factory-overview']?.summary?.shortage),
+                      branch: knownNumber(parts['branch-overview']?.summary?.shortage),
+                    }}
                     onOpen={() =>
                       setTab(
                         key === 'aging'
