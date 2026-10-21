@@ -11,8 +11,10 @@
 | pack_unit_qty | 同范围批次占用量合计 |
 | freeze_qty | 同范围批次冻结量合计 |
 | age_days | 正库存批次的快照日期减 prod_date，再取仓库 SKU 最大值；缺日期、未来生产日期及非正库存批次不参与 |
-| warehouse_name、product_categ_name、material_group_name | agents_scm_material_in_out_summary_d 同仓库 SKU 唯一名称；不唯一时不任选一条。仓库名称缺失时显示仓库编码 |
-| belong_base | agents_scm_cust_deliv_daily_di 同仓库唯一所属基地；多基地仓库不强行归属 |
+| warehouse_name | 库存源新增同名字段，按快照、仓库、SKU 和仓库类型核唯一值；空值显示仓库编码，不再依赖出入库历史补仓名 |
+| belong_base | 库存源新增同名字段，按同库存粒度核唯一值；不再从客户交货记录推断基地。用于四个 Agent 的基地筛选、分组和产销分仓列表 |
+| material_name | 库存源新增同名字段；库存明细、分仓补货列表优先显示源商品名，缺值沿用原商品字典补充 |
+| product_categ_name、material_group_name | 仍取 agents_scm_material_in_out_summary_d 同仓库 SKU 唯一品类、物料组；聚合后关联，避免放大库存 |
 
 日期差用公历序日计算，覆盖跨月、跨年和闰年。不能直接在 Doris 中相减 DATE，因为其结果是 YYYYMMDD 数值差。
 
@@ -30,4 +32,8 @@
 | 全链、基地、分仓、产销协同 | 源更新时间 | agents_scm_inventory_sku_data_d.source_updated_at 已移除；month_date 是快照日期 |
 | 全链、基地、分仓、产销协同 | 行更新时间 | agents_scm_inventory_sku_data_d.update_time 已移除；month_date 是快照日期 |
 
-2026-10-21 已在正式 GEA 验证四个 Consumer 的库存汇总、分仓补货及产销分仓查询；结果与直连逐列一致，没有返回字段被拒。验证使用 warehouse_classify、month_date、prod_date、live_qty 和相关数量、编码字段；直连结果与正式通道结果分别留证。
+2026-10-21 新增三个名称、归属字段已回灌：01/02 基地共 33 个仓库，20 分仓共 25 个仓库，同库存粒度未发现名称、基地冲突。分类范围内现库存合计 5,233,552.1 箱，基地 4,962,765.9 箱，分仓 270,786.2 箱。
+
+发布验证按用户要求取消三个插件联合启动检查，保留相关 SQL、功能回归、各插件构建和 CI；不把静态打包成功表述为客户端运行验收。
+
+四个正式 Consumer 的库存汇总与明细、分仓补货明细、产销分仓列表，以及按基地筛选的第二页共 11 次查询均与直连逐列一致，没有返回列被拒；47 个受影响 SQL 定义通过字段、别名和只读语法自检，50 项 SQL 回归通过。

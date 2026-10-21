@@ -1,0 +1,2 @@
+# User-provided evidence is hash-checked against its original bytes.
+docs/agent-inputs/apsplan-20261020/** whitespace=-blank-at-eof,-blank-at-eol

@@ -365,7 +365,8 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         tables = {
             'agents_dim_product_list_mi': 'material_code material_name product_item_name',
-            'agents_scm_inventory_sku_data_d': 'warehouseid material_code prod_date sap_warehouseid plant quality_batch is_good_prod live_qty available_qty pack_unit_qty freeze_qty warehouse_classify unrestricted_qty month_date',
+            'agents_scm_inventory_sku_data_d': 'warehouseid material_code prod_date sap_warehouseid plant quality_batch is_good_prod live_qty available_qty pack_unit_qty freeze_qty warehouse_classify unrestricted_qty month_date warehouse_name belong_base material_name',
+            'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
             'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
             'agents_scm_material_in_out_summary_d': 'warehouseid material_code material_name material_group_name warehouse_name product_categ_name',
@@ -425,6 +426,36 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(branch['total_qty'],130)
         # Removed target/threshold fields cannot be recreated from stock quantity.
         self.assertIsNone(base['overaged_qty'])
+
+    def test_inventory_names_and_base_come_from_snapshot_not_other_business_scopes(self):
+        self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET warehouse_name='库存分仓',belong_base='库存基地',material_name='库存商品' WHERE warehouse_classify='20'")
+        self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',material_code='S1',warehouse_name='历史仓名',material_name='历史商品')
+        self.insert('agents_scm_cust_deliv_daily_di',warehouse='WH1',material_code='S1',belong_base='历史基地1')
+        self.insert('agents_scm_cust_deliv_daily_di',warehouse='WH1',material_code='S1',belong_base='历史基地2')
+        rows=self.read('replenishment.detail')
+        self.assertEqual([(r['warehouse_name'],r['material_name']) for r in rows],[('库存分仓','库存商品')]*2)
+        self.assertEqual(sum(r['inventory_qty'] for r in rows),130)
+        for agent in ['fc','aqkc','qll','apsplan']:
+            self.config=config_for(agent)
+            rows=self.read('health.detail',bases_enabled=True,bases=['库存基地'],warehouse_type_mode='equal',warehouse_type='分仓')
+            self.assertEqual(len(rows),2,agent)
+            self.assertTrue(all(r['belong_base']=='库存基地' and r['warehouse_name']=='库存分仓' and r['material_name']=='库存商品' for r in rows),agent)
+            self.assertEqual(sum(r['total_qty'] for r in rows),130,agent)
+            self.assertEqual(self.read('health.detail',bases_enabled=True,bases=['历史基地1']),[],agent)
+
+    def test_aps_branch_list_returns_source_base_and_preserves_stock_totals(self):
+        self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET warehouse_name='库存分仓',belong_base='库存基地' WHERE warehouse_classify='20'")
+        self.config=config_for('apsplan')
+        rows=self.read('page.branch',end_exclusive='2026-10-21')
+        self.assertEqual([(r['name'],r['base'],r['inventory']) for r in rows],[('库存分仓','库存基地',130)])
+
+    def test_conflicting_source_names_do_not_duplicate_inventory_or_infer_a_base(self):
+        self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET belong_base='基地一' WHERE material_code='S1'")
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',material_code='S1',warehouse_classify='20',prod_date='2026-09-29',live_qty=10,available_qty=10,belong_base='基地二')
+        rows=self.read('health.detail',warehouse_type_mode='equal',warehouse_type='分仓')
+        row=next(r for r in rows if r['material_code']=='S1')
+        self.assertIsNone(row['belong_base'])
+        self.assertEqual(row['total_qty'],60)
 
     def test_stock_only_sku_and_its_names_are_not_lost_to_plan_scope(self):
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',material_code='S2',material_name='商品S2',material_group_name='物料组')
