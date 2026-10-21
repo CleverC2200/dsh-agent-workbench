@@ -36,6 +36,20 @@
   color: var(--ui-risk);
   background: var(--ui-risk-soft);
 }
+.queryErrors {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  color: var(--ui-risk);
+  font: 11px/1.5 var(--ui-font);
+  overflow-wrap: anywhere;
+}
+.queryErrors > summary {
+  cursor: pointer;
+}
+.queryErrors > ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
 .note {
   margin: 0;
   padding: 12px 16px;
@@ -147,4 +161,66 @@
   color: var(--ui-muted);
   font: 10px/1.4 var(--ui-font);
   white-space: normal;
+}
+
+.hierarchy {
+  min-width: 0;
+  padding: 12px;
+}
+.hierarchy > section {
+  min-width: 0;
+  border-bottom: 1px solid var(--ui-border);
+}
+.hierarchyToggle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: var(--ui-soft);
+  color: var(--ui-secondary);
+  text-align: left;
+  font: 600 11px var(--ui-font);
+  cursor: pointer;
+}
+.hierarchyToggle:hover {
+  color: var(--ui-accent);
+  background: var(--ui-hover);
+}
+
+.controls.cycleForm {
+  display: grid;
+  gap: 16px;
+}
+.cycleForm > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 12px/1.4 var(--ui-font);
+}
+.cycleForm input {
+  width: 88px;
+}
+.cycleForm > p {
+  margin: 0;
+  color: var(--ui-muted);
+  font: 11px/1.4 var(--ui-font);
+}
+.cycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border);
+}
+.cycleForm .cycleActions button[type='submit'] {
+  color: var(--ui-surface);
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+.cycleForm .cycleActions button[type='submit']:hover {
+  background: var(--ui-accent-hover, #c91029);
 }

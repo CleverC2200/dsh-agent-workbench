@@ -132,6 +132,7 @@ test('FC UI records stay partitioned by the real identity and Session address an
     plans: [],
     cycles: [],
     preferences: [],
+    replenishmentCycleDays: 14,
   };
   workbench.saveHtmlViewState('inventory-fc', 'actual-account-scope/actual-session', state);
   assert.equal(

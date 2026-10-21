@@ -25,3 +25,12 @@ body {
 .topbar {
   display: none;
 }
+
+body[data-ds-dark-theme] .delivery-order-searches :is(input, select) {
+  color: var(--workbench-body);
+  background: var(--workbench-surface);
+  border-color: var(--workbench-control-border);
+}
+body[data-ds-dark-theme] .delivery-order-searches input::placeholder {
+  color: var(--workbench-muted);
+}

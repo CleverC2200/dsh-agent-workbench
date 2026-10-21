@@ -99,10 +99,13 @@ test('base changes and closed details cannot retain or publish obsolete query re
       {
         name: 'local-page-fixture',
         setup(api) {
-          api.onResolve({ filter: /^react(?:\/jsx-runtime)?$/ }, (args) => ({
-            path: pathToFileURL(require.resolve(args.path)).href,
-            external: true,
-          }));
+          api.onResolve(
+            { filter: /^(?:react(?:\/jsx-runtime)?|react-dom(?:\/client)?)$/ },
+            (args) => ({
+              path: pathToFileURL(require.resolve(args.path)).href,
+              external: true,
+            }),
+          );
           api.onResolve(
             {
               filter:
@@ -119,7 +122,7 @@ test('base changes and closed details cannot retain or publish obsolete query re
                   ? 'export const clearReadCache=()=>{};'
                   : args.path.includes('workspace-normalizer')
                     ? 'export const normalizeWorkspaceState=value=>value;'
-                    : `import React from "react";const Pass=p=>React.createElement('div',null,p.children);export const Button=p=>React.createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children);export const Dropdown=Pass;export const Menu=Pass;Menu.Item=Pass;export const DataPagination=()=>null;export const IconDown=()=>null;export const DashboardOverviewSkeleton=()=>null;export const DashboardTableSkeleton=()=>null;export const DailyReportButton=()=>null;export const FloatingTableScrollbar=()=>null;`,
+                    : `import React from "react";const Pass=p=>React.createElement('div',null,p.children);export const Button=p=>React.createElement('button',{onClick:p.onClick,disabled:p.disabled},p.children);export const Table=Pass;export const Input=Pass;export const Dropdown=Pass;export const Menu=Pass;Menu.Item=Pass;export const DataPagination=()=>null;export const IconDown=()=>null;export const DashboardOverviewSkeleton=()=>null;export const DashboardTableSkeleton=()=>null;export const DailyReportButton=()=>null;export const FloatingTableScrollbar=()=>null;`,
           }));
         },
       },

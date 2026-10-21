@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../../../shared/query-errors';
 import type { InventoryBatch } from '../../../../../fc/src/lib/domain';
 const quantity = (value: number | null | undefined) =>
   typeof value === 'number' && Number.isFinite(value)
@@ -6,8 +7,9 @@ const quantity = (value: number | null | undefined) =>
 export function InventoryBatchTable({ rows, error }: { rows?: InventoryBatch[]; error?: string }) {
   if (error)
     return (
-      <div className="inventory-batch-panel" role="alert">
-        {error}
+      <div className="inventory-batch-panel">
+        <QueryErrors errors={[error]} scope="inventory-fc-batches" />
+        <p>暂无数据。</p>
       </div>
     );
   if (!rows)

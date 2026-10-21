@@ -1,6 +1,5 @@
-import { usesConfiguredSql } from '../../../shared/sql-config';
-import sqlSourceConfiguration from '../../sql.config.json';
-import { ConfiguredFactsPage } from '../../../shared/configured-facts-page';
+import { QueryErrors } from '../../../shared/query-errors';
+import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
 import { action, reportElements } from '../../../shared/channel.js';
@@ -3243,20 +3242,6 @@ function IntelligentWorkbenchPage({
                     <strong>{item.value}</strong>
                     <span>{item.unit}</span>
                   </div>
-                  {item.name === '销售预算达成率' &&
-                    budgetObservation &&
-                    !Number.isFinite(comparison?.['销售预算达成率'].current) && (
-                      <p className="kpi-source-note">
-                        同月客户SKU匹配 {budgetObservation.matchedKeys}/
-                        {budgetObservation.budgetKeys}；{budgetObservation.monthCount}/
-                        {budgetObservation.expectedMonths} 个月。未税收入{' '}
-                        {formatNumber(budgetObservation.matchedIncome / 10000)} 万元 / 月度预算{' '}
-                        {formatNumber(budgetObservation.matchedBudget / 10000)} 万元。
-                        {budgetObservation.expectedMonths > 1
-                          ? '年度观察按可用月度达成率平均。'
-                          : ''}
-                      </p>
-                    )}
                   <div className="kpi-comparison-head">
                     <span>{'对比指标'}</span>
                     <span>{'变化量'}</span>
@@ -5097,7 +5082,6 @@ export default function Home({
     timeGranularityOptions.find((item) => item.key === timeGranularity)?.label || periodMeta.label;
   const _overviewPeriodLabel = activeAnalysisPeriod;
   const liveDate = effectiveEnd.iso;
-  const [sourceSupplementOpen, setSourceSupplementOpen] = useState(false);
   const live = useWorkspace(
     liveData && ['intelligent', 'plan'].includes(activeWorkspace),
     liveDate,
@@ -5744,35 +5728,6 @@ export default function Home({
           <strong>{Number.isFinite(displayValue) ? formatNumber(displayValue, 2) : '-'}</strong>
           {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
         </div>
-        {liveMetricNotes[kpi.name]?.detail && (
-          <p className="kpi-source-note">{liveMetricNotes[kpi.name].detail}</p>
-        )}
-        {kpi.name === '销售预算达成率' && !Number.isFinite(kpi.value) && planBudgetObservation && (
-          <p className="kpi-source-note">
-            匹配范围达成率 {formatNumber(planBudgetObservation.value, 2)}%；
-            {planBudgetObservation.matchedKeys}/{planBudgetObservation.budgetKeys} 客户SKU月记录，
-            {planBudgetObservation.monthCount}/{planBudgetObservation.expectedMonths} 个月；
-            仅取预算和未税收入均完整的客户SKU，仅作观察，不作健康判断和跨期比较。
-          </p>
-        )}
-        {kpi.name === '生产计划达成率' &&
-          !Number.isFinite(kpi.value) &&
-          planProductionObservation && (
-            <p className="kpi-source-note">
-              有效记录达成率 {formatNumber(planProductionObservation.value, 2)}
-              %；
-              {planProductionObservation.count}/{planProductionObservation.total} 条记录，排除{' '}
-              {planProductionObservation.excluded} 条异常，仅作观察。
-            </p>
-          )}
-        {kpi.name === '可发货天数' && observation && stockObservation?.shippable && (
-          <p className="kpi-source-note">
-            同范围 {stockObservation.shippable.count}/{stockObservation.shippable.total} 个基地SKU；
-            可用库存 {formatNumber(stockObservation.shippable.quantity)} 箱 / 计划日均需求{' '}
-            {formatNumber(stockObservation.shippable.demand)} 箱/天； 快照{' '}
-            {snapshotDateLabel(kpi.name)}，目标版本 {live.data?.version}。仅作观察。
-          </p>
-        )}
         <div className="kpi-comparison-head">
           <span>{'对比指标'}</span>
           <span>{'变化量'}</span>
@@ -5814,15 +5769,9 @@ export default function Home({
           </div>
         </div>
         <div className="kpi-foot">
-          <span>{observation ? '仅作观察' : kpi.targetText}</span>
+          <span>{kpi.targetText}</span>
           {observation || !Number.isFinite(kpi.value) ? (
-            <b className="neutral">
-              {observation
-                ? '不作健康判断与跨期比较'
-                : readFailed
-                  ? '来源读取失败，详见来源状态'
-                  : '数据不足，暂不计算'}
-            </b>
+            <b className="neutral">{readFailed ? '读取失败' : '差距 -'}</b>
           ) : kpi.target === null ? (
             <b className="neutral">
               {liveData && kpi.name !== '库存量' ? '待配置目标' : '数量观察项'}
@@ -7276,6 +7225,100 @@ export default function Home({
     setTimeout(() => setToast(''), 2600);
   };
 
+  const periodDatePicker = (
+    <div className="month-wrap date-picker-wrap">
+      <button
+        className="date-button date-picker-button"
+        aria-haspopup="menu"
+        aria-expanded={dateOpen}
+        onClick={() => {
+          setDateOpen((value) => !value);
+          setWeekOpen(false);
+        }}
+      >
+        <CalendarDays />
+        <span>
+          {timeGranularity === 'year'
+            ? selectedYear.label
+            : timeGranularity === 'day'
+              ? selectedDateLabel
+              : selectedPeriodLabel}
+        </span>
+        <ChevronDown />
+      </button>
+      {dateOpen && (
+        <div
+          className="month-menu period-filter-menu date-picker-menu"
+          role="menu"
+          aria-label="统计日期筛选"
+        >
+          <small>
+            {'选择'}
+            {timeGranularity === 'year' ? '年份' : timeGranularity === 'day' ? '日期' : '年月'}
+          </small>
+          <div className="date-picker-sections">
+            <section>
+              <strong>{'年'}</strong>
+              <div className="date-picker-year">
+                {yearOptions.map((year) => (
+                  <button
+                    key={year.key}
+                    className={selectedYear.key === year.key ? 'selected' : ''}
+                    onClick={() => chooseYear(year)}
+                  >
+                    <Check />
+                    {year.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+            {timeGranularity !== 'year' && (
+              <section>
+                <strong>{'月'}</strong>
+                <div className="date-picker-month">
+                  {monthOptions.map((month) => (
+                    <button
+                      key={month.key}
+                      disabled={
+                        liveData && isFutureCalendarDay(Number(selectedYear.key), month.value, 1)
+                      }
+                      className={selectedMonth.key === month.key ? 'selected' : ''}
+                      onClick={() => chooseMonth(month)}
+                    >
+                      <Check />
+                      {month.value}月
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            {timeGranularity === 'day' && (
+              <section>
+                <strong>{'日'}</strong>
+                <div className="date-picker-day">
+                  {dayOptions.map((day) => (
+                    <button
+                      key={day}
+                      disabled={
+                        liveData &&
+                        isFutureCalendarDay(Number(selectedYear.key), selectedMonth.value, day)
+                      }
+                      className={selectedDay === day ? 'selected' : ''}
+                      onClick={() => chooseDay(day)}
+                    >
+                      <Check />
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className={`app-shell chat-${chatMode} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${contextSelectionMode ? 'context-selecting' : ''} ${embedMode ? 'embed-mode' : ''}`}
@@ -7419,112 +7462,16 @@ export default function Home({
         </div>
       </aside>
 
-      <main className="main-content">
-        {liveData && (
-          <section className="aps-data-state" role={live.error ? 'alert' : 'status'}>
-            <strong>
-              {!['intelligent', 'plan'].includes(activeWorkspace)
-                ? '本页为原型预览，不代表正式执行状态'
-                : live.busy
-                  ? '当前范围正在读取'
-                  : live.error
-                    ? '部分来源不可用'
-                    : live.data
-                      ? '当前范围数据已读取'
-                      : '当前范围暂无可用数据'}
-            </strong>
-            <span>
-              {'截止 '}
-              {liveDate}
-              {' · '}
-              {selectedBase}
-              {typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
-                ? ' · 本地数据库只读直连'
-                : ' · GEA 授权只读'}
-              {live.data
-                ? ' · 读取时间 ' +
-                  new Date(live.data.readAt).toLocaleString('zh-CN', {
-                    timeZone: 'Asia/Shanghai',
-                    hour12: false,
-                  })
-                : ''}
-            </span>
-            {live.data?.missingValuePolicy === 'zero' && (
-              <p>缺失数值按 0 计算；分母为 0 时不计算比例。</p>
-            )}
-            {live.error && (
-              <p>
-                {live.data?.sections.some((section) => section.status === 'error')
-                  ? `${live.data.sections.filter((section) => section.status === 'error').length} 项来源未齐，详见“来源状态”。`
-                  : live.error}
-              </p>
-            )}
-            {live.data?.sections
-              .filter(
-                (section) =>
-                  ['sales-accuracy', 'demand-accuracy'].includes(section.id) &&
-                  section.status === 'ready',
-              )
-              .map((section) => {
-                const unassigned = section.rows
-                  .filter((row) => row.base == null || row.base === '')
-                  .reduce((count, row) => count + Number(row.records ?? 0), 0);
-                return unassigned > 0 ? (
-                  <p key={section.id}>
-                    {section.id === 'sales-accuracy' ? '销售提报' : '需求预测'}
-                    {'有 ' +
-                      unassigned +
-                      ' 条记录未归属基地，保留在公司合计中；基地仅统计已归属记录，不分摊未归属数量。'}
-                  </p>
-                ) : null;
-              })}
-            {live.data?.missingValuePolicy !== 'zero' && stockObservation && (
-              <p>
-                {(
-                  [
-                    ['support', '计划库存支撑'],
-                    ['shippable', '可发货'],
-                  ] as const
-                ).map(([key, label]) => {
-                  const observation = stockObservation[key];
-                  return observation ? (
-                    <span key={key}>
-                      {label} {observation.days == null ? '-' : formatNumber(observation.days)} 天（
-                      {observation.count}/{observation.total} 个库存基地SKU；同范围
-                      {key === 'support' ? '现存' : '可用'}{' '}
-                      {formatNumber(observation.quantity / 10000)} 万箱 / 计划日均需求{' '}
-                      {formatNumber(observation.demand)} 箱/天）。{' '}
-                    </span>
-                  ) : null;
-                })}
-                {'部分覆盖量仅作观察，不计算达标及同比环比；快照 ' +
-                  readSourceDateLabel(live.data, 'stock') +
-                  '，目标版本 ' +
-                  (live.data?.version ?? '按当前选择') +
-                  '。'}
-              </p>
-            )}
-            <details>
-              <summary>{'来源状态'}</summary>
-              <ul>
-                {(apsEvidence.sources as any[]).map((source) => (
-                  <li key={source.id}>
-                    {source.label}
-                    {'：'}
-                    {source.status}
-                    {' · 当前范围 '}
-                    {source.groups}
-                    {' 组'}
-                    {source.note ? ' · ' + source.note : ''}
-                    {source.error ? ' · ' + source.error.message : ''}
-                  </li>
-                ))}
-              </ul>
-
-              <p>{'任务及编辑属于本页预览，未保存或提交业务系统。'}</p>
-            </details>
-          </section>
+      <main className="main-content" aria-busy={liveData && live.busy}>
+        {liveData && !['intelligent', 'plan'].includes(activeWorkspace) && (
+          <p className="aps-data-state" role="status">
+            原型预览
+          </p>
         )}
+        <QueryErrors
+          errors={liveData && live.error ? [live.error] : []}
+          scope="inventory-apsplan"
+        />
         {contextSelectionMode && (
           <div className="context-selection-banner" role="status">
             <Link2 />
@@ -7545,25 +7492,41 @@ export default function Home({
           </div>
         )}
         {embedMode && ['intelligent', 'plan'].includes(activeWorkspace) && (
-          <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
-            <button
-              className={activeWorkspace === 'intelligent' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
-              onClick={() => setActiveWorkspace('intelligent')}
-            >
-              智能工作台
-            </button>
-            <button
-              className={activeWorkspace === 'plan' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
-              onClick={() => {
-                setAnalysisScope('overview');
-                setActiveWorkspace('plan');
-              }}
-            >
-              产销协同看板
-            </button>
-          </nav>
+          <BusinessToolbar
+            filters={
+              <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
+                <button
+                  className={activeWorkspace === 'intelligent' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
+                  onClick={() => setActiveWorkspace('intelligent')}
+                >
+                  智能工作台
+                </button>
+                <button
+                  className={activeWorkspace === 'plan' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
+                  onClick={() => {
+                    setAnalysisScope('overview');
+                    setActiveWorkspace('plan');
+                  }}
+                >
+                  产销协同看板
+                </button>
+              </nav>
+            }
+            actions={
+              <>
+                {periodDatePicker}
+                <button
+                  type="button"
+                  disabled={liveData && live.busy}
+                  onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                >
+                  刷新
+                </button>
+              </>
+            }
+          />
         )}
 
         {activeWorkspace === 'intelligent' ? (
@@ -7700,110 +7663,7 @@ export default function Home({
                         </button>
                       ))}
                     </div>
-                    <div className="month-wrap date-picker-wrap">
-                      <button
-                        className="date-button date-picker-button"
-                        aria-haspopup="menu"
-                        aria-expanded={dateOpen}
-                        onClick={() => {
-                          setDateOpen((value) => !value);
-                          setWeekOpen(false);
-                        }}
-                      >
-                        <CalendarDays />
-                        <span>
-                          {timeGranularity === 'year'
-                            ? selectedYear.label
-                            : timeGranularity === 'day'
-                              ? selectedDateLabel
-                              : selectedPeriodLabel}
-                        </span>
-                        <ChevronDown />
-                      </button>
-                      {dateOpen && (
-                        <div
-                          className="month-menu period-filter-menu date-picker-menu"
-                          role="menu"
-                          aria-label="统计日期筛选"
-                        >
-                          <small>
-                            {'选择'}
-                            {timeGranularity === 'year'
-                              ? '年份'
-                              : timeGranularity === 'day'
-                                ? '日期'
-                                : '年月'}
-                          </small>
-                          <div className="date-picker-sections">
-                            <section>
-                              <strong>{'年'}</strong>
-                              <div className="date-picker-year">
-                                {yearOptions.map((year) => (
-                                  <button
-                                    key={year.key}
-                                    className={selectedYear.key === year.key ? 'selected' : ''}
-                                    onClick={() => chooseYear(year)}
-                                  >
-                                    <Check />
-                                    {year.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </section>
-                            {timeGranularity !== 'year' && (
-                              <section>
-                                <strong>{'月'}</strong>
-                                <div className="date-picker-month">
-                                  {monthOptions.map((month) => (
-                                    <button
-                                      key={month.key}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          month.value,
-                                          1,
-                                        )
-                                      }
-                                      className={selectedMonth.key === month.key ? 'selected' : ''}
-                                      onClick={() => chooseMonth(month)}
-                                    >
-                                      <Check />
-                                      {month.value}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                            {timeGranularity === 'day' && (
-                              <section>
-                                <strong>{'日'}</strong>
-                                <div className="date-picker-day">
-                                  {dayOptions.map((day) => (
-                                    <button
-                                      key={day}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          selectedMonth.value,
-                                          day,
-                                        )
-                                      }
-                                      className={selectedDay === day ? 'selected' : ''}
-                                      onClick={() => chooseDay(day)}
-                                    >
-                                      <Check />
-                                      {day}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {!embedMode && periodDatePicker}
                     {timeGranularity === 'week' && (
                       <div className="month-wrap week-wrap">
                         <button
@@ -9394,34 +9254,6 @@ export default function Home({
               </section>
             </section>
           </div>
-        )}
-        {embedMode && liveData && usesConfiguredSql() && (
-          <details
-            className="plugin-source-supplement"
-            onToggle={(event) => setSourceSupplementOpen(event.currentTarget.open)}
-          >
-            <summary>业务明细</summary>
-            {sourceSupplementOpen && (
-              <ConfiguredFactsPage
-                key={'targets:' + liveDate + ':' + selectedBase}
-                config={sqlSourceConfiguration}
-                embedded
-                viewIds={[
-                  'monthly-targets',
-                  'base-stock-flows',
-                  'base-shipments',
-                  'warehouse-health',
-                  'branch-stock',
-                  'branch-operations',
-                  'order-plan-source',
-                  'shipment-batches',
-                  'workflow-source',
-                ]}
-                date={liveDate}
-                initialFilters={selectedBase === '全部基地' ? {} : { base: selectedBase }}
-              />
-            )}
-          </details>
         )}
       </main>
       <aside className="ai-chat" aria-label="产销协同数字人">

@@ -94,3 +94,9 @@ html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   --ui-warning: var(--workbench-body);
   --ui-warning-soft: var(--workbench-subtle);
 }
+
+/* Original board light colors; retain the host's dark palette. */
+html.aps-plugin-host body:not([data-ds-dark-theme]) {
+  --v02-text-muted: #858c96;
+  --v02-hover-border: #efabb4;
+}

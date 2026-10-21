@@ -84,7 +84,7 @@
 .metrics {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
   margin: 0 0 12px;
 }
 .metric,
@@ -106,7 +106,7 @@
   flex-direction: column;
   align-items: stretch;
   justify-content: flex-start;
-  padding: 12px;
+  padding: 8px;
   gap: 0;
 }
 .metricTop {
@@ -122,8 +122,8 @@
 }
 .metric > strong {
   display: block;
-  margin: 14px 0 11px;
-  font-size: 23px;
+  margin: 8px 0;
+  font-size: 20px;
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.04em;
@@ -431,9 +431,6 @@
   }
 }
 @media (max-width: 520px) {
-  .metrics {
-    grid-template-columns: 1fr;
-  }
   .customerPicker {
     width: 100%;
   }
@@ -499,6 +496,15 @@
   background: var(--ui-surface);
   border-bottom: 1px solid var(--ui-border);
 }
+.shell > .sharedTopbar {
+  width: calc(100% + 32px);
+  max-width: none;
+  margin: 0 -16px 12px;
+}
+.sharedTopbar .customerOptions {
+  left: 0;
+  right: auto;
+}
 .topbar .navigation {
   margin: 0;
   padding: 0;
@@ -561,6 +567,12 @@
   border: 0;
   background: var(--ui-surface);
   padding: 6px 8px;
+}
+@media (max-width: 720px) {
+  .customerOptions {
+    left: 0;
+    right: auto;
+  }
 }
 .customerOptions button:hover,
 .customerOptions button[aria-pressed='true'] {
@@ -649,4 +661,14 @@
   .topbar .customerPicker {
     padding-bottom: 8px;
   }
+}
+
+@media (max-width: 359px) {
+  .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+:global(body[data-ds-dark-theme]) .shell th {
+  color: var(--ui-muted);
 }

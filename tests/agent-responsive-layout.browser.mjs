@@ -73,7 +73,7 @@ for (const id of ['fc', 'qll', 'aqkc', 'apsplan'])
       );
       for (const r of boxes) {
         assert.ok(
-          r.width >= Math.min(220, width - 48),
+          r.width >= Math.min(160, width - 48),
           `${id}@${width}: cramped metric ${JSON.stringify(r)}`,
         );
         assert.ok(
@@ -101,16 +101,16 @@ for (const id of ['fc', 'qll', 'aqkc', 'apsplan'])
     assert.deepEqual(errors, []);
   });
 test('narrow source table keeps columns, paging and display choices accessible', async (t) => {
-  const { page, frame, calls } = await mount(t, 'qll', 1440);
+  const { page, frame, calls } = await mount(t, 'fc', 1440);
   await page.locator('iframe').evaluate((el) => {
     el.style.width = '320px';
   });
   await expect(frame.locator('table').first()).toBeVisible();
   const before = calls.length;
-  await frame.locator('summary').filter({ hasText: '显示列' }).click();
+  await frame.locator('summary').filter({ hasText: '列设置' }).click();
   const choices = frame
     .locator('details')
-    .filter({ has: frame.locator('summary').filter({ hasText: '显示列' }) })
+    .filter({ has: frame.locator('summary').filter({ hasText: '列设置' }) })
     .locator('div')
     .first();
   const box = await choices.boundingBox();

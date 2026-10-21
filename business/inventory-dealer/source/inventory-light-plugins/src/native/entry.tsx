@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../shared/query-errors';
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import Page from '@business-page';
@@ -64,13 +65,7 @@ function App() {
   };
   return (
     <>
-      {warnings.length > 0 && (
-        <div role="alert" style={{ padding: 12, color: '#a34200', background: '#fff7e8' }}>
-          {warnings.map((w) => (
-            <p key={w}>{w}</p>
-          ))}
-        </div>
-      )}
+      <QueryErrors errors={warnings} scope="inventory-dealer" />
       {reading ? (
         <Boundary key={revision}>
           {usesConfiguredSql() ? <ConfiguredWorkbench /> : <Page />}

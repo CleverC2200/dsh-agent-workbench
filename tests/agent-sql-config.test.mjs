@@ -283,3 +283,36 @@ export const executeGeaSqlPage=async()=>({rows:[]});`,
     assert.equal(reads[index].options.parameters.customerCode, 'fixture-customer');
   }
 });
+
+test('newly connected list fields are present in the default visible columns', async () => {
+  for (const agent of ['aqkc', 'qll', 'apsplan', 'dealer']) {
+    const config = JSON.parse(
+      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    );
+    for (const view of config.sourceViews.views) {
+      const fields = new Set(view.columns.map((column) => column.field));
+      for (const field of view.defaultColumns ?? [])
+        assert.ok(fields.has(field), `${agent}/${view.id}: stale default ${field}`);
+      if (view.id === 'base-stock-flows')
+        for (const field of [
+          'avg_30d_send',
+          'pre_order_qty',
+          'begin_stock',
+          'turnover_days_stock',
+          'turnover_days_avail',
+        ])
+          assert.ok(
+            (view.defaultColumns ?? [...fields]).includes(field),
+            `${agent}/${field}: hidden connected field`,
+          );
+      if (view.queryId === 'dealer.stock.detail')
+        for (const field of ['analysis_avg_stock_age', 'analysis_target_inventory']) {
+          if (fields.has(field))
+            assert.ok(
+              (view.defaultColumns ?? [...fields]).includes(field),
+              `${agent}/${field}: hidden reference`,
+            );
+        }
+    }
+  }
+});
