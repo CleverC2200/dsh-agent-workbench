@@ -1819,3 +1819,73 @@
   margin-left: auto;
   text-align: right;
 }
+
+/* The configured overview adapts to the actual business pane without oversized cards. */
+.shell .kpiGrid.compactKpiGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.shell .kpiGrid.compactKpiGrid > :last-child {
+  grid-column: auto;
+}
+.shell .compactKpiGrid .kpiCard {
+  min-height: 126px;
+  padding: 12px;
+}
+.shell .compactKpiGrid .kpiTop {
+  min-height: 18px;
+  flex-wrap: wrap;
+}
+.shell .compactKpiGrid .kpiTitle {
+  font-size: 11px;
+  font-weight: 600;
+}
+.shell .compactKpiGrid .kpiValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  margin: 4px 0 8px;
+  padding: 0;
+  font-size: 23px;
+  line-height: 1.15;
+}
+.shell .compactKpiGrid .kpiScopeLabel {
+  margin: 0;
+  font-size: 9px;
+}
+.shell .compactKpiGrid .kpiHelpers {
+  margin-top: auto;
+  padding-top: 8px;
+  gap: 4px;
+}
+.shell .compactKpiGrid .kpiHelpers > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.shell .compactKpiGrid .kpiHelpers dt,
+.shell .compactKpiGrid .kpiHelpers dd {
+  font-size: 9px;
+  line-height: 1.4;
+}
+@media (max-width: 879px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 639px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 399px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

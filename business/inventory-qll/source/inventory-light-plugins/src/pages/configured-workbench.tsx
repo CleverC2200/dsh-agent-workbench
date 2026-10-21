@@ -156,7 +156,11 @@ export default function ConfiguredWorkbench() {
           />
           <div className={styles.boardScroll}>
             <QueryErrors errors={errors} />
-            <div className={`${styles.kpiGrid} ${common.kpis}`} aria-busy={busy}>
+            <div
+              className={`${styles.kpiGrid} ${styles.compactKpiGrid} ${common.kpis}`}
+              data-overview-cards="qll"
+              aria-busy={busy}
+            >
               {(['inventoryLevel', 'turnover', 'aging', 'fulfillment', 'orderGap'] as const).map(
                 (key) => (
                   <KpiCard
