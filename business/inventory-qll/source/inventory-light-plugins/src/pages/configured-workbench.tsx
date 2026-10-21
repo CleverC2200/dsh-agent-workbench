@@ -148,7 +148,7 @@ export default function ConfiguredWorkbench() {
                   required
                   max={businessDay()}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onValueChange={setDraft}
                 />
                 <button>查询 / 刷新</button>
               </LocalQueryForm>

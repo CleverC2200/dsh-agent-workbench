@@ -737,3 +737,63 @@ test('QLL category cells bind category names while retaining organization as the
   );
   assert.deepEqual(errors, []);
 });
+
+for (const id of ['fc', 'qll', 'dealer'])
+  test(`${id}: Chinese calendar stays inside narrow panes and only applies on refresh`, async (t) => {
+    const { page, frame, calls, errors } = await mount(t, id, 390);
+    const header = frame.locator('[data-business-toolbar]');
+    const input = header.getByLabel('读取时点');
+    const trigger = header.getByRole('button', { name: /^选择日期：/ });
+    await expect(trigger).toBeVisible();
+    await expect.poll(() => calls.length).toBeGreaterThan(2);
+    await expect(frame.locator('main[aria-busy="true"]')).toHaveCount(0);
+    const before = calls.length;
+    await trigger.click();
+    const calendar = frame.getByRole('dialog', { name: '选择日期', exact: true });
+    await expect(calendar).toContainText('2026年10月');
+    await expect(calendar.getByRole('button', { name: '今天', exact: true })).toBeVisible();
+    await expect(calendar.getByRole('button', { name: '清空', exact: true })).toBeVisible();
+    assert.doesNotMatch(await calendar.innerText(), /October|Clear|Today/);
+    await expect(calendar.getByRole('button', { name: '下个月', exact: true })).toBeDisabled();
+    await expect(
+      calendar.getByRole('button', { name: '2026年10月21日', exact: true }),
+    ).toBeDisabled();
+    for (const width of [1280, 560, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await trigger.click();
+      if (!(await calendar.isVisible())) await trigger.click();
+      const box = await calendar.boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= width, `calendar clipped at ${width}`);
+    }
+    await calendar.getByRole('button', { name: '2026年10月18日', exact: true }).click();
+    await expect(input).toHaveValue('2026-10-18');
+    await expect(calendar).toHaveCount(0);
+    assert.equal(calls.length, before, 'choosing a date must not run queries');
+    await header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ })
+      .click();
+    await expect
+      .poll(() => calls.slice(before).some((q) => q.parameters.as_of === '2026-10-18'))
+      .toBe(true);
+    await trigger.click();
+    await page.keyboard.press('Escape');
+    await expect(calendar).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await calendar.getByRole('button', { name: '上个月', exact: true }).click();
+    await expect(calendar).toContainText('2026年9月');
+    await calendar.getByRole('button', { name: '今天', exact: true }).click();
+    await expect(input).toHaveValue('2026-10-20');
+    await trigger.click();
+    await calendar.getByRole('button', { name: '清空', exact: true }).click();
+    await expect(input).toHaveValue('');
+    const clearedCalls = calls.length;
+    await header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ })
+      .click();
+    assert.equal(calls.length, clearedCalls, 'required empty date blocks refresh');
+    await expect(calendar).toBeVisible();
+    assert.deepEqual(errors, []);
+  });
