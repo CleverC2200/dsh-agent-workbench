@@ -9,6 +9,7 @@ import {
   readFileSync,
   existsSync,
   realpathSync,
+  chmodSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -23,6 +24,8 @@ function fixture(
     desktopTools = false,
     knowledge = false,
     staticFailure,
+    preparation = false,
+    localLayout = false,
   } = {},
 ) {
   const parent = mkdtempSync(join(tmpdir(), 'source-checks-'));
@@ -49,7 +52,7 @@ function fixture(
   };
   const repositories = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'].map((repo) => {
     const path =
-      owner === 'dsh-gea-plugin'
+      owner === 'dsh-gea-plugin' && !localLayout
         ? join(parent, repo === 'dsh-agent-workbench' ? 'source' : 'candidate', repo)
         : join(parent, repo);
     mkdirSync(path, { recursive: true });
@@ -75,6 +78,18 @@ function fixture(
         'scripts/prepare-official-sdk.mjs',
         `export function verifyOfficialSDK({coreHead}) { throw Error('SDK_SELECTED_CORE:' + coreHead); }`,
       );
+    if (preparation && repo === 'dsh-gea-plugin') {
+      put(
+        path,
+        'scripts/build-admission.mjs',
+        'export function acquireBuild() { return () => {}; }',
+      );
+      put(
+        path,
+        'scripts/quality-upstreams.mjs',
+        `import { writeFileSync } from 'node:fs'; export async function prepareQualityUpstreamSources() { writeFileSync('.runtime/upstream-sources', 'prepared'); } export async function prepareQualityUpstreams() { throw Error('UNRELATED_UPSTREAM_BUILD'); } export async function bindQualityUpstreamInputs(root, inputs, options) { if(!options.sourceOnly) throw Error('SOURCE_LINKS_REQUIRED'); writeFileSync('.runtime/upstream-links', options.prepare ? 'prepared' : 'verified'); }`,
+      );
+    }
     return { repo, path, head: commit(path) };
   });
   const root = repositories.find((entry) => entry.repo === owner).path;
@@ -135,6 +150,9 @@ function fixture(
           sourceTests: ['tests/tool.test.mjs'],
         },
       ],
+      ...(preparation
+        ? { sourceFixtures: { 'tests/tool.test.mjs': { dependencies: false } } }
+        : {}),
     }),
   );
   if (desktopTools) {
@@ -154,14 +172,24 @@ function fixture(
   const head = commit(root);
   const result = { base, head, files: Object.keys(changed), mode: 'code' };
   const env = { ...process.env, SOURCE_REPOSITORY: owner, GITHUB_OUTPUT: '' };
+  if (preparation) {
+    const executable = join(parent, 'bin/corepack');
+    put(
+      parent,
+      'bin/corepack',
+      `#!${process.execPath}\nimport {writeFileSync,readFileSync} from 'node:fs'; import {execFileSync} from 'node:child_process'; const args = process.argv.slice(2); if(args.join(' ') === 'pnpm install --frozen-lockfile --ignore-scripts --prefer-offline') writeFileSync('.runtime/owner-installed', 'locked'); else if(args[0] === 'pnpm' && args[1] === 'run') execFileSync('/bin/sh', ['-c', JSON.parse(readFileSync('package.json')).scripts[args[2]]], {stdio:'inherit'}); else throw Error('UNEXPECTED_INSTALL');`,
+    );
+    chmodSync(executable, 0o755);
+    env.PATH = join(parent, 'bin') + ':' + env.PATH;
+  }
   delete env.NODE_TEST_CONTEXT;
-  const run = (phase) =>
+  const run = (phase, { workingTree = false } = {}) =>
     spawnSync(
       process.execPath,
       [
         '--input-type=module',
         '-e',
-        `import {sourceChecks} from ${JSON.stringify(runner)}; await sourceChecks(${JSON.stringify(result)}, ${JSON.stringify(phase)});`,
+        `import {sourceChecks} from ${JSON.stringify(runner)}; await sourceChecks(${JSON.stringify({ ...result, ...(workingTree ? { workingTree: true } : {}) })}, ${JSON.stringify(phase)});`,
       ],
       { cwd: root, encoding: 'utf8', env },
     );
@@ -177,6 +205,55 @@ test('nonjoint source checks reject a missing knowledge reference through the ow
   writeFileSync(join(f.root, 'docs/required.md'), 'required knowledge');
   const accepted = f.run('affected-check');
   assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+});
+
+test('local material plans use actual sibling peers and refuse preparing or executing a working tree', async (t) => {
+  for (const repo of ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'])
+    await t.test(repo, (t) => {
+      const f = fixture(t, { 'tsconfig.official.json': '{}' }, { repo, localLayout: true });
+      const peer = f.repositories.find((entry) => entry.repo !== repo);
+      writeFileSync(join(peer.path, 'README.md'), 'current local peer');
+      execFileSync('git', [
+        '-C',
+        peer.path,
+        '-c',
+        'user.name=fixture',
+        '-c',
+        'user.email=fixture@invalid',
+        'commit',
+        '-am',
+        'local peer',
+      ]);
+      const planned = f.run('affected-plan', { workingTree: true });
+      assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+      const plan = JSON.parse(planned.stdout);
+      assert.equal(plan.workingTree, true);
+      assert.equal(plan.typecheck, true);
+      assert.equal(plan.sdk, true);
+      assert.equal(plan.dependencies, true);
+      if (repo === 'dsh-gea-plugin') assert.equal(plan.upstreams, 'artifacts');
+      for (const phase of ['affected-prepare', 'affected-check']) {
+        const rejected = f.run(phase, { workingTree: true });
+        assert.notEqual(rejected.status, 0);
+        assert.match(rejected.stderr, /SOURCE_WORKING_TREE_PLAN_ONLY/);
+      }
+    });
+});
+
+test('isolated GEA source preparation installs owner dependencies using only verified upstream source links', (t) => {
+  const f = fixture(
+    t,
+    { 'scripts/tool.mjs': 'export const value = 2;' },
+    { repo: 'dsh-gea-plugin', preparation: true },
+  );
+  const prepared = f.run('affected-prepare');
+  assert.equal(prepared.status, 0, prepared.stdout + prepared.stderr);
+  assert.equal(readFileSync(join(f.root, '.runtime/upstream-sources'), 'utf8'), 'prepared');
+  assert.equal(readFileSync(join(f.root, '.runtime/upstream-links'), 'utf8'), 'prepared');
+  assert.equal(readFileSync(join(f.root, '.runtime/owner-installed'), 'utf8'), 'locked');
+  const checked = f.run('affected-check');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.equal(readFileSync(join(f.root, '.runtime/upstream-links'), 'utf8'), 'verified');
 });
 
 test('each owner lint and format failure blocks the source gate with dependency needs declared', async (t) => {
