@@ -464,7 +464,7 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(page.getByText('懂业务 · 会协同 · 能行动', { exact: true })).toBeVisible();
   await expect(page.getByText('预览版', { exact: true })).toHaveCount(0);
   await expect(page.getByText('历史会话', { exact: true })).toHaveCount(0);
-  const heading = page.getByRole('button', { name: '工作台', exact: true });
+  const heading = page.getByRole('button', { name: '历史对话', exact: true });
   const business = page.getByRole('button', { name: '业务工作台', exact: true });
   assert.equal(
     await heading.evaluate((node) => getComputedStyle(node).fontSize),
@@ -477,6 +477,46 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await row.evaluate((node) => (node.dataset.retainedProbe = 'original'));
   await heading.click();
   await expect(row).toBeHidden();
+  const geometry = await heading.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const label = node.querySelector('.gea-drawer-title');
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const text = range.getBoundingClientRect();
+    const clipping = [];
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      if (getComputedStyle(parent).overflowY === 'hidden') {
+        const box = parent.getBoundingClientRect();
+        clipping.push({ top: box.top, bottom: box.bottom });
+      }
+    }
+    const business = document.querySelector('.gea-drawer-function .gea-drawer-title');
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      textTop: text.top,
+      textBottom: text.bottom,
+      textLeft: text.left,
+      businessLeft: business.getBoundingClientRect().left,
+      clipping,
+    };
+  });
+  assert.ok(
+    Math.abs(geometry.textLeft - geometry.businessLeft) <= 1,
+    'collapsed history aligns with business navigation',
+  );
+  for (const clip of geometry.clipping) {
+    assert.ok(
+      geometry.top >= clip.top && geometry.bottom <= clip.bottom,
+      'the complete collapsed heading stays inside every clipping container',
+    );
+    assert.ok(
+      geometry.textTop >= clip.top && geometry.textBottom <= clip.bottom,
+      'the collapsed label is fully visible',
+    );
+  }
+  const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
+  if (proof) await page.screenshot({ path: resolve(proof, 'history-collapsed.png') });
   await heading.click();
   await expect(row).toBeVisible();
   await expect(row).toHaveAttribute('data-retained-probe', 'original');
@@ -487,7 +527,6 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(searchInput).toBeVisible();
   await searchInput.press('Escape');
   await expect(row).toBeVisible();
-  const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
   if (proof) await page.screenshot({ path: resolve(proof, 'welcome-workspace-desktop.png') });
   await page.setViewportSize({ width: 760, height: 720 });
   await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
