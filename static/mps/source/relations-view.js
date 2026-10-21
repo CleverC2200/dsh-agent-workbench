@@ -8,7 +8,7 @@ const groups = [
 ];
 const display = (value) =>
   value === null || value === undefined || value === '' ? '—' : String(value);
-const status = (row) => [...row.missing, ...(row.pending ?? [])].join('、') || '源字段齐备，待确认';
+const status = (row) => [...row.missing, ...(row.pending ?? [])].join('、') || '待核对';
 const columns = {
   sku: [
     '产品编码',
@@ -21,6 +21,7 @@ const columns = {
     '隧道号',
     '源系列',
     '组合系列',
+    '源生产品类',
     '组合标准日产/件',
     '组合标准日产/吨',
     '核对状态',
@@ -45,6 +46,9 @@ const columns = {
     '目标基地',
     '调拨品标签',
     '调拨方向',
+    '源SAP品类',
+    '源老大类',
+    '源生产品类',
     '核对状态',
   ],
 };
@@ -63,6 +67,7 @@ function cells(kind, row) {
       source.tunnel_no,
       source.series,
       source.combined_series,
+      source.production_category,
       source.standard_daily_output_pc,
       source.standard_daily_output_ton,
       status(row),
@@ -88,6 +93,9 @@ function cells(kind, row) {
     source.target_base,
     source.transfer_tag,
     source.transfer_direction,
+    source.sap_category,
+    source.old_category,
+    source.production_category,
     status(row),
   ];
 }

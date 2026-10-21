@@ -33,6 +33,13 @@ export async function readRelations(config, execute, month, signal) {
   };
 }
 
+const emptySourceField = (value) => value == null || (typeof value === 'string' && !value.trim());
+const capacityMissing = (source) => [
+  ...(emptySourceField(source.series) ? ['缺产线源系列'] : []),
+  ...(emptySourceField(source.combined_series) ? ['缺组合系列'] : []),
+  ...(emptySourceField(source.production_category) ? ['缺产线生产品类'] : []),
+];
+
 export function relationRecords(sources, month) {
   const byCode = new Map();
   sources.sku_capacity.forEach((row) => {
@@ -55,7 +62,7 @@ export function relationRecords(sources, month) {
     }
     for (const capacity of matches) {
       used.add(capacity);
-      sku.push({ month, product, capacity, missing: [...missing] });
+      sku.push({ month, product, capacity, missing: [...missing, ...capacityMissing(capacity)] });
     }
   }
   for (const capacity of sources.sku_capacity) {
@@ -64,7 +71,11 @@ export function relationRecords(sources, month) {
       month,
       product: null,
       capacity,
-      missing: [...(!capacity.material_code?.trim() ? ['缺产线物料编码'] : []), '无产品记录'],
+      missing: [
+        ...(!capacity.material_code?.trim() ? ['缺产线物料编码'] : []),
+        '无产品记录',
+        ...capacityMissing(capacity),
+      ],
     });
   }
   const productCodes = new Set(
@@ -88,6 +99,9 @@ export function relationRecords(sources, month) {
         ...(!productCodes.has(source.material_code) ? ['无产品记录'] : []),
         ...(!source.series?.trim() ? ['缺源系列'] : []),
         ...(!source.target_base?.trim() ? ['缺目标基地'] : []),
+        ...(emptySourceField(source.sap_category) ? ['缺SAP品类'] : []),
+        ...(emptySourceField(source.old_category) ? ['缺老大类'] : []),
+        ...(emptySourceField(source.production_category) ? ['缺调拨生产品类'] : []),
       ],
       pending: !source.transfer_direction?.trim() ? ['调拨方向待确认'] : [],
     };

@@ -41,7 +41,13 @@ test('relation result keeps every exact-code candidate and never matches by name
           combined_series: '组合甲乙',
           standard_daily_output_pc: 50,
         },
-        { material_code: null, material_name: '同名产品', series: '空码产线' },
+        {
+          material_code: null,
+          material_name: '同名产品',
+          series: '空码产线',
+          combined_series: '组合系列',
+          production_category: '生产品类',
+        },
       ],
       tunnels: [],
       transfers: [],
@@ -124,6 +130,9 @@ test('relation result preserves production-unit and transfer source scope withou
     target_base: '广州',
     transfer_tag: '源标签',
     transfer_direction: '四川至广州',
+    sap_category: 'SAP品类',
+    old_category: '老大类',
+    production_category: '生产品类',
   };
   const result = relationRecords(
     { products: [], sku_capacity: [], tunnels: [tunnel], transfers: [transfer] },
@@ -152,6 +161,9 @@ test('self-produced source labels with empty directions stay unconfirmed', () =>
     target_base: '四川',
     transfer_tag: '自产',
     transfer_direction: null,
+    sap_category: 'SAP品类',
+    old_category: '老大类',
+    production_category: '生产品类',
   };
   const result = relationRecords(
     {
@@ -165,4 +177,39 @@ test('self-produced source labels with empty directions stay unconfirmed', () =>
   assert.equal(result.transfers[0].source.transfer_tag, '自产');
   assert.deepEqual(result.transfers[0].missing, []);
   assert.deepEqual(result.transfers[0].pending, ['调拨方向待确认']);
+});
+
+test('source series and categories remain missing even when the exact product is complete', () => {
+  const result = relationRecords(
+    {
+      products: [{ material_code: '001', series: '产品系列', sub_category: '产品分类' }],
+      sku_capacity: [
+        {
+          material_code: '001',
+          series: null,
+          combined_series: '',
+          production_category: ' ',
+          standard_daily_output_pc: 0,
+        },
+      ],
+      tunnels: [],
+      transfers: [
+        {
+          stat_period: '2026-10',
+          material_code: '001',
+          series: '调拨系列',
+          target_base: '四川',
+          transfer_direction: '四川至广州',
+          sap_category: null,
+          old_category: '',
+          production_category: ' ',
+        },
+      ],
+    },
+    '2026-10',
+  );
+  assert.deepEqual(result.sku[0].missing, ['缺产线源系列', '缺组合系列', '缺产线生产品类']);
+  assert.equal(result.sku[0].capacity.standard_daily_output_pc, 0);
+  assert.deepEqual(result.transfers[0].missing, ['缺SAP品类', '缺老大类', '缺调拨生产品类']);
+  assert.deepEqual(result.transfers[0].pending, []);
 });

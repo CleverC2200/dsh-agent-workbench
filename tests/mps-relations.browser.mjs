@@ -23,6 +23,7 @@ const rows = {
       tunnel_no: '1#',
       series: '源系列甲',
       combined_series: '组合甲乙',
+      production_category: '产线生产品类',
       standard_daily_output_pc: 50,
       standard_daily_output_ton: 0,
     },
@@ -34,6 +35,7 @@ const rows = {
       tunnel_no: '1#',
       series: '源系列乙',
       combined_series: '组合甲乙',
+      production_category: '产线生产品类',
       standard_daily_output_pc: 50,
     },
     { material_code: null, material_name: '同名空码' },
@@ -62,6 +64,9 @@ function fixture({ queryId, parameters }) {
             target_base: '广州',
             transfer_tag: '自产',
             transfer_direction: null,
+            sap_category: 'SAP品类',
+            old_category: '老大类',
+            production_category: '调拨生产品类',
           },
         ]
       : (rows[kind] ?? []);
@@ -142,7 +147,7 @@ test('fourth MPS step uses exact-code source relations, paginates the full set a
   await expect(view.locator('tbody tr').nth(1)).toContainText('产线候选乙');
   await expect(view.locator('tbody tr').nth(0)).toContainText('产品系列');
   await expect(view.locator('tbody tr').nth(0)).toContainText('源系列甲');
-  await expect(view.locator('tbody tr').nth(0).locator('td').nth(11)).toHaveText('0');
+  await expect(view.locator('tbody tr').nth(0).locator('td').nth(12)).toHaveText('0');
   await view.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(view.locator('tbody tr')).toHaveCount(4);
   await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('同名空码');
@@ -203,4 +208,42 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
   await expect(view.locator('tbody tr')).toContainText('2026-11');
   release();
   await expect(view.locator('tbody tr')).not.toContainText('2026-10');
+});
+
+test('source series and category gaps stay visible and filterable with a complete product match', async (t) => {
+  const { view } = await relations(t, (query) => {
+    const result = fixture(query);
+    if (query.queryId === 'sku_capacity.detail')
+      Object.assign(result.rows[0], {
+        series: null,
+        combined_series: '',
+        production_category: null,
+        standard_daily_output_pc: 0,
+      });
+    if (query.queryId === 'transfers.detail')
+      Object.assign(result.rows[0], {
+        sap_category: null,
+        old_category: '',
+        production_category: null,
+        transfer_direction: '四川至广州',
+      });
+    return result;
+  });
+  await expect(view).toContainText('共29条');
+  await view.getByRole('searchbox', { name: '搜索关系记录' }).fill('P000');
+  await expect(view.locator('tbody tr')).toHaveCount(2);
+  await expect(view.getByRole('columnheader', { name: '源生产品类', exact: true })).toBeVisible();
+  await view.getByRole('checkbox', { name: '仅缺项或待确认' }).check();
+  await expect(view.locator('tbody tr')).toHaveCount(1);
+  const candidate = view.locator('tbody tr');
+  await expect(candidate).toContainText('产品系列');
+  await expect(candidate).toContainText('汤圆');
+  await expect(candidate).toContainText('缺产线源系列、缺组合系列、缺产线生产品类');
+  await expect(candidate.locator('td').nth(11)).toHaveText('0');
+  await view.getByRole('tab', { name: /基地与调拨/ }).click();
+  await expect(view.locator('tbody tr')).toHaveCount(1);
+  for (const name of ['源SAP品类', '源老大类', '源生产品类'])
+    await expect(view.getByRole('columnheader', { name, exact: true })).toBeVisible();
+  await expect(view.locator('tbody tr')).toContainText('缺SAP品类、缺老大类、缺调拨生产品类');
+  await expect(view.locator('tbody tr')).not.toContainText('调拨方向待确认');
 });
