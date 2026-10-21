@@ -2,6 +2,6 @@
   "surface": "gea-html-inventory-mps",
   "protocol": "self-report",
   "pageIds": ["plan-category-production"],
-  "consumerCode": "mps-prototype",
+  "consumerCode": "mps",
   "maxEffect": "view"
 }

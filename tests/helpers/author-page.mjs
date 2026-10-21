@@ -43,7 +43,7 @@ const parent = await compile(`
  window.openAuthor=async(name,width,seed)=>{flushSync(()=>root.render(null));unregister?.();page={id:name==='category'?'plan-region-category':'plan-category-production',kind:'html',src:'/author/'+name,label:name};unregister=owner.registerFrame(page);await owner.open(page.id);owner.associateSession(page.id,{sessionId:id,preset:null,ownerScope:'fixture-author-scope',subject});if(seed)owner.saveHtmlViewState(page.id,viewScope,seed);associated=true;document.getElementById('root').style.width=(width+520)+'px';render();};
  window.unassociate=()=>{associated=false;owner.forgetSession(page.id);render();};window.readView=()=>owner.readHtmlViewState(page.id,viewScope);
 `);
-export async function authorPage(t) {
+export async function authorPage(t, options = {}) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1920, height: 720 } });
@@ -64,7 +64,14 @@ export async function authorPage(t) {
             { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
           )
         : await readFile('lib/static/' + name + '/index.html', 'utf8');
-    assets[name] = injectPicker(html, picker);
+    const configured =
+      name === 'mps' && options.mpsConfig
+        ? html.replace(
+            '</head>',
+            `<script id="agent-sql-config" type="application/json">${JSON.stringify(options.mpsConfig).replaceAll('<', '\\u003c')}</script></head>`,
+          )
+        : html;
+    assets[name] = injectPicker(configured, picker);
   }
   await page.route('http://127.0.0.1:19480/**', (route) =>
     route.fulfill({
