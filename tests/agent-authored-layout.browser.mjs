@@ -193,6 +193,39 @@ test('APS top month selector applies the original period and keeps its menu with
     .toBe(true);
   assert.deepEqual(errors, []);
 });
+test('fc: order card displays monthly shortage and stock allocation without inventing pending orders', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'health.summary') result.rows[0].pack_unit_qty = 86814.2;
+    if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
+    return result;
+  });
+  const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
+  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
+  await expect(card.locator('dl')).toContainText('库存备单占用86,814.2箱');
+  await expect(card.locator('.kpi-value')).toHaveText('-');
+  assert.ok(
+    calls.some((q) => q.queryId === 'health.summary' && q.parameters.warehouse_type === '分仓'),
+  );
+  assert.ok(
+    calls.some((q) => q.queryId === 'orders.summary' && q.parameters.pickup_type === '分仓'),
+  );
+  assert.deepEqual(errors, []);
+});
+test('fc: unavailable stock allocation does not hide monthly shortage or become zero', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'health.summary')
+      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
+    if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
+    return result;
+  });
+  const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
+  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
+  await expect(card.locator('dl')).toContainText('库存备单占用-');
+  await expect(card.locator('.kpi-value')).toHaveText('-');
+  await expect(frame.getByRole('alert')).toHaveCount(1);
+  assert.equal(calls.filter((q) => q.queryId === 'health.summary').length, 1);
+  assert.deepEqual(errors, []);
+});
 test('dealer top date refresh preserves the selected customer scope', async (t) => {
   const { frame, calls, errors } = await mount(t, 'dealer', 390);
   const header = frame.locator('[data-business-toolbar]');

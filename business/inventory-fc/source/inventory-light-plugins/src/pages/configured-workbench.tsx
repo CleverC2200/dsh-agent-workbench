@@ -92,9 +92,11 @@ export default function ConfiguredWorkbench() {
       value: null,
       unit: '箱',
       color: 'amber',
+      description:
+        '当前待发订单仍缺分仓阶段快照。下方分别为本月累计缺货量与库存快照中的备单占用量，不能相加或推算当前待发量。',
       details: [
-        ['缺货量', null, '箱'],
-        ['备单量', null, '箱'],
+        ['本月缺货量', completeValue(order, 'shortage'), '箱'],
+        ['库存备单占用', knownNumber(branchStock?.pack_unit_qty), '箱'],
       ],
     },
   ];
@@ -163,7 +165,7 @@ export default function ConfiguredWorkbench() {
                   title={
                     c.title === '当前货龄'
                       ? '当前货龄取分仓库存最大库龄；平均货龄未提供。'
-                      : undefined
+                      : c.description
                   }
                 >
                   <div className="kpi-title">
