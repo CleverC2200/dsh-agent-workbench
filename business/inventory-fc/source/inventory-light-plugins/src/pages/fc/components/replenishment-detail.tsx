@@ -1,4 +1,6 @@
 'use client';
+import { QueryErrors } from '../../../../../../../shared/query-errors';
+('use client');
 import { useEffect, useState } from 'react';
 import type {
   BaseResource,
@@ -72,8 +74,8 @@ function DetailState({
   return !enabled ? (
     <p>当前演示或历史快照未保存该项明细。</p>
   ) : error ? (
-    <div role="alert">
-      <p>{error}</p>
+    <div>
+      <QueryErrors errors={[error]} scope="inventory-fc-replenishment" />
       <button className="secondary-button" onClick={retry}>
         重试读取明细
       </button>
@@ -122,7 +124,10 @@ export function ReplenishmentDetailContent(input: Input) {
         {quantity(detail.expectedQty)} · 批次合计：{quantity(detail.detailQty)}
         {detail.sourceDate ? ` · 数据时间：${detail.sourceDate}` : ''}
       </p>
-      {detail.notice && <p role="alert">{detail.notice}</p>}
+      <QueryErrors
+        errors={detail.notice ? [detail.notice] : []}
+        scope="inventory-fc-replenishment"
+      />
       <div className="table-scroll">
         <table className="data-table detail-quantity-table">
           <thead>

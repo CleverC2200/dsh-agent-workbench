@@ -1,3 +1,4 @@
+import { QueryErrors } from './query-errors';
 import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
 import React, { useEffect, useRef, useState } from 'react';
@@ -406,11 +407,7 @@ export function ConfiguredFactsPage({
             </button>
           </LocalQueryForm>
         )}
-        {error && (
-          <div role="alert" className={css.warning}>
-            {error.message}（{error.code}）
-          </div>
-        )}
+        <QueryErrors errors={error ? [`${error.message}（${error.code}）`] : []} />
         {loading && <p role="status">正在读取{view.title}…</p>}
         {!loading && result?.status === 'select_customer' && (
           <p role="status" className={css.empty}>
@@ -450,11 +447,13 @@ export function ConfiguredFactsPage({
           ))}
         {result && ['available', 'empty'].includes(result.status) && (
           <>
-            {result.summaryError && (
-              <p role="alert" className={css.warning}>
-                汇总不可用：{result.summaryError.message}（{result.summaryError.code}）
-              </p>
-            )}
+            <QueryErrors
+              errors={
+                result.summaryError
+                  ? [`${result.summaryError.message}（${result.summaryError.code}）`]
+                  : []
+              }
+            />
             {view.metrics?.length > 0 && (
               <div className={css.metrics}>
                 {view.metrics.map((metric: any) => (

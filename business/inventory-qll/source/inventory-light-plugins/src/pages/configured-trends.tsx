@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../shared/query-errors';
 import { useEffect, useRef, useState } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredHistory } from '../../../../../shared/configured-history';
@@ -74,7 +75,7 @@ export function ConfiguredTrends({ date }: { date: string }) {
           </Button>
         )}
       </div>
-      {error && <p role="alert">{error}</p>}
+      <QueryErrors errors={error ? [error] : []} scope="inventory-qll-trends" />
       {data ? (
         <>
           <TrendChart

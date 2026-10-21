@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../shared/query-errors';
 import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
@@ -7467,14 +7468,10 @@ export default function Home({
             原型预览
           </p>
         )}
-        {liveData && live.error && (
-          <section className="aps-data-state" role="alert">
-            <details>
-              <summary>数据读取异常 · 查看详情</summary>
-              <p>{live.error}</p>
-            </details>
-          </section>
-        )}
+        <QueryErrors
+          errors={liveData && live.error ? [live.error] : []}
+          scope="inventory-apsplan"
+        />
         {contextSelectionMode && (
           <div className="context-selection-banner" role="status">
             <Link2 />

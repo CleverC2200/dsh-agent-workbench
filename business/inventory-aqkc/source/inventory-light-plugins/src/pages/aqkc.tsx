@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
@@ -7,7 +8,7 @@ import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-cu
 import { createPageViewState } from '../../../../../shared/view-state.js';
 const aqkcView = createPageViewState('inventory-aqkc');
 import { DashboardOverviewSkeleton, DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
-import { DATA_PERMISSION_MESSAGE, queryErrorText } from '../query-error.js';
+import { queryErrorText } from '../query-error.js';
 import { usePageFilter } from '../native/page-filter.tsx';
 
 import { DailyReportButton } from './aqkc/components/analytics/daily-report-dialog.tsx';
@@ -138,14 +139,13 @@ function moveTabFocus<T extends string>(
 const boardTabs: BoardTabName[] = ['基地结构', '品类结构', '货龄结构'];
 
 const FEATURED_INVENTORY_REPORT_PROMPT = '生成全国库存分析报告';
-const DATA_READ_FAILURE_MESSAGE = '数据读取失败，请刷新重试；若仍失败，请联系管理员。';
-
 function readFailureText(value: unknown) {
-  const message = queryErrorText(value);
-  return message === DATA_PERMISSION_MESSAGE ||
-    (typeof message === 'string' && /页面已显示|登录身份已变化|页面会话已切换/.test(message))
-    ? message
-    : DATA_READ_FAILURE_MESSAGE;
+  return (
+    <>
+      <QueryErrors errors={[queryErrorText(value)]} scope="inventory-aqkc-detail" />
+      暂无数据。
+    </>
+  );
 }
 
 const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
@@ -1553,7 +1553,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     return (
       <tr className={styles.skuExpandedRow}>
         <td colSpan={colSpan}>
-          <div className={styles.inlineDetailState} role="alert">
+          <div className={styles.inlineDetailState} role="status">
             {readFailureText(error)}
           </div>
         </td>
@@ -1767,10 +1767,7 @@ function BaseCategoryDetail({
     return (
       <tr className={styles.expandedRow}>
         <td colSpan={colSpan}>
-          <div
-            className={styles.inlineDetailState}
-            role={state.kind === 'error' ? 'alert' : 'status'}
-          >
+          <div className={styles.inlineDetailState} role="status">
             {state.kind === 'error' ? readFailureText(state.message) : state.message}
           </div>
         </td>
@@ -1859,10 +1856,7 @@ function CategoryBaseDetail({
     return (
       <tr className={styles.expandedRow}>
         <td colSpan={colSpan}>
-          <div
-            className={styles.inlineDetailState}
-            role={state.kind === 'error' ? 'alert' : 'status'}
-          >
+          <div className={styles.inlineDetailState} role="status">
             {state.kind === 'error' ? readFailureText(state.message) : state.message}
           </div>
         </td>

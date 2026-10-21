@@ -259,11 +259,7 @@ function OriginalOperations({ config, date, revision }: any) {
   const cost = parts.cost?.summary;
   return (
     <>
-      {errors.map((error: string) => (
-        <p role="alert" key={error}>
-          {error}
-        </p>
-      ))}
+      <QueryErrors errors={errors} scope="inventory-fc-resources" />
       <div className="resource-grid">
         {[
           ['本月入库', null, '箱'],

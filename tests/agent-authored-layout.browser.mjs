@@ -11,8 +11,12 @@ async function mount(t, id, width, override) {
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
     errors = [],
-    calls = [];
+    calls = [],
+    diagnostics = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (message) => {
+    if (message.type() === 'warning') diagnostics.push(message.text());
+  });
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   const html = await configuredPageHtml(id),
     wire = await configuredWire(id);
@@ -38,7 +42,7 @@ async function mount(t, id, width, override) {
   );
   await page.goto('http://agent-layout.test/');
   const frame = page.frameLocator('iframe');
-  return { page, frame, errors, calls };
+  return { page, frame, errors, calls, diagnostics };
 }
 test('APS source limitations do not masquerade as query failures', async (t) => {
   const { frame, calls, errors } = await mount(t, 'apsplan', 1280);
@@ -48,25 +52,19 @@ test('APS source limitations do not masquerade as query failures', async (t) => 
   assert.deepEqual(errors, []);
 });
 
-test('APS permission failures remain visible once while other sources finish', async (t) => {
-  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+test('APS query diagnostics stay in logs while other sources finish', async (t) => {
+  const { frame, calls, errors, diagnostics } = await mount(t, 'apsplan', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date')
       return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
     return result;
   });
   await expect.poll(() => calls.length).toBeGreaterThan(10);
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
-  const alert = frame.getByRole('alert');
-  await expect(alert).toHaveCount(1);
-  await alert.locator('summary').click();
-  await expect(alert).toContainText('NO_RETURN_COLUMN_ALLOWED');
-  const text = await alert.innerText();
-  assert.equal(
-    text.split('基地库存（选定版本）：').length - 1,
-    1,
-    'a failed source must appear only once',
-  );
-  assert.doesNotMatch(text, /SOURCE_NOT_AVAILABLE/);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
+  await expect(frame.locator('body')).not.toContainText('NO_RETURN_COLUMN_ALLOWED');
+  await expect
+    .poll(() => diagnostics.some((message) => message.includes('NO_RETURN_COLUMN_ALLOWED')))
+    .toBe(true);
   assert.deepEqual(errors, []);
 });
 for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
@@ -222,7 +220,7 @@ test('fc: unavailable stock allocation does not hide monthly shortage or become 
   await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
   await expect(card.locator('dl')).toContainText('库存备单占用-');
   await expect(card.locator('.kpi-value')).toHaveText('-');
-  await expect(frame.getByRole('alert')).toHaveCount(1);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
   assert.equal(calls.filter((q) => q.queryId === 'health.summary').length, 1);
   assert.deepEqual(errors, []);
 });
@@ -799,5 +797,25 @@ for (const id of ['fc', 'qll', 'dealer'])
       .click();
     assert.equal(calls.length, clearedCalls, 'required empty date blocks refresh');
     await expect(calendar).toBeVisible();
+    assert.deepEqual(errors, []);
+  });
+
+for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
+  test(`${id}: source warnings are logged without business-page banners`, async (t) => {
+    const { frame, errors, diagnostics } = await mount(t, id, 1280);
+    const root = frame.locator('#app');
+    await expect(root).not.toBeEmpty();
+    await root.evaluate(() =>
+      window.dispatchEvent(
+        new CustomEvent('gea-query-warning', {
+          detail: { message: '缺少批次货龄与生产日期，无法计算完整货龄分桶和未来推演。' },
+        }),
+      ),
+    );
+    await expect
+      .poll(() => diagnostics.some((message) => message.includes('缺少批次货龄')))
+      .toBe(true);
+    await expect(root).not.toContainText('缺少批次货龄与生产日期');
+    await expect(root.getByRole('alert')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });

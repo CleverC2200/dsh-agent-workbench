@@ -1,4 +1,6 @@
 'use client';
+import { QueryErrors } from '../../../../../../../../shared/query-errors';
+('use client');
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Checkbox, Input, Modal, Select, Spin } from '../../../../dsh-ui/controls';
@@ -620,11 +622,10 @@ function ReportBody({
               </Section>
             ))}
           <Section id="feedback" title="六、反馈与跟进" hint="反馈当前仅本人可见 · 不自动执行建议">
-            {!feedback.available && (
-              <p role="status" className={styles.warning}>
-                {feedback.warning}
-              </p>
-            )}
+            <QueryErrors
+              errors={!feedback.available && feedback.warning ? [feedback.warning] : []}
+              scope="inventory-aqkc-feedback"
+            />
             <h4>今日新增反馈</h4>
             {renderFeedback(views.filter((f) => reportDate(f.createdAt) === report.date))}
             <details className={styles.history}>
@@ -1000,9 +1001,9 @@ export function DailyReportButton({ className, bases, initialBase, onBoard, onAs
             <p>{attempt > 0 ? '正在重新读取库存、货龄和订单…' : '正在读取库存、货龄和订单…'}</p>
           </div>
         ) : error ? (
-          <div className={styles.state} role="alert">
-            <h3>日报暂不可用</h3>
-            <p>{error}</p>
+          <div className={styles.state}>
+            <QueryErrors errors={[error]} scope="inventory-aqkc-daily-report" />
+            <h3>暂无日报数据</h3>
             <Button onClick={() => setAttempt((v) => v + 1)}>重试</Button>
           </div>
         ) : report?.empty ? (

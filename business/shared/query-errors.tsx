@@ -1,17 +1,16 @@
-import styles from './restored-workbench.module.css';
+import { useEffect } from 'react';
 
-/** Keep actionable query failures available without repeating full source messages above the cards. */
-export function QueryErrors({ errors }: { errors: readonly string[] }) {
-  const messages = [...new Set(errors.filter(Boolean))];
-  if (!messages.length) return null;
-  return (
-    <details className={styles.queryErrors} role="alert">
-      <summary>数据读取异常（{messages.length}项）</summary>
-      <ul>
-        {messages.map((message) => (
-          <li key={message}>{message}</li>
-        ))}
-      </ul>
-    </details>
-  );
+/** Keep data diagnostics in developer logs without adding warnings to business pages. */
+export function QueryErrors({
+  errors,
+  scope = 'business-data',
+}: {
+  errors: readonly string[];
+  scope?: string;
+}) {
+  const message = [...new Set(errors.filter(Boolean))].join('\n');
+  useEffect(() => {
+    if (message) console.warn('business-data-diagnostic', { scope, message });
+  }, [scope, message]);
+  return null;
 }

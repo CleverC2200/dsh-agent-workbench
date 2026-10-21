@@ -1,3 +1,4 @@
+import { QueryErrors } from './query-errors';
 import React from 'react';
 import { LocalQueryForm } from './local-query-form';
 import {
@@ -183,16 +184,13 @@ export function OriginalBusinessList({
           )}
         </LocalQueryForm>
       )}
-      {error && (
-        <p role="alert" className={css.error}>
-          {error.message}（{error.code}）
-        </p>
-      )}
-      {result?.summaryError && (
-        <p role="alert" className={css.error}>
-          {result.summaryError.message}
-        </p>
-      )}
+      <QueryErrors
+        errors={[
+          error ? `${error.message}（${error.code}）` : '',
+          result?.summaryError?.message,
+        ].filter(Boolean)}
+        scope={agentId}
+      />
       {result?.status === 'select_customer' ? (
         <p className={css.empty}>请选择客户。</p>
       ) : (
