@@ -330,7 +330,7 @@ for (const id of ['customer', 'orderfulfillment', 'orderworkbench', 'regional', 
       );
     if (id === 'orderfulfillment')
       targets.push(
-        frame.getByLabel('按来源订单号或 OMS 单号模糊查询'),
+        frame.getByRole('searchbox', { name: '查询订单单号', exact: true }),
         frame.locator('.orders tbody td').first(),
       );
     if (id === 'orderworkbench')
