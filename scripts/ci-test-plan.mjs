@@ -253,10 +253,19 @@ function references(file, roots, known, importsOnly = false) {
     const token = tokens[index];
     if (['from', 'import'].includes(token) && literal(tokens[index + 1]))
       names.push([tokens[index + 1].slice(1, -1), true, true]);
-    if (['import', 'require'].includes(token) && tokens[index + 1] === '(') {
-      const argument = argumentsOf(index + 1)[0];
+    const moduleCall = ['import', 'require'].includes(token) && tokens[index + 1] === '(';
+    const packageResolution =
+      token === 'require' &&
+      tokens[index + 1] === '.' &&
+      tokens[index + 2] === 'resolve' &&
+      tokens[index + 3] === '(';
+    if (moduleCall || packageResolution) {
+      const argument = argumentsOf(index + (packageResolution ? 3 : 1))[0];
+      const fileURL =
+        moduleCall && token === 'import' && tokens[argument?.start] === 'pathToFileURL';
       if (argument)
-        for (const name of pathNames(argument.start, argument.end)) names.push([name, true, true]);
+        for (const name of pathNames(argument.start, argument.end))
+          names.push([name, true, !fileURL]);
     }
     if (importsOnly) continue;
     let start;
@@ -286,28 +295,33 @@ function references(file, roots, known, importsOnly = false) {
     if (start === undefined) continue;
     for (const name of pathNames(start, endOf(start))) names.push([name, recursive]);
   }
+  const owner = roots.find((root) => file.startsWith(root + '/'));
+  const upstreamRoots = owner
+    ? [
+        '../../upstream-inputs',
+        '../../quality-upstreams',
+        'node_modules/@changfenhuang/dsh-genui',
+        'node_modules/dsh-better-sidebar',
+      ].map((path) => resolve(owner, path))
+    : [];
   for (const [name, recursive, module] of names) {
     if (module && !name.startsWith('.') && !name.startsWith('/') && !isBuiltin(name))
       result.set(packageDependency, true);
     if (name.includes('official-latest-standard') || (module && name.startsWith('@deepseek-ai/')))
       result.set(sdkDependency, true);
-    const upstreamPackage = /^(?:@changfenhuang\/dsh-genui|dsh-better-sidebar)(?:\/|$)/.test(name);
-    if (
-      upstreamPackage ||
-      /(?:^|\/)(?:upstream-inputs\/(?:genui|sidebar)|upstream-reference\/dsh-(?:genui|better-sidebar)|upstream-assets\/genui-0\.11\.3|node_modules\/(?:@changfenhuang\/dsh-genui|dsh-better-sidebar))(?:\/|$)/.test(
-        name,
-      )
-    )
-      result.set(upstreamDependency, true);
+    const upstreamPackage =
+      module && /^(?:@changfenhuang\/dsh-genui|dsh-better-sidebar)(?:\/|$)/.test(name);
+    if (upstreamPackage) result.set(upstreamDependency, true);
     if (module && upstreamPackage) result.set(sdkDependency, true);
     if (module && /^(?:@playwright\/test|playwright(?:-core)?)(?:\/|$)/.test(name)) {
       result.set(browserDependency, true);
       continue;
     }
     if (name.length > 300) continue;
-    const owner = roots.find((root) => file.startsWith(root + '/'));
     for (const base of [dirname(file), owner].filter(Boolean)) {
       const target = resolve(base, name.split('${')[0]);
+      if (upstreamRoots.some((path) => target === path || target.startsWith(path + '/')))
+        result.set(upstreamDependency, true);
       const workbench = roots.find((root) => root.endsWith('/dsh-agent-workbench'));
       if (
         workbench &&
