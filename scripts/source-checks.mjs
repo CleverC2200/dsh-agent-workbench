@@ -54,6 +54,8 @@ export async function sourceChecks(result, phase) {
     testOwners,
     sourceOnly: true,
   });
+  const desktopTools =
+    repo === 'dsh-gea-plugin' && selected.files.includes('scripts/package-desktop.test.mjs');
   const typecheck = result.files.some(
     (file) =>
       (/^(?:src|packages|business)\//.test(file) && /\.(?:ts|tsx|mts|cts)$/.test(file)) ||
@@ -73,6 +75,7 @@ export async function sourceChecks(result, phase) {
     dependencies:
       typecheck ||
       joint ||
+      desktopTools ||
       selected.dependencies ||
       selected.files.some((file) => file.endsWith('.ts')),
     sdk:
@@ -90,6 +93,12 @@ export async function sourceChecks(result, phase) {
         appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${plan[key]}\n`);
     console.log(JSON.stringify(plan));
     return;
+  }
+  if (repo === 'dsh-gea-plugin' && !joint) {
+    const linkedWorkbench = resolve(root, '../dsh-agent-workbench');
+    if (!existsSync(linkedWorkbench)) symlinkSync(workbench, linkedWorkbench, 'dir');
+    if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
+      throw Error('SOURCE_PEER_LINK_MISMATCH');
   }
   let coreHead;
   if (plan.sdk) {
@@ -121,10 +130,6 @@ export async function sourceChecks(result, phase) {
         pathToFileURL(resolve(gea, 'scripts/build-admission.mjs'))
       );
       if (repo === 'dsh-gea-plugin' && typecheck) {
-        const linkedWorkbench = resolve(root, '../dsh-agent-workbench');
-        if (!existsSync(linkedWorkbench)) symlinkSync(workbench, linkedWorkbench, 'dir');
-        if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
-          throw Error('SOURCE_PEER_LINK_MISMATCH');
         for (const peer of [workbench, manage]) {
           const release = acquireBuild({ operation: 'prepare', cwd: peer });
           try {
@@ -263,6 +268,21 @@ export async function sourceChecks(result, phase) {
         ? ['exec', '--', 'playwright', 'install', '--with-deps', 'chromium']
         : ['pnpm', 'exec', 'playwright', 'install', '--with-deps', 'chromium'],
     );
+  if (desktopTools) {
+    const { acquireBuild } = await import(
+      pathToFileURL(resolve(gea, 'scripts/build-admission.mjs'))
+    );
+    const release = acquireBuild({
+      operation: 'build',
+      cwd: root,
+      output: resolve(root, 'desktop'),
+    });
+    try {
+      run(process.execPath, ['scripts/build-desktop-tools.mjs'], root);
+    } finally {
+      release();
+    }
+  }
   const nodeFiles = plan.files.filter((file) => !file.endsWith('.ts'));
   if (nodeFiles.length)
     run(process.execPath, ['--expose-internals', '--test', '--test-concurrency=1', ...nodeFiles]);
