@@ -199,7 +199,7 @@ test('Markdown link examples inside code are preserved without becoming active r
 test('official core build refuses absent SDK before generating any output', (t) => {
   const { root } = fixture(t);
   mkdirSync(resolve(root, 'scripts'));
-  for (const file of ['build.mjs', 'verify-official-input.mjs']) {
+  for (const file of ['build.mjs', 'build-output.mjs', 'verify-official-input.mjs']) {
     writeFileSync(
       resolve(root, 'scripts', file),
       readFileSync(resolve(import.meta.dirname, '../scripts', file)),

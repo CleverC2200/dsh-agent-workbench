@@ -3,6 +3,7 @@ import { build } from 'esbuild';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, relative } from 'node:path';
 import { createHash } from 'node:crypto';
+import { syncAgentResources } from './build-output.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/dms');
@@ -45,8 +46,7 @@ await build({
 });
 for (const file of ['plugin.json', 'page.json', 'SOURCE.json'])
   await cp(resolve(source, file), resolve(output, file));
-for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills'])
-  await cp(resolve(agent, file), resolve(output, file), { recursive: true });
+await syncAgentResources(agent, output);
 const files = [
   ...Object.keys(result.metafile.inputs).filter((p) => !p.includes('node_modules/')),
   'prototypes/dms/index.html',
