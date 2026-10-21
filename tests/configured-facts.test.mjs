@@ -355,13 +355,21 @@ test('branch shipment windows retain the whole month plus exactly thirty calenda
   }
 });
 
-test('new branch inventory binds its own snapshot and warehouse type', async () => {
+test('inventory binds warehouse code and base name without a warehouse-class type', async () => {
   const io = source(configs.fc);
-  const r = await readConfiguredFacts(configs.fc, 'branch-stock', input, io);
+  const r = await readConfiguredFacts(
+    configs.fc,
+    'branch-stock',
+    { ...input, filters: { warehouse_code: 'A020', base: '遂平' } },
+    io,
+  );
   assert.equal(r.snapshotDate, '2026-10-15');
   const call = io.calls.find((c) => c.queryId === 'health.detail');
-  assert.equal(call.values.warehouse_type, '分仓');
-  assert.equal(call.values.warehouse_type_mode, 'equal');
+  assert.equal(call.values.warehouse_code, 'A020');
+  assert.equal(call.values.warehouse_code_mode, 'equal');
+  assert.equal(call.values.bases_enabled, true);
+  assert.deepEqual(call.values.bases, ['遂平']);
+  assert.equal('warehouse_type' in call.values, false);
   assert.equal(call.values.stat_date, '2026-10-15');
 });
 test('production base defaults are kept only on compatible source views', async () => {
@@ -376,7 +384,7 @@ test('production base defaults are kept only on compatible source views', async 
   assert.deepEqual(initialFiltersForView(aps, 'warehouse-health', { base: '华东' }), {
     base: '华东',
   });
-  assert.deepEqual(initialFiltersForView(aps, 'branch-stock', { base: '华东' }), {});
+  assert.deepEqual(initialFiltersForView(aps, 'branch-stock', { base: '华东' }), { base: '华东' });
   assert.deepEqual(
     initialFiltersForView(aps, 'branch-operations', { base: '华东', warehouse_id: 'W1' }),
     { warehouse_id: 'W1' },

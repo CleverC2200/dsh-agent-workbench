@@ -49,9 +49,6 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
 [data-gea-narrow] .gea-workspace-owned {
   display: none;
 }
-.gea-workspace-heading {
-  padding-inline: 0;
-}
 .gea-conversation-welcome {
   max-width: 100%;
   padding-inline: 16px;
