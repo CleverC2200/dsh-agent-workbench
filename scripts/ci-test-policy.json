@@ -22,7 +22,7 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^business/inventory-(?:apsplan|aqkc|fc|qll)/source/|^business/shared/.*\\.css$",
+      "pattern": "^business/inventory-(?:apsplan|aqkc|dealer|fc|qll)/(?:source/|theme\\.css$)|^business/shared/.*\\.css$",
       "tests": [
         "tests/agent-authored-layout.browser.mjs",
         "tests/agent-responsive-layout.browser.mjs"
@@ -110,7 +110,7 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^scripts/(?:agent_sql\\.py|test_agent_sql\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "pattern": "^scripts/(?:agent_sql\\.py|test_agent_sql\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py|update-inventory-batch-source\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
       "tests": ["tests/agent-sql-direct.test.mjs", "tests/agent-sql-config.test.mjs"]
     },
     {
