@@ -34,7 +34,7 @@ test('fast overview cards render while another source is pending; shared snapsho
     },
   });
   await new Promise(setImmediate);
-  const early = progress.some((p) => p.plan?.summary && !p.orders);
+  const early = progress.some((p) => p.replenishment?.summary && !p.orders);
   finishSlow();
   const result = await promise;
   assert.ok(early, 'a slow source must not hide ready cards');
@@ -52,7 +52,7 @@ test('refresh creates a new snapshot scope and permission failures do not retry'
   };
   for (let n = 0; n < 2; n++) {
     const parts = await readConfiguredOverview(config, '2026-10-19', '', { execute });
-    assert.equal(parts.plan.error, 'denied');
+    assert.equal(parts.replenishment.error, 'denied');
     assert.equal(parts['branch-stock'].error, 'denied');
     assert.equal(parts.orders.summary.row_count, 1);
   }

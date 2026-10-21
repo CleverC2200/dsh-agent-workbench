@@ -41,7 +41,7 @@ async function mount(t, id, width, override) {
   return { page, frame, errors, calls };
 }
 for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
-  test(`${id}: authored structure and supplementary data remain usable at desktop and narrow widths`, async (t) => {
+  test(`${id}: original business structure remains usable at desktop and narrow widths`, async (t) => {
     const { page, frame, errors } = await mount(t, id, 1280);
     const root = frame.locator(id === 'apsplan' ? '#root' : '#app');
     await expect(root).not.toBeEmpty();
@@ -53,14 +53,15 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
       apsplan: '智能工作台',
     }[id];
     await expect(
-      root.getByRole(id === 'aqkc' ? 'tab' : 'button', { name: marker, exact: true }).first(),
+      root
+        .getByRole(['aqkc', 'qll'].includes(id) ? 'tab' : 'button', { name: marker, exact: true })
+        .first(),
     ).toBeVisible({
       timeout: 15000,
     });
     if (id === 'apsplan' || id === 'aqkc') {
       const summary = frame.locator('summary').filter({ hasText: '业务明细' });
-      await expect(summary).toBeVisible();
-      assert.equal(await summary.evaluate((el) => el.parentElement.open), false);
+      await expect(summary).toHaveCount(0);
     }
     assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
     for (const width of [1280, 560]) {
@@ -82,7 +83,7 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
     }
     assert.deepEqual(errors, []);
   });
-test('qll execution headline shows dated base orders without deriving pending from monthly totals', async (t) => {
+test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
     if (query.queryId === 'inventory.summary')
@@ -97,11 +98,11 @@ test('qll execution headline shows dated base orders without deriving pending fr
   });
   const card = frame
     .getByRole('button')
-    .filter({ has: frame.getByText('订单执行', { exact: true }) });
+    .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card).toContainText('104.93万箱');
-  await expect(card).toContainText('基地未备单量 · 2026-10-19 · 范围 3500/3500 个SKU');
-  await expect(card).toContainText('基地已备单占用');
-  await expect(card).toContainText('26.12万箱');
+  await expect(card).toContainText('基地缺货量');
+  await expect(card).toContainText('分仓缺货量');
+  assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
   assert.equal(
     calls.some((query) => query.queryId.startsWith('inventory.detail')),
     false,
@@ -129,32 +130,34 @@ for (const [quantity, count, display] of [
     });
     const card = frame
       .locator('article')
-      .filter({ has: frame.getByText('基地未备单量', { exact: true }) });
+      .filter({ has: frame.getByText('当前订单', { exact: true }) });
     await expect(card.locator('strong')).toHaveText(display);
-    await expect(card).toContainText(`快照 2026-10-19 · 范围 ${count}/201 个基地SKU`);
-    await expect(card).toContainText('50箱（201/201 SKU）');
-    await expect(
-      card.locator('dl div').filter({ hasText: '当前待发总量' }).locator('dd'),
-    ).toHaveText('-');
+    await expect(card).toContainText('50箱');
+    assert.doesNotMatch(await card.innerText(), /快照|范围|SKU/);
+    await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
+      '-',
+    );
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
   });
-test('dealer keeps original column order while display choices do not change queries or ten-row pagination', async (t) => {
+test('dealer reuses original tabs, table and pagination while ten-row paging stays server-driven', async (t) => {
   const { frame, calls } = await mount(t, 'dealer', 1280);
-  await frame.getByRole('button', { name: 'SKU库存', exact: true }).click();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   await expect(frame.locator('tbody tr')).toHaveCount(10);
   const offset = () =>
     calls.filter((c) => c.queryId.startsWith('dealer.stock.detail')).at(-1)?.parameters.offset;
   assert.equal(offset(), 0);
-  const before = calls.length;
-  await frame.locator('summary').filter({ hasText: '显示列' }).click();
-  const checkbox = frame.getByRole('checkbox', { name: 'SKU编码', exact: true });
-  await checkbox.uncheck();
-  await expect(frame.locator('thead th').filter({ hasText: /^SKU编码$/ })).toHaveCount(0);
-  await frame.getByRole('button', { name: '显示全部', exact: true }).click();
-  await expect(frame.locator('thead th').filter({ hasText: /^SKU编码$/ })).toHaveCount(1);
-  assert.equal(calls.length, before);
-  await frame.locator('summary').filter({ hasText: '显示列' }).click();
+  await expect(frame.getByRole('tablist')).toHaveCount(1);
+  await expect(frame.getByRole('tab', { name: 'SKU库存', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(frame.locator('summary').filter({ hasText: '显示列' })).toHaveCount(0);
+  assert.equal(
+    await frame.locator('thead tr').evaluate((el) => Math.round(el.getBoundingClientRect().height)),
+    38,
+  );
+  await expect(frame.getByRole('combobox', { name: '每页条数' })).toHaveValue('10');
   await frame.getByRole('button', { name: '下一页', exact: true }).click();
   await expect.poll(offset).toBe(10);
   assert.equal(
@@ -318,7 +321,7 @@ for (const [quantity, demand, expected] of [
     if (!demand) await expect(card.locator('.kpi-value > span')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
-test('FC monthly order identity and shortage SKU counts are shown without inventing current pending quantities', async (t) => {
+test('FC original current-order card excludes monthly counts and keeps unavailable pending quantities distinct', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
     if (query.queryId === 'orders.summary')
       Object.assign(result.rows[0], {
@@ -338,102 +341,29 @@ test('FC monthly order identity and shortage SKU counts are shown without invent
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('-');
-  await expect(card.locator('dl div').filter({ hasText: '本月涉及订单' })).toContainText('6单');
-  await expect(card.locator('dl div').filter({ hasText: '本月缺货SKU' })).toContainText('3个');
-  await expect(card.locator('dl div').filter({ hasText: '本月缺货订单' })).toContainText('2单');
-  await expect(card).toContainText('本月累计');
+  assert.doesNotMatch(await card.innerText(), /本月|SKU|6单|2单/);
+  await expect(card.locator('dt')).toHaveText(['缺货量', '备单量']);
   assert.equal(calls.filter((q) => q.queryId === 'orders.summary').length, 1);
   assert.deepEqual(errors, []);
 });
 for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
-  test(`${id}: dated factory shipment details stay lazy and requery ten rows per page`, async (t) => {
-    const { page, frame, calls, errors } = await mount(t, id, 1280, (query, result) => {
-      if (query.queryId === 'base_shipments.count') result.rows = [{ total: 25 }];
-      if (query.queryId === 'base_shipments.summary')
-        Object.assign(result.rows[0], {
-          row_count: 25,
-          base_count: 5,
-          month_ship_positive: 3909186,
-          month_ship_net: 3908218.937,
-          rolling_ship_positive: 6862792.1,
-          rolling_ship_net: 6861044.737,
-          rolling_ship_negative: 1747.363,
-        });
-      if (query.queryId === 'base_shipments.detail')
-        result.rows = Array.from(
-          { length: Math.min(10, 25 - query.parameters.offset) },
-          (_, n) => ({
-            ...Object.fromEntries(result.returnedColumns.map((field) => [field, null])),
-            base: '华东',
-            sku: 'ship-sku-' + (query.parameters.offset + n),
-            material_name: '发货测试商品',
-            month_ship_positive: 100,
-            month_ship_net: 95,
-            rolling_ship_positive: 200,
-            rolling_ship_net: 190,
-            rolling_ship_negative: 10,
-            last_ship_date: '20261019',
-          }),
-        );
-      return result;
-    });
-    await expect(frame.locator(id === 'apsplan' ? '#root' : '#app')).not.toBeEmpty();
+  test(`${id}: source diagnostics and extra source tabs stay outside the original business UI`, async (t) => {
+    const { frame, calls, errors } = await mount(t, id, 1280);
+    await expect(frame.locator('summary').filter({ hasText: '业务明细' })).toHaveCount(0);
+    for (const title of [
+      '基地实际发货',
+      '客户计划分析来源',
+      '基地产销日记录',
+      '分仓运营与费用',
+      '分仓库存与补货测算',
+    ])
+      await expect(frame.getByRole('button', { name: title, exact: true })).toHaveCount(0);
     assert.equal(
       calls.some((query) => query.queryId === 'base_shipments.detail'),
       false,
     );
-    if (['aqkc', 'apsplan'].includes(id))
-      await frame.locator('summary').filter({ hasText: '业务明细' }).click();
-    if (id === 'fc') await frame.getByRole('button', { name: '基地资源', exact: true }).click();
-    await frame.getByRole('button', { name: '基地实际发货', exact: true }).click();
-    const panel = frame.locator('section[aria-labelledby="source-view-title"]');
-    await expect(panel.locator('tbody tr')).toHaveCount(10);
-    await expect(panel).toContainText('近30日净发货');
-    const detailCalls = () => calls.filter((query) => query.queryId === 'base_shipments.detail');
-    assert.equal(detailCalls().at(-1).parameters.page_size, 10);
-    assert.equal(detailCalls().at(-1).parameters.offset, 0);
-    assert.equal(detailCalls().at(-1).parameters.rolling_start, '20260921');
-    assert.equal(detailCalls().at(-1).parameters.shipment_end_exclusive, '20261021');
-    await panel.getByRole('button', { name: '下一页', exact: true }).click();
-    await expect.poll(() => detailCalls().at(-1)?.parameters.offset).toBe(10);
-    await expect(panel.locator('tbody tr')).toHaveCount(10);
-    await expect(panel).toContainText('ship-sku-10');
-    await expect(panel).toContainText('2026-09-21');
-    await page.setViewportSize({ width: 560, height: 900 });
-    const width = await panel.evaluate(() => ({
-      page: document.documentElement.scrollWidth,
-      viewport: innerWidth,
-    }));
-    assert.ok(width.page <= width.viewport + 2, JSON.stringify(width));
     assert.deepEqual(errors, []);
   });
-test('APS warehouse operations show source fractions as percentages and preserve source zero', async (t) => {
-  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
-    if (['branch_cost.detail', 'branch_cost.detail.atomic'].includes(query.queryId))
-      Object.assign(result.rows[0], {
-        jfjsl: '0.0000',
-        llfhl: '1.0000',
-        zqjfl: '0.9770',
-        kwfhl: '0.0000',
-        hdqrjsl: '0.6690',
-        xxdzb: '0.9600',
-      });
-    return result;
-  });
-  await frame.locator('summary').filter({ hasText: '业务明细' }).click();
-  await frame.getByRole('button', { name: '分仓运营与费用', exact: true }).click();
-  const panel = frame.locator('section[aria-labelledby="source-view-title"]');
-  await expect(panel.locator('tbody tr')).toHaveCount(1);
-  for (const percentage of ['97.7%', '66.9%', '96%', '100%', '0%'])
-    await expect(panel).toContainText(percentage);
-  const query = calls.find((query) =>
-    ['branch_cost.detail', 'branch_cost.detail.atomic'].includes(query.queryId),
-  );
-  assert.equal(query.parameters.start, '202610');
-  assert.equal(query.parameters.end_exclusive, '202611');
-  assert.equal(query.parameters.base, undefined);
-  assert.deepEqual(errors, []);
-});
 
 for (const deniedBudget of [false, true])
   test(`APS sales view keeps cards, list and analysis consistent with zero-fill; denied budget=${deniedBudget}`, async (t) => {
@@ -524,3 +454,34 @@ for (const deniedBudget of [false, true])
     assert.doesNotMatch(await frame.locator('#overview-detail-list').innerText(), /[-—]%/);
     assert.deepEqual(errors, []);
   });
+
+test('dealer original customer menu applies the new query scope and closes after selection', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'dealer', 1280);
+  const menu = frame.locator('header details').first();
+  await menu.locator('summary').click();
+  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
+  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect(menu.locator('summary')).toContainText('客户 customer-A');
+  assert.equal(await menu.evaluate((el) => el.open), false);
+  await expect
+    .poll(() =>
+      calls.some(
+        (q) =>
+          q.queryId.startsWith('dealer.stock.customer') && q.parameters.customer === 'customer-A',
+      ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+
+test('QLL category cells bind category names while retaining organization as the secondary line', async (t) => {
+  const { frame, errors } = await mount(t, 'qll', 1280);
+  const cell = frame.locator('tbody tr').first().locator('td').first();
+  await expect(cell.locator('strong')).toHaveText('汤圆');
+  await expect(cell.locator('small')).toHaveText(['华东', 'sku-A-000']);
+  await expect(frame.getByRole('tab', { name: '品类结构', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  assert.deepEqual(errors, []);
+});

@@ -81,10 +81,10 @@ function formatMetric(value: number | null, unit: MetricValue['unit'], compact =
     return `${(value / 10_000).toFixed(2)} 万箱`;
   if (unit === '%') return `${value.toFixed(2)}%`;
   if (unit === '天') return `${value.toFixed(1)} 天`;
-  return `${Math.round(value).toLocaleString('zh-CN')} ${unit}`;
+  return `${Math.round(value).toLocaleString('zh-CN')} ${unit === '件' ? '箱' : unit}`;
 }
 
-function KpiCard({
+export function KpiCard({
   metricKey,
   metric,
   workspace,
@@ -261,6 +261,7 @@ function KpiCard({
                 </div>
               )}
               {layerSummary}
+              {customerHelper && <dl className={styles.kpiHelpers}>{customerHelper}</dl>}
             </>
           }
         >
@@ -293,7 +294,6 @@ function KpiCard({
               </dt>
               <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
             </div>
-            {customerHelper}
           </dl>
         )}
         {!splitValues && (
@@ -369,7 +369,6 @@ function KpiCard({
                 </div>
               </>
             )}
-            {customerHelper}
           </dl>
         )}
       </div>

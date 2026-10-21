@@ -127,7 +127,7 @@ export async function readConfiguredStock(
     'safety_stock.id': JSON.stringify([row.base, row.sku]),
     'safety_stock.source': row.target_source_rows > 0 ? 'ai-db-daily-stock' : 'ai-db-stock-only',
     'safety_stock.record_count': 1,
-    'safety_stock.last_30d_shipment_quantity': null,
+    'safety_stock.last_30d_shipment_quantity': row.rolling_ship_positive ?? null,
   }));
 }
 
@@ -257,7 +257,7 @@ export function configuredStockRows(rows: any[], version: string) {
     'safety_stock.id': JSON.stringify([row.base, row.sku]),
     'safety_stock.source': row.target_source_rows > 0 ? 'ai-db-daily-stock' : 'ai-db-stock-only',
     'safety_stock.record_count': 1,
-    'safety_stock.last_30d_shipment_quantity': null,
+    'safety_stock.last_30d_shipment_quantity': row.rolling_ship_positive ?? null,
   }));
 }
 
@@ -319,6 +319,8 @@ export async function readConfiguredStockPage(
   );
   const next = new Date(end + 'T00:00:00Z');
   next.setUTCDate(next.getUTCDate() + 1);
+  const rollingStart = new Date(end + 'T00:00:00Z');
+  rollingStart.setUTCDate(rollingStart.getUTCDate() - 29);
   const bases = input.base
     .split(',')
     .map((s) => s.trim())
@@ -345,6 +347,8 @@ export async function readConfiguredStockPage(
     sort_direction: input.sort?.direction ?? 'asc',
     page_size: size,
     offset: (page - 1) * size,
+    rolling_start: rollingStart.toISOString().slice(0, 10).replaceAll('-', ''),
+    shipment_end_exclusive: next.toISOString().slice(0, 10).replaceAll('-', ''),
     order_start: month,
     order_end_exclusive: next.toISOString().slice(0, 10),
     order_bases_enabled: bases.length > 0,

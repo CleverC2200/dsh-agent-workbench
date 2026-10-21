@@ -262,12 +262,7 @@ const FIXED_WORKBENCH_COLUMNS = [
   { key: 'allocatedQuantity', label: '占用量' },
   { key: 'skuCount', label: 'SKU个数' },
 ];
-const sourceColumns = (columns: { key: string; label: string }[]) =>
-  usesConfiguredSql()
-    ? columns.map((column) =>
-        column.key === 'last30d' ? { ...column, label: '近30日均销量' } : column,
-      )
-    : columns;
+const sourceColumns = (columns: { key: string; label: string }[]) => columns;
 
 function fixedWorkbenchWarning(current: number, target: number, demand: number) {
   if (target <= 0 && current > 0) return { label: '目标为0但有库存，暂不比较', tone: 'gray' };
@@ -1813,7 +1808,7 @@ export async function loadInitialDashboard(
     };
     orderCard.helpers = [
       { label: '快照未备单订单', value: knownSourceTotal('safety_stock.source_ordered') },
-      { label: '快照已备单占用', value: knownSourceTotal('safety_stock.source_allocated') },
+      { label: '备单量', value: knownSourceTotal('safety_stock.source_allocated') },
     ];
   }
   const orderHelpers = shippedOrderMetricHelpers(
@@ -1906,10 +1901,7 @@ export async function loadInitialDashboard(
     const rowCovered = coveredComparison(
       skuRows.filter((source) => String(source['safety_stock.base_name'] ?? '未分类') === rowBase),
     );
-    const warehouseAge = sourceHealth?.rows?.find((r: any) => r.belong_base === rowBase);
-    const rowAge = direct
-      ? (numeric(warehouseAge?.max_age) ?? undefined)
-      : businessSummary.ageByBase[rowBase];
+    const rowAge = direct ? undefined : businessSummary.ageByBase[rowBase];
     const rowOrder = businessSummary.orderByBase[rowBase];
     const pending = currentOrders.find((row) => row.base === rowBase);
     const rowPartial = row.targetCoverage.missingCount > 0;
@@ -2047,7 +2039,7 @@ export async function loadInitialDashboard(
         tone: 'neutral',
       },
       {
-        label: direct ? '最大库龄' : '当前货龄',
+        label: '当前货龄',
         value: direct
           ? healthAge === null
             ? '-'
@@ -2133,9 +2125,7 @@ export async function loadInitialDashboard(
     },
     comparison: null,
     table: {
-      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS).map((column) =>
-        direct && column.key === 'age' ? { ...column, label: '最大库龄/天' } : column,
-      ),
+      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS),
       rows: workbenchRows,
     },
     actions: [],
@@ -2238,7 +2228,7 @@ export async function loadInitialDashboard(
           tone: 'neutral',
         },
         {
-          title: direct ? '最大库龄' : '当前货龄',
+          title: '当前货龄',
           coverage: direct ? `${healthScope}；下列超60天数量仍取日库存快照` : undefined,
           value: direct
             ? healthAge === null
@@ -2404,9 +2394,7 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
         (age ? AGE_COLUMNS : CATEGORY_COLUMNS).filter((c) => c.key !== 'skuCount'),
       ),
       rows: computed,
-      notice: age
-        ? '批次货龄缺失；已接实存和超60天数量。'
-        : '当前待发订单及占用阶段快照缺失；当月满足率按履约来源读取。',
+      notice: '暂无数据。',
     },
     total: result.total,
     page: result.page,
@@ -2490,7 +2478,6 @@ async function loadConfiguredSummaryDashboard(
       s.sum('target_count') === s.n && s.sum('inventory_count') === s.n
         ? fixedWorkbenchWarning(current, target, demand)
         : { label: '-', tone: 'gray' };
-    const age = numeric(health.rows?.find((r: any) => r.belong_base === base)?.max_age);
     return {
       id: base,
       level: base,
@@ -2505,7 +2492,7 @@ async function loadConfiguredSummaryDashboard(
       last30d: s.sum('stock_avg_30d_sale_valid_count')
         ? displayDailyMovement(s.sum('stock_avg_30d_sale_valid'))
         : '-',
-      age: days(age),
+      age: '-',
       orderFillRate:
         business.orderByBase[base]?.rate == null
           ? '-'
@@ -2541,16 +2528,14 @@ async function loadConfiguredSummaryDashboard(
   );
   // The daily fact provides an unprepared subset, not the full pending-order total.
   const orderCard = {
-    title: '基地未备单量',
+    title: '当前订单',
     value: show(all, 'ordered', true),
     helpers: [
       {
-        label: '快照已备单占用',
-        value: all.sum('allocated_valid_count')
-          ? `${show(all, 'allocated', true)}箱（${all.sum('allocated_valid_count')}/${all.n} SKU）`
-          : '-',
+        label: '已备单占用',
+        value: all.sum('allocated_valid_count') ? `${show(all, 'allocated', true)}箱` : '-',
       },
-      { label: '当前待发总量', value: '-' },
+      { label: '缺货量', value: '-' },
     ],
     tone: 'neutral' as const,
   };
@@ -2581,15 +2566,15 @@ async function loadConfiguredSummaryDashboard(
       tone: 'neutral',
     },
     {
-      title: '最大库龄',
+      title: '当前货龄',
       value: days(healthAge),
       coverage: `${healthScope}；下列超60天数量仍取日库存快照`,
       helpers: [
         {
-          label: '超60天SKU',
+          label: '超龄SKU',
           value: all.sum('over60_valid_count') ? displayNumber(all.sum('over60_skus')) : '-',
         },
-        { label: '超60天库存', value: show(all, 'over60', true) },
+        { label: '超龄库存', value: show(all, 'over60', true) },
       ],
       tone: 'neutral',
     },
@@ -2637,9 +2622,7 @@ async function loadConfiguredSummaryDashboard(
       status: scope.fallbackUsed ? '使用备选版本' : '只读',
     },
     table: {
-      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS).map((c) =>
-        c.key === 'age' ? { ...c, label: '最大库龄/天' } : c,
-      ),
+      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS),
       rows: baseRows,
     },
     presentation: 'fixed_workbench',

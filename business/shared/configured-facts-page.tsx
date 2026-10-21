@@ -1,3 +1,4 @@
+import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
 import React, { useEffect, useRef, useState } from 'react';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
@@ -44,8 +45,10 @@ export function ConfiguredFactsPage({
   onPageChange,
   currentPageSize,
   onPageSizeChange,
+  presentation,
 }: {
   config: AgentSqlConfig;
+  presentation?: { title: string; columns: any[]; filters?: string[] };
   onRead?: (value: any) => void;
   embedded?: boolean;
   viewIds?: string[];
@@ -91,7 +94,21 @@ export function ConfiguredFactsPage({
   const [result, setResult] = useState<any>(null),
     [error, setError] = useState<any>(null),
     [loading, setLoading] = useState(false);
-  const view = definition.views.find((v: any) => v.id === viewId);
+  const sourceView = definition.views.find((v: any) => v.id === viewId);
+  // Presentation is independent of the query contract: no field, parameter or
+  // permission is changed when rendering the original business table.
+  const view = presentation
+    ? {
+        ...sourceView,
+        title: presentation.title,
+        columns: presentation.columns,
+        defaultColumns: presentation.columns.map((c: any) => c.field),
+        filters: sourceView.filters.filter(
+          (f: any) => !presentation.filters || presentation.filters.includes(f.name),
+        ),
+        metrics: [],
+      }
+    : sourceView;
   const chosenColumns =
     columnChoices[viewId] ?? view.defaultColumns ?? view.columns.map((c: any) => c.field);
   const columns = view.columns.filter((c: any) => chosenColumns.includes(c.field));
@@ -155,10 +172,66 @@ export function ConfiguredFactsPage({
     navigate('orders');
   };
 
+  const businessTitleId = React.useId();
+  const titleId = presentation ? businessTitleId : 'source-view-title';
   const totalPages = result?.total == null ? null : Math.max(1, Math.ceil(result.total / pageSize));
+  if (presentation)
+    return (
+      <OriginalBusinessList
+        agentId={config.agentId}
+        view={view}
+        columns={columns}
+        chosenColumns={chosenColumns}
+        onColumns={(next: string[]) => setColumnChoices((old) => ({ ...old, [viewId]: next }))}
+        filters={draft}
+        onFilter={(name: string, value: string) => setDraft((old) => ({ ...old, [name]: value }))}
+        submit={(event: React.FormEvent) => {
+          event.preventDefault();
+          setFilters({ ...draft });
+          setPage(1);
+          refresh((n) => n + 1);
+        }}
+        reset={() => {
+          setDraft(defaultsFor(viewId));
+          setFilters(defaultsFor(viewId));
+          setPage(1);
+        }}
+        result={result}
+        error={error}
+        loading={loading}
+        page={page}
+        pageSize={pageSize}
+        onPage={setPage}
+        onPageSize={setPageSize}
+        renderCell={(row: any, c: any) =>
+          c.context ? (
+            display(c.context === 'stock_date' ? result?.snapshotDate : c.value)
+          ) : c.unavailable ? (
+            '-'
+          ) : definition.customerScope && view.id === 'customer' && c.field === 'customer' ? (
+            <button className={css.link} onClick={() => chooseCustomer(String(row.customer))}>
+              {display(row.customer)}
+            </button>
+          ) : c.secondary ? (
+            <div className="agent-business-product">
+              <strong>{cellValue(row, c.valueField ?? c.field, c.format)}</strong>
+              {c.secondary
+                .filter((field: string) => row[field] != null && row[field] !== '')
+                .map((field: string) => (
+                  <small key={field}>{cellValue(row, field)}</small>
+                ))}
+            </div>
+          ) : (
+            cellValue(row, c.valueField ?? c.field, c.format)
+          )
+        }
+      />
+    );
   const Container = embedded ? 'div' : 'main';
   return (
-    <Container className={`${css.page} ${embedded ? css.embedded : ''}`}>
+    <Container
+      className={`${css.page} ${embedded ? css.embedded : ''} ${presentation ? css.business : ''}`}
+    >
       {!embedded && (
         <header className={css.header}>
           <div>
@@ -230,31 +303,33 @@ export function ConfiguredFactsPage({
           ))}
         </nav>
       )}
-      <section className={css.panel} aria-labelledby="source-view-title">
+      <section className={css.panel} aria-labelledby={titleId}>
         <div className={css.heading}>
-          <h2 id="source-view-title">{view.title}</h2>
+          <h2 id={titleId}>{view.title}</h2>
           <div className={css.tableActions}>
-            <span>
-              {view.timeMode === 'current'
-                ? '当前源记录 · 不应用日期筛选'
-                : view.timeMode === 'month'
-                  ? '所属月份：' + asOf.slice(0, 7)
-                  : result?.snapshotDate
-                    ? '快照日：' + result.snapshotDate
-                    : result?.parameters?.rolling_start
-                      ? '本月 ' +
-                        asOf.slice(0, 7) +
-                        '-01 至 ' +
-                        asOf +
-                        '；近30日 ' +
-                        String(result.parameters.rolling_start).replace(
-                          /^(\d{4})(\d{2})(\d{2})$/,
-                          '$1-$2-$3',
-                        ) +
-                        ' 至 ' +
-                        asOf
-                      : asOf.slice(0, 7) + '-01 至 ' + asOf}
-            </span>
+            {!presentation && (
+              <span>
+                {view.timeMode === 'current'
+                  ? '当前源记录 · 不应用日期筛选'
+                  : view.timeMode === 'month'
+                    ? '所属月份：' + asOf.slice(0, 7)
+                    : result?.snapshotDate
+                      ? (view.snapshotLabel ?? '快照日') + '：' + result.snapshotDate
+                      : result?.parameters?.rolling_start
+                        ? '本月 ' +
+                          asOf.slice(0, 7) +
+                          '-01 至 ' +
+                          asOf +
+                          '；近30日 ' +
+                          String(result.parameters.rolling_start).replace(
+                            /^(\d{4})(\d{2})(\d{2})$/,
+                            '$1-$2-$3',
+                          ) +
+                          ' 至 ' +
+                          asOf
+                        : asOf.slice(0, 7) + '-01 至 ' + asOf}
+              </span>
+            )}
             <details className={css.columnPicker}>
               <summary>显示列（{columns.length}）</summary>
               <div className={css.columnOptions}>
@@ -289,10 +364,12 @@ export function ConfiguredFactsPage({
                 </button>
               </div>
             </details>
-            <details className={css.definition}>
-              <summary>统计口径</summary>
-              <p>{view.description}</p>
-            </details>
+            {!presentation && (
+              <details className={css.definition}>
+                <summary>统计口径</summary>
+                <p>{view.description}</p>
+              </details>
+            )}
           </div>
         </div>
         {view.filters.length > 0 && (
@@ -332,7 +409,6 @@ export function ConfiguredFactsPage({
         {error && (
           <div role="alert" className={css.warning}>
             {error.message}（{error.code}）
-            <p>本次来源读取失败，不能据此推断无库存、无订单或无风险。</p>
           </div>
         )}
         {loading && <p role="status">正在读取{view.title}…</p>}
@@ -360,7 +436,7 @@ export function ConfiguredFactsPage({
                   <tr>
                     <td colSpan={columns.length}>
                       <p role="status" className={css.empty}>
-                        {view.description}
+                        {presentation ? '暂无数据。' : view.description}
                       </p>
                     </td>
                   </tr>
@@ -369,7 +445,7 @@ export function ConfiguredFactsPage({
             </div>
           ) : (
             <p role="status" className={css.empty}>
-              {view.description}
+              {presentation ? '暂无数据。' : view.description}
             </p>
           ))}
         {result && ['available', 'empty'].includes(result.status) && (
@@ -401,7 +477,7 @@ export function ConfiguredFactsPage({
             )}
             {result.total === 0 ? (
               <p role="status" className={css.empty}>
-                {result.message || '当前来源及筛选范围无记录。'}
+                {presentation ? '暂无数据。' : result.message || '当前来源及筛选范围无记录。'}
               </p>
             ) : (
               <>
@@ -464,8 +540,21 @@ export function ConfiguredFactsPage({
                                 >
                                   {display(row.customer)}
                                 </button>
+                              ) : c.secondary ? (
+                                <div className={css.product}>
+                                  <strong>
+                                    {cellValue(row, c.valueField ?? c.field, c.format)}
+                                  </strong>
+                                  {c.secondary
+                                    .filter(
+                                      (field: string) => row[field] != null && row[field] !== '',
+                                    )
+                                    .map((field: string) => (
+                                      <small key={field}>{cellValue(row, field)}</small>
+                                    ))}
+                                </div>
                               ) : (
-                                cellValue(row, c.field, c.format)
+                                cellValue(row, c.valueField ?? c.field, c.format)
                               )}
                             </td>
                           ))}

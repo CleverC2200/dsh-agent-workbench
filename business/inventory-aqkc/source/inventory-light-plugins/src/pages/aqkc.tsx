@@ -1,4 +1,3 @@
-import common from '../../../../../shared/restored-workbench.module.css';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
@@ -185,7 +184,6 @@ const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
 };
 
 export function InventoryOperationsWorkbench() {
-  const [sourceDetailsOpen, setSourceDetailsOpen] = useState(false);
   const restoredView = useRef<Record<string, unknown> | null>(null);
   const restorePhase = useRef(0);
   const [activeBoardTab, setActiveBoardTab] = useState<BoardTabName>('基地结构');
@@ -996,7 +994,6 @@ export function InventoryOperationsWorkbench() {
                       value={card.value}
                       tone={card.tone}
                       helpers={card.helpers}
-                      coverage={'coverage' in card ? card.coverage : undefined}
                     />
                   ))}
                 </div>
@@ -1006,12 +1003,17 @@ export function InventoryOperationsWorkbench() {
                     <strong>AI 洞察</strong>
                     <small>库存经营分析</small>
                   </div>
-                  <div className={styles.insightSummary}>
+                  <div
+                    className={styles.insightSummary}
+                    title={overviewWorkspace.workbench?.overallAnalysis
+                      ?.split('\n')
+                      .find((line) => line.startsWith('数据边界：'))}
+                  >
                     {sanitizeUserVisibleCopy(
                       overviewWorkspace.workbench?.overallAnalysis || '当前缺少经营分析所需数据。',
                     )
                       .split('\n')
-                      .filter(Boolean)
+                      .filter((line) => line && !line.startsWith('数据边界：'))
                       .map((line, index) => {
                         const colon = line.indexOf('：');
                         return (
@@ -1093,7 +1095,25 @@ export function InventoryOperationsWorkbench() {
                     key={paths.join(',')}
                     config={healthSqlConfig}
                     embedded
-                    viewIds={['age-structure', 'health']}
+                    viewIds={['age-structure']}
+                    presentation={{
+                      title: '货龄结构',
+                      columns: [
+                        ['belong_base', '对象'],
+                        ['missing_warning', '预警标志'],
+                        ['total_qty', '当前库存'],
+                        ['missing_average_age', '平均货龄'],
+                        ['missing_age0_30', '0-30天量/占比'],
+                        ['missing_age31_40', '31-40天量/占比'],
+                        ['missing_age41_60', '41-60天量/占比'],
+                        ['missing_age60', '60+天量/占比'],
+                        ['missing_future7', '未来7日预计超龄'],
+                        ['missing_future14', '未来14日预计超龄'],
+                        ['missing_daily_sales', '日均动销'],
+                        ['sku_count', 'SKU个数'],
+                      ].map(([field, label]) => ({ field, label })),
+                      filters: [],
+                    }}
                     initialFilters={
                       paths.length
                         ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
@@ -1219,45 +1239,17 @@ export function InventoryOperationsWorkbench() {
           </>
         </div>
       </section>
-      {usesConfiguredSql() && (
-        <details
-          className={common.sourceSupplement}
-          onToggle={(event) => setSourceDetailsOpen(event.currentTarget.open)}
-        >
-          <summary>业务明细</summary>
-          {sourceDetailsOpen && (
-            <ConfiguredFactsPage
-              config={healthSqlConfig}
-              embedded
-              viewIds={[
-                'health',
-                'health-base',
-                'base-stock-flows',
-                'order-plan-source',
-                'base-shipments',
-              ]}
-              initialFilters={
-                paths.length
-                  ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
-                  : {}
-              }
-            />
-          )}
-        </details>
-      )}
     </div>
   );
 }
 
 function Kpi({
-  coverage,
   title,
   tone,
   value,
   helpers,
 }: {
   title: string;
-  coverage?: string;
   tone: 'neutral' | 'red';
   value: string;
   helpers: { label: string; value: string }[];
@@ -1274,11 +1266,15 @@ function Kpi({
         title={
           title === '基地未备单量'
             ? '日库存快照未备单量的非负有值范围；不含已备单占用，不代表全部当前待发订单'
-            : title === '当前订单'
-              ? currentOrderMetricScopes.orderQuantity
-              : title === '订单满足率'
-                ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
-                : undefined
+            : title === '当前货龄'
+              ? '当前可取的最大库龄；平均货龄未提供。'
+              : title === '当前订单'
+                ? usesConfiguredSql()
+                  ? '当前可取得的基地未备单量；不含已备单占用。'
+                  : currentOrderMetricScopes.orderQuantity
+                : title === '订单满足率'
+                  ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
+                  : undefined
         }
         className={`${styles.kpiValue} ${tone === 'red' ? styles.toneRed : ''}`}
       >
@@ -1287,26 +1283,29 @@ function Kpi({
           <small className={styles.kpiUnit}>箱</small>
         ) : null}
       </strong>
-      {coverage && <p className={styles.metricCoverage}>{coverage}</p>}
       <dl>
         {helpers.slice(0, 2).map((item) => (
           <div key={item.label}>
             <dt>{item.label}</dt>
             <dd
               title={
-                title === '基地未备单量'
-                  ? item.label === '当前待发总量'
-                    ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
-                    : '日库存快照已备单占用量，仅展示非负有值范围'
-                  : title === '当前订单'
-                    ? item.label.startsWith('快照')
-                      ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
-                      : item.label === '备单量'
-                        ? currentOrderMetricScopes.preparingQuantity
-                        : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
-                    : title === '订单满足率'
-                      ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
-                      : undefined
+                usesConfiguredSql() && title === '当前订单'
+                  ? item.label === '已备单占用'
+                    ? '日库存快照已备单占用量，不与未备单量重复计算。'
+                    : '当前阶段缺货量尚无等价来源。'
+                  : title === '基地未备单量'
+                    ? item.label === '当前待发总量'
+                      ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
+                      : '日库存快照已备单占用量，仅展示非负有值范围'
+                    : title === '当前订单'
+                      ? item.label.startsWith('快照')
+                        ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
+                        : item.label === '备单量'
+                          ? currentOrderMetricScopes.preparingQuantity
+                          : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
+                      : title === '订单满足率'
+                        ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
+                        : undefined
               }
             >
               {item.value.endsWith('（部分）') ? (

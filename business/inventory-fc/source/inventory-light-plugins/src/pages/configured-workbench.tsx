@@ -1,13 +1,15 @@
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
-import { Fragment, useState } from 'react';
+import { QueryErrors } from '../../../../../shared/query-errors';
+import { Fragment, useState, useEffect } from 'react';
 import config from '../../../../sql.config.json';
+import { readConfiguredFacts } from '../../../../../shared/configured-facts';
+import { originalFcView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import {
   businessDay,
   fulfillmentPercent,
   completeValue,
-  completeCount,
   knownNumber,
 } from '../../../../../shared/configured-overview';
 import { updateContext } from '../native/context';
@@ -22,12 +24,12 @@ const tabs = [
   ['operations', '运营观察'],
 ];
 const views: Record<string, string[]> = {
-  replenishment: ['replenishment', 'branch-stock', 'shipments', 'flows'],
-  orders: ['orders', 'shipments', 'delivery'],
-  structure: ['inventory', 'health', 'flows'],
+  replenishment: ['replenishment'],
+  orders: ['orders'],
+  structure: ['inventory'],
   plan: ['plan'],
-  base: ['base-resources', 'base', 'base-shipments'],
-  operations: ['cost', 'flows', 'shipments', 'base-stock-flows'],
+  base: ['base-resources'],
+  operations: ['cost'],
 };
 const show = (n: number | null, unit = '') =>
   n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
@@ -40,33 +42,27 @@ export default function ConfiguredWorkbench() {
     updateContext('overview', value),
   );
   const order = parts.orders?.summary,
-    plan = parts.plan?.summary,
-    shipments = parts.shipments?.summary;
+    plan = parts.replenishment?.summary;
   const branchStock = parts['branch-stock']?.summary;
-  const planCoverage = (field: string) =>
-    `${plan?.['known_' + field + '_count'] ?? '-'} / ${plan?.row_count ?? '-'} 个仓库SKU`;
   const cards = [
     {
       title: '当前库存',
       value: knownNumber(branchStock?.total_qty),
       unit: '箱',
       color: 'blue',
-      scope: `快照 ${parts['branch-stock']?.snapshotDate ?? '-'} · ${branchStock?.warehouse_count ?? '-'}个分仓`,
       details: [
-        ['可用库存', knownNumber(branchStock?.available_qty), '箱'],
-        ['备单占用', knownNumber(branchStock?.pack_unit_qty), '箱'],
-        ['冻结库存', knownNumber(branchStock?.freeze_qty), '箱'],
+        ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
+        ['展望周转', null, '天'],
       ],
     },
     {
-      title: '最大库龄',
+      title: '当前货龄',
       value: knownNumber(branchStock?.max_age),
       unit: '天',
       color: 'purple',
-      scope: `最大库龄 · ${branchStock?.age_valid_count ?? '-'}个仓库SKU有值`,
       details: [
         ['超龄库存量', knownNumber(branchStock?.overaged_qty), '箱'],
-        ['平均货龄', null, '天'],
+        ['滞库风险量', null, '箱'],
       ],
     },
     {
@@ -74,27 +70,19 @@ export default function ConfiguredWorkbench() {
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
-      scope: `本月截至 ${date} · 分仓履约`,
       details: [
         ['已发订单量', completeValue(order, 'shipped_order_quantity'), '箱'],
-        ['订单口径发货量', completeValue(order, 'shipped'), '箱'],
-        ['仓库本月正向发货', knownNumber(shipments?.month_ship_positive), '箱'],
-        ['仓库近30日正向发货', knownNumber(shipments?.rolling_ship_positive), '箱'],
-        ['仓库近30日净发货', knownNumber(shipments?.rolling_ship_net), '箱'],
-        ['仓库近30日负向发货', knownNumber(shipments?.rolling_ship_negative), '箱'],
+        ['实际发货量', completeValue(order, 'shipped'), '箱'],
       ],
     },
     {
       title: '待补货量',
-      value: null,
+      value: knownNumber(plan?.recommended_qty),
       unit: '箱',
       color: 'red',
-      scope: `备单覆盖 ${planCoverage('preparing')}；在途覆盖 ${planCoverage('in_transit')} · 源单位未知`,
       details: [
-        ['需补货SKU', null, '个'],
-        ['紧急补货SKU', null, '个'],
-        ['源备单量', knownNumber(plan?.known_preparing), ''],
-        ['源在途量', knownNumber(plan?.known_in_transit), ''],
+        ['调拨备单量', knownNumber(plan?.known_preparing), '箱'],
+        ['调拨在途量', knownNumber(plan?.known_in_transit), '箱'],
       ],
     },
     {
@@ -102,32 +90,9 @@ export default function ConfiguredWorkbench() {
       value: null,
       unit: '箱',
       color: 'amber',
-      scope: '当前待发 · 辅助项为本月累计',
       details: [
-        [
-          '本月涉及订单',
-          completeCount(order, 'from_order_count', ['missing_order_identity']),
-          '单',
-        ],
-        [
-          '本月缺货SKU',
-          completeCount(order, 'shortage_sku_count', [
-            'missing_shortage',
-            'missing_shortage_sku_identity',
-          ]),
-          '个',
-        ],
-        [
-          '本月缺货订单',
-          completeCount(order, 'affected_from_order_count', [
-            'missing_order_identity',
-            'missing_shortage',
-            'invalid',
-          ]),
-          '单',
-        ],
-        ['本月订单量', completeValue(order, 'ordered'), '箱'],
-        ['本月缺货量', completeValue(order, 'shortage'), '箱'],
+        ['缺货量', null, '箱'],
+        ['备单量', null, '箱'],
       ],
     },
   ];
@@ -178,22 +143,26 @@ export default function ConfiguredWorkbench() {
             <button
               className="warehouse-cycle-context"
               disabled
-              title="补货周期属于业务配置，当前页面尚未接入有效配置"
+              title="沿用原分仓固化规则默认7天，备货3天；个别仓库/SKU配置仍需业务配置接入"
             >
-              补货周期 <strong>-</strong>
+              补货周期 <strong>{config.replenishmentPolicy.defaultCycleDays}天（默认）</strong>
             </button>
           </div>
         </header>
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
-            {errors.map((e: string) => (
-              <p key={e} role="alert" className={common.error}>
-                {e}
-              </p>
-            ))}
+            <QueryErrors errors={errors} />
             <div className={`kpi-grid safety-stock-kpis ${common.kpis}`} aria-busy={busy}>
               {cards.map((c) => (
-                <article key={c.title} className={`kpi-card ${c.color}`}>
+                <article
+                  key={c.title}
+                  className={`kpi-card ${c.color}`}
+                  title={
+                    c.title === '当前货龄'
+                      ? '当前货龄取分仓库存最大库龄；平均货龄未提供。'
+                      : undefined
+                  }
+                >
                   <div className="kpi-title">
                     <span>{c.title}</span>
                   </div>
@@ -201,7 +170,6 @@ export default function ConfiguredWorkbench() {
                     {show(c.value)}
                     {c.value != null && <small>{c.unit}</small>}
                   </div>
-                  <p className={common.metricScope}>{c.scope}</p>
                   <dl>
                     {c.details.map(([label, value, unit]) => (
                       <div key={String(label)}>
@@ -219,20 +187,9 @@ export default function ConfiguredWorkbench() {
                 <small>经营洞察</small>
               </h3>
               <p>
-                <b>核心判断：</b>
-                按分仓查看现存、可用、备单占用、冻结与超龄库存；货龄展示最大值。本月履约和近30日发货分别统计，库存快照日期及统计范围随指标列示。
+                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '箱')}
+                ，建议补货 {show(knownNumber(plan?.recommended_qty), '箱')}。
               </p>
-              <details className={common.scopeDetails}>
-                <summary>统计范围与口径</summary>
-                <p>
-                  <b>数据边界：</b>
-                  订单满足率为所选月截至读取日的分仓履约；调拨量为源计划记录；计划月份、快照日期、版本、单位尚未提供，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
-                  {shipments?.warehouse_count ?? '-'} 个仓库、{shipments?.row_count ?? '-'}{' '}
-                  个仓库SKU；本月发货有值 {shipments?.month_valid_skus ?? '-'} 行、近30日有值{' '}
-                  {shipments?.rolling_valid_skus ?? '-'} 行；末次发货日{' '}
-                  {shipments?.last_ship_date ?? '-'}。
-                </p>
-              </details>
             </section>
             <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
               {tabs.map(([id, label]) => (
@@ -247,21 +204,81 @@ export default function ConfiguredWorkbench() {
               ))}
             </nav>
             <div className="business-panel">
-              {tab === 'orders' && (
-                <p className={common.note}>下方展示本月订单履约与交货记录，按所选统计日期查询。</p>
+              {tab === 'operations' ? (
+                <OriginalOperations config={config} date={date} revision={revision} />
+              ) : (
+                <ConfiguredFactsPage
+                  key={[tab, date, revision].join(':')}
+                  config={config}
+                  embedded
+                  presentation={originalFcView(config, tab)}
+                  viewIds={views[tab]}
+                  date={date}
+                  onRead={(v) => updateContext('data', v)}
+                />
               )}
-              <ConfiguredFactsPage
-                key={[tab, date, revision].join(':')}
-                config={config}
-                embedded
-                viewIds={views[tab]}
-                date={date}
-                onRead={(v) => updateContext('data', v)}
-              />
             </div>
           </section>
         </div>
       </div>
     </main>
+  );
+}
+
+function OriginalOperations({ config, date, revision }: any) {
+  const [{ parts, errors }, setState] = useState<any>({ parts: {}, errors: [] });
+  useEffect(() => {
+    const task = new AbortController();
+    setState({ parts: {}, errors: [] });
+    void Promise.all(
+      ['cost', 'shipments'].map(async (id) => {
+        try {
+          const result = await readConfiguredFacts(
+            config,
+            id,
+            { asOf: date },
+            { signal: task.signal, summaryOnly: true },
+          );
+          if (result.summaryError)
+            throw Object.assign(Error(result.summaryError.message), result.summaryError);
+          if (!task.signal.aborted)
+            setState((old: any) => ({ ...old, parts: { ...old.parts, [id]: result } }));
+        } catch (error) {
+          if (!task.signal.aborted)
+            setState((old: any) => ({ ...old, errors: [...old.errors, (error as Error).message] }));
+        }
+      }),
+    );
+    return () => task.abort();
+  }, [date, revision]);
+  const cost = parts.cost?.summary;
+  return (
+    <>
+      {errors.map((error: string) => (
+        <p role="alert" key={error}>
+          {error}
+        </p>
+      ))}
+      <div className="resource-grid">
+        {[
+          ['本月入库', null, '箱'],
+          ['本月出库', knownNumber(parts.shipments?.summary?.month_ship_positive), '箱'],
+          ['本月仓储费', knownNumber(cost?.ccfje), '元'],
+          ['本月运输费', knownNumber(cost?.ysfje), '元'],
+          ['分仓过仓量', knownNumber(cost?.fc_act_dl_qty), '箱'],
+          ['省区整体出货', null, '箱'],
+        ].map(([label, value, unit]) => (
+          <article className="resource-card" key={String(label)}>
+            <div>
+              <strong>{label}</strong>
+            </div>
+            <p>{show(value as number | null, String(unit))}</p>
+          </article>
+        ))}
+      </div>
+      <div className="observation-list">
+        <p className="empty-state">暂无运营观察。</p>
+      </div>
+    </>
   );
 }

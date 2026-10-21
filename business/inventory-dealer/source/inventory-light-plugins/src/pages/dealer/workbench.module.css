@@ -562,6 +562,12 @@
   background: var(--ui-surface);
   padding: 6px 8px;
 }
+@media (max-width: 720px) {
+  .customerOptions {
+    left: 0;
+    right: auto;
+  }
+}
 .customerOptions button:hover,
 .customerOptions button[aria-pressed='true'] {
   background: var(--ui-accent-soft);

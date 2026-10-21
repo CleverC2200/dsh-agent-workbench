@@ -1,0 +1,18 @@
+interface:
+  display_name: "订单满足率根因分析与交互报告"
+  short_description: "按订单商品核查根因并直接填充指定交互模板生成全量报告"
+  default_prompt: "使用 $order-satisfaction-analysis 核查订单满足率，围绕本期重要问题灵活分析需求与供给，沿证据深入并区分生产偏差解释和订单缺货因果，使用指定模板交付报告。"
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "cube_new"
+      description: "查询 Cube 语义模型中的订单满足率、基础数量与下钻维度"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:19443/mcp"
+    - type: "mcp"
+      value: "gea_kb"
+      description: "核对订单满足率口径、制度规则和业务背景资料"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:19444/mcp"
+policy:
+  allow_implicit_invocation: true

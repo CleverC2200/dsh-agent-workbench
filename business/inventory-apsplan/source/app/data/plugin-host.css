@@ -478,6 +478,15 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   margin-right: 0;
   overflow-x: auto;
 }
+/* Keep every authored metric tab reachable inside a narrow client pane. */
+html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
 .kpi-source-note {
   margin: 8px 0;
   color: var(--ui-muted, #667085);
@@ -533,6 +542,10 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   }
 }
 @media (max-width: 520px) {
+  html.aps-plugin-host .date-picker-menu {
+    left: 0;
+    right: auto;
+  }
   html.aps-plugin-host #category-operations .category-health-grid {
     grid-template-columns: minmax(0, 1fr);
   }

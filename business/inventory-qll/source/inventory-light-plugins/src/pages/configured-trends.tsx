@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredHistory } from '../../../../../shared/configured-history';
 import { TrendChart } from '../dsh-ui/chart';
+import { Button } from '../dsh-ui/controls';
 import { ownContextPart } from '../native/context';
 import styles from './qll/components/full-chain-workbench.module.css';
 export function ConfiguredTrends({ date }: { date: string }) {
@@ -52,28 +53,27 @@ export function ConfiguredTrends({ date }: { date: string }) {
           <select aria-label="趋势指标">
             <option value="inventory">库存趋势</option>
             <option value="orders" disabled>
-              订单缺口趋势（缺历史来源）
+              订单缺口趋势
             </option>
             <option value="aging" disabled>
-              货龄趋势（缺平均货龄来源）
+              货龄趋势
             </option>
           </select>
         </label>
-        <button disabled={busy} onClick={() => void load()}>
+        <Button disabled={busy} onClick={() => void load()}>
           查询趋势
-        </button>
+        </Button>
         {busy && (
-          <button
+          <Button
             onClick={() => {
               request.current?.abort();
               setBusy(false);
             }}
           >
             取消查询
-          </button>
+          </Button>
         )}
       </div>
-      <p>基地本月历史库存，按日汇总；不混加分仓、客户或不同日期。订单与平均货龄历史来源未接入。</p>
       {error && <p role="alert">{error}</p>}
       {data ? (
         <>
@@ -81,7 +81,6 @@ export function ConfiguredTrends({ date }: { date: string }) {
             data={data}
             series={[{ key: 'base', name: '基地库存/箱', color: 'var(--ui-accent)' }]}
           />
-          <p>缺失期间或层级以断线表示，不补零、不插值；真实零值保留。</p>
         </>
       ) : (
         <p role="status">{busy ? '趋势查询中…' : '选择当前范围后查询趋势。'}</p>
