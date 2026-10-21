@@ -20,7 +20,7 @@ def adapter(predicate=''):
     production = ordinal('d.production_year', 'd.production_month', 'd.production_day')
     return f"""inventory_batch_dates AS (
 SELECT b.warehouseid AS warehouseid, b.material_code AS material_code,
- b.warehouse_classify AS warehouse_classify, b.month_date AS month_date,
+ b.month_date AS month_date,
  b.warehouse_name AS warehouse_name, b.belong_base AS belong_base, b.material_name AS material_name,
  b.live_qty AS live_qty, b.available_qty AS available_qty,
  b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty,
@@ -31,10 +31,10 @@ SELECT b.warehouseid AS warehouseid, b.material_code AS material_code,
  CAST(SUBSTRING(NULLIF(b.prod_date, ''), 6, 2) AS INTEGER) AS production_month,
  CAST(SUBSTRING(NULLIF(b.prod_date, ''), 9, 2) AS INTEGER) AS production_day
 FROM {SOURCE} AS b
-WHERE b.warehouse_classify IN ('01', '02', '20'){predicate}
+WHERE TRUE{predicate}
 ), inventory_batch_ages AS (
 SELECT d.warehouseid AS warehouseid, d.material_code AS material_code,
- d.warehouse_classify AS warehouse_classify, d.month_date AS month_date,
+ d.month_date AS month_date,
  d.warehouse_name AS warehouse_name, d.belong_base AS belong_base, d.material_name AS material_name,
  d.live_qty AS live_qty, d.available_qty AS available_qty,
  d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty,
@@ -45,7 +45,6 @@ FROM inventory_batch_dates AS d
 ), inventory_batch_totals AS (
 SELECT CAST(CONCAT(SUBSTRING(a.month_date, 1, 4), '-', SUBSTRING(a.month_date, 5, 2), '-', SUBSTRING(a.month_date, 7, 2)) AS DATE) AS stat_date,
  a.warehouseid AS warehouseid, a.material_code AS material_code,
- CASE WHEN a.warehouse_classify IN ('01', '02') THEN '基地仓' ELSE '分仓' END AS warehouse_type,
  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.warehouse_name), '')) = 1 THEN MAX(NULLIF(TRIM(a.warehouse_name), '')) ELSE NULL END AS warehouse_name,
  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.belong_base), '')) = 1 THEN MAX(NULLIF(TRIM(a.belong_base), '')) ELSE NULL END AS belong_base,
  CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.material_name), '')) = 1 THEN MAX(NULLIF(TRIM(a.material_name), '')) ELSE NULL END AS material_name,
@@ -55,8 +54,7 @@ SELECT CAST(CONCAT(SUBSTRING(a.month_date, 1, 4), '-', SUBSTRING(a.month_date, 5
  SUM(COALESCE(a.freeze_qty, 0)) AS freeze_qty,
  MAX(a.age_days) AS age_days
 FROM inventory_batch_ages AS a
-GROUP BY a.month_date, a.warehouseid, a.material_code,
- CASE WHEN a.warehouse_classify IN ('01', '02') THEN '基地仓' ELSE '分仓' END
+GROUP BY a.month_date, a.warehouseid, a.material_code
 ), inventory_batch_names AS (
 SELECT n.warehouseid AS warehouseid, n.material_code AS material_code,
  CASE WHEN COUNT(DISTINCT NULLIF(n.product_categ_name, '')) = 1 THEN MAX(NULLIF(n.product_categ_name, '')) ELSE NULL END AS product_categ_name,
@@ -64,7 +62,7 @@ SELECT n.warehouseid AS warehouseid, n.material_code AS material_code,
 FROM agents_scm_material_in_out_summary_d AS n GROUP BY n.warehouseid, n.material_code
 ), inventory_batch_source AS (
 SELECT a.stat_date AS stat_date, a.warehouseid AS warehouseid,
- a.material_code AS material_code, a.warehouse_type AS warehouse_type,
+ a.material_code AS material_code, a.warehouseid AS warehouse_type,
  COALESCE(a.warehouse_name, a.warehouseid) AS warehouse_name, a.material_name AS material_name,
  n.product_categ_name AS product_categ_name,
  n.material_group_name AS material_group_name, a.belong_base AS belong_base,
@@ -91,7 +89,11 @@ def migrate(sql):
         predicate = re.search(r" AND b\.month_date = REPLACE\(CAST\(:gea_p\d+ AS VARCHAR\(10\)\), '-', ''\)", prefix)
         return 'WITH ' + adapter(predicate.group(0) if predicate else '') + rest
     if 'inventory_batch_source AS' in sql:
-        return sql
+        # Calendar adapters expose only snapshot date and the legacy grouping
+        # alias; that alias now contains the source warehouse code, not a type.
+        sql = sql.replace("CASE WHEN b.warehouse_classify IN ('01', '02') THEN '基地仓' ELSE '分仓' END AS warehouse_type", 'b.warehouseid AS warehouse_type')
+        sql = sql.replace("NULLIF(TRIM(b.warehouse_name), '') AS warehouse_type", 'b.warehouseid AS warehouse_type')
+        return sql.replace(" WHERE b.warehouse_classify IN ('01', '02', '20')", '')
     # Push snapshot equality into the physical scan, retaining named parameters.
     dates = re.findall(r'\b(?:t|h)\.stat_date\s*=\s*CAST\(:(gea_p\d+) AS DATE\)', sql, re.I)
     predicate = ''
@@ -102,8 +104,8 @@ def migrate(sql):
     if fields <= {'stat_date', 'warehouse_type'}:
         prefix = f"""inventory_batch_source AS (
 SELECT CAST(CONCAT(SUBSTRING(b.month_date, 1, 4), '-', SUBSTRING(b.month_date, 5, 2), '-', SUBSTRING(b.month_date, 7, 2)) AS DATE) AS stat_date,
- CASE WHEN b.warehouse_classify IN ('01', '02') THEN '基地仓' ELSE '分仓' END AS warehouse_type
-FROM {SOURCE} AS b WHERE b.warehouse_classify IN ('01', '02', '20')
+ b.warehouseid AS warehouse_type
+FROM {SOURCE} AS b
 )"""
     else:
         prefix = adapter(predicate)
@@ -142,9 +144,38 @@ def attribution_columns(sql, query_id):
     return sql
 
 
+def source_dimensions(query):
+    sql = query['request']['sql']
+    if 'inventory_batch_source AS' not in sql:
+        return
+    # Warehouses join by source ID and bases by source name. Classification
+    # codes do not select disjoint base/warehouse inventory populations.
+    sql = re.sub(r"\b([a-z]+)\.warehouse_type\s*=\s*'分仓'", r"NULLIF(TRIM(\1.warehouseid), '') IS NOT NULL", sql)
+    sql = re.sub(r"NULLIF\(TRIM\(([a-z]+)\.warehouse_name\), ''\) IS NOT NULL", r"NULLIF(TRIM(\1.warehouseid), '') IS NOT NULL", sql)
+    sql = re.sub(r"\b([a-z]+)\.warehouse_type\s*=\s*'基地仓'", r"NULLIF(TRIM(\1.belong_base), '') IS NOT NULL", sql)
+    # Date-only adapters need the corresponding dimension when used to choose
+    # a base/warehouse snapshot.
+    if 'inventory_batch_dates AS (' not in sql:
+        if 'b.warehouseid AS warehouseid' not in sql:
+            sql = sql.replace('b.warehouseid AS warehouse_type', 'b.warehouseid AS warehouse_type, b.warehouseid AS warehouseid')
+        if 'b.belong_base AS belong_base' not in sql:
+            sql = sql.replace('b.warehouseid AS warehouse_type', 'b.warehouseid AS warehouse_type, b.belong_base AS belong_base')
+    if any(s['name'] in ('warehouse_type_mode', 'warehouse_name_mode') for s in query['parameterSpec'].values()):
+        sql = re.sub(r'\br\.(?:warehouse_type|warehouse_name)(?=\s*(?:=\s*:gea_p5|IS NULL))', 'r.warehouseid', sql)
+    for spec in query['parameterSpec'].values():
+        if spec['name'] in ('warehouse_type_mode', 'warehouse_name_mode'):
+            spec['name'] = 'warehouse_code_mode'
+        elif spec['name'] in ('warehouse_type', 'warehouse_name'):
+            spec['name'] = 'warehouse_code'
+        if spec['name'] == 'warehouse_code' and spec.get('example') in ('基地仓', '分仓'):
+            spec['example'] = 'A020'
+    query['request']['sql'] = sql
+
+
 def main():
     for path in sorted((ROOT / 'business').glob('*/sql.config.json')):
         config = json.loads(path.read_text())
+        before = json.dumps(config, ensure_ascii=False)
         changed = []
         for name, query in config.get('queries', {}).items():
             old = query.get('request', {}).get('sql', '')
@@ -152,7 +183,7 @@ def main():
             notes = query.get('notes', [])
             new_notes = notes
             if 'inventory_batch_dates AS (' in new:
-                note = '批次现库存按仓库/SKU求和；01/02基地仓、20分仓，其它分类排除；仓库名称、基地、商品名称取库存源 warehouse_name、belong_base、material_name；正库存且生产日期有效的批次计算最大货龄。源已移除超龄阈值标志、安全/目标库存及更新时间，保持未知。'
+                note = '批次现库存按仓库/SKU求和；不按 warehouse_classify 过滤或归类；分仓用 warehouseid 编码关联和筛选、warehouse_name 展示名称；基地用 belong_base 名称关联和筛选；商品名称取 material_name；基地与分仓为同一事实集的维度，不重复相加；正库存且生产日期有效的批次计算最大货龄。源已移除超龄阈值标志、安全/目标库存及更新时间，保持未知。'
                 if isinstance(notes, list):
                     new_notes = [x for x in notes if not x.startswith('批次现库存按仓库/SKU求和；')] + [note]
                 else:
@@ -163,7 +194,26 @@ def main():
                 query['request']['sql'] = new
                 query['notes'] = new_notes
                 changed.append(name)
-        if changed:
+            source_dimensions(query)
+        for view in config.get('sourceViews', {}).get('views', []):
+            if not (view.get('queryId') or '').startswith('health.'):
+                continue
+            overrides = view.get('overrides', {})
+            overrides.pop('warehouse_type_mode', None)
+            overrides.pop('warehouse_type', None)
+            if view.get('inheritProductionBaseFilter') is False:
+                view['inheritProductionBaseFilter'] = True
+            view['filters'] = [f for f in view.get('filters', []) if f['name'] != 'warehouse_name']
+            if not any(f['name'] == 'warehouse_code' for f in view['filters']):
+                view['filters'].append({'name': 'warehouse_code', 'label': '分仓编码'})
+            for col in view.get('columns', []):
+                if col['field'] == 'warehouse_type':
+                    col['label'] = '分仓编码'
+                if col['field'] == 'warehouse_name':
+                    col['label'] = '分仓名称'
+            view['defaultColumns'] = [x for x in view.get('defaultColumns', []) if x != 'warehouse_type']
+            view['description'] = view.get('description', '').replace('01/02为基地仓、20为分仓，忽略其它分类。', '不按仓库分类编码过滤；基地按所属基地名称、分仓按仓库编码取值。').replace('基地按所属基地、分仓按仓库名称取值。', '基地按所属基地名称、分仓按仓库编码取值。')
+        if before != json.dumps(config, ensure_ascii=False):
             path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + '\n')
             print(path.parent.name, len(changed))
 
