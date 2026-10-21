@@ -20,21 +20,25 @@ const run = (command, args, cwd = process.cwd(), env = {}) =>
   execFileSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
 const modules = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'];
 export async function sourceChecks(result, phase) {
+  const local = result.workingTree === true;
+  if (local && phase !== 'affected-plan') throw Error('SOURCE_WORKING_TREE_PLAN_ONLY');
   const root = process.cwd();
   const repo = process.env.SOURCE_REPOSITORY || modules.find((name) => root.endsWith('/' + name));
   if (!modules.includes(repo) || !result.base) throw Error('SOURCE_CHECK_INPUT_REQUIRED');
-  const baseline = json(resolve(root, 'scripts/quality-peer-baseline.json'));
+  const baseline = local ? null : json(resolve(root, 'scripts/quality-peer-baseline.json'));
   const repositories = modules.map((name) => {
     const path =
       name === repo
         ? root
-        : name === 'dsh-agent-workbench' && repo === 'dsh-gea-plugin'
+        : !local && name === 'dsh-agent-workbench' && repo === 'dsh-gea-plugin'
           ? resolve(root, '../../source', name)
           : resolve(root, '..', name);
     const head =
       name === repo
         ? result.head
-        : baseline.repositories.find((entry) => entry.repo === name)?.head;
+        : local
+          ? git(path, 'rev-parse', 'HEAD')
+          : baseline.repositories.find((entry) => entry.repo === name)?.head;
     if (!/^[a-f0-9]{40}$/.test(head || '') || git(path, 'rev-parse', 'HEAD') !== head)
       throw Error(`SOURCE_PEER_MISMATCH: ${name}`);
     return { repo: name, path, head };
@@ -53,6 +57,7 @@ export async function sourceChecks(result, phase) {
     base: result.base,
     testOwners,
     sourceOnly: true,
+    workingTree: result.workingTree === true,
   });
   const desktopTools =
     repo === 'dsh-gea-plugin' && selected.files.includes('scripts/package-desktop.test.mjs');
@@ -70,6 +75,9 @@ export async function sourceChecks(result, phase) {
     selected.build ||
     selected.files.some((file) => Object.values(lanes).some((lane) => file in lane));
   const staticChecks = joint ? [] : ['check:knowledge', 'lint', 'format:check'];
+  let upstreams = 'none';
+  if (repo === 'dsh-gea-plugin' || joint)
+    upstreams = typecheck || joint ? 'artifacts' : selected.upstreams;
   const plan = {
     ...selected,
     staticChecks,
@@ -86,6 +94,7 @@ export async function sourceChecks(result, phase) {
       joint ||
       selected.sdk ||
       (repo === 'dsh-agent-manage' && selected.files.some((file) => file.endsWith('.ts'))),
+    upstreams,
     joint,
   };
   mkdirSync('.runtime', { recursive: true });
@@ -128,13 +137,14 @@ export async function sourceChecks(result, phase) {
   }
   if (phase === 'affected-prepare') {
     if (plan.dependencies && (repo === 'dsh-gea-plugin' || joint)) {
-      const { prepareQualityUpstreams, bindQualityUpstreamInputs } = await import(
-        pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs'))
-      );
+      const { prepareQualityUpstreamSources, prepareQualityUpstreams, bindQualityUpstreamInputs } =
+        await import(pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs')));
       const upstream = resolve(root, '../../quality-upstreams');
-      await prepareQualityUpstreams(upstream);
+      const sourceOnly = plan.upstreams === 'source-links';
+      await (sourceOnly ? prepareQualityUpstreamSources : prepareQualityUpstreams)(upstream);
       await bindQualityUpstreamInputs(upstream, resolve(root, '../../upstream-inputs'), {
         prepare: true,
+        sourceOnly,
       });
     }
     if (plan.dependencies && !joint) {
@@ -179,6 +189,16 @@ export async function sourceChecks(result, phase) {
       }
     }
     return;
+  }
+  if (plan.upstreams === 'source-links') {
+    const { bindQualityUpstreamInputs } = await import(
+      pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs'))
+    );
+    await bindQualityUpstreamInputs(
+      resolve(root, '../../quality-upstreams'),
+      resolve(root, '../../upstream-inputs'),
+      { sourceOnly: true },
+    );
   }
   if (joint) {
     if (repo === 'dsh-agent-manage') {
