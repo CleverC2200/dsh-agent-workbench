@@ -287,7 +287,7 @@ const copy = {
   geaBusiness: ['Synear GEA', 'Synear GEA'],
   brandSubtitle: ['智能体工作台', 'Agent workspace'],
   functionArea: ['业务工作台', 'Business workbenches'],
-  workspaceArea: ['工作台', 'Workbench'],
+  workspaceArea: ['历史对话', 'Conversation history'],
   welcomeLead: ['AI', 'AI'],
   welcomeMessage: ['不止于对话，更融入', ' goes beyond conversation, into '],
   welcomeWork: ['工作', 'work'],

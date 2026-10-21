@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis';
-import React, { useSyncExternalStore } from 'react';
+import React, { useEffect, useSyncExternalStore } from 'react';
 import type { SettingsSectionOwnerProps } from '@deepseek-ai/dsh-client-ui-settings/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import { zh, en } from './client/locales.ts';
@@ -63,7 +63,7 @@ export function mountBusinessViews(ctx: Context) {
         </section>
       );
     }
-    function LogPage({ close }: { close?: () => void }) {
+    function LogPage() {
       const account = useSyncExternalStore(identity.subscribe, identity.getSnapshot);
       const environment = account.status?.environment;
       if (!environment || !account.scope || !account.status?.authenticated)
@@ -81,10 +81,18 @@ export function mountBusinessViews(ctx: Context) {
             key={account.scope ?? 'unconfirmed'}
             environment={environment}
             request={request}
-            onClose={close ?? (() => void ctx.agentWorkbench.open(PANEL))}
+            onClose={() => void ctx.agentWorkbench.open(PANEL)}
           />
         </section>
       );
+    }
+
+    function OpenLogPage({ close }: SettingsSectionOwnerProps) {
+      useEffect(() => {
+        void ctx.agentWorkbench.open(API_LOG_PANEL);
+        close();
+      }, [close]);
+      return null;
     }
 
     for (const [id, label, component] of [[API_LOG_PANEL, 'apiLog', LogPage]] as const)
@@ -105,7 +113,7 @@ export function mountBusinessViews(ctx: Context) {
           label: () => t('geaApiLog'),
           locale: 'geaProof',
         },
-        ({ close }: SettingsSectionOwnerProps) => <LogPage close={close} />,
+        OpenLogPage,
       ),
     );
     ctx.slots.inject('main', () =>
