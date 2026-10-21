@@ -1,9 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "inventory-mps",
-  "name": "主生产计划(MPS) · 模拟原型",
+  "name": "主生产计划(MPS)",
   "version": "0.1.0-preview.25",
-  "mode": "mock",
   "html": "index.html",
   "pages": [
     {
@@ -16,7 +15,7 @@
   "skills": ["skills/inventory-mps/SKILL.md"],
   "mcp": "mcp.json",
   "gea": {
-    "consumerCode": "mps-prototype",
+    "consumerCode": "mps",
     "readonly": true,
     "contract": "gea-html-v2"
   },
@@ -27,5 +26,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "sqlConfig": "sql.config.json"
 }

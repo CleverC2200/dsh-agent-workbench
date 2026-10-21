@@ -1,5 +1,8 @@
+import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import { prototypeProducts } from './prototype-products.js';
+import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
+import { createMasterData } from './master-data-view.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -133,21 +136,23 @@ const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
-const makeDraft = (id, month) => ({
+const makeDraft = (id, month, demo = !hasMpsSource()) => ({
   id,
   name: `${Number(month.slice(5))}月滚动评估 · 第${id.split('-')[1]}版`,
   month,
-  products: prototypeProducts.map((row) => ({
-    基地: row.base,
-    产品编码: row.code,
-    产品名称: row.name,
-    大类: row.cat,
-    系列: row.series,
-    物料组: row.group,
-    老品编码: row.oldCode ?? '',
-    老品名称: row.oldName ?? '',
-  })),
-  productSource: 'demo',
+  products: demo
+    ? prototypeProducts.map((row) => ({
+        基地: row.base,
+        产品编码: row.code,
+        产品名称: row.name,
+        大类: row.cat,
+        系列: row.series,
+        物料组: row.group,
+        老品编码: row.oldCode ?? '',
+        老品名称: row.oldName ?? '',
+      }))
+    : [],
+  productSource: demo ? 'demo' : 'business-unread',
   annual: [],
   report: [],
   forecast: [],
@@ -157,6 +162,20 @@ const makeDraft = (id, month) => ({
   forecastOffset: 1,
   historyYears: 1,
 });
+function annualSelection(draft) {
+  const bases = [...new Set(draft.annual.map((row) => row['基地']).filter(Boolean))];
+  const base =
+    (bases.includes(draft.annualBase) ? draft.annualBase : undefined) ??
+    (bases.includes('全国') ? '全国' : bases[0]);
+  return {
+    bases,
+    base,
+    rows:
+      draft.annualSource === 'business'
+        ? draft.annual.filter((row) => row['基地'] === base)
+        : draft.annual,
+  };
+}
 function sourceSelection(draft, type) {
   const period =
     type === 'report'
@@ -177,7 +196,7 @@ function downloadFile(name, mime, text) {
 }
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
-  function Dialog({ title, children, footer, close }) {
+  function Dialog({ title, children, footer, close, className = '' }) {
     const element = react.useRef();
     react.useEffect(() => {
       element.current.showModal();
@@ -187,7 +206,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       'dialog',
       {
         ref: element,
-        className: 'dc-dialog',
+        className: `dc-dialog ${className}`,
         'aria-label': title,
         onCancel: (event) => {
           event.preventDefault();
@@ -440,7 +459,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
         !rows.length &&
           h('p', { className: 'dc-empty' }, '当前期间无已读取记录，不能判定业务数据为零。'),
-        busy && h('p', { role: 'status' }, '正在读取本地文件…'),
+        busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
       ),
       h(
@@ -515,11 +534,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
     );
   }
-  function Annual({ draft, read, error, busy }) {
+  function Annual({ draft, read, sync, update, error, busy }) {
+    const live = draft.annualSource === 'business';
+    const unit = live ? '源数量' : '件';
+    const { bases, base, rows: annual } = annualSelection(draft);
     const start = Number(draft.month.slice(0, 4)) - (Number(draft.month.slice(5)) < 7 ? 1 : 0);
     const months = Array.from({ length: 12 }, (_value, index) => monthOffset(`${start}-07`, index));
     const recordsFor = (category, month) =>
-      draft.annual.filter((row) => row['大类'] === category && row['月份'] === month);
+      annual.filter((row) => row['大类'] === category && row['月份'] === month);
     const absolute = (category, month) => {
       const records = recordsFor(category, month);
       if (!records.length) return '未提供';
@@ -536,7 +558,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：同月同大类有效数量相加；代入：${records.map((row) => (row['数量'] === '' ? '缺失' : row['数量'])).join(' + ')}；结果：${missing === records.length ? '未提供' : total + '件'}。`,
+          `公式：同月同大类有效数量相加；代入：${records.map((row) => (row['数量'] === '' ? (row['重复记录数'] ? '源粒度重复' : '数量缺失') : row['数量'])).join(' + ')}；结果：${missing === records.length ? '未提供' : total + unit}。`,
         ),
       );
     };
@@ -567,7 +589,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       );
     };
     const annualTotal = (category) => {
-      const records = draft.annual.filter(
+      const records = annual.filter(
         (row) => row['大类'] === category && months.includes(row['月份']),
       );
       if (!records.some((row) => row['数量'] !== '')) return '未提供';
@@ -581,15 +603,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {},
           `公式：7月至次年6月同大类已读有效数量相加；代入：${records
             .slice(0, 25)
-            .map((row) => row['数量'] || '缺失')
+            .map((row) => (row['数量'] === '' ? '缺失' : row['数量']))
             .join(
               ' + ',
-            )}${records.length > 25 ? '…完整输入见年度明细导出' : ''}；结果：${total}件。未覆盖月份不补零，完整年度仍需核齐。`,
+            )}${records.length > 25 ? '…完整输入见年度明细导出' : ''}；结果：${total}${unit}。未覆盖月份不补零，完整年度仍需核齐。`,
         ),
       );
     };
-    const rows = categories.map((category) => ({
-      大类: category,
+    const displayedCategories = live ? [...new Set(annual.map((row) => row['大类']))] : categories;
+    const rows = displayedCategories.map((category) => ({
+      大类: category || '未提供',
       ...Object.fromEntries(
         months.map((month) => [
           month,
@@ -611,7 +634,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         { className: 'dc-section-title' },
         h('h2', {}, '年度销售计划（分月）'),
         h('span', {}, `${start}年7月 → ${start + 1}年6月 · 绝对值＋环比增幅`),
-        h('button', { disabled: true, title: '来源合同与读取权限未接入' }, '同步数据源'),
+        h(
+          'button',
+          { disabled: !hasMpsSource() || busy, onClick: () => sync('annual') },
+          busy ? '同步中…' : '同步数据源',
+        ),
       ),
       h(
         'section',
@@ -620,13 +647,29 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           'div',
           { className: 'dc-card-head' },
           h('h3', {}, '年度销售计划 · 分月明细'),
-          h('span', { className: 'dc-status' }, draft.files.annual ? '本地文件' : '未接入'),
+          live &&
+            h(
+              'select',
+              {
+                'aria-label': '年度需求基地',
+                value: base,
+                onChange: (event) => update({ annualBase: event.target.value }),
+              },
+              bases.map((name) => h('option', { key: name, value: name }, name)),
+            ),
+          h(
+            'span',
+            { className: 'dc-status' },
+            live ? '业务数据 · 源数量' : draft.files.annual ? '本地文件' : '未接入',
+          ),
           h(
             'span',
             { className: 'dc-card-note' },
-            draft.files.annual
-              ? `${draft.files.annual}，已读取${draft.annual.length}条`
-              : '年度计划正式来源待确认',
+            live
+              ? '全国年度需求表'
+              : draft.files.annual
+                ? `${draft.files.annual}，已读取${draft.annual.length}条`
+                : '年度计划正式来源待确认',
           ),
           h(Upload, { label: '选择年度计划CSV', read: (file) => read('annual', file) }),
           h(
@@ -638,17 +681,25 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             'button',
             {
               disabled: !draft.annual.length,
-              onClick: () => downloadCsv('年度计划-全部已读.csv', annualColumns, draft.annual),
+              onClick: () =>
+                downloadCsv(
+                  live ? '年度需求-源数量.csv' : '年度计划-全部已读.csv',
+                  live
+                    ? ['基地', ...annualColumns, '源月份', '源记录数', '缺失数量', '重复记录数']
+                    : annualColumns,
+                  draft.annual,
+                ),
             },
             '下载',
           ),
         ),
-        busy && h('p', { role: 'status' }, '正在读取本地文件…'),
+        busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
         table(['大类', ...months, '全年合计'], rows),
       ),
     );
   }
+  const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
   const Shipment = createShipment(react, useMpsPart, {
     Dialog,
     Upload,
@@ -673,23 +724,67 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [productPage, setProductPage] = react.useState(0);
+    const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
     const generation = react.useRef(0),
-      requests = react.useRef({});
+      requests = react.useRef({}),
+      controllers = react.useRef({});
     const clearFiles = () => {
       generation.current++;
+      Object.values(controllers.current).forEach((controller) => controller.abort());
+      controllers.current = {};
       requests.current = {};
       setErrors({});
       setBusy({});
     };
-    const read = async (type, file) => {
-      const epoch = generation.current,
-        id = draft.id,
-        request = (requests.current[type] ?? 0) + 1;
+    const begin = (type) => {
+      controllers.current[type]?.abort();
+      const controller = new AbortController();
+      controllers.current[type] = controller;
+      const epoch = generation.current;
+      const request = (requests.current[type] ?? 0) + 1;
       requests.current[type] = request;
       setBusy((state) => ({ ...state, [type]: true }));
-      const valid = () => epoch === generation.current && requests.current[type] === request;
+      setErrors((state) => ({ ...state, [type]: '' }));
+      return {
+        signal: controller.signal,
+        valid: () =>
+          !controller.signal.aborted &&
+          epoch === generation.current &&
+          requests.current[type] === request,
+      };
+    };
+    const sync = async (type) => {
+      const id = draft.id;
+      const { signal, valid } = begin(type);
+      try {
+        const result = type === 'products' ? await readProducts(signal) : await readAnnual(signal);
+        if (!valid()) return;
+        setDrafts((entries) =>
+          entries.map((entry) =>
+            entry.id === id
+              ? {
+                  ...entry,
+                  [type]: type === 'products' ? result.rows : result,
+                  ...(type === 'products'
+                    ? { productSource: 'business' }
+                    : { annualSource: 'business' }),
+                  files: { ...entry.files, [type]: null },
+                }
+              : entry,
+          ),
+        );
+        if (type === 'products') resetEditor();
+      } catch (failure) {
+        if (valid()) setErrors((state) => ({ ...state, [type]: failure.message }));
+      } finally {
+        if (valid()) setBusy((state) => ({ ...state, [type]: false }));
+      }
+    };
+    const read = async (type, file) => {
+      const id = draft.id;
+      const { valid } = begin(type);
       try {
         if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未读取任何行。');
         const rows = parseCsv(
@@ -707,7 +802,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? {
                   ...entry,
                   [type]: rows,
-                  ...(type === 'products' ? { productSource: 'local-file' } : {}),
+                  ...(type === 'products'
+                    ? { productSource: 'local-file' }
+                    : type === 'annual'
+                      ? { annualSource: 'local-file' }
+                      : {}),
                   files: { ...entry.files, [type]: file.name },
                 }
               : entry,
@@ -740,6 +839,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setVersionOpen(false);
         setCompareOpen(false);
         setHelpOpen(false);
+        setMasterOpen(false);
         setReference('');
         setVersionName('');
       };
@@ -748,13 +848,35 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       });
       window.addEventListener('gea-session-changing', reset);
       window.addEventListener('gea-identity-changed', reset);
+      window.addEventListener('pagehide', reset);
       return () => {
         clearFiles();
         stop();
         window.removeEventListener('gea-session-changing', reset);
         window.removeEventListener('gea-identity-changed', reset);
+        window.removeEventListener('pagehide', reset);
       };
     }, []);
+    react.useEffect(() => {
+      if (!active) {
+        clearFiles();
+        setMasterOpen(false);
+      }
+    }, [active]);
+    react.useEffect(() => {
+      let current = true;
+      if (active && hasMpsSource() && draft.productSource === 'business-unread') {
+        ready.then(() => {
+          if (current) {
+            void sync('products');
+            if (!draft.annualSource) void sync('annual');
+          }
+        });
+      }
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, active]);
     const update = (changes) =>
       setDrafts((entries) =>
         entries.map((entry) => (entry.id === draft.id ? { ...entry, ...changes } : entry)),
@@ -823,11 +945,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ];
       }),
     );
+    const annualContext = annualSelection(draft);
     useMpsPart(
       react,
       'check',
       {
-        scope: 'local-check-only',
+        scope: hasMpsSource() ? 'business-read-local-draft' : 'local-check-only',
+        annualSource: draft.annualSource ?? null,
+        annualRowCount: draft.annual.length,
+        annualSelection: {
+          ...annualContext,
+          rows: annualContext.rows.slice(0, 120),
+          rowCount: annualContext.rows.length,
+          truncated: annualContext.rows.length > 120,
+        },
+        visibleProducts: filteredProducts
+          .slice(productPage * 25, (productPage + 1) * 25)
+          .map(({ row }) => row),
         draft: { id: draft.id, name: draft.name, month: draft.month },
         productCount: draft.products.length,
         productSource: draft.productSource,
@@ -920,6 +1054,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               },
               '版本对比',
             ),
+            hasMpsSource() && h('button', { onClick: () => setMasterOpen(true) }, '数据源'),
             h('button', { disabled: true, title: '正式保存合同与权限未接入' }, '保存调整'),
           ),
         ),
@@ -1007,7 +1142,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   value: reference,
                   onChange: (event) => setReference(event.target.value),
                 },
-                h('option', { value: '' }, '不复制本地输入，使用演示产品'),
+                h(
+                  'option',
+                  { value: '' },
+                  hasMpsSource() ? '不复制已读输入' : '不复制本地输入，使用演示产品',
+                ),
                 drafts.map((entry) => h('option', { key: entry.id, value: entry.id }, entry.name)),
               ),
             ),
@@ -1085,7 +1224,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            '产品演示样例与本地CSV均不是业务系统主数据。读取权限、历史继承、计算口径与正式保存尚未接入。',
+            '业务数据由月主计划授权读取。产品关系调整保留在本地版本，历史继承、冲突口径和正式保存待接入。',
           ),
           h(
             'button',
@@ -1113,6 +1252,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h('p', {}, '底稿JSON保留当前版本全部已读输入，供人工核对；正式导入与底稿重载尚未接入。'),
           assistant,
         ),
+      masterOpen &&
+        h(MasterData, { key: draft.id, month: draft.month, close: () => setMasterOpen(false) }),
       active &&
         step === 'ship' &&
         h(Shipment, {
@@ -1142,13 +1283,40 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 `${filteredProducts.length === draft.products.length ? draft.products.length : filteredProducts.length + ' / ' + draft.products.length} 个产品`,
               ),
             ),
+            hasMpsSource() &&
+              h(
+                'select',
+                {
+                  'aria-label': '产品数据来源',
+                  value: draft.productSource.startsWith('demo')
+                    ? 'demo'
+                    : draft.productSource.startsWith('local')
+                      ? 'local'
+                      : 'business',
+                  onChange: (event) => {
+                    clearFiles();
+                    resetEditor();
+                    if (event.target.value === 'demo') {
+                      const demo = makeDraft(draft.id, draft.month, true);
+                      update({ products: demo.products, productSource: 'demo' });
+                    } else {
+                      update({ products: [], productSource: 'business-unread' });
+                    }
+                  },
+                },
+                h('option', { value: 'business' }, '业务数据'),
+                h('option', { value: 'demo' }, '演示数据'),
+                draft.productSource.startsWith('local') &&
+                  h('option', { value: 'local' }, '本地输入'),
+              ),
+            hasMpsSource() &&
+              h(
+                'button',
+                { disabled: busy.products, onClick: () => sync('products') },
+                busy.products ? '同步中…' : '同步产品',
+              ),
             draft.productSource.startsWith('demo') &&
               h('span', { className: 'dc-demo' }, '演示数据'),
-            h(
-              'span',
-              { className: 'dc-product-note' },
-              '支持修改与新增；对应老品仅供核对，历史继承规则待确认',
-            ),
             h('input', {
               className: 'dc-product-search',
               value: search,
@@ -1363,7 +1531,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ),
             ),
         ),
-        h(Annual, { draft, read, error: errors.annual, busy: busy.annual }),
+        h(Annual, { draft, read, sync, update, error: errors.annual, busy: busy.annual }),
         h(
           'div',
           { className: 'dc-source-grid' },

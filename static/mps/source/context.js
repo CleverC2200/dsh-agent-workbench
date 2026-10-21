@@ -20,7 +20,7 @@ let connected = false,
 let latest;
 let lifetime = new AbortController();
 const notice =
-  '前两步为本地隔离核对，可下载已读输入与发货结存底稿；刷新或切换对话会清除内存输入，未接入真实取数与正式保存。第三至七步保留旧模拟内容，未接入前两步本地结果。当前对话保留界面意图和未发送文字。';
+  '前两步为本地隔离核对，可下载已读输入与发货结存底稿；刷新或切换对话会清除内存输入，产品清单、年度需求、产能和调拨主数据可授权只读查询，正式保存未接入。第三至七步保留旧模拟内容，未接入前两步本地结果。当前对话保留界面意图和未发送文字。';
 mpsView.subscribe((_snapshot, event) => {
   if (event === 'released') {
     cancelPublication();
@@ -77,8 +77,8 @@ function schedule() {
       epoch,
       session,
       snapshot: {
-        page: '主生产计划(MPS) · 模拟原型',
-        mock: true,
+        page: '主生产计划(MPS)',
+        scope: 'read-only-master-data-local-drafts',
         notice,
         parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
       },

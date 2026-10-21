@@ -69,7 +69,11 @@ test('MPS product relationships stay in their local month draft and can be edite
     await editor.getByLabel(label, { exact: true }).fill(value);
   await editor.getByRole('button', { name: '新增', exact: true }).click();
   await expect(products.getByRole('cell', { name: 'P1', exact: true })).toBeVisible();
-  await expect(products).toContainText('历史继承规则待确认');
+  await frame.getByRole('button', { name: '页面说明', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
+    '历史继承、冲突口径和正式保存待接入',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByLabel('评估版本选择').selectOption('local-1');
   await expect(products.getByRole('cell', { name: 'P1', exact: true })).toHaveCount(0);
   await frame.getByLabel('评估版本选择').selectOption('local-2');
