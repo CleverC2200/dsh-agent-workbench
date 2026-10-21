@@ -59,8 +59,11 @@ export async function sourceChecks(result, phase) {
   }
   if (joint) {
     if (repo === 'dsh-agent-manage') {
-      run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'], workbench);
-      run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.official.json', '--noEmit', 'false', '--emitDeclarationOnly', 'true'], workbench);
+      const { acquireBuild } = await import(pathToFileURL(resolve(gea, 'scripts/build-admission.mjs')));
+      let release = acquireBuild({ operation: 'prepare', cwd: workbench });
+      try { run('npm', ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'], workbench); } finally { release(); }
+      release = acquireBuild({ operation: 'build', cwd: workbench });
+      try { run(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.official.json', '--noEmit', 'false', '--emitDeclarationOnly', 'true'], workbench); } finally { release(); }
     }
     const reader = JSON.parse(execFileSync(process.execPath, [resolve(workbench, 'scripts/read-hosted-peer-input.mjs'), '--repo', repo], { encoding: 'utf8', env: { ...process.env, QUALITY_EXPECTED_SHA: result.head, QUALITY_SCOPE_ALLOWED: 'true', GITHUB_OUTPUT: '' } }));
     const env = { QUALITY_EXPECTED_SHA: result.head, QUALITY_BASE_SHA: result.base, QUALITY_REUSE_SDK: 'true', QUALITY_GROUP_GEA: reader['gea-sha'], QUALITY_GROUP_MANAGE: reader['manage-sha'], QUALITY_GROUP_WORKBENCH: reader['workbench-sha'], QUALITY_GROUP_ID: reader['group-id'], QUALITY_SOURCE_KIND: reader['source-kind'], QUALITY_BASELINE_ID: reader['baseline-id'] };
