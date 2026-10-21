@@ -7377,15 +7377,6 @@ export default function Home({
             <details>
               <summary>数据读取异常 · 查看详情</summary>
               <p>{live.error}</p>
-              <ul>
-                {live.data?.sections
-                  .filter((section) => section.status === 'error')
-                  .map((section) => (
-                    <li key={section.id}>
-                      {section.label}：{section.error?.message ?? '读取失败'}
-                    </li>
-                  ))}
-              </ul>
             </details>
           </section>
         )}

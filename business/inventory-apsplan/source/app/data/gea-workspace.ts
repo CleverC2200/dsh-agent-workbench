@@ -376,7 +376,9 @@ export function createGeaWorkspace(transport: SqlTransport) {
         };
         return {
           ...result,
-          status: 'error',
+          // Missing source mappings or snapshots are data limitations, not failed
+          // gateway requests. Keep their structured reason in page/Agent context.
+          status: error.code === 'SOURCE_NOT_AVAILABLE' ? 'unavailable' : 'error',
           rows: [],
           error: {
             code: error.code || 'GEA_QUERY_FAILED',

@@ -40,6 +40,35 @@ async function mount(t, id, width, override) {
   const frame = page.frameLocator('iframe');
   return { page, frame, errors, calls };
 }
+test('APS source limitations do not masquerade as query failures', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 1280);
+  await expect.poll(() => calls.length).toBeGreaterThan(10);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  await expect(frame.getByRole('alert')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS permission failures remain visible once while other sources finish', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (query.queryId === 'source.stock-date')
+      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
+    return result;
+  });
+  await expect.poll(() => calls.length).toBeGreaterThan(10);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  const alert = frame.getByRole('alert');
+  await expect(alert).toHaveCount(1);
+  await alert.locator('summary').click();
+  await expect(alert).toContainText('NO_RETURN_COLUMN_ALLOWED');
+  const text = await alert.innerText();
+  assert.equal(
+    text.split('基地库存（选定版本）：').length - 1,
+    1,
+    'a failed source must appear only once',
+  );
+  assert.doesNotMatch(text, /SOURCE_NOT_AVAILABLE/);
+  assert.deepEqual(errors, []);
+});
 for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
   test(`${id}: original business structure remains usable at desktop and narrow widths`, async (t) => {
     const { page, frame, errors } = await mount(t, id, 1280);
