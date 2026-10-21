@@ -1,3 +1,4 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessDateInput } from '../../../../../shared/business-date-input';
@@ -100,28 +101,20 @@ export default function ConfiguredWorkbench() {
   return (
     <main className={`agent-root ${common.root}`}>
       <div className="agent-shell">
-        <header className="agent-topbar compact-topbar">
-          <div className="agent-topbar-context">
-            <div className="workspace-heading">
-              <strong>分仓库存经营看板</strong>
-              <span>库存监控 · 补货决策 · 订单履约</span>
-            </div>
-            <div className="steps" aria-label="运营步骤">
-              {['监控指标', '缺货订单', '补货下单', '滞库消化', '大日期处理'].map((s, i) => (
-                <Fragment key={s}>
-                  <button
-                    className={i === 0 ? 'active' : ''}
-                    onClick={() =>
-                      setTab(i === 1 ? 'orders' : i > 2 ? 'structure' : 'replenishment')
-                    }
-                  >
-                    <i>{i + 1}</i>
-                    <span>{s}</span>
-                  </button>
-                  {i < 4 && <b aria-hidden="true">→</b>}
-                </Fragment>
-              ))}
-            </div>
+        <BusinessToolbar
+          filters={
+            <>
+              <span className="warehouse-switch">全部分仓</span>
+              <button
+                className="warehouse-cycle-context"
+                disabled
+                title="沿用原分仓固化规则默认7天，备货3天；个别仓库/SKU配置仍需业务配置接入"
+              >
+                补货周期 <strong>{config.replenishmentPolicy.defaultCycleDays}天（默认）</strong>
+              </button>
+            </>
+          }
+          actions={
             <LocalQueryForm
               className={common.controls}
               onSubmit={(e) => {
@@ -139,16 +132,26 @@ export default function ConfiguredWorkbench() {
               />
               <button className="secondary-button">刷新</button>
             </LocalQueryForm>
-            <span className="warehouse-switch">全部分仓</span>
-            <button
-              className="warehouse-cycle-context"
-              disabled
-              title="沿用原分仓固化规则默认7天，备货3天；个别仓库/SKU配置仍需业务配置接入"
-            >
-              补货周期 <strong>{config.replenishmentPolicy.defaultCycleDays}天（默认）</strong>
-            </button>
-          </div>
-        </header>
+          }
+          navigation={
+            <div className="steps" aria-label="运营步骤">
+              {['监控指标', '缺货订单', '补货下单', '滞库消化', '大日期处理'].map((s, i) => (
+                <Fragment key={s}>
+                  <button
+                    className={i === 0 ? 'active' : ''}
+                    onClick={() =>
+                      setTab(i === 1 ? 'orders' : i > 2 ? 'structure' : 'replenishment')
+                    }
+                  >
+                    <i>{i + 1}</i>
+                    <span>{s}</span>
+                  </button>
+                  {i < 4 && <b aria-hidden="true">→</b>}
+                </Fragment>
+              ))}
+            </div>
+          }
+        />
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
             <QueryErrors errors={errors} />

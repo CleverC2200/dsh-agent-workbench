@@ -1,3 +1,5 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import React, { useState, useEffect } from 'react';
@@ -146,84 +148,100 @@ export default function ConfiguredWorkbench() {
   };
   return (
     <main className={`${css.shell} ${common.root}`}>
-      <header className={css.topbar}>
-        <nav className={css.navigation} aria-label="客户库存与客户订单">
-          <button
-            aria-current={area === 'stock'}
-            onClick={() => {
+      <BusinessToolbar
+        className={css.sharedTopbar}
+        filters={
+          <div className={css.customerPicker}>
+            <details className={css.customerMenu} title={`库存快照：${stock?.snapshotDate ?? '-'}`}>
+              <summary>
+                {customer ? `客户 ${customer}` : '全部负责客户'}
+                <span aria-hidden="true">⌄</span>
+              </summary>
+              <div className={css.customerOptions}>
+                <LocalQueryForm
+                  className={common.controls}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setPage(1);
+                    setCustomer(draft.trim());
+                    setDate(dateDraft);
+                    refresh((n) => n + 1);
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
+                  }}
+                >
+                  <input
+                    aria-label="客户编码"
+                    placeholder="输入客户编码"
+                    maxLength={100}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <button>查询 / 刷新</button>
+                </LocalQueryForm>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    setPage(1);
+                    setArea('stock');
+                    setTab('customer-stock');
+                    setDraft('');
+                    setCustomer('');
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
+                  }}
+                >
+                  全部负责客户
+                </button>
+              </div>
+            </details>
+          </div>
+        }
+        actions={
+          <LocalQueryForm
+            className={common.controls}
+            onSubmit={(event) => {
+              event.preventDefault();
               setPage(1);
-              setArea('stock');
-              setTab('customer-stock');
+              setDate(dateDraft);
+              refresh((n) => n + 1);
             }}
           >
-            客户库存
-          </button>
-          <button
-            aria-current={area === 'order'}
-            onClick={() => {
-              setPage(1);
-              setArea('order');
-              setTab('catalog');
-            }}
-          >
-            客户订单
-          </button>
-        </nav>
-        <div className={css.customerPicker}>
-          <details className={css.customerMenu}>
-            <summary>
-              {customer ? `客户 ${customer}` : '全部负责客户'}
-              <span aria-hidden="true">⌄</span>
-            </summary>
-            <div className={css.customerOptions}>
-              <LocalQueryForm
-                className={common.controls}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  setPage(1);
-                  setCustomer(draft.trim());
-                  setDate(dateDraft);
-                  refresh((n) => n + 1);
-                  const menu = event.currentTarget.closest('details');
-                  if (menu) menu.open = false;
-                }}
-              >
-                <input
-                  aria-label="客户编码"
-                  placeholder="输入客户编码"
-                  maxLength={100}
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                />
-                <input
-                  aria-label="读取时点"
-                  type="date"
-                  required
-                  max={businessDay()}
-                  value={dateDraft}
-                  onChange={(event) => setDateDraft(event.target.value)}
-                />
-                <button>查询 / 刷新</button>
-              </LocalQueryForm>
-              <button
-                type="button"
-                onClick={(event) => {
-                  setPage(1);
-                  setArea('stock');
-                  setTab('customer-stock');
-                  setDraft('');
-                  setCustomer('');
-                  const menu = event.currentTarget.closest('details');
-                  if (menu) menu.open = false;
-                }}
-              >
-                全部负责客户
-              </button>
-            </div>
-          </details>
-          {area === 'stock' && <small>库存快照：{stock?.snapshotDate ?? '-'}</small>}
-        </div>
-      </header>
+            <BusinessDateInput
+              aria-label="读取时点"
+              required
+              max={businessDay()}
+              value={dateDraft}
+              onChange={(event) => setDateDraft(event.target.value)}
+            />
+            <button>查询 / 刷新</button>
+          </LocalQueryForm>
+        }
+        navigation={
+          <nav className={css.navigation} aria-label="客户库存与客户订单">
+            <button
+              aria-current={area === 'stock'}
+              onClick={() => {
+                setPage(1);
+                setArea('stock');
+                setTab('customer-stock');
+              }}
+            >
+              客户库存
+            </button>
+            <button
+              aria-current={area === 'order'}
+              onClick={() => {
+                setPage(1);
+                setArea('order');
+                setTab('catalog');
+              }}
+            >
+              客户订单
+            </button>
+          </nav>
+        }
+      />
       <QueryErrors errors={errors} />
       {area === 'stock' && (
         <div aria-busy={busy}>

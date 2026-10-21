@@ -112,6 +112,122 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
     }
     assert.deepEqual(errors, []);
   });
+for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
+  test(`${id}: shared header aligns filters and refresh across pane widths`, async (t) => {
+    const { page, frame, errors } = await mount(t, id, 1280);
+    const header = frame.locator('[data-business-toolbar]');
+    await expect(header).toBeVisible();
+    assert.equal(
+      await header.evaluate((el) => getComputedStyle(el).backgroundColor),
+      'rgb(255, 255, 255)',
+      `${id}: shared header surface`,
+    );
+    const refresh = header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ });
+    await expect(refresh).toBeVisible();
+    for (const width of [1280, 768, 560, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const boxes = await header.evaluate((el) => {
+        const rect = (node) => {
+          const r = node.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, height: r.height };
+        };
+        return {
+          header: rect(el),
+          row: rect(el.querySelector('[data-business-toolbar-row]')),
+          filters: rect(el.querySelector('[data-business-toolbar-filters]')),
+          actions: rect(el.querySelector('[data-business-toolbar-actions]')),
+          scroll: document.documentElement.scrollWidth,
+          viewport: innerWidth,
+        };
+      });
+      assert.ok(boxes.scroll <= boxes.viewport + 2, `${id}@${width}: page overflows`);
+      assert.ok(
+        Math.abs(boxes.filters.left - boxes.row.left - 16) <= 1,
+        `${id}@${width}: filter alignment`,
+      );
+      assert.ok(
+        Math.abs(boxes.row.right - boxes.actions.right - 16) <= 1,
+        `${id}@${width}: action alignment`,
+      );
+      if (width === 1280)
+        assert.equal(Math.round(boxes.row.height), 56, `${id}: primary toolbar height`);
+      const button = await refresh.boundingBox();
+      assert.ok(
+        button && Math.abs(button.height - 36) <= 1,
+        `${id}@${width}: refresh control height`,
+      );
+      if (process.env.AGENT_TOOLBAR_EVIDENCE) {
+        await mkdir(process.env.AGENT_TOOLBAR_EVIDENCE, { recursive: true });
+        await page.screenshot({ path: `${process.env.AGENT_TOOLBAR_EVIDENCE}/${id}-${width}.png` });
+      }
+    }
+    assert.deepEqual(errors, []);
+  });
+test('APS top month selector applies the original period and keeps its menu within a narrow pane', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 390);
+  const picker = frame.locator('[data-business-toolbar] button.date-picker-button');
+  await picker.click();
+  const menu = frame.getByRole('menu', { name: '统计日期筛选', exact: true });
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  assert.ok(
+    box && box.x >= 0 && box.x + box.width <= 391,
+    `APS date menu clipped: ${JSON.stringify(box)}`,
+  );
+  const before = calls.length;
+  await menu.locator('.date-picker-month').getByRole('button', { name: '9', exact: true }).click();
+  await expect(picker).toContainText('2026年9月');
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.parameters.as_of?.startsWith('2026-09') ||
+            query.parameters.start?.startsWith('2026-09') ||
+            query.parameters.start_month === '202609',
+        ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+test('dealer top date refresh preserves the selected customer scope', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'dealer', 390);
+  const header = frame.locator('[data-business-toolbar]');
+  const menu = header.locator('details').first();
+  await menu.locator('summary').click();
+  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
+  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect(menu.locator('summary')).toContainText('customer-A');
+  await header.getByLabel('读取时点').fill('2026-10-18');
+  const before = calls.length;
+  await header
+    .locator('[data-business-toolbar-actions]')
+    .getByRole('button', { name: '查询 / 刷新', exact: true })
+    .click();
+  await expect
+    .poll(
+      () =>
+        calls
+          .slice(before)
+          .some(
+            (query) =>
+              query.queryId === 'source.dealer-stock-date' &&
+              query.parameters.as_of === '2026-10-18',
+          ) &&
+        calls
+          .slice(before)
+          .some(
+            (query) =>
+              query.queryId.startsWith('dealer.stock.customer') &&
+              query.parameters.customer === 'customer-A',
+          ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
 test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';

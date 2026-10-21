@@ -1,3 +1,4 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
@@ -890,41 +891,8 @@ export function InventoryOperationsWorkbench() {
   return (
     <div className={styles.shell}>
       <section ref={boardRef} className={styles.boardPanel} aria-label="业务看板">
-        <header className={styles.boardHeader}>
-          <div>
-            <h2>{sanitizeUserVisibleCopy(dashboardWorkspace?.title ?? '库存运营看板')}</h2>
-          </div>
-          <div className={styles.boardHeaderActions}>
-            <Button
-              size="small"
-              onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
-              aria-label="刷新库存数据"
-            >
-              刷新数据
-            </Button>
-            <DailyReportButton
-              bases={basePaths.map((base) => base.replace(/基地$/u, ''))}
-              initialBase={paths[0]?.replace(/基地$/u, '')}
-              onBoard={(risk, base) => {
-                if (base && basePaths.includes(`${base}基地`)) selectPaths([`${base}基地`]);
-                else closeDetails();
-                setActiveBoardTab(risk?.module === 'age' ? '货龄结构' : '基地结构');
-                if (!risk) return;
-                const tab = risk.module === 'age' ? '货龄结构' : '品类结构';
-                void toggleBaseDetail(risk.base, tab, true);
-                if (risk.category)
-                  void toggleHierarchySkuDetail(tab, risk.base, risk.category, risk.material);
-              }}
-              onAsk={(question) => {
-                void askDsh(question, reportContext()).catch((error) =>
-                  window.dispatchEvent(
-                    new CustomEvent('gea-query-warning', {
-                      detail: { message: error.message },
-                    }),
-                  ),
-                );
-              }}
-            />
+        <BusinessToolbar
+          filters={
             <Dropdown
               trigger="click"
               position="bl"
@@ -963,8 +931,42 @@ export function InventoryOperationsWorkbench() {
                 <IconDown />
               </Button>
             </Dropdown>
-          </div>
-        </header>
+          }
+          actions={
+            <>
+              <DailyReportButton
+                bases={basePaths.map((base) => base.replace(/基地$/u, ''))}
+                initialBase={paths[0]?.replace(/基地$/u, '')}
+                onBoard={(risk, base) => {
+                  if (base && basePaths.includes(`${base}基地`)) selectPaths([`${base}基地`]);
+                  else closeDetails();
+                  setActiveBoardTab(risk?.module === 'age' ? '货龄结构' : '基地结构');
+                  if (!risk) return;
+                  const tab = risk.module === 'age' ? '货龄结构' : '品类结构';
+                  void toggleBaseDetail(risk.base, tab, true);
+                  if (risk.category)
+                    void toggleHierarchySkuDetail(tab, risk.base, risk.category, risk.material);
+                }}
+                onAsk={(question) => {
+                  void askDsh(question, reportContext()).catch((error) =>
+                    window.dispatchEvent(
+                      new CustomEvent('gea-query-warning', {
+                        detail: { message: error.message },
+                      }),
+                    ),
+                  );
+                }}
+              />
+              <Button
+                size="small"
+                onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                aria-label="刷新库存数据"
+              >
+                刷新数据
+              </Button>
+            </>
+          }
+        />
         <div id="inventory-board-content" className={styles.boardScroll}>
           <FloatingTableScrollbar />
           <>

@@ -499,6 +499,15 @@
   background: var(--ui-surface);
   border-bottom: 1px solid var(--ui-border);
 }
+.shell > .sharedTopbar {
+  width: calc(100% + 32px);
+  max-width: none;
+  margin: 0 -16px 12px;
+}
+.sharedTopbar .customerOptions {
+  left: 0;
+  right: auto;
+}
 .topbar .navigation {
   margin: 0;
   padding: 0;

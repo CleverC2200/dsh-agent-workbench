@@ -1,0 +1,150 @@
+.header {
+  --toolbar-surface: var(--ui-surface, var(--workbench-surface, #fff));
+  --toolbar-border: var(--ui-border, var(--workbench-border, #e3e6ea));
+  --toolbar-control-border: var(--ui-border-strong, var(--workbench-control-border, #d9dde3));
+  --toolbar-body: var(--ui-secondary, var(--workbench-body, #555d68));
+  --toolbar-font: var(--ui-font, var(--workbench-font-family, sans-serif));
+  --toolbar-brand: var(--ui-accent, var(--workbench-brand, #df1732));
+  --toolbar-hover: var(--ui-hover, var(--workbench-hover, #fffafb));
+  --toolbar-hover-border: var(--ui-accent-line, #efabb4);
+  position: relative;
+  z-index: 5;
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  border-bottom: 1px solid var(--toolbar-border);
+  background: var(--toolbar-surface);
+  color: var(--toolbar-body);
+  font-family: var(--toolbar-font);
+}
+.header .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  min-height: 56px;
+  padding: 9px 16px;
+  box-sizing: border-box;
+}
+.filters,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.filters {
+  flex: 1 1 auto;
+}
+.actions {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+.header .row :is(button, summary, select) {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.header .row form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+}
+.header .filters > nav {
+  display: flex;
+  flex-wrap: nowrap;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.header .filters > nav > button {
+  flex: none;
+  width: auto;
+  min-width: 90px;
+  padding: 0 14px;
+  border-radius: 0;
+}
+.header .actions > button {
+  padding: 0 12px;
+  border: 1px solid var(--toolbar-control-border);
+  background: var(--toolbar-surface);
+  color: var(--toolbar-body);
+  cursor: pointer;
+}
+.header .actions > button:hover:not(:disabled) {
+  border-color: var(--toolbar-hover-border);
+  background: var(--toolbar-hover);
+  color: var(--toolbar-brand);
+}
+.header .actions :global(.date-picker-wrap) {
+  position: static;
+}
+.header .actions :global(.date-picker-menu) {
+  top: calc(100% + 4px);
+  right: 16px;
+  left: auto;
+  box-sizing: border-box;
+  max-width: calc(100% - 32px);
+  max-height: min(520px, calc(100dvh - 120px));
+  overflow-y: auto;
+}
+.header .row :is(button, summary, input, select):focus-visible {
+  outline: 2px solid var(--toolbar-brand);
+  outline-offset: 2px;
+}
+.navigation {
+  min-width: 0;
+  padding: 0 16px;
+  border-top: 1px solid var(--toolbar-border);
+}
+.header .navigation > :first-child {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  min-height: 46px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.navigation :is(button, b) {
+  flex: none;
+}
+.navigation button {
+  height: 46px;
+  min-height: 46px;
+  font: 600 11px/1.4 var(--toolbar-font);
+}
+.header nav::-webkit-scrollbar,
+.navigation > :first-child::-webkit-scrollbar {
+  display: none;
+}
+@media (max-width: 520px) {
+  .header .row {
+    gap: 8px;
+  }
+  .actions {
+    flex-basis: 100%;
+  }
+}

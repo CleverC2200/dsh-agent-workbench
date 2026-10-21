@@ -1,3 +1,4 @@
+import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
 import { action, reportElements } from '../../../shared/channel.js';
@@ -7223,6 +7224,100 @@ export default function Home({
     setTimeout(() => setToast(''), 2600);
   };
 
+  const periodDatePicker = (
+    <div className="month-wrap date-picker-wrap">
+      <button
+        className="date-button date-picker-button"
+        aria-haspopup="menu"
+        aria-expanded={dateOpen}
+        onClick={() => {
+          setDateOpen((value) => !value);
+          setWeekOpen(false);
+        }}
+      >
+        <CalendarDays />
+        <span>
+          {timeGranularity === 'year'
+            ? selectedYear.label
+            : timeGranularity === 'day'
+              ? selectedDateLabel
+              : selectedPeriodLabel}
+        </span>
+        <ChevronDown />
+      </button>
+      {dateOpen && (
+        <div
+          className="month-menu period-filter-menu date-picker-menu"
+          role="menu"
+          aria-label="统计日期筛选"
+        >
+          <small>
+            {'选择'}
+            {timeGranularity === 'year' ? '年份' : timeGranularity === 'day' ? '日期' : '年月'}
+          </small>
+          <div className="date-picker-sections">
+            <section>
+              <strong>{'年'}</strong>
+              <div className="date-picker-year">
+                {yearOptions.map((year) => (
+                  <button
+                    key={year.key}
+                    className={selectedYear.key === year.key ? 'selected' : ''}
+                    onClick={() => chooseYear(year)}
+                  >
+                    <Check />
+                    {year.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+            {timeGranularity !== 'year' && (
+              <section>
+                <strong>{'月'}</strong>
+                <div className="date-picker-month">
+                  {monthOptions.map((month) => (
+                    <button
+                      key={month.key}
+                      disabled={
+                        liveData && isFutureCalendarDay(Number(selectedYear.key), month.value, 1)
+                      }
+                      className={selectedMonth.key === month.key ? 'selected' : ''}
+                      onClick={() => chooseMonth(month)}
+                    >
+                      <Check />
+                      {month.value}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            {timeGranularity === 'day' && (
+              <section>
+                <strong>{'日'}</strong>
+                <div className="date-picker-day">
+                  {dayOptions.map((day) => (
+                    <button
+                      key={day}
+                      disabled={
+                        liveData &&
+                        isFutureCalendarDay(Number(selectedYear.key), selectedMonth.value, day)
+                      }
+                      className={selectedDay === day ? 'selected' : ''}
+                      onClick={() => chooseDay(day)}
+                    >
+                      <Check />
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className={`app-shell chat-${chatMode} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${contextSelectionMode ? 'context-selecting' : ''} ${embedMode ? 'embed-mode' : ''}`}
@@ -7400,25 +7495,41 @@ export default function Home({
           </div>
         )}
         {embedMode && ['intelligent', 'plan'].includes(activeWorkspace) && (
-          <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
-            <button
-              className={activeWorkspace === 'intelligent' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
-              onClick={() => setActiveWorkspace('intelligent')}
-            >
-              智能工作台
-            </button>
-            <button
-              className={activeWorkspace === 'plan' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
-              onClick={() => {
-                setAnalysisScope('overview');
-                setActiveWorkspace('plan');
-              }}
-            >
-              产销协同看板
-            </button>
-          </nav>
+          <BusinessToolbar
+            filters={
+              <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
+                <button
+                  className={activeWorkspace === 'intelligent' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
+                  onClick={() => setActiveWorkspace('intelligent')}
+                >
+                  智能工作台
+                </button>
+                <button
+                  className={activeWorkspace === 'plan' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
+                  onClick={() => {
+                    setAnalysisScope('overview');
+                    setActiveWorkspace('plan');
+                  }}
+                >
+                  产销协同看板
+                </button>
+              </nav>
+            }
+            actions={
+              <>
+                {periodDatePicker}
+                <button
+                  type="button"
+                  disabled={liveData && live.busy}
+                  onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                >
+                  刷新
+                </button>
+              </>
+            }
+          />
         )}
 
         {activeWorkspace === 'intelligent' ? (
@@ -7555,110 +7666,7 @@ export default function Home({
                         </button>
                       ))}
                     </div>
-                    <div className="month-wrap date-picker-wrap">
-                      <button
-                        className="date-button date-picker-button"
-                        aria-haspopup="menu"
-                        aria-expanded={dateOpen}
-                        onClick={() => {
-                          setDateOpen((value) => !value);
-                          setWeekOpen(false);
-                        }}
-                      >
-                        <CalendarDays />
-                        <span>
-                          {timeGranularity === 'year'
-                            ? selectedYear.label
-                            : timeGranularity === 'day'
-                              ? selectedDateLabel
-                              : selectedPeriodLabel}
-                        </span>
-                        <ChevronDown />
-                      </button>
-                      {dateOpen && (
-                        <div
-                          className="month-menu period-filter-menu date-picker-menu"
-                          role="menu"
-                          aria-label="统计日期筛选"
-                        >
-                          <small>
-                            {'选择'}
-                            {timeGranularity === 'year'
-                              ? '年份'
-                              : timeGranularity === 'day'
-                                ? '日期'
-                                : '年月'}
-                          </small>
-                          <div className="date-picker-sections">
-                            <section>
-                              <strong>{'年'}</strong>
-                              <div className="date-picker-year">
-                                {yearOptions.map((year) => (
-                                  <button
-                                    key={year.key}
-                                    className={selectedYear.key === year.key ? 'selected' : ''}
-                                    onClick={() => chooseYear(year)}
-                                  >
-                                    <Check />
-                                    {year.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </section>
-                            {timeGranularity !== 'year' && (
-                              <section>
-                                <strong>{'月'}</strong>
-                                <div className="date-picker-month">
-                                  {monthOptions.map((month) => (
-                                    <button
-                                      key={month.key}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          month.value,
-                                          1,
-                                        )
-                                      }
-                                      className={selectedMonth.key === month.key ? 'selected' : ''}
-                                      onClick={() => chooseMonth(month)}
-                                    >
-                                      <Check />
-                                      {month.value}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                            {timeGranularity === 'day' && (
-                              <section>
-                                <strong>{'日'}</strong>
-                                <div className="date-picker-day">
-                                  {dayOptions.map((day) => (
-                                    <button
-                                      key={day}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          selectedMonth.value,
-                                          day,
-                                        )
-                                      }
-                                      className={selectedDay === day ? 'selected' : ''}
-                                      onClick={() => chooseDay(day)}
-                                    >
-                                      <Check />
-                                      {day}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {!embedMode && periodDatePicker}
                     {timeGranularity === 'week' && (
                       <div className="month-wrap week-wrap">
                         <button

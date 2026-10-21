@@ -1,3 +1,4 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessDateInput } from '../../../../../shared/business-date-input';
@@ -116,9 +117,8 @@ export default function ConfiguredWorkbench() {
     <main className={`${styles.shell} ${common.root}`}>
       <div className={styles.workspacePanels}>
         <section className={styles.workbench}>
-          <header className={styles.header}>
-            <h1 className={styles.title}>全链路库存</h1>
-            <div className={styles.controls}>
+          <BusinessToolbar
+            filters={
               <label className={styles.channelSwitch}>
                 <input
                   type="checkbox"
@@ -133,6 +133,8 @@ export default function ConfiguredWorkbench() {
                 <span aria-hidden="true" />
                 含渠道
               </label>
+            }
+            actions={
               <LocalQueryForm
                 className={common.controls}
                 onSubmit={(e) => {
@@ -150,8 +152,8 @@ export default function ConfiguredWorkbench() {
                 />
                 <button>查询 / 刷新</button>
               </LocalQueryForm>
-            </div>
-          </header>
+            }
+          />
           <div className={styles.boardScroll}>
             <QueryErrors errors={errors} />
             <div className={`${styles.kpiGrid} ${common.kpis}`} aria-busy={busy}>
