@@ -127,7 +127,8 @@ export function createShipment(
     const passed = Number(cutoff.slice(8));
     const [year, monthNumber] = month.split('-').map(Number);
     const totalDays = new Date(year, monthNumber, 0).getDate();
-    const demo = state.rows == null && cutoff === '2026-09-22';
+    const demo =
+      draft.productSource.startsWith('demo') && state.rows == null && cutoff === '2026-09-22';
     const sourceRows = state.rows ?? (demo ? prototypeShipments : []);
     const [expanded, setExpanded] = react.useState([]);
     const [formula, setFormula] = react.useState(null);
