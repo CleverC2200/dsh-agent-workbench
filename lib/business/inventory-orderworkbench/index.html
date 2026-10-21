@@ -6860,6 +6860,9 @@ html body[data-ds-dark-theme] {
     ).join("");
   }
   function renderWorkbenchTasks() {
+    workbenchView.querySelectorAll("[data-wb-task-filter]").forEach(
+      (button) => button.classList.toggle("active", button.dataset.wbTaskFilter === taskFilter)
+    );
     const tasks = currentCreatedTasks();
     const pending2 = tasks.filter((task) => task.status !== "\u5DF2\u5B8C\u6210").length;
     const done = tasks.length - pending2;
@@ -7441,10 +7444,6 @@ html body[data-ds-dark-theme] {
     if (state.weekInitialized !== void 0) weekInitialized = state.weekInitialized;
     if (state.event !== void 0) eventFilter = state.event;
     if (state.task !== void 0) taskFilter = state.task;
-    if (state.dimension !== void 0) dimensionTab = state.dimension;
-    if (state.base !== void 0) selectedWorkbenchBase = state.base;
-    wbBaseFilter.value = selectedWorkbenchBase;
-    wbOwnerFilter.value = selectedWorkbenchBase;
     renderSelectedPeriod();
     restoringView = false;
     updateReport();
@@ -7460,9 +7459,7 @@ html body[data-ds-dark-theme] {
           week: selectedWeek,
           weekInitialized,
           event: eventFilter,
-          task: taskFilter,
-          dimension: dimensionTab,
-          base: selectedWorkbenchBase
+          task: taskFilter
         });
       return {
         source: "\u8BA2\u5355\u5DE5\u4F5C\u53F0\u62A5\u544A\u6458\u5F55\u4E0E\u672C\u5730\u6A21\u62DF",

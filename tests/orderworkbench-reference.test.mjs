@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
+import { validHtmlViewState } from '../src/html-view-state.ts';
 
 test('order workbench reference interactions', () => {
   const dom = new JSDOM(readFileSync('prototypes/inventory-orderworkbench/index.html', 'utf8'), {
@@ -18,7 +19,7 @@ test('order workbench reference interactions', () => {
       '',
     );
     window.eval(
-      'const createPageViewState=()=>({subscribe(){},update(){}}); const publishReport=()=>()=>{};\n' +
+      'const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const publishReport=(snapshot)=>{document.addEventListener("click",()=>snapshot()); snapshot(); return ()=>snapshot()};\n' +
         code,
     );
     const document = window.document;
@@ -29,6 +30,16 @@ test('order workbench reference interactions', () => {
     document.getElementById('wbDetailClose').click();
     document.getElementById('weekMode').click();
     assert.equal(document.querySelectorAll('.wb-kpi').length, 6);
+    assert.equal(window.savedView.mode, 'week');
+    assert.equal(
+      validHtmlViewState('inventory-orderworkbench', { ...window.savedView, version: 1 }),
+      true,
+    );
+    window.restoreView({ ...window.savedView, task: 'done' });
+    assert.equal(
+      document.querySelector('[data-wb-task-filter].active').dataset.wbTaskFilter,
+      'done',
+    );
     document.getElementById('monthMode').click();
     const edit = document.querySelector('[data-wb-edit-issue]');
     assert.ok(edit);

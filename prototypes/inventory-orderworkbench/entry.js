@@ -1362,6 +1362,11 @@ function renderWorkbenchEvents() {
     .join('');
 }
 function renderWorkbenchTasks() {
+  workbenchView
+    .querySelectorAll('[data-wb-task-filter]')
+    .forEach((button) =>
+      button.classList.toggle('active', button.dataset.wbTaskFilter === taskFilter),
+    );
   const tasks = currentCreatedTasks();
   const pending = tasks.filter((task) => task.status !== '已完成').length;
   const done = tasks.length - pending;
@@ -2029,10 +2034,6 @@ view.subscribe((state) => {
   if (state.weekInitialized !== undefined) weekInitialized = state.weekInitialized;
   if (state.event !== undefined) eventFilter = state.event;
   if (state.task !== undefined) taskFilter = state.task;
-  if (state.dimension !== undefined) dimensionTab = state.dimension;
-  if (state.base !== undefined) selectedWorkbenchBase = state.base;
-  wbBaseFilter.value = selectedWorkbenchBase;
-  wbOwnerFilter.value = selectedWorkbenchBase;
   renderSelectedPeriod();
   restoringView = false;
   updateReport();
@@ -2050,8 +2051,6 @@ const updateReport = publishReport(
         weekInitialized,
         event: eventFilter,
         task: taskFilter,
-        dimension: dimensionTab,
-        base: selectedWorkbenchBase,
       });
     return {
       source: '订单工作台报告摘录与本地模拟',
