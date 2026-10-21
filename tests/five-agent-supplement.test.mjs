@@ -69,10 +69,10 @@ test('known inputs are accessible without labeling unknown decisions as zero', a
     qll.sourceViews.views.find((v) => v.id === 'channel-sku').queryId,
     'dealer.stock.detail',
   );
-  assert.equal(
-    fc.sourceViews.views.find((v) => v.id === 'health').overrides.warehouse_type,
-    '分仓',
-  );
+  const branchHealth = fc.sourceViews.views.find((v) => v.id === 'health');
+  assert.equal(branchHealth.overrides.warehouse_type, undefined);
+  assert.ok(branchHealth.filters.some((filter) => filter.name === 'warehouse_code'));
+  assert.ok(branchHealth.filters.some((filter) => filter.name === 'base'));
 });
 
 test('base overview uses maximum age and cannot present the source maximum as an average', async () => {
