@@ -58,6 +58,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const noSubscribe = () => () => {};
 const emptyGuide: readonly import('@deepseek-ai/dsh-client-ui-sidebar-right/client').SidebarRightGuideBox[] =
   [];
+const inventoryAgentPages = new Set([
+  'inventory-qll',
+  'inventory-fc',
+  'inventory-aqkc',
+  'inventory-dealer',
+  'inventory-apsplan',
+]);
 
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey =
@@ -183,6 +190,7 @@ export function mountFramePresentation(
     const [view, setView] = useState<'center' | 'split' | 'chat'>(
       () => pageViews.get(page.id) ?? 'split',
     );
+    const titleless = inventoryAgentPages.has(page.id);
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const currentCwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
@@ -550,6 +558,21 @@ export function mountFramePresentation(
         </ConversationToolbar>
       </div>
     );
+    const chrome = (
+      <header
+        className={
+          'agent-workbench-document-chrome' +
+          (titleless ? ' agent-workbench-document-chrome-tools' : '')
+        }
+        data-workbench-view={view}
+        data-workbench-window-chrome
+        data-window-drag
+        aria-label={titleless ? '会话操作栏' : '工作台标题栏'}
+      >
+        {!titleless && <span className="agent-workbench-document-title">{title}</span>}
+        {toolbar}
+      </header>
+    );
     return (
       <section
         ref={documentElement}
@@ -558,16 +581,7 @@ export function mountFramePresentation(
           { '--workbench-ai-preferred-width': conversationWidth + 'px' } as React.CSSProperties
         }
       >
-        <header
-          className="agent-workbench-document-chrome"
-          data-workbench-view={view}
-          data-workbench-window-chrome
-          data-window-drag
-          aria-label="工作台标题栏"
-        >
-          <span className="agent-workbench-document-title">{title}</span>
-          {toolbar}
-        </header>
+        {!titleless && chrome}
         {page.resourceId && identity.error !== undefined && (
           <p className="agent-workbench-page-status" role="alert" title={identity.error}>
             {t('pageIdentityFailed')}
@@ -631,6 +645,7 @@ export function mountFramePresentation(
             aria-label="AI对话"
             hidden={view === 'center'}
           >
+            {titleless && view !== 'center' && chrome}
             {associated && session?.openState === 'open' ? (
               renderSlot('agent-workbench.conversation', { page: page.id })
             ) : (
@@ -659,6 +674,7 @@ export function mountFramePresentation(
             )}
           </aside>
         </div>
+        {titleless && view === 'center' && chrome}
       </section>
     );
   }

@@ -10,7 +10,7 @@ const bundle = await build({
  let Document;const locale={active:'zh'};const identity={state:'confirmed',scope:null,status:{authenticated:false}};
  const ctx={get:()=>undefined,provide(){},locale:{subscribe:()=>()=>{},getSnapshot:()=>locale},theme:{getTheme:()=>({active:{colorScheme:'light',tokens:{}},fontSize:14})},on:()=>()=>{},effect:fn=>fn(),inputTriggers:{registerSource:()=>()=>{}},conversation:{input:{for:()=>({})}},slots:{registerFactory:(_meta,component)=>{Document=component;return()=>{};},register:()=>()=>{},inject:(_name,fn)=>fn()},inject:(names,fn)=>{if(names.includes('sidebarRight'))return;return fn({...ctx,businessAccount:{getSnapshot:()=>identity,subscribe:()=>()=>{}},remote:{session:{}}})}};
  const documents=new DocumentWorkbench({panel:()=>{},document:()=>{}});mountFramePresentation(ctx,()=>undefined,key=>key,documents);
- const root=createRoot(document.getElementById('root'));const page={id:'business',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
+ const root=createRoot(document.getElementById('root'));const page={id:window.testPageId??'business',kind:'local',label:'业务页面',body:()=>React.createElement('input',{'aria-label':'业务筛选',defaultValue:''})};
  documents.registerFrame(page);documents.open(page.id);
  window.remount=()=>{root.render(null);setTimeout(()=>root.render(React.createElement(Document,{page,active:true,useSessions:fn=>fn({byId:{}}),useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}})),0)};
  root.render(React.createElement(Document,{page,active:true,useSessions:fn=>fn({byId:{}}),useSession:()=>undefined,useProjection:()=>undefined,renderSlot:()=>{throw Error('no unbound Conversation')}}));`,
@@ -22,7 +22,7 @@ const bundle = await build({
   platform: 'browser',
   loader: { '.png': 'dataurl', '.css': 'text' },
 });
-async function documentFixture(t) {
+async function documentFixture(t, pageId = 'business') {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1600, height: 700 } });
@@ -36,6 +36,9 @@ async function documentFixture(t) {
   await page.setContent(
     `<style>${css} html,body{margin:0;height:100%} #root{height:100%;margin-left:280px}</style><div id="root"></div>`,
   );
+  await page.evaluate((id) => {
+    window.testPageId = id;
+  }, pageId);
   await page.addScriptTag({ content: bundle.outputFiles[0].text });
   await expect(page.getByRole('complementary', { name: 'AI对话' })).toBeVisible();
   return page;
@@ -153,3 +156,36 @@ test('the shared Document title row reserves safe space and window drag above bo
     assert.notEqual(await chrome.getAttribute('data-window-drag'), null);
   }
 });
+
+for (const id of [
+  'inventory-qll',
+  'inventory-fc',
+  'inventory-aqkc',
+  'inventory-dealer',
+  'inventory-apsplan',
+])
+  test(`${id}: business content starts at the top and conversation controls remain accessible`, async (t) => {
+    const page = await documentFixture(t, id);
+    const business = page.locator('.agent-workbench-business');
+    const input = page.getByRole('textbox', { name: '业务筛选' });
+    const ai = page.getByRole('complementary', { name: 'AI对话' });
+    await expect(page.locator('.agent-workbench-document-title')).toHaveCount(0);
+    await input.fill('保留业务筛选');
+    for (const width of [1600, 860]) {
+      await page.setViewportSize({ width, height: 700 });
+      assert.equal((await business.boundingBox()).y, 0);
+      await expect(ai.getByRole('toolbar', { name: '对话区视图与会话操作' })).toBeVisible();
+      await page.getByRole('button', { name: '中间区域最大，隐藏会话区' }).click();
+      await expect(ai).toBeHidden();
+      const businessBox = await business.boundingBox();
+      const toolbar = page.getByRole('toolbar', { name: '对话区视图与会话操作' });
+      assert.equal(businessBox.y, 0);
+      assert.ok((await toolbar.boundingBox()).y >= businessBox.y + businessBox.height);
+      await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
+      await expect(business).toBeHidden();
+      await expect(ai.getByRole('toolbar', { name: '对话区视图与会话操作' })).toBeVisible();
+      await page.getByRole('button', { name: '同时显示中间区域和会话区' }).click();
+      await expect(input).toHaveValue('保留业务筛选');
+      assert.equal(await toolbar.count(), 1);
+    }
+  });
