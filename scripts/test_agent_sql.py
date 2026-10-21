@@ -365,18 +365,18 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.db.row_factory = sqlite3.Row
         tables = {
             'agents_dim_product_list_mi': 'material_code material_name product_item_name',
-            'agents_scm_inventory_sku_data_d': 'stat_date warehouseid material_code warehouse_name warehouse_type belong_base product_categ_name material_group_name is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days source_updated_at update_time',
+            'agents_scm_inventory_sku_data_d': 'warehouseid material_code prod_date sap_warehouseid plant quality_batch is_good_prod live_qty available_qty pack_unit_qty freeze_qty warehouse_classify unrestricted_qty month_date',
             'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at',
-            'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify',
-            'agents_scm_material_in_out_summary_d': 'warehouseid material_code material_name material_group_name',
+            'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
+            'agents_scm_material_in_out_summary_d': 'warehouseid material_code material_name material_group_name warehouse_name product_categ_name',
         }
-        numeric = set('is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan act_dl_qty'.split())
+        numeric = set('live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
         self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouse_code='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=20, transfer_prepare_qty=20, plan_month='2026-10-01', snapshot_date='2026-10-19', plan_version='v1', plan_qty_unit='箱')
         for sku, stock, available, kind in [('S1',50,25,'分仓'),('S2',80,60,'分仓'),('BASE',999,999,'基地仓')]:
-            self.insert('agents_scm_inventory_sku_data_d',stat_date='2026-10-19',warehouseid='WH1',material_code=sku,warehouse_name='分仓1',warehouse_type=kind,total_qty=stock,available_qty=available,pack_unit_qty=0,freeze_qty=0)
+            self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',material_code=sku,prod_date='2026-09-30',warehouse_classify='20' if kind=='分仓' else '01',live_qty=stock,available_qty=available,pack_unit_qty=0,freeze_qty=0)
         for sku, amount in [('S1',30),('S2',60)]:
             self.insert('agents_scm_cust_deliv_daily_di',warehouse='WH1',material_code=sku,material_name='商品'+sku,warehouse_classify='20',act_ship_date='20261010',act_dl_qty=amount)
 
@@ -394,7 +394,37 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         for cast in list(tree.find_all(sqlglot.exp.Cast)):
             if cast.args['to'].this == sqlglot.exp.DataType.Type.DATE:
                 cast.replace(cast.this.copy())
-        return [dict(row) for row in self.db.execute(tree.sql(dialect='sqlite'),params)]
+        sql = tree.sql(dialect='sqlite')
+        for key, value in list(params.items()):
+            if isinstance(value, list):
+                names = [key + '_' + str(i) for i in range(len(value))]
+                sql = re.sub(':' + key + r'\b', ', '.join(':' + item for item in names), sql)
+                params.pop(key)
+                params.update(zip(names, value))
+        return [dict(row) for row in self.db.execute(sql,params)]
+
+    def test_batch_stock_sums_every_batch_and_ignores_other_warehouse_classes(self):
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',material_code='S1',prod_date='2026-08-30',warehouse_classify='20',live_qty=10,available_qty=5,pack_unit_qty=5,freeze_qty=0)
+        for kind in ['03','04']:
+            self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='IGNORED',material_code='IGNORE'+kind,prod_date='2020-01-01',warehouse_classify=kind,live_qty=99999,available_qty=99999)
+        rows=self.read('replenishment.detail');by_sku={x['sku']:x for x in rows}
+        self.assertEqual(set(by_sku),{'S1','S2'})
+        self.assertEqual((by_sku['S1']['inventory_qty'],by_sku['S1']['available_qty']),(60,30))
+        self.assertEqual(self.read('health.summary')[0]['max_age'],50)
+        self.assertEqual(self.read('health.summary')[0]['duplicate_keys'],0)
+
+    def test_batch_base_classes_and_positive_stock_age_follow_the_calendar(self):
+        import datetime
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE2',material_code='B2',prod_date='2024-02-29',warehouse_classify='02',live_qty=10,available_qty=10)
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE2',material_code='B2',prod_date='2020-01-01',warehouse_classify='02',live_qty=0,available_qty=0)
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE2',material_code='FUTURE',prod_date='2026-10-20',warehouse_classify='02',live_qty=1,available_qty=1)
+        base=self.read('health.summary',warehouse_type_mode='equal',warehouse_type='基地仓')[0]
+        branch=self.read('health.summary',warehouse_type_mode='equal',warehouse_type='分仓')[0]
+        self.assertEqual(base['total_qty'],1010)
+        self.assertEqual(base['max_age'],(datetime.date(2026,10,19)-datetime.date(2024,2,29)).days)
+        self.assertEqual(branch['total_qty'],130)
+        # Removed target/threshold fields cannot be recreated from stock quantity.
+        self.assertIsNone(base['overaged_qty'])
 
     def test_stock_only_sku_and_its_names_are_not_lost_to_plan_scope(self):
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',material_code='S2',material_name='商品S2',material_group_name='物料组')
@@ -419,7 +449,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertTrue(all(row['calculation_status'] == '近30日发货测算' for row in self.read('replenishment.detail')))
 
     def test_stock_only_sku_can_replenish_from_historical_shipments_with_explicit_basis(self):
-        self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,total_qty=0 WHERE material_code='S2'")
+        self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
         row = next(row for row in self.read('replenishment.detail') if row['sku']=='S2')
         self.assertEqual((row['target_inventory_qty'],row['recommended_qty'],row['urgent']),(20,20,1))
         self.assertEqual(row['calculation_status'],'近30日发货测算')
