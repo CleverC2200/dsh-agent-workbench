@@ -251,7 +251,7 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
     'Synear GEA',
     '智能体工作台',
     '业务工作台',
-    '工作台',
+    '历史对话',
     '产销协同',
     '计划管理',
     '库存管理',
