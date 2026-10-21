@@ -67,12 +67,10 @@ function fixture({ queryId, parameters }) {
       : (rows[kind] ?? []);
   const result = queryId.endsWith('.count')
     ? [{ total: records.length }]
-    : records
-        .slice(parameters.offset, parameters.offset + parameters.page_size)
-        .map((row) => ({
-          ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
-          ...row,
-        }));
+    : records.slice(parameters.offset, parameters.offset + parameters.page_size).map((row) => ({
+        ...Object.fromEntries(config.queries[queryId].columns.map((column) => [column, null])),
+        ...row,
+      }));
   return {
     rows: result,
     returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
@@ -121,7 +119,7 @@ async function relations(t, execute = fixture) {
   const frame = page.frameLocator('iframe');
   await expect(frame.getByRole('heading', { name: '需求确认', exact: true })).toBeVisible();
   await version(frame, '2026-10');
-  await frame.getByRole('button', { name: '主数据对应关系', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   return {
     page,
     frame,
@@ -198,9 +196,9 @@ test('fourth MPS step clears records on failed refresh and discards a late resul
   await expect
     .poll(() => calls.filter((query) => query.queryId === 'transfers.detail').length)
     .toBeGreaterThan(before);
-  await frame.getByRole('button', { name: '需求确认', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
   await version(frame, '2026-11');
-  await frame.getByRole('button', { name: '主数据对应关系', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '主数据对应关系' }).click();
   await view.getByRole('tab', { name: /基地与调拨/ }).click();
   await expect(view.locator('tbody tr')).toContainText('2026-11');
   release();
