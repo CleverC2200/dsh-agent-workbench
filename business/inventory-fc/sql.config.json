@@ -20697,7 +20697,7 @@
     "onPageChange": "fresh-query",
     "summary": "independent-full-filter-aggregate"
   },
-  "overviewViewIds": ["orders", "replenishment", "shipments", "branch-stock", "replenishment"],
+  "overviewViewIds": ["orders", "replenishment", "shipments", "branch-stock"],
   "replenishmentPolicy": {
     "defaultCycleDays": 7,
     "preparationDays": 3,

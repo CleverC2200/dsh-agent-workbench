@@ -11,12 +11,22 @@ const configs = Object.fromEntries(
 );
 const view = (a, id) => configs[a].sourceViews.views.find((v) => v.id === id);
 const fields = (a, id) => view(a, id).columns.map((c) => c.field);
-test('the original 37 replenishment business fields remain available in their original order', async () => {
+test('the 37 replenishment business columns retain their order with explicit new-source labels', async () => {
   const original = JSON.parse(await readFile('tests/fixtures/original-fc-columns.json', 'utf8'));
   const actual = view('fc', 'replenishment').columns.map((c) => c.label);
   assert.deepEqual(
     actual.slice(2, 39),
-    original.map((x) => x[1]),
+    original.map(
+      ([field, label]) =>
+        ({
+          forecastTurnoverDays: '测算可供天数',
+          currentOutboundQty: '源月出货计划',
+          currentTransferQty: '源月调拨计划',
+          transferPendingQty: '调拨备单（源量）',
+          transferShippedQty: '调拨在途（源量）',
+          safetyStockGapQty: '目标库存差异量',
+        })[field] ?? label,
+    ),
   );
 });
 test('dealer source values are displayed, including tag, specification, sales amount and normal inventory', () => {
@@ -75,5 +85,7 @@ test('the full APS dashboard is directly reachable and preserves its production 
   const s = await readFile('business/inventory-apsplan/source/app/workbench-app.tsx', 'utf8');
   assert.match(s, /aria-label="产销工作区"/);
   assert.match(s, />\s*产销协同看板\s*<\/button>/);
-  assert.match(s, /有效记录达成率/);
+  assert.match(s, /productionOutputObservation\(productionSection\.rows\)/);
+  assert.match(s, /value: formatNumber\(productionObservation\.value\)/);
+  assert.match(s, /status: '有效范围'/);
 });
