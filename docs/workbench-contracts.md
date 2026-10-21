@@ -59,6 +59,8 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 
 ## 设置中的接口日志
 
+`sales-plan` 的 `correctionAccess` 和 `correctionAdjustments` 保留为旧 Host 的兼容导出，函数行为沿固定已接收来源 `52337d4737f1f6405a6fe08e45bb4cea4134bcfb` 不变。当前页面仍沿既有共用审批流程，不调用兼容导出来恢复旧 UI；兼容导出不授予写权限，GEA 仍核身份、角色、快照与服务端契约。该兼容面避免无关页面因旧 Host 的命名导入在装载/编译阶段整体失败。
+
 `settings.section/gea-api-log` 复用 `LogPage` 与 `ApiLogCenter`，导航标签为 GEA 接口日志，位于插件管理之前。设置关闭动作由容器传入；原业务页的关闭仍返回业务工作台。同一身份投影控制是否挂载日志中心，切换账号或环境沿原 scope 重新挂载。进入页面不执行重发或清空，日志后端和业务授权继续归 GEA。
 
 配置化 HTML 在注入大体积 SQL JSON 前声明 UTF-8，确保无显式响应字符集的加载方式也能完整保留中文 SQL 文本、筛选值及枚举。配置仍在作者脚本前装载，保留 JSON 的 HTML 转义与原权限校验。
