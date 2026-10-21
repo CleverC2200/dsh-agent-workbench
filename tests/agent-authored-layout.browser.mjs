@@ -1351,3 +1351,90 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   ).toHaveValue('17');
   assert.deepEqual(errors, []);
 });
+
+test('FC list filters align compact white controls, retain actions and adapt to narrow panes', async (t) => {
+  const { page, frame, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  const toolbar = frame.locator('[data-business-filters="fc"]');
+  await expect(toolbar).toBeVisible();
+  for (const tab of ['补货确认', '分仓计划', '当前订单']) {
+    await frame.getByRole('button', { name: tab, exact: true }).first().click();
+    for (const width of [1280, 922, 768, 560, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await toolbar.evaluate((el) => {
+        const box = (node) => {
+          const r = node.getBoundingClientRect();
+          return {
+            left: r.left,
+            right: r.right,
+            height: r.height,
+            background: getComputedStyle(node).backgroundColor,
+          };
+        };
+        return {
+          controls: [
+            ...el.querySelectorAll(
+              ':scope > label > input:not([type="file"]), :scope > button, :scope > details > summary',
+            ),
+          ].map(box),
+          fields: [...el.querySelectorAll(':scope > label > input:not([type="file"])')].map(box),
+          toolbar: box(el),
+          scroll: document.documentElement.scrollWidth,
+        };
+      });
+      assert.ok(layout.scroll <= width + 2, `${tab}: horizontal overflow at ${width}`);
+      assert.ok(
+        layout.controls.every((control) => Math.abs(control.height - 36) <= 1),
+        `${tab}: unequal control heights at ${width}`,
+      );
+      assert.ok(
+        layout.controls.every((control) => control.left >= 0 && control.right <= width + 1),
+        `${tab}: filter/action clips at ${width}`,
+      );
+      assert.ok(
+        layout.fields.every((control) => control.background === 'rgb(255, 255, 255)'),
+        'inputs use a white surface',
+      );
+      if (width >= 768)
+        assert.ok(
+          layout.fields.every((control) => control.right - control.left <= 136),
+          'desktop fields remain compact',
+        );
+      const columns = toolbar.locator('summary[aria-label="列设置"]');
+      await columns.click();
+      const menu = await toolbar.locator('details > div').boundingBox();
+      assert.ok(
+        menu && menu.x >= 0 && menu.x + menu.width <= width + 1,
+        `column menu clips at ${width}`,
+      );
+      await columns.click();
+      if (process.env.AGENT_FILTER_EVIDENCE && tab === '补货确认') {
+        await mkdir(process.env.AGENT_FILTER_EVIDENCE, { recursive: true });
+        await toolbar.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: `${process.env.AGENT_FILTER_EVIDENCE}/fc-filters-${width}.png`,
+        });
+      }
+    }
+  }
+  await frame.getByRole('button', { name: '补货确认', exact: true }).click();
+  await expect(
+    frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
+  const before = calls.length;
+  await toolbar.getByRole('textbox', { name: '分仓编码', exact: true }).fill('001');
+  assert.equal(calls.length, before, 'typing does not query');
+  await toolbar.getByRole('button', { name: '查询', exact: true }).click();
+  await expect
+    .poll(() =>
+      calls.some(
+        (query) =>
+          query.queryId === 'replenishment.detail.atomic' &&
+          query.parameters.warehouse_code === '001',
+      ),
+    )
+    .toBe(true);
+  await expect(toolbar.getByRole('button', { name: '草稿（0）', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: '提交', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'CSV', exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});

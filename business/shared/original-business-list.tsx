@@ -129,14 +129,16 @@ export function OriginalBusinessList({
     <section className={css.list} aria-label={view.title} aria-busy={loading}>
       {(view.filters.length > 0 || fc) && (
         <LocalQueryForm
-          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar}`}
+          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : ''}`}
+          data-business-filters={fc ? 'fc' : undefined}
           onSubmit={submit}
         >
           {view.filters.map((f: any) => (
-            <label key={f.name}>
-              {f.label}
+            <label key={f.name} className={fc ? css.filterField : undefined}>
+              <span>{f.label}</span>
               <Input
                 aria-label={f.label}
+                placeholder={fc ? `请输入${f.label}` : undefined}
                 maxLength={100}
                 value={filters[f.name] ?? ''}
                 onChange={(value: string) => onFilter(f.name, value)}
@@ -145,10 +147,10 @@ export function OriginalBusinessList({
           ))}
           {view.filters.length > 0 && (
             <>
-              <Button htmlType="submit" size="small">
+              <Button htmlType="submit" size="small" variant={fc ? 'primary' : undefined}>
                 查询
               </Button>
-              <Button size="small" onClick={reset}>
+              <Button size="small" className={fc ? css.filterReset : undefined} onClick={reset}>
                 清空筛选
               </Button>
             </>
@@ -156,7 +158,7 @@ export function OriginalBusinessList({
           {toolbarActions}
           {fc && (
             <details className={css.columns}>
-              <summary>显示列（{columns.length}）</summary>
+              <summary aria-label="列设置">列设置（{columns.length}）</summary>
               <div>
                 {view.columns.map((c: any) => (
                   <label key={c.field}>
