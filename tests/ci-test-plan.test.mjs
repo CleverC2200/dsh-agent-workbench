@@ -78,9 +78,87 @@ function fixture(t, repo = 'dsh-agent-workbench') {
       base = commit(root);
       own.head = base;
     },
-    plan: (testOwners, options = {}) => selectCiTests({ repositories, repo: own.repo, base, testOwners, ...options }),
+    plan: (testOwners, options = {}) =>
+      selectCiTests({ repositories, repo: own.repo, base, testOwners, ...options }),
   };
 }
+
+test('local source plans combine committed, staged, unstaged and untracked inputs without changing frozen plans', (t) => {
+  const f = fixture(t);
+  for (const name of ['committed', 'staged', 'unstaged', 'untracked']) {
+    f.policy.rules.push({
+      pattern: `^scripts/${name}\\.mjs$`,
+      sourceTests: [`tests/${name}.test.mjs`],
+      tests: [`tests/${name}.test.mjs`],
+    });
+    f.put(f.root, `tests/${name}.test.mjs`, 'export const fixture = true;');
+    if (name !== 'untracked') f.put(f.root, `scripts/${name}.mjs`, 'export const value = 1;');
+  }
+  f.put(f.root, '.gitignore', '.runtime/\nnode_modules/\n');
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.checkpoint();
+  f.put(f.root, 'scripts/committed.mjs', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  f.put(f.root, 'scripts/staged.mjs', 'export const value = 2;');
+  execFileSync('git', ['-C', f.root, 'add', 'scripts/staged.mjs']);
+  f.put(f.root, 'scripts/unstaged.mjs', 'export const value = 2;');
+  f.put(f.root, 'scripts/untracked.mjs', 'export const value = 2;');
+  f.put(f.root, '.runtime/generated.mjs', 'ignored');
+  f.put(f.root, 'node_modules/generated.mjs', 'ignored');
+  const local = f.plan(undefined, { sourceOnly: true, workingTree: true });
+  assert.equal(local.workingTree, true);
+  assert.equal(local.head, f.repositories[0].head);
+  assert.deepEqual(local.files, [
+    'tests/committed.test.mjs',
+    'tests/staged.test.mjs',
+    'tests/unstaged.test.mjs',
+    'tests/untracked.test.mjs',
+  ]);
+  assert.deepEqual(
+    local.changes.map((change) => change.file),
+    [
+      'scripts/committed.mjs',
+      'scripts/staged.mjs',
+      'scripts/unstaged.mjs',
+      'scripts/untracked.mjs',
+    ],
+  );
+  const frozen = f.plan(undefined, { sourceOnly: true });
+  assert.equal(frozen.workingTree, undefined);
+  assert.deepEqual(frozen.files, ['tests/committed.test.mjs']);
+  assert.throws(() => f.plan(undefined, { workingTree: true }), /CI_TEST_WORKING_TREE_SOURCE_ONLY/);
+});
+
+test('local source plans preserve deleted and renamed source inputs and reject unknown dirty sources', (t) => {
+  const f = fixture(t);
+  f.put(f.root, 'scripts/old.mjs', 'export const value = 1;');
+  f.policy.rules.push({
+    pattern: '^scripts/(?:old|renamed)\\.mjs$',
+    tests: ['tests/affected.test.mjs'],
+  });
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.checkpoint();
+  rmSync(join(f.root, 'scripts/old.mjs'));
+  f.put(f.root, 'scripts/renamed.mjs', 'export const value = 1;');
+  const local = f.plan(undefined, { sourceOnly: true, workingTree: true });
+  assert.deepEqual(
+    local.changes.map((change) => change.file),
+    ['scripts/old.mjs', 'scripts/renamed.mjs'],
+  );
+  f.put(f.root, 'src/unowned.ts', 'export const value = 1;');
+  assert.throws(
+    () => f.plan(undefined, { sourceOnly: true, workingTree: true }),
+    /CI_TEST_IMPACT_UNMAPPED.*src\/unowned\.ts/,
+  );
+  rmSync(join(f.root, 'src/unowned.ts'));
+  f.put(f.root, 'src/unowned.ts', 'export const value = 1;');
+  f.checkpoint();
+  rmSync(join(f.root, 'src/unowned.ts'));
+  assert.throws(
+    () => f.plan(undefined, { sourceOnly: true, workingTree: true }),
+    /CI_TEST_IMPACT_UNMAPPED.*src\/unowned\.ts/,
+  );
+});
 
 test('ordinary documentation skips source tests without selecting the full pool', (t) => {
   const f = fixture(t);
@@ -1305,7 +1383,7 @@ test('adjacent SQL configs preserve dynamic page and computation consumers in th
   assert.ok(!plan.files.includes('tests/inventory-storage-build.test.mjs'));
 });
 
- test('source events select affected own consumers without required or changed peer suites', t => {
+test('source events select affected own consumers without required or changed peer suites', (t) => {
   const f = fixture(t);
   f.put(f.root, 'src/value.ts', 'export const value = 2;');
   f.repositories[0].head = f.commit(f.root);
@@ -1315,20 +1393,28 @@ test('adjacent SQL configs preserve dynamic page and computation consumers in th
   assert.deepEqual(plan.files, ['tests/affected.test.mjs']);
   assert.deepEqual(plan.required, []);
   assert.deepEqual(plan.changes, [{ repo: 'dsh-agent-workbench', file: 'src/value.ts' }]);
- });
- test('unknown source deletion blocks source-event checks before preparation', t => {
+});
+test('unknown source deletion blocks source-event checks before preparation', (t) => {
   const f = fixture(t);
   f.put(f.root, 'src/unknown.ts', 'export const unknown = 1;');
   f.checkpoint();
   unlinkSync(join(f.root, 'src/unknown.ts'));
   f.repositories[0].head = f.commit(f.root);
   assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_IMPACT_UNMAPPED/);
- });
+});
 
-test('source preparation follows selected package and SDK consumers', t => {
-  for (const [dependency, packages, sdk] of [['node:assert/strict', false, false], ['esbuild', true, false], ['@deepseek-ai/cordis', true, true]]) {
+test('source preparation follows selected package and SDK consumers', (t) => {
+  for (const [dependency, packages, sdk] of [
+    ['node:assert/strict', false, false],
+    ['esbuild', true, false],
+    ['@deepseek-ai/cordis', true, true],
+  ]) {
     const f = fixture(t);
-    f.put(f.root, 'tests/affected.test.mjs', `import '../src/consumer.js'; import '${dependency}';`);
+    f.put(
+      f.root,
+      'tests/affected.test.mjs',
+      `import '../src/consumer.js'; import '${dependency}';`,
+    );
     f.checkpoint();
     f.put(f.root, 'src/value.ts', 'export const value = 2;');
     f.repositories[0].head = f.commit(f.root);
@@ -1338,9 +1424,77 @@ test('source preparation follows selected package and SDK consumers', t => {
   }
 });
 
-test('source tool ownership uses existing selftests while joint checks retain capability rules', t => {
+test('real upstream imports and input paths require artifacts and cannot claim isolated source ownership', (t) => {
+  for (const dependency of [
+    'dsh-better-sidebar',
+    'dsh-better-sidebar/client',
+    '@changfenhuang/dsh-genui',
+    '@changfenhuang/dsh-genui/embed',
+    '../../upstream-inputs/genui/src/plugin/tool.ts',
+    '../node_modules/dsh-better-sidebar/src/agent-opens.ts',
+  ]) {
+    const f = fixture(t);
+    f.put(
+      f.root,
+      'tests/affected.test.mjs',
+      `import '../src/consumer.js'; import '${dependency}';`,
+    );
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly: true });
+    assert.equal(plan.upstreams, 'artifacts', dependency);
+    f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: true } };
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.repositories[0].head = f.commit(f.root);
+    assert.throws(
+      () => f.plan(undefined, { sourceOnly: true }),
+      /CI_TEST_SOURCE_FIXTURE_REJECTED/,
+      dependency,
+    );
+  }
+});
+
+test('only verified isolated source fixtures can use source links while ordinary consumers keep artifacts', (t) => {
   const f = fixture(t);
-  f.policy.rules.push({ pattern: '^scripts/tool\\.mjs$', tests: ['tests/affected.test.mjs'], sourceTests: ['tests/tool.test.mjs'] });
+  f.put(f.root, 'tests/affected.test.mjs', 'import "../src/consumer.js"; import "esbuild";');
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 2;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan(undefined, { sourceOnly: true }).upstreams, 'artifacts');
+  f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: true } };
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.checkpoint();
+  f.put(f.root, 'src/value.ts', 'export const value = 3;');
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan(undefined, { sourceOnly: true }).upstreams, 'source-links');
+  assert.equal(f.plan().upstreams, 'artifacts');
+});
+
+test('upstream consumers remain visible through helper imports and executed esbuild contents', (t) => {
+  for (const source of [
+    'import "../src/upstream.mjs";',
+    `import {build} from "esbuild"; await build({stdin:{contents:'import "../../upstream-inputs/genui/src/plugin/tool.ts";'}});`,
+  ]) {
+    const f = fixture(t);
+    f.put(f.root, 'src/upstream.mjs', 'import "dsh-better-sidebar/client";');
+    f.put(f.root, 'tests/affected.test.mjs', `import '../src/consumer.js'; ${source}`);
+    f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: true } };
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.checkpoint();
+    f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/);
+  }
+});
+
+test('source tool ownership uses existing selftests while joint checks retain capability rules', (t) => {
+  const f = fixture(t);
+  f.policy.rules.push({
+    pattern: '^scripts/tool\\.mjs$',
+    tests: ['tests/affected.test.mjs'],
+    sourceTests: ['tests/tool.test.mjs'],
+  });
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   f.put(f.root, 'scripts/tool.mjs', 'export const value = 1;');
   f.put(f.root, 'tests/tool.test.mjs', 'export const test = true;');
@@ -1351,11 +1505,15 @@ test('source tool ownership uses existing selftests while joint checks retain ca
   assert.deepEqual(f.plan().files, ['tests/affected.test.mjs', 'tests/required.test.mjs']);
 });
 
-test('source fixture ownership avoids preparing copied command targets and rejects direct SDK consumers', t => {
+test('source fixture ownership avoids preparing copied command targets and rejects direct SDK consumers', (t) => {
   const f = fixture(t);
   f.policy.sourceFixtures = { 'tests/affected.test.mjs': { dependencies: false } };
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
-  f.put(f.root, 'tests/affected.test.mjs', 'import "node:child_process"; import "../src/consumer.js"; execFileSync("node", ["scripts/command.mjs"]);');
+  f.put(
+    f.root,
+    'tests/affected.test.mjs',
+    'import "node:child_process"; import "../src/consumer.js"; execFileSync("node", ["scripts/command.mjs"]);',
+  );
   f.put(f.root, 'scripts/command.mjs', 'import "@playwright/test"; import "@deepseek-ai/cordis";');
   f.checkpoint();
   f.put(f.root, 'src/value.ts', 'export const value = 2;');
@@ -1364,16 +1522,33 @@ test('source fixture ownership avoids preparing copied command targets and rejec
   assert.equal(plan.browser, false);
   assert.equal(plan.sdk, false);
   assert.equal(plan.dependencies, false);
+  f.put(f.root, 'scripts/command.mjs', 'import "dsh-better-sidebar";');
+  f.repositories[0].head = f.commit(f.root);
+  assert.equal(f.plan(undefined, { sourceOnly: true }).upstreams, 'source-links');
+  f.put(f.root, 'scripts/command.mjs', 'import "@playwright/test"; import "@deepseek-ai/cordis";');
+  f.repositories[0].head = f.commit(f.root);
   for (const dependency of ['@deepseek-ai/cordis', 'esbuild', '@playwright/test']) {
-    f.put(f.root, 'tests/affected.test.mjs', `import '${dependency}'; import '../src/consumer.js';`);
+    f.put(
+      f.root,
+      'tests/affected.test.mjs',
+      `import '${dependency}'; import '../src/consumer.js';`,
+    );
     f.repositories[0].head = f.commit(f.root);
-    assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/, dependency);
+    assert.throws(
+      () => f.plan(undefined, { sourceOnly: true }),
+      /CI_TEST_SOURCE_FIXTURE_REJECTED/,
+      dependency,
+    );
   }
 });
 
-test('source selftests run themselves and explicit helper owners avoid old business suites', t => {
+test('source selftests run themselves and explicit helper owners avoid old business suites', (t) => {
   const f = fixture(t);
-  f.policy.rules.push({ pattern: '^tests/', tests: ['tests/required.test.mjs'], sourceTests: ['tests/tool.test.mjs'] });
+  f.policy.rules.push({
+    pattern: '^tests/',
+    tests: ['tests/required.test.mjs'],
+    sourceTests: ['tests/tool.test.mjs'],
+  });
   f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
   f.put(f.root, 'tests/tool.test.mjs', 'export const checked = 1;');
   f.put(f.root, 'tests/helper.ts', 'export const helper = 1;');
