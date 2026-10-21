@@ -8,7 +8,7 @@ import {
   symlinkSync,
   realpathSync,
 } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { selectCiTests } from './ci-test-plan.mjs';
@@ -303,8 +303,31 @@ export async function sourceChecks(result, phase) {
 export async function checkTypes(root, repositories, repo, changed = []) {
   const require = createRequire(resolve(root, 'package.json'));
   const ts = require('typescript');
-  const peerPaths = {};
+  const peerPaths = {},
+    sdkPaths = {};
+  const sdkRoot = resolve(root, '../../official-latest-standard');
   for (const peer of repositories) {
+    if (peer.repo !== repo) {
+      const config = resolve(
+        peer.path,
+        existsSync(resolve(peer.path, 'tsconfig.official-paths.json'))
+          ? 'tsconfig.official-paths.json'
+          : 'tsconfig.official.json',
+      );
+      if (existsSync(config)) {
+        const options = json(config).compilerOptions ?? {};
+        for (const [alias, paths] of Object.entries(options.paths ?? {})) {
+          if (alias.includes('*') || !paths.length) continue;
+          const absolute = paths.map((path) =>
+            resolve(dirname(config), options.baseUrl ?? '.', path),
+          );
+          if (
+            absolute.every((path) => path.startsWith(sdkRoot + sep) && /\.d\.[cm]?ts$/.test(path))
+          )
+            sdkPaths[alias] = absolute;
+        }
+      }
+    }
     const pkg = json(resolve(peer.path, 'package.json'));
     for (const [name, entry] of Object.entries(pkg.exports || {})) {
       const type = typeof entry === 'object' ? entry.types : null;
@@ -343,7 +366,7 @@ export async function checkTypes(root, repositories, repo, changed = []) {
       },
     );
     if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
-    parsed.options.paths = { ...parsed.options.paths, ...peerPaths };
+    parsed.options.paths = { ...sdkPaths, ...parsed.options.paths, ...peerPaths };
     parsed.options.rootDir = resolve(root, '../..');
     parsed.options.typeRoots = [resolve(root, 'node_modules/@types')];
     const ambient = repositories
