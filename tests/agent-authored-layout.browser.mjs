@@ -174,8 +174,21 @@ test('APS top month selector applies the original period and keeps its menu with
     box && box.x >= 0 && box.x + box.width <= 391,
     `APS date menu clipped: ${JSON.stringify(box)}`,
   );
+  assert.ok(box.width <= 264, 'period picker must stay compact');
+  const grid = await menu.locator('.date-picker-month').evaluate((el) => ({
+    columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+    children: [...el.children].map((child) => {
+      const r = child.getBoundingClientRect();
+      return { width: r.width, height: r.height };
+    }),
+  }));
+  assert.equal(grid.columns, 4);
+  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height <= 32));
   const before = calls.length;
-  await menu.locator('.date-picker-month').getByRole('button', { name: '9', exact: true }).click();
+  await menu
+    .locator('.date-picker-month')
+    .getByRole('button', { name: '9月', exact: true })
+    .click();
   await expect(picker).toContainText('2026年9月');
   await expect
     .poll(() =>
