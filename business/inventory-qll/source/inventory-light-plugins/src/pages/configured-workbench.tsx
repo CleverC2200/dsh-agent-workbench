@@ -187,6 +187,7 @@ export default function ConfiguredWorkbench() {
             </div>
             <section className={styles.aiInsight} aria-label="AI 洞察">
               <div className={styles.aiInsightHeading}>
+                <span className={styles.aiInsightIcon} aria-hidden="true" />
                 <strong>AI 洞察</strong>
                 <span className={styles.aiInsightBadge}>经营洞察</span>
               </div>
