@@ -69,12 +69,15 @@ export async function sourceChecks(result, phase) {
     selected.runtime ||
     selected.build ||
     selected.files.some((file) => Object.values(lanes).some((lane) => file in lane));
+  const staticChecks = joint ? [] : ['check:knowledge', 'lint', 'format:check'];
   const plan = {
     ...selected,
+    staticChecks,
     typecheck,
     dependencies:
       typecheck ||
       joint ||
+      staticChecks.some((check) => check !== 'check:knowledge') ||
       desktopTools ||
       selected.dependencies ||
       selected.files.some((file) => file.endsWith('.ts')),
@@ -100,6 +103,15 @@ export async function sourceChecks(result, phase) {
     if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
       throw Error('SOURCE_PEER_LINK_MISMATCH');
   }
+  const ownerCheck = (check) =>
+    run(
+      repo === 'dsh-agent-workbench' ? 'npm' : 'corepack',
+      repo === 'dsh-agent-workbench' ? ['run', check] : ['pnpm', 'run', check],
+      root,
+      { QUALITY_BASE_SHA: selected.diffBase, DSH_WORKBENCH_CHECKOUT: workbench },
+    );
+  if (phase === 'affected-check' && staticChecks.includes('check:knowledge'))
+    ownerCheck('check:knowledge');
   let coreHead;
   if (plan.sdk) {
     const { ciCores } = await import(pathToFileURL(resolve(gea, 'scripts/ci-core-policy.mjs')));
@@ -260,6 +272,8 @@ export async function sourceChecks(result, phase) {
     run(process.execPath, args, root, env);
     return;
   }
+  for (const check of staticChecks.filter((check) => check !== 'check:knowledge'))
+    ownerCheck(check);
   if (typecheck) await checkTypes(root, repositories, repo, result.files);
   if (plan.browser)
     run(
