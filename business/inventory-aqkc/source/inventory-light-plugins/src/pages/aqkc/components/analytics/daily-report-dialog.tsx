@@ -1,6 +1,5 @@
 'use client';
 import { QueryErrors } from '../../../../../../../../shared/query-errors';
-('use client');
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button, Checkbox, Input, Modal, Select, Spin } from '../../../../dsh-ui/controls';

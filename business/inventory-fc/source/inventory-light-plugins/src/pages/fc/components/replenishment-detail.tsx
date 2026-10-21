@@ -1,6 +1,5 @@
 'use client';
 import { QueryErrors } from '../../../../../../../shared/query-errors';
-('use client');
 import { useEffect, useState } from 'react';
 import type {
   BaseResource,
