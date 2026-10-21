@@ -1,28 +1,18 @@
 import { createPageViewState } from '../../business/shared/view-state.js';
+import { draft } from '../../business/shared/channel.js';
+import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
-import { publishReport } from './publication.js';
-
-const workbenchView = document.getElementById('workbenchView');
-const activePage = 'workbench';
 const pageTimeouts = new Set(),
   downloadUrls = new Set();
-function schedule(callback, delay) {
-  const handle = setTimeout(() => {
-    pageTimeouts.delete(handle);
-    callback();
-  }, delay);
-  pageTimeouts.add(handle);
-  return handle;
-}
+const workbenchView = document.getElementById('workbenchView');
+const activePage = 'workbench';
 let periodMode = 'month';
 let selectedMonth = '2026-09';
-let selectedWeek = '2026-09-14';
-let weekInitialized = false;
+let selectedWeek = '2026-08-31';
 let eventFilter = 'focus';
 let taskFilter = 'all';
-let dimensionTab = 'category-fill';
-let selectedWorkbenchBase = '';
+let dimensionTab = 'base-performance';
 let expandedSkuCategories = new Set();
 let expandedRegionChangeGroups = new Set();
 const createdWorkbenchTasks = new Map();
@@ -30,7 +20,114 @@ const improvementTasks = new Map();
 const dimensionIssueEdits = new Map();
 let editingWorkbenchTaskId = '';
 let pendingIssueEdit = null;
+let pendingWorkbenchUnmet = null;
 const workbenchLocalStateKey = 'order-workbench-improvements-v1';
+const workbenchSummaryStorageKey = 'order-workbench-summary-v1';
+const defaultWorkbenchSummary = {
+  positive:
+    '满足率 95.27%（目标>95%）本期达成，环比 +0.97pct、同比 +7.97pct；准交率 99.15% 持续高位（环比 +2.23pct），各基地准交率全面达标；60天+货龄占比 2.21% 较上期 -1.45pct 持续压降，汤圆环比 -3.87pct 改善明显。',
+  risk: '改单率 2.60% 未达目标（缺口 0.60pct），华东经销 3.41%、华南事业部 3.78%、餐饮雪套 5.25%、高势能渠道 21.4% 为拐点；可发货天数 14.5 天大幅超标（环比 +3.96 天、同比 +5.50 天），郑州 15.28、华南 13.20、西南 16.32、遂平 13.73 均超 11 天阈值，库存沉淀明显；面点 91.56%、预制食材 88.76% 为品项最弱两环。',
+  rhythm:
+    '本周满足率 96.17%（周环比 +1.63pct），较上期改善，这达标口径进一步扩大；西南本周 94.93%（周环比 +6.31pct）修复显著；华东本周 95.01%（周环比 +1.15pct）已步入目标线上方。',
+};
+let workbenchSummaryContent = { ...defaultWorkbenchSummary };
+let pendingWorkbenchSummaryTrigger = null;
+const workbenchUnmetEntriesKey = 'order-workbench-unmet-entries-v1';
+const workbenchDirectorNotesKey = 'order-workbench-director-notes-v1';
+let workbenchDirectorNotes = [];
+let pendingWorkbenchDirectorNote = null;
+const workbenchReferenceLinksKey = 'order-workbench-reference-links-v1';
+let workbenchReferenceLinks = [];
+let pendingWorkbenchReference = null;
+let addedWorkbenchUnmetEntries = [];
+const workbenchUnmetOverrides = new Map();
+const deletedWorkbenchUnmetKeys = new Set();
+let pendingWorkbenchUnmetDelete = null;
+try {
+  const savedSummary = JSON.parse(localStorage.getItem(workbenchSummaryStorageKey) || 'null');
+  if (savedSummary && typeof savedSummary === 'object')
+    workbenchSummaryContent = Object.fromEntries(
+      Object.keys(defaultWorkbenchSummary).map((key) => [
+        key,
+        typeof savedSummary[key] === 'string' ? savedSummary[key] : defaultWorkbenchSummary[key],
+      ]),
+    );
+} catch {}
+function saveWorkbenchSummary() {
+  try {
+    localStorage.setItem(workbenchSummaryStorageKey, JSON.stringify(workbenchSummaryContent));
+    return true;
+  } catch {
+    return false;
+  }
+}
+try {
+  const savedUnmetEntries = JSON.parse(localStorage.getItem(workbenchUnmetEntriesKey) || '[]');
+  if (Array.isArray(savedUnmetEntries)) addedWorkbenchUnmetEntries = savedUnmetEntries;
+  else if (savedUnmetEntries && typeof savedUnmetEntries === 'object') {
+    addedWorkbenchUnmetEntries = Array.isArray(savedUnmetEntries.entries)
+      ? savedUnmetEntries.entries
+      : [];
+    (savedUnmetEntries.overrides || []).forEach(([key, value]) =>
+      workbenchUnmetOverrides.set(key, value),
+    );
+    (savedUnmetEntries.deleted || []).forEach((key) => deletedWorkbenchUnmetKeys.add(key));
+  }
+} catch {}
+try {
+  const savedDirectorNotes = JSON.parse(localStorage.getItem(workbenchDirectorNotesKey) || '[]');
+  if (Array.isArray(savedDirectorNotes))
+    workbenchDirectorNotes = savedDirectorNotes.filter(
+      (note) =>
+        note &&
+        typeof note.id === 'string' &&
+        typeof note.director === 'string' &&
+        typeof note.title === 'string' &&
+        typeof note.content === 'string',
+    );
+} catch {}
+function saveWorkbenchDirectorNotes() {
+  try {
+    localStorage.setItem(workbenchDirectorNotesKey, JSON.stringify(workbenchDirectorNotes));
+    return true;
+  } catch {
+    return false;
+  }
+}
+try {
+  const savedReferenceLinks = JSON.parse(localStorage.getItem(workbenchReferenceLinksKey) || '[]');
+  if (Array.isArray(savedReferenceLinks))
+    workbenchReferenceLinks = savedReferenceLinks.filter(
+      (link) =>
+        link &&
+        typeof link.id === 'string' &&
+        typeof link.name === 'string' &&
+        typeof link.url === 'string',
+    );
+} catch {}
+function saveWorkbenchReferenceLinks() {
+  try {
+    localStorage.setItem(workbenchReferenceLinksKey, JSON.stringify(workbenchReferenceLinks));
+    return true;
+  } catch {
+    return false;
+  }
+}
+function saveWorkbenchUnmetState() {
+  try {
+    localStorage.setItem(
+      workbenchUnmetEntriesKey,
+      JSON.stringify({
+        entries: addedWorkbenchUnmetEntries,
+        overrides: [...workbenchUnmetOverrides.entries()],
+        deleted: [...deletedWorkbenchUnmetKeys],
+      }),
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
 try {
   const savedWorkbenchState = JSON.parse(localStorage.getItem(workbenchLocalStateKey) || '{}');
   (savedWorkbenchState.tasks || []).forEach((task) => improvementTasks.set(task.key, task.value));
@@ -65,8 +162,8 @@ const metricDefinitions = [
     same: '同期 11.37%',
     sameChange: '↓ -9.33pp',
     sameTone: 'good',
-    target: '≤6%',
-    targetLabel: '健康 ≤ 6%',
+    target: '<6%',
+    targetLabel: '健康 < 6%',
     gap: '低于上限 3.95pp',
     gapTone: 'good',
     trend: '较上期 -3.55pp',
@@ -88,8 +185,8 @@ const metricDefinitions = [
     same: '同期 —',
     sameChange: '—',
     sameTone: '',
-    target: '≤2%',
-    targetLabel: '健康 ≤ 2%',
+    target: '<2%',
+    targetLabel: '健康 < 2%',
     gap: '高于上限 0.20pp',
     gapTone: 'bad',
     trend: '较上期 -0.85pp',
@@ -273,9 +370,9 @@ const reportEvents = [
     focus: true,
     kind: '关注',
     title: '改单率仍高于目标',
-    summary: '整体 2.20%，目标 ≤2%；高势能渠道销售改单率 27.55% 属明显异常。',
+    summary: '整体 2.20%，目标 <2%；高势能渠道销售改单率 27.55% 属明显异常。',
     evidence:
-      '核心 KPI 报告：改单率由 3.05% 降至 2.20%，但未达 ≤2% 目标；大区/省区报告列出高势能渠道销售 27.55%。',
+      '核心 KPI 报告：改单率由 3.05% 降至 2.20%，但未达 <2% 目标；大区/省区报告列出高势能渠道销售 27.55%。',
     action: '先核对渠道口径及改单原因，再分渠道复盘锁单与需求变更流程。',
   },
   {
@@ -360,7 +457,6 @@ const reportTasks = [
     detail: '区分前置备货与实际动销，提出库存结构和去化建议。',
   },
 ];
-// 周报的“本周”列独立展示；不将“本期（9.1–9.6）”累计值误作周度值。
 const weeklyMetricDefinitions = [
   {
     key: '作废率',
@@ -375,8 +471,8 @@ const weeklyMetricDefinitions = [
     same: '同期 8.80%',
     sameChange: '↓ -7.19pp',
     sameTone: 'good',
-    target: '≤6%',
-    targetLabel: '健康 ≤ 6%',
+    target: '<6%',
+    targetLabel: '健康 < 6%',
     gap: '低于上限 4.39pp',
     gapTone: 'good',
     trend: '周环比 -1.69pp',
@@ -398,15 +494,15 @@ const weeklyMetricDefinitions = [
     same: '同期 —',
     sameChange: '—',
     sameTone: '',
-    target: '≤2%',
-    targetLabel: '健康 ≤ 2%',
-    gap: '位于目标上限',
-    gapTone: 'good',
+    target: '<2%',
+    targetLabel: '健康 < 2%',
+    gap: '达到目标边界，未满足严格小于目标',
+    gapTone: 'bad',
     trend: '周环比 +0.02pp',
-    status: '达标',
-    tone: '',
+    status: '未达标',
+    tone: 'urgent',
     formula: '周内改单量 ÷ 同周有效投单量 × 100%',
-    note: '本周 2.00%，恰在目标上限；上周 1.97%。周报本期累计值 2.02%，状态为基本达标，两个口径不可混用。',
+    note: '本周 2.00%，达到目标边界但不满足严格小于 2%；上周 1.97%。周报本期累计值 2.02%，两个口径不可混用。',
   },
   {
     key: '订单满足率',
@@ -1046,6 +1142,725 @@ const workbenchDimensions = {
     },
   },
 };
+const performanceValue = (text, state = '') => ({ text, state });
+const workbenchPerformance = {
+  'base-performance': {
+    title: '基地维度达成分析',
+    baseColumnIndex: 0,
+    summary:
+      '月度满足率合计 95.3%、准交率 99.1%；郑州、遂平、华南和西南可发货天数高于基地 11 天参考线，华东为 8.2 天。周度满足率合计 96.2%，可发货天数合计 14.5 天。',
+    monthly: {
+      title: '基地月度达成（本期 / 环比 / 同比）',
+      groups: [
+        { label: '基地', rowspan: true },
+        { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
+        { label: '准交率 >98.5%', columns: ['本期', '环比'] },
+        { label: '60天+占比', columns: ['本期', '环比'] },
+        { label: '可发货天数 <（全国+郑州12.5天，基地11天）', columns: ['本期', '环比', '同比'] },
+      ],
+      rows: [
+        [
+          '郑州',
+          performanceValue('95.5%', 'good'),
+          '+0.02pct',
+          '+8.73pct',
+          performanceValue('98.8%', 'good'),
+          '+1.30pct',
+          performanceValue('3.3%', 'warning'),
+          '-1.71pct',
+          performanceValue('15.3', 'bad'),
+          '+4.70天',
+          '+5.92天',
+        ],
+        [
+          '遂平',
+          performanceValue('95.5%', 'good'),
+          '+0.46pct',
+          '+8.72pct',
+          performanceValue('99.1%', 'good'),
+          '+2.27pct',
+          performanceValue('1.7%', 'good'),
+          '-2.08pct',
+          performanceValue('13.7', 'bad'),
+          '+2.67天',
+          '+5.93天',
+        ],
+        [
+          '华东',
+          performanceValue('94.2%', 'bad'),
+          '-1.39pct',
+          '+4.22pct',
+          performanceValue('100.0%', 'good'),
+          '+0.00pct',
+          performanceValue('0.2%', 'good'),
+          '-3.66pct',
+          performanceValue('8.2', 'good'),
+          '-4.33天',
+          '+2.40天',
+        ],
+        [
+          '华南',
+          performanceValue('97.0%', 'good'),
+          '+1.06pct',
+          '+4.16pct',
+          performanceValue('98.8%', 'good'),
+          '-1.18pct',
+          performanceValue('1.8%', 'good'),
+          '-0.05pct',
+          performanceValue('13.2', 'bad'),
+          '+2.69天',
+          '+3.63天',
+        ],
+        [
+          '西南',
+          performanceValue('93.6%', 'bad'),
+          '+4.66pct',
+          '+7.60pct',
+          performanceValue('99.9%', 'good'),
+          '+6.71pct',
+          performanceValue('1.1%', 'good'),
+          '-0.06pct',
+          performanceValue('16.3', 'bad'),
+          '+7.16天',
+          '+5.33天',
+        ],
+        [
+          '合计',
+          performanceValue('95.3%', 'good'),
+          '+0.97pct',
+          '+7.97pct',
+          performanceValue('99.1%', 'good'),
+          '+2.23pct',
+          performanceValue('2.2%', 'good'),
+          '-1.45pct',
+          performanceValue('14.5', 'bad'),
+          '+3.96天',
+          '+5.50天',
+        ],
+      ],
+    },
+    weekly: {
+      title: '基地周度达成（本周 / 周环比 / 周同比）',
+      groups: [
+        { label: '基地', rowspan: true },
+        { label: '满足率', columns: ['本周', '周环比', '周同比'] },
+        { label: '准交率', columns: ['本周', '周环比'] },
+        { label: '60天+占比', columns: ['本周', '周环比'] },
+        { label: '可发货天数', columns: ['本周', '周环比'] },
+      ],
+      rows: [
+        [
+          '郑州',
+          performanceValue('95.7%', 'good'),
+          '+0.00pct',
+          '+9.63pct',
+          performanceValue('99.3%', 'good'),
+          '-0.05pct',
+          performanceValue('3.3%', 'warning'),
+          '-0.16pct',
+          performanceValue('15.3', 'bad'),
+          '+1.79天',
+        ],
+        [
+          '遂平',
+          performanceValue('96.5%', 'good'),
+          '+1.88pct',
+          '+9.33pct',
+          performanceValue('99.8%', 'good'),
+          '+0.48pct',
+          performanceValue('1.7%', 'good'),
+          '-0.12pct',
+          performanceValue('13.7', 'bad'),
+          '+1.51天',
+        ],
+        [
+          '华东',
+          performanceValue('96.4%', 'good'),
+          '+2.78pct',
+          '+6.74pct',
+          performanceValue('100.0%', 'good'),
+          '+0.00pct',
+          performanceValue('0.2%', 'good'),
+          '-1.31pct',
+          performanceValue('8.2', 'good'),
+          '+0.52天',
+        ],
+        [
+          '华南',
+          performanceValue('96.6%', 'good'),
+          '-0.24pct',
+          '+3.72pct',
+          performanceValue('100.0%', 'good'),
+          '+0.57pct',
+          performanceValue('1.8%', 'good'),
+          '+0.12pct',
+          performanceValue('13.2', 'bad'),
+          '+1.65天',
+        ],
+        [
+          '西南',
+          performanceValue('96.9%', 'good'),
+          '+7.64pct',
+          '+9.21pct',
+          performanceValue('99.7%', 'good'),
+          '-0.26pct',
+          performanceValue('1.1%', 'good'),
+          '+0.08pct',
+          performanceValue('16.3', 'bad'),
+          '+2.25天',
+        ],
+        [
+          '合计',
+          performanceValue('96.2%', 'good'),
+          '+1.63pct',
+          '+8.82pct',
+          performanceValue('99.6%', 'good'),
+          '+0.12pct',
+          performanceValue('2.2%', 'good'),
+          '-0.13pct',
+          performanceValue('14.5', 'bad'),
+          '+1.67天',
+        ],
+      ],
+    },
+  },
+  'director-performance': {
+    title: '应责总监维度达成分析',
+    baseColumnIndex: 1,
+    summary:
+      '月度全国满足率 95.3%、准交率 99.1%；刘威胜满足率 92.5%，郑州三位总监可发货天数均高于 12.5 天参考线。周度全国满足率 96.2%，各总监数据按对应基地展开。',
+    monthly: {
+      title: '应责总监月度达成',
+      groups: [
+        { label: '应责总监', rowspan: true },
+        { label: '对应基地', rowspan: true },
+        { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
+        { label: '准交率 >98.5%', columns: ['本期', '环比'] },
+        { label: '60天+占比', columns: ['本期', '环比'] },
+        { label: '可发货天数', columns: ['本期', '环比', '同比'] },
+      ],
+      rows: [
+        [
+          '庞丽娟',
+          '郑州',
+          performanceValue('96.7%', 'good'),
+          '+8.32pct',
+          '+10.75pct',
+          performanceValue('98.8%', 'good'),
+          '+1.30pct',
+          performanceValue('3.8%', 'warning'),
+          '-3.33pct',
+          performanceValue('14.5', 'bad'),
+          '+5.14天',
+          '+5.79天',
+        ],
+        [
+          '张培',
+          '郑州',
+          performanceValue('96.7%', 'good'),
+          '+9.44pct',
+          '+8.96pct',
+          '—',
+          '—',
+          performanceValue('2.1%', 'good'),
+          '-1.89pct',
+          performanceValue('15.4', 'bad'),
+          '+3.75天',
+          '+6.73天',
+        ],
+        [
+          '刘威胜',
+          '郑州',
+          performanceValue('92.5%', 'bad'),
+          '-2.71pct',
+          '+1.66pct',
+          '—',
+          '—',
+          performanceValue('2.4%', 'good'),
+          '+1.77pct',
+          performanceValue('18.4', 'bad'),
+          '+2.25天',
+          '+4.43天',
+        ],
+        [
+          '殷科培',
+          '遂平',
+          performanceValue('95.5%', 'good'),
+          '+2.31pct',
+          '+8.72pct',
+          performanceValue('99.1%', 'good'),
+          '+2.27pct',
+          performanceValue('1.7%', 'good'),
+          '-2.08pct',
+          performanceValue('13.7', 'bad'),
+          '+2.67天',
+          '+5.93天',
+        ],
+        [
+          '姚小伟',
+          '华东',
+          performanceValue('94.2%', 'bad'),
+          '+2.47pct',
+          '+4.22pct',
+          performanceValue('100.0%', 'good'),
+          '+0.00pct',
+          performanceValue('0.2%', 'good'),
+          '-3.66pct',
+          performanceValue('8.2', 'good'),
+          '-4.33天',
+          '+2.40天',
+        ],
+        [
+          '赵曼威',
+          '华南',
+          performanceValue('97.0%', 'good'),
+          '+2.39pct',
+          '+4.16pct',
+          performanceValue('98.8%', 'good'),
+          '-1.18pct',
+          performanceValue('1.8%', 'good'),
+          '-0.05pct',
+          performanceValue('13.2', 'bad'),
+          '+2.69天',
+          '+3.63天',
+        ],
+        [
+          '甘建勇',
+          '西南',
+          performanceValue('93.6%', 'bad'),
+          '+5.14pct',
+          '+7.60pct',
+          performanceValue('99.9%', 'good'),
+          '+6.71pct',
+          performanceValue('1.1%', 'good'),
+          '-0.06pct',
+          performanceValue('16.3', 'bad'),
+          '+7.16天',
+          '+5.33天',
+        ],
+        [
+          '全国合计',
+          '—',
+          performanceValue('95.3%', 'good'),
+          '+0.97pct',
+          '+7.97pct',
+          performanceValue('99.1%', 'good'),
+          '+2.23pct',
+          performanceValue('2.2%', 'good'),
+          '-1.45pct',
+          performanceValue('14.5', 'bad'),
+          '+3.96天',
+          '+5.50天',
+        ],
+      ],
+    },
+    weekly: {
+      title: '应责总监周度达成',
+      groups: [
+        { label: '应责总监', rowspan: true },
+        { label: '对应基地', rowspan: true },
+        { label: '满足率', columns: ['本周', '周环比', '周同比'] },
+        { label: '准交率', columns: ['本周', '周环比'] },
+        { label: '60天+占比', columns: ['本周', '周环比'] },
+        { label: '可发货天数', columns: ['本周', '周环比'] },
+      ],
+      rows: [
+        [
+          '庞丽娟',
+          '郑州',
+          performanceValue('97.1%', 'good'),
+          '+0.59pct',
+          '+11.65pct',
+          performanceValue('99.3%', 'good'),
+          '-0.05pct',
+          performanceValue('3.8%', 'warning'),
+          '-0.48pct',
+          performanceValue('14.5', 'bad'),
+          '+1.82天',
+        ],
+        [
+          '张培',
+          '郑州',
+          performanceValue('96.8%', 'good'),
+          '-0.36pct',
+          '+10.88pct',
+          '—',
+          '—',
+          performanceValue('2.1%', 'good'),
+          '-0.17pct',
+          performanceValue('15.4', 'bad'),
+          '+2.64天',
+        ],
+        [
+          '刘威胜',
+          '郑州',
+          performanceValue('91.3%', 'bad'),
+          '-2.40pct',
+          '+2.07pct',
+          '—',
+          '—',
+          performanceValue('2.4%', 'good'),
+          '+0.77pct',
+          performanceValue('18.4', 'bad'),
+          '+1.42天',
+        ],
+        [
+          '殷科培',
+          '遂平',
+          performanceValue('96.5%', 'good'),
+          '+1.88pct',
+          '+9.33pct',
+          performanceValue('99.8%', 'good'),
+          '+0.48pct',
+          performanceValue('1.7%', 'good'),
+          '-0.12pct',
+          performanceValue('13.7', 'bad'),
+          '+1.51天',
+        ],
+        [
+          '姚小伟',
+          '华东',
+          performanceValue('96.4%', 'good'),
+          '+2.78pct',
+          '+6.74pct',
+          performanceValue('100.0%', 'good'),
+          '+0.00pct',
+          performanceValue('0.2%', 'good'),
+          '-1.31pct',
+          performanceValue('8.2', 'good'),
+          '+0.52天',
+        ],
+        [
+          '赵曼威',
+          '华南',
+          performanceValue('96.6%', 'good'),
+          '-0.24pct',
+          '+3.72pct',
+          performanceValue('100.0%', 'good'),
+          '+0.57pct',
+          performanceValue('1.8%', 'good'),
+          '+0.12pct',
+          performanceValue('13.2', 'bad'),
+          '+1.65天',
+        ],
+        [
+          '甘建勇',
+          '西南',
+          performanceValue('96.9%', 'good'),
+          '+7.64pct',
+          '+9.21pct',
+          performanceValue('99.7%', 'good'),
+          '-0.26pct',
+          performanceValue('1.1%', 'good'),
+          '+0.08pct',
+          performanceValue('16.3', 'bad'),
+          '+2.25天',
+        ],
+        [
+          '全国合计',
+          '—',
+          performanceValue('96.2%', 'good'),
+          '+1.63pct',
+          '+8.82pct',
+          performanceValue('99.6%', 'good'),
+          '+0.12pct',
+          performanceValue('2.2%', 'good'),
+          '-0.13pct',
+          performanceValue('14.5', 'bad'),
+          '+1.67天',
+        ],
+      ],
+    },
+  },
+  'item-performance': {
+    title: '品项维度达成分析',
+    summary:
+      '月度 7 个常规品项中，火锅料、馄饨、面点和预制食材满足率未达 95%；汤圆、水饺、休闲等多个品项可发货天数超过参考线。粽子为季节性库存，报告显示可发货天数为∞。',
+    monthly: {
+      title: '品项月度达成',
+      groups: [
+        { label: '品项', rowspan: true },
+        { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
+        { label: '可发货天数', columns: ['本期', '环比', '同比'] },
+        { label: '60天+占比', columns: ['本期', '环比', '同比'] },
+        { label: '未达成项', rowspan: true },
+      ],
+      rows: [
+        [
+          '汤圆',
+          performanceValue('97.2%', 'good'),
+          '+0.28pct',
+          '+7.94pct',
+          performanceValue('19.0', 'bad'),
+          '+3.59天',
+          '+8.09天',
+          performanceValue('3.3%', 'warning'),
+          '-3.87pct',
+          '+3.26pct',
+          '可发货天数 19.0',
+        ],
+        [
+          '水饺',
+          performanceValue('97.2%', 'good'),
+          '+3.48pct',
+          '+7.47pct',
+          performanceValue('15.6', 'bad'),
+          '+5.11天',
+          '+5.10天',
+          performanceValue('1.0%', 'good'),
+          '-0.54pct',
+          '-0.76pct',
+          '可发货天数 15.6',
+        ],
+        [
+          '休闲',
+          performanceValue('97.0%', 'good'),
+          '+1.98pct',
+          '+9.77pct',
+          performanceValue('17.3', 'bad'),
+          '+5.70天',
+          '+7.46天',
+          performanceValue('0.6%', 'good'),
+          '-0.75pct',
+          '-0.85pct',
+          '可发货天数 17.3',
+        ],
+        [
+          '火锅料',
+          performanceValue('93.0%', 'bad'),
+          '-2.38pct',
+          '+3.58pct',
+          performanceValue('22.4', 'bad'),
+          '+2.17天',
+          '+8.39天',
+          performanceValue('2.4%', 'good'),
+          '+1.54pct',
+          '+0.07pct',
+          '满足率 93.0%、可发货天数 22.4',
+        ],
+        [
+          '馄饨',
+          performanceValue('94.0%', 'bad'),
+          '+0.44pct',
+          '-0.06pct',
+          performanceValue('13.6', 'bad'),
+          '+5.53天',
+          '+3.83天',
+          performanceValue('0.5%', 'good'),
+          '-4.71pct',
+          '-4.43pct',
+          '满足率 94.0%、可发货天数 13.6',
+        ],
+        [
+          '面点',
+          performanceValue('91.6%', 'bad'),
+          '-1.98pct',
+          '+26.27pct',
+          performanceValue('11.7', 'good'),
+          '+0.49天',
+          '+3.52天',
+          performanceValue('2.3%', 'good'),
+          '-1.48pct',
+          '+2.07pct',
+          '满足率 91.6%',
+        ],
+        [
+          '预制食材',
+          performanceValue('88.8%', 'bad'),
+          '+0.30pct',
+          '-0.17pct',
+          performanceValue('11.2', 'good'),
+          '+1.96天',
+          '-0.52天',
+          performanceValue('1.5%', 'good'),
+          '-0.28pct',
+          '+0.89pct',
+          '满足率 88.8%',
+        ],
+        [
+          '粽子',
+          performanceValue('100.0%', 'good'),
+          '—',
+          '—',
+          performanceValue('∞', 'bad'),
+          '—',
+          '—',
+          performanceValue('100.0%', 'bad'),
+          '+0.00pct',
+          '—',
+          '可发货天数 ∞、60天+占比 100%',
+        ],
+      ],
+    },
+    weekly: {
+      title: '品项周度达成',
+      groups: [
+        { label: '品项', rowspan: true },
+        { label: '满足率', columns: ['本周', '周环比', '周同比'] },
+        { label: '可发货天数', columns: ['本周', '周环比'] },
+        { label: '60天+占比', columns: ['本周', '周环比'] },
+      ],
+      rows: [
+        [
+          '汤圆',
+          performanceValue('98.1%', 'good'),
+          '+1.94pct',
+          '+8.45pct',
+          performanceValue('19.0', 'bad'),
+          '+2.92天',
+          performanceValue('3.3%', 'warning'),
+          '-1.01pct',
+        ],
+        [
+          '水饺',
+          performanceValue('98.1%', 'good'),
+          '+1.72pct',
+          '+8.46pct',
+          performanceValue('15.6', 'bad'),
+          '+1.24天',
+          performanceValue('1.0%', 'good'),
+          '+0.16pct',
+        ],
+        [
+          '休闲',
+          performanceValue('98.4%', 'good'),
+          '+1.92pct',
+          '+10.18pct',
+          performanceValue('17.3', 'bad'),
+          '+2.60天',
+          performanceValue('0.6%', 'good'),
+          '+0.13pct',
+        ],
+        [
+          '火锅料',
+          performanceValue('93.1%', 'bad'),
+          '+0.14pct',
+          '+4.83pct',
+          performanceValue('22.4', 'bad'),
+          '+3.16天',
+          performanceValue('2.4%', 'good'),
+          '+0.64pct',
+        ],
+        [
+          '馄饨',
+          performanceValue('95.4%', 'good'),
+          '+3.18pct',
+          '+2.04pct',
+          performanceValue('13.6', 'bad'),
+          '+2.78天',
+          performanceValue('0.5%', 'good'),
+          '+0.01pct',
+        ],
+        [
+          '面点',
+          performanceValue('92.4%', 'bad'),
+          '+1.11pct',
+          '+27.93pct',
+          performanceValue('11.7', 'good'),
+          '+0.81天',
+          performanceValue('2.3%', 'good'),
+          '+0.05pct',
+        ],
+        [
+          '预制食材',
+          performanceValue('87.7%', 'bad'),
+          '-2.75pct',
+          '-0.98pct',
+          performanceValue('11.2', 'good'),
+          '+0.03天',
+          performanceValue('1.5%', 'good'),
+          '-0.05pct',
+        ],
+        [
+          '粽子',
+          performanceValue('100.0%', 'good'),
+          '—',
+          '—',
+          performanceValue('∞', 'bad'),
+          '—',
+          performanceValue('100.0%', 'bad'),
+          '+0.00pct',
+        ],
+        [
+          '合计',
+          performanceValue('96.2%', 'good'),
+          '+1.63pct',
+          '+8.82pct',
+          performanceValue('14.5', 'bad'),
+          '+1.67天',
+          performanceValue('2.2%', 'good'),
+          '-0.13pct',
+        ],
+      ],
+    },
+  },
+};
+const workbenchBaseUnmetItems = [
+  {
+    title: '西南基地｜满足率 93.62%（未达标）+ 可发货天数 16.3天（超标 5.3天）',
+    analysis:
+      '满足率 93.62%（环比 +3.93pct，仍低于 95%）；可发货天数 16.32天（环比 +2.25天，超阈值 5.32天，全国最高）。',
+    reasons: [
+      '1–4号发货量均为 9 月底备单，订单率在 85% 左右，拉低满足率；鸡肉制品、面点类缺货。',
+      '10 月初版计划 200 万件，产品组又追加 18 万件汤圆；截至 10 月 19 日整体下单进度 52%，实际发货进度只有 36%。因发货进度偏低，需按周对接各省区确认需求。',
+    ],
+    measures: [
+      '自产品跟进尽快投产',
+      '鸡肉制品结合排产进行调拨',
+      '19 日川南省区调减 15 万件，生产对应做紧急调整',
+      '过程多频次联动各省区确认需求，及时获取信息并调整',
+    ],
+  },
+  {
+    title: '华东基地｜满足率 94.16%（未达标，差距收敛）',
+    analysis:
+      '满足率 94.16%（环比 +1.72pct，距目标 95% 差距 0.84pct）；可发货天数 8.19天（最优，达标）。',
+    reasons: [
+      '订单满足率 94.16%：聚焦水饺 92.15%、预制食材 80.15%、火锅料 89.59%。',
+      '水饺缺货集中在盒马水饺，缺货 6,283 件；9 月底至 10 月上旬盒马水饺持续缺货。',
+      '预制食材聚焦炖馍 640 件（国庆期间调拨物流 4 号发运，造成直营缺货）、金牌鸡肉小食 763 件、BP 饭团 385 件；过程中调拨货挂单等待。',
+      '火锅料：0 系列丸子 1 千件调拨缺货及计划需求偏差；牛羊肉卷 325 件调拨缺货；400g/500g 真空丸子 400 件因计划需求偏差过大造成缺货。',
+    ],
+    measures: [
+      '盒马水饺已部分缓解',
+      '预制食材有所缓解，但过程中仍有单品缺货',
+      '0 系列丸子和牛羊肉卷对接直属部，部分缓解',
+      '持续对接销售计划预测并调整计划需求偏差，监控发货进度',
+      '缺货品前置下单等待',
+    ],
+  },
+];
+const workbenchItemUnmetItems = [
+  {
+    title: '预制食材｜满足率 88.76%（品项最低，缺口 6.24pct）',
+    reasons: [
+      '鸡调品缺货（鸡米花 / 雪花鸡柳 / 川香鸡柳）：10 月 1–18 日缺货 19,668 件，占预制食材缺货 70%；ODM 代工产能约束与订单超前是双重因素。',
+      '饭团 / 糯米鸡缺货：10 月 1–18 日缺货 4,773 件，占 18%；ODM 代工产能约束，因工人问题稻圣产能仅为原产能 50%。',
+      '调拨原因缺货：2,200 件，占 9%。',
+    ],
+    measures: [
+      '挖掘现有产能，已锁定代工厂全月产能并每日跟踪日产达成；鸡米花实陈生产 1–18 日累计欠产 11,500 件',
+      'ODM 管理正在推动新的代工资源补充产能',
+      '泰正已增加第三条产线',
+      '长期规划：ODM 管理推动新代工资源、储备备选工厂；月销量按代工厂产能 85% 下达，避免超能力接单；新品先备安全库存再开放下单权限',
+    ],
+  },
+  {
+    title: '面点｜满足率 91.56%（缺口 3.44pct，仍未修复）',
+    reasons: [
+      '主要集中在散装圆包 0.7 万件、寿桃包 0.6 万件、卡通包 0.25 万件、大师圆包 0.22 万件。',
+      '散装圆包：郑州基地 0.4 万件，外协厂未达到规划日产目标，生产进度滞后（截至 18 日 47%，落后 10%）；遂平基地 0.22 万件未达规划日产。',
+      '寿桃包：订单前置，当前订单纠偏报单进度 92%，规划本月底下市，可满足目前系统缺货订单。',
+      '卡通包：湖州基地未达到规划日产，缺货预计 25 号可满足。',
+      '60 天以上库存：510 圆包（遂平基地）7 月份日期产品质量问题封存，已对接遂平基地核实转中试产品。',
+    ],
+    measures: [
+      '寿桃包 / 切黄包 10 月底消化完',
+      '单品已打标签控制下单',
+      '长期规划：卡通包等下市品项 10 月底清零；面点封存策略与周转平衡评估',
+    ],
+  },
+];
 const workbenchSkuExamples = {
   汤圆: [
     {
@@ -1215,7 +2030,6 @@ function currentCreatedTasks() {
     .map(([, task]) => task);
   return [...reportTasks, ...scopedImprovements];
 }
-
 function parseIsoDate(iso) {
   const [year, month, day] = iso.split('-').map(Number);
   return new Date(year, month - 1, day);
@@ -1241,19 +2055,66 @@ function weeksInMonth(month) {
     weeks.push({ start, end: addDays(start, 6) });
   return weeks;
 }
-function syncWeekOptions() {
-  const select = document.getElementById('periodWeek');
-  const weeks = weeksInMonth(selectedMonth);
-  if (!weeks.some((week) => week.start === selectedWeek)) selectedWeek = weeks[0].start;
-  select.replaceChildren(
-    ...weeks.map((week, index) => {
-      const option = document.createElement('option');
-      option.value = week.start;
-      option.textContent = `第 ${index + 1} 周 · ${week.start} 至 ${week.end}`;
-      return option;
+function formatMonthName(month) {
+  const [year, number] = month.split('-').map(Number);
+  return `${year}年${number}月`;
+}
+function formatMonthDay(iso) {
+  return iso.slice(5).replace('-', '');
+}
+function renderPeriodPicker() {
+  const monthList = document.getElementById('periodPickerMonths');
+  const weekList = document.getElementById('periodPickerWeeks');
+  const monthDate = parseIsoDate(`${selectedMonth}-01`);
+  const months = Array.from({ length: 3 }, (_, index) => {
+    const date = new Date(monthDate.getFullYear(), monthDate.getMonth() - index, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  });
+  monthList.replaceChildren(
+    ...months.map((month) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'period-picker-option';
+      button.dataset.periodMonth = month;
+      button.setAttribute('aria-pressed', String(month === selectedMonth));
+      button.textContent = formatMonthName(month);
+      return button;
     }),
   );
-  select.value = selectedWeek;
+  const allButton = document.createElement('button');
+  allButton.type = 'button';
+  allButton.className = 'period-picker-option';
+  allButton.dataset.periodAll = '';
+  allButton.setAttribute('aria-pressed', String(periodMode === 'month'));
+  allButton.textContent = '全部';
+  const weekButtons = weeksInMonth(selectedMonth).map((week, index) => {
+    const firstInMonth = `${selectedMonth}-01`;
+    const [year, number] = selectedMonth.split('-').map(Number);
+    const lastInMonth = toIsoDate(new Date(year, number, 0));
+    const start = week.start < firstInMonth ? firstInMonth : week.start;
+    const end = week.end > lastInMonth ? lastInMonth : week.end;
+    const weekNumber = ['一', '二', '三', '四', '五', '六'][index] || String(index + 1);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'period-picker-option';
+    button.dataset.periodWeek = week.start;
+    button.setAttribute(
+      'aria-pressed',
+      String(periodMode === 'week' && selectedWeek === week.start),
+    );
+    button.textContent = `第${weekNumber}周（${formatMonthDay(start)}–${formatMonthDay(end)}）`;
+    return button;
+  });
+  weekList.replaceChildren(allButton, ...weekButtons);
+  const currentWeekIndex = weeksInMonth(selectedMonth).findIndex(
+    (week) => week.start === selectedWeek,
+  );
+  const selectedLabel =
+    periodMode === 'month'
+      ? '全部'
+      : `第${['一', '二', '三', '四', '五', '六'][currentWeekIndex] || currentWeekIndex + 1}周`;
+  document.getElementById('periodPickerValue').textContent =
+    `${formatMonthName(selectedMonth)} · ${selectedLabel}`;
 }
 function selectedPeriodLabel() {
   if (periodMode === 'month') {
@@ -1266,18 +2127,10 @@ function hasWorkbenchReport() {
   return activeReport() !== null;
 }
 function renderSelectedPeriod() {
-  document.getElementById('monthMode').classList.toggle('active', periodMode === 'month');
-  document.getElementById('weekMode').classList.toggle('active', periodMode === 'week');
-  document.getElementById('monthMode').setAttribute('aria-pressed', String(periodMode === 'month'));
-  document.getElementById('weekMode').setAttribute('aria-pressed', String(periodMode === 'week'));
-  document.getElementById('periodMonth').value = selectedMonth;
-  document.getElementById('weekControl').hidden = periodMode !== 'week';
-  syncWeekOptions();
+  renderPeriodPicker();
   const reportAvailable = hasWorkbenchReport();
   workbenchView
-    .querySelectorAll(
-      '.wb-context, .wb-context-note, .wb-report-date, .wb-note, .wb-section, .wb-analysis, .wb-panels, #wbTaskSection, #wbDimensionSection, .wb-boundary',
-    )
+    .querySelectorAll('.wb-note, .wb-section, .wb-analysis, .wb-panels, #wbDimensionSection')
     .forEach((node) => {
       node.hidden = !reportAvailable;
     });
@@ -1294,61 +2147,153 @@ function renderSelectedPeriod() {
       : '月报 · 截至 09-13'
     : '暂无对应报告';
 }
-document.getElementById('monthMode').addEventListener('click', () => {
-  if (periodMode !== 'month') {
+const periodPicker = document.getElementById('periodPicker');
+const periodPickerTrigger = document.getElementById('periodPickerTrigger');
+const periodPickerMenu = document.getElementById('periodPickerMenu');
+function setPeriodPickerOpen(open, returnFocus = false) {
+  periodPickerMenu.hidden = !open;
+  periodPickerTrigger.setAttribute('aria-expanded', String(open));
+  if (returnFocus) periodPickerTrigger.focus();
+}
+periodPickerTrigger.addEventListener('click', () => setPeriodPickerOpen(periodPickerMenu.hidden));
+periodPickerMenu.addEventListener('click', (event) => {
+  const monthOption = event.target.closest('[data-period-month]');
+  if (monthOption) {
+    selectedMonth = monthOption.dataset.periodMonth;
     periodMode = 'month';
+    const weeks = weeksInMonth(selectedMonth);
+    if (!weeks.some((week) => week.start === selectedWeek)) selectedWeek = weeks[0].start;
+
     renderSelectedPeriod();
-  }
-});
-document.getElementById('weekMode').addEventListener('click', () => {
-  if (periodMode !== 'week') {
-    periodMode = 'week';
-    if (!weekInitialized && selectedMonth === '2026-09') selectedWeek = '2026-08-31';
-    weekInitialized = true;
-    renderSelectedPeriod();
-  }
-});
-document.getElementById('periodMonth').addEventListener('change', (event) => {
-  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) {
-    event.target.value = selectedMonth;
+    periodPickerMenu.querySelector(`[data-period-month="${selectedMonth}"]`)?.focus();
     return;
   }
-  selectedMonth = event.target.value;
-  selectedWeek = '';
-  renderSelectedPeriod();
-});
-document.getElementById('periodWeek').addEventListener('change', (event) => {
-  selectedWeek = event.target.value;
-  renderSelectedPeriod();
-});
+  if (event.target.closest('[data-period-all]')) {
+    periodMode = 'month';
 
+    renderSelectedPeriod();
+    setPeriodPickerOpen(false, true);
+    return;
+  }
+  const weekOption = event.target.closest('[data-period-week]');
+  if (weekOption) {
+    periodMode = 'week';
+    selectedWeek = weekOption.dataset.periodWeek;
+
+    renderSelectedPeriod();
+    setPeriodPickerOpen(false, true);
+  }
+});
+document.addEventListener('click', (event) => {
+  if (!periodPicker.contains(event.target)) setPeriodPickerOpen(false);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !periodPickerMenu.hidden) setPeriodPickerOpen(false, true);
+});
 function escapeHtml(value) {
   return String(value).replace(
     /[&<>"']/g,
     (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char],
   );
 }
-function renderWorkbench() {
-  const report = activeReport();
-  if (!report) return;
-  const weekly = report.kind === 'week';
-  workbenchView.querySelector('.wb-report-date').textContent = weekly
-    ? '周度报告截至 2026-09-06'
-    : '月度报告截至 2026-09-13';
-  document.getElementById('wbKpis').innerHTML = report.metrics
+function renderWorkbenchSummary() {
+  document.querySelectorAll('[data-wb-summary-content]').forEach((node) => {
+    node.textContent = workbenchSummaryContent[node.dataset.wbSummaryContent] || '';
+  });
+}
+function renderWorkbenchReferenceLinks() {
+  const list = document.getElementById('wbReferenceList');
+  if (!list) return;
+  const safeLinks = workbenchReferenceLinks
+    .map((link) => {
+      try {
+        const url = new URL(link.url);
+        return ['http:', 'https:'].includes(url.protocol) ? { ...link, href: url.href } : null;
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+  if (!safeLinks.length) {
+    list.innerHTML = '<p class="wb-reference-empty">暂无参考链接，点击“添加”填写。</p>';
+    return;
+  }
+  list.innerHTML = safeLinks
     .map(
-      (metric) =>
-        `<button class="wb-kpi ${metric.tone}" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.key)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.key)}</span><span class="wb-kpi-state ${metric.status === '未达标' ? 'bad' : metric.status === '待核算' ? 'unknown' : ''}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-meta"><span class="wb-kpi-badge">${escapeHtml(metric.badge)}</span><span>${escapeHtml(metric.scope)}</span></span><span class="wb-kpi-value"><strong>${escapeHtml(metric.display)}</strong>${metric.unit ? `<em>${escapeHtml(metric.unit)}</em>` : ''}</span><span class="wb-kpi-compare"><span class="wb-kpi-compare-row head"><span>对比指标</span><span>变化量</span></span><span class="wb-kpi-compare-row"><span>${escapeHtml(metric.previous)}</span><b class="${escapeHtml(metric.changeTone)}">${escapeHtml(metric.change)}</b></span><span class="wb-kpi-compare-row"><span>${escapeHtml(metric.same)}</span><b class="${escapeHtml(metric.sameTone)}">${escapeHtml(metric.sameChange)}</b></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.targetLabel)}</span><b class="${escapeHtml(metric.gapTone)}">${escapeHtml(metric.gap)}</b></span></button>`,
+      (link) =>
+        `<article class="wb-reference-row"><div class="wb-reference-main"><strong title="${escapeHtml(link.name)}">${escapeHtml(link.name)}</strong><a href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.href)}">${escapeHtml(link.href)}</a></div><div class="wb-reference-actions"><button type="button" data-wb-edit-reference="${escapeHtml(link.id)}" aria-label="编辑${escapeHtml(link.name)}" title="编辑"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"/></svg></button><button class="delete" type="button" data-wb-delete-reference="${escapeHtml(link.id)}" aria-label="删除${escapeHtml(link.name)}" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button></div></article>`,
     )
     .join('');
-  workbenchView.querySelector('.wb-boundary p').textContent = weekly
-    ? '9.6 周报本周指标与品类/基地异常 → 人工核实 → 改善建议 → 采纳后建任务；订单明细仍在“订单履约”页'
-    : '9 月报告指标与异常事项 → 人工核实 → 改善建议 → 采纳后建任务；订单明细仍在“订单履约”页';
-  workbenchView.querySelector('.wb-boundary > span').textContent = weekly
-    ? '周报摘录 · 非实时'
-    : '报告摘录 · 非实时';
+}
+function renderWorkbench() {
+  renderWorkbenchSummary();
+  const report = activeReport();
+  if (!report) return;
+  const topMetricCards = [
+    {
+      key: '作废率',
+      label: '作废率',
+      value: '2.05',
+      unit: '%',
+      target: '<6%',
+      status: '达标',
+      footer: '本周作废率 1.90%',
+    },
+    {
+      key: '改单率',
+      label: '改单率',
+      value: '2.05',
+      unit: '%',
+      target: '<6%',
+      status: '未达',
+      footer: '本周改单率 1.90%',
+    },
+    {
+      key: '订单满足率',
+      label: '满足率',
+      value: '2.05',
+      unit: '%',
+      target: '>95%（挑战 97%）',
+      status: '达标',
+      footer: '本周满足率 1.90%',
+    },
+    {
+      key: '准交率',
+      label: '准交率',
+      value: '2.05',
+      unit: '%',
+      target: '>95%（挑战 97%）',
+      status: '达标',
+      footer: '本周准交率 1.90%',
+    },
+    {
+      key: '货龄（>60天库存占比）',
+      label: '60天以上货龄占比',
+      value: '2.05',
+      unit: '%',
+      target: '越低越好',
+      status: '达标',
+      footer: '本周货龄占比 1.90%',
+    },
+    {
+      key: '周转天数',
+      label: '可发货天数',
+      value: '14.5',
+      unit: '天',
+      target: '<12.5天（基地<11天）',
+      status: '达标',
+      footer: '本周可发货天数 14.5天',
+    },
+  ];
+  document.getElementById('wbKpis').innerHTML = topMetricCards
+    .map((metric) => {
+      const statusClass = metric.status === '未达' ? 'bad' : '';
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b>−1.9pct</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b>1.9pct</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b>−1.9pct</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b>1.9pct</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+    })
+    .join('');
   renderWorkbenchTasks();
   renderWorkbenchDimensions();
+  renderWorkbenchReferenceLinks();
 }
 function renderWorkbenchEvents() {
   const events = activeReport()?.events || [];
@@ -1362,11 +2307,6 @@ function renderWorkbenchEvents() {
     .join('');
 }
 function renderWorkbenchTasks() {
-  workbenchView
-    .querySelectorAll('[data-wb-task-filter]')
-    .forEach((button) =>
-      button.classList.toggle('active', button.dataset.wbTaskFilter === taskFilter),
-    );
   const tasks = currentCreatedTasks();
   const pending = tasks.filter((task) => task.status !== '已完成').length;
   const done = tasks.length - pending;
@@ -1466,25 +2406,13 @@ function renderWorkbenchSkuDetail(category) {
   const samples = workbenchSkuExamples[category] || [];
   if (!samples.length)
     return `<div class="wb-sku-detail"><p>${escapeHtml(category)}暂无订单样例 SKU；请接入商品主数据及订单明细。</p></div>`;
-  const showOwner = Boolean(selectedWorkbenchBase);
-  const baseOwners = {
-    郑州: '郑州基地负责人（演示）',
-    遂平: '遂平基地负责人（演示）',
-    西南: '西南基地负责人（演示）',
-    华东: '华东基地负责人（演示）',
-    华南: '华南基地负责人（演示）',
-  };
-  const ownerCell = showOwner
-    ? `<td>${escapeHtml(baseOwners[selectedWorkbenchBase] || '待补充')}</td>`
-    : '';
-  const ownerHeader = showOwner ? '<th>基地负责人</th>' : '';
   const rows = samples
     .map(
       (sku) =>
-        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td>${ownerCell}<td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
+        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
     )
     .join('');
-  return `<div class="wb-sku-detail"><p>SKU 库存、销售计划及可发货天数为原型演示样例，实际数据需接入商品主数据及订单明细。${showOwner ? `当前筛选基地：${escapeHtml(selectedWorkbenchBase)}。` : ''}</p><table class="wb-sku-table ${showOwner ? 'has-owner' : ''}"><thead><tr><th>SKU名称</th><th>编码</th>${ownerHeader}<th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="wb-sku-detail"><p>SKU 库存、销售计划及可发货天数为原型演示样例，实际数据需接入商品主数据及订单明细。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const dimension = workbenchDimensions['region-change'];
@@ -1498,6 +2426,161 @@ function renderWorkbenchRegionCustomerDetail(regionIndex) {
         .join('')
     : '<tr><td class="wb-region-customer-empty" colspan="4">暂无客户明细</td></tr>';
   return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>客户经理</th><th>改单订单数</th><th>订单总数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
+  const firstHeader = table.groups
+    .map((group) =>
+      group.rowspan
+        ? `<th scope="col" rowspan="2">${escapeHtml(group.label)}</th>`
+        : `<th scope="colgroup" colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`,
+    )
+    .join('');
+  const secondHeader = table.groups
+    .filter((group) => !group.rowspan)
+    .flatMap((group) => group.columns)
+    .map((label) => `<th scope="col">${escapeHtml(label)}</th>`)
+    .join('');
+  const rows = table.rows.filter(
+    (row) => !selectedBase || baseColumnIndex == null || row[baseColumnIndex] === selectedBase,
+  );
+  const body = rows
+    .map((row) => {
+      const cells = row
+        .map((value) => {
+          if (value && typeof value === 'object' && 'text' in value) {
+            const marker =
+              value.state && value.state !== 'good'
+                ? `<span class="wb-performance-marker ${escapeHtml(value.state)}" aria-label="${value.state === 'warning' ? '关注' : '超出参考线'}">${value.state === 'warning' ? '!' : '●'}</span>`
+                : '';
+            return `<td class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
+          }
+          return `<td>${escapeHtml(String(value))}</td>`;
+        })
+        .join('');
+      return `<tr>${cells}</tr>`;
+    })
+    .join('');
+  const empty = rows.length
+    ? ''
+    : `<tr><td class="wb-performance-empty" colspan="${table.rows[0]?.length || 1}">当前基地筛选下暂无数据</td></tr>`;
+  const tableClass = `wb-performance-table ${table.groups.length > 5 ? 'wide' : ''}`;
+  return `<div class="wb-performance-table-wrap" role="region" aria-label="${escapeHtml(table.title)}表格，可横向滚动" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr><tr>${secondHeader}</tr></thead><tbody>${body || empty}</tbody></table></div>`;
+}
+function renderWorkbenchUnmetCards(sectionTitle, items, emptyText) {
+  const cards = items
+    .map((item) => {
+      const reasons = item.reasons.map((reason) => `<li>${escapeHtml(reason)}</li>`).join('');
+      const measures = item.measures
+        .map(
+          (measure, index) =>
+            `<span><i>${'①②③④⑤⑥'[index] || `${index + 1}.`}</i>${escapeHtml(measure)}</span>`,
+        )
+        .join('');
+      const tools = `<div class="wb-unmet-card-actions"><button type="button" aria-label="编辑${escapeHtml(item.title)}" title="编辑" data-wb-edit-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="删除${escapeHtml(item.title)}" title="删除" data-wb-delete-unmet="${encodeURIComponent(item.key)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div>`;
+      return `<article class="wb-unmet-card" data-wb-unmet-card="${encodeURIComponent(item.key)}">${tools}<h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(item.title)}</h4>${item.analysis ? `<p class="wb-unmet-analysis"><strong>未达成指标：</strong>${escapeHtml(item.analysis)}</p>` : ''}<ul>${reasons}</ul><div class="wb-unmet-measures"><strong><span aria-hidden="true">✓</span> 改善（执行情况）：</strong><div>${measures}</div></div></article>`;
+    })
+    .join('');
+  const kind = sectionTitle.startsWith('基地') ? 'base' : 'item';
+  return `<section class="wb-unmet-section"><div class="wb-unmet-section-head"><h3>${escapeHtml(sectionTitle)}</h3><div class="wb-unmet-section-actions"><button class="wb-unmet-ai-button" type="button" data-wb-unmet-ai="${kind}">✦ AI 分析</button><button class="wb-unmet-add-button" type="button" data-wb-add-unmet="${kind}">添加</button></div></div>${cards || `<p class="wb-unmet-empty">${escapeHtml(emptyText)}</p>`}</section>`;
+}
+function unmetTextLines(value) {
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+function getWorkbenchUnmetItems(kind, selectedBase = '') {
+  const sourceItems = kind === 'base' ? workbenchBaseUnmetItems : workbenchItemUnmetItems;
+  const staticItems = sourceItems.map((item, index) => {
+    const key = `${kind}:static:${index}`;
+    const separator = item.title.indexOf('｜');
+    const prefix = separator >= 0 ? item.title.slice(0, separator) : '';
+    const entity = kind === 'base' ? prefix.replace(/基地$/, '') : prefix;
+    const formTitle = separator >= 0 ? item.title.slice(separator + 1) : item.title;
+    const baseReason = [item.analysis ? `未达成指标：${item.analysis}` : '', ...item.reasons]
+      .filter(Boolean)
+      .join('\n');
+    const override = workbenchUnmetOverrides.get(key);
+    const entry = override
+      ? {
+          ...item,
+          title: `${override.entity}${kind === 'base' ? '基地｜' : '｜'}${override.title}`,
+          analysis: '',
+          reasons: unmetTextLines(override.reason),
+          measures: unmetTextLines(override.measure),
+          entity: override.entity,
+          formTitle: override.title,
+          formReason: override.reason,
+          formMeasure: override.measure,
+          key,
+        }
+      : {
+          ...item,
+          entity,
+          formTitle,
+          formReason: baseReason,
+          formMeasure: item.measures.join('\n'),
+          key,
+        };
+    return entry;
+  });
+  const addedItems = addedWorkbenchUnmetEntries
+    .filter((entry) => entry.kind === kind)
+    .map((entry) => {
+      const key = `${kind}:added:${entry.id}`;
+      const override = workbenchUnmetOverrides.get(key);
+      const current = override || entry;
+      return {
+        title: `${current.entity}${kind === 'base' ? '基地｜' : '｜'}${current.title}`,
+        reasons: unmetTextLines(current.reason),
+        measures: unmetTextLines(current.measure),
+        entity: current.entity,
+        formTitle: current.title,
+        formReason: current.reason,
+        formMeasure: current.measure,
+        key,
+      };
+    });
+  return [...staticItems, ...addedItems].filter(
+    (item) =>
+      !deletedWorkbenchUnmetKeys.has(item.key) &&
+      (kind !== 'base' || !selectedBase || item.entity === selectedBase),
+  );
+}
+function renderWorkbenchBaseUnmet() {
+  return renderWorkbenchUnmetCards(
+    '基地未达成项：原因分析与改善措施',
+    getWorkbenchUnmetItems('base'),
+    '当前暂无基地未达成事项。',
+  );
+}
+function renderWorkbenchItemUnmet() {
+  return renderWorkbenchUnmetCards(
+    '品项未达成项：原因分析与改善措施',
+    getWorkbenchUnmetItems('item'),
+    '当前暂无品项未达成事项。',
+  );
+}
+function renderWorkbenchDirectorNotes() {
+  const cards = workbenchDirectorNotes
+    .map(
+      (note) =>
+        `<article class="wb-unmet-card wb-director-note-card" data-wb-director-note="${escapeHtml(note.id)}"><div class="wb-unmet-card-actions"><button type="button" aria-label="编辑${escapeHtml(note.title)}" title="编辑" data-wb-edit-director-note="${escapeHtml(note.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg></button><button class="delete" type="button" aria-label="删除${escapeHtml(note.title)}" title="删除" data-wb-delete-director-note="${escapeHtml(note.id)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="m19 6-1 14H6L5 6"/><path d="M10 11v5M14 11v5"/></svg></button></div><h4><span class="wb-unmet-dot" aria-hidden="true">●</span>${escapeHtml(note.director)}｜${escapeHtml(note.title)}</h4><p class="wb-director-note-content">${escapeHtml(note.content)}</p></article>`,
+    )
+    .join('');
+  return `<section class="wb-unmet-section wb-director-notes"><div class="wb-unmet-section-head"><h3>应责总监备注</h3><button class="wb-unmet-add-button" type="button" data-wb-add-director-note>添加</button></div>${cards || '<p class="wb-unmet-empty">当前暂无应责总监备注。</p>'}</section>`;
+}
+function renderWorkbenchPerformance(dimension) {
+  const panel = document.getElementById('wbDimensionPanel');
+  const bottomSection =
+    dimensionTab === 'base-performance'
+      ? renderWorkbenchBaseUnmet()
+      : dimensionTab === 'item-performance'
+        ? renderWorkbenchItemUnmet()
+        : dimensionTab === 'director-performance'
+          ? renderWorkbenchDirectorNotes()
+          : '';
+  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">数据按截图报告展示；“—”表示未提供数据，粽子为季节性品项。</p>`;
 }
 function renderWorkbenchDimensions() {
   const panel = document.getElementById('wbDimensionPanel');
@@ -1514,36 +2597,20 @@ function renderWorkbenchDimensions() {
   });
   panel.setAttribute('aria-labelledby', selectedButton.id);
   const headingMeta = workbenchView.querySelector('.wb-dimension-head > span');
+  const performanceDimension = workbenchPerformance[dimensionTab];
+  if (performanceDimension) {
+    headingMeta.textContent = '月度与周度报告 · 截至 2026-09-13';
+    renderWorkbenchPerformance(performanceDimension);
+    return;
+  }
   if (activeReport()?.kind !== 'month') {
     headingMeta.textContent = '周度报告 · 暂无对应维度数据';
-    panel.innerHTML =
-      '<div class="wb-dimension-empty">当前分析页签仅有截至 2026-09-13 的月度报告数据。<br>请切换到“月度”查看，不能将月度维度值移作周度值。</div>';
+    panel.innerHTML = `<div class="wb-dimension-empty">当前分析页签仅有截至 2026-09-13 的月度报告数据。<br>请切换到“月度”查看，不能将月度维度值移作周度值。</div>${dimensionTab === 'director-performance' ? renderWorkbenchDirectorNotes() : ''}`;
     return;
   }
   headingMeta.textContent = '月度报告 · 截至 2026-09-13';
   const dimension = workbenchDimensions[dimensionTab];
-  const baseFiltered =
-    ['base-category', 'base-category-days'].includes(dimensionTab) && selectedWorkbenchBase;
-  const visibleRows = baseFiltered
-    ? dimension.rows.filter((row) => row[0] === selectedWorkbenchBase)
-    : dimension.rows;
-  let summaryText = dimension.summary;
-  if (baseFiltered && visibleRows[0]) {
-    const row = visibleRows[0];
-    const problemLimit = dimensionTab === 'base-category' ? 90 : 12;
-    const problemItems = row
-      .slice(1)
-      .map((value, index) => ({
-        category: dimension.columns[index + 1],
-        value: Number.parseFloat(value),
-      }))
-      .filter((item) =>
-        dimensionTab === 'base-category' ? item.value < problemLimit : item.value > problemLimit,
-      );
-    summaryText = problemItems.length
-      ? `${selectedWorkbenchBase}基地有 ${problemItems.length} 项${dimensionTab === 'base-category' ? '满足率低于 90%' : '可发货天数超过 12 天'}：${problemItems.map((item) => `${item.category} ${item.value}${dimensionTab === 'base-category' ? '%' : ' 天'}`).join('、')}。`
-      : `${selectedWorkbenchBase}基地当前没有${dimensionTab === 'base-category' ? '满足率低于 90%' : '可发货天数超过 12 天'}的品类。`;
-  }
+  const visibleRows = dimension.rows;
   const header = `${dimension.columns.map((column) => `<th scope="col">${escapeHtml(column)}</th>`).join('')}<th class="issue-col" scope="col">问题及改进</th>`;
   const body = visibleRows
     .map((row) => {
@@ -1577,8 +2644,7 @@ function renderWorkbenchDimensions() {
       return `<tr>${values}<td class="issue-cell">${renderWorkbenchDimensionIssues(risk, row[0], dimensionTab, rowIndex)}</td></tr>${detail}${customerDetail}`;
     })
     .join('');
-  const filterNote = baseFiltered ? `当前基地筛选：${escapeHtml(selectedWorkbenchBase)}` : '';
-  panel.innerHTML = `<div class="wb-dimension-summary"><strong>${escapeHtml(dimension.title)}</strong><span>${escapeHtml(dimension.note)} ${filterNote}</span></div><div class="wb-dimension-insight"><strong>总结分析</strong><span>${escapeHtml(summaryText)}</span></div><div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === 'region-change' ? 'region-change-table' : ''}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+  panel.innerHTML = `<div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === 'region-change' ? 'region-change-table' : ''}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
   panel.querySelectorAll('[data-wb-sku-toggle]').forEach((button) =>
     button.addEventListener('click', () => {
       const key = `${dimensionTab}:${button.dataset.wbSkuToggle}`;
@@ -1596,20 +2662,6 @@ function renderWorkbenchDimensions() {
     }),
   );
 }
-const wbBaseFilter = document.getElementById('wbBaseFilter');
-const wbOwnerFilter = document.getElementById('wbOwnerFilter');
-wbBaseFilter.addEventListener('change', () => {
-  selectedWorkbenchBase = wbBaseFilter.value;
-  wbOwnerFilter.value = selectedWorkbenchBase;
-  document.getElementById('wbContextNote').textContent =
-    '基地/负责人筛选仅作用于基地交叉分析；汇总指标与品类汇总按报告整体口径显示。负责人选项为原型维度演示。';
-  renderWorkbenchDimensions();
-});
-wbOwnerFilter.addEventListener('change', () => {
-  selectedWorkbenchBase = wbOwnerFilter.value;
-  wbBaseFilter.value = selectedWorkbenchBase;
-  renderWorkbenchDimensions();
-});
 const wbDimensionTabButtons = [...workbenchView.querySelectorAll('[data-wb-dimension-tab]')];
 wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
@@ -1622,7 +2674,7 @@ function showWorkbenchToast(message) {
   toast.textContent = message;
   toast.hidden = false;
   clearTimeout(window.toastTimer);
-  window.toastTimer = schedule(() => {
+  window.toastTimer = setTimeout(() => {
     toast.hidden = true;
   }, 3000);
 }
@@ -1687,10 +2739,7 @@ function syncDimensionIssueTask(context, values) {
   renderWorkbenchTasks();
   closeIssueEditor();
   renderWorkbenchDimensions();
-  document.getElementById('wbTaskSection').scrollIntoView({ block: 'start', behavior: 'smooth' });
-  showWorkbenchToast(
-    existing ? '问题及改进已更新到任务追踪。' : '已生成改进任务，可在任务追踪中继续修改。',
-  );
+  showWorkbenchToast(existing ? '问题及改进已更新到本地改进任务。' : '已生成本地改进任务。');
 }
 function saveIssueEditor(generateTask) {
   if (!pendingIssueEdit) return;
@@ -1715,6 +2764,223 @@ function saveIssueEditor(generateTask) {
   renderWorkbenchDimensions();
   showWorkbenchToast('问题及改进已保存。');
 }
+function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
+  const isBase = kind === 'base';
+  const entitySelect = document.getElementById('wbUnmetEntity');
+  const item = itemKey ? getWorkbenchUnmetItems(kind).find((entry) => entry.key === itemKey) : null;
+  const options = isBase
+    ? workbenchPerformance['base-performance'].monthly.rows
+        .map((row) => row[0])
+        .filter((base) => base !== '合计')
+    : workbenchIssueCategories();
+  document.getElementById('wbUnmetAddForm').reset();
+  document.getElementById('wbUnmetAddTitle').textContent = item
+    ? isBase
+      ? '编辑基地未达成项'
+      : '编辑品类未达成项'
+    : isBase
+      ? '添加基地未达成项'
+      : '添加品类未达成项';
+  document.getElementById('wbUnmetAddSubtitle').textContent = item
+    ? '修改未达成项的原因分析与改善措施'
+    : isBase
+      ? '补充基地未达成原因与改善措施'
+      : '补充品类未达成原因与改善措施';
+  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品类';
+  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品类'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
+  document.getElementById('wbUnmetTitleInput').value = item?.formTitle || '';
+  document.getElementById('wbUnmetReasonInput').value = item?.formReason || '';
+  document.getElementById('wbUnmetMeasureInput').value = item?.formMeasure || '';
+  document.getElementById('wbUnmetAddSubmit').textContent = item ? '保存' : '提交';
+  pendingWorkbenchUnmet = { kind, trigger, key: itemKey };
+  document.getElementById('wbUnmetAddOverlay').hidden = false;
+  entitySelect.focus();
+}
+function closeWorkbenchUnmetAdd() {
+  document.getElementById('wbUnmetAddOverlay').hidden = true;
+  const { kind, trigger } = pendingWorkbenchUnmet || {};
+  pendingWorkbenchUnmet = null;
+  const fallback = kind ? workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`) : null;
+  if (trigger?.isConnected) trigger.focus();
+  else fallback?.focus();
+}
+document.getElementById('wbUnmetAddForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingWorkbenchUnmet || !event.currentTarget.reportValidity()) return;
+  const entry = {
+    id:
+      globalThis.crypto?.randomUUID?.() ||
+      `unmet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind: pendingWorkbenchUnmet.kind,
+    entity: document.getElementById('wbUnmetEntity').value,
+    title: document.getElementById('wbUnmetTitleInput').value.trim(),
+    reason: document.getElementById('wbUnmetReasonInput').value.trim(),
+    measure: document.getElementById('wbUnmetMeasureInput').value.trim(),
+    createdAt: new Date().toISOString(),
+  };
+  if (!entry.entity || !entry.title || !entry.reason || !entry.measure) {
+    showWorkbenchToast('请完整填写标题、未达成原因和改善措施。');
+    return;
+  }
+  const context = pendingWorkbenchUnmet;
+  if (context.key)
+    workbenchUnmetOverrides.set(context.key, {
+      entity: entry.entity,
+      title: entry.title,
+      reason: entry.reason,
+      measure: entry.measure,
+    });
+  else addedWorkbenchUnmetEntries.push(entry);
+  const persisted = saveWorkbenchUnmetState();
+  const kind = context.kind;
+  const focusKey = context.key;
+  document.getElementById('wbUnmetAddOverlay').hidden = true;
+  pendingWorkbenchUnmet = null;
+  renderWorkbenchDimensions();
+  if (focusKey)
+    workbenchView.querySelector(`[data-wb-edit-unmet="${encodeURIComponent(focusKey)}"]`)?.focus();
+  else workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`)?.focus();
+  showWorkbenchToast(
+    persisted
+      ? focusKey
+        ? '未达成项已修改并保存在本机。'
+        : '未达成项已添加并保存在本机。'
+      : '内容已更新；浏览器存储不可用，刷新后不会保留。',
+  );
+});
+document.getElementById('wbUnmetAddClose').addEventListener('click', closeWorkbenchUnmetAdd);
+document.getElementById('wbUnmetAddCancel').addEventListener('click', closeWorkbenchUnmetAdd);
+document.getElementById('wbUnmetAddOverlay').addEventListener('click', (event) => {
+  if (event.target.id === 'wbUnmetAddOverlay') closeWorkbenchUnmetAdd();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !document.getElementById('wbUnmetAddOverlay').hidden)
+    closeWorkbenchUnmetAdd();
+});
+const directorNoteOverlay = document.getElementById('wbDirectorNoteOverlay');
+const directorNoteForm = document.getElementById('wbDirectorNoteForm');
+const directorNoteDirector = document.getElementById('wbDirectorNoteDirector');
+const directorNoteHeading = document.getElementById('wbDirectorNoteHeading');
+const directorNoteContent = document.getElementById('wbDirectorNoteContent');
+function openWorkbenchDirectorNote(trigger, id = '') {
+  const existing = id ? workbenchDirectorNotes.find((note) => note.id === id) : null;
+  const directors = workbenchPerformance['director-performance'].monthly.rows
+    .map((row) => row[0])
+    .filter((name) => name !== '全国合计');
+  directorNoteForm.reset();
+  directorNoteDirector.innerHTML = `<option value="">请选择应责总监</option>${directors.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('')}`;
+  directorNoteDirector.value = existing?.director || '';
+  directorNoteHeading.value = existing?.title || '';
+  directorNoteContent.value = existing?.content || '';
+  document.getElementById('wbDirectorNoteTitle').textContent = existing
+    ? '编辑应责总监备注'
+    : '添加应责总监备注';
+  document.getElementById('wbDirectorNoteSubmit').textContent = existing ? '保存' : '提交';
+  pendingWorkbenchDirectorNote = { id: existing?.id || '', trigger };
+  directorNoteOverlay.hidden = false;
+  directorNoteDirector.focus();
+}
+function closeWorkbenchDirectorNote() {
+  directorNoteOverlay.hidden = true;
+  const trigger = pendingWorkbenchDirectorNote?.trigger;
+  pendingWorkbenchDirectorNote = null;
+  if (trigger?.isConnected) trigger.focus();
+}
+directorNoteForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingWorkbenchDirectorNote || !directorNoteForm.reportValidity()) return;
+  const values = {
+    director: directorNoteDirector.value,
+    title: directorNoteHeading.value.trim(),
+    content: directorNoteContent.value.trim(),
+  };
+  if (!values.director || !values.title || !values.content) {
+    showWorkbenchToast('请完整填写应责总监、标题和内容。');
+    return;
+  }
+  const id = pendingWorkbenchDirectorNote.id;
+  if (id)
+    workbenchDirectorNotes = workbenchDirectorNotes.map((note) =>
+      note.id === id ? { ...note, ...values } : note,
+    );
+  else
+    workbenchDirectorNotes.push({
+      id:
+        globalThis.crypto?.randomUUID?.() ||
+        `director-note-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ...values,
+    });
+  const persisted = saveWorkbenchDirectorNotes();
+  directorNoteOverlay.hidden = true;
+  pendingWorkbenchDirectorNote = null;
+  renderWorkbenchDimensions();
+  const action = id ? '[data-wb-edit-director-note]' : '[data-wb-add-director-note]';
+  if (id)
+    [...workbenchView.querySelectorAll(action)]
+      .find((button) => button.dataset.wbEditDirectorNote === id)
+      ?.focus();
+  else workbenchView.querySelector(action)?.focus();
+  showWorkbenchToast(
+    persisted
+      ? id
+        ? '应责总监备注已修改并保存在本机。'
+        : '应责总监备注已添加并保存在本机。'
+      : '备注已更新；浏览器存储不可用，刷新后不会保留。',
+  );
+});
+document
+  .getElementById('wbDirectorNoteClose')
+  .addEventListener('click', closeWorkbenchDirectorNote);
+document
+  .getElementById('wbDirectorNoteCancel')
+  .addEventListener('click', closeWorkbenchDirectorNote);
+directorNoteOverlay.addEventListener('click', (event) => {
+  if (event.target === directorNoteOverlay) closeWorkbenchDirectorNote();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !directorNoteOverlay.hidden) closeWorkbenchDirectorNote();
+});
+function openWorkbenchUnmetDelete(key, trigger) {
+  const kind = key.startsWith('base:') ? 'base' : 'item';
+  const item = getWorkbenchUnmetItems(kind).find((entry) => entry.key === key);
+  if (!item) return;
+  document.getElementById('wbUnmetDeleteCopy').textContent =
+    `确认删除“${item.title}”吗？删除后可重新添加，但当前删除无法撤销。`;
+  pendingWorkbenchUnmetDelete = { key, kind, trigger };
+  document.getElementById('wbUnmetDeleteOverlay').hidden = false;
+  document.getElementById('wbUnmetDeleteConfirm').focus();
+}
+function closeWorkbenchUnmetDelete() {
+  document.getElementById('wbUnmetDeleteOverlay').hidden = true;
+  const trigger = pendingWorkbenchUnmetDelete?.trigger;
+  pendingWorkbenchUnmetDelete = null;
+  if (trigger?.isConnected) trigger.focus();
+}
+function confirmWorkbenchUnmetDelete() {
+  if (!pendingWorkbenchUnmetDelete) return;
+  const { key, kind } = pendingWorkbenchUnmetDelete;
+  deletedWorkbenchUnmetKeys.add(key);
+  const persisted = saveWorkbenchUnmetState();
+  document.getElementById('wbUnmetDeleteOverlay').hidden = true;
+  pendingWorkbenchUnmetDelete = null;
+  renderWorkbenchDimensions();
+  workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`)?.focus();
+  showWorkbenchToast(
+    persisted ? '未达成项已删除。' : '未达成项已从当前列表移除；浏览器存储不可用，刷新后会恢复。',
+  );
+}
+document.getElementById('wbUnmetDeleteClose').addEventListener('click', closeWorkbenchUnmetDelete);
+document.getElementById('wbUnmetDeleteCancel').addEventListener('click', closeWorkbenchUnmetDelete);
+document
+  .getElementById('wbUnmetDeleteConfirm')
+  .addEventListener('click', confirmWorkbenchUnmetDelete);
+document.getElementById('wbUnmetDeleteOverlay').addEventListener('click', (event) => {
+  if (event.target.id === 'wbUnmetDeleteOverlay') closeWorkbenchUnmetDelete();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !document.getElementById('wbUnmetDeleteOverlay').hidden)
+    closeWorkbenchUnmetDelete();
+});
 document.getElementById('wbIssueClose').addEventListener('click', closeIssueEditor);
 document.getElementById('wbIssueCancel').addEventListener('click', closeIssueEditor);
 document.getElementById('wbIssueSave').addEventListener('click', () => saveIssueEditor(false));
@@ -1726,13 +2992,406 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !document.getElementById('wbIssueOverlay').hidden)
     closeIssueEditor();
 });
+const improvementEditIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"/></svg>';
+const improvementSaveIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+const improvementDeleteIcon =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg>';
+function createImprovementAction(label, icon, className, attribute) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = `wb-improvement-action${className ? ` ${className}` : ''}`;
+  button.setAttribute(attribute, '');
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.innerHTML = icon;
+  return button;
+}
+function appendImprovementActions(row) {
+  if (row.querySelector('td.actions')) return;
+  const cell = document.createElement('td');
+  cell.className = 'actions';
+  const actions = document.createElement('div');
+  actions.className = 'wb-improvement-actions';
+  actions.append(
+    createImprovementAction('编辑', improvementEditIcon, '', 'data-wb-improvement-edit'),
+  );
+  actions.append(
+    createImprovementAction('删除', improvementDeleteIcon, 'delete', 'data-wb-improvement-delete'),
+  );
+  cell.append(actions);
+  row.append(cell);
+}
+workbenchView.querySelectorAll('.wb-improvement-table').forEach((table) => {
+  const header = table.tHead?.rows[0];
+  if (header && !header.querySelector('.actions')) {
+    const cell = document.createElement('th');
+    cell.className = 'actions';
+    cell.textContent = '操作';
+    header.append(cell);
+  }
+  table.tBodies[0]?.querySelectorAll('tr').forEach((row) => {
+    appendImprovementActions(row);
+  });
+});
+const improvementAddOverlay = document.getElementById('wbImprovementAddOverlay');
+const improvementAddForm = document.getElementById('wbImprovementAddForm');
+const improvementAddFields = document.getElementById('wbImprovementAddFields');
+const improvementAddSchemas = {
+  short: [
+    { key: 'direction', label: '追进方向', multiline: false },
+    { key: 'measure', label: '改善措施', multiline: true },
+    { key: 'issue', label: '对应问题', multiline: true },
+  ],
+  long: [
+    { key: 'mechanism', label: '机制', multiline: false },
+    { key: 'content', label: '机制内容（问题→对策）', multiline: true },
+    { key: 'goal', label: '目标', multiline: true },
+    { key: 'status', label: '状态', multiline: false },
+  ],
+};
+let pendingImprovementAdd = null;
+function openImprovementAdd(kind, trigger) {
+  const schema = improvementAddSchemas[kind];
+  if (!schema) return;
+  pendingImprovementAdd = { kind, trigger };
+  document.getElementById('wbImprovementAddTitle').textContent =
+    kind === 'short' ? '添加短期追进措施' : '添加长期机制';
+  document.getElementById('wbImprovementAddSubtitle').textContent =
+    kind === 'short'
+      ? '填写追进方向、改善措施及对应问题。'
+      : '填写机制、机制内容（问题→对策）及目标。';
+  improvementAddFields.replaceChildren();
+  schema.forEach((field) => {
+    const label = document.createElement('label');
+    label.append(document.createTextNode(field.label));
+    const control = document.createElement(field.multiline ? 'textarea' : 'input');
+    control.dataset.improvementField = field.key;
+    control.required = true;
+    control.maxLength = field.multiline ? 4000 : 160;
+    control.placeholder = `填写${field.label}`;
+    label.append(control);
+    improvementAddFields.append(label);
+  });
+  improvementAddOverlay.hidden = false;
+  improvementAddFields.querySelector('input,textarea')?.focus();
+}
+function closeImprovementAdd() {
+  improvementAddOverlay.hidden = true;
+  const trigger = pendingImprovementAdd?.trigger;
+  pendingImprovementAdd = null;
+  if (trigger?.isConnected) trigger.focus();
+}
+improvementAddForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingImprovementAdd || !improvementAddForm.reportValidity()) return;
+  const { kind, trigger } = pendingImprovementAdd;
+  const table = workbenchView.querySelector(
+    kind === 'short' ? '.wb-improvement-table:not(.long-term)' : '.wb-improvement-table.long-term',
+  );
+  const row = document.createElement('tr');
+  improvementAddSchemas[kind].forEach((field) => {
+    const cell = document.createElement('td');
+    if (field.key === 'direction' || field.key === 'mechanism') cell.className = 'direction';
+    if (field.key === 'issue') cell.className = 'issue';
+    if (field.key === 'goal') cell.className = 'goal';
+    if (field.key === 'status') cell.className = 'status';
+    cell.textContent = improvementAddFields
+      .querySelector(`[data-improvement-field="${field.key}"]`)
+      .value.trim();
+    row.append(cell);
+  });
+  appendImprovementActions(row);
+  table?.tBodies[0]?.append(row);
+  closeImprovementAdd();
+  if (!table) trigger?.focus();
+  showWorkbenchToast('改善措施已添加到当前页面。');
+});
+document.getElementById('wbImprovementAddClose').addEventListener('click', closeImprovementAdd);
+document.getElementById('wbImprovementAddCancel').addEventListener('click', closeImprovementAdd);
+improvementAddOverlay.addEventListener('click', (event) => {
+  if (event.target === improvementAddOverlay) closeImprovementAdd();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !improvementAddOverlay.hidden) closeImprovementAdd();
+});
+const referenceOverlay = document.getElementById('wbReferenceOverlay');
+const referenceForm = document.getElementById('wbReferenceForm');
+const referenceNameInput = document.getElementById('wbReferenceName');
+const referenceUrlInput = document.getElementById('wbReferenceUrl');
+function openWorkbenchReference(trigger, id = '') {
+  const existing = id ? workbenchReferenceLinks.find((link) => link.id === id) : null;
+  pendingWorkbenchReference = { id: existing?.id || '', trigger };
+  referenceForm.reset();
+  referenceNameInput.value = existing?.name || '';
+  referenceUrlInput.value = existing?.url || '';
+  document.getElementById('wbReferenceFormTitle').textContent = existing
+    ? '编辑参考链接'
+    : '添加参考链接';
+  document.getElementById('wbReferenceSubmit').textContent = existing ? '保存' : '提交';
+  referenceOverlay.hidden = false;
+  referenceNameInput.focus();
+}
+function closeWorkbenchReference() {
+  referenceOverlay.hidden = true;
+  const trigger = pendingWorkbenchReference?.trigger;
+  pendingWorkbenchReference = null;
+  if (trigger?.isConnected) trigger.focus();
+}
+referenceForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingWorkbenchReference || !referenceForm.reportValidity()) return;
+  const name = referenceNameInput.value.trim();
+  let url;
+  try {
+    url = new URL(referenceUrlInput.value.trim());
+  } catch {
+    showWorkbenchToast('请输入有效的网页链接（需包含 https:// 或 http://）。');
+    referenceUrlInput.focus();
+    return;
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    showWorkbenchToast('参考链接仅支持 http 或 https 地址。');
+    referenceUrlInput.focus();
+    return;
+  }
+  const { id } = pendingWorkbenchReference;
+  if (id) {
+    workbenchReferenceLinks = workbenchReferenceLinks.map((link) =>
+      link.id === id ? { ...link, name, url: url.href } : link,
+    );
+  } else {
+    const newId =
+      globalThis.crypto?.randomUUID?.() ||
+      `reference-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    workbenchReferenceLinks.push({ id: newId, name, url: url.href });
+  }
+  const saved = saveWorkbenchReferenceLinks();
+  closeWorkbenchReference();
+  renderWorkbenchReferenceLinks();
+  showWorkbenchToast(
+    saved
+      ? id
+        ? '参考链接已更新。'
+        : '参考链接已添加。'
+      : '参考链接已更新，但浏览器存储不可用；刷新后不会保留。',
+  );
+});
+document.getElementById('wbReferenceClose').addEventListener('click', closeWorkbenchReference);
+document.getElementById('wbReferenceCancel').addEventListener('click', closeWorkbenchReference);
+referenceOverlay.addEventListener('click', (event) => {
+  if (event.target === referenceOverlay) closeWorkbenchReference();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !referenceOverlay.hidden) closeWorkbenchReference();
+});
+const summaryEditOverlay = document.getElementById('wbSummaryEditOverlay');
+const summaryEditForm = document.getElementById('wbSummaryEditForm');
+const summaryInputs = {
+  positive: document.getElementById('wbSummaryPositiveInput'),
+  risk: document.getElementById('wbSummaryRiskInput'),
+  rhythm: document.getElementById('wbSummaryRhythmInput'),
+};
+function openWorkbenchSummaryEdit(trigger) {
+  Object.entries(summaryInputs).forEach(([key, input]) => {
+    input.value = workbenchSummaryContent[key];
+  });
+  pendingWorkbenchSummaryTrigger = trigger;
+  summaryEditOverlay.hidden = false;
+  summaryInputs.positive.focus();
+}
+function closeWorkbenchSummaryEdit() {
+  summaryEditOverlay.hidden = true;
+  const trigger = pendingWorkbenchSummaryTrigger;
+  pendingWorkbenchSummaryTrigger = null;
+  if (trigger?.isConnected) trigger.focus();
+}
+summaryEditForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!pendingWorkbenchSummaryTrigger || !summaryEditForm.reportValidity()) return;
+  const updated = Object.fromEntries(
+    Object.entries(summaryInputs).map(([key, input]) => [key, input.value.trim()]),
+  );
+  if (Object.values(updated).some((value) => !value)) {
+    showWorkbenchToast('请完整填写三段摘要内容。');
+    return;
+  }
+  workbenchSummaryContent = updated;
+  const persisted = saveWorkbenchSummary();
+  renderWorkbenchSummary();
+  closeWorkbenchSummaryEdit();
+  showWorkbenchToast(
+    persisted
+      ? '本期结论摘要已更新并保存在本机。'
+      : '摘要已更新；浏览器存储不可用，刷新后不会保留。',
+  );
+});
+document.getElementById('wbSummaryEditClose').addEventListener('click', closeWorkbenchSummaryEdit);
+document.getElementById('wbSummaryEditCancel').addEventListener('click', closeWorkbenchSummaryEdit);
+summaryEditOverlay.addEventListener('click', (event) => {
+  if (event.target === summaryEditOverlay) closeWorkbenchSummaryEdit();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !summaryEditOverlay.hidden) closeWorkbenchSummaryEdit();
+});
 workbenchView.addEventListener('click', (event) => {
+  const summaryAi = event.target.closest('[data-wb-summary-ai]');
+  if (summaryAi) {
+    send(
+      `请基于订单工作台当前的本期结论摘要进行 AI 分析，梳理关键结论、主要风险、变化趋势及优先改善方向；区分报告事实与推断，不补造数据。\n\n正向：${workbenchSummaryContent.positive}\n\n风险：${workbenchSummaryContent.risk}\n\n旬/周节奏：${workbenchSummaryContent.rhythm}`,
+    );
+    return;
+  }
+  const summaryEdit = event.target.closest('[data-wb-summary-edit]');
+  if (summaryEdit) {
+    openWorkbenchSummaryEdit(summaryEdit);
+    return;
+  }
+  const referenceAdd = event.target.closest('[data-wb-reference-add]');
+  if (referenceAdd) {
+    openWorkbenchReference(referenceAdd);
+    return;
+  }
+  const referenceEdit = event.target.closest('[data-wb-edit-reference]');
+  if (referenceEdit) {
+    openWorkbenchReference(referenceEdit, referenceEdit.dataset.wbEditReference);
+    return;
+  }
+  const referenceDelete = event.target.closest('[data-wb-delete-reference]');
+  if (referenceDelete) {
+    const item = workbenchReferenceLinks.find(
+      (link) => link.id === referenceDelete.dataset.wbDeleteReference,
+    );
+    if (!item || !window.confirm(`确认删除参考链接“${item.name}”吗？`)) return;
+    workbenchReferenceLinks = workbenchReferenceLinks.filter((link) => link.id !== item.id);
+    const saved = saveWorkbenchReferenceLinks();
+    renderWorkbenchReferenceLinks();
+    document.querySelector('[data-wb-reference-add]')?.focus();
+    showWorkbenchToast(
+      saved ? '参考链接已删除。' : '参考链接已从当前页面移除，但浏览器存储不可用；刷新后可能恢复。',
+    );
+    return;
+  }
+  const improvementAdd = event.target.closest('[data-wb-improvement-add]');
+  if (improvementAdd) {
+    openImprovementAdd(improvementAdd.dataset.wbImprovementAdd, improvementAdd);
+    return;
+  }
+  const improvementEdit = event.target.closest('[data-wb-improvement-edit]');
+  if (improvementEdit) {
+    const row = improvementEdit.closest('tr');
+    const isEditing = improvementEdit.dataset.editing === 'true';
+    row.querySelectorAll('td:not(.actions)').forEach((cell) => {
+      if (isEditing) {
+        const text = String(cell.innerText || cell.textContent || '').trim();
+        cell.innerHTML = escapeHtml(text).replace(/\n/g, '<br>');
+        cell.contentEditable = 'false';
+        cell.classList.remove('is-editing');
+      } else {
+        cell.contentEditable = 'true';
+        cell.spellcheck = false;
+        cell.classList.add('is-editing');
+      }
+    });
+    improvementEdit.dataset.editing = String(!isEditing);
+    improvementEdit.innerHTML = isEditing ? improvementEditIcon : improvementSaveIcon;
+    improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
+    improvementEdit.title = isEditing ? '编辑' : '保存';
+    if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
+    else showWorkbenchToast('改善措施已在当前页面更新。');
+    return;
+  }
+  const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
+  if (improvementDelete) {
+    if (!window.confirm('确认删除这条改善措施吗？删除后仅从当前页面移除。')) return;
+    improvementDelete.closest('tr')?.remove();
+    showWorkbenchToast('改善措施已从当前页面移除。');
+    return;
+  }
+  const editUnmet = event.target.closest('[data-wb-edit-unmet]');
+  if (editUnmet) {
+    const key = decodeURIComponent(editUnmet.dataset.wbEditUnmet);
+    openWorkbenchUnmetAdd(key.startsWith('base:') ? 'base' : 'item', editUnmet, key);
+    return;
+  }
+  const deleteUnmet = event.target.closest('[data-wb-delete-unmet]');
+  if (deleteUnmet) {
+    openWorkbenchUnmetDelete(decodeURIComponent(deleteUnmet.dataset.wbDeleteUnmet), deleteUnmet);
+    return;
+  }
+  const addUnmet = event.target.closest('[data-wb-add-unmet]');
+  if (addUnmet) {
+    openWorkbenchUnmetAdd(addUnmet.dataset.wbAddUnmet, addUnmet);
+    return;
+  }
+  const unmetAi = event.target.closest('[data-wb-unmet-ai]');
+  if (unmetAi) {
+    const kind = unmetAi.dataset.wbUnmetAi;
+    const items = getWorkbenchUnmetItems(kind);
+    if (!items.length) {
+      showWorkbenchToast('当前没有未达成项可供分析。');
+      return;
+    }
+    const title = kind === 'base' ? '基地未达成项' : '品项未达成项';
+    const details = items
+      .map((item) =>
+        [
+          item.title,
+          item.analysis ? `未达成指标：${item.analysis}` : '',
+          ...item.reasons.map((reason) => `原因：${reason}`),
+          ...item.measures.map((measure) => `改善措施：${measure}`),
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+      .join('\n\n');
+
+    send(
+      `请基于订单工作台的【${title}：原因分析与改善措施】分析以下内容，归纳共性原因、优先级和可执行的改善建议。请区分报告已提供的信息与推断，不要补造事实。\n\n${details}`,
+    );
+    return;
+  }
+  const addDirectorNote = event.target.closest('[data-wb-add-director-note]');
+  if (addDirectorNote) {
+    openWorkbenchDirectorNote(addDirectorNote);
+    return;
+  }
+  const editDirectorNote = event.target.closest('[data-wb-edit-director-note]');
+  if (editDirectorNote) {
+    openWorkbenchDirectorNote(editDirectorNote, editDirectorNote.dataset.wbEditDirectorNote);
+    return;
+  }
+  const deleteDirectorNote = event.target.closest('[data-wb-delete-director-note]');
+  if (deleteDirectorNote) {
+    const note = workbenchDirectorNotes.find(
+      (item) => item.id === deleteDirectorNote.dataset.wbDeleteDirectorNote,
+    );
+    if (!note || !window.confirm(`确认删除“${note.director}｜${note.title}”吗？`)) return;
+    workbenchDirectorNotes = workbenchDirectorNotes.filter((item) => item.id !== note.id);
+    const persisted = saveWorkbenchDirectorNotes();
+    renderWorkbenchDimensions();
+    workbenchView.querySelector('[data-wb-add-director-note]')?.focus();
+    showWorkbenchToast(
+      persisted
+        ? '应责总监备注已删除。'
+        : '备注已从当前页面移除；浏览器存储不可用，刷新后可能恢复。',
+    );
+    return;
+  }
   const customerOrders = event.target.closest('[data-wb-customer-orders]');
   if (customerOrders) {
     const [regionIndex, customerIndex] = customerOrders.dataset.wbCustomerOrders
       .split(':')
       .map(Number);
     openChangedOrderList(regionIndex, customerIndex, customerOrders);
+    return;
+  }
+  if (event.target.closest('[data-wb-analysis-chat]')) {
+    const report = activeReport();
+    send(
+      `请基于当前${report?.kind === 'week' ? '周度' : '月度'}报告，进一步分析顶部核心指标的达标情况、主要风险及改进建议。`,
+    );
     return;
   }
   const eventTab = event.target.closest('[data-wb-event-filter]');
@@ -1768,7 +3427,7 @@ workbenchView.addEventListener('click', (event) => {
     const report = activeReport();
     const item = report?.events.find((entry) => entry.id === eventAi.dataset.wbEventAi);
     if (item) {
-      openWorkbenchDetail('event', item.id);
+      send(`${item.title}的风险原因和改善建议`);
     }
     return;
   }
@@ -1862,7 +3521,7 @@ function focusCreatedTask(id) {
   if (row) {
     row.classList.add('is-linked');
     row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    schedule(() => row.classList.remove('is-linked'), 2800);
+    setTimeout(() => row.classList.remove('is-linked'), 2800);
   }
 }
 const wbAdoptOverlay = document.getElementById('wbAdoptOverlay');
@@ -1929,7 +3588,7 @@ wbAdoptForm.addEventListener('submit', (event) => {
   toast.textContent = '已在本页创建跟进任务；未同步到真实任务系统。';
   toast.hidden = false;
   clearTimeout(window.toastTimer);
-  window.toastTimer = schedule(() => {
+  window.toastTimer = setTimeout(() => {
     toast.hidden = true;
   }, 3000);
 });
@@ -2008,9 +3667,16 @@ function exportWorkbenchTasks() {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  schedule(() => URL.revokeObjectURL(url), 1000);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
+async function send(text) {
+  try {
+    await draft(text);
+    showWorkbenchToast('分析问题已填入右侧输入框，请确认后发送。');
+  } catch (error) {
+    showWorkbenchToast('无法填入分析问题：' + error.message);
+  }
+}
 function openMetricDetail(key) {
   const metric = activeReport()?.metrics.find((item) => item.key === key);
   if (!metric) return;
@@ -2025,13 +3691,13 @@ function openFulfillmentPlugin() {
     new URL(document.referrer).origin,
   );
 }
+
 renderSelectedPeriod();
 view.subscribe((state) => {
   restoringView = true;
   if (state.mode !== undefined) periodMode = state.mode;
   if (state.month !== undefined) selectedMonth = state.month;
   if (state.week !== undefined) selectedWeek = state.week;
-  if (state.weekInitialized !== undefined) weekInitialized = state.weekInitialized;
   if (state.event !== undefined) eventFilter = state.event;
   if (state.task !== undefined) taskFilter = state.task;
   renderSelectedPeriod();
@@ -2048,7 +3714,7 @@ const updateReport = publishReport(
         mode: periodMode,
         month: selectedMonth,
         week: selectedWeek,
-        weekInitialized,
+        weekInitialized: true,
         event: eventFilter,
         task: taskFilter,
       });
@@ -2069,7 +3735,7 @@ const updateReport = publishReport(
         event: eventFilter,
         task: taskFilter,
         dimension: dimensionTab,
-        base: selectedWorkbenchBase,
+        base: '',
       },
       metrics: report?.metrics ?? [],
       events: (report?.events ?? []).filter((event) => eventFilter !== 'focus' || event.focus),

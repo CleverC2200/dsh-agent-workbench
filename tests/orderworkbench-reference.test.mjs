@@ -19,39 +19,63 @@ test('order workbench reference interactions', () => {
       '',
     );
     window.eval(
-      'const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const publishReport=(snapshot)=>{document.addEventListener("click",()=>snapshot()); snapshot(); return ()=>snapshot()};\n' +
+      'const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const draft=async()=>{}; const publishReport=(snapshot)=>{document.addEventListener("click",()=>snapshot()); snapshot(); return ()=>snapshot()};\n' +
         code,
     );
     const document = window.document;
-    assert.equal(document.querySelectorAll('.wb-kpi').length, 8);
-    for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) button.click();
-    document.querySelector('.wb-kpi').click();
-    assert.equal(document.getElementById('wbDetailOverlay').hidden, false);
-    document.getElementById('wbDetailClose').click();
-    document.getElementById('weekMode').click();
     assert.equal(document.querySelectorAll('.wb-kpi').length, 6);
+    assert.equal(document.querySelector('.assistant'), null);
+    const click = (selector) => {
+      const node = document.querySelector(selector);
+      assert.ok(node, selector);
+      node.click();
+    };
+    const submit = (id) =>
+      document
+        .getElementById(id)
+        .dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    click('.wb-kpi');
+    assert.equal(document.getElementById('wbDetailOverlay').hidden, false);
+    click('#wbDetailClose');
+    click('#periodPickerTrigger');
+    assert.equal(document.getElementById('periodPickerMenu').hidden, false);
+    click('[data-period-week="2026-08-31"]');
     assert.equal(window.savedView.mode, 'week');
     assert.equal(
       validHtmlViewState('inventory-orderworkbench', { ...window.savedView, version: 1 }),
       true,
     );
-    window.restoreView({ ...window.savedView, task: 'done' });
+    click('#periodPickerTrigger');
+    click('[data-period-all]');
+    click('[data-wb-summary-edit]');
+    document.getElementById('wbSummaryPositiveInput').value = '测试正向结论';
+    submit('wbSummaryEditForm');
     assert.equal(
-      document.querySelector('[data-wb-task-filter].active').dataset.wbTaskFilter,
-      'done',
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '测试正向结论',
     );
-    document.getElementById('monthMode').click();
-    const edit = document.querySelector('[data-wb-edit-issue]');
-    assert.ok(edit);
-    edit.click();
-    assert.equal(document.getElementById('wbIssueOverlay').hidden, false);
-    document.getElementById('wbIssueAnalysis').value = '测试问题';
-    document.getElementById('wbIssueMeasure').value = '测试改进';
-    document.getElementById('wbIssueGenerate').click();
-    assert.match(document.getElementById('wbTaskSection').textContent, /改进任务/);
-    edit.click();
-    document.getElementById('wbIssueCancel').click();
-    assert.equal(document.getElementById('wbIssueOverlay').hidden, true);
+    assert.match(window.localStorage.getItem('order-workbench-summary-v1'), /测试正向结论/);
+    click('[data-wb-add-unmet="base"]');
+    const entity = document.getElementById('wbUnmetEntity');
+    entity.value = [...entity.options].find((option) => option.value).value;
+    document.getElementById('wbUnmetTitleInput').value = '测试未达成';
+    document.getElementById('wbUnmetReasonInput').value = '测试原因';
+    document.getElementById('wbUnmetMeasureInput').value = '测试措施';
+    submit('wbUnmetAddForm');
+    assert.match(document.getElementById('wbDimensionPanel').textContent, /测试未达成/);
+    for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) button.click();
+    click('[data-wb-reference-add]');
+    document.getElementById('wbReferenceName').value = '月度报告';
+    document.getElementById('wbReferenceUrl').value = 'https://example.com/report';
+    submit('wbReferenceForm');
+    assert.equal(document.querySelector('#wbReferenceList a').href, 'https://example.com/report');
+    click('[data-wb-improvement-add="short"]');
+    for (const field of document.querySelectorAll(
+      '#wbImprovementAddFields input, #wbImprovementAddFields textarea',
+    ))
+      field.value = '测试改善';
+    submit('wbImprovementAddForm');
+    assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     assert.deepEqual(errors, []);
   } finally {
     window.close();
