@@ -280,3 +280,23 @@ test('aborted refresh cannot seed its replacement and changed config still rejec
     startConfiguredStockReadCycle();
   }
 });
+
+test('base SKU rows publish the actual rolling shipment total and keep a real zero', async () => {
+  const io = source();
+  const result = await readConfiguredStockPage(
+    { base: '郑州' },
+    {
+      now,
+      execute: async (...args) => {
+        const result = await io.execute(...args);
+        if (args[1].queryId === 'page.sku-detail.atomic')
+          result.rows.forEach((row, i) => {
+            row.rolling_ship_positive = i === 0 ? 75 : 0;
+          });
+        return result;
+      },
+    },
+  );
+  assert.equal(result.rows[0]['safety_stock.last_30d_shipment_quantity'], 75);
+  assert.equal(result.rows[1]['safety_stock.last_30d_shipment_quantity'], 0);
+});

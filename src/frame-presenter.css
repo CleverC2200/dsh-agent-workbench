@@ -43,6 +43,9 @@
 .agent-workbench-document-chrome .gea-conversation-toolbar {
   border-bottom: 0;
 }
+.agent-workbench-document-chrome-tools {
+  display: block;
+}
 .agent-workbench-business {
   display: flex;
   flex-direction: column;

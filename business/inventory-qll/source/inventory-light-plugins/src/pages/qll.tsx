@@ -81,19 +81,30 @@ function formatMetric(value: number | null, unit: MetricValue['unit'], compact =
     return `${(value / 10_000).toFixed(2)} 万箱`;
   if (unit === '%') return `${value.toFixed(2)}%`;
   if (unit === '天') return `${value.toFixed(1)} 天`;
-  return `${Math.round(value).toLocaleString('zh-CN')} ${unit}`;
+  return `${Math.round(value).toLocaleString('zh-CN')} ${unit === '件' ? '箱' : unit}`;
 }
 
-function KpiCard({
+export function KpiCard({
   metricKey,
   metric,
   workspace,
   onOpen,
+  maximumAges,
+  periodShortages,
+  channelSnapshot,
 }: {
   metricKey: KpiKey;
   metric: MetricValue;
   workspace: FullChainWorkspace;
   onOpen: () => void;
+  maximumAges?: { base: number | null; branch: number | null };
+  periodShortages?: { base: number | null; branch: number | null };
+  channelSnapshot?: {
+    inventory: number | null;
+    inTransit: number | null;
+    stockDays: number | null;
+    date?: string;
+  };
 }) {
   const copy = KPI_COPY[metricKey];
   const inventoryMetric =
@@ -173,6 +184,26 @@ function KpiCard({
         </dd>
       </div>
     ) : null;
+  const channelRows =
+    workspace.scope === 'all-channel' && channelSnapshot ? (
+      metricKey === 'inventoryLevel' ? (
+        <>
+          <div title={channelSnapshot.date ? `客户库存快照：${channelSnapshot.date}` : undefined}>
+            <dt>{'客户在仓'}</dt>
+            <dd>{cardValue(channelSnapshot.inventory, '件')}</dd>
+          </div>
+          <div>
+            <dt>{'客户在途'}</dt>
+            <dd>{cardValue(channelSnapshot.inTransit, '件')}</dd>
+          </div>
+        </>
+      ) : metricKey === 'turnover' ? (
+        <div title="客户在仓及在途库存÷同范围近30日日均动销">
+          <dt>{'客户库存支撑'}</dt>
+          <dd>{cardValue(channelSnapshot.stockDays, '天')}</dd>
+        </div>
+      ) : null
+    ) : null;
   const valueText = cardValue(primaryValue, metric.unit);
   const unavailable = primaryValue == null;
   const statusClass = metric.state === 'risk' ? styles.kpiStatusRisk : styles.kpiStatusCurrent;
@@ -188,7 +219,9 @@ function KpiCard({
               )
             : null;
         const order = workspace.fulfillment[layer === 'base' ? 'factory' : 'branch'];
-        const age = workspace.layerMetrics?.[layer].averageAgeDays ?? null;
+        const age = maximumAges
+          ? maximumAges[layer]
+          : (workspace.layerMetrics?.[layer].averageAgeDays ?? null);
         const value =
           metricKey === 'inventoryLevel'
             ? `${total != null && primaryValue ? ((total / primaryValue) * 100).toFixed(1) + '%' : '—'} / ${formatMetric(total, '件', true)}`
@@ -211,7 +244,7 @@ function KpiCard({
             : metricKey === 'turnover'
               ? '基地按计划日均需求；分仓按可用库存及实际出库'
               : metricKey === 'aging'
-                ? `平均货龄 / >30天库存量；分层展示`
+                ? `${maximumAges ? '最大库龄' : '平均货龄'} / >30天库存量；分层展示`
                 : metricKey === 'fulfillment'
                   ? '基地按需求减缺口；分仓按运营事实发货÷订单'
                   : '最新备单快照的当前订单量';
@@ -261,6 +294,7 @@ function KpiCard({
                 </div>
               )}
               {layerSummary}
+              {customerHelper && <dl className={styles.kpiHelpers}>{customerHelper}</dl>}
             </>
           }
         >
@@ -293,7 +327,7 @@ function KpiCard({
               </dt>
               <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
             </div>
-            {customerHelper}
+            {channelRows}
           </dl>
         )}
         {!splitValues && (
@@ -309,11 +343,25 @@ function KpiCard({
               <>
                 <div>
                   <dt>{'基地货龄'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.base.averageAgeDays ?? null, '天')}</dd>
+                  <dd>
+                    {cardValue(
+                      maximumAges
+                        ? maximumAges.base
+                        : (workspace.layerMetrics?.base.averageAgeDays ?? null),
+                      '天',
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>{'分仓货龄'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.branch.averageAgeDays ?? null, '天')}</dd>
+                  <dd>
+                    {cardValue(
+                      maximumAges
+                        ? maximumAges.branch
+                        : (workspace.layerMetrics?.branch.averageAgeDays ?? null),
+                      '天',
+                    )}
+                  </dd>
                 </div>
               </>
             ) : metricKey === 'turnover' ? (
@@ -341,15 +389,25 @@ function KpiCard({
             ) : metricKey === 'orderGap' ? (
               <>
                 <div>
-                  <dt>{'基地缺货量'}</dt>
+                  <dt>{periodShortages ? '基地本月缺货量' : '基地缺货量'}</dt>
                   <dd>
-                    {cardValue(workspace.orderExecution?.currentBaseShortageQty ?? null, '件')}
+                    {cardValue(
+                      periodShortages
+                        ? periodShortages.base
+                        : (workspace.orderExecution?.currentBaseShortageQty ?? null),
+                      '件',
+                    )}
                   </dd>
                 </div>
                 <div>
-                  <dt>{'分仓缺货量'}</dt>
+                  <dt>{periodShortages ? '分仓本月缺货量' : '分仓缺货量'}</dt>
                   <dd>
-                    {cardValue(workspace.orderExecution?.currentBranchShortageQty ?? null, '件')}
+                    {cardValue(
+                      periodShortages
+                        ? periodShortages.branch
+                        : (workspace.orderExecution?.currentBranchShortageQty ?? null),
+                      '件',
+                    )}
                   </dd>
                 </div>
               </>
@@ -369,7 +427,7 @@ function KpiCard({
                 </div>
               </>
             )}
-            {customerHelper}
+            {channelRows}
           </dl>
         )}
       </div>

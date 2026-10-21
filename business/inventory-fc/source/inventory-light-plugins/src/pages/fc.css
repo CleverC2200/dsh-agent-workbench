@@ -4659,3 +4659,115 @@ body,
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.agent-root .workspace > .kpi-grid.fc-compact-kpis {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.agent-root .fc-compact-kpis .kpi-card {
+  display: flex;
+  min-height: 110px;
+  flex-direction: column;
+  padding: 8px;
+}
+.agent-root .fc-compact-kpis > :last-child {
+  grid-column: auto;
+}
+.agent-root .fc-compact-kpis .kpi-title {
+  min-height: 18px;
+  font-size: 11px;
+}
+.agent-root .fc-compact-kpis .kpi-card .kpi-value {
+  display: flex;
+  min-height: 30px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin: 4px 0 6px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1.15;
+}
+.agent-root .fc-compact-kpis .kpi-card dl {
+  margin-top: auto;
+  padding-top: 8px;
+}
+.agent-root .fc-compact-kpis .kpi-card dl > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.agent-root .fc-compact-kpis .kpi-card :is(dt, dd) {
+  font-size: 9px;
+  line-height: 1.4;
+}
+.fc-quantity-input,
+.fc-reason-input {
+  width: 90px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 6px;
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  font: 10px var(--ui-font);
+}
+.fc-reason-input {
+  width: 140px;
+}
+.fc-workflow-dialog {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  color: var(--ui-secondary);
+  font: 11px/1.5 var(--ui-font);
+}
+.fc-workflow-dialog p {
+  margin: 0;
+}
+.fc-workflow-dialog .table-scroll {
+  max-height: 340px;
+  overflow: auto;
+}
+.fc-workflow-dialog .data-table {
+  min-width: 540px;
+}
+.fc-workflow-dialog select {
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  color: var(--ui-secondary);
+  background: var(--ui-surface);
+}
+.fc-workflow-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fc-workflow-notice {
+  margin: 8px 0;
+  color: var(--ui-secondary);
+  font: 11px/1.4 var(--ui-font);
+}
+.fc-action-disabled {
+  opacity: 0.5;
+}
+@media (max-width: 799px) {
+  .agent-root .workspace > .kpi-grid.fc-compact-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 559px) {
+  .agent-root .workspace > .kpi-grid.fc-compact-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 359px) {
+  .agent-root .workspace > .kpi-grid.fc-compact-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

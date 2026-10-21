@@ -11,8 +11,12 @@ async function mount(t, id, width, override) {
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
     errors = [],
-    calls = [];
+    calls = [],
+    diagnostics = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('console', (message) => {
+    if (message.type() === 'warning') diagnostics.push(message.text());
+  });
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   const html = await configuredPageHtml(id),
     wire = await configuredWire(id);
@@ -38,10 +42,33 @@ async function mount(t, id, width, override) {
   );
   await page.goto('http://agent-layout.test/');
   const frame = page.frameLocator('iframe');
-  return { page, frame, errors, calls };
+  return { page, frame, errors, calls, diagnostics };
 }
+test('APS source limitations do not masquerade as query failures', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 1280);
+  await expect.poll(() => calls.length).toBeGreaterThan(10);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  await expect(frame.getByRole('alert')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS query diagnostics stay in logs while other sources finish', async (t) => {
+  const { frame, calls, errors, diagnostics } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (query.queryId === 'source.stock-date')
+      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
+    return result;
+  });
+  await expect.poll(() => calls.length).toBeGreaterThan(10);
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  await expect(frame.getByRole('alert')).toHaveCount(0);
+  await expect(frame.locator('body')).not.toContainText('NO_RETURN_COLUMN_ALLOWED');
+  await expect
+    .poll(() => diagnostics.some((message) => message.includes('NO_RETURN_COLUMN_ALLOWED')))
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
 for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
-  test(`${id}: authored structure and supplementary data remain usable at desktop and narrow widths`, async (t) => {
+  test(`${id}: original business structure remains usable at desktop and narrow widths`, async (t) => {
     const { page, frame, errors } = await mount(t, id, 1280);
     const root = frame.locator(id === 'apsplan' ? '#root' : '#app');
     await expect(root).not.toBeEmpty();
@@ -53,14 +80,15 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
       apsplan: '智能工作台',
     }[id];
     await expect(
-      root.getByRole(id === 'aqkc' ? 'tab' : 'button', { name: marker, exact: true }).first(),
+      root
+        .getByRole(['aqkc', 'qll'].includes(id) ? 'tab' : 'button', { name: marker, exact: true })
+        .first(),
     ).toBeVisible({
       timeout: 15000,
     });
     if (id === 'apsplan' || id === 'aqkc') {
       const summary = frame.locator('summary').filter({ hasText: '业务明细' });
-      await expect(summary).toBeVisible();
-      assert.equal(await summary.evaluate((el) => el.parentElement.open), false);
+      await expect(summary).toHaveCount(0);
     }
     assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
     for (const width of [1280, 560]) {
@@ -82,7 +110,171 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
     }
     assert.deepEqual(errors, []);
   });
-test('qll execution headline shows dated base orders without deriving pending from monthly totals', async (t) => {
+for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
+  test(`${id}: shared header aligns filters and refresh across pane widths`, async (t) => {
+    const { page, frame, errors } = await mount(t, id, 1280);
+    const header = frame.locator('[data-business-toolbar]');
+    await expect(header).toBeVisible();
+    assert.equal(
+      await header.evaluate((el) => getComputedStyle(el).backgroundColor),
+      'rgb(255, 255, 255)',
+      `${id}: shared header surface`,
+    );
+    const refresh = header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ });
+    await expect(refresh).toBeVisible();
+    for (const width of [1280, 768, 560, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const boxes = await header.evaluate((el) => {
+        const rect = (node) => {
+          const r = node.getBoundingClientRect();
+          return { left: r.left, right: r.right, top: r.top, height: r.height };
+        };
+        return {
+          header: rect(el),
+          row: rect(el.querySelector('[data-business-toolbar-row]')),
+          filters: rect(el.querySelector('[data-business-toolbar-filters]')),
+          actions: rect(el.querySelector('[data-business-toolbar-actions]')),
+          scroll: document.documentElement.scrollWidth,
+          viewport: innerWidth,
+        };
+      });
+      assert.ok(boxes.scroll <= boxes.viewport + 2, `${id}@${width}: page overflows`);
+      assert.ok(
+        Math.abs(boxes.filters.left - boxes.row.left - 16) <= 1,
+        `${id}@${width}: filter alignment`,
+      );
+      assert.ok(
+        Math.abs(boxes.row.right - boxes.actions.right - 16) <= 1,
+        `${id}@${width}: action alignment`,
+      );
+      if (width === 1280)
+        assert.equal(Math.round(boxes.row.height), 56, `${id}: primary toolbar height`);
+      const button = await refresh.boundingBox();
+      assert.ok(
+        button && Math.abs(button.height - 36) <= 1,
+        `${id}@${width}: refresh control height`,
+      );
+      if (process.env.AGENT_TOOLBAR_EVIDENCE) {
+        await mkdir(process.env.AGENT_TOOLBAR_EVIDENCE, { recursive: true });
+        await page.screenshot({ path: `${process.env.AGENT_TOOLBAR_EVIDENCE}/${id}-${width}.png` });
+      }
+    }
+    assert.deepEqual(errors, []);
+  });
+test('APS top month selector applies the original period and keeps its menu within a narrow pane', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'apsplan', 390);
+  const picker = frame.locator('[data-business-toolbar] button.date-picker-button');
+  await picker.click();
+  const menu = frame.getByRole('menu', { name: '统计日期筛选', exact: true });
+  await expect(menu).toBeVisible();
+  const box = await menu.boundingBox();
+  assert.ok(
+    box && box.x >= 0 && box.x + box.width <= 391,
+    `APS date menu clipped: ${JSON.stringify(box)}`,
+  );
+  assert.ok(box.width <= 264, 'period picker must stay compact');
+  const grid = await menu.locator('.date-picker-month').evaluate((el) => ({
+    columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+    children: [...el.children].map((child) => {
+      const r = child.getBoundingClientRect();
+      return { width: r.width, height: r.height };
+    }),
+  }));
+  assert.equal(grid.columns, 4);
+  assert.ok(grid.children.every((cell) => cell.width <= 60 && cell.height <= 32));
+  const before = calls.length;
+  await menu
+    .locator('.date-picker-month')
+    .getByRole('button', { name: '9月', exact: true })
+    .click();
+  await expect(picker).toContainText('2026年9月');
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.parameters.as_of?.startsWith('2026-09') ||
+            query.parameters.start?.startsWith('2026-09') ||
+            query.parameters.start_month === '202609',
+        ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+test('fc: order card displays monthly shortage and stock allocation without inventing pending orders', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'health.summary') result.rows[0].pack_unit_qty = 86814.2;
+    if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
+    return result;
+  });
+  const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
+  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
+  await expect(card.locator('dl')).toContainText('库存备单占用86,814.2箱');
+  await expect(card.locator('.kpi-value')).toHaveText('0箱');
+  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
+  assert.ok(
+    calls.some((q) => q.queryId === 'health.summary' && q.parameters.warehouse_type === '分仓'),
+  );
+  assert.ok(
+    calls.some((q) => q.queryId === 'orders.summary' && q.parameters.pickup_type === '分仓'),
+  );
+  assert.deepEqual(errors, []);
+});
+test('fc: unavailable stock allocation does not hide monthly shortage or become zero', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'health.summary')
+      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
+    if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
+    return result;
+  });
+  const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
+  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
+  await expect(card.locator('dl')).toContainText('库存备单占用-');
+  await expect(card.locator('.kpi-value')).toHaveText('0箱');
+  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
+  await expect(frame.getByRole('alert')).toHaveCount(0);
+  assert.equal(calls.filter((q) => q.queryId === 'health.summary').length, 1);
+  assert.deepEqual(errors, []);
+});
+test('dealer top date refresh preserves the selected customer scope', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'dealer', 390);
+  const header = frame.locator('[data-business-toolbar]');
+  const menu = header.locator('details').first();
+  await menu.locator('summary').click();
+  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
+  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect(menu.locator('summary')).toContainText('customer-A');
+  await header.getByLabel('读取时点').fill('2026-10-18');
+  const before = calls.length;
+  await header
+    .locator('[data-business-toolbar-actions]')
+    .getByRole('button', { name: '查询 / 刷新', exact: true })
+    .click();
+  await expect
+    .poll(
+      () =>
+        calls
+          .slice(before)
+          .some(
+            (query) =>
+              query.queryId === 'source.dealer-stock-date' &&
+              query.parameters.as_of === '2026-10-18',
+          ) &&
+        calls
+          .slice(before)
+          .some(
+            (query) =>
+              query.queryId.startsWith('dealer.stock.customer') &&
+              query.parameters.customer === 'customer-A',
+          ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
     if (query.queryId === 'inventory.summary')
@@ -97,15 +289,89 @@ test('qll execution headline shows dated base orders without deriving pending fr
   });
   const card = frame
     .getByRole('button')
-    .filter({ has: frame.getByText('订单执行', { exact: true }) });
+    .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card).toContainText('104.93万箱');
-  await expect(card).toContainText('基地未备单量 · 2026-10-19 · 范围 3500/3500 个SKU');
-  await expect(card).toContainText('基地已备单占用');
-  await expect(card).toContainText('26.12万箱');
+  await expect(card).toContainText('基地本月缺货量');
+  await expect(card).toContainText('分仓本月缺货量');
+  assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
   assert.equal(
     calls.some((query) => query.queryId.startsWith('inventory.detail')),
     false,
   );
+  assert.deepEqual(errors, []);
+});
+test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'replenishment.summary')
+      Object.assign(result.rows[0], { historical_turnover_days: 12.5, turnover_count: 30 });
+    return result;
+  });
+  const card = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('库存周转', { exact: true }) });
+  await expect(card).toContainText('12.5天');
+  assert.ok(calls.some((query) => query.queryId === 'replenishment.summary'));
+  await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
+  await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+test('QLL cards retain layer maximum ages and monthly shortage values, including zero', async (t) => {
+  const { frame, errors } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId === 'health.summary')
+      Object.assign(result.rows[0], {
+        base_max_age: 405,
+        max_age: query.parameters.warehouse_type === '分仓' ? 381 : 405,
+      });
+    if (query.queryId === 'orders.summary')
+      Object.assign(result.rows[0], {
+        shortage: query.parameters.pickup_type === '分仓' ? 0 : 12345,
+      });
+    return result;
+  });
+  const age = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('当前货龄', { exact: true }) });
+  await expect(age).toContainText('基地货龄405.0天');
+  await expect(age).toContainText('分仓货龄381.0天');
+  const orders = frame
+    .getByRole('button')
+    .filter({ has: frame.getByText('当前订单', { exact: true }) });
+  await expect(orders).toContainText('基地本月缺货量1.23万箱');
+  await expect(orders).toContainText('分仓本月缺货量0箱');
+  assert.deepEqual(errors, []);
+});
+test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'qll', 560);
+  await expect(
+    frame.locator('div[aria-busy]').filter({ has: frame.getByText('当前库存', { exact: true }) }),
+  ).toHaveAttribute('aria-busy', 'false');
+  const before = calls.length;
+  await frame.getByLabel('读取时点').fill('2026-10-18');
+  await expect(frame.getByText('2026年10月18日', { exact: true })).toBeVisible();
+  assert.equal(calls.length, before);
+  await frame.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.queryId === 'source.stock-date' && query.parameters.as_of === '2026-10-18',
+        ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+test('FC uses the same Chinese date display and retains explicit refresh', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'fc', 560);
+  await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
+  await frame.getByLabel('读取时点').fill('2026-10-18');
+  await expect(frame.getByText('2026年10月18日', { exact: true })).toBeVisible();
+  const before = calls.length;
+  await frame.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect
+    .poll(() => calls.slice(before).some((query) => query.parameters.as_of === '2026-10-18'))
+    .toBe(true);
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
@@ -129,32 +395,34 @@ for (const [quantity, count, display] of [
     });
     const card = frame
       .locator('article')
-      .filter({ has: frame.getByText('基地未备单量', { exact: true }) });
+      .filter({ has: frame.getByText('当前订单', { exact: true }) });
     await expect(card.locator('strong')).toHaveText(display);
-    await expect(card).toContainText(`快照 2026-10-19 · 范围 ${count}/201 个基地SKU`);
-    await expect(card).toContainText('50箱（201/201 SKU）');
-    await expect(
-      card.locator('dl div').filter({ hasText: '当前待发总量' }).locator('dd'),
-    ).toHaveText('-');
+    await expect(card).toContainText('50箱');
+    assert.doesNotMatch(await card.innerText(), /快照|范围|SKU/);
+    await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
+      '-',
+    );
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
   });
-test('dealer keeps original column order while display choices do not change queries or ten-row pagination', async (t) => {
+test('dealer reuses original tabs, table and pagination while ten-row paging stays server-driven', async (t) => {
   const { frame, calls } = await mount(t, 'dealer', 1280);
-  await frame.getByRole('button', { name: 'SKU库存', exact: true }).click();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
   await expect(frame.locator('tbody tr')).toHaveCount(10);
   const offset = () =>
     calls.filter((c) => c.queryId.startsWith('dealer.stock.detail')).at(-1)?.parameters.offset;
   assert.equal(offset(), 0);
-  const before = calls.length;
-  await frame.locator('summary').filter({ hasText: '显示列' }).click();
-  const checkbox = frame.getByRole('checkbox', { name: 'SKU编码', exact: true });
-  await checkbox.uncheck();
-  await expect(frame.locator('thead th').filter({ hasText: /^SKU编码$/ })).toHaveCount(0);
-  await frame.getByRole('button', { name: '显示全部', exact: true }).click();
-  await expect(frame.locator('thead th').filter({ hasText: /^SKU编码$/ })).toHaveCount(1);
-  assert.equal(calls.length, before);
-  await frame.locator('summary').filter({ hasText: '显示列' }).click();
+  await expect(frame.getByRole('tablist')).toHaveCount(1);
+  await expect(frame.getByRole('tab', { name: 'SKU库存', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(frame.locator('summary').filter({ hasText: '显示列' })).toHaveCount(0);
+  assert.equal(
+    await frame.locator('thead tr').evaluate((el) => Math.round(el.getBoundingClientRect().height)),
+    38,
+  );
+  await expect(frame.getByRole('combobox', { name: '每页条数' })).toHaveValue('10');
   await frame.getByRole('button', { name: '下一页', exact: true }).click();
   await expect.poll(offset).toBe(10);
   assert.equal(
@@ -318,7 +586,7 @@ for (const [quantity, demand, expected] of [
     if (!demand) await expect(card.locator('.kpi-value > span')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
-test('FC monthly order identity and shortage SKU counts are shown without inventing current pending quantities', async (t) => {
+test('FC current-order card follows explicit missing-zero policy without borrowing monthly quantities', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
     if (query.queryId === 'orders.summary')
       Object.assign(result.rows[0], {
@@ -337,103 +605,31 @@ test('FC monthly order identity and shortage SKU counts are shown without invent
   const card = frame
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('-');
-  await expect(card.locator('dl div').filter({ hasText: '本月涉及订单' })).toContainText('6单');
-  await expect(card.locator('dl div').filter({ hasText: '本月缺货SKU' })).toContainText('3个');
-  await expect(card.locator('dl div').filter({ hasText: '本月缺货订单' })).toContainText('2单');
-  await expect(card).toContainText('本月累计');
+  await expect(card.locator('.kpi-value')).toHaveText('0箱');
+  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
+  assert.doesNotMatch(await card.innerText(), /SKU|6单|2单/);
+  await expect(card.locator('dt')).toHaveText(['本月缺货量', '库存备单占用']);
   assert.equal(calls.filter((q) => q.queryId === 'orders.summary').length, 1);
   assert.deepEqual(errors, []);
 });
 for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
-  test(`${id}: dated factory shipment details stay lazy and requery ten rows per page`, async (t) => {
-    const { page, frame, calls, errors } = await mount(t, id, 1280, (query, result) => {
-      if (query.queryId === 'base_shipments.count') result.rows = [{ total: 25 }];
-      if (query.queryId === 'base_shipments.summary')
-        Object.assign(result.rows[0], {
-          row_count: 25,
-          base_count: 5,
-          month_ship_positive: 3909186,
-          month_ship_net: 3908218.937,
-          rolling_ship_positive: 6862792.1,
-          rolling_ship_net: 6861044.737,
-          rolling_ship_negative: 1747.363,
-        });
-      if (query.queryId === 'base_shipments.detail')
-        result.rows = Array.from(
-          { length: Math.min(10, 25 - query.parameters.offset) },
-          (_, n) => ({
-            ...Object.fromEntries(result.returnedColumns.map((field) => [field, null])),
-            base: '华东',
-            sku: 'ship-sku-' + (query.parameters.offset + n),
-            material_name: '发货测试商品',
-            month_ship_positive: 100,
-            month_ship_net: 95,
-            rolling_ship_positive: 200,
-            rolling_ship_net: 190,
-            rolling_ship_negative: 10,
-            last_ship_date: '20261019',
-          }),
-        );
-      return result;
-    });
-    await expect(frame.locator(id === 'apsplan' ? '#root' : '#app')).not.toBeEmpty();
+  test(`${id}: source diagnostics and extra source tabs stay outside the original business UI`, async (t) => {
+    const { frame, calls, errors } = await mount(t, id, 1280);
+    await expect(frame.locator('summary').filter({ hasText: '业务明细' })).toHaveCount(0);
+    for (const title of [
+      '基地实际发货',
+      '客户计划分析来源',
+      '基地产销日记录',
+      '分仓运营与费用',
+      '分仓库存与补货测算',
+    ])
+      await expect(frame.getByRole('button', { name: title, exact: true })).toHaveCount(0);
     assert.equal(
       calls.some((query) => query.queryId === 'base_shipments.detail'),
       false,
     );
-    if (['aqkc', 'apsplan'].includes(id))
-      await frame.locator('summary').filter({ hasText: '业务明细' }).click();
-    if (id === 'fc') await frame.getByRole('button', { name: '基地资源', exact: true }).click();
-    await frame.getByRole('button', { name: '基地实际发货', exact: true }).click();
-    const panel = frame.locator('section[aria-labelledby="source-view-title"]');
-    await expect(panel.locator('tbody tr')).toHaveCount(10);
-    await expect(panel).toContainText('近30日净发货');
-    const detailCalls = () => calls.filter((query) => query.queryId === 'base_shipments.detail');
-    assert.equal(detailCalls().at(-1).parameters.page_size, 10);
-    assert.equal(detailCalls().at(-1).parameters.offset, 0);
-    assert.equal(detailCalls().at(-1).parameters.rolling_start, '20260921');
-    assert.equal(detailCalls().at(-1).parameters.shipment_end_exclusive, '20261021');
-    await panel.getByRole('button', { name: '下一页', exact: true }).click();
-    await expect.poll(() => detailCalls().at(-1)?.parameters.offset).toBe(10);
-    await expect(panel.locator('tbody tr')).toHaveCount(10);
-    await expect(panel).toContainText('ship-sku-10');
-    await expect(panel).toContainText('2026-09-21');
-    await page.setViewportSize({ width: 560, height: 900 });
-    const width = await panel.evaluate(() => ({
-      page: document.documentElement.scrollWidth,
-      viewport: innerWidth,
-    }));
-    assert.ok(width.page <= width.viewport + 2, JSON.stringify(width));
     assert.deepEqual(errors, []);
   });
-test('APS warehouse operations show source fractions as percentages and preserve source zero', async (t) => {
-  const { frame, calls, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
-    if (['branch_cost.detail', 'branch_cost.detail.atomic'].includes(query.queryId))
-      Object.assign(result.rows[0], {
-        jfjsl: '0.0000',
-        llfhl: '1.0000',
-        zqjfl: '0.9770',
-        kwfhl: '0.0000',
-        hdqrjsl: '0.6690',
-        xxdzb: '0.9600',
-      });
-    return result;
-  });
-  await frame.locator('summary').filter({ hasText: '业务明细' }).click();
-  await frame.getByRole('button', { name: '分仓运营与费用', exact: true }).click();
-  const panel = frame.locator('section[aria-labelledby="source-view-title"]');
-  await expect(panel.locator('tbody tr')).toHaveCount(1);
-  for (const percentage of ['97.7%', '66.9%', '96%', '100%', '0%'])
-    await expect(panel).toContainText(percentage);
-  const query = calls.find((query) =>
-    ['branch_cost.detail', 'branch_cost.detail.atomic'].includes(query.queryId),
-  );
-  assert.equal(query.parameters.start, '202610');
-  assert.equal(query.parameters.end_exclusive, '202611');
-  assert.equal(query.parameters.base, undefined);
-  assert.deepEqual(errors, []);
-});
 
 for (const deniedBudget of [false, true])
   test(`APS sales view keeps cards, list and analysis consistent with zero-fill; denied budget=${deniedBudget}`, async (t) => {
@@ -522,5 +718,810 @@ for (const deniedBudget of [false, true])
       assert.ok(budgetCalls.every((query) => query.parameters.start_month === '202610'));
     }
     assert.doesNotMatch(await frame.locator('#overview-detail-list').innerText(), /[-—]%/);
+    assert.deepEqual(errors, []);
+  });
+
+test('dealer original customer menu applies the new query scope and closes after selection', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'dealer', 1280);
+  const menu = frame.locator('header details').first();
+  await menu.locator('summary').click();
+  await menu.getByRole('textbox', { name: '客户编码', exact: true }).fill('customer-A');
+  await menu.getByRole('button', { name: '查询 / 刷新', exact: true }).click();
+  await expect(menu.locator('summary')).toContainText('客户 customer-A');
+  assert.equal(await menu.evaluate((el) => el.open), false);
+  await expect
+    .poll(() =>
+      calls.some(
+        (q) =>
+          q.queryId.startsWith('dealer.stock.customer') && q.parameters.customer === 'customer-A',
+      ),
+    )
+    .toBe(true);
+  assert.deepEqual(errors, []);
+});
+
+test('QLL category cells bind category names while retaining organization as the secondary line', async (t) => {
+  const { frame, errors } = await mount(t, 'qll', 1280);
+  const cell = frame.locator('tbody tr').first().locator('td').first();
+  await expect(cell.locator('strong')).toHaveText('汤圆');
+  await expect(cell.locator('small')).toHaveText(['华东', 'sku-A-000']);
+  await expect(frame.getByRole('tab', { name: '品类结构', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  assert.deepEqual(errors, []);
+});
+
+for (const id of ['fc', 'qll', 'dealer'])
+  test(`${id}: Chinese calendar stays inside narrow panes and only applies on refresh`, async (t) => {
+    const { page, frame, calls, errors } = await mount(t, id, 390);
+    const header = frame.locator('[data-business-toolbar]');
+    const input = header.getByLabel('读取时点');
+    const trigger = header.getByRole('button', { name: /^选择日期：/ });
+    await expect(trigger).toBeVisible();
+    await expect.poll(() => calls.length).toBeGreaterThan(2);
+    await expect(frame.locator('main[aria-busy="true"]')).toHaveCount(0);
+    const before = calls.length;
+    await trigger.click();
+    const calendar = frame.getByRole('dialog', { name: '选择日期', exact: true });
+    await expect(calendar).toContainText('2026年10月');
+    await expect(calendar.getByRole('button', { name: '今天', exact: true })).toBeVisible();
+    await expect(calendar.getByRole('button', { name: '清空', exact: true })).toBeVisible();
+    assert.doesNotMatch(await calendar.innerText(), /October|Clear|Today/);
+    await expect(calendar.getByRole('button', { name: '下个月', exact: true })).toBeDisabled();
+    await expect(
+      calendar.getByRole('button', { name: '2026年10月21日', exact: true }),
+    ).toBeDisabled();
+    for (const width of [1280, 560, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await trigger.click();
+      if (!(await calendar.isVisible())) await trigger.click();
+      const box = await calendar.boundingBox();
+      assert.ok(box.x >= 0 && box.x + box.width <= width, `calendar clipped at ${width}`);
+    }
+    await calendar.getByRole('button', { name: '2026年10月18日', exact: true }).click();
+    await expect(input).toHaveValue('2026-10-18');
+    await expect(calendar).toHaveCount(0);
+    assert.equal(
+      calls.slice(before).some((q) => q.parameters.as_of === '2026-10-18'),
+      false,
+      'choosing a date must not apply the draft',
+    );
+    await header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ })
+      .click();
+    await expect
+      .poll(() => calls.slice(before).some((q) => q.parameters.as_of === '2026-10-18'))
+      .toBe(true);
+    await trigger.click();
+    await page.keyboard.press('Escape');
+    await expect(calendar).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await trigger.click();
+    await calendar.getByRole('button', { name: '上个月', exact: true }).click();
+    await expect(calendar).toContainText('2026年9月');
+    await calendar.getByRole('button', { name: '今天', exact: true }).click();
+    await expect(input).toHaveValue('2026-10-20');
+    await trigger.click();
+    await calendar.getByRole('button', { name: '清空', exact: true }).click();
+    await expect(input).toHaveValue('');
+    const clearedCalls = calls.length;
+    await header
+      .locator('[data-business-toolbar-actions]')
+      .getByRole('button', { name: /刷新/ })
+      .click();
+    assert.equal(calls.length, clearedCalls, 'required empty date blocks refresh');
+    await expect(calendar).toBeVisible();
+    assert.deepEqual(errors, []);
+  });
+
+for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
+  test(`${id}: source warnings are logged without business-page banners`, async (t) => {
+    const { frame, errors, diagnostics } = await mount(t, id, 1280);
+    const root = frame.locator('#app');
+    await expect(root).not.toBeEmpty();
+    await root.evaluate(() =>
+      window.dispatchEvent(
+        new CustomEvent('gea-query-warning', {
+          detail: { message: '缺少批次货龄与生产日期，无法计算完整货龄分桶和未来推演。' },
+        }),
+      ),
+    );
+    await expect
+      .poll(() => diagnostics.some((message) => message.includes('缺少批次货龄')))
+      .toBe(true);
+    await expect(root).not.toContainText('缺少批次货龄与生产日期');
+    await expect(root.getByRole('alert')).toHaveCount(0);
+    assert.deepEqual(errors, []);
+  });
+
+test('FC cycle dialog applies one setting to its card and fresh ten-row pages', async (t) => {
+  const { frame, calls, errors, page } = await mount(t, 'fc', 390, (query, result) => {
+    if (query.queryId === 'replenishment.summary')
+      Object.assign(result.rows[0], {
+        recommended_qty: 10 * (query.parameters.cycle_days + 3) - 20,
+      });
+    return result;
+  });
+  const trigger = frame.getByRole('button', { name: '补货周期配置', exact: true });
+  const card = frame.locator('.kpi-card').filter({ hasText: '待补货量' });
+  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await expect(trigger).toContainText('7天（默认）');
+  await trigger.click();
+  const modal = frame.getByRole('dialog', { name: '补货周期配置', exact: true });
+  const input = modal.getByRole('spinbutton', { name: '补货周期（天）', exact: true });
+  await input.fill('14');
+  await modal.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(trigger).toContainText('7天（默认）');
+  await trigger.click();
+  await input.fill('0');
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(modal).toBeVisible();
+  await expect(trigger).toContainText('7天（默认）');
+  await input.fill('14');
+  const before = calls.length;
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(trigger).toContainText('14天');
+  await expect(card.locator('.kpi-value')).toHaveText('150箱');
+  await expect
+    .poll(() =>
+      calls
+        .slice(before)
+        .some(
+          (query) =>
+            query.queryId === 'replenishment.detail.atomic' &&
+            query.parameters.cycle_days === 14 &&
+            query.parameters.page_size === 10 &&
+            query.parameters.offset === 0,
+        ),
+    )
+    .toBe(true);
+  await trigger.click();
+  await modal.getByRole('button', { name: '恢复默认', exact: true }).click();
+  await expect(input).toHaveValue('7');
+  await modal.getByRole('button', { name: '应用', exact: true }).click();
+  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await page.setViewportSize({ width: 320, height: 900 });
+  await trigger.click();
+  const box = await modal.boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= 320);
+  await page.keyboard.press('Escape');
+  await expect(modal).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS intelligent core cards use one compact row on desktop and adapt to split panes', async (t) => {
+  const { page, frame, errors } = await mount(t, 'apsplan', 922);
+  const grid = frame.locator('.intelligent-core-metric-group .scope-kpi-count-4');
+  await expect(grid.locator('.period-kpi-card')).toHaveCount(4);
+  for (const [width, columns] of [
+    [1280, 4],
+    [922, 4],
+    [800, 4],
+    [768, 4],
+    [560, 2],
+    [480, 2],
+    [390, 1],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      viewport: innerWidth,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          height: r.height,
+          width: r.width,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `column count at ${width}`);
+    assert.ok(layout.scroll <= layout.viewport + 2, `page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `card content clips at ${width}`,
+    );
+    if (columns === 4) {
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+      assert.ok(
+        layout.cards.every((card) => card.height <= 210),
+        'core cards must be compact',
+      );
+    }
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/aps-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('QLL overview fits five compact cards in a wide row and adapts without clipping', async (t) => {
+  const { page, frame, errors } = await mount(t, 'qll', 922);
+  const grid = frame.locator('[data-overview-cards="qll"]');
+  await expect(grid.getByRole('button')).toHaveCount(5);
+  for (const [width, columns] of [
+    [1280, 5],
+    [1000, 5],
+    [922, 5],
+    [880, 5],
+    [800, 5],
+    [768, 3],
+    [640, 3],
+    [560, 3],
+    [480, 2],
+    [400, 2],
+    [390, 2],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          width: r.width,
+          height: r.height,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `QLL column count at ${width}`);
+    assert.ok(layout.scroll <= width + 2, `QLL page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `QLL card clips at ${width}`,
+    );
+    assert.ok(
+      layout.cards.every((card) => card.height <= 145),
+      `QLL cards too tall at ${width}`,
+    );
+    if (columns === 5)
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/qll-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('AQKC overview fits five compact cards in a wide row and adapts without clipping', async (t) => {
+  const { page, frame, errors } = await mount(t, 'aqkc', 922, (query, result) => {
+    if (query.queryId === 'calendar.target_versions')
+      return {
+        ...result,
+        rows: [{ month: '2026-10-01', inventory_version: '月初', source_rows: 1 }],
+      };
+    return result;
+  });
+  const grid = frame.locator('[data-overview-cards="aqkc"]');
+  await expect(grid.locator('article')).toHaveCount(5);
+  for (const [width, columns] of [
+    [1280, 5],
+    [1000, 5],
+    [922, 5],
+    [880, 5],
+    [800, 5],
+    [768, 3],
+    [640, 3],
+    [560, 3],
+    [480, 2],
+    [400, 2],
+    [390, 2],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          width: r.width,
+          height: r.height,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `AQKC column count at ${width}`);
+    assert.ok(layout.scroll <= width + 2, `AQKC page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `AQKC card clips at ${width}`,
+    );
+    assert.ok(
+      layout.cards.every((card) => card.height <= 145),
+      `AQKC cards too tall at ${width}`,
+    );
+    if (columns === 5)
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/aqkc-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
+
+function fcWorkflowRows(query, result) {
+  const detail = /^(replenishment|transfer_plan)\.detail(?:\.atomic)?$/.test(query.queryId);
+  const values = (index) => ({
+    warehouse_code: '001',
+    warehouse_name: '上海分仓',
+    sku: `sku-A-${String(index).padStart(3, '0')}`,
+    material_name: '测试商品',
+    page_scope_total: 21,
+    page_row_present: 1,
+    total: 21,
+    row_count: 21,
+    inventory_qty: 25,
+    available_qty: 20,
+    open_transfer_reported_qty: 0,
+    recommended_qty: query.queryId.endsWith('.summary') ? 105 : 5,
+    month_out_plan: 31,
+    warehouse_month_transfer_plan: 62,
+    plan_month: '2026-10-01',
+    month_ship_positive: 10,
+    forecast_turnover_days: 20,
+    calculation_daily: 1,
+    day: query.parameters.as_of ?? '2026-10-19',
+  });
+  const source =
+    result.rows[0] ?? Object.fromEntries(result.returnedColumns.map((column) => [column, null]));
+  const rows = detail
+    ? Array.from(
+        { length: Math.min(query.parameters.page_size, 21 - query.parameters.offset) },
+        (_, index) => {
+          const known = values(query.parameters.offset + index);
+          return Object.fromEntries(
+            Object.entries(source).map(([key, value]) => [
+              key,
+              Object.hasOwn(known, key) ? known[key] : value,
+            ]),
+          );
+        },
+      )
+    : result.rows.map((row) => {
+        const known = values(0);
+        return Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            key,
+            Object.hasOwn(known, key) ? known[key] : value,
+          ]),
+        );
+      });
+  return { ...result, rows };
+}
+
+test('FC restored quantity draft survives server paging and submits a real workbook', async (t) => {
+  const { frame, page, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  assert.equal(
+    calls.find((query) => query.queryId === 'replenishment.detail.atomic').parameters.page_size,
+    10,
+  );
+  await list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }).fill('13');
+  await list.getByRole('textbox', { name: 'sku-A-000调整原因', exact: true }).fill('补充订单');
+  await list.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
+  ).toBeVisible();
+  assert.ok(
+    calls.some(
+      (query) => query.queryId === 'replenishment.detail.atomic' && query.parameters.offset === 10,
+    ),
+  );
+  await list.getByRole('button', { name: '上一页', exact: true }).click();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
+  ).toHaveValue('13');
+  await list.getByRole('button', { name: '草稿（1）', exact: true }).click();
+  const draft = frame.getByRole('dialog', { name: '补货草稿', exact: true });
+  await expect(draft.getByRole('spinbutton')).toHaveValue('13');
+  await draft.getByRole('button', { name: '取消', exact: true }).click();
+  await list.getByRole('button', { name: '提交', exact: true }).click();
+  const confirmation = frame.getByRole('dialog', { name: '确认导出补货清单', exact: true });
+  await expect(confirmation).toContainText('21个SKU');
+  const downloaded = page.waitForEvent('download');
+  await confirmation.getByRole('button', { name: '确认导出', exact: true }).click();
+  const file = await downloaded;
+  assert.match(file.suggestedFilename(), /DMS补货.*\.xlsx$/);
+  const { unzipWorkbook } =
+    await import('../business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbook.ts');
+  const content = await unzipWorkbook(new Uint8Array(await readFile(await file.path())).buffer);
+  const sheet = new TextDecoder().decode(content.get('xl/worksheets/sheet1.xml'));
+  assert.equal((sheet.match(/<row /g) ?? []).length, 22);
+  assert.match(sheet, /商品编码/);
+  assert.match(sheet, /数量/);
+  assert.doesNotMatch(sheet, /分仓编码/);
+  assert.match(sheet, /<v>13<\/v>/);
+  await expect(list.getByRole('button', { name: '草稿（0）', exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
+test('FC restores real plan template, validates warehouse scope and applies an import trial', async (t) => {
+  const { frame, page, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
+  const list = frame.getByRole('region', { name: '分仓计划', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  await list.getByRole('button', { name: '下载模板', exact: true }).click();
+  const template = frame.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
+  await template
+    .getByRole('combobox', { name: '模板计划月份', exact: true })
+    .selectOption('2026-10');
+  const downloaded = page.waitForEvent('download');
+  await template.getByRole('button', { name: '下载模板', exact: true }).click();
+  const file = await downloaded;
+  const { workbookBytes, unzipWorkbook } =
+    await import('../business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbook.ts');
+  const content = await unzipWorkbook(new Uint8Array(await readFile(await file.path())).buffer);
+  const sheet = new TextDecoder().decode(content.get('xl/worksheets/sheet1.xml'));
+  assert.match(sheet, /仓库编号/);
+  assert.match(sheet, />001</, 'warehouse leading zeros must survive the template');
+  assert.equal(
+    (sheet.match(/<row /g) ?? []).length,
+    22,
+    'download must include all 21 filtered rows',
+  );
+  const headers = [
+    '仓库编号',
+    '仓库名称',
+    '月份',
+    'SKU编码',
+    '产品名称',
+    '本月出货计划',
+    '本月调拨计划',
+  ];
+  const upload = list.getByLabel('导入分仓计划Excel');
+  await upload.setInputFiles({
+    name: '错误分仓.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: Buffer.from(
+      workbookBytes([headers, ['999', '未知仓', '2026-10', 'sku-A-000', '测试商品', 310, 620]]),
+    ),
+  });
+  const preview = frame.getByRole('dialog', { name: 'Excel 导入校验与预览', exact: true });
+  await expect(preview.getByRole('alert')).toContainText('不在当前有权限的分仓计划范围内');
+  await expect(preview.getByRole('button', { name: '确认导入并重算', exact: true })).toBeDisabled();
+  await preview.getByRole('button', { name: '取消', exact: true }).click();
+  await upload.setInputFiles({
+    name: '分仓计划.xlsx',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    buffer: Buffer.from(
+      workbookBytes([headers, ['001', '上海分仓', '2026-10', 'sku-A-000', '测试商品', 310, 620]]),
+    ),
+  });
+  await expect(preview).toContainText('310');
+  await preview.getByRole('button', { name: '确认导入并重算', exact: true }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(list.locator('tbody tr').first()).toContainText('310');
+  await expect(list.locator('tbody tr').first()).toContainText('620');
+  const card = frame
+    .locator('[data-overview-cards="fc"] article')
+    .filter({ has: frame.getByText('待补货量', { exact: true }) });
+  await expect(card.locator('.kpi-value')).toHaveText('180箱');
+  await frame.getByRole('button', { name: '补货确认', exact: true }).click();
+  await expect(
+    frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
+  ).toHaveValue('80');
+  assert.deepEqual(errors, []);
+});
+
+test('FC overview fits five compact cards in a wide row and adapts without clipping', async (t) => {
+  const { page, frame, errors } = await mount(t, 'fc', 922, fcWorkflowRows);
+  const grid = frame.locator('[data-overview-cards="fc"]');
+  await expect(grid.locator('article')).toHaveCount(5);
+  for (const [width, columns] of [
+    [1280, 5],
+    [1000, 5],
+    [922, 5],
+    [880, 5],
+    [800, 5],
+    [768, 3],
+    [640, 3],
+    [560, 3],
+    [480, 2],
+    [400, 2],
+    [390, 2],
+    [320, 1],
+  ]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await grid.evaluate((el) => ({
+      columns: getComputedStyle(el).gridTemplateColumns.split(' ').length,
+      scroll: document.documentElement.scrollWidth,
+      cards: [...el.children].map((card) => {
+        const r = card.getBoundingClientRect();
+        return {
+          top: r.top,
+          left: r.left,
+          right: r.right,
+          width: r.width,
+          height: r.height,
+          scroll: card.scrollWidth,
+        };
+      }),
+    }));
+    assert.equal(layout.columns, columns, `FC column count at ${width}`);
+    assert.ok(layout.scroll <= width + 2, `FC page overflow at ${width}`);
+    assert.ok(
+      layout.cards.every(
+        (card) => card.left >= 0 && card.right <= width + 1 && card.scroll <= card.width + 2,
+      ),
+      `FC card clips at ${width}`,
+    );
+    assert.ok(
+      layout.cards.every((card) => card.height <= 145),
+      `FC cards too tall at ${width}`,
+    );
+    if (columns === 5)
+      assert.equal(new Set(layout.cards.map((card) => Math.round(card.top))).size, 1);
+    if (process.env.AGENT_COMPACT_EVIDENCE) {
+      await mkdir(process.env.AGENT_COMPACT_EVIDENCE, { recursive: true });
+      await page.screenshot({ path: `${process.env.AGENT_COMPACT_EVIDENCE}/fc-${width}.png` });
+    }
+  }
+  assert.deepEqual(errors, []);
+});
+
+test('FC refused export reads never download a partial file or retry authorization', async (t) => {
+  const { frame, page, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100)
+      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '当前无导出字段权限' } };
+    return fcWorkflowRows(query, result);
+  });
+  let downloads = 0;
+  page.on('download', () => downloads++);
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  await list.getByRole('button', { name: 'CSV', exact: true }).click();
+  await expect(frame.locator('.fc-workflow-notice')).toContainText('当前无导出字段权限');
+  assert.equal(downloads, 0);
+  assert.equal(
+    calls.filter(
+      (query) =>
+        query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100,
+    ).length,
+    1,
+  );
+  assert.deepEqual(errors, []);
+});
+
+test('FC DMS export keeps warehouses separate and preserves another warehouse draft', async (t) => {
+  const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    const value = fcWorkflowRows(query, result);
+    if (query.queryId.startsWith('replenishment.detail'))
+      value.rows = value.rows.map((row) => {
+        const second = Number(String(row.sku).slice(-3)) >= 10;
+        return {
+          ...row,
+          warehouse_code: second ? '002' : '001',
+          warehouse_name: second ? '北京分仓' : '上海分仓',
+        };
+      });
+    return value;
+  });
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  await list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }).fill('13');
+  await list.getByRole('button', { name: '下一页', exact: true }).click();
+  await list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }).fill('17');
+  await list.getByRole('button', { name: '提交', exact: true }).click();
+  const confirmation = frame.getByRole('dialog', { name: '确认导出补货清单', exact: true });
+  await expect(confirmation.getByRole('button', { name: '确认导出', exact: true })).toBeDisabled();
+  await confirmation
+    .getByRole('combobox', { name: '导出补货分仓', exact: true })
+    .selectOption('001');
+  await expect(confirmation).toContainText('10个SKU');
+  const downloaded = page.waitForEvent('download');
+  await confirmation.getByRole('button', { name: '确认导出', exact: true }).click();
+  const file = await downloaded;
+  assert.match(file.suggestedFilename(), /DMS补货-上海分仓/);
+  const { unzipWorkbook } =
+    await import('../business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbook.ts');
+  const content = await unzipWorkbook(new Uint8Array(await readFile(await file.path())).buffer);
+  const sheet = new TextDecoder().decode(content.get('xl/worksheets/sheet1.xml'));
+  assert.equal((sheet.match(/<row /g) ?? []).length, 11);
+  assert.doesNotMatch(sheet, /sku-A-010/);
+  await expect(list.getByRole('button', { name: '草稿（1）', exact: true })).toBeVisible();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
+  ).toHaveValue('17');
+  assert.deepEqual(errors, []);
+});
+
+test('FC list filters align compact white controls, retain actions and adapt to narrow panes', async (t) => {
+  const { page, frame, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  const toolbar = frame.locator('[data-business-filters="fc"]');
+  await expect(toolbar).toBeVisible();
+  for (const tab of ['补货确认', '分仓计划', '当前订单']) {
+    await frame.getByRole('button', { name: tab, exact: true }).first().click();
+    for (const width of [1280, 922, 768, 560, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await toolbar.evaluate((el) => {
+        const box = (node) => {
+          const r = node.getBoundingClientRect();
+          return {
+            left: r.left,
+            right: r.right,
+            height: r.height,
+            background: getComputedStyle(node).backgroundColor,
+          };
+        };
+        return {
+          controls: [
+            ...el.querySelectorAll(
+              ':scope > label > input:not([type="file"]), :scope > button, :scope > details > summary',
+            ),
+          ].map(box),
+          fields: [...el.querySelectorAll(':scope > label > input:not([type="file"])')].map(box),
+          toolbar: box(el),
+          scroll: document.documentElement.scrollWidth,
+        };
+      });
+      assert.ok(layout.scroll <= width + 2, `${tab}: horizontal overflow at ${width}`);
+      assert.ok(
+        layout.controls.every((control) => Math.abs(control.height - 36) <= 1),
+        `${tab}: unequal control heights at ${width}`,
+      );
+      assert.ok(
+        layout.controls.every((control) => control.left >= 0 && control.right <= width + 1),
+        `${tab}: filter/action clips at ${width}`,
+      );
+      assert.ok(
+        layout.fields.every((control) => control.background === 'rgb(255, 255, 255)'),
+        'inputs use a white surface',
+      );
+      if (width >= 768)
+        assert.ok(
+          layout.fields.every((control) => control.right - control.left <= 136),
+          'desktop fields remain compact',
+        );
+      const columns = toolbar.locator('summary[aria-label="列设置"]');
+      await columns.click();
+      const menu = await toolbar.locator('details > div').boundingBox();
+      assert.ok(
+        menu && menu.x >= 0 && menu.x + menu.width <= width + 1,
+        `column menu clips at ${width}`,
+      );
+      await columns.click();
+      if (process.env.AGENT_FILTER_EVIDENCE && tab === '补货确认') {
+        await mkdir(process.env.AGENT_FILTER_EVIDENCE, { recursive: true });
+        await toolbar.scrollIntoViewIfNeeded();
+        await page.screenshot({
+          path: `${process.env.AGENT_FILTER_EVIDENCE}/fc-filters-${width}.png`,
+        });
+      }
+    }
+  }
+  await frame.getByRole('button', { name: '补货确认', exact: true }).click();
+  await expect(
+    frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
+  const before = calls.length;
+  await toolbar.getByRole('textbox', { name: '分仓编码', exact: true }).fill('001');
+  assert.equal(calls.length, before, 'typing does not query');
+  await toolbar.getByRole('button', { name: '查询', exact: true }).click();
+  await expect
+    .poll(() =>
+      calls.some(
+        (query) =>
+          query.queryId === 'replenishment.detail.atomic' &&
+          query.parameters.warehouse_code === '001',
+      ),
+    )
+    .toBe(true);
+  await expect(toolbar.getByRole('button', { name: '草稿（0）', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: '提交', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'CSV', exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
+for (const [inventory, inTransit, stockDays] of [
+  [12060, 2412, 18],
+  [0, 0, 0],
+  [null, null, null],
+])
+  test(`QLL channel switch exposes customer summary and ten-row customer paging: ${inventory}`, async (t) => {
+    const { page, frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
+      if (query.queryId === 'dealer.stock.summary')
+        Object.assign(result.rows[0], { inventory, in_transit: inTransit, cover_days: stockDays });
+      return result;
+    });
+    const grid = frame.locator('[data-overview-cards="qll"]');
+    const stock = grid
+      .getByRole('button')
+      .filter({ has: frame.getByText('当前库存', { exact: true }) });
+    const turnover = grid
+      .getByRole('button')
+      .filter({ has: frame.getByText('库存周转', { exact: true }) });
+    await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
+    await expect.poll(() => calls.some((q) => q.queryId === 'dealer.stock.summary')).toBe(true);
+    const summaryReads = calls.filter((q) => q.queryId === 'dealer.stock.summary').length;
+    await frame.getByRole('checkbox', { name: '含渠道', exact: true }).check();
+    const value = (card, label) =>
+      card
+        .locator('dl > div')
+        .filter({ has: frame.getByText(label, { exact: true }) })
+        .locator('dd');
+    await expect(value(stock, '客户在仓')).toHaveText(
+      inventory === null ? '-' : inventory === 0 ? '0箱' : '1.21万箱',
+    );
+    await expect(value(stock, '客户在途')).toHaveText(
+      inTransit === null ? '-' : inTransit === 0 ? '0箱' : '2,412箱',
+    );
+    await expect(value(turnover, '客户库存支撑')).toHaveText(
+      stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
+    );
+    const customerLayer = frame
+      .locator('section')
+      .filter({ has: frame.getByRole('button', { name: '渠道库存明细', exact: true }) })
+      .last();
+    await expect(
+      customerLayer.getByRole('button', { name: '渠道库存明细', exact: true }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
+    await expect(customerLayer.locator('tbody tr').first()).toContainText('客户A');
+    const before = calls.length;
+    await customerLayer.getByRole('button', { name: '下一页', exact: true }).click();
+    await expect
+      .poll(() =>
+        calls
+          .slice(before)
+          .some(
+            (q) =>
+              q.queryId.startsWith('dealer.stock.detail') &&
+              q.parameters.offset === 10 &&
+              q.parameters.page_size === 10,
+          ),
+      )
+      .toBe(true);
+    assert.equal(
+      calls.filter((q) => q.queryId === 'dealer.stock.summary').length,
+      summaryReads,
+      'switch reuses the SQL summary',
+    );
+    for (const width of [1280, 560, 480, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await grid.evaluate((el) => ({
+        viewport: innerWidth,
+        scroll: document.documentElement.scrollWidth,
+        cards: [...el.children].map((card) => ({
+          width: card.clientWidth,
+          scroll: card.scrollWidth,
+          height: card.getBoundingClientRect().height,
+        })),
+      }));
+      assert.ok(layout.scroll <= layout.viewport + 2, `channel page overflow at ${width}`);
+      assert.ok(
+        layout.cards.every((c) => c.scroll <= c.width + 2 && c.height <= 180),
+        `channel card overflow at ${width}`,
+      );
+    }
+    await frame.getByRole('checkbox', { name: '含渠道', exact: true }).uncheck();
+    await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
+    await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
   });

@@ -5,6 +5,7 @@ import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 export type FactReadContext = { key: string; snapshotDate: string; configVersion: string };
 export type FactInput = {
   asOf: string;
+  cycleDays?: number;
   page?: number;
   pageSize?: number;
   filters?: Record<string, string>;
@@ -76,6 +77,7 @@ export async function readConfiguredFacts(
     signal?: AbortSignal;
     execute?: any;
     summaryOnly?: boolean;
+    detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
@@ -128,6 +130,7 @@ export async function readConfiguredFacts(
     viewId,
     input.asOf,
     input.customer?.trim() ?? '',
+    input.cycleDays,
     Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
   ]);
   let snapshotDate: string | null = null;
@@ -143,11 +146,18 @@ export async function readConfiguredFacts(
       version = previous.configVersion;
       versionSeen = true;
     } else {
-      const result = await read(
-        view.snapshotQuery ?? (stock ? 'source.stock-date' : 'source.health-date'),
-        stock ? { month, as_of: input.asOf } : { as_of: input.asOf },
-        true,
+      const snapshotId = view.snapshotQuery ?? (stock ? 'source.stock-date' : 'source.health-date');
+      const snapshotValues = Object.fromEntries(
+        Object.entries(config.queries[snapshotId].parameterSpec).map(([key, spec]: any) => {
+          let value = config.queries[snapshotId].request.parameters[key];
+          if (spec.name === 'as_of') value = input.asOf;
+          if (spec.name === 'month') value = month;
+          if (spec.format === 'YYYYMM' && typeof value === 'string')
+            value = value.slice(0, 7).replace('-', '');
+          return [spec.name, value];
+        }),
       );
+      const result = await read(snapshotId, snapshotValues, true);
       snapshotDate = result.rows[0]?.day ?? null;
     }
     if (!snapshotDate)
@@ -184,7 +194,12 @@ export async function readConfiguredFacts(
     if (name === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? nextMonth(month) : nextDay(input.asOf);
     if (name === 'month') value = month;
+    if (name === 'days_in_month')
+      value = new Date(
+        Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
+      ).getUTCDate();
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
+    if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = pageSize;
     if (name === 'offset') value = (page - 1) * pageSize;
     if (spec.format === 'YYYYMM' && typeof value === 'string')
@@ -259,7 +274,7 @@ export async function readConfiguredFacts(
   if (!countId) return fail('INVALID_COLLECTION_CONTRACT', '分页缺少配对计数');
   // The aggregate reads the full filter scope independently of the ten-row page.
   const readSummary = async () => {
-    if (!view.summaryId) return { summary: null, summaryError: null };
+    if (!view.summaryId || options.detailsOnly) return { summary: null, summaryError: null };
     try {
       const aggregate = await read(view.summaryId, subset(view.summaryId));
       if (aggregate.rows.length !== 1) return fail('INVALID_SUMMARY', '汇总未返回唯一记录');

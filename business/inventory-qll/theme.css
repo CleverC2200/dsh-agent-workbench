@@ -115,3 +115,11 @@ body {
   max-height: none;
   overflow: visible;
 }
+
+/* Retain the authored light palette; dark colors remain host projections. */
+body:not([data-ds-dark-theme]) {
+  --ui-muted: #858c96;
+  --ui-faint: #a0a4ac;
+  --ui-divider: #eceef1;
+  --ui-accent-line: #efabb4;
+}

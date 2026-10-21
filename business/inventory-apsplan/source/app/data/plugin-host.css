@@ -28,16 +28,16 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 .intelligent-core-metric-group .period-kpi-card {
   display: flex;
   min-width: 0;
-  min-height: 232px;
-  padding: 16px 16px 0;
+  min-height: 164px;
+  padding: 8px 8px 0;
   flex-direction: column;
   border-color: var(--v02-border);
   background: var(--v02-surface);
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-name {
-  min-height: 24px;
+  min-height: 20px;
   padding-right: 0;
-  gap: 10px;
+  gap: 8px;
   color: var(--v02-text-strong);
   font-size: 12px;
   line-height: 1.4;
@@ -65,28 +65,28 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value {
   display: flex;
-  min-height: 54px;
-  margin: 5px 0 4px;
+  min-height: 32px;
+  margin: 4px 0;
   align-items: center;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value strong {
   color: var(--v02-text-strong);
-  font-size: 30px;
-  line-height: 1.1;
+  font-size: 20px;
+  line-height: 1.15;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-value span {
   color: var(--v02-text-muted);
   font-size: 11px;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-comparison-head {
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   margin-top: 0;
   padding-top: 7px;
   font-size: 8px;
 }
 .intelligent-core-metric-group .kpi-comparison-rows {
   display: grid;
-  min-height: 48px;
+  min-height: 40px;
   align-content: center;
   color: var(--v02-text-muted);
   font-size: 9px;
@@ -94,8 +94,8 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
 .intelligent-core-metric-group .kpi-comparison-rows > div {
   display: grid;
   min-width: 0;
-  min-height: 24px;
-  grid-template-columns: minmax(0, 1fr) minmax(96px, 0.8fr);
+  min-height: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
 }
@@ -125,9 +125,9 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
   flex: none;
 }
 .intelligent-core-metric-group .period-kpi-card .kpi-foot {
-  min-height: 42px;
+  min-height: 28px;
   margin-top: auto;
-  padding: 9px 0;
+  padding: 5px 0;
   align-items: center;
   font-size: 10px;
 }
@@ -137,36 +137,6 @@ html.aps-plugin-host .embed-mode .main-content > .workspace-page {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-@media (max-width: 720px) {
-  .intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
-  .intelligent-core-metric-group
-    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .intelligent-core-metric-group .scope-kpi-count-3 .period-kpi-card:nth-child(3n),
-  .intelligent-core-metric-group .scope-kpi-count-4 .period-kpi-card:nth-child(4n) {
-    border-right: 1px solid var(--v02-border);
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(2n) {
-    border-right: 0;
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(n + 3) {
-    border-top: 1px solid var(--v02-border);
-  }
-}
-@media (max-width: 520px) {
-  .intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
-  .intelligent-core-metric-group
-    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
-    grid-template-columns: 1fr;
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(n) {
-    border-right: 0;
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(n + 2) {
-    border-top: 1px solid var(--v02-border);
-  }
 }
 
 /* Category cards fill the embedded content area in four equal columns. */
@@ -478,6 +448,15 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   margin-right: 0;
   overflow-x: auto;
 }
+/* Keep every authored metric tab reachable inside a narrow client pane. */
+html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
 .kpi-source-note {
   margin: 8px 0;
   color: var(--ui-muted, #667085);
@@ -511,28 +490,17 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   flex-wrap: wrap;
   white-space: normal;
 }
-@media (min-width: 721px) and (max-width: 1100px) {
-  .intelligent-core-metric-group .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
-  .intelligent-core-metric-group
-    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(n) {
-    border-right: 1px solid var(--v02-border);
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(2n) {
-    border-right: 0;
-  }
-  .intelligent-core-metric-group .period-kpi-card:nth-child(n + 3) {
-    border-top: 1px solid var(--v02-border);
-  }
-}
+
 @media (max-width: 900px) {
   html.aps-plugin-host #category-operations .category-health-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 520px) {
+  html.aps-plugin-host .date-picker-menu {
+    left: 0;
+    right: auto;
+  }
   html.aps-plugin-host #category-operations .category-health-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -542,5 +510,134 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > div,
   html.aps-plugin-host .intelligent-metrics-first > .intelligent-section-heading > p {
     top: 0;
+  }
+}
+
+/* A compact period picker uses the same control scale as the other Agent calendars. */
+html.aps-plugin-host .date-picker-menu {
+  width: 264px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border, #e3e6ea);
+  border-radius: 8px;
+  background: var(--ui-surface, #fff);
+  box-shadow: 0 12px 32px #1d20281a;
+}
+html.aps-plugin-host .date-picker-menu > small,
+html.aps-plugin-host .date-picker-sections section > strong {
+  display: none;
+}
+html.aps-plugin-host .date-picker-sections {
+  gap: 12px;
+}
+html.aps-plugin-host .date-picker-sections section {
+  display: block;
+}
+html.aps-plugin-host .date-picker-year {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border, #e3e6ea);
+}
+html.aps-plugin-host .date-picker-month {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+html.aps-plugin-host .date-picker-day {
+  gap: 3px;
+}
+html.aps-plugin-host .date-picker-menu .date-picker-sections button {
+  width: 100%;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--ui-surface, #fff);
+  color: var(--ui-secondary, #555d68);
+  font: 12px/1.4 var(--ui-font, sans-serif);
+}
+html.aps-plugin-host .date-picker-menu .date-picker-year button {
+  height: 30px;
+  min-height: 30px;
+  background: var(--ui-muted-surface, #f5f6f8);
+}
+html.aps-plugin-host .date-picker-menu .date-picker-day button {
+  height: 28px;
+  min-height: 28px;
+}
+html.aps-plugin-host .date-picker-menu .date-picker-sections button:hover:not(:disabled) {
+  border-color: var(--ui-accent-line, #efabb4);
+  background: var(--ui-hover, #fffafb);
+  color: var(--ui-accent, #df1732);
+}
+html.aps-plugin-host .date-picker-menu .date-picker-sections button.selected {
+  border-color: var(--ui-accent-line, #efabb4);
+  background: var(--ui-accent-soft, #fff0f2);
+  color: var(--ui-accent, #df1732);
+  font-weight: 600;
+}
+html.aps-plugin-host .date-picker-menu .date-picker-sections button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+html.aps-plugin-host .date-picker-menu .date-picker-sections button:focus-visible {
+  outline: 2px solid var(--ui-accent, #df1732);
+  outline-offset: 1px;
+}
+
+/* Adapt to the business iframe width, including a desktop split pane. */
+html.aps-plugin-host
+  .intelligent-core-metric-group
+  .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(n) {
+  border-top: 0;
+  border-right: 1px solid var(--v02-border);
+}
+html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:last-child {
+  border-right: 0;
+}
+html.aps-plugin-host .intelligent-core-metric-group .kpi-comparison-rows span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 9px;
+}
+@media (max-width: 719px) {
+  html.aps-plugin-host
+    .intelligent-core-metric-group
+    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
+  html.aps-plugin-host
+    .intelligent-core-metric-group
+    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(2n) {
+    border-right: 0;
+  }
+  html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(n + 3) {
+    border-top: 1px solid var(--v02-border);
+  }
+}
+@media (max-width: 399px) {
+  html.aps-plugin-host
+    .intelligent-core-metric-group
+    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-3,
+  html.aps-plugin-host
+    .intelligent-core-metric-group
+    .kpi-grid.period-kpi-grid.overview-flat-kpi-grid.scope-kpi-count-4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(n) {
+    border-right: 0;
+  }
+  html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(n + 2) {
+    border-top: 1px solid var(--v02-border);
   }
 }

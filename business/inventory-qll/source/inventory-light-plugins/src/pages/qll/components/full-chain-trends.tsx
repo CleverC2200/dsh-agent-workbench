@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../../../shared/query-errors';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../../dsh-ui/controls';
 import { TrendChart } from '../../../dsh-ui/chart';
@@ -264,7 +265,7 @@ export function FullChainTrends({
         {'。最近30天观察，订单限定目标月；风险标签仅筛选结构表。'}
       </p>
       {state === 'error' ? (
-        <p role="alert">{error}</p>
+        <QueryErrors errors={[error]} scope="inventory-qll-trends" />
       ) : state !== 'ready' ? (
         <p role="status">
           {state === 'loading'

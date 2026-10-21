@@ -1,4 +1,5 @@
-import common from '../../../../../shared/restored-workbench.module.css';
+import { QueryErrors } from '../../../../../shared/query-errors';
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
@@ -7,7 +8,7 @@ import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-cu
 import { createPageViewState } from '../../../../../shared/view-state.js';
 const aqkcView = createPageViewState('inventory-aqkc');
 import { DashboardOverviewSkeleton, DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
-import { DATA_PERMISSION_MESSAGE, queryErrorText } from '../query-error.js';
+import { queryErrorText } from '../query-error.js';
 import { usePageFilter } from '../native/page-filter.tsx';
 
 import { DailyReportButton } from './aqkc/components/analytics/daily-report-dialog.tsx';
@@ -138,14 +139,13 @@ function moveTabFocus<T extends string>(
 const boardTabs: BoardTabName[] = ['基地结构', '品类结构', '货龄结构'];
 
 const FEATURED_INVENTORY_REPORT_PROMPT = '生成全国库存分析报告';
-const DATA_READ_FAILURE_MESSAGE = '数据读取失败，请刷新重试；若仍失败，请联系管理员。';
-
 function readFailureText(value: unknown) {
-  const message = queryErrorText(value);
-  return message === DATA_PERMISSION_MESSAGE ||
-    (typeof message === 'string' && /页面已显示|登录身份已变化|页面会话已切换/.test(message))
-    ? message
-    : DATA_READ_FAILURE_MESSAGE;
+  return (
+    <>
+      <QueryErrors errors={[queryErrorText(value)]} scope="inventory-aqkc-detail" />
+      暂无数据。
+    </>
+  );
 }
 
 const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
@@ -185,7 +185,6 @@ const roleConfig: Record<RoleKey, { name: string; quick: string[] }> = {
 };
 
 export function InventoryOperationsWorkbench() {
-  const [sourceDetailsOpen, setSourceDetailsOpen] = useState(false);
   const restoredView = useRef<Record<string, unknown> | null>(null);
   const restorePhase = useRef(0);
   const [activeBoardTab, setActiveBoardTab] = useState<BoardTabName>('基地结构');
@@ -892,41 +891,8 @@ export function InventoryOperationsWorkbench() {
   return (
     <div className={styles.shell}>
       <section ref={boardRef} className={styles.boardPanel} aria-label="业务看板">
-        <header className={styles.boardHeader}>
-          <div>
-            <h2>{sanitizeUserVisibleCopy(dashboardWorkspace?.title ?? '库存运营看板')}</h2>
-          </div>
-          <div className={styles.boardHeaderActions}>
-            <Button
-              size="small"
-              onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
-              aria-label="刷新库存数据"
-            >
-              刷新数据
-            </Button>
-            <DailyReportButton
-              bases={basePaths.map((base) => base.replace(/基地$/u, ''))}
-              initialBase={paths[0]?.replace(/基地$/u, '')}
-              onBoard={(risk, base) => {
-                if (base && basePaths.includes(`${base}基地`)) selectPaths([`${base}基地`]);
-                else closeDetails();
-                setActiveBoardTab(risk?.module === 'age' ? '货龄结构' : '基地结构');
-                if (!risk) return;
-                const tab = risk.module === 'age' ? '货龄结构' : '品类结构';
-                void toggleBaseDetail(risk.base, tab, true);
-                if (risk.category)
-                  void toggleHierarchySkuDetail(tab, risk.base, risk.category, risk.material);
-              }}
-              onAsk={(question) => {
-                void askDsh(question, reportContext()).catch((error) =>
-                  window.dispatchEvent(
-                    new CustomEvent('gea-query-warning', {
-                      detail: { message: error.message },
-                    }),
-                  ),
-                );
-              }}
-            />
+        <BusinessToolbar
+          filters={
             <Dropdown
               trigger="click"
               position="bl"
@@ -965,8 +931,42 @@ export function InventoryOperationsWorkbench() {
                 <IconDown />
               </Button>
             </Dropdown>
-          </div>
-        </header>
+          }
+          actions={
+            <>
+              <DailyReportButton
+                bases={basePaths.map((base) => base.replace(/基地$/u, ''))}
+                initialBase={paths[0]?.replace(/基地$/u, '')}
+                onBoard={(risk, base) => {
+                  if (base && basePaths.includes(`${base}基地`)) selectPaths([`${base}基地`]);
+                  else closeDetails();
+                  setActiveBoardTab(risk?.module === 'age' ? '货龄结构' : '基地结构');
+                  if (!risk) return;
+                  const tab = risk.module === 'age' ? '货龄结构' : '品类结构';
+                  void toggleBaseDetail(risk.base, tab, true);
+                  if (risk.category)
+                    void toggleHierarchySkuDetail(tab, risk.base, risk.category, risk.material);
+                }}
+                onAsk={(question) => {
+                  void askDsh(question, reportContext()).catch((error) =>
+                    window.dispatchEvent(
+                      new CustomEvent('gea-query-warning', {
+                        detail: { message: error.message },
+                      }),
+                    ),
+                  );
+                }}
+              />
+              <Button
+                size="small"
+                onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                aria-label="刷新库存数据"
+              >
+                刷新数据
+              </Button>
+            </>
+          }
+        />
         <div id="inventory-board-content" className={styles.boardScroll}>
           <FloatingTableScrollbar />
           <>
@@ -980,7 +980,7 @@ export function InventoryOperationsWorkbench() {
               </DataState>
             ) : overviewWorkspace ? (
               <>
-                <div className={styles.kpiGrid}>
+                <div className={styles.kpiGrid} data-overview-cards="aqkc">
                   {(
                     overviewWorkspace.workbench?.cards ??
                     overviewWorkspace.kpis.map((item) => ({
@@ -996,7 +996,6 @@ export function InventoryOperationsWorkbench() {
                       value={card.value}
                       tone={card.tone}
                       helpers={card.helpers}
-                      coverage={'coverage' in card ? card.coverage : undefined}
                     />
                   ))}
                 </div>
@@ -1006,12 +1005,17 @@ export function InventoryOperationsWorkbench() {
                     <strong>AI 洞察</strong>
                     <small>库存经营分析</small>
                   </div>
-                  <div className={styles.insightSummary}>
+                  <div
+                    className={styles.insightSummary}
+                    title={overviewWorkspace.workbench?.overallAnalysis
+                      ?.split('\n')
+                      .find((line) => line.startsWith('数据边界：'))}
+                  >
                     {sanitizeUserVisibleCopy(
                       overviewWorkspace.workbench?.overallAnalysis || '当前缺少经营分析所需数据。',
                     )
                       .split('\n')
-                      .filter(Boolean)
+                      .filter((line) => line && !line.startsWith('数据边界：'))
                       .map((line, index) => {
                         const colon = line.indexOf('：');
                         return (
@@ -1093,7 +1097,25 @@ export function InventoryOperationsWorkbench() {
                     key={paths.join(',')}
                     config={healthSqlConfig}
                     embedded
-                    viewIds={['age-structure', 'health']}
+                    viewIds={['age-structure']}
+                    presentation={{
+                      title: '货龄结构',
+                      columns: [
+                        ['belong_base', '对象'],
+                        ['missing_warning', '预警标志'],
+                        ['total_qty', '当前库存'],
+                        ['missing_average_age', '平均货龄'],
+                        ['missing_age0_30', '0-30天量/占比'],
+                        ['missing_age31_40', '31-40天量/占比'],
+                        ['missing_age41_60', '41-60天量/占比'],
+                        ['missing_age60', '60+天量/占比'],
+                        ['missing_future7', '未来7日预计超龄'],
+                        ['missing_future14', '未来14日预计超龄'],
+                        ['missing_daily_sales', '日均动销'],
+                        ['sku_count', 'SKU个数'],
+                      ].map(([field, label]) => ({ field, label })),
+                      filters: [],
+                    }}
                     initialFilters={
                       paths.length
                         ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
@@ -1219,45 +1241,17 @@ export function InventoryOperationsWorkbench() {
           </>
         </div>
       </section>
-      {usesConfiguredSql() && (
-        <details
-          className={common.sourceSupplement}
-          onToggle={(event) => setSourceDetailsOpen(event.currentTarget.open)}
-        >
-          <summary>业务明细</summary>
-          {sourceDetailsOpen && (
-            <ConfiguredFactsPage
-              config={healthSqlConfig}
-              embedded
-              viewIds={[
-                'health',
-                'health-base',
-                'base-stock-flows',
-                'order-plan-source',
-                'base-shipments',
-              ]}
-              initialFilters={
-                paths.length
-                  ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
-                  : {}
-              }
-            />
-          )}
-        </details>
-      )}
     </div>
   );
 }
 
 function Kpi({
-  coverage,
   title,
   tone,
   value,
   helpers,
 }: {
   title: string;
-  coverage?: string;
   tone: 'neutral' | 'red';
   value: string;
   helpers: { label: string; value: string }[];
@@ -1274,11 +1268,15 @@ function Kpi({
         title={
           title === '基地未备单量'
             ? '日库存快照未备单量的非负有值范围；不含已备单占用，不代表全部当前待发订单'
-            : title === '当前订单'
-              ? currentOrderMetricScopes.orderQuantity
-              : title === '订单满足率'
-                ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
-                : undefined
+            : title === '当前货龄'
+              ? '当前可取的最大库龄；平均货龄未提供。'
+              : title === '当前订单'
+                ? usesConfiguredSql()
+                  ? '当前可取得的基地未备单量；不含已备单占用。'
+                  : currentOrderMetricScopes.orderQuantity
+                : title === '订单满足率'
+                  ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
+                  : undefined
         }
         className={`${styles.kpiValue} ${tone === 'red' ? styles.toneRed : ''}`}
       >
@@ -1287,26 +1285,29 @@ function Kpi({
           <small className={styles.kpiUnit}>箱</small>
         ) : null}
       </strong>
-      {coverage && <p className={styles.metricCoverage}>{coverage}</p>}
       <dl>
         {helpers.slice(0, 2).map((item) => (
           <div key={item.label}>
             <dt>{item.label}</dt>
             <dd
               title={
-                title === '基地未备单量'
-                  ? item.label === '当前待发总量'
-                    ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
-                    : '日库存快照已备单占用量，仅展示非负有值范围'
-                  : title === '当前订单'
-                    ? item.label.startsWith('快照')
-                      ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
-                      : item.label === '备单量'
-                        ? currentOrderMetricScopes.preparingQuantity
-                        : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
-                    : title === '订单满足率'
-                      ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
-                      : undefined
+                usesConfiguredSql() && title === '当前订单'
+                  ? item.label === '已备单占用'
+                    ? '日库存快照已备单占用量，不与未备单量重复计算。'
+                    : '当前阶段缺货量尚无等价来源。'
+                  : title === '基地未备单量'
+                    ? item.label === '当前待发总量'
+                      ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
+                      : '日库存快照已备单占用量，仅展示非负有值范围'
+                    : title === '当前订单'
+                      ? item.label.startsWith('快照')
+                        ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
+                        : item.label === '备单量'
+                          ? currentOrderMetricScopes.preparingQuantity
+                          : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
+                      : title === '订单满足率'
+                        ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
+                        : undefined
               }
             >
               {item.value.endsWith('（部分）') ? (
@@ -1552,7 +1553,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     return (
       <tr className={styles.skuExpandedRow}>
         <td colSpan={colSpan}>
-          <div className={styles.inlineDetailState} role="alert">
+          <div className={styles.inlineDetailState} role="status">
             {readFailureText(error)}
           </div>
         </td>
@@ -1766,10 +1767,7 @@ function BaseCategoryDetail({
     return (
       <tr className={styles.expandedRow}>
         <td colSpan={colSpan}>
-          <div
-            className={styles.inlineDetailState}
-            role={state.kind === 'error' ? 'alert' : 'status'}
-          >
+          <div className={styles.inlineDetailState} role="status">
             {state.kind === 'error' ? readFailureText(state.message) : state.message}
           </div>
         </td>
@@ -1858,10 +1856,7 @@ function CategoryBaseDetail({
     return (
       <tr className={styles.expandedRow}>
         <td colSpan={colSpan}>
-          <div
-            className={styles.inlineDetailState}
-            role={state.kind === 'error' ? 'alert' : 'status'}
-          >
+          <div className={styles.inlineDetailState} role="status">
             {state.kind === 'error' ? readFailureText(state.message) : state.message}
           </div>
         </td>

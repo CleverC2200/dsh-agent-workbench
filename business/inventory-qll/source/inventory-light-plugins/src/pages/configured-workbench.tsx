@@ -1,8 +1,17 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
+import { QueryErrors } from '../../../../../shared/query-errors';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import React, { useState, useEffect } from 'react';
 import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
 import { ConfiguredTrends } from './configured-trends';
 import config from '../../../../sql.config.json';
+import { Tabs } from '../dsh-ui/controls';
+import { KpiCard } from './qll';
+import {
+  originalQllView,
+  originalQllLayerView,
+} from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import {
@@ -10,7 +19,7 @@ import {
   fulfillmentPercent,
   knownNumber,
 } from '../../../../../shared/configured-overview';
-import { fullChainCards, formatChainValue as show } from '../../../../../shared/full-chain-display';
+import { formatChainValue as show } from '../../../../../shared/full-chain-display';
 import { updateContext } from '../native/context';
 import styles from './qll/components/full-chain-workbench.module.css';
 import common from '../../../../../shared/restored-workbench.module.css';
@@ -21,17 +30,10 @@ const tabs = [
   ['shortage', '订单缺口'],
 ];
 const views: Record<string, string[]> = {
-  category: ['category', 'base', 'base-stock-flows', 'base-shipments'],
-  structure: ['organization', 'branch-stock', 'plan', 'branch-shipments'],
-  aging: ['aging', 'warehouse-age-detail', 'history'],
-  shortage: [
-    'fulfillment-path',
-    'shortage',
-    'orders',
-    'delivery',
-    'order-plan-source',
-    'shipment-batches',
-  ],
+  category: ['category'],
+  structure: ['organization'],
+  aging: ['aging'],
+  shortage: ['fulfillment-path'],
 };
 const viewState = createPageViewState('inventory-qll');
 export default function ConfiguredWorkbench() {
@@ -53,78 +55,70 @@ export default function ConfiguredWorkbench() {
   );
   const stock = parts.base?.summary,
     orders = parts.orders?.summary;
-  const cards = fullChainCards(
-    stock,
-    orders,
-    parts.base?.inventoryVersion,
-    parts.base?.snapshotDate,
-  );
-  cards[0].title = '库存水平';
-  cards[2].title = '库存库龄';
-  cards[4].title = '订单执行';
-  if (cards[2].value == null) cards[2].scope = '基地 · 货龄指标';
-  if (cards[4].value == null) cards[4].scope = '基地未备单量';
-  const branchStock = parts['branch-stock']?.summary;
-  cards[0].details[1] = ['分仓库存', knownNumber(branchStock?.total_qty), '箱'];
-  cards[0].details.push(['分仓可用', knownNumber(branchStock?.available_qty), '箱']);
-  cards[1].details = [
-    ['基地', cards[1].value, '天'],
-    ['分仓', null, '天', '待同口径出库及期间核验'],
-    ...cards[1].details,
-  ];
-  cards[3].details = [
-    ['基地', fulfillmentPercent(parts['factory-overview']?.summary), '%'],
-    ['分仓', fulfillmentPercent(parts['branch-overview']?.summary), '%'],
-    ...cards[3].details,
-  ];
-  const branchShipments = parts['branch-shipments']?.summary;
-  cards[4].details.push([
-    '分仓本月正向发货',
-    branchShipments?.month_ship_positive == null
-      ? null
-      : Number(branchShipments.month_ship_positive),
-    '箱',
-  ]);
-  const factoryShipments = parts['base-shipments']?.summary;
-  cards[4].details.push(
-    ['工厂本月正向发货', knownNumber(factoryShipments?.month_ship_positive), '箱'],
-    ['工厂近30日正向发货', knownNumber(factoryShipments?.rolling_ship_positive), '箱'],
-    ['工厂近30日净发货', knownNumber(factoryShipments?.rolling_ship_net), '箱'],
-    ['分仓近30日净发货', knownNumber(branchShipments?.rolling_ship_net), '箱'],
-  );
-  const health = parts.health?.summary,
-    customerStock = parts['channel-overview'];
-  if (channel && customerStock?.summary) {
-    const s = customerStock.summary;
-    cards[0].details.push([
-      '客户库存',
-      s.total_inventory == null ? null : Number(s.total_inventory),
-      '箱',
-    ]);
-    cards[1].details.push([
-      '客户库存支撑',
-      s.cover_days == null ? null : Number(s.cover_days),
-      '天',
-    ]);
-  }
-  if (health && Number(health.age_valid_count) > 0) {
-    cards[2] = {
-      ...cards[2],
-      value: health.max_age == null ? null : Number(health.max_age),
-      scope: `仓库健康表 ${parts.health?.snapshotDate} · ${health.age_valid_count}/${health.row_count} 条记录 · 最大库龄`,
-      details: [
-        ['源超龄数量', health.overaged_qty == null ? null : Number(health.overaged_qty), '箱'],
-        ['有货龄记录', Number(health.age_valid_count), '条'],
-      ],
-    };
-  }
+  const branch = parts['branch-stock']?.summary;
+  const customer = parts['channel-overview']?.summary;
+  const baseQty = knownNumber(stock?.known_inventory),
+    branchAvailable = knownNumber(branch?.available_qty);
+  const companyQty =
+    baseQty === null || branchAvailable === null ? null : baseQty + branchAvailable;
+  const workspace: any = {
+    scope: channel ? 'all-channel' : 'company',
+    customerObservationRisks: [],
+    structure: [
+      { layer: 'base', currentQty: baseQty, availableQty: knownNumber(stock?.known_available) },
+      {
+        layer: 'branch',
+        currentQty: knownNumber(branch?.total_qty),
+        availableQty: branchAvailable,
+      },
+    ],
+    aging: { over30ByLayer: {} },
+    agingDetails: [],
+    layerMetrics: {
+      base: { turnoverDays: knownNumber(stock?.matched_stock_days), averageAgeDays: null },
+      branch: {
+        turnoverDays: knownNumber(parts['branch-replenishment']?.summary?.historical_turnover_days),
+        averageAgeDays: null,
+      },
+    },
+    fulfillment: {
+      factory: { rate: fulfillmentPercent(parts['factory-overview']?.summary) },
+      branch: { rate: fulfillmentPercent(parts['branch-overview']?.summary) },
+    },
+    orderExecution: {
+      currentOrderQty: knownNumber(stock?.known_open_orders),
+      currentBaseShortageQty: null,
+      currentBranchShortageQty: null,
+    },
+    kpis: {
+      inventoryLevel: {
+        current: companyQty,
+        companyCurrent: companyQty,
+        planCustomerTotal: channel ? knownNumber(customer?.total_inventory) : null,
+        planCustomerDate: parts['channel-overview']?.snapshotDate,
+        unit: '件',
+      },
+      turnover: { current: knownNumber(stock?.matched_stock_days), unit: '天' },
+      aging: {
+        current: knownNumber(parts.health?.summary?.max_age),
+        unit: '天',
+        explanation: '当前货龄及基地、分仓货龄分别取对应库存健康快照的最大库龄，不作为平均货龄。',
+      },
+      fulfillment: { current: fulfillmentPercent(orders), unit: '%' },
+      orderGap: {
+        current: knownNumber(stock?.known_open_orders),
+        unit: '件',
+        explanation:
+          '当前可取得的基地未备单量；不含已备单占用，分仓当前待发阶段尚无等价来源。下方缺货量为所选日期所在月截至该日的累计值。',
+      },
+    },
+  };
   return (
     <main className={`${styles.shell} ${common.root}`}>
       <div className={styles.workspacePanels}>
         <section className={styles.workbench}>
-          <header className={styles.header}>
-            <h1 className={styles.title}>全链路库存</h1>
-            <div className={styles.controls}>
+          <BusinessToolbar
+            filters={
               <label className={styles.channelSwitch}>
                 <input
                   type="checkbox"
@@ -139,6 +133,8 @@ export default function ConfiguredWorkbench() {
                 <span aria-hidden="true" />
                 含渠道
               </label>
+            }
+            actions={
               <LocalQueryForm
                 className={common.controls}
                 onSubmit={(e) => {
@@ -147,116 +143,150 @@ export default function ConfiguredWorkbench() {
                   refresh((n) => n + 1);
                 }}
               >
-                <input
-                  type="date"
+                <BusinessDateInput
                   aria-label="读取时点"
                   required
                   max={businessDay()}
                   value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
+                  onValueChange={setDraft}
                 />
                 <button>查询 / 刷新</button>
               </LocalQueryForm>
-            </div>
-          </header>
+            }
+          />
           <div className={styles.boardScroll}>
-            {errors.map((e: string) => (
-              <p key={e} role="alert" className={common.error}>
-                {e}
-              </p>
-            ))}
-            <div className={`${styles.kpiGrid} ${common.kpis}`} aria-busy={busy}>
-              {cards.map((c) => (
-                <button key={c.title} className={styles.kpiButton} onClick={() => setTab(c.tab)}>
-                  <div className={styles.kpiCard}>
-                    <div className={styles.kpiTop}>
-                      <span className={styles.kpiTitle}>{c.title}</span>
-                    </div>
-                    <p className={common.metricScope}>{c.scope}</p>
-                    <strong className={styles.kpiValue}>{show(c.value, c.unit)}</strong>
-                    <dl className={styles.kpiHelpers}>
-                      {c.details.map(([label, n, unit]) => (
-                        <div key={String(label)}>
-                          <dt>{label}</dt>
-                          <dd>{show(n as number | null, String(unit))}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                </button>
-              ))}
+            <QueryErrors errors={errors} />
+            <div
+              className={`${styles.kpiGrid} ${styles.compactKpiGrid} ${common.kpis}`}
+              data-overview-cards="qll"
+              aria-busy={busy}
+            >
+              {(['inventoryLevel', 'turnover', 'aging', 'fulfillment', 'orderGap'] as const).map(
+                (key) => (
+                  <KpiCard
+                    key={key}
+                    metricKey={key}
+                    metric={workspace.kpis[key]}
+                    workspace={workspace}
+                    channelSnapshot={{
+                      inventory: knownNumber(customer?.inventory),
+                      inTransit: knownNumber(customer?.in_transit),
+                      stockDays: knownNumber(customer?.cover_days),
+                      date: parts['channel-overview']?.snapshotDate,
+                    }}
+                    maximumAges={{
+                      base: knownNumber(parts.health?.summary?.base_max_age),
+                      branch: knownNumber(branch?.max_age),
+                    }}
+                    periodShortages={{
+                      base: knownNumber(parts['factory-overview']?.summary?.shortage),
+                      branch: knownNumber(parts['branch-overview']?.summary?.shortage),
+                    }}
+                    onOpen={() =>
+                      setTab(
+                        key === 'aging'
+                          ? 'aging'
+                          : ['fulfillment', 'orderGap'].includes(key)
+                            ? 'shortage'
+                            : 'structure',
+                      )
+                    }
+                  />
+                ),
+              )}
             </div>
             <section className={styles.aiInsight} aria-label="AI 洞察">
               <div className={styles.aiInsightHeading}>
+                <span className={styles.aiInsightIcon} aria-hidden="true" />
                 <strong>AI 洞察</strong>
                 <span className={styles.aiInsightBadge}>经营洞察</span>
               </div>
               <p>
-                <b>核心判断：</b>
-                数量统一为箱（1件=1箱），大数以万箱显示。主指标为基地范围；分仓现存和可用库存独立列示，明细见组织结构。订单执行主值为基地库存快照中的未备单量，已备单占用独立列示；货龄展示最大库龄。
+                <b>核心判断：</b>公司库存 {show(companyQty, '箱')}
+                。结合品类结构、组织结构和订单缺口安排库存协同。
               </p>
-              <details className={common.scopeDetails}>
-                <summary>统计范围与口径</summary>
-                <p>
-                  <b>数据边界：</b>基地快照 {parts.base?.snapshotDate ?? '-'}；分仓快照{' '}
-                  {parts['branch-stock']?.snapshotDate ?? '-'}（{branchStock?.row_count ?? '-'}
-                  个仓库SKU）；库存范围 {stock?.known_inventory_count ?? '-'} /{' '}
-                  {stock?.row_count ?? '-'}{' '}
-                  个基地SKU。差额与周转分别限定库存、目标或需求均有值且非负的同一批SKU，覆盖数量逐项列示；需求合计为0不计算周转。订单满足率使用本月履约，当前待发量保持未知。分仓发货来源有{' '}
-                  {branchShipments?.warehouse_count ?? '-'} 个仓库、
-                  {branchShipments?.row_count ?? '-'} 个仓库SKU，本月有值{' '}
-                  {branchShipments?.month_valid_skus ?? '-'} 行；可在“组织结构→分仓发货观察”查看。
-                </p>
-              </details>
             </section>
-            {channel && (
-              <p className={common.note}>
-                客户库存统计日：{customerStock?.snapshotDate ?? '-'}；
-                {customerStock?.summary?.customer_count ?? '-'}个客户、
-                {customerStock?.summary?.row_count ?? '-'}
-                条记录。库存及动销单位为箱；与基地快照日期和有效记录范围不同，单独列示，不加入基地库存主值。
-              </p>
-            )}
-            <section className={common.panel}>
-              <nav className={common.tabs} aria-label="库存业务页签">
+            <section className={styles.detailCard}>
+              <Tabs activeTab={tab} onChange={setTab}>
                 {tabs.map(([id, label]) => (
-                  <button
-                    key={id}
-                    aria-current={tab === id ? 'page' : undefined}
-                    onClick={() => setTab(id)}
-                  >
-                    {label}
-                  </button>
+                  <Tabs.TabPane key={id} title={label} />
                 ))}
-              </nav>
-              <ConfiguredFactsPage
-                key={[tab, date, revision, channel].join(':')}
-                config={config}
-                embedded
-                viewIds={
-                  channel && tab === 'structure'
-                    ? ['channel-stock', 'channel-sku', ...views[tab]]
-                    : views[tab]
-                }
-                date={date}
-                onRead={(v) => {
-                  updateContext('data', v);
-                  updateContext('queryState', {
-                    state: ['available', 'empty'].includes(v.status) ? 'ready' : v.status,
-                    message: v.message,
-                  });
-                  updateContext('fullChainWorkspace', {
-                    realData: ['available', 'empty'].includes(v.status),
-                    date,
-                    scope: 'base',
-                  });
-                }}
-              />
+              </Tabs>
+              {tab === 'structure' ? (
+                <OrganizationHierarchy
+                  date={date}
+                  revision={revision}
+                  channel={channel}
+                  onRead={(v: any) => updateContext('data', v)}
+                />
+              ) : (
+                <ConfiguredFactsPage
+                  key={[tab, date, revision, channel].join(':')}
+                  config={config}
+                  embedded
+                  viewIds={views[tab]}
+                  presentation={originalQllView(config, tab)}
+                  date={date}
+                  onRead={(v) => {
+                    updateContext('data', v);
+                    updateContext('queryState', {
+                      state: ['available', 'empty'].includes(v.status) ? 'ready' : v.status,
+                      message: v.message,
+                    });
+                    updateContext('fullChainWorkspace', {
+                      realData: ['available', 'empty'].includes(v.status),
+                      date,
+                      scope: channel ? 'all-channel' : 'company',
+                    });
+                  }}
+                />
+              )}
             </section>
             <ConfiguredTrends key={revision} date={date} />
           </div>
         </section>
       </div>
     </main>
+  );
+}
+
+function OrganizationHierarchy({ date, revision, channel, onRead }: any) {
+  const [open, setOpen] = useState<string[]>(['base']);
+  useEffect(() => {
+    if (channel) setOpen((old) => (old.includes('customer') ? old : [...old, 'customer']));
+  }, [channel]);
+  return (
+    <div className={common.hierarchy} aria-label="组织结构分层">
+      {[
+        ['base', '基地', 'organization'],
+        ['branch', '分仓', 'branch-stock'],
+        ...(channel ? [['customer', '渠道', 'channel-sku']] : []),
+      ].map(([id, label, viewId]) => (
+        <section key={id}>
+          <button
+            className={common.hierarchyToggle}
+            aria-label={`${label}库存明细`}
+            aria-expanded={open.includes(id)}
+            onClick={() =>
+              setOpen((old) => (old.includes(id) ? old.filter((v) => v !== id) : [...old, id]))
+            }
+          >
+            <span aria-hidden="true">{open.includes(id) ? '▾' : '▸'}</span>
+            {label}
+          </button>
+          {open.includes(id) && (
+            <ConfiguredFactsPage
+              key={[id, date, revision].join(':')}
+              config={config}
+              embedded
+              viewIds={[viewId]}
+              date={date}
+              presentation={originalQllLayerView(config, id, channel)}
+              onRead={onRead}
+            />
+          )}
+        </section>
+      ))}
+    </div>
   );
 }

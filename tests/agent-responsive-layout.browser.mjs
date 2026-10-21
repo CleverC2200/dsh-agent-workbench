@@ -101,7 +101,7 @@ for (const id of ['fc', 'qll', 'aqkc', 'apsplan'])
     assert.deepEqual(errors, []);
   });
 test('narrow source table keeps columns, paging and display choices accessible', async (t) => {
-  const { page, frame, calls } = await mount(t, 'qll', 1440);
+  const { page, frame, calls } = await mount(t, 'fc', 1440);
   await page.locator('iframe').evaluate((el) => {
     el.style.width = '320px';
   });

@@ -33,6 +33,7 @@ export async function readConfiguredOverview(
   customer = '',
   options: {
     signal?: AbortSignal;
+    cycleDays?: number;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
   } = {},
@@ -56,7 +57,12 @@ export async function readConfiguredOverview(
         const result = await readConfiguredFacts(
           config,
           id,
-          { asOf, customer, filters: id === 'customer' && customer ? { customer } : {} },
+          {
+            asOf,
+            customer,
+            cycleDays: options.cycleDays,
+            filters: id === 'customer' && customer ? { customer } : {},
+          },
           { ...options, snapshotReads, summaryOnly: true },
         );
         part = result.summaryError
