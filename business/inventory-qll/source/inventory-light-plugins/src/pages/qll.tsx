@@ -91,6 +91,7 @@ export function KpiCard({
   onOpen,
   maximumAges,
   periodShortages,
+  channelSnapshot,
 }: {
   metricKey: KpiKey;
   metric: MetricValue;
@@ -98,6 +99,12 @@ export function KpiCard({
   onOpen: () => void;
   maximumAges?: { base: number | null; branch: number | null };
   periodShortages?: { base: number | null; branch: number | null };
+  channelSnapshot?: {
+    inventory: number | null;
+    inTransit: number | null;
+    stockDays: number | null;
+    date?: string;
+  };
 }) {
   const copy = KPI_COPY[metricKey];
   const inventoryMetric =
@@ -176,6 +183,26 @@ export function KpiCard({
           )}
         </dd>
       </div>
+    ) : null;
+  const channelRows =
+    workspace.scope === 'all-channel' && channelSnapshot ? (
+      metricKey === 'inventoryLevel' ? (
+        <>
+          <div title={channelSnapshot.date ? `客户库存快照：${channelSnapshot.date}` : undefined}>
+            <dt>{'客户在仓'}</dt>
+            <dd>{cardValue(channelSnapshot.inventory, '件')}</dd>
+          </div>
+          <div>
+            <dt>{'客户在途'}</dt>
+            <dd>{cardValue(channelSnapshot.inTransit, '件')}</dd>
+          </div>
+        </>
+      ) : metricKey === 'turnover' ? (
+        <div title="客户在仓及在途库存÷同范围近30日日均动销">
+          <dt>{'客户库存支撑'}</dt>
+          <dd>{cardValue(channelSnapshot.stockDays, '天')}</dd>
+        </div>
+      ) : null
     ) : null;
   const valueText = cardValue(primaryValue, metric.unit);
   const unavailable = primaryValue == null;
@@ -300,6 +327,7 @@ export function KpiCard({
               </dt>
               <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
             </div>
+            {channelRows}
           </dl>
         )}
         {!splitValues && (
@@ -399,6 +427,7 @@ export function KpiCard({
                 </div>
               </>
             )}
+            {channelRows}
           </dl>
         )}
       </div>

@@ -1438,3 +1438,90 @@ test('FC list filters align compact white controls, retain actions and adapt to 
   await expect(toolbar.getByRole('button', { name: 'CSV', exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
+
+for (const [inventory, inTransit, stockDays] of [
+  [12060, 2412, 18],
+  [0, 0, 0],
+  [null, null, null],
+])
+  test(`QLL channel switch exposes customer summary and ten-row customer paging: ${inventory}`, async (t) => {
+    const { page, frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
+      if (query.queryId === 'dealer.stock.summary')
+        Object.assign(result.rows[0], { inventory, in_transit: inTransit, cover_days: stockDays });
+      return result;
+    });
+    const grid = frame.locator('[data-overview-cards="qll"]');
+    const stock = grid
+      .getByRole('button')
+      .filter({ has: frame.getByText('当前库存', { exact: true }) });
+    const turnover = grid
+      .getByRole('button')
+      .filter({ has: frame.getByText('库存周转', { exact: true }) });
+    await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
+    await expect.poll(() => calls.some((q) => q.queryId === 'dealer.stock.summary')).toBe(true);
+    const summaryReads = calls.filter((q) => q.queryId === 'dealer.stock.summary').length;
+    await frame.getByRole('checkbox', { name: '含渠道', exact: true }).check();
+    const value = (card, label) =>
+      card
+        .locator('dl > div')
+        .filter({ has: frame.getByText(label, { exact: true }) })
+        .locator('dd');
+    await expect(value(stock, '客户在仓')).toHaveText(
+      inventory === null ? '-' : inventory === 0 ? '0箱' : '1.21万箱',
+    );
+    await expect(value(stock, '客户在途')).toHaveText(
+      inTransit === null ? '-' : inTransit === 0 ? '0箱' : '2,412箱',
+    );
+    await expect(value(turnover, '客户库存支撑')).toHaveText(
+      stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
+    );
+    const customerLayer = frame
+      .locator('section')
+      .filter({ has: frame.getByRole('button', { name: '渠道库存明细', exact: true }) })
+      .last();
+    await expect(
+      customerLayer.getByRole('button', { name: '渠道库存明细', exact: true }),
+    ).toHaveAttribute('aria-expanded', 'true');
+    await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
+    await expect(customerLayer.locator('tbody tr').first()).toContainText('客户A');
+    const before = calls.length;
+    await customerLayer.getByRole('button', { name: '下一页', exact: true }).click();
+    await expect
+      .poll(() =>
+        calls
+          .slice(before)
+          .some(
+            (q) =>
+              q.queryId.startsWith('dealer.stock.detail') &&
+              q.parameters.offset === 10 &&
+              q.parameters.page_size === 10,
+          ),
+      )
+      .toBe(true);
+    assert.equal(
+      calls.filter((q) => q.queryId === 'dealer.stock.summary').length,
+      summaryReads,
+      'switch reuses the SQL summary',
+    );
+    for (const width of [1280, 560, 480, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await grid.evaluate((el) => ({
+        viewport: innerWidth,
+        scroll: document.documentElement.scrollWidth,
+        cards: [...el.children].map((card) => ({
+          width: card.clientWidth,
+          scroll: card.scrollWidth,
+          height: card.getBoundingClientRect().height,
+        })),
+      }));
+      assert.ok(layout.scroll <= layout.viewport + 2, `channel page overflow at ${width}`);
+      assert.ok(
+        layout.cards.every((c) => c.scroll <= c.width + 2 && c.height <= 180),
+        `channel card overflow at ${width}`,
+      );
+    }
+    await frame.getByRole('checkbox', { name: '含渠道', exact: true }).uncheck();
+    await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
+    await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
+    assert.deepEqual(errors, []);
+  });

@@ -56,6 +56,7 @@ export default function ConfiguredWorkbench() {
   const stock = parts.base?.summary,
     orders = parts.orders?.summary;
   const branch = parts['branch-stock']?.summary;
+  const customer = parts['channel-overview']?.summary;
   const baseQty = knownNumber(stock?.known_inventory),
     branchAvailable = knownNumber(branch?.available_qty);
   const companyQty =
@@ -93,9 +94,8 @@ export default function ConfiguredWorkbench() {
       inventoryLevel: {
         current: companyQty,
         companyCurrent: companyQty,
-        planCustomerTotal: channel
-          ? knownNumber(parts['channel-overview']?.summary?.total_inventory)
-          : null,
+        planCustomerTotal: channel ? knownNumber(customer?.total_inventory) : null,
+        planCustomerDate: parts['channel-overview']?.snapshotDate,
         unit: '件',
       },
       turnover: { current: knownNumber(stock?.matched_stock_days), unit: '天' },
@@ -168,6 +168,12 @@ export default function ConfiguredWorkbench() {
                     metricKey={key}
                     metric={workspace.kpis[key]}
                     workspace={workspace}
+                    channelSnapshot={{
+                      inventory: knownNumber(customer?.inventory),
+                      inTransit: knownNumber(customer?.in_transit),
+                      stockDays: knownNumber(customer?.cover_days),
+                      date: parts['channel-overview']?.snapshotDate,
+                    }}
                     maximumAges={{
                       base: knownNumber(parts.health?.summary?.base_max_age),
                       branch: knownNumber(branch?.max_age),
@@ -230,7 +236,7 @@ export default function ConfiguredWorkbench() {
                     updateContext('fullChainWorkspace', {
                       realData: ['available', 'empty'].includes(v.status),
                       date,
-                      scope: 'base',
+                      scope: channel ? 'all-channel' : 'company',
                     });
                   }}
                 />
@@ -246,6 +252,9 @@ export default function ConfiguredWorkbench() {
 
 function OrganizationHierarchy({ date, revision, channel, onRead }: any) {
   const [open, setOpen] = useState<string[]>(['base']);
+  useEffect(() => {
+    if (channel) setOpen((old) => (old.includes('customer') ? old : [...old, 'customer']));
+  }, [channel]);
   return (
     <div className={common.hierarchy} aria-label="组织结构分层">
       {[
