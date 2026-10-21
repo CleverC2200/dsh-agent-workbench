@@ -7286,7 +7286,7 @@ export default function Home({
                       onClick={() => chooseMonth(month)}
                     >
                       <Check />
-                      {month.value}
+                      {month.value}月
                     </button>
                   ))}
                 </div>
