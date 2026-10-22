@@ -78,9 +78,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const fields = step === 'process' ? processFields : planFields;
     const bases = [
       ...new Set(
-        [...result.rows.map((row) => row.base), ...draft.products.map((row) => row['基地'])].filter(
-          Boolean,
-        ),
+        [
+          ...result.rows.map((row) => row.base),
+          ...result.constraints.safetyDays.map((row) => row.base),
+        ].filter(Boolean),
       ),
     ];
     const categories = [...new Set(result.categoryRows.map((row) => row.category))];
