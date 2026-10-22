@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
-import { authorPage } from './helpers/author-page.mjs';
+import { mpsPage } from './helpers/mps-page.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const product = Object.fromEntries(
   config.queries['products.detail'].columns.map((key) => [key, null]),
@@ -23,48 +23,7 @@ const annual = {
   demand_qty: 100,
   update_time: null,
 };
-async function livePage(t, execute) {
-  const page = await authorPage(t, { mpsConfig: config });
-  const calls = [];
-  await page.exposeFunction('mpsQuery', async (message) => {
-    if (message.method !== 'sql') return {};
-    assert.deepEqual(Object.keys(message.parameters).sort(), ['parameters', 'queryId']);
-    calls.push(message.parameters);
-    return execute(message.parameters);
-  });
-  await page.evaluate(() => {
-    window.addEventListener('message', (event) => {
-      if (event.data?.protocol !== 'gea-html-v2' || event.data.type !== 'ready') return;
-      const pair = new MessageChannel();
-      window.mpsPort = pair.port1;
-      pair.port1.onmessage = async ({ data }) => {
-        if (data.type !== 'request') return;
-        try {
-          pair.port1.postMessage({
-            type: 'response',
-            id: data.id,
-            result: await window.mpsQuery(data),
-          });
-        } catch (error) {
-          pair.port1.postMessage({ type: 'response', id: data.id, error: error.message });
-        }
-      };
-      event.source.postMessage(
-        {
-          protocol: 'gea-html-v2',
-          type: 'connect',
-          context: { session: 'fixture-mps-session', plugin: 'inventory-mps' },
-        },
-        '*',
-        [pair.port2],
-      );
-    });
-  });
-  await page.evaluate(() => window.openAuthor('mps', 1200));
-  const frame = page.frameLocator('iframe');
-  await expect(frame.getByRole('heading', { name: '需求确认', exact: true })).toBeVisible();
-  return { page, frame, calls };
-}
+const livePage = (t, execute) => mpsPage(t, config, execute);
 function fixture({ queryId, parameters }) {
   let rows;
   if (queryId.endsWith('.count')) rows = [{ total: 1 }];
