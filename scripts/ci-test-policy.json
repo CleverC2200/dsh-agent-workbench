@@ -33,6 +33,9 @@
     },
     "tests/source-tools.test.mjs": {
       "dependencies": false
+    },
+    "tests/source-result.test.mjs": {
+      "dependencies": false
     }
   },
   "rules": [
@@ -235,6 +238,12 @@
       "pattern": "^scripts/source-tools\\.mjs$",
       "tests": ["tests/source-tools.test.mjs", "tests/source-checks.test.mjs"],
       "sourceTests": ["tests/source-tools.test.mjs", "tests/source-checks.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/source-result\\.mjs$",
+      "tests": ["tests/source-result.test.mjs"],
+      "sourceTests": ["tests/source-result.test.mjs"]
     }
   ],
   "sourceTools": {
