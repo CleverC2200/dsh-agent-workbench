@@ -111,10 +111,7 @@ for (const page of ['category', 'mps']) {
 test('retired MPS relationship view ordering remains fixed if restored', () => {
   const source = JSON.parse(readFileSync('static/mps/source/SOURCE.json'));
   const files = Object.fromEntries(
-    ['app.js', 'data.js'].map((file) => [
-      file,
-      readFileSync(`static/mps/source/${file}`, 'utf8'),
-    ]),
+    ['app.js', 'data.js'].map((file) => [file, readFileSync(`static/mps/source/${file}`, 'utf8')]),
   );
   verifyFixedAuthoredData('mps', files, source);
   verifyFixedAuthoredData(
