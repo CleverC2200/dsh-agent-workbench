@@ -5,6 +5,103 @@
   "source": "ai_db",
   "templates": {},
   "queries": {
+    "sku.owners": {
+      "title": "品项责任与生产分类（独立授权）",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT e.belong_base AS base,e.material_code AS sku,e.director,e.product_item,e.series FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) ORDER BY e.executeorderno,e.executeorderlineno LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["base", "sku", "director", "product_item", "series"],
+      "pagination": {
+        "countQuery": "orders.facts.count"
+      }
+    },
     "sku.age": {
       "title": "基地SKU批次货龄",
       "parameterSpec": {
@@ -2578,9 +2675,9 @@
     },
     {
       "metric": "准交率",
-      "reason": "已有is_ontime源标记，但缺当期应交付时间、承诺时间、GPS/人工到货依据及12小时容差版本；不能用完成样本代替应交付订单分母。",
+      "reason": "已有is_ontime源标记，但缺GPS围栏/人工到货依据及最大承诺时间加12小时版本；新版按实际到货周期及已发货订单分母计算，不能以当前创建日列表替代。",
       "metricEn": "On-time delivery",
-      "reasonEn": "The source flag lacks due-delivery denominators, promise/GPS timestamps and the applicable 12-hour tolerance version. Completed samples cannot stand in for orders due."
+      "reasonEn": "GPS/manual arrival evidence and the maximum-promise plus 12-hour rule remain unverified. The new actual-arrival period and shipped-order denominator cannot be replaced by the current creation-date list."
     },
     {
       "metric": "终缺 / 当天及之前 / 未来5日累计终缺",
@@ -2590,9 +2687,9 @@
     },
     {
       "metric": "可发货天数",
-      "reason": "已在品项原列按10日初版、20日纠偏、月末下月初版计算；缺计划、非指定快照、零分母、重复源键保持未知，分页行不冒充整体均值。",
+      "reason": "按库存日期所在月的销售与调拨出库计划计算；纠偏大于0取纠偏，否则取初版，不再限制10日/20日/月末。缺计划、零分母、重复源键保持未知，分页行不冒充整体均值。",
       "metricEn": "Days of supply",
-      "reasonEn": "Computed per SKU using the documented snapshot plan versions. Missing plans, non-designated snapshots, zero denominators and duplicate keys remain unknown; paginated rows do not establish an overall average."
+      "reasonEn": "Uses stock-month sales and outbound-transfer plans, preferring positive adjustments over initial plans on every snapshot date. Missing plans, zero denominators and duplicate keys remain unknown; paginated rows do not establish an overall average."
     },
     {
       "metric": "未来5日排产 / 调拨 / OEM / 货龄分箱",
@@ -2608,16 +2705,17 @@
     },
     {
       "metric": "应责总监 / 部分自产品标签",
-      "reason": "缺SKU责任总监关系；库存与自产品表基地名称不一致时无权威映射，不猜测关联。",
+      "reason": "执行主表已有director、product_item、series，独立查询已接入，但当前GEA返回FIELD_NOT_PUBLISHED；未授权时保留未知。库存与自产品表基地别名无权威映射时不猜测关联。",
       "metricEn": "Responsible director / unmatched production tags",
-      "reasonEn": "SKU responsibility mapping and authoritative cross-source base aliases are absent."
+      "reasonEn": "The source has director, product_item and series; the independent query is wired but GEA returns FIELD_NOT_PUBLISHED. Unavailable fields remain unknown, and cross-source base aliases are not guessed."
     }
   ],
   "requirements": {
-    "url": "https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg",
-    "revision": 3109,
-    "dateBasis": "header_addtime（源订单创建时间）；文档预期到货/开单确认时间尚无字段，不冒充该口径",
+    "url": "https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd",
+    "documentToken": "QN9AdJovRozeqCxmK3zcTg3Ynie",
+    "revision": 1548,
+    "dateBasis": "当前列表按header_addtime（OMS接收时间）筛选；不冒充实际到货周期准交率或全月发货指标",
     "authorization": "GEA Gateway enforces order01 current-user table/row/column grants; browser filters only narrow results",
-    "quantityUnit": "源数量单位待业务确认，不标件"
+    "quantityUnit": "订单数量按CS箱、EA及源换算率对齐；单位或换算率缺失保持未知"
   }
 }

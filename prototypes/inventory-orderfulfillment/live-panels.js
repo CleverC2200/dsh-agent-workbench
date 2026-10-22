@@ -34,10 +34,17 @@ export function renderCharts(computed,total,drill) {
   const charts=document.querySelectorAll('svg.delivery-line-chart');
   plot(charts[0],names,series,drill);
   plot(charts[1],['<70%','70–80%','80–90%','90–95%','≥95%'],[{name:'订单数',color:'#e52b42',values:total?.buckets??[0,0,0,0,0],orders:total?.rate_order_ids??[[],[],[],[],[]]}],drill);
+  for(const [index,description] of [
+    '按当前有效节点统计订单；超时、预警、正常仅统计具备判定依据的订单。点击数据点查看对应订单。',
+    '按完整原始需求与当前缺货量计算占单满足率，再按订单统计区间；数量缺失的订单不分档。点击数据点查看对应订单。',
+  ].entries()) {
+    const card=charts[index]?.closest('.dimension-card');
+    if(card){card.querySelector('p').textContent=description;const note=card.querySelector('.dimension-note');if(note)note.textContent=description;}
+  }
   const detail=document.getElementById('orderStatusChartDetail');
   if(detail)detail.textContent=`当前节点订单按订单去重；缺失时限或状态未确认 ${computed.nodes.unknown}张，不计作正常。满足率区间覆盖 ${total?.rate_coverage??0}/${total?.rate_total??0}张订单，未覆盖订单不分档。`;
 }
-let coordinationRows=[],coordinationPage=0;
+let coordinationRows=[],coordinationPage=0,coordinationLimit=20;
 const columns=[
   ['基本信息','base','基地'],['基本信息','sku','产品编号'],['基本信息','material_name','产品名称'],['基本信息','product_item','品项'],['基本信息','series','系列'],['基本信息','stock_date','库存日期'],
   ['销售信息','main_plan_initial','主品销售计划（初版）'],['销售信息','main_plan_adjusted','主品销售计划（纠偏）'],['销售信息','bp_plan_initial','BP销售计划（初版）'],['销售信息','bp_plan_adjusted','BP销售计划（纠偏）'],['销售信息','transfer_plan_initial','调拨出库计划（初版）'],['销售信息','transfer_plan_adjusted','调拨出库计划（纠偏）'],['销售信息','next_month_sales_plan','下月销售计划'],
@@ -57,14 +64,14 @@ export function renderCoordination(result,{reset=true}={}) {
   if(reset){const previous=select.value;select.replaceChildren(new Option('全部基地',''));for(const base of [...new Set(coordinationRows.map(row=>row.base).filter(Boolean))].sort())select.append(new Option(base,base));select.value=[...select.options].some(option=>option.value===previous)?previous:'';}
   const search=document.getElementById('itemCoordinationSearch').value.trim().toLowerCase();
   const rows=coordinationRows.filter(row=>(!select.value||row.base===select.value)&&(!search||[row.sku,row.material_name,row.product_item].some(value=>String(value??'').toLowerCase().includes(search))));
-  const pages=Math.max(1,Math.ceil(rows.length/25));coordinationPage=Math.min(Math.max(0,coordinationPage),pages-1);
+  const pages=Math.max(1,Math.ceil(rows.length/coordinationLimit));coordinationPage=Math.min(Math.max(0,coordinationPage),pages-1);
   const body=table.tBodies[0];body.replaceChildren();
-  for(const row of rows.slice(coordinationPage*25,(coordinationPage+1)*25)){
+  for(const row of rows.slice(coordinationPage*coordinationLimit,(coordinationPage+1)*coordinationLimit)){
     const line=body.insertRow();for(const [group,key] of columns){const td=line.insertCell();td.textContent=text(row[key]);td.className=`coord-group-${['基本信息','销售信息','生产信息','库存信息'].indexOf(group)+1}`;if(td.textContent==='—')td.title='当前源字段缺失或存在重复记录，未补零';}
   }
   if(!body.rows.length){const td=body.insertRow().insertCell();td.colSpan=columns.length;td.textContent='当前授权和筛选范围无产销协同记录';}
   document.getElementById('itemCoordinationCount').textContent=`共${rows.length}条（当前授权${coordinationRows.length}条）`;
-  document.getElementById('itemCoordinationPageInfo').textContent=`第${coordinationPage+1}/${pages}页 · 每页25条`;
+  document.getElementById('itemCoordinationPageInfo').textContent=`第 ${coordinationPage+1} / ${pages} 页`;
   document.getElementById('itemCoordinationPrev').disabled=coordinationPage===0;
   document.getElementById('itemCoordinationNext').disabled=coordinationPage>=pages-1;
   document.querySelector('#itemCoordinationPanel .dimension-note').textContent='使用当前授权范围的基地SKU库存及源销售、生产计划；按基本、销售、生产、库存分组。数量沿源单位，不将未指定期间的计划冒充未来5日计划；缺失字段不补零。';
@@ -76,6 +83,13 @@ export function clearPanels() {
   document.getElementById('orderStatusChartDetail').textContent='等待读取当前授权数据';
 }
 export function bindPanelControls() {
+  const next=document.getElementById('itemCoordinationNext');
+  const nav=document.createElement('nav');nav.className='order-pagination';nav.setAttribute('aria-label','产销协同分页');
+  const size=document.createElement('select');size.setAttribute('aria-label','每页条数');
+  for(const n of [20,50,100])size.append(new Option(`${n}条/页`,String(n)));
+  next.after(nav);
+  nav.append(document.getElementById('itemCoordinationCount'),size,document.getElementById('itemCoordinationPrev'),document.getElementById('itemCoordinationPageInfo'),next);
+  size.addEventListener('change',()=>{coordinationLimit=Number(size.value);coordinationPage=0;renderCoordination(null,{reset:false});});
   for(const id of ['itemCoordinationSearch','itemCoordinationBase'])document.getElementById(id).addEventListener(id.endsWith('Base')?'change':'input',()=>{coordinationPage=0;renderCoordination(null,{reset:false});});
   document.getElementById('itemCoordinationPrev').addEventListener('click',()=>{coordinationPage--;renderCoordination(null,{reset:false});});
   document.getElementById('itemCoordinationNext').addEventListener('click',()=>{coordinationPage++;renderCoordination(null,{reset:false});});

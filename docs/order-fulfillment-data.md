@@ -80,6 +80,18 @@ Comparisons, charts and drilldowns share complete granted facts. The coordinatio
 
 当前账号的页面实测与不同真实账号的验收分开记录。后续仍需以不同范围、拒权及撤权账号验证行列、汇总和身份切换；源码授权桩不代替该验收。客户端安装和发布渠道未变更，界面布局未修改。
 
+## 最新术语库接线（2026-10-22） / Latest glossary
+
+当前口径以[订单履约及工作台术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)所指文档 `QN9AdJovRozeqCxmK3zcTg3Ynie`、revision 1548 为准；下述内容替代本页历史记录中相应的旧公式和缺口描述，历史验收不代表当前状态。
+
+- 商品缺货量＝|原始数量－实占数量|；整单及未开订单满足率＝|原始数量合计－当前缺货合计|÷原始数量合计×100%。全部有效输入、单位与拆单归并明确后才计算，不平均SKU百分比。
+- 已开订单满足率按当前列表发货数量÷原始数量计算并发布覆盖；创建日列表不是全月发货指标。准交率需要实际到货周期、已发货分母、GPS优先的到货事实及最大承诺时间加12小时规则，不能借用当前列表计算。
+- 可发货天数＝可用库存÷[(当月销售计划＋当月调拨出库计划×0.5)÷当月天数]。各计划纠偏值大于0取纠偏，否则取初版；不再限制10日、20日或月末快照，也不在月末自动切换下月计划。
+- 主表 `agents_scm_execute_detail_d` 已有 `director`、`product_item`、`series`；独立命名查询 `sku.owners` 已接线，当前GEA探测三列均返回 `FIELD_NOT_PUBLISHED`。不扩大授权，不使该独立失败阻断已有数据，总监未获返回时保持未知。
+- 厂内/厂外候车状态归入装车节点。缺货供应追踪仅展示已关联源事实，不冒充按同到货日倒序逐单分配的完整供应账本。未来五日确认供应、GPS/人工实际到货和确认回调仍需补齐。
+
+The latest glossary replaces the corresponding historical formulas above. Quantity-based rates use complete original demand and absolute shortage; the opened shipment rate is explicitly limited to the current list. Days of supply use positive adjusted plans or initial plans for the stock month on any date. New director/category/series fields exist in Doris but are not published by GEA; their optional failure neither widens access nor clears other sections. Conflicting period/threshold definitions and the existing age-bin boundaries are not silently reinterpreted. Layout, pagination and hidden charts remain unchanged.
+
 ## 加载与滚动验收（2026-10-21）
 
 按用户本次要求，订单履约和客户库存移除顶部正常加载状态条，取消页面内部固定高度的纵向滚动层，保留单一页面滚动；业务卡片、筛选和表格结构不变。

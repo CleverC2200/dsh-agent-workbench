@@ -10,7 +10,7 @@ import {
 } from '../prototypes/inventory-orderfulfillment/live-model.mjs';
 import { makeRequest } from '../business/shared/configured-query-client.mjs';
 
-test('planned shipping days use documented snapshot versions and preserve unknowns', () => {
+test('planned shipping days use current-month corrected plans on every snapshot day and preserve unknowns', () => {
   const row = {
     source_rows: 1,
     stock_date: '2026-10-20',
@@ -24,7 +24,8 @@ test('planned shipping days use documented snapshot versions and preserve unknow
     transfer_plan_adjusted: 0,
   };
   assert.equal(plannedShippingDays(row), 100 / 30);
-  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-10' }), 5);
+  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-10' }), 100 / 30);
+  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-21' }), 100 / 30);
   assert.equal(
     plannedShippingDays({
       ...row,
@@ -32,11 +33,10 @@ test('planned shipping days use documented snapshot versions and preserve unknow
       next_month_sales_plan: 300,
       next_month_out_plan: 600,
     }),
-    5,
+    100 / 30,
   );
   assert.equal(plannedShippingDays({ ...row, available_qty: 0 }), 0);
   for (const change of [
-    { stock_date: '2026-10-21' },
     { source_rows: 2 },
     { available_qty: null },
     { main_plan_adjusted: null, main_plan_initial: null },
