@@ -699,9 +699,9 @@ export const customerStockConversation: ConversationPromptConfig = {
 
 /** 订单工作台：订单状态、供应风险与提报审批进度。 */
 export const orderManagementConversation: ConversationPromptConfig = {
-  name: '订单管理Agent',
-  intro: '我可以帮你分析订单状态、库存与供应风险，并跟进客户提报和审批进度。',
-  boundary: '我只做分析和建议，不直接修改订单。',
+  name: '订单工作台助手',
+  intro: '可解读当前月报或周报的指标、预警事项',
+  boundary: '并生成可复核的跟进建议',
   actions: [
     {
       icon: 'chart',
@@ -733,18 +733,19 @@ export const orderManagementConversation: ConversationPromptConfig = {
     },
   ],
   prompts: [
-    '本月订单情况如何？',
-    '哪些商品需要重点关注？',
-    '当前最需要关注的风险是什么？',
-    '客户提报和审批进度如何？',
+    '帮我查河南省区冷鲜肉水饺的缺货订单，未来 5 日排产能否补足？',
+    '今天有哪些订单已超时或处于预警，分别卡在哪个履约节点？',
+    '郑州基地冷鲜肉水饺 当前可用库存多少、可发货几天、影响哪些订单？',
+    '遂平基地纸皮烧麦未来 5 日排产能覆盖未满足订单吗？',
+    '华东基地有哪些订单尚未发车或运输超时，分别对应哪个物流商？',
   ],
 };
 
 /** 订单履约页：接收、校验与 OMS 推送进度。 */
 export const orderFulfillmentConversation: ConversationPromptConfig = {
-  name: '订单履约Agent',
-  intro: '我可以帮你跟进订单接收、校验与 OMS 推送进度，定位履约异常。',
-  boundary: '我只做风险分析和处理建议，不直接推送订单。',
+  name: '订单履约助手',
+  intro: '按订单、商品、基地或销售组织问数',
+  boundary: '查看预警、超时、缺货、生产与库存',
   actions: [
     {
       icon: 'chart',
@@ -776,9 +777,10 @@ export const orderFulfillmentConversation: ConversationPromptConfig = {
     },
   ],
   prompts: [
-    '当前订单履约进度如何？',
-    '哪些订单校验异常？',
-    '有哪些订单等待推送？',
-    '下一步应优先处理什么？',
+    '帮我查河南省区冷鲜肉水饺的缺货订单，未来 5 日排产能否补足？',
+    '今天有哪些订单已超时或处于预警，分别卡在哪个履约节点？',
+    '郑州基地冷鲜肉水饺 当前可用库存多少、可发货几天、影响哪些订单？',
+    '遂平基地纸皮烧麦未来 5 日排产能覆盖未满足订单吗？',
+    '华东基地有哪些订单尚未发车或运输超时，分别对应哪个物流商？',
   ],
 };

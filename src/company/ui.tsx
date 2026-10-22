@@ -51,6 +51,7 @@ const agents: Record<string, prompts.ConversationPromptConfig> = {
   'inventory-qll': prompts.fullChainStockConversation,
   'inventory-apsplan': prompts.supplyCoordinationConversation,
   'inventory-customer': prompts.customerStockConversation,
+  'inventory-orderworkbench': prompts.orderManagementConversation,
   'inventory-orderfulfillment': prompts.orderFulfillmentConversation,
 };
 const unavailableAccount = {
@@ -82,7 +83,11 @@ export function CompanyWelcome({
   const agent = page ? (agents[page] ?? prompts.homeConversation) : undefined;
   const copy = language === 'en' ? en : zh;
   return agent ? (
-    <AgentWelcome agent={agent} onFill={(prompt) => onFill?.(prompt)} />
+    <AgentWelcome
+      agent={agent}
+      orderTemplate={page === 'inventory-orderworkbench' || page === 'inventory-orderfulfillment'}
+      onFill={(prompt) => onFill?.(prompt)}
+    />
   ) : (
     <GeaHomeHero
       copy={{
