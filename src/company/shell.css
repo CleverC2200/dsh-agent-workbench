@@ -63,6 +63,10 @@
     color 140ms ease;
 }
 
+.gea-workspace-owned span:has(> .gea-workspace-heading) {
+  margin-right: auto;
+}
+
 .gea-workspace-owned .gea-workspace-heading {
   padding-left: calc(var(--gea-menu-left, 10px) - 4px);
 }
