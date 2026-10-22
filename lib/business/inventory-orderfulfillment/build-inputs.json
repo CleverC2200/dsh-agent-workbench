@@ -3,12 +3,16 @@
   "commit": "2b3300bceccfa3c117901d965e5829390833b2f0",
   "sourceHtmlSha256": "f05b62dabb3f3451020e4aed97fb75bc3cd6c9aeed4c581073083eb4ee1c598c",
   "id": "inventory-orderfulfillment",
-  "consumerCode": "orderfulfillment-preview",
+  "consumerCode": "order01",
   "runtimeProtocol": "gea-html-v2",
   "sourceRole": "build input only; no legacy manifest or decoder",
+  "sourceConsumerCode": "orderfulfillment-preview",
+  "presentationSha256": "5df808128da95b09ea6abe4fcd269dd822f28372ff5f0536518c8f292fd00822",
   "sharedThemeSha256": "19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66",
-  "stateSha256": "a818ee722045210cde8a79e633dd9c9d4b9d26d60b68a2336035a40368bddee8",
-  "themeBindingSha256": "6d3bf47bd3d09c794f3f9670ceefb4eedce07c420389a003ea67d053ef9fe54d",
-  "channelBundleSha256": "0489b60a2c6fb09fad27bb2ae0aa45ec439aa5b2817a6e8a99360f3872c3aa36",
-  "htmlSha256": "97ed1ec77571d8d67237b69e9a9a93fd38c399df946e72cf982c520eaec076c7"
+  "stateSha256": "1bd5eba8d027acc3380be82515da0def0298150020a326a052be705c96ef2927",
+  "sqlConfigSha256": "2375c6be8b2b08427fb55833c633c669c580901fd6c3a344929a47748ec5ef80",
+  "dataMode": "GEA_GOVERNED_READONLY",
+  "themeBindingSha256": "9a83b65fa909a9e57d2010da0ae182748ecfa93d2feb03ea72dec39457a9f86b",
+  "channelBundleSha256": "12d6507cc7c4f21bb42eb8680cedc1537d5455f098bf77fc67ad14f0afe1b82e",
+  "htmlSha256": "144ba5372f21fe056a70daf71e2380b61f6e017e2c568ca06528b7b150560e8c"
 }
