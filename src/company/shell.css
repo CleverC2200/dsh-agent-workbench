@@ -1832,7 +1832,10 @@
   text-align: left;
   white-space: normal;
 }
-.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts button:hover {
+.agent-workbench-document
+  .gea-agent-welcome.gea-order-agent-welcome
+  .gea-agent-prompts
+  button:hover {
   border-color: #b8cdfa;
   color: #4e72b8;
   background: #fff;
