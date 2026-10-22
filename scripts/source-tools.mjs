@@ -236,3 +236,19 @@ export function prepareSourceTools(root, packages) {
   );
   console.log(JSON.stringify(receipt));
 }
+
+export async function prepareCoreCommandMetadata(head, workspace) {
+  if (!/^[a-f0-9]{40}$/.test(head)) throw Error('SOURCE_CORE_METADATA_HEAD');
+  const response = await fetch(
+    `https://raw.githubusercontent.com/CleverC2200/deepseek-harness/${head}/package.json`,
+  );
+  if (!response.ok) throw Error(`SOURCE_CORE_METADATA_HTTP: ${response.status}`);
+  const text = await response.text();
+  const manifest = JSON.parse(text);
+  if (!manifest.scripts || typeof manifest.scripts !== 'object' || Array.isArray(manifest.scripts))
+    throw Error('SOURCE_CORE_COMMANDS_REQUIRED');
+  const directory = resolve(workspace, 'official-latest-standard');
+  mkdirSync(directory);
+  writeFileSync(resolve(directory, 'package.json'), text);
+  return { head, bytes: Buffer.byteLength(text), purpose: 'command-reference-only' };
+}
