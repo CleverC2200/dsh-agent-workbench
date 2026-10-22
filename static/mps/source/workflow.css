@@ -67,6 +67,12 @@
   max-width: 380px;
   white-space: normal;
 }
+.wf-page .wf-reasons {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
 .wf-page .wf-value {
   font-size: inherit;
   font-variant-numeric: tabular-nums;

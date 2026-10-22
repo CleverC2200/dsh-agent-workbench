@@ -137,9 +137,19 @@ export function createShipment(
       cutoff === '2026-09-22';
     const business =
       state.business?.month === month && state.business?.cutoff === cutoff ? state.business : null;
-    const sourceRows = state.rows ?? business?.rows ?? (demo ? prototypeShipments : emptyRows);
+    const activeSource = state.activeSource ?? (state.rows != null ? 'local-file' : 'business');
+    const sourceRows =
+      activeSource === 'local-file'
+        ? (state.rows ?? emptyRows)
+        : (business?.rows ?? (demo ? prototypeShipments : emptyRows));
     const sourceKind =
-      state.rows != null ? 'local-file' : business ? 'business' : demo ? 'demo' : 'unread';
+      activeSource === 'local-file' && state.rows != null
+        ? 'local-file'
+        : business && activeSource === 'business'
+          ? 'business'
+          : demo
+            ? 'demo'
+            : 'unread';
     const stateRef = react.useRef(state);
     stateRef.current = state;
     const snapshotCallback = react.useRef(onSnapshot);
@@ -208,10 +218,22 @@ export function createShipment(
     );
     const national = aggregate(rows, '全国合计');
     const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
+    const selectSource = (next) => {
+      updateState({
+        activeSource: next,
+        sourceEdits: {
+          ...state.sourceEdits,
+          [activeSource]: { values: state.values, remaining: state.remaining },
+        },
+        values: state.sourceEdits?.[next]?.values ?? {},
+        remaining: state.sourceEdits?.[next]?.remaining ?? {},
+      });
+      setFormula(null);
+    };
     const source =
       sourceKind === 'demo'
         ? '演示数据 · 原型2026-09汤圆645条；四输入按原型确定性映射，剩余入库按本月生产入库÷22×8四舍五入演示推算'
-        : state.file
+        : sourceKind === 'local-file'
           ? `本地CSV：${state.file}`
           : business
             ? `业务来源：实际发货 ${month}-01 至 ${cutoff}；近三天${business.metadata.recentStatus === 'ok' ? '截止日及前两日' : '未提供'}；已备未备与库存来源未接入`
@@ -243,7 +265,21 @@ export function createShipment(
       setBusy(true);
       setSyncStatus('loading');
       setError('');
-      updateState({ business: null, businessAttempted: true });
+      updateState({
+        business: null,
+        businessAttempted: true,
+        activeSource: 'business',
+        ...(activeSource === 'local-file'
+          ? {
+              sourceEdits: {
+                ...state.sourceEdits,
+                [activeSource]: { values: state.values, remaining: state.remaining },
+              },
+              values: {},
+              remaining: {},
+            }
+          : {}),
+      });
       const recentStart = `${month}-${String(passed - 2).padStart(2, '0')}`;
       const results = await Promise.allSettled([
         readShipmentRange(`${month}-01`, cutoff, stop.signal),
@@ -445,7 +481,13 @@ export function createShipment(
           if (finite(parsed.reduce((sum, row) => sum + (row[field] ?? 0), 0)) == null)
             throw Error('输入合计超出安全范围，未替换原输入。');
         if (!valid()) return;
-        updateState({ rows: parsed, file: file.name, values: {}, remaining: {} });
+        updateState({
+          rows: parsed,
+          file: file.name,
+          activeSource: 'local-file',
+          values: {},
+          remaining: {},
+        });
         setError('');
         setExpanded([]);
         setFormula(null);
@@ -731,6 +773,23 @@ export function createShipment(
             },
           }),
         ),
+        (state.rows != null || state.businessAttempted || business) &&
+          h(
+            'label',
+            {},
+            '发货数据来源',
+            h(
+              'select',
+              {
+                'aria-label': '发货数据来源',
+                value: activeSource,
+                disabled: busy,
+                onChange: (event) => selectSource(event.target.value),
+              },
+              h('option', { value: 'business' }, '实际发货'),
+              h('option', { value: 'local-file', disabled: state.rows == null }, '本地CSV'),
+            ),
+          ),
         h('span', {}, '单位 件'),
       ),
       h(

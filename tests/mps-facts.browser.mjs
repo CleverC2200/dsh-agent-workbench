@@ -162,3 +162,50 @@ test('truncated facts are rejected and a late historical period cannot overwrite
   await history.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog')).toContainText(String(new Date().getFullYear() - 2));
 });
+
+test('history failures stay bound to the read period after switching historical years', async (t) => {
+  let deniedMonth = '';
+  const { frame } = await mpsPage(t, config, (query) => {
+    if (query.queryId === 'facts.history' && query.parameters.month === deniedMonth)
+      throw Error('AGENT_ACCESS_DENIED');
+    return fixture(query);
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: '期间核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,',
+    ),
+  });
+  const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
+  await expect(history).toContainText('发货数量：7件');
+  deniedMonth = '2025-10-01';
+  await history.getByRole('button', { name: '同步', exact: true }).click();
+  await expect(history.getByRole('alert')).toContainText('暂无数据权限');
+  await history.getByLabel('历史同期').selectOption('2');
+  await expect(history).toContainText('2024-10');
+  await expect(history.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+  await expect(history.getByRole('alert')).toHaveCount(0);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const quantity = frame.getByRole('button', {
+    name: '基地甲 001 2026-10 历史发货数量 计算过程',
+    exact: true,
+  });
+  await expect(quantity).toHaveText('—');
+  await quantity.click();
+  await expect(frame.getByRole('dialog')).toContainText('暂无数据权限');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  deniedMonth = '';
+  await history.getByLabel('历史同期').selectOption('1');
+  await expect(history).toContainText('2025-10');
+  await expect(history.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+  deniedMonth = '2024-10-01';
+  await history.getByLabel('历史同期').selectOption('2');
+  await expect(history.getByRole('alert')).toContainText('暂无数据权限');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(quantity).toHaveText('7');
+});
