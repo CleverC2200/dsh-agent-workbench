@@ -62,7 +62,13 @@ export async function readCurrentShortage(
   if (
     !Number.isSafeInteger(result.total) ||
     result.total < result.rows.length ||
-    result.rows.some((r: Record<string, unknown>) => knownNumber(r.invalid) !== 0)
+    result.rows.some(
+      (r: Record<string, unknown>) =>
+        knownNumber(r.invalid) !== 0 ||
+        ['demand', 'allocated', 'remaining', 'available', 'shortage'].some(
+          (field) => knownNumber(r[field]) === null,
+        ),
+    )
   )
     throw Object.assign(Error('当前缺货模型返回不完整范围'), {
       code: 'CURRENT_SHORTAGE_INCOMPLETE',

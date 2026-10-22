@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
-import { LocalQueryForm } from './local-query-form';
-import common from './restored-workbench.module.css';
+import { OriginalBusinessList } from './original-business-list';
 
 const columns = [
   ['base', '基地'],
@@ -28,6 +27,7 @@ export function CurrentShortageList({
   const [filters, setFilters] = useState({ base: '', warehouse_code: '', sku: '' });
   const [draft, setDraft] = useState(filters),
     [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(10),
     [result, setResult] = useState<{ rows: Array<Record<string, unknown>>; total: number } | null>(
       null,
     ),
@@ -39,6 +39,7 @@ export function CurrentShortageList({
     readCurrentShortage(config, 'current-shortage.detail', filters, {
       signal: controller.signal,
       page,
+      pageSize,
     })
       .then((value) => {
         if (!controller.signal.aborted) {
@@ -49,7 +50,7 @@ export function CurrentShortageList({
             rows: value.rows,
             total: value.total,
             page,
-            pageSize: 10,
+            pageSize,
             rowScope: 'current_server_page',
             currentState: true,
             calculation: 'order_then_pool_sku_then_sum',
@@ -74,95 +75,59 @@ export function CurrentShortageList({
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [config, filters, page, revision]);
+  }, [config, filters, page, pageSize, revision]);
+  const allColumns = columns
+    .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
+    .map(([field, label]) => ({ field, label }));
+  const [chosenColumns, setChosenColumns] = useState(() => columns.map(([key]) => key));
   return (
-    <section className={common.root} aria-busy={busy}>
-      <LocalQueryForm
-        className={`${common.controls} ${common.shortageControls}`}
-        onSubmit={(e) => {
-          e.preventDefault();
-          setPage(1);
-          setFilters({ ...draft });
-        }}
-      >
-        {(
-          [
-            ['base', '基地'],
-            ['warehouse_code', '分仓编码'],
-            ['sku', 'SKU'],
-          ] as const
-        )
-          .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
-          .map(([key, label]) => (
-            <label key={key}>
-              {label}
-              <input
-                aria-label={label}
-                value={draft[key]}
-                onChange={(e) => setDraft({ ...draft, [key]: e.target.value })}
-              />
-            </label>
-          ))}
-        <button>查询</button>
-        <button
-          type="button"
-          onClick={() => {
-            setDraft({ base: '', warehouse_code: '', sku: '' });
-            setFilters({ base: '', warehouse_code: '', sku: '' });
-            setPage(1);
-          }}
-        >
-          清空筛选
-        </button>
-      </LocalQueryForm>
-      <div style={{ overflowX: 'auto' }}>
-        <table className={common.currentShortageTable}>
-          <thead>
-            <tr>
-              {columns
-                .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
-                .map(([key, label]) => (
-                  <th key={key}>{label}</th>
-                ))}
-            </tr>
-          </thead>
-          <tbody>
-            {result?.rows.map((row, index) => (
-              <tr key={JSON.stringify([row.location_type, row.location_code, row.sku, index])}>
-                {columns
-                  .filter(
-                    ([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code',
-                  )
-                  .map(([key]) => (
-                    <td key={key}>
-                      {row[key] == null
-                        ? '-'
-                        : ['demand', 'allocated', 'remaining', 'available', 'shortage'].includes(
-                              key,
-                            ) && Number.isFinite(Number(row[key]))
-                          ? Number(row[key]).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
-                          : String(row[key])}
-                    </td>
-                  ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {!result?.rows.length && <p>{busy ? '加载中…' : '暂无数据'}</p>}
-      <div className={common.controls}>
-        <span>共 {result?.total ?? '-'} 条，每页 10 条</span>
-        <button disabled={busy || page === 1} onClick={() => setPage((p) => p - 1)}>
-          上一页
-        </button>
-        <span>第 {page} 页</span>
-        <button
-          disabled={busy || !result || page * 10 >= result.total}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          下一页
-        </button>
-      </div>
-    </section>
+    <OriginalBusinessList
+      agentId={config.agentId}
+      view={{
+        id: 'current-shortage',
+        title: config.agentId === 'inventory-fc' ? '当前订单' : '订单缺口',
+        columns: allColumns,
+        filters: [
+          { name: 'base', label: '基地' },
+          { name: 'warehouse_code', label: '分仓编码' },
+          { name: 'sku', label: 'SKU' },
+        ].filter((field) => config.agentId !== 'inventory-fc' || field.name !== 'base'),
+      }}
+      columns={allColumns.filter((column) => chosenColumns.includes(column.field))}
+      chosenColumns={chosenColumns}
+      onColumns={setChosenColumns}
+      filters={draft}
+      onFilter={(name: string, value: string) =>
+        setDraft((current) => ({ ...current, [name]: value }))
+      }
+      submit={(event: FormEvent) => {
+        event.preventDefault();
+        setPage(1);
+        setFilters({ ...draft });
+      }}
+      reset={() => {
+        setDraft({ base: '', warehouse_code: '', sku: '' });
+        setFilters({ base: '', warehouse_code: '', sku: '' });
+        setPage(1);
+      }}
+      result={result ? { ...result, status: result.rows.length ? 'available' : 'empty' } : null}
+      loading={busy}
+      page={page}
+      pageSize={pageSize}
+      onPage={setPage}
+      onPageSize={(size: number) => {
+        setPageSize(size);
+        setPage(1);
+      }}
+      renderCell={(row: Record<string, unknown>, column: { field: string }) => {
+        const value = row[column.field];
+        return value == null
+          ? '-'
+          : ['demand', 'allocated', 'remaining', 'available', 'shortage'].includes(column.field) &&
+              Number.isFinite(Number(value))
+            ? Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+            : String(value);
+      }}
+    />
   );
 }

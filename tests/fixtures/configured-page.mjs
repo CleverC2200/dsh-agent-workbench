@@ -87,6 +87,24 @@ export async function configuredWire(id) {
         { length: Math.max(0, Math.min(p.page_size ?? 10, total - offset)) },
         (_, i) => makeRow(offset + i),
       );
+    if (payload.queryId.startsWith('current-shortage.')) {
+      const types = ['qll', 'apsplan'].includes(id)
+        ? ['基地', '分仓']
+        : [id === 'aqkc' ? '基地' : '分仓'];
+      rows = types.map((location_type) => ({
+        ...makeRow(0),
+        location_type,
+        location_code: location_type === '基地' ? '华东' : 'W01',
+        location_name: location_type === '基地' ? '华东' : '分仓1',
+        warehouse_code: location_type === '基地' ? null : 'W01',
+        invalid: 0,
+        demand: 100,
+        allocated: 20,
+        remaining: 80,
+        available: 70,
+        shortage: 10,
+      }));
+    }
     return { rows, returnedColumns: columns, rejectedColumns: [], configVersion: 'fixture-v1' };
   };
 }

@@ -185,6 +185,10 @@ jobs:
         with:
           path: ${{ steps.affected.outputs.tools-downloads }}
           key: ${{ steps.tool-download-cache.outputs.cache-primary-key }}
+      - uses: astral-sh/setup-uv@v6
+        if: steps.affected.outputs.pythonSql == 'true' && steps.reuse.outputs.hit != 'true'
+        with:
+          enable-cache: false
       - name: Run affected behavior and real TypeScript checks
         if: needs.source-plan.outputs.engineering == 'true' && steps.reuse.outputs.hit != 'true'
         run: node scripts/source-quality.mjs --phase affected-check
