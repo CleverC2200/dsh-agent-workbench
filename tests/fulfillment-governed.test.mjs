@@ -84,7 +84,7 @@ test('complete inputs use bounded concurrent pages without repeated per-page cou
     const reader = createFulfillmentReader(config, async (_request, options) => {
       if (options.queryId.endsWith('.count'))
         return {
-          rows: [{ total: ++counts === 3 && fault === 'count' ? 871 : 870 }],
+          rows: [{ total: ++counts === 2 && fault === 'count' ? 871 : 870 }],
           configVersion: 'v1',
         };
       const offset = options.values.offset;
@@ -113,11 +113,31 @@ test('complete inputs use bounded concurrent pages without repeated per-page cou
       const result = await reader.all('orders.facts', filters);
       assert.equal(result.rows.length, 870);
       assert.equal(result.rows[200].cust_order_no, 'O200');
-      assert.equal(counts, 3);
+      assert.equal(counts, 2);
       assert.equal(dataCalls, 5);
       assert.ok(peak > 1 && peak <= 4);
     } else await assert.rejects(reader.all('orders.facts', filters));
   }
+});
+
+test('complete read starts first page before count returns and still checks the final count', async () => {
+  const calls = [];
+  let releaseCount;
+  const reader = createFulfillmentReader(config, async (_request, options) => {
+    calls.push(options.queryId);
+    if (options.queryId.endsWith('.count')) {
+      if (calls.filter((id) => id.endsWith('.count')).length === 1)
+        await new Promise((resolve) => { releaseCount = resolve; });
+      return { rows: [{ total: 0 }], configVersion: 'v1' };
+    }
+    return { rows: [], configVersion: 'v1' };
+  });
+  const loading = reader.all('orders.facts', filters);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.includes('orders.facts'), '首批数据不能等待计数返回');
+  releaseCount();
+  await loading;
+  assert.equal(calls.filter((id) => id === 'orders.facts.count').length, 2);
 });
 
 test('order01 queries bind business filters only and expose no transport credentials', () => {
