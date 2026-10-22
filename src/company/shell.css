@@ -63,6 +63,10 @@
     color 140ms ease;
 }
 
+.gea-workspace-owned .gea-workspace-heading {
+  padding-left: calc(var(--gea-menu-left, 10px) - 4px);
+}
+
 .gea-sidebar-tab:hover {
   background: #eceff2 !important;
   color: #202531;
