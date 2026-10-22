@@ -2,6 +2,7 @@ import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import healthSqlConfig from '../../../../sql.config.json';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
+import { originalAqkcAgeView } from '../../../../../shared/original-business-views';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
 import { stockPageSortFields } from '../configured-stock';
 import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-current-order.ts';
@@ -1098,24 +1099,7 @@ export function InventoryOperationsWorkbench() {
                     config={healthSqlConfig}
                     embedded
                     viewIds={['age-structure']}
-                    presentation={{
-                      title: '货龄结构',
-                      columns: [
-                        ['belong_base', '对象'],
-                        ['missing_warning', '预警标志'],
-                        ['total_qty', '当前库存'],
-                        ['missing_average_age', '平均货龄'],
-                        ['missing_age0_30', '0-30天量/占比'],
-                        ['missing_age31_40', '31-40天量/占比'],
-                        ['missing_age41_60', '41-60天量/占比'],
-                        ['missing_age60', '60+天量/占比'],
-                        ['missing_future7', '未来7日预计超龄'],
-                        ['missing_future14', '未来14日预计超龄'],
-                        ['missing_daily_sales', '日均动销'],
-                        ['sku_count', 'SKU个数'],
-                      ].map(([field, label]) => ({ field, label })),
-                      filters: [],
-                    }}
+                    presentation={originalAqkcAgeView(healthSqlConfig)}
                     initialFilters={
                       paths.length
                         ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }

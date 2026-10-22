@@ -66,10 +66,25 @@ test('full-chain keeps target days, share, snapshot, layer and source age distin
   for (const id of ['factory-overview', 'branch-overview'])
     assert.ok(configs.qll.overviewViewIds.includes(id));
 });
-test('base age bins and forecasts are retained as missing, never derived from maximum age', () => {
+test('base age original columns map to batch measures and retain the average/max distinction', () => {
   const v = view('aqkc', 'age-structure');
-  assert.ok(v.columns.some((c) => c.field === 'max_age' && !c.unavailable));
-  assert.ok(v.columns.filter((c) => c.unavailable).length >= 7);
+  const columns = Object.fromEntries(v.columns.map((c) => [c.field, c]));
+  const expected = {
+    max_age: 'average_age',
+    missing_age0_30: 'age0_30',
+    missing_age31_40: 'age31_40',
+    missing_age41_60: 'age41_60',
+    missing_age60: 'age60_plus',
+    missing_future7: 'future7',
+    missing_future14: 'future14',
+  };
+  const returned = configs.aqkc.queries[v.queryId].resultColumns;
+  for (const [field, measure] of Object.entries(expected)) {
+    assert.equal(columns[field].valueField, measure);
+    assert.notEqual(columns[field].unavailable, true);
+    assert.ok(returned.includes(measure), measure);
+  }
+  assert.equal(columns.max_age.label, '平均货龄（天）');
   assert.ok(fields('aqkc', 'health').includes('warehouseid'));
 });
 test('real count columns may not accidentally be hidden as missing source columns', () => {
