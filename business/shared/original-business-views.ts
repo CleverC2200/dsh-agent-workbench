@@ -137,6 +137,28 @@ export function originalFcView(config: any, tab: string) {
     ['base', 'sku'],
   );
 }
+export function originalAqkcAgeView(config: any) {
+  return present(
+    config,
+    'age-structure',
+    '货龄结构',
+    [
+      ['belong_base', '对象'],
+      ['missing_warning', '预警标志'],
+      ['total_qty', '当前库存'],
+      ['max_age', '平均货龄'],
+      ['missing_age0_30', '0-30天量/占比'],
+      ['missing_age31_40', '31-40天量/占比'],
+      ['missing_age41_60', '41-60天量/占比'],
+      ['missing_age60', '60+天量/占比'],
+      ['missing_future7', '未来7日预计超龄'],
+      ['missing_future14', '未来14日预计超龄'],
+      ['missing_movement', '日均动销'],
+      ['sku_count', 'SKU个数'],
+    ],
+    [],
+  );
+}
 export function originalQllView(config: any, tab: string) {
   if (tab === 'aging')
     return present(

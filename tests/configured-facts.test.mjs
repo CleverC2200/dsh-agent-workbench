@@ -221,7 +221,7 @@ test('every displayed field and source gap is declared in that Agent configurati
         assert.ok(
           view.columns.every(
             (c) =>
-              columns.includes(c.field) ||
+              columns.includes(c.valueField ?? c.field) ||
               (c.unavailable === true && c.field.startsWith('missing_')) ||
               (c.context === 'stock_date' && c.field === 'stock_date') ||
               (c.context === 'layer_label' && c.field === 'layer_label' && c.value === '基地'),

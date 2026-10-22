@@ -190,14 +190,27 @@ export async function readConfiguredFacts(
     if (name === 'shipment_start') value = month < rollingStart ? month : rollingStart;
     if (name === 'shipment_month_start') value = month;
     if (name === 'rolling_start') value = rollingStart;
+    if (name === 'batch_rolling_start') {
+      const from = dateOnly(snapshotDate ?? input.asOf);
+      from.setUTCDate(from.getUTCDate() - 29);
+      value = from.toISOString().slice(0, 10);
+    }
+    if (name === 'batch_end_exclusive') value = nextDay(snapshotDate ?? input.asOf);
     if (name === 'shipment_end_exclusive') value = nextDay(input.asOf);
     if (name === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? nextMonth(month) : nextDay(input.asOf);
     if (name === 'month') value = month;
+    if (name === 'next_month') value = nextMonth(month);
     if (name === 'days_in_month')
       value = new Date(
         Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
       ).getUTCDate();
+    if (name === 'next_days_in_month') {
+      const next = nextMonth(month);
+      value = new Date(
+        Date.UTC(Number(next.slice(0, 4)), Number(next.slice(5, 7)), 0),
+      ).getUTCDate();
+    }
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = pageSize;
