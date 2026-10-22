@@ -120,9 +120,11 @@ test('version-only manifests and generated stamps select their declared contract
 });
 
 test('dependency, export, stamp logic and Host changes retain their real consumers beside a version bump', (t) => {
-  for (const change of ['dependency', 'export', 'stamp', 'host']) {
+  for (const change of ['dependency', 'export', 'export-order', 'stamp', 'host']) {
     const f = fixture(t);
     const manifest = { name: 'fixture', version: '1.0.0', dependencies: { helper: '1' } };
+    if (change === 'export-order')
+      manifest.exports = { '.': { node: './src/value.ts', default: './src/consumer.ts' } };
     f.policy.versionTests = ['tests/version.test.mjs'];
     f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
     f.put(f.root, 'package.json', JSON.stringify(manifest));
@@ -140,6 +142,8 @@ test('dependency, export, stamp logic and Host changes retain their real consume
     const next = { ...manifest, version: '1.0.1' };
     if (change === 'dependency') next.dependencies = { helper: '2' };
     if (change === 'export') next.exports = './src/consumer.ts';
+    if (change === 'export-order')
+      next.exports = { '.': { default: './src/consumer.ts', node: './src/value.ts' } };
     f.put(f.root, 'package.json', JSON.stringify(next));
     f.put(
       f.root,

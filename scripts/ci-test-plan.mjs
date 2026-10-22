@@ -34,7 +34,7 @@ function versionOnlyFiles(root, base) {
       !current ||
       current === previous ||
       typeof before.name !== 'string' ||
-      !isDeepStrictEqual(oldFields, newFields)
+      JSON.stringify(oldFields) !== JSON.stringify(newFields)
     )
       return files;
     files.add('package.json');
