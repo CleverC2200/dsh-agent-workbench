@@ -22,14 +22,26 @@ type NavIconKind =
 export function AgentWelcome({
   agent,
   onFill,
+  orderTemplate = false,
 }: {
   agent: ConversationPromptConfig;
   onFill: (prompt: string) => void;
+  orderTemplate?: boolean;
 }) {
   return (
-    <section className="gea-agent-welcome" aria-label={agent.name}>
+    <section
+      className={`gea-agent-welcome${orderTemplate ? ' gea-order-agent-welcome' : ''}`}
+      aria-label={agent.name}
+    >
       <div className="gea-agent-identity">
-        <AgentAvatar className="gea-agent-avatar" />
+        {orderTemplate ? (
+          <div className="gea-order-agent-robot" aria-hidden="true">
+            <i />
+            <span />
+          </div>
+        ) : (
+          <AgentAvatar className="gea-agent-avatar" />
+        )}
         <h2>{agent.name}</h2>
         <p className="gea-agent-intro">
           {agent.intro}
@@ -100,7 +112,11 @@ export function ConversationToolbar({
   associateDisabled?: boolean;
   children?: React.ReactNode;
 }) {
-  const choices: { view: ConversationView; label: string; icon: React.ReactNode }[] = [
+  const choices: {
+    view: ConversationView;
+    label: string;
+    icon: React.ReactNode;
+  }[] = [
     {
       view: 'center',
       label: '中间区域最大，隐藏会话区',

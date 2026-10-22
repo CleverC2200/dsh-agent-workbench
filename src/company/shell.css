@@ -63,6 +63,10 @@
     color 140ms ease;
 }
 
+.gea-workspace-owned .gea-workspace-heading {
+  padding-left: calc(var(--gea-menu-left, 10px) - 4px);
+}
+
 .gea-sidebar-tab:hover {
   background: #eceff2 !important;
   color: #202531;
@@ -1776,4 +1780,141 @@
 
 .gea-unsent-history button:disabled {
   cursor: default;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome {
+  padding: 0 19px 14px;
+  background: transparent;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-identity {
+  display: grid;
+  justify-items: center;
+  padding: 17px 4px 26px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-identity h2 {
+  margin: 0 0 8px;
+  color: #303946;
+  font-size: 19px;
+  font-weight: 700;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-intro {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #77849a;
+  font-size: 13px;
+  line-height: 1.8;
+  text-align: center;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-intro b {
+  display: block;
+  color: inherit;
+  font-weight: 400;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 14px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts h3 {
+  margin: 0 0 2px;
+  color: #303946;
+  font-size: 12px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts button {
+  width: 100%;
+  min-height: 39px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #dce4f5;
+  border-radius: 11px;
+  color: #74839b;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+}
+.agent-workbench-document
+  .gea-agent-welcome.gea-order-agent-welcome
+  .gea-agent-prompts
+  button:hover {
+  border-color: #b8cdfa;
+  color: #4e72b8;
+  background: #fff;
+}
+.gea-order-agent-robot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 82px;
+  height: 68px;
+  margin: 8px 0 22px;
+  border: 6px solid #fff;
+  border-radius: 31px;
+  background: linear-gradient(150deg, #fff, #ffe3e8);
+  box-shadow:
+    0 12px 24px rgba(205, 89, 110, 0.19),
+    inset 0 -4px 9px rgba(236, 120, 144, 0.14);
+}
+.gea-order-agent-robot::before,
+.gea-order-agent-robot::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  width: 10px;
+  height: 23px;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  background: #ff859b;
+}
+.gea-order-agent-robot::before {
+  left: -14px;
+}
+.gea-order-agent-robot::after {
+  right: -14px;
+}
+.gea-order-agent-robot i {
+  position: absolute;
+  top: -15px;
+  left: 34px;
+  width: 5px;
+  height: 13px;
+  border-radius: 5px;
+  background: #ffd5dd;
+}
+.gea-order-agent-robot i::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #ffa3b3;
+}
+.gea-order-agent-robot span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 59px;
+  height: 36px;
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 0%, #ff7280, #9f0d27 65%, #650b1f);
+  box-shadow:
+    inset 0 2px 5px rgba(255, 255, 255, 0.7),
+    0 3px 8px rgba(142, 10, 36, 0.27);
+}
+.gea-order-agent-robot span::before,
+.gea-order-agent-robot span::after {
+  content: '';
+  width: 4px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 7px #fff;
 }
