@@ -24,6 +24,12 @@ function plot(svg,labels,series,drill) {
   });
 }
 export function renderCharts(computed,total,drill) {
+  if(!computed) {
+    const message='订单明细字段不足，节点状态与满足率图表未评估';
+    for(const svg of document.querySelectorAll('svg.delivery-line-chart'))svg.replaceChildren(svgNode('text',{x:80,y:120,fill:'#8d98a8'},message));
+    document.getElementById('orderStatusChartDetail').textContent=message;
+    return;
+  }
   const names=['备单中','派车中','装车中','在途'];
   const stages=['allocation','dispatch','loading','transit'];
   const definitions=[['总量','#657fa3',null],['预警','#e4a429','warning'],['超时','#e52b42','overdue'],['正常','#22a478','normal']];

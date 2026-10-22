@@ -1916,6 +1916,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h('button', { className: 'dc-primary', onClick: onNext }, '下一步：本月预估发货'),
           ),
       ),
+      !helpOpen && assistant,
     );
   };
 }
