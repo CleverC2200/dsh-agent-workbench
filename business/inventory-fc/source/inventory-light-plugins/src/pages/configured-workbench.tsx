@@ -13,6 +13,8 @@ import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { Fragment, useState, useEffect } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
+import { currentShortageSum } from '../../../../../shared/current-shortage';
+import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import { originalFcView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
@@ -107,7 +109,7 @@ function WorkbenchBody() {
       color: 'purple',
       details: [
         ['超龄库存量', knownNumber(branchStock?.overaged_qty), '箱'],
-        ['滞库风险量', null, '箱'],
+        ['滞库风险量', knownNumber(branchStock?.stagnant_qty), '箱'],
       ],
     },
     {
@@ -135,14 +137,14 @@ function WorkbenchBody() {
     },
     {
       title: '当前订单',
-      value: order ? 0 : null,
+      value: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
       unit: '箱',
       color: 'amber',
       description:
-        '分仓当前待发快照尚未提供，按缺失值规则显示0，不代表实际没有待发订单。下方月累计缺货与库存备单占用不能相加推算当前待发。',
+        '当前未备单订单需求；缺货由三层模型按分仓与SKU扣可用库存后汇总，不是月累计履约缺货。',
       details: [
-        ['本月缺货量', completeValue(order, 'shortage'), '箱'],
-        ['库存备单占用', knownNumber(branchStock?.pack_unit_qty), '箱'],
+        ['缺货量', currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '箱'],
+        ['未备单订单占用', currentShortageSum(parts['current-shortage']?.rows, 'allocated'), '箱'],
       ],
     },
   ];
@@ -268,7 +270,13 @@ function WorkbenchBody() {
               ))}
             </nav>
             <div className="business-panel">
-              {tab === 'operations' ? (
+              {tab === 'orders' ? (
+                <CurrentShortageList
+                  config={config}
+                  revision={revision}
+                  onRead={(value) => updateContext('data', value)}
+                />
+              ) : tab === 'operations' ? (
                 <OriginalOperations config={config} date={date} revision={revision} />
               ) : (
                 <ConfiguredFactsPage

@@ -1,9 +1,8 @@
 /** Field scope follows currentOrderCtes; interpretation must not narrow an allocation to one stage. */
 export const currentOrderMetricScopes = {
-  orderQuantity: '备单中订单量＋已备单未发货占用量（最新已同步快照）',
-  preparingQuantity: '仅备单中订单量，不含已备单未发货',
-  allocatedQuantity:
-    '当前待发订单的全部占用量，含备单中占用与已备单未发货占用；不等于仅已备单未发货量',
+  orderQuantity: '当前未备单完成订单需求量；不含已备单完成并下发WMS的订单',
+  preparingQuantity: '未备单订单逐订单与SKU截零后汇总的还需满足量',
+  allocatedQuantity: '同一未备单完成订单自身的实占数量；不使用库存总占用量',
 } as const;
 
 export interface CurrentOrderBase {
@@ -15,7 +14,7 @@ export interface CurrentOrderBase {
   orderSnapshot: string;
   inventorySnapshot: string;
 }
-const BASES = ['郑州', '华东', '西南', '遂平', '华南'];
+const BASES = ['郑州', '华东', '西南', '遂平', '华南', '濮阳'];
 type OrderSummaryRow = Record<string, string | number | null | undefined>;
 
 function numberOrNull(value: unknown): number | null {

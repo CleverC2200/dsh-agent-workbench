@@ -1,5 +1,6 @@
 import { readConfiguredFacts } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
+import { readCurrentShortage } from './current-shortage';
 
 export const businessDay = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
@@ -39,14 +40,16 @@ export async function readConfiguredOverview(
   } = {},
 ) {
   config = agentSqlConfig(config);
-  const ids: string[] =
-    config.overviewViewIds ??
-    (config.agentId === 'inventory-fc'
-      ? ['orders', 'plan']
-      : config.agentId === 'inventory-qll'
-        ? ['base', 'orders']
-        : ['customer']);
+  const ids: string[] = [
+    ...(config.overviewViewIds ??
+      (config.agentId === 'inventory-fc'
+        ? ['orders', 'plan']
+        : config.agentId === 'inventory-qll'
+          ? ['base', 'orders']
+          : ['customer'])),
+  ];
   const snapshotReads = new Map<string, Promise<any>>();
+  if (config.queries?.['current-shortage.summary']) ids.push('current-shortage');
   const parts: Record<string, any> = {},
     versions = new Set<unknown>();
   let invalid: Error | undefined;
@@ -54,26 +57,35 @@ export async function readConfiguredOverview(
     ids.map(async (id) => {
       let part: any;
       try {
-        const result = await readConfiguredFacts(
-          config,
-          id,
-          {
-            asOf,
-            customer,
-            cycleDays: options.cycleDays,
-            filters: id === 'customer' && customer ? { customer } : {},
-          },
-          { ...options, snapshotReads, summaryOnly: true },
-        );
-        part = result.summaryError
-          ? { error: result.summaryError.message }
-          : {
-              summary: result.summary,
-              total: result.total,
-              snapshotDate: result.snapshotDate,
-              inventoryVersion: result.parameters?.inventory_version,
-              configVersion: result.configVersion,
-            };
+        if (id === 'current-shortage') {
+          const result = await readCurrentShortage(config, id + '.summary', {}, options);
+          part = {
+            rows: result.rows,
+            configVersion: result.configVersion,
+            snapshotDate: result.rows[0]?.snapshot_date,
+          };
+        } else {
+          const result = await readConfiguredFacts(
+            config,
+            id,
+            {
+              asOf,
+              customer,
+              cycleDays: options.cycleDays,
+              filters: id === 'customer' && customer ? { customer } : {},
+            },
+            { ...options, snapshotReads, summaryOnly: true },
+          );
+          part = result.summaryError
+            ? { error: result.summaryError.message }
+            : {
+                summary: result.summary,
+                total: result.total,
+                snapshotDate: result.snapshotDate,
+                inventoryVersion: result.parameters?.inventory_version,
+                configVersion: result.configVersion,
+              };
+        }
       } catch (e: any) {
         if (options.signal?.aborted) throw e;
         if (e.code === 'QUERY_CONFIG_CHANGED') invalid = e;

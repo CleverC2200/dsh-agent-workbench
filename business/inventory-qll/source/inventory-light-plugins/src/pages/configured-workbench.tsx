@@ -14,6 +14,8 @@ import {
 } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
+import { currentShortageSum } from '../../../../../shared/current-shortage';
+import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import {
   businessDay,
   fulfillmentPercent,
@@ -89,9 +91,17 @@ export default function ConfiguredWorkbench() {
       branch: { rate: fulfillmentPercent(parts['branch-overview']?.summary) },
     },
     orderExecution: {
-      currentOrderQty: knownNumber(stock?.known_open_orders),
-      currentBaseShortageQty: null,
-      currentBranchShortageQty: null,
+      currentOrderQty: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
+      currentBaseShortageQty: currentShortageSum(
+        parts['current-shortage']?.rows,
+        'shortage',
+        '基地',
+      ),
+      currentBranchShortageQty: currentShortageSum(
+        parts['current-shortage']?.rows,
+        'shortage',
+        '分仓',
+      ),
     },
     kpis: {
       inventoryLevel: {
@@ -109,10 +119,9 @@ export default function ConfiguredWorkbench() {
       },
       fulfillment: { current: fulfillmentPercent(orders), unit: '%' },
       orderGap: {
-        current: knownNumber(stock?.known_open_orders),
+        current: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
         unit: '件',
-        explanation:
-          '当前可取得的基地未备单量；不含已备单占用，分仓当前待发阶段尚无等价来源。下方缺货量为所选日期所在月截至该日的累计值。',
+        explanation: '当前未备单订单需求；基地与分仓各按独立库存池计算缺货，不使用月累计履约缺货。',
       },
     },
   };
@@ -181,10 +190,6 @@ export default function ConfiguredWorkbench() {
                       base: knownNumber(parts.health?.summary?.base_max_age),
                       branch: knownNumber(branch?.max_age),
                     }}
-                    periodShortages={{
-                      base: knownNumber(parts['factory-overview']?.summary?.shortage),
-                      branch: knownNumber(parts['branch-overview']?.summary?.shortage),
-                    }}
                     onOpen={() =>
                       setTab(
                         key === 'aging'
@@ -215,7 +220,13 @@ export default function ConfiguredWorkbench() {
                   <Tabs.TabPane key={id} title={label} />
                 ))}
               </Tabs>
-              {tab === 'structure' ? (
+              {tab === 'shortage' ? (
+                <CurrentShortageList
+                  config={config}
+                  revision={revision}
+                  onRead={(value) => updateContext('data', value)}
+                />
+              ) : tab === 'structure' ? (
                 <OrganizationHierarchy
                   date={date}
                   revision={revision}

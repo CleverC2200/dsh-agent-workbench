@@ -100,6 +100,7 @@ export async function sourceChecks(result, phase) {
       (repo === 'dsh-agent-manage' && selected.files.some((file) => file.endsWith('.ts'))),
     upstreams,
     joint,
+    pythonSql: selected.files.includes('tests/agent-sql-direct.test.mjs'),
   };
   mkdirSync('.runtime', { recursive: true });
   writeFileSync('.runtime/source-checks-plan.json', JSON.stringify(plan, null, 2) + '\n');
@@ -114,7 +115,7 @@ export async function sourceChecks(result, phase) {
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, `tooling=${tools !== null}\n`);
     if (process.env.GITHUB_OUTPUT)
-      for (const key of ['dependencies', 'sdk', 'browser', 'joint', 'core'])
+      for (const key of ['dependencies', 'sdk', 'browser', 'joint', 'core', 'pythonSql'])
         appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${plan[key]}\n`);
     console.log(JSON.stringify(plan));
     return;

@@ -103,6 +103,8 @@ export function FcConfiguredList(
   const draftKey = keyFor('order-draft', month),
     planDraftKey = keyFor('plan-draft', month);
   const [draft, setDraft] = useState(() => loadDraft(draftKey));
+  const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
+  useEffect(() => setQuantityInputs({}), [draftKey]);
   const [planDraft, setPlanDraft] = useState(() => loadPlan(planDraftKey));
   const [dialog, setDialog] = useState<'template' | 'import' | 'draft' | 'export' | null>(null);
   const [templateMonth, setTemplateMonth] = useState(defaultPlanTemplateMonth);
@@ -128,6 +130,7 @@ export function FcConfiguredList(
     const restore = () => {
       active.current?.abort();
       setDraft(loadDraft(draftKey));
+      setQuantityInputs({});
       setPlanDraft(loadPlan(planDraftKey));
       setDialog(null);
     };
@@ -159,14 +162,12 @@ export function FcConfiguredList(
     }
   };
   const updateQuantity = (row: FcRow, raw: string) => {
-    const next = { ...draft.quantities };
-    if (!raw.trim()) delete next[rowKey(row)];
-    else {
-      const value = Number(raw);
-      if (!Number.isFinite(value) || value < 0 || value > 1e9) return;
-      next[rowKey(row)] = value;
-    }
-    save({ ...draft, quantities: next, dirty: true });
+    const value = raw.trim() ? Number(raw) : 0;
+    if (!Number.isFinite(value) || value < 0 || value > 1e9) return;
+    const key = rowKey(row);
+    // Keep the editing text separate from the numeric draft used by exports.
+    setQuantityInputs((current) => ({ ...current, [key]: raw }));
+    save({ ...draft, quantities: { ...draft.quantities, [key]: value }, dirty: true });
   };
   const displayPlan = (row: FcRow, field: string) => {
     const nextMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1);
@@ -198,8 +199,19 @@ export function FcConfiguredList(
             min={0}
             max={1e9}
             step="any"
-            value={draft.quantities[key] ?? text(row.recommended_qty).replace('-', '')}
+            value={
+              quantityInputs[key] ??
+              draft.quantities[key] ??
+              text(row.recommended_qty).replace('-', '')
+            }
             onChange={(event) => updateQuantity(row, event.target.value)}
+            onBlur={() =>
+              setQuantityInputs((current) => {
+                const next = { ...current };
+                delete next[key];
+                return next;
+              })
+            }
           />
         );
       if (column.field === 'missing_reason')

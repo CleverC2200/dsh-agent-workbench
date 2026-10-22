@@ -1,6 +1,6 @@
 {
   "name": "@cleverc2200/dsh-agent-workbench",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "private": true,
   "type": "module",
   "description": "提供统一的智能体工作台布局，连接业务页面与会话。",

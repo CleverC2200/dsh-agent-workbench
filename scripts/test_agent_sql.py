@@ -3,6 +3,8 @@ import unittest
 import sqlite3
 import re
 import sqlglot
+from test_current_shortage_source import SourceFormula
+from test_fc_aging_source import BranchAgingSource
 from unittest.mock import patch
 from agent_sql import ContractError, bind, inspect, validate_parameters, Executor, direct_preview_document, config_for
 
@@ -425,8 +427,9 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(base['total_qty'],11)
         self.assertEqual(base['max_age'],(datetime.date(2026,10,19)-datetime.date(2024,2,29)).days)
         self.assertEqual(branch['total_qty'],130)
-        # Removed target/threshold fields cannot be recreated from stock quantity.
-        self.assertIsNone(base['overaged_qty'])
+        # Fixed branch thresholds classify positive batches, not whole-SKU maximum age.
+        self.assertEqual(base['overaged_qty'],10)
+        self.assertEqual(base['stagnant_qty'],10)
 
     def test_inventory_names_and_base_come_from_snapshot_not_other_business_scopes(self):
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET warehouse_name='库存分仓',belong_base='库存基地',material_name='库存商品' WHERE warehouse_classify='20'")

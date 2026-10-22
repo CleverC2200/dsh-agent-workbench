@@ -219,42 +219,35 @@ test('APS top month selector applies the original period and keeps its menu with
     .toBe(true);
   assert.deepEqual(errors, []);
 });
-test('fc: order card displays monthly shortage and stock allocation without inventing pending orders', async (t) => {
+test('fc: current order card uses its own demand, allocation and three-stage gap', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
     if (query.queryId === 'health.summary') result.rows[0].pack_unit_qty = 86814.2;
     if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
+    if (query.queryId === 'current-shortage.summary')
+      Object.assign(result.rows[0], { demand: 450, allocated: 50, shortage: 3 });
     return result;
   });
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
-  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
-  await expect(card.locator('dl')).toContainText('库存备单占用86,814.2箱');
-  await expect(card.locator('.kpi-value')).toHaveText('0箱');
-  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
-  assert.ok(calls.some((q) => q.queryId === 'health.summary'));
-  assert.ok(
-    calls
-      .filter((q) => q.queryId === 'health.summary')
-      .every((q) => !('warehouse_type' in q.parameters)),
-  );
-  assert.ok(
-    calls.some((q) => q.queryId === 'orders.summary' && q.parameters.pickup_type === '分仓'),
-  );
+  await expect(card.locator('.kpi-value')).toHaveText('450箱');
+  await expect(card.locator('dl')).toContainText('缺货量3箱');
+  await expect(card.locator('dl')).toContainText('未备单订单占用50箱');
+  assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
 });
-test('fc: unavailable stock allocation does not hide monthly shortage or become zero', async (t) => {
+test('fc: denied current orders remain unknown without substituting monthly shortage', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    if (query.queryId === 'health.summary')
-      return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '库存读取权限不足' } };
+    if (query.queryId === 'current-shortage.summary')
+      return { failure: { reasonCode: 'ROW_SCOPE_DENIED', message: '当前范围无权限' } };
     if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
     return result;
   });
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
-  await expect(card.locator('dl')).toContainText('本月缺货量16,163箱');
-  await expect(card.locator('dl')).toContainText('库存备单占用-');
-  await expect(card.locator('.kpi-value')).toHaveText('0箱');
-  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
+  await expect(card.locator('.kpi-value')).toHaveText('-');
+  await expect(card.locator('dd')).toHaveText(['-', '-']);
+  assert.doesNotMatch(await card.innerText(), /16,163|本月/);
   await expect(frame.getByRole('alert')).toHaveCount(0);
-  assert.equal(calls.filter((q) => q.queryId === 'health.summary').length, 1);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
 });
 test('dealer top date refresh preserves the selected customer scope', async (t) => {
@@ -295,6 +288,10 @@ test('dealer top date refresh preserves the selected customer scope', async (t) 
 test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (query.queryId === 'current-shortage.summary')
+      result.rows.forEach((row) =>
+        Object.assign(row, { demand: row.location_type === '基地' ? 1049341 : 100000 }),
+      );
     if (query.queryId === 'inventory.summary')
       Object.assign(result.rows[0], {
         known_open_orders: 1049341,
@@ -308,9 +305,9 @@ test('qll original current-order card retains new base snapshot quantities witho
   const card = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(card).toContainText('104.93万箱');
-  await expect(card).toContainText('基地本月缺货量');
-  await expect(card).toContainText('分仓本月缺货量');
+  await expect(card).toContainText('114.93万箱');
+  await expect(card).toContainText('基地缺货量');
+  await expect(card).toContainText('分仓缺货量');
   assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
   assert.equal(
     calls.some((query) => query.queryId.startsWith('inventory.detail')),
@@ -333,17 +330,17 @@ test('QLL branch turnover reads its summary and its date control has a stable Ch
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
-test('QLL cards retain layer maximum ages and monthly shortage values, including zero', async (t) => {
+test('QLL cards retain maximum ages and independent current gaps, including zero', async (t) => {
   const { frame, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'health.summary')
       Object.assign(result.rows[0], {
         base_max_age: 405,
         max_age: 381,
       });
-    if (query.queryId === 'orders.summary')
-      Object.assign(result.rows[0], {
-        shortage: query.parameters.pickup_type === '分仓' ? 0 : 12345,
-      });
+    if (query.queryId === 'current-shortage.summary')
+      result.rows.forEach((row) =>
+        Object.assign(row, { shortage: row.location_type === '分仓' ? 0 : 12345 }),
+      );
     return result;
   });
   const age = frame
@@ -354,8 +351,8 @@ test('QLL cards retain layer maximum ages and monthly shortage values, including
   const orders = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(orders).toContainText('基地本月缺货量1.23万箱');
-  await expect(orders).toContainText('分仓本月缺货量0箱');
+  await expect(orders).toContainText('基地缺货量1.23万箱');
+  await expect(orders).toContainText('分仓缺货量0箱');
   assert.deepEqual(errors, []);
 });
 test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
@@ -402,6 +399,12 @@ for (const [quantity, count, display] of [
       if (query.queryId === 'calendar.target_versions')
         result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
       if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+      if (query.queryId === 'current-shortage.locations')
+        Object.assign(result.rows[0], {
+          demand: quantity,
+          allocated: 50,
+          shortage: quantity === null ? null : 12,
+        });
       if (query.queryId === 'page.dashboard-groups')
         Object.assign(result.rows[0], {
           ordered_valid: quantity,
@@ -415,10 +418,10 @@ for (const [quantity, count, display] of [
       .locator('article')
       .filter({ has: frame.getByText('当前订单', { exact: true }) });
     await expect(card.locator('strong')).toHaveText(display);
-    await expect(card).toContainText('50箱');
+    if (quantity !== null) await expect(card).toContainText('50箱');
     assert.doesNotMatch(await card.innerText(), /快照|范围|SKU/);
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
-      '-',
+      quantity === null ? '-' : '12箱',
     );
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
@@ -604,30 +607,21 @@ for (const [quantity, demand, expected] of [
     if (!demand) await expect(card.locator('.kpi-value > span')).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
-test('FC current-order card follows explicit missing-zero policy without borrowing monthly quantities', async (t) => {
+test('FC current-order card preserves a verified zero independently of monthly quantities', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
     if (query.queryId === 'orders.summary')
-      Object.assign(result.rows[0], {
-        from_order_count: 6,
-        affected_from_order_count: 2,
-        invalid: 0,
-        missing_order_identity: 0,
-        shortage_sku_count: 3,
-        missing_shortage_sku_identity: 0,
-        missing_shortage: 0,
-        ordered: 172005,
-        shortage: 15675,
-      });
+      Object.assign(result.rows[0], { ordered: 172005, shortage: 15675 });
+    if (query.queryId === 'current-shortage.summary')
+      Object.assign(result.rows[0], { demand: 0, allocated: 0, remaining: 0, shortage: 0 });
     return result;
   });
   const card = frame
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('0箱');
-  await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
-  assert.doesNotMatch(await card.innerText(), /SKU|6单|2单/);
-  await expect(card.locator('dt')).toHaveText(['本月缺货量', '库存备单占用']);
-  assert.equal(calls.filter((q) => q.queryId === 'orders.summary').length, 1);
+  await expect(card.locator('dt')).toHaveText(['缺货量', '未备单订单占用']);
+  await expect(card.locator('dd')).toHaveText(['0箱', '0箱']);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
 });
 for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
@@ -1543,3 +1537,32 @@ for (const [inventory, inTransit, stockDays] of [
     await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
+
+test('FC actual quantity can clear zero, type a replacement and retain decimal drafts', async (t) => {
+  const { frame, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId.startsWith('replenishment.'))
+      for (const row of result.rows) {
+        row.recommended_qty = 0;
+        row.warehouse_code = 'W01';
+        row.warehouse_name = '分仓1';
+      }
+    return result;
+  });
+  const input = frame.getByRole('spinbutton', { name: /实际补货量/ }).first();
+  await expect(input).toHaveValue('0');
+  await input.focus();
+  await input.press('Backspace');
+  await expect(input).toHaveValue('');
+  await input.pressSequentially('100');
+  await expect(input).toHaveValue('100');
+  await input.blur();
+  await expect(input).toHaveValue('100');
+  await input.fill('12.5');
+  await input.blur();
+  await expect(input).toHaveValue('12.5');
+  await input.fill('');
+  await expect(input).toHaveValue('');
+  await input.blur();
+  await expect(input).toHaveValue('0');
+  assert.deepEqual(errors, []);
+});
