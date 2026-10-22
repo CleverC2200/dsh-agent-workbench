@@ -5,7 +5,7 @@ import ts from 'typescript';
 // Preserve the accepted pre-format data identity; this reference never follows HEAD.
 const ref = '9b4863692cb29a3edc8a2358e98feb7846526d1b';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-const retiredMpsStudio = new Set([
+const retiredMpsData = new Set([
   'TV',
   'MV',
   'RV',
@@ -19,6 +19,7 @@ const retiredMpsStudio = new Set([
   'Gd',
   'fu',
   'Yd',
+  'fH',
 ]);
 function initializer(file, text, name, alias, retired = false) {
   const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
@@ -80,7 +81,7 @@ export function verifyFixedAuthoredData(page, files, source) {
       files[expected.file],
       name,
       alias,
-      page === 'mps' && retiredMpsStudio.has(name),
+      page === 'mps' && retiredMpsData.has(name),
     );
     if (!current) continue;
     if (JSON.stringify(valueAST(current.node)) !== JSON.stringify(valueAST(original.node)))

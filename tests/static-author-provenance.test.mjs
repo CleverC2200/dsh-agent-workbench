@@ -108,6 +108,25 @@ for (const page of ['category', 'mps']) {
     }
   });
 }
+test('retired MPS master tab mapping still rejects changed data when reintroduced', () => {
+  const source = JSON.parse(readFileSync('static/mps/source/SOURCE.json'));
+  const files = Object.fromEntries(
+    ['app.js', 'data.js'].map((file) => [
+      file,
+      readFileSync(`static/mps/source/${file}`, 'utf8'),
+    ]),
+  );
+  const original = {
+    ...files,
+    'app.js': files['app.js'] + '\nconst fH = { sku: 0, line: 1, base: 2 };',
+  };
+  verifyFixedAuthoredData('mps', original, source);
+  const changed = {
+    ...files,
+    'app.js': files['app.js'] + '\nconst fH = { sku: 0, line: 1, base: 3 };',
+  };
+  assert.throws(() => verifyFixedAuthoredData('mps', changed, source), /STATIC_AUTHORED_DATA_CHANGED/);
+});
 test('development build refuses missing fixed Git history instead of adopting current data', () => {
   const root = mkdtempSync(join(tmpdir(), 'workbench-static-history-'));
   try {
