@@ -19,10 +19,12 @@ const text = (value) => {
 };
 export async function readFactMonth(type, month, signal) {
   if (!['report', 'history'].includes(type)) throw Error('该事实来源尚未接入');
+  return readFacts('facts.' + type, { month: month + '-01' }, signal, type, month);
+}
+async function readFacts(id, parameters, signal, type, month) {
   const element = document.getElementById('agent-sql-config');
   if (!element) throw Error('月主计划数据源尚未装载');
   const config = JSON.parse(element.textContent);
-  const id = 'facts.' + type;
   const definition = config.queries[id];
   const client = createQueryClient(config, (_request, options) =>
     call(
@@ -44,7 +46,7 @@ export async function readFactMonth(type, month, signal) {
   for (let offset = 0; total === undefined || offset < total; offset += 200) {
     const result = await client.read(
       id,
-      { month: month + '-01', page_size: 200, offset },
+      { ...parameters, page_size: 200, offset },
       {
         signal,
         requiredColumns: definition.columns,
@@ -75,6 +77,8 @@ export async function readFactMonth(type, month, signal) {
     partial ||= result.dataStatus === 'partial';
     warnings.push(...(result.warnings ?? []));
   }
+  if (type === 'shipment')
+    return { rows, metadata: { partial, warnings, total, configVersion: version, ...parameters } };
   const prefix =
     type === 'report' ? 'agents_sales_plan_demand_m.' : 'agents_scm_cust_deliv_daily_di.';
   const records = rows.map((row) => {
@@ -104,5 +108,30 @@ export async function readFactMonth(type, month, signal) {
   return {
     rows: records,
     metadata: { period: month, partial, warnings, total, configVersion: version },
+  };
+}
+
+export async function readShipmentRange(start, end, signal) {
+  const valid = (value) =>
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+    Number.isFinite(Date.parse(value + 'T00:00:00Z')) &&
+    new Date(value + 'T00:00:00Z').toISOString().slice(0, 10) === value;
+  if (!valid(start) || !valid(end) || start > end || start.slice(0, 7) !== end.slice(0, 7))
+    throw Error('实际发货须限定同月有效截止期间');
+  const result = await readFacts('facts.shipment', { start, end }, signal, 'shipment');
+  const prefix = 'agents_scm_cust_deliv_daily_di.';
+  return {
+    ...result,
+    rows: result.rows.map((row) => ({
+      month: start.slice(0, 7),
+      base: text(row[prefix + 'belong_base']),
+      code: text(row[prefix + 'material_code']),
+      name: text(row[prefix + 'material_name']),
+      category: text(row[prefix + 'product_categ_name']),
+      group: text(row[prefix + 'material_group_name']),
+      shipped:
+        row[prefix + 'act_dl_qty_total'] === null ? null : number(row[prefix + 'act_dl_qty_total']),
+    })),
   };
 }

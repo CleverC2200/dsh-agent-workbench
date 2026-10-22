@@ -101,7 +101,7 @@ function cells(kind, row) {
 }
 export function createRelations(react, useMpsPart) {
   const h = react.createElement;
-  return function Relations({ scope }) {
+  return function Relations({ scope, onResult }) {
     const [kind, setKind] = react.useState('sku');
     const [search, setSearch] = react.useState('');
     const [onlyMissing, setOnlyMissing] = react.useState(false);
@@ -110,6 +110,9 @@ export function createRelations(react, useMpsPart) {
     const [loaded, setLoaded] = react.useState({});
     const scopeKey = JSON.stringify([scope?.id, scope?.month, scope?.generation]);
     const state = loaded.scopeKey === scopeKey ? loaded : { busy: true };
+    react.useEffect(() => {
+      onResult?.({ ...state, scopeKey });
+    }, [loaded, scopeKey, onResult]);
     react.useEffect(() => {
       if (!scope?.month) return;
       const controller = new AbortController();

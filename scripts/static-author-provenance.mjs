@@ -5,7 +5,25 @@ import ts from 'typescript';
 // Preserve the accepted pre-format data identity; this reference never follows HEAD.
 const ref = '9b4863692cb29a3edc8a2358e98feb7846526d1b';
 const hash = (value) => createHash('sha256').update(value).digest('hex');
-const retiredMpsStudio = new Set([
+const retiredMpsPrototype = new Set([
+  'k1',
+  'TO',
+  'OV',
+  'Ud',
+  'SV',
+  'ar',
+  'dl',
+  'EV',
+  'PV',
+  'NV',
+  'kV',
+  'j1',
+  'jV',
+  'IV',
+  'I1',
+  'Kd',
+  'dn',
+  'yH',
   'TV',
   'MV',
   'RV',
@@ -81,7 +99,7 @@ export function verifyFixedAuthoredData(page, files, source) {
       files[expected.file],
       name,
       alias,
-      page === 'mps' && retiredMpsStudio.has(name),
+      page === 'mps' && retiredMpsPrototype.has(name),
     );
     if (!current) continue;
     if (JSON.stringify(valueAST(current.node)) !== JSON.stringify(valueAST(original.node)))
