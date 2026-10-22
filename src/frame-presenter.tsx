@@ -70,6 +70,8 @@ const inventoryAgentPages = new Set([
 export type FrameCopyKey =
   | 'pageConnect'
   | 'pageNewChat'
+  | 'pageAssistantTitle'
+  | 'pageHistory'
   | 'pageWorking'
   | 'pageChanged'
   | 'pageHint'
@@ -642,10 +644,36 @@ export function mountFramePresentation(
           />
           <aside
             className="agent-workbench-native-conversation"
+            data-order-assistant={
+              page.id === 'inventory-orderworkbench' || page.id === 'inventory-orderfulfillment'
+                ? ''
+                : undefined
+            }
             aria-label="AI对话"
             hidden={view === 'center'}
           >
             {titleless && view !== 'center' && chrome}
+            {(page.id === 'inventory-orderworkbench' ||
+              page.id === 'inventory-orderfulfillment') && (
+              <div className="gea-order-assistant-head">
+                <strong>{t('pageAssistantTitle')}</strong>
+                <button
+                  type="button"
+                  aria-label={t('pageHistory')}
+                  onClick={() => workbench.showHistory(page.id)}
+                >
+                  ◴
+                </button>
+                <button
+                  type="button"
+                  aria-label={t('pageNewChat')}
+                  disabled={busy}
+                  onClick={() => void newConversation()}
+                >
+                  ⊞
+                </button>
+              </div>
+            )}
             {associated && session?.openState === 'open' ? (
               renderSlot('agent-workbench.conversation', { page: page.id })
             ) : (

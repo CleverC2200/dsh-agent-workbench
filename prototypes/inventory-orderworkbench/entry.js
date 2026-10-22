@@ -2225,66 +2225,67 @@ function renderWorkbenchReferenceLinks() {
     )
     .join('');
 }
+const topMetricCards = [
+  {
+    key: '作废率',
+    label: '作废率',
+    value: '2.05',
+    unit: '%',
+    target: '<6%',
+    status: '达标',
+    footer: '本周作废率 1.90%',
+  },
+  {
+    key: '改单率',
+    label: '改单率',
+    value: '2.05',
+    unit: '%',
+    target: '<6%',
+    status: '未达',
+    footer: '本周改单率 1.90%',
+  },
+  {
+    key: '订单满足率',
+    label: '满足率',
+    value: '2.05',
+    unit: '%',
+    target: '>95%（挑战 97%）',
+    status: '达标',
+    footer: '本周满足率 1.90%',
+  },
+  {
+    key: '准交率',
+    label: '准交率',
+    value: '2.05',
+    unit: '%',
+    target: '>95%（挑战 97%）',
+    status: '达标',
+    footer: '本周准交率 1.90%',
+  },
+  {
+    key: '货龄（>60天库存占比）',
+    label: '60天以上货龄占比',
+    value: '2.05',
+    unit: '%',
+    target: '越低越好',
+    status: '达标',
+    footer: '本周货龄占比 1.90%',
+  },
+  {
+    key: '周转天数',
+    label: '可发货天数',
+    value: '14.5',
+    unit: '天',
+    target: '<12.5天（基地<11天）',
+    status: '达标',
+    footer: '本周可发货天数 14.5天',
+  },
+];
 function renderWorkbench() {
   renderWorkbenchSummary();
   const report = activeReport();
   if (!report) return;
-  const topMetricCards = [
-    {
-      key: '作废率',
-      label: '作废率',
-      value: '2.05',
-      unit: '%',
-      target: '<6%',
-      status: '达标',
-      footer: '本周作废率 1.90%',
-    },
-    {
-      key: '改单率',
-      label: '改单率',
-      value: '2.05',
-      unit: '%',
-      target: '<6%',
-      status: '未达',
-      footer: '本周改单率 1.90%',
-    },
-    {
-      key: '订单满足率',
-      label: '满足率',
-      value: '2.05',
-      unit: '%',
-      target: '>95%（挑战 97%）',
-      status: '达标',
-      footer: '本周满足率 1.90%',
-    },
-    {
-      key: '准交率',
-      label: '准交率',
-      value: '2.05',
-      unit: '%',
-      target: '>95%（挑战 97%）',
-      status: '达标',
-      footer: '本周准交率 1.90%',
-    },
-    {
-      key: '货龄（>60天库存占比）',
-      label: '60天以上货龄占比',
-      value: '2.05',
-      unit: '%',
-      target: '越低越好',
-      status: '达标',
-      footer: '本周货龄占比 1.90%',
-    },
-    {
-      key: '周转天数',
-      label: '可发货天数',
-      value: '14.5',
-      unit: '天',
-      target: '<12.5天（基地<11天）',
-      status: '达标',
-      footer: '本周可发货天数 14.5天',
-    },
-  ];
+
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = metric.status === '未达' ? 'bad' : '';
@@ -3737,7 +3738,44 @@ const updateReport = publishReport(
         dimension: dimensionTab,
         base: '',
       },
-      metrics: report?.metrics ?? [],
+      consumerCode: 'order',
+      metrics: report
+        ? topMetricCards.map((metric) => ({
+            ...metric,
+            value: metric.value + metric.unit,
+            note: metric.footer,
+            mock: true,
+            comparison: {
+              periodChange: '−1.9pct',
+              yearChange: '1.9pct',
+              weekChange: '−1.9pct',
+              weekYearChange: '1.9pct',
+            },
+          }))
+        : [],
+      summary: report ? { ...workbenchSummaryContent } : null,
+      dimension: report
+        ? {
+            key: dimensionTab,
+            report: workbenchPerformance[dimensionTab] ?? null,
+            unmet:
+              dimensionTab === 'base-performance'
+                ? getWorkbenchUnmetItems('base')
+                : dimensionTab === 'item-performance'
+                  ? getWorkbenchUnmetItems('item')
+                  : [],
+            directorNotes: dimensionTab === 'director-performance' ? workbenchDirectorNotes : [],
+          }
+        : null,
+      improvements: report
+        ? [...workbenchView.querySelectorAll('.wb-improvement-block')].map((block) => ({
+            title: block.querySelector('h3').textContent,
+            rows: [...block.querySelectorAll('tbody tr')].map((row) =>
+              [...row.querySelectorAll('td:not(.actions)')].map((cell) => cell.textContent.trim()),
+            ),
+          }))
+        : [],
+      references: workbenchReferenceLinks,
       events: (report?.events ?? []).filter((event) => eventFilter !== 'focus' || event.focus),
       actions: report?.actions ?? [],
       tasks: tasks.filter(
@@ -3746,7 +3784,7 @@ const updateReport = publishReport(
           (taskFilter === 'done' ? task.status === '已完成' : task.status !== '已完成'),
       ),
       coverage:
-        '报告摘录非实时；无单笔订单明细、真实任务派发或业务写入。冷刷新/重新进入不保存本地演示任务。',
+        '演示报告摘录，非实时业务数据；顶部卡片、结论摘要与维度表可能存在口径或演示值差异，必须分别引用，不替换或推算。仅本地编辑，不代表数据库保存、真实任务派发或业务写入。',
     };
   },
   () => {

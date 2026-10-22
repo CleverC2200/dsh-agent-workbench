@@ -61,6 +61,7 @@ export async function configuredWire(id) {
             cover_days: 18,
             onhand_days: 15,
             known_inventory: 5580,
+            total_qty: 5580,
             known_available: 5500,
             known_inventory_count: 105,
             known_available_count: 105,

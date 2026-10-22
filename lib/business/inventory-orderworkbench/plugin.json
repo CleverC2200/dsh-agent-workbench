@@ -10,7 +10,7 @@
   "mcp": "mcp.json",
   "mode": "mock",
   "gea": {
-    "consumerCode": "orderworkbench-preview",
+    "consumerCode": "order",
     "readonly": true,
     "contract": "gea-html-v2"
   },

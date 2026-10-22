@@ -1,6 +1,6 @@
 # 本地准备与检查
 
-统一依赖、容量准入、构建复用与收尾使用相邻 GEA 的 [开发构建入口](../../dsh-gea-plugin/docs/development-builds.md)及本仓原生环境。 / Dependency preparation, capacity admission, build reuse and finish reports use the sibling GEA [development entry](../../dsh-gea-plugin/docs/development-builds.md) and this repository’s native environment.
+本地轻预检、影响计划、依赖准备、容量准入、构建复用与收尾使用相邻 GEA 的 [开发构建入口](../../dsh-gea-plugin/docs/development-builds.md)及本仓原生环境。 / Local preflight, impact plans, dependency preparation, capacity admission, build reuse and finish reports use the sibling GEA [development entry](../../dsh-gea-plugin/docs/development-builds.md) and this repository’s native environment.
 
 实际工具链版本读取 package.json 的 packageManager；依赖采用本仓 package-lock.json。先核本票固定三仓和官方 SDK，再在自己的工作树按锁安装，node_modules/lib 不跨工作树共享。官方 SDK 可只读引用。固定官方提交与材料要求由 [verify-official-input.mjs](../scripts/verify-official-input.mjs) 核验；类型映射查 [tsconfig.official.json](../tsconfig.official.json)。当前只支持登记的官方输入，本地 SDK 配置不构成发行依赖或发行授权。
 

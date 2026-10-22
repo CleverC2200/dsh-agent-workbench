@@ -18,7 +18,7 @@ async function createVersion(frame, month) {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
-test('MPS opens demo products with unconnected business sources and keeps seven business steps separate from formal save', async (t) => {
+test('MPS keeps confirmed sources awaiting a Host, forecast pending and formal save disabled', async (t) => {
   const { page, frame } = await confirmation(t);
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
@@ -27,9 +27,13 @@ test('MPS opens demo products with unconnected business sources and keeps seven 
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
   await expect(frame.locator('.ap-page-tab')).toHaveCount(7);
-  await expect(
-    frame.getByRole('region', { name: '计划提报数据' }).getByText('未接入', { exact: true }),
-  ).toBeVisible();
+  for (const name of ['计划提报数据', '模型双期预测', '历史同期发货']) {
+    const source = frame.getByRole('region', { name, exact: true });
+    await expect(
+      source.getByText(name === '模型双期预测' ? '待建表' : '待同步', { exact: true }),
+    ).toBeVisible();
+    await expect(source.getByRole('button', { name: '同步', exact: true })).toBeDisabled();
+  }
   await expect(frame.getByRole('region', { name: '系统派生口径参数' })).toBeVisible();
   await expect(frame.getByRole('heading', { name: '大类预估需求数量', exact: true })).toBeVisible();
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
@@ -69,7 +73,11 @@ test('MPS product relationships stay in their local month draft and can be edite
     await editor.getByLabel(label, { exact: true }).fill(value);
   await editor.getByRole('button', { name: '新增', exact: true }).click();
   await expect(products.getByRole('cell', { name: 'P1', exact: true })).toBeVisible();
-  await expect(products).toContainText('历史继承规则待确认');
+  await frame.getByRole('button', { name: '页面说明', exact: true }).click();
+  await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
+    '历史继承、冲突口径和正式保存待接入',
+  );
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByLabel('评估版本选择').selectOption('local-1');
   await expect(products.getByRole('cell', { name: 'P1', exact: true })).toHaveCount(0);
   await frame.getByLabel('评估版本选择').selectOption('local-2');
