@@ -228,39 +228,6 @@ export async function sourceChecks(result, phase) {
     );
   }
   if (joint) {
-    if (repo === 'dsh-agent-manage') {
-      const { acquireBuild } = await import(
-        pathToFileURL(resolve(gea, 'scripts/build-admission.mjs'))
-      );
-      let release = acquireBuild({ operation: 'prepare', cwd: workbench });
-      try {
-        run(
-          'npm',
-          ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund'],
-          workbench,
-        );
-      } finally {
-        release();
-      }
-      release = acquireBuild({ operation: 'build', cwd: workbench });
-      try {
-        run(
-          process.execPath,
-          [
-            'node_modules/typescript/bin/tsc',
-            '-p',
-            'tsconfig.official.json',
-            '--noEmit',
-            'false',
-            '--emitDeclarationOnly',
-            'true',
-          ],
-          workbench,
-        );
-      } finally {
-        release();
-      }
-    }
     const reader = JSON.parse(
       execFileSync(
         process.execPath,
