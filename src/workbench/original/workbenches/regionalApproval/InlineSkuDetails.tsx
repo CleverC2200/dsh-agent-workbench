@@ -1,3 +1,4 @@
+import { SkuQuantityAmount } from './SkuQuantityAmount.tsx';
 import styles from './InlineSkuDetails.module.css';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Input, Spin } from '@arco-design/web-react';
@@ -25,6 +26,7 @@ const draftLog = (stage: string, detail: unknown) => console.warn(`[gea-draft] $
 
 export function InlineSkuDetails({
   row,
+  orderType = 'M',
   t,
   detail,
   canEdit,
@@ -36,8 +38,19 @@ export function InlineSkuDetails({
   onElementsChange,
   initialInputValues,
   onInputChange,
+  comparison = false,
+  comparedSkus,
+  selectedSkus,
+  unavailable = false,
+  loading = false,
 }: {
+  comparison?: boolean;
+  comparedSkus?: readonly GeaSalesPlanSku[];
+  selectedSkus?: GeaSalesPlanSku[];
+  unavailable?: boolean;
+  loading?: boolean;
   row: RegionalApprovalLiveRow;
+  orderType?: 'M' | 'Z';
   t: TFunction;
   detail?: GeaSalesPlanDetail;
   canEdit?: boolean;
@@ -63,14 +76,27 @@ export function InlineSkuDetails({
   const { salesPlan } = useWorkbenchHost();
   const [skus, setSkus] = useState<GeaSalesPlanSku[]>();
   const [failed, setFailed] = useState(false);
-  const displayedSkus = useMemo(
-    () =>
-      skus?.filter(
-        (sku) =>
-          categoryName === undefined || (sku.productCategName.trim() || '其他') === categoryName,
-      ),
-    [skus, categoryName],
-  );
+  const displayedSkus = useMemo(() => {
+    const rows = skus ? [...skus] : undefined;
+    for (const previous of comparedSkus ?? [])
+      if (rows && !rows.some((sku) => String(sku.skuCode) === String(previous.skuCode)))
+        rows.push({
+          ...previous,
+          versionId: row.versionId,
+          baseQty: '0',
+          qty: '0',
+          amt: '0',
+          amtBase: '0',
+          regionConfirmedQty: null,
+          provinceConfirmedQty: null,
+          areaConfirmedQty: null,
+          categoryConfirmedQty: null,
+        });
+    return rows?.filter(
+      (sku) =>
+        categoryName === undefined || (sku.productCategName.trim() || '其他') === categoryName,
+    );
+  }, [skus, comparedSkus, categoryName, row.versionId]);
   const [confirmedValues, setConfirmedValues] = useState<Record<string, string>>(
     () => initialInputValues ?? {},
   );
@@ -93,21 +119,28 @@ export function InlineSkuDetails({
     if (target.length === 0) return;
     userEdited.current = true;
     const changes = Object.fromEntries(
-      target.map((sku) => [String(sku.skuCode), draftPatch.quantity]),
+      target.map((sku) => [
+        String(sku.skuCode),
+        orderType === 'Z'
+          ? addExactDecimals([baselineFor(sku), draftPatch.quantity])
+          : draftPatch.quantity,
+      ]),
     );
     onInputChange?.(changes);
     setConfirmedValues((current) => {
       const next = { ...current };
-      for (const sku of target) next[String(sku.skuCode)] = draftPatch.quantity;
+      for (const sku of target) next[String(sku.skuCode)] = changes[String(sku.skuCode)];
       return next;
     });
-  }, [canEdit, draftPatch, skus, onInputChange]);
+  }, [canEdit, draftPatch, skus, onInputChange, orderType]);
   useEffect(() => {
     const controller = new AbortController();
     setSkus(undefined);
     setFailed(false);
-    const source =
-      detail?.skus && detail.currentVersion.id === row.versionId
+    if (loading) return () => controller.abort();
+    const source = selectedSkus
+      ? Promise.resolve(selectedSkus)
+      : detail?.skus && detail.currentVersion.id === row.versionId
         ? Promise.resolve(detail.skus)
         : salesPlan.versionSkus.invoke({ versionId: row.versionId, signal: controller.signal });
     void source
@@ -118,7 +151,7 @@ export function InlineSkuDetails({
         if (!controller.signal.aborted) setFailed(true);
       });
     return () => controller.abort();
-  }, [row.versionId]);
+  }, [row.versionId, selectedSkus, loading]);
   useEffect(() => {
     if (!canEdit || !detail) {
       setDraftState('idle');
@@ -136,7 +169,11 @@ export function InlineSkuDetails({
       })
       .then((result) => {
         if (controller.signal.aborted) return;
-        // 草稿自带写入时的节点口径；按它还原用户当时填的数字，而不是按当前筛选节点重算。
+        if (result.stale || (result.draft?.role && result.draft.role !== approvalRole)) {
+          setSavedDraft('{}');
+          setDraftState('idle');
+          return;
+        }
         const restoreRole = result.draft?.role ?? approvalRole;
         const baseline = (sku: GeaSalesPlanSku) =>
           salesPlanEditableQuantity(sku, row.status, row.planTypeCode, restoreRole) ??
@@ -212,10 +249,12 @@ export function InlineSkuDetails({
     }
     const quantityFields = displayedSkus.map((sku) => {
       const code = String(sku.skuCode);
-      const quantity = canEdit ? (confirmedValues[code] ?? baselineFor(sku)) : sku.qty;
+      const confirmed = canEdit ? (confirmedValues[code] ?? baselineFor(sku)) : baselineFor(sku);
+      const quantity =
+        orderType === 'Z' ? subtractExactDecimals(confirmed, baselineFor(sku)) : confirmed;
       return {
         id: `field:${row.planId}:${code}:qty`,
-        label: `${sku.materialDescription ?? sku.productCategName ?? code} 确认计划量`,
+        label: `${sku.materialDescription ?? sku.productCategName ?? code} ${orderType === 'Z' ? t('common.correction.adjustment') : tr('columns.qty')}`,
         value: quantityText(quantity),
         editable: Boolean(canEdit),
       };
@@ -223,23 +262,26 @@ export function InlineSkuDetails({
     const readOnlyFields = displayedSkus.flatMap((sku) => {
       const code = String(sku.skuCode);
       const confirmed = confirmedValues[code] ?? editableQuantityText(baselineFor(sku));
-      const amount = multiplyExactDecimals(confirmed, String(sku.price));
+      const amount = multiplyExactDecimals(
+        orderType === 'Z' ? subtractExactDecimals(confirmed, baselineFor(sku)) : confirmed,
+        String(sku.price),
+      );
       return [
         {
           id: `field:${row.planId}:${code}:baseQty`,
           label: `${code} ${tr('columns.baseQty')}`,
-          value: quantityText(sku.baseQty),
+          value: quantityText(row.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty),
           editable: false,
         },
         {
           id: `field:${row.planId}:${code}:baseAmount`,
           label: `${code} ${tr('columns.baseAmount')}`,
-          value: formatExactDecimal(sku.amtBase),
+          value: formatExactDecimal(row.orderType === 'Z' ? sku.amt : sku.amtBase),
           editable: false,
         },
         {
           id: `field:${row.planId}:${code}:amount`,
-          label: `${code} ${tr('columns.amount')}`,
+          label: `${code} ${orderType === 'Z' ? t('common.correction.adjustmentAmount') : tr('columns.amount')}`,
           value: amount === undefined ? '—' : formatExactDecimal(amount),
           editable: false,
         },
@@ -264,6 +306,7 @@ export function InlineSkuDetails({
     row.orgName,
     row.planId,
     displayedSkus,
+    orderType,
     t,
   ]);
   useEffect(() => {
@@ -362,6 +405,14 @@ export function InlineSkuDetails({
       return {};
     }
   }, [savedDraft]);
+  const comparisonText = (key: string) =>
+    t(`common.assistantSurface.regionalApproval.inlineComparison.${key}`);
+  const columns = [
+    'plan',
+    comparison ? 'confirmedPrimary' : 'confirmed',
+    ...(comparison ? ['confirmedCompared', 'difference'] : []),
+  ];
+  const comparedByCode = new Map(comparedSkus?.map((sku) => [String(sku.skuCode), sku]));
   const groups = new Map<string, GeaSalesPlanSku[]>();
   for (const sku of displayedSkus ?? []) {
     const category = sku.productCategName.trim() || '其他';
@@ -370,24 +421,29 @@ export function InlineSkuDetails({
   // 暂存状态就近展示在改过的数字旁；失败给就地重试，不再用表格顶部通栏。
   return (
     <section className={styles.root} aria-label={tr('columns.sku')}>
-      {failed ? (
+      {loading ? (
+        <Spin />
+      ) : unavailable ? (
+        <Alert type="info" content={comparisonText('missing')} />
+      ) : failed ? (
         <Alert type="error" content={tr('loadError')} />
       ) : !skus ? (
         <Spin />
       ) : (
         <div className={styles.viewport} tabIndex={0} role="region" aria-label={tr('columns.sku')}>
-          <table className={styles.table}>
+          <table className={`${styles.table} ${styles.combinedTable}`}>
             <colgroup>
               <col className={styles.skuColumn} />
-              {['baseQty', 'qty', 'baseAmount', 'amount'].map((key) => (
+              {columns.map((key) => (
                 <col className={styles.metricColumn} key={key} />
               ))}
             </colgroup>
             <thead>
               <tr>
-                {['sku', 'baseQty', 'qty', 'baseAmount', 'amount'].map((key) => (
+                <th scope="col">{tr('columns.sku')}</th>
+                {columns.map((key) => (
                   <th scope="col" key={key}>
-                    {tr('columns.' + key)}
+                    {comparisonText(key)}
                   </th>
                 ))}
               </tr>
@@ -395,18 +451,37 @@ export function InlineSkuDetails({
             {[...groups].map(([category, items]) => (
               <tbody key={category}>
                 <tr className={styles.group}>
-                  <th colSpan={5} scope="rowgroup">
+                  <th colSpan={columns.length + 1} scope="rowgroup">
                     {category} · {items.length} SKU
                   </th>
                 </tr>
                 {items.map((sku, index) => {
                   const changed =
-                    formatExactDecimal(sku.baseQty) !== formatExactDecimal(sku.qty) ||
-                    formatExactDecimal(sku.amtBase) !== formatExactDecimal(sku.amt);
+                    formatExactDecimal(
+                      row.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty,
+                    ) !== formatExactDecimal(sku.qty) ||
+                    formatExactDecimal(row.orderType === 'Z' ? sku.amt : sku.amtBase) !==
+                      formatExactDecimal(sku.amt);
                   const code = String(sku.skuCode),
                     baseline = baselineFor(sku),
                     confirmed = confirmedValues[code] ?? editableQuantityText(baseline);
-                  const confirmedAmount = multiplyExactDecimals(confirmed, String(sku.price));
+                  const adjustment = subtractExactDecimals(confirmed, baseline);
+                  const confirmedAmount = multiplyExactDecimals(
+                    orderType === 'Z' ? adjustment : confirmed,
+                    String(sku.price),
+                  );
+                  const previous = comparedByCode.get(code);
+                  const previousQuantity = !comparedSkus
+                    ? undefined
+                    : previous
+                      ? baselineFor(previous)
+                      : '0';
+                  const previousAmount =
+                    previousQuantity === undefined
+                      ? undefined
+                      : previous
+                        ? multiplyExactDecimals(previousQuantity, String(previous.price))
+                        : '0';
                   return (
                     <tr key={code + ':' + index} className={changed ? styles.changed : undefined}>
                       <td>
@@ -415,55 +490,92 @@ export function InlineSkuDetails({
                           {sku.materialDescription || sku.skuName || tr('missingDescription')}
                         </span>
                       </td>
-                      <td>{quantityText(sku.baseQty)}</td>
                       <td>
-                        {canEdit ? (
-                          <div className={styles.quantityCell}>
-                            <Input
-                              className={styles.quantityInput}
-                              type="number"
-                              step={1}
-                              size="small"
-                              value={confirmed}
-                              aria-label={`${tr('columns.qty')} ${code}`}
-                              onChange={(value) => {
-                                userEdited.current = true;
-                                setConfirmedValues((current) => ({ ...current, [code]: value }));
-                                onInputChange?.({ [code]: value });
-                              }}
-                            />
-                            {savedValues[code] === confirmedValues[code] ? null : draftState ===
-                              'failed' ? (
-                              <span
-                                className={styles.draftFailed}
-                                role="alert"
-                                title={tr('draft.failed')}
-                              >
-                                <span className={styles.draftFailedText}>
-                                  {tr('draft.failedShort')}
-                                </span>
-                                <button
-                                  type="button"
-                                  className={styles.draftRetry}
-                                  onClick={() => setSaveRetry((value) => value + 1)}
+                        <SkuQuantityAmount
+                          quantity={
+                            row.orderType === 'Z' ? (sku.corrBaseQty ?? sku.qty) : sku.baseQty
+                          }
+                          amount={row.orderType === 'Z' ? sku.amt : sku.amtBase}
+                        />
+                      </td>
+                      <td>
+                        <SkuQuantityAmount
+                          quantity={orderType === 'Z' ? adjustment : confirmed}
+                          amount={confirmedAmount}
+                        >
+                          {canEdit && skus.some((current) => String(current.skuCode) === code) ? (
+                            <div className={styles.quantityCell}>
+                              <Input
+                                className={styles.quantityInput}
+                                type="number"
+                                step={orderType === 'Z' ? 0.001 : 1}
+                                size="small"
+                                value={orderType === 'Z' ? adjustment : confirmed}
+                                aria-label={`${orderType === 'Z' ? t('common.correction.adjustment') : tr('columns.qty')} ${code}`}
+                                onChange={(value) => {
+                                  userEdited.current = true;
+                                  const quantity =
+                                    orderType === 'Z' && value.trim()
+                                      ? addExactDecimals([baseline, value])
+                                      : value;
+                                  setConfirmedValues((current) => ({
+                                    ...current,
+                                    [code]: quantity,
+                                  }));
+                                  onInputChange?.({ [code]: quantity });
+                                }}
+                              />
+                              {savedValues[code] === confirmedValues[code] ? null : draftState ===
+                                'failed' ? (
+                                <span
+                                  className={styles.draftFailed}
+                                  role="alert"
+                                  title={tr('draft.failed')}
                                 >
-                                  {tr('draft.retryShort')}
-                                </button>
-                              </span>
-                            ) : draftState === 'saving' ? (
-                              <span className={styles.draftSaving} role="status">
-                                {tr('draft.saving')}
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : (
-                          quantityText(sku.qty)
-                        )}
+                                  <span className={styles.draftFailedText}>
+                                    {tr('draft.failedShort')}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className={styles.draftRetry}
+                                    onClick={() => setSaveRetry((value) => value + 1)}
+                                  >
+                                    {tr('draft.retryShort')}
+                                  </button>
+                                </span>
+                              ) : draftState === 'saving' ? (
+                                <span className={styles.draftSaving} role="status">
+                                  {tr('draft.saving')}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : undefined}
+                        </SkuQuantityAmount>
                       </td>
-                      <td>{formatExactDecimal(sku.amtBase)}</td>
-                      <td>
-                        {confirmedAmount === undefined ? '—' : formatExactDecimal(confirmedAmount)}
-                      </td>
+                      {comparison && (
+                        <>
+                          <td>
+                            <SkuQuantityAmount
+                              quantity={previousQuantity}
+                              amount={previousAmount}
+                            />
+                          </td>
+                          <td>
+                            <SkuQuantityAmount
+                              quantity={
+                                previousQuantity === undefined
+                                  ? undefined
+                                  : subtractExactDecimals(confirmed, previousQuantity)
+                              }
+                              amount={
+                                previousAmount === undefined || confirmedAmount === undefined
+                                  ? undefined
+                                  : subtractExactDecimals(confirmedAmount, previousAmount)
+                              }
+                            />
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}

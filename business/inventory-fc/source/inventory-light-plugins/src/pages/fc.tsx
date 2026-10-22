@@ -1,3 +1,4 @@
+import { QueryErrors } from '../../../../../shared/query-errors';
 import { reportElements, currentSessionId, ready } from '../channel.js';
 import { InventoryBatchTable } from './fc/components/inventory-batch-table';
 import { parseActualQuantity, dmsWorkbookRows } from '../fc-feedback';
@@ -1665,7 +1666,8 @@ export function BranchInventoryAgent() {
             </nav>
             <div className="business-panel" aria-busy={snapshotLoading}>
               {awaitingData || snapshotEmpty ? (
-                <div className="empty-state" role={blockingError ? 'alert' : 'status'}>
+                <div className="empty-state" role="status">
+                  <QueryErrors errors={blockingError ? [blockingError] : []} scope="inventory-fc" />
                   <strong>
                     {snapshotEmpty
                       ? '当前授权范围暂无库存与计划数据'
@@ -1673,11 +1675,6 @@ export function BranchInventoryAgent() {
                         ? '当前分仓数据尚未就绪'
                         : '等待分仓数据连接'}
                   </strong>
-                  <p>
-                    {snapshotEmpty
-                      ? '查询已完成，未返回业务行；不代表库存数量为零。'
-                      : blockingError || '请先登录并连接页面能力，再读取当前分仓数据。'}
-                  </p>
                   {sessionReady && snapshotLoading && !blockingError && (
                     <WorkbenchLoading title="正在读取当前分仓" compact />
                   )}
@@ -1691,8 +1688,8 @@ export function BranchInventoryAgent() {
                     </div>
                   )}
                   {snapshotError && sessionMode === 'gea' ? (
-                    <div className="empty-state" role="alert">
-                      <p>{queryErrorText(snapshotError)}</p>
+                    <div className="empty-state">
+                      <QueryErrors errors={[queryErrorText(snapshotError)]} scope="inventory-fc" />
                       <button
                         className="secondary-button"
                         onClick={() => setPageRevision((value) => value + 1)}
@@ -2607,7 +2604,7 @@ export function BranchInventoryAgent() {
               onApply={applyHumanPlanPreview}
             />
           ) : detailError ? (
-            <p role="alert">{detailError}</p>
+            <QueryErrors errors={[detailError]} scope="inventory-fc-detail" />
           ) : snapshot.page && !detailSnapshot ? (
             <p role="status">{'正在读取完整指标明细…'}</p>
           ) : (

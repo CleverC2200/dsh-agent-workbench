@@ -6,6 +6,7 @@ export type GeaSqlParameters = Record<string, unknown>;
 export type GeaSqlRequestOptions = {
   signal?: AbortSignal;
   parameters?: GeaSqlParameters;
+  pageConcurrency?: 1 | 3;
   [key: string]: unknown;
 };
 let lifetime = new AbortController();
@@ -82,8 +83,26 @@ export async function executeAllGeaSqlPages(
   const rows: GeaSqlRow[] = [];
   let total: number | undefined;
   let permissions: string | undefined;
+  const queued = new Map<
+    number,
+    Promise<{ value?: Awaited<ReturnType<typeof read>>; error?: unknown }>
+  >();
+  const fetchPage = (pageNo: number) => {
+    if (!queued.has(pageNo))
+      queued.set(
+        pageNo,
+        read({ sql, parameters, pageNo, pageSize }, { ...options, signal }).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        ),
+      );
+    return queued.get(pageNo)!;
+  };
   for (let pageNo = 1; ; pageNo++) {
-    const page = await read({ sql, parameters, pageNo, pageSize }, { ...options, signal });
+    const result = await fetchPage(pageNo);
+    queued.delete(pageNo);
+    if ('error' in result) throw result.error;
+    const page = result.value!;
     signal.throwIfAborted();
     const pagePermissions = JSON.stringify([page.returnedColumns, page.rejectedColumns]);
     // Some governed SQL hosts apply the statement as one atomic read and return
@@ -121,6 +140,12 @@ export async function executeAllGeaSqlPages(
       );
     rows.push(...page.rows);
     if (rows.length === total) return rows;
+    for (
+      let next = pageNo + 1;
+      next <= Math.min(Math.ceil(total / pageSize), pageNo + (options.pageConcurrency ?? 1));
+      next++
+    )
+      void fetchPage(next);
   }
 }
 export class GeaSqlApiError extends Error {

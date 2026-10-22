@@ -13,7 +13,9 @@ export function injectSqlConfig(html: string, config: unknown): string {
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
     .replace(/&/g, '\\u0026');
-  const script = `<script type="application/json" id="agent-sql-config">${json}</script>`;
+  // The injected config can exceed the HTML encoding prescan window. Declare UTF-8
+  // before it so Chinese SQL literals and enum parameters survive headerless loads.
+  const script = `<meta charset="utf-8"><script type="application/json" id="agent-sql-config">${json}</script>`;
   const head = /<head\b[^>]*>/i.exec(html);
   if (head)
     return (

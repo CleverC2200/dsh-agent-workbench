@@ -1,3 +1,5 @@
+import sqlConfiguration from '../../../../../sql.config.json';
+import { readCurrentShortage, currentShortageSum } from '../../../../../../shared/current-shortage';
 import {
   readConfiguredStockSummary,
   readConfiguredHealthSummary,
@@ -262,12 +264,7 @@ const FIXED_WORKBENCH_COLUMNS = [
   { key: 'allocatedQuantity', label: '占用量' },
   { key: 'skuCount', label: 'SKU个数' },
 ];
-const sourceColumns = (columns: { key: string; label: string }[]) =>
-  usesConfiguredSql()
-    ? columns.map((column) =>
-        column.key === 'last30d' ? { ...column, label: '近30日均销量' } : column,
-      )
-    : columns;
+const sourceColumns = (columns: { key: string; label: string }[]) => columns;
 
 function fixedWorkbenchWarning(current: number, target: number, demand: number) {
   if (target <= 0 && current > 0) return { label: '目标为0但有库存，暂不比较', tone: 'gray' };
@@ -506,7 +503,7 @@ const DETAIL_COLUMNS: SafetyStockDetailPage['columns'] = [
   { key: 'safety', label: '安全库存' },
 ];
 
-const KNOWN_BASES = new Set(['华东', '华南', '西南', '遂平', '郑州']);
+const KNOWN_BASES = new Set(['华东', '华南', '西南', '遂平', '郑州', '濮阳']);
 const MONTH_LABEL = /^(20\d{2})年(1[0-2]|0?[1-9])月$/;
 const MATERIAL_CODE = /^[A-Za-z0-9_-]{1,64}$/;
 const DEFAULT_DETAIL_ORDER = {
@@ -1219,7 +1216,7 @@ export async function loadInventoryDashboardTabs(
     !(selectedBase && normalizedCategory && categoryLevel !== 'base')
   ) {
     const groupBy = normalizedCategory ? 'base' : 'category';
-    const [{ groups }, orderRows] = await Promise.all([
+    const [{ groups }, orderRows, pendingRows] = await Promise.all([
       readConfiguredStockSummary(selectedBases, {
         signal,
         structure: { groupBy, category: normalizedCategory },
@@ -1233,6 +1230,12 @@ export async function loadInventoryDashboardTabs(
         if (signal?.aborted) throw error;
         return null;
       }),
+      readCurrentShortage(sqlConfiguration, 'current-shortage.categories', {}, { signal }).catch(
+        (error) => {
+          if (signal?.aborted) throw error;
+          return null;
+        },
+      ),
     ]);
     const rows = groups
       .map((r: any) => {
@@ -1244,6 +1247,14 @@ export async function loadInventoryDashboardTabs(
               ? o['workbench.base'] === r.level
               : categoryName(o['workbench.category']) === r.level),
         );
+        const pending = pendingRows?.rows.filter(
+          (o: any) =>
+            (!selectedBases.length || selectedBases.includes(String(o.base))) &&
+            (!normalizedCategory || categoryName(o.category) === normalizedCategory) &&
+            (groupBy === 'base' ? o.base === r.level : categoryName(o.category) === r.level),
+        );
+        const pendingValue = (field: string) =>
+          pending ? displayNumber(currentShortageSum(pending, field) ?? 0) : '-';
         const invalid =
           !orders?.length ||
           orders.some(
@@ -1288,9 +1299,9 @@ export async function loadInventoryDashboardTabs(
             : need > 0
               ? `${((1 - shortage / need) * 100).toFixed(1)}%`
               : '不适用',
-          orderQuantity: '-',
-          shortageQuantity: '-',
-          allocatedQuantity: '-',
+          orderQuantity: pendingValue('demand'),
+          shortageQuantity: pendingValue('shortage'),
+          allocatedQuantity: pendingValue('allocated'),
           skuCount: displayNumber(r.sku_count),
           rawGap: (r.inventory ?? 0) - (r.target ?? 0),
         };
@@ -1813,7 +1824,7 @@ export async function loadInitialDashboard(
     };
     orderCard.helpers = [
       { label: '快照未备单订单', value: knownSourceTotal('safety_stock.source_ordered') },
-      { label: '快照已备单占用', value: knownSourceTotal('safety_stock.source_allocated') },
+      { label: '备单量', value: knownSourceTotal('safety_stock.source_allocated') },
     ];
   }
   const orderHelpers = shippedOrderMetricHelpers(
@@ -1906,10 +1917,7 @@ export async function loadInitialDashboard(
     const rowCovered = coveredComparison(
       skuRows.filter((source) => String(source['safety_stock.base_name'] ?? '未分类') === rowBase),
     );
-    const warehouseAge = sourceHealth?.rows?.find((r: any) => r.belong_base === rowBase);
-    const rowAge = direct
-      ? (numeric(warehouseAge?.max_age) ?? undefined)
-      : businessSummary.ageByBase[rowBase];
+    const rowAge = direct ? undefined : businessSummary.ageByBase[rowBase];
     const rowOrder = businessSummary.orderByBase[rowBase];
     const pending = currentOrders.find((row) => row.base === rowBase);
     const rowPartial = row.targetCoverage.missingCount > 0;
@@ -2047,7 +2055,7 @@ export async function loadInitialDashboard(
         tone: 'neutral',
       },
       {
-        label: direct ? '最大库龄' : '当前货龄',
+        label: '当前货龄',
         value: direct
           ? healthAge === null
             ? '-'
@@ -2133,9 +2141,7 @@ export async function loadInitialDashboard(
     },
     comparison: null,
     table: {
-      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS).map((column) =>
-        direct && column.key === 'age' ? { ...column, label: '最大库龄/天' } : column,
-      ),
+      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS),
       rows: workbenchRows,
     },
     actions: [],
@@ -2238,7 +2244,7 @@ export async function loadInitialDashboard(
           tone: 'neutral',
         },
         {
-          title: direct ? '最大库龄' : '当前货龄',
+          title: '当前货龄',
           coverage: direct ? `${healthScope}；下列超60天数量仍取日库存快照` : undefined,
           value: direct
             ? healthAge === null
@@ -2393,6 +2399,28 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
   const order = new Map<string, number>(
     result.facts.map((row: any, index: number) => [String(row.sku), index]),
   );
+  if (!age && result.facts.length) {
+    const current = await readCurrentShortage(
+      sqlConfiguration,
+      'current-shortage.skus',
+      {
+        base: input.base,
+        skus: result.facts.map((row: any) => String(row.sku)),
+      },
+      { signal },
+    ).catch((e) => {
+      if (signal?.aborted) throw e;
+      return null;
+    });
+    const bySku = new Map((current?.rows ?? []).map((row: any) => [String(row.sku), row]));
+    for (const row of computed) {
+      const sku = String(row.level).split(' ')[0];
+      const pending: any = bySku.get(sku);
+      row.orderQuantity = current ? displayNumber(pending?.demand ?? 0) : '-';
+      row.shortageQuantity = current ? displayNumber(pending?.shortage ?? 0) : '-';
+      row.allocatedQuantity = current ? displayNumber(pending?.allocated ?? 0) : '-';
+    }
+  }
   computed.sort(
     (left, right) =>
       (order.get(String(left.level).split(' ')[0]) ?? 0) -
@@ -2404,9 +2432,7 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
         (age ? AGE_COLUMNS : CATEGORY_COLUMNS).filter((c) => c.key !== 'skuCount'),
       ),
       rows: computed,
-      notice: age
-        ? '批次货龄缺失；已接实存和超60天数量。'
-        : '当前待发订单及占用阶段快照缺失；当月满足率按履约来源读取。',
+      notice: '暂无数据。',
     },
     total: result.total,
     page: result.page,
@@ -2424,7 +2450,7 @@ async function loadConfiguredSummaryDashboard(
   signal?: AbortSignal,
   selectedBases?: string[],
 ): Promise<WorkspaceState> {
-  const [{ groups: sourceGroups, scope, day }, support, health] = await Promise.all([
+  const [{ groups: sourceGroups, scope, day }, support, health, current] = await Promise.all([
     readConfiguredStockSummary(selectedBases, { signal }),
     loadWorkbenchSqlQuery(
       context,
@@ -2439,7 +2465,16 @@ async function loadConfiguredSummaryDashboard(
       if (signal?.aborted) throw e;
       return { error: e.message } as any;
     }),
+    readCurrentShortage(sqlConfiguration, 'current-shortage.locations', {}, { signal }).catch(
+      (e) => {
+        if (signal?.aborted) throw e;
+        return { rows: undefined, error: e.message };
+      },
+    ),
   ]);
+  const currentRows = current.rows?.filter(
+    (r: any) => !selectedBases?.length || selectedBases.includes(r.base),
+  );
   // Keep the legacy business scope after SQL aggregation as well.
   const groups = sourceGroups
     .filter((r: any) => KNOWN_BASES.has(String(r.base)) && categoryName(r.category) !== '饺鲜说')
@@ -2462,7 +2497,12 @@ async function loadConfiguredSummaryDashboard(
     };
   };
   const all = stats(groups),
-    bases = [...new Set(groups.map((r: any) => r.base))] as string[];
+    bases = [
+      ...new Set([
+        ...groups.map((r: any) => String(r.base)),
+        ...(currentRows ?? []).map((r: any) => String(r.base)),
+      ]),
+    ];
   const business = workbenchBusinessSummaryFromRows(
     support.filter((r) => bases.includes(String(r['workbench.base']))),
   );
@@ -2487,10 +2527,9 @@ async function loadConfiguredSummaryDashboard(
       current = s.sum('inventory'),
       demand = s.sum('daily_demand');
     const warning =
-      s.sum('target_count') === s.n && s.sum('inventory_count') === s.n
+      s.n > 0 && s.sum('target_count') === s.n && s.sum('inventory_count') === s.n
         ? fixedWorkbenchWarning(current, target, demand)
         : { label: '-', tone: 'gray' };
-    const age = numeric(health.rows?.find((r: any) => r.belong_base === base)?.max_age);
     return {
       id: base,
       level: base,
@@ -2505,14 +2544,35 @@ async function loadConfiguredSummaryDashboard(
       last30d: s.sum('stock_avg_30d_sale_valid_count')
         ? displayDailyMovement(s.sum('stock_avg_30d_sale_valid'))
         : '-',
-      age: days(age),
+      age: '-',
       orderFillRate:
         business.orderByBase[base]?.rate == null
           ? '-'
           : `${(business.orderByBase[base].rate! * 100).toFixed(1)}%`,
-      orderQuantity: '-',
-      shortageQuantity: '-',
-      allocatedQuantity: '-',
+      orderQuantity: currentRows
+        ? displayNumber(
+            currentShortageSum(
+              currentRows.filter((r: any) => r.base === base),
+              'demand',
+            ) ?? 0,
+          )
+        : '-',
+      shortageQuantity: currentRows
+        ? displayNumber(
+            currentShortageSum(
+              currentRows.filter((r: any) => r.base === base),
+              'shortage',
+            ) ?? 0,
+          )
+        : '-',
+      allocatedQuantity: currentRows
+        ? displayNumber(
+            currentShortageSum(
+              currentRows.filter((r: any) => r.base === base),
+              'allocated',
+            ) ?? 0,
+          )
+        : '-',
       skuCount: displayNumber(s.n),
     };
   });
@@ -2539,21 +2599,26 @@ async function loadConfiguredSummaryDashboard(
     '数据边界：',
     `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，周转覆盖${all.turnCount}/${all.n}个基地SKU，均只比较同一匹配范围；`,
   );
-  const orderCard = currentOrderCard([], bases);
-  orderCard.helpers = [
-    {
-      label: '快照未备单订单',
-      value: all.sum('ordered_valid_count')
-        ? `${show(all, 'ordered', true)}（${all.sum('ordered_valid_count')}/${all.n} SKU）`
-        : '-',
-    },
-    {
-      label: '快照已备单占用',
-      value: all.sum('allocated_valid_count')
-        ? `${show(all, 'allocated', true)}（${all.sum('allocated_valid_count')}/${all.n} SKU）`
-        : '-',
-    },
-  ];
+  // The daily fact provides an unprepared subset, not the full pending-order total.
+  const orderCard = {
+    title: '当前订单',
+    value: currentRows ? displayNumber(currentShortageSum(currentRows, 'demand') ?? 0) : '-',
+    helpers: [
+      {
+        label: '未备单订单占用',
+        value: currentRows
+          ? `${displayNumber(currentShortageSum(currentRows, 'allocated') ?? 0)}箱`
+          : '-',
+      },
+      {
+        label: '缺货量',
+        value: currentRows
+          ? `${displayNumber(currentShortageSum(currentRows, 'shortage') ?? 0)}箱`
+          : '-',
+      },
+    ],
+    tone: 'neutral' as const,
+  };
   const cards = [
     {
       title: '当前库存',
@@ -2581,15 +2646,15 @@ async function loadConfiguredSummaryDashboard(
       tone: 'neutral',
     },
     {
-      title: '最大库龄',
+      title: '当前货龄',
       value: days(healthAge),
       coverage: `${healthScope}；下列超60天数量仍取日库存快照`,
       helpers: [
         {
-          label: '超60天SKU',
+          label: '超龄SKU',
           value: all.sum('over60_valid_count') ? displayNumber(all.sum('over60_skus')) : '-',
         },
-        { label: '超60天库存', value: show(all, 'over60', true) },
+        { label: '超龄库存', value: show(all, 'over60', true) },
       ],
       tone: 'neutral',
     },
@@ -2602,7 +2667,7 @@ async function loadConfiguredSummaryDashboard(
     },
     {
       ...orderCard,
-      coverage: '订单辅助项取日库存快照，未备单与占用分别展示，当前待发总量仍未知。',
+      coverage: `快照 ${day} · 范围 ${all.sum('ordered_valid_count')}/${all.n} 个基地SKU；未备单与占用分别展示`,
     },
   ];
   const workspace = unavailableWorkspace();
@@ -2637,9 +2702,7 @@ async function loadConfiguredSummaryDashboard(
       status: scope.fallbackUsed ? '使用备选版本' : '只读',
     },
     table: {
-      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS).map((c) =>
-        c.key === 'age' ? { ...c, label: '最大库龄/天' } : c,
-      ),
+      columns: sourceColumns(FIXED_WORKBENCH_COLUMNS),
       rows: baseRows,
     },
     presentation: 'fixed_workbench',
@@ -2647,7 +2710,16 @@ async function loadConfiguredSummaryDashboard(
       status: 'ready',
       statusDescription: `工作台默认展示最新已发布数据：${scope.targetMonthLabel}，优先使用${scope.versionLabel}。`,
       overallAnalysis: overall,
-      currentOrders: [],
+      currentOrders: (currentRows ?? []).map((r: any) => ({
+        base: r.base,
+        orderQuantity: numeric(r.demand),
+        allocatedQuantity: numeric(r.allocated),
+        shortageQuantity: numeric(r.shortage),
+        preparingQuantity: numeric(r.remaining),
+        orderSnapshot: String(r.snapshot_date),
+        inventorySnapshot: String(r.snapshot_date),
+      })),
+      currentOrderError: 'error' in current ? current.error : undefined,
       cards,
       inventoryInsight: {
         ...insight,

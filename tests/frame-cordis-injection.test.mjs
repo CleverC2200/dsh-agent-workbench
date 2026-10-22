@@ -242,7 +242,7 @@ test('a quote consumer uses real Cordis dependencies and the actual Session-owne
   assert.equal(posted.at(-1).ok, true);
 });
 
-test('actual Cordis discovery registers HTML Documents before main presentation is mounted and removes them with its own lifetime', async (t) => {
+test('actual Cordis discovery registers HTML Documents before Document presentation is mounted and removes them with its own lifetime', async (t) => {
   const dom = new JSDOM('<html><head></head><body></body></html>', {
     url: 'https://host.example/workbench',
   });
@@ -273,12 +273,16 @@ test('actual Cordis discovery registers HTML Documents before main presentation 
   ])
     Object.defineProperty(globalThis, key, { value, configurable: true, writable: true });
   const ctx = new Context();
-  const mainCallbacks = [];
+  const presentationCallbacks = new Map();
+  const factories = [];
   const services = {
     slots: {
-      registerFactory: () => () => {},
+      registerFactory: (options) => {
+        factories.push(options.name);
+        return () => {};
+      },
       inject: (name, callback) => {
-        if (name === 'main') mainCallbacks.push(callback);
+        presentationCallbacks.set(name, callback);
         return () => {};
       },
       register: () => () => {},
@@ -318,10 +322,13 @@ test('actual Cordis discovery registers HTML Documents before main presentation 
   await new Promise((resolve) => setImmediate(resolve));
   const workbench = ctx.agentWorkbench;
   assert.equal(reads, 1);
-  assert.ok(mainCallbacks.length, 'presentation remains contributed through public main slots');
+  assert.ok(factories.includes('agent-workbench.document'));
+  assert.ok(presentationCallbacks.has('shell.overlay'));
+  assert.ok(presentationCallbacks.has('agent-workbench.documents'));
+  assert.equal(presentationCallbacks.has('main'), false);
   assert.ok(
     workbench.getSnapshot().pages.some((item) => item.id === page.id),
-    'HTML metadata must be available without executing a main slot callback',
+    'HTML metadata must be available without executing a Document presentation callback',
   );
   await workbench.open(page.id);
   assert.equal(workbench.getSnapshot().selectedDocument.id, page.id);

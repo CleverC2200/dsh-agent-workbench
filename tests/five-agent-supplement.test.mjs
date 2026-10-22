@@ -63,16 +63,16 @@ test('known inputs are accessible without labeling unknown decisions as zero', a
     assert.equal(dealer.sourceViews.views.find((v) => v.id === id).queryId, 'dealer.stock.detail');
   assert.equal(
     fc.sourceViews.views.find((v) => v.id === 'replenishment').queryId,
-    'transfer_plan.detail',
+    'replenishment.detail',
   );
   assert.equal(
     qll.sourceViews.views.find((v) => v.id === 'channel-sku').queryId,
     'dealer.stock.detail',
   );
-  assert.equal(
-    fc.sourceViews.views.find((v) => v.id === 'health').overrides.warehouse_type,
-    '分仓',
-  );
+  const branchHealth = fc.sourceViews.views.find((v) => v.id === 'health');
+  assert.equal(branchHealth.overrides.warehouse_type, undefined);
+  assert.ok(branchHealth.filters.some((filter) => filter.name === 'warehouse_code'));
+  assert.ok(branchHealth.filters.some((filter) => filter.name === 'base'));
 });
 
 test('base overview uses maximum age and cannot present the source maximum as an average', async () => {
@@ -81,10 +81,11 @@ test('base overview uses maximum age and cannot present the source maximum as an
     'utf8',
   );
   assert.match(source, /numeric\(healthSummary\?\.max_age\)/);
-  assert.match(source, /numeric\(warehouseAge\?\.max_age\)/);
+  assert.match(source, /const rowAge = direct \? undefined : businessSummary.ageByBase/);
   assert.doesNotMatch(
     source,
     /healthSummary\?\.weighted_age|warehouseAge\?\.weighted_age|按仓库源库存加权/,
   );
-  assert.match(source, /direct \? '最大库龄' : '当前货龄'/);
+  assert.doesNotMatch(source, /label: '最大库龄\/天'/);
+  assert.match(source, /title: '当前货龄'/);
 });

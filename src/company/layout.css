@@ -43,8 +43,35 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   min-height: 0;
   overflow: hidden;
 }
-.gea-workspace-owned[hidden] {
+.gea-workspace-owned[data-gea-expanded='false'] {
+  flex: none;
+}
+[data-gea-narrow] .gea-workspace-owned {
   display: none;
+}
+.gea-conversation-welcome {
+  max-width: 100%;
+  padding-inline: 16px;
+  text-align: center;
+  font-family: var(--workbench-font-family);
+  color: var(--workbench-text);
+}
+.gea-conversation-welcome h1 {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 700;
+  line-height: 1.4;
+  text-wrap: balance;
+}
+.gea-conversation-welcome h1 span {
+  color: var(--workbench-brand);
+}
+.gea-conversation-welcome p {
+  margin: 12px 0 0;
+  color: var(--workbench-muted);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
 }
 .gea-account-launcher {
   --gea-sidebar-ink: var(--workbench-text);
@@ -107,13 +134,6 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   margin-left: auto;
   margin-right: auto;
   margin-bottom: 8px;
-}
-.gea-directory-owned {
-  height: 100%;
-  min-height: 0;
-  overflow: auto;
-  padding: 24px;
-  box-sizing: border-box;
 }
 .gea-sidebar-window-row {
   display: flex;

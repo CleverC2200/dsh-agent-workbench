@@ -20,7 +20,7 @@ let connected = false,
 let latest;
 let lifetime = new AbortController();
 const notice =
-  '模拟原型：所有数据和操作均为模拟，保存、提交、导出及结转不会写入业务系统。当前Session保留界面意图和未发送文字；模拟派生结果不存业务库。';
+  '产品清单与年度需求可经mps授权只读查询；第一步DMS提报、模型输出、BI发货三路表尚未建立，其他业务表不替代。五项参数与基础指标依赖DMS提报和BI发货，逐月测算由输入现算，不独立落表；未裁决公式保持待定。第二步支持本地输入测算，第四步核对真实产线、系列与调拨关系。第三、五、六步保留原模拟内容，第七步尚未实现。下载不等于业务保存，刷新或切换对话会清除内存输入。当前对话保留界面意图和未发送文字。';
 mpsView.subscribe((_snapshot, event) => {
   if (event === 'released') {
     cancelPublication();
@@ -77,8 +77,8 @@ function schedule() {
       epoch,
       session,
       snapshot: {
-        page: '主生产计划(MPS) · 模拟原型',
-        mock: true,
+        page: '主生产计划(MPS)',
+        scope: 'read-only-master-data-local-drafts',
         notice,
         parts: Object.fromEntries([...parts].map(([key, part]) => [key, part.value])),
       },
@@ -94,7 +94,7 @@ function cancelPublication() {
   latest = undefined;
 }
 /** Component owners report their current state, without discovering DOM. */
-export function useMpsPart(react, key, value, label) {
+export function useMpsPart(react, key, value, label, active = true) {
   const serialized = JSON.stringify(value);
   const [restoreRevision, setRestoreRevision] = react.useState(restoration);
   react.useEffect(() => {
@@ -103,6 +103,7 @@ export function useMpsPart(react, key, value, label) {
     return () => restorationListeners.delete(setRestoreRevision);
   }, []);
   react.useEffect(() => {
+    if (!active) return;
     const part = {
       value: JSON.parse(serialized),
       restoration: restoreRevision,
@@ -123,7 +124,7 @@ export function useMpsPart(react, key, value, label) {
       stop();
       schedule();
     };
-  }, [key, serialized, restoreRevision]);
+  }, [key, serialized, restoreRevision, active]);
 }
 export function useMpsNavigation(react, state, select) {
   useMpsPart(react, 'navigation', state);
@@ -155,7 +156,7 @@ void ready.then(() => {
   connected = true;
   schedule();
 });
-const refreshLabel = '刷新MPS模拟原型，恢复当前Session界面意图并保留未发送文字';
+const refreshLabel = '刷新MPS页面，保留对话界面意图和未发送文字，清除本页隔离输入';
 action('refresh', refreshLabel, () => window.location.reload());
 reportElements(
   'refresh',

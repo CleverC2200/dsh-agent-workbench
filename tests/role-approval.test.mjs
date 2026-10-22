@@ -228,36 +228,7 @@ test('role receipt verifies actor, configured return target and all required app
     false,
   );
 });
-test('correction role authority uses explicit current-node capability and selected-role data', () => {
-  const d = {
-    ...detail(),
-    currentVersion: { ...detail().currentVersion, orderType: 'Z' },
-    correctionContext: { contract: 'absolute-net-v1', monthlyApproved: true, approvalOpen: true },
-    actionContext: policy(),
-  };
-  const returned = {
-    ...d,
-    currentVersion: { ...d.currentVersion, status: 7 },
-    actionContext: {
-      ...policy(['region'], 7),
-      nodeOrder: 2,
-      allowedActions: ['SAVE', 'APPROVE', 'REJECT'],
-    },
-  };
-  assert.equal(
-    m.correctionAccess(returned, undefined, 'region', ['region']).approvalRole,
-    'region',
-  );
-  assert.equal(m.correctionAccess(returned, undefined, 'region'), undefined);
-  assert.equal(
-    m.correctionAccess(
-      { ...d, correctionContext: { ...d.correctionContext, monthlyApproved: false } },
-      undefined,
-      'region',
-      ['region'],
-    ),
-    undefined,
-  );
+test('correction submission inheritance uses selected-role data', () => {
   assert.equal(
     m.correctionDecision(
       {

@@ -287,7 +287,14 @@ const copy = {
   geaBusiness: ['Synear GEA', 'Synear GEA'],
   brandSubtitle: ['智能体工作台', 'Agent workspace'],
   functionArea: ['业务工作台', 'Business workbenches'],
-  workspaceArea: ['历史会话', 'Session history'],
+  workspaceArea: ['历史对话', 'Conversation history'],
+  welcomeLead: ['AI', 'AI'],
+  welcomeMessage: ['不止于对话，更融入', ' goes beyond conversation, into '],
+  welcomeWork: ['工作', 'work'],
+  welcomeTagline: [
+    '懂业务 · 会协同 · 能行动',
+    'Understands business · Collaborates · Takes action',
+  ],
   homeEyebrow: ['思念企业 AI 协作伙伴', 'Synear enterprise AI copilot'],
   homeTitle: [
     '让 AI 进入工作流程，让智能成为组织生产力。',

@@ -385,6 +385,7 @@ test('customer inventory SQL is fixed to the granted latest snapshot table', () 
   assert.match(source, /FROM agents_scm_cust_jxc_ai_daliy_d/);
   assert.match(source, /agents_dim_dealer_data_d/);
   assert.match(source, /SELECT MAX\(stat_date\)/);
+  assert.doesNotMatch(source, /SELECT\s+sku\.\*/);
   assert.doesNotMatch(source, /\+\s*request|INSERT|UPDATE|DELETE/i);
 });
 
@@ -424,4 +425,21 @@ test('isolated SKU discrepancies do not block customer or city aggregates or imp
     customerInventoryStatus({ ...rows[0], largeDateRatio: 1, structureScore: 90 }),
     'healthy',
   );
+});
+
+test('customer Agent manifest registers the page bridge and all five supplied Skills in profile order', async () => {
+  const manifest = JSON.parse(
+    await readFile(
+      new URL('../prototypes/inventory-customer/plugin.json', import.meta.url),
+      'utf8',
+    ),
+  );
+  assert.deepEqual(manifest.skills, [
+    'skills/customer/SKILL.md',
+    'skills/customer-inventory-age-risk/SKILL.md',
+    'skills/customer-inventory-change/SKILL.md',
+    'skills/customer-inventory-diagnosis/SKILL.md',
+    'skills/customer-overstock-control/SKILL.md',
+    'skills/customer-stockout-replenishment/SKILL.md',
+  ]);
 });

@@ -2,7 +2,12 @@
 import { Alert, Button, Input, Modal, Spin } from '@arco-design/web-react';
 import type { TFunction } from 'i18next';
 import React, { useEffect, useRef, useState } from 'react';
-import type { GeaSalesPlanActionRequest } from '../../bridge.ts';
+import {
+  useWorkbenchHost,
+  type GeaSalesPlanActionRequest,
+  type GeaSalesPlanDetail,
+} from '../../bridge.ts';
+import { salesPlanApprovalDraftValues } from './models/salesPlanLocalDraftModel.ts';
 import {
   SalesPlanActionAttempt,
   classifySalesPlanActionError,
@@ -21,6 +26,8 @@ const AUTO_CLOSE_SECONDS = 5;
 
 export type BatchActionItem = {
   row: RegionalApprovalLiveRow;
+  detail?: GeaSalesPlanDetail;
+  pendingValues?: Record<string, string>;
   /** 与单笔按钮同源的能力证据；缺失时该笔不提交，只在结果里说明原因。 */
   access?: SalesPlanAccess;
   /** 与单笔按钮同源的置灰原因键，用于把「为什么这一笔没提交」说清楚。 */
@@ -60,6 +67,7 @@ const RegionalApprovalBatchActionDialog: React.FC<{
   onCompleted: (outcomes: readonly BatchActionOutcome[]) => void | Promise<void>;
   onClose: () => void;
 }> = ({ visible, kind, items, t, client, onPermissionDenied, onCompleted, onClose }) => {
+  const { salesPlan } = useWorkbenchHost();
   const [remark, setRemark] = useState('');
   const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -138,6 +146,28 @@ const RegionalApprovalBatchActionDialog: React.FC<{
       };
       const attempt = new SalesPlanActionAttempt(client);
       try {
+        if (kind === 'APPROVE') {
+          const stored = await salesPlan.draft?.invoke({
+            planId: item.row.planId,
+            versionId: item.row.versionId,
+            approvalRole: item.access.approvalRole,
+          });
+          if (stored?.stale) throw new Error('草稿版本已变化，请刷新后重试');
+          const adjustments = Object.entries(
+            salesPlanApprovalDraftValues(
+              item.detail,
+              item.row,
+              item.access.approvalRole,
+              stored?.draft?.role && stored.draft.role !== item.access.approvalRole
+                ? []
+                : (stored?.draft?.adjustments ?? []),
+              item.pendingValues,
+            ),
+          )
+            .filter(([, value]) => value.trim() && !/^[+-]?0+(?:\.0{1,3})?$/.test(value.trim()))
+            .map(([skuCode, adjustQty]) => ({ skuCode, adjustQty: adjustQty.trim() }));
+          if (adjustments.length) request.adjustments = adjustments;
+        }
         // 逐笔串行提交：每笔都有自己的幂等键，失败不会影响已提交的其它计划。
         // eslint-disable-next-line no-await-in-loop
         await attempt.submit({

@@ -12,8 +12,11 @@ test('the opaque inventory build keeps memory storage after repository formattin
   await mkdir(join(workbench, 'scripts'), { recursive: true });
   await cp('scripts/build-inventory-fc.mjs', join(workbench, 'scripts/build-inventory-fc.mjs'));
   await cp('scripts/build-inventory.mjs', join(workbench, 'scripts/build-inventory.mjs'));
+  await cp('scripts/build-output.mjs', join(workbench, 'scripts/build-output.mjs'));
   await cp('scripts/sql-config-build.mjs', join(workbench, 'scripts/sql-config-build.mjs'));
-  await cp('business/shared', join(workbench, 'business/shared'), { recursive: true });
+  await cp('business/shared', join(workbench, 'business/shared'), {
+    recursive: true,
+  });
   await cp('theme', join(workbench, 'theme'), { recursive: true });
   await cp('business/inventory-fc', join(workbench, 'business/inventory-fc'), {
     recursive: true,
@@ -27,6 +30,15 @@ test('the opaque inventory build keeps memory storage after repository formattin
     join(fixture, 'dsh-agent-manage/business-resources/inventory-fc'),
     { recursive: true },
   );
+  for (const id of ['dealer', 'qll', 'aqkc'])
+    await cp(
+      `business/inventory-${id}/source`,
+      join(workbench, `business/inventory-${id}/source`),
+      {
+        recursive: true,
+        filter: (path) => !path.split(/[\\/]/).includes('node_modules'),
+      },
+    );
   const ui = join(workbench, 'business/inventory-fc/source/inventory-light-plugins');
   // Reuse the prepared content cache, but give this build its own writable installation.
   execFileSync('corepack', ['pnpm', 'install', '--frozen-lockfile', '--offline'], {

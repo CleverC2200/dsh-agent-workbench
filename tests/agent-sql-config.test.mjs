@@ -45,12 +45,16 @@ test('configuration is inserted before author code and cannot close its data scr
     templates: {},
     queries: {},
     note: '</script><script>alert(1)</script>',
+    sourceFlag: '销售口径',
+    padding: 'x'.repeat(2048),
   };
   const html = injectSqlConfig(
     '<!doctype html><html><head></head><body><script>APP()</script></body></html>',
     config,
   );
   assert.ok(html.indexOf('agent-sql-config') < html.indexOf('APP()'));
+  assert.ok(html.indexOf('<meta charset="utf-8">') < html.indexOf('agent-sql-config'));
+  assert.ok(html.indexOf('<meta charset="utf-8">') < 1024);
   assert.ok(!html.includes('<script>alert(1)</script>'));
   assert.deepEqual(JSON.parse(html.match(/id="agent-sql-config">([^<]*)<\/script>/)[1]), config);
   assert.throws(() => injectSqlConfig('', {}), /INVALID_AGENT_SQL_CONFIG/);
@@ -277,5 +281,38 @@ export const executeGeaSqlPage=async()=>({rows:[]});`,
   for (const [index, key] of ['customerCar', 'customerReceive', 'customerPickup'].entries()) {
     assert.ok(reads[index].sql.includes(config.resourceNames[key]));
     assert.equal(reads[index].options.parameters.customerCode, 'fixture-customer');
+  }
+});
+
+test('newly connected list fields are present in the default visible columns', async () => {
+  for (const agent of ['aqkc', 'qll', 'apsplan', 'dealer']) {
+    const config = JSON.parse(
+      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    );
+    for (const view of config.sourceViews.views) {
+      const fields = new Set(view.columns.map((column) => column.field));
+      for (const field of view.defaultColumns ?? [])
+        assert.ok(fields.has(field), `${agent}/${view.id}: stale default ${field}`);
+      if (view.id === 'base-stock-flows')
+        for (const field of [
+          'avg_30d_send',
+          'pre_order_qty',
+          'begin_stock',
+          'turnover_days_stock',
+          'turnover_days_avail',
+        ])
+          assert.ok(
+            (view.defaultColumns ?? [...fields]).includes(field),
+            `${agent}/${field}: hidden connected field`,
+          );
+      if (view.queryId === 'dealer.stock.detail')
+        for (const field of ['analysis_avg_stock_age', 'analysis_target_inventory']) {
+          if (fields.has(field))
+            assert.ok(
+              (view.defaultColumns ?? [...fields]).includes(field),
+              `${agent}/${field}: hidden reference`,
+            );
+        }
+    }
   }
 });

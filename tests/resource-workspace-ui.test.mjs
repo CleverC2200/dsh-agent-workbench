@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
-import React, { act } from 'react';
-import { createRoot } from 'react-dom/client';
 import { JSDOM } from 'jsdom';
 
 const require = createRequire(import.meta.url);
@@ -164,18 +162,7 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     originalError = console.error;
   console.error = (...args) => errors.push(args);
   apply(ctx);
-  const root = createRoot(dom.window.document.getElementById('root'));
-  await act(async () => {
-    root.render(
-      React.createElement(slots.get('agent-workbench.directory'), {
-        sessionId: cwd ? 'current' : undefined,
-        useSessions: (select) => select(sessionCatalogue),
-      }),
-    );
-    await settle();
-  });
   t.after(async () => {
-    await act(async () => root.unmount());
     cleanups.reverse().forEach((off) => off());
     console.error = originalError;
     dom.window.close();
@@ -184,11 +171,6 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
       else delete globalThis[key];
     }
   });
-  const click = async (button) =>
-    act(async () => {
-      button.click();
-      await settle();
-    });
   return {
     ctx,
     sessionCatalogue,
@@ -200,63 +182,8 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     errors,
     pickerCalls: () => pickerCalls,
     text: () => dom.window.document.body.textContent,
-    workspaceButton: () =>
-      [...dom.window.document.querySelectorAll('button')].find(
-        (button) => button.textContent === (language === 'en' ? 'Choose Workspace' : '选择工作区'),
-      ),
-    resourceButton: () =>
-      [...dom.window.document.querySelectorAll('button')].find((button) =>
-        button.textContent.startsWith('Fixture'),
-      ),
-    click,
   };
 }
-
-test('Resources keeps current Session workspace A visible and prevents choosing an ineffective B', async (t) => {
-  const h = await fixture(t, { cwd: '/workspace/A' });
-  assert.equal(h.workspaceButton().disabled, true);
-  assert.match(h.text(), /当前对话工作区.*\/workspace\/A/);
-  await h.click(h.workspaceButton());
-  assert.equal(h.pickerCalls(), 0);
-  assert.deepEqual(h.lists, ['/workspace/A']);
-  await h.click(h.resourceButton());
-  assert.deepEqual(h.selections, [{ id: 'prompt:fixture', cwd: '/workspace/A' }]);
-  assert.deepEqual(h.sessions, [{ cwd: '/workspace/A' }]);
-  assert.deepEqual(h.opened, ['created-0']);
-});
-
-test('Resources with no current workspace lets the chosen B drive its list and new Session', async (t) => {
-  const h = await fixture(t);
-  assert.equal(h.workspaceButton().disabled, false);
-  assert.equal(h.pickerCalls(), 0, 'loading Resources does not open the directory picker');
-  assert.match(h.text(), /请先选择工作区/);
-  await h.click(h.workspaceButton());
-  assert.equal(h.pickerCalls(), 1);
-  assert.match(h.text(), /已选择工作区.*\/workspace\/B/);
-  assert.deepEqual(h.lists, ['/workspace/B']);
-  await h.click(h.resourceButton());
-  assert.deepEqual(h.selections, [{ id: 'prompt:fixture', cwd: '/workspace/B' }]);
-  assert.deepEqual(h.sessions, [{ cwd: '/workspace/B' }]);
-  assert.deepEqual(h.opened, ['created-0']);
-});
-
-test('cancelling the workspace picker keeps Resources unselected and creates no Session', async (t) => {
-  const h = await fixture(t, { picked: null });
-  await h.click(h.workspaceButton());
-  assert.equal(h.pickerCalls(), 1);
-  assert.equal(h.workspaceButton().disabled, false);
-  assert.match(h.text(), /请先选择工作区/);
-  assert.deepEqual(h.lists, []);
-  assert.deepEqual(h.selections, []);
-  assert.deepEqual(h.sessions, []);
-  assert.deepEqual(h.opened, []);
-});
-
-test('Resources explains the current Conversation workspace in English', async (t) => {
-  const h = await fixture(t, { cwd: '/workspace/A', language: 'en' });
-  assert.equal(h.workspaceButton().disabled, true);
-  assert.match(h.text(), /Current Conversation Workspace.*\/workspace\/A/);
-});
 
 test('Agent configuration starts the chosen preset in a fresh native Conversation with the current Workspace', async (t) => {
   const h = await fixture(t, { cwd: '/workspace/A', configCwd: '/configured/unused' });

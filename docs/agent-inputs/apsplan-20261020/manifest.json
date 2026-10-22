@@ -1,0 +1,259 @@
+{
+  "schemaVersion": 1,
+  "agentId": "inventory-apsplan",
+  "purpose": "User-supplied prompt and skill inputs for the next coordinated Workbench/Manage PR; not a runtime activation manifest.",
+  "sourcePromptName": "产销协同数字人系统提示词_RTGO_快慢回答精简版.md",
+  "sourceSkillsDirectoryName": "skills 3",
+  "skillNames": [
+    "answer-visualization",
+    "order-satisfaction-analysis",
+    "plan-operations-weekly-report"
+  ],
+  "files": [
+    {
+      "path": "system-prompt.md",
+      "bytes": 5512,
+      "sha256": "2a4cbbb257b123537ecde307e8bd42d3c8b2cae0ac5f6b4cfee76dc6809b95db"
+    },
+    {
+      "path": "skills/answer-visualization/SKILL.md",
+      "bytes": 3735,
+      "sha256": "90792dd27ba0fcaa969239941c88fa7099f98b5011d86a2aed50f5d09c68c879"
+    },
+    {
+      "path": "skills/answer-visualization/agents/openai.yaml",
+      "bytes": 314,
+      "sha256": "d814a7a253592d2a7b73f142156737c42d5c77dd83f55bf44f19e6d181221a18"
+    },
+    {
+      "path": "skills/answer-visualization/assets/answer-visualization-template.html",
+      "bytes": 33000,
+      "sha256": "53ce2302448a02044440e70832cb2fd30d85dab0ee9e2b0f999c8c64c2c2a37a"
+    },
+    {
+      "path": "skills/answer-visualization/references/data-contract.md",
+      "bytes": 4228,
+      "sha256": "e50a816ef81454d116063cd74b7d7102be28920247c2b5a6ab8d4b5acb6b5d9d"
+    },
+    {
+      "path": "skills/answer-visualization/references/visualization-selection-rules.md",
+      "bytes": 7871,
+      "sha256": "1618b30e3f71d2086b0cf138323604c5567040439c3c091e0354a9880a4d4191"
+    },
+    {
+      "path": "skills/answer-visualization/scripts/render_answer.py",
+      "bytes": 1744,
+      "sha256": "7d8e5123e713164baca619b26b1b109fd54adf2cee52ce736982b485a3c390f3"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/SKILL.md",
+      "bytes": 7624,
+      "sha256": "2f112741838cbd3a396f379dc34c6d92e75a91b4b04dcd959254bffb59f5470b"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/agents/openai.yaml",
+      "bytes": 887,
+      "sha256": "197d8871695ab213c147f09bc82e5536d75b175d02abba377e9ee8d15d5aee48"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/assets/conclusion-report.css",
+      "bytes": 2305,
+      "sha256": "83bff8f062a61647480a733667ac93d9e9852a6ecc437906e45b87a3cd45d86a"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/assets/data-binding.css",
+      "bytes": 17102,
+      "sha256": "c73dd690f5aafaa6d55b6fa0fc20e5e77330618f5a9623714534eb792eb27e64"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/assets/订单满足率分析模板.html",
+      "bytes": 211289,
+      "sha256": "4ea7adb14e52d5b45005798dc58d3325d5211b5565c9f836f39f711268911b67"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/diagnosis-paths.md",
+      "bytes": 3011,
+      "sha256": "046d09285eb9dbf5e53d1e098b423e675e44799b2a244f8a88848b3f40cb3582"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/evidence-and-output-contract.md",
+      "bytes": 2829,
+      "sha256": "f20ef6c13ebf493b36125b0b6b45f776933ce6e8e8d8aa70b158e4ada958472e"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/historical-business-patterns.md",
+      "bytes": 2892,
+      "sha256": "80edf5e3d184eb28ea824426764d6bd2208575932ec7e39d8de01986b4f80c01"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/input-preparation.md",
+      "bytes": 4629,
+      "sha256": "ae35f7ffc353f766f03f01d8188a4fe3abb7766c2674274f5470c44b2c154e16"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/interactive-analysis-contract.md",
+      "bytes": 5870,
+      "sha256": "c4427196b52c31c39483127290d777f2fd0051053b09fcc7c4181c99c47e465f"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/metric-and-data-contract.md",
+      "bytes": 10001,
+      "sha256": "642fbc0321cc0038294c0b372d0b7ed094811ca3532fa5e4dc905b1aca928f76"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/references/report-contract.md",
+      "bytes": 14732,
+      "sha256": "e5077b3d4d049c8361fab0dafb759aed6a44c414fbf655f7fed9ab5a6c87f35f"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/audit-report-data.cjs",
+      "bytes": 3593,
+      "sha256": "c1216b984873b70b07fbed06dff00365dc5f78eddeb9f0441b9a9567d8c27bc9"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/conclusion-report.js",
+      "bytes": 8510,
+      "sha256": "fd9c2f6016b4f91dbced895e5237d25e00faf1847f02da4a62003c3cdb6017aa"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/generate-report.cjs",
+      "bytes": 9248,
+      "sha256": "6aa2a3dd53c6d69b5e09fa50776ac97d2c6ddc112c7f3cfbd7e2adf75529614b"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/interactive-runtime.js",
+      "bytes": 10910,
+      "sha256": "a907df79500b5485e8ee2885de00c41373d01976d6b351a993af231bb9371e74"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/package-runtime.cjs",
+      "bytes": 1937,
+      "sha256": "6010c62c107278b8c4e4931a8e40affab4692b9b1a36bd82e882d3b6f1f59adf"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/prepare-report-data.cjs",
+      "bytes": 6767,
+      "sha256": "f4cf92a6b4737c135a44d4f0086612f409619532ea779992a556124b51321e8a"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/production-reason-dictionary.js",
+      "bytes": 5838,
+      "sha256": "ddbc3338f281d95e6a8ec054ebc8c6171abafdc7f2d3f0681adbdc861babd4a7"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/production-reasons.js",
+      "bytes": 7150,
+      "sha256": "b9004ade5a175f6abf26577f8c9389c1ca9c9cf4f03141ff335527e358b9f0c9"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/report-controls.js",
+      "bytes": 2975,
+      "sha256": "948919489cadc241e10e8e9014578fbff82c1359bdb23c016f92ad1473a66c8f"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/report-core.js",
+      "bytes": 10926,
+      "sha256": "4d68c1525090acf398f19fb131dd38910072da8ab6293563dc81c7247ec4da90"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/report-environment.cjs",
+      "bytes": 1948,
+      "sha256": "d6b16129d5f6d674f9d1513ffeea6bde7a9a7e835004231a563b70bd1f05d7ea"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/report-responsive.js",
+      "bytes": 1836,
+      "sha256": "5396f06bfd33b16647c02aec5c5db99a0ac6a592ae856af18faad5d82b3860ee"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/sales-reporting.js",
+      "bytes": 5083,
+      "sha256": "b6a5068a4e728ef91919a8381ade7f347f1ae2aaf2b19317cc6f617f64485e83"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/sync-reason-template.cjs",
+      "bytes": 4178,
+      "sha256": "1b7fce04e9a4a7b4a4e4b0c5d03d247158515ffd3f3d2f971267c8c56e7e6235"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/template-components.js",
+      "bytes": 18275,
+      "sha256": "da06cdc593838fe30c3d18a462fc3916763989978ee037a5eb67e7d560ec48fd"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-conclusion.cjs",
+      "bytes": 3669,
+      "sha256": "99675c4d8ee9816b99fa52e2519a1fc5c9cc7c8ff61a5f132f8e1f4e71c34fa6"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-data-preparation.cjs",
+      "bytes": 5235,
+      "sha256": "fee473e3c4be484b2de985a19e63e5535e66b9958a29634606946c4a5a234096"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-metric-policy.cjs",
+      "bytes": 3705,
+      "sha256": "8825ba3dd441fc640f8f3c5941eb43ba4580e8d70e2cf44a7c338cda66d95a58"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-production-cards.cjs",
+      "bytes": 4210,
+      "sha256": "c0f6851d7de253834d3a0be4103dd252896328030789d2f9882623654dd498bd"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-report-responsive.cjs",
+      "bytes": 2939,
+      "sha256": "4c97633d091167a2ef112ea5194f52e7cd29e837aefe9133ee0aa6cb30e05942"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-report.cjs",
+      "bytes": 17538,
+      "sha256": "0d7baeec1e6447ae45327e5d97c35b1e38a0fa13aaebfa2010a446added34af3"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-sales-accuracy-variance.cjs",
+      "bytes": 1808,
+      "sha256": "d3b541aeabe63cd6f57d20f0d84f1057064afd36795486c061cc9690f42b13bf"
+    },
+    {
+      "path": "skills/order-satisfaction-analysis/scripts/test-sales-reporting.cjs",
+      "bytes": 3110,
+      "sha256": "5f2d6f56bd12034740c37ebcbbfb2dc146c31be3a42f095ea21641d173e8b185"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/SKILL.md",
+      "bytes": 7639,
+      "sha256": "2c82780004a50e562a36603e03f6512bf735e5085be0852d017fc36ef4b6ab1e"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/agents/openai.yaml",
+      "bytes": 770,
+      "sha256": "be01aa511a18f8f5806f5b0e4395537987d2b36970a6bb068e64fcc99d030166"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/assets/weekly-report-html-template.html",
+      "bytes": 42367,
+      "sha256": "2cb2d8e3f289b5bff5c2a0641bd2e069f826c761201d8d0337679bbc4b62d08a"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/references/analysis-and-writing-rules.md",
+      "bytes": 3465,
+      "sha256": "e9efff79c53853dbec47d192f595da53ec97740a38f63d434553676425f0940c"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/references/data-contract.md",
+      "bytes": 3981,
+      "sha256": "079a5afb16d2bec611ba4397f617e357c1d8285bcb347e84e77d0ca419fa4cec"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/references/html-output-template.md",
+      "bytes": 4605,
+      "sha256": "2eae028075543c034a033d62dd90e605efe862e4489c424dfdefa9f8812b86dd"
+    },
+    {
+      "path": "skills/plan-operations-weekly-report/references/report-structure.md",
+      "bytes": 4500,
+      "sha256": "e4e9cd7ec1a305c8a878f96dab32a17f7fcfdd1a611a8753eb614111154eb9f3"
+    }
+  ]
+}

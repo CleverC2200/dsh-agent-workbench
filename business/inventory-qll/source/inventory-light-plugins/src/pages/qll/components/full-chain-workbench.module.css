@@ -1462,6 +1462,7 @@
   opacity: 0;
 }
 .channelSwitch > span {
+  pointer-events: none;
   width: 34px;
   height: 20px;
   padding: 2px;
@@ -1540,7 +1541,7 @@
 }
 .aiInsight {
   margin: 0 0 12px;
-  padding: 16px 18px;
+  padding: 22px 24px;
   border: 1px solid #f2dadd;
   border-radius: 10px;
   background: var(--ui-accent-soft);
@@ -1549,15 +1550,16 @@
   gap: 0;
 }
 .aiInsightIcon {
-  height: 30px;
-  width: 28px;
-  border-radius: 6px 0 0 6px;
+  height: 24px;
+  width: 27px;
+  flex: none;
+  border-radius: 0;
 }
 .aiInsightHeading > strong {
-  height: 30px;
-  padding-right: 12px;
-  border-radius: 0 6px 6px 0;
-  font-size: 12px;
+  height: 24px;
+  padding-right: 8px;
+  border-radius: 0;
+  font-size: 10px;
   letter-spacing: 0;
 }
 .aiInsightBadge {
@@ -1565,11 +1567,11 @@
   background: none;
   border: 0;
   color: var(--ui-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 .aiInsight p {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.75;
   color: var(--ui-secondary);
 }
@@ -1801,4 +1803,90 @@
 .stateBadge[data-state='未命中风险'] {
   color: var(--ui-success);
   background: var(--ui-success-soft);
+}
+
+.kpiHelpers > div {
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+.kpiHelpers dt {
+  flex: 1 1 90px;
+  min-width: 0;
+  white-space: normal;
+}
+.kpiHelpers dd {
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
+  text-align: right;
+}
+
+/* The configured overview adapts to the actual business pane without oversized cards. */
+.shell .kpiGrid.compactKpiGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.shell .kpiGrid.compactKpiGrid > :last-child {
+  grid-column: auto;
+}
+.shell .compactKpiGrid .kpiCard {
+  min-height: 110px;
+  padding: 8px;
+}
+.shell .compactKpiGrid .kpiTop {
+  min-height: 18px;
+  flex-wrap: wrap;
+}
+.shell .compactKpiGrid .kpiTitle {
+  font-size: 11px;
+  font-weight: 600;
+}
+.shell .compactKpiGrid .kpiValue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  margin: 4px 0 6px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 1.15;
+}
+.shell .compactKpiGrid .kpiScopeLabel {
+  margin: 0;
+  font-size: 9px;
+}
+.shell .compactKpiGrid .kpiHelpers {
+  margin-top: auto;
+  padding-top: 8px;
+  gap: 4px;
+}
+.shell .compactKpiGrid .kpiHelpers > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.shell .compactKpiGrid .kpiHelpers dt,
+.shell .compactKpiGrid .kpiHelpers dd {
+  font-size: 9px;
+  line-height: 1.4;
+}
+@media (max-width: 799px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 559px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 359px) {
+  .shell .kpiGrid.compactKpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

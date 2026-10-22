@@ -17,6 +17,8 @@
 
 ## 区域、品类与 MPS 模拟页面
 
+客户库存右侧 Agent 使用 Manage 提供的完整提示词、页面证据桥接 Skill 和五个专项 Skill：库存诊断、缺货补货、高库存控补、货龄风险、库存变化。Workbench 的 plugin.json 按 Prompt 中的顺序登记全部六个 Skill 文件；构建仍从 Manage 复制资源，不在本仓重复维护业务原文。此次资源接入不新增页面数据源、写操作或权限。
+
 客户库存由 Workbench 保留原展示并通过 GEA 受控 SQL 读取最新客户库存快照；Manage 声明其 Prompt、Skill、表和 `governed-sql-read` 能力，身份、凭据、行列权限仍归 GEA Host。订单工作台与订单履约仍是模拟交互和零业务能力声明。资源选用关联实际 Core Session，不自行创建 Session。订单工作台的本地演示任务在冷刷新后清空。其固定作者输入和边界见 `prototypes/inventory-orderworkbench` 下的 SOURCE.json。
 
 区域计划复用静态作者页与 `plan-regional` 资源。模块、模拟日期、提报维度、节奏草稿和未保存节奏编辑按实际 Session 恢复，重新派生模拟上下文。品类计划复用静态作者页、`category-plan` Prompt、Skill 和空 MCP 声明；指标、事件、建议和任务由作者状态发布为模拟快照。临时模拟任务不落库。

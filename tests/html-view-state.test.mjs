@@ -132,6 +132,7 @@ test('FC UI records stay partitioned by the real identity and Session address an
     plans: [],
     cycles: [],
     preferences: [],
+    replenishmentCycleDays: 14,
   };
   workbench.saveHtmlViewState('inventory-fc', 'actual-account-scope/actual-session', state);
   assert.equal(
@@ -199,6 +200,33 @@ test('received mock pages keep only authored UI intent under their actual Sessio
     );
   }
 });
+test('the live fulfillment page restores only its filter and dimension intent for its Session', () => {
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const id = 'inventory-orderfulfillment';
+  owner.registerFrame({ id, kind: 'html', src: '/fulfillment', resourceId: 'gea-html-' + id });
+  const state = {
+    version: 1,
+    fulfillmentBaseFilter: '郑州',
+    deliveryOrgFilter: 'region:华中大区',
+    deliveryChannelFilter: '',
+    warehouseProviderFilter: '',
+    deliveryOrderNumberQuery: '',
+    deliveryCustomerQuery: '佳特',
+    deliveryRegionQuery: '',
+    deliveryBaseQuery: '',
+    deliveryStatusQuery: '',
+    dimension: 'warehouseDimensionPanel',
+  };
+  owner.saveHtmlViewState(id, 'subject/session-A', state);
+  assert.deepEqual(owner.readHtmlViewState(id, 'subject/session-A'), state);
+  assert.equal(owner.readHtmlViewState(id, 'subject/session-B'), undefined);
+  for (const extra of [{ dimension: 'unknown' }, { rows: [{ secret: 'derived' }] }])
+    assert.throws(
+      () => owner.saveHtmlViewState(id, 'subject/session-A', { ...state, ...extra }),
+      /INVALID_HTML_VIEW_STATE/,
+    );
+});
+
 test('the received category page partitions its UI intent by the owned Session', () => {
   const owner = new WorkbenchController({ panel() {}, document() {} });
   owner.registerFrame({

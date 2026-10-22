@@ -41,6 +41,7 @@ export async function readWorkspaceQuery(
     const field = spec.name;
     let value = query.request.parameters[key];
     if (field === 'start') value = start;
+    if (field === 'as_of') value = end;
     if (field === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? shifted(end, 0, 1) : shifted(end, 1);
     if (['month', 'start_month'].includes(field)) value = start.slice(0, 7) + '-01';

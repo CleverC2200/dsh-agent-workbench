@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { runQualityChecks } from './run-quality-checks.mjs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, readdirSync, appendFileSync } from 'node:fs';
@@ -16,6 +17,7 @@ const { values } = parseArgs({
     'core-source': { type: 'string' },
     'core-head': { type: 'string' },
     'prepare-sdk': { type: 'boolean' },
+    'source-only': { type: 'boolean' },
     browser: { type: 'boolean' },
     'prepare-browser': { type: 'boolean' },
     'dealer-history': { type: 'string' },
@@ -28,18 +30,28 @@ function refuse(code, detail) {
   throw Error(`${code}: ${detail}`);
 }
 function run(command, args, cwd = process.cwd()) {
-  finalGroup.verifyUnchanged();
-  const windows = process.platform === 'win32' && ['npm', 'corepack'].includes(command);
-  const result = spawnSync(windows ? `${command}.cmd` : command, args, {
-    cwd,
-    stdio: 'inherit',
-    shell: windows,
-  });
-  if (result.error || result.status !== 0)
-    refuse(
-      'QUALITY_COMMAND_FAILED',
-      `${command} exited ${result.status}: ${result.error?.message ?? ''}`,
-    );
+  const release =
+    ['npm', 'corepack'].includes(command) && (args.includes('ci') || args.includes('install'))
+      ? createRequire(import.meta.url)(
+          '../../dsh-gea-plugin/scripts/build-admission.mjs',
+        ).acquireBuild({ operation: 'prepare', cwd })
+      : () => {};
+  try {
+    finalGroup.verifyUnchanged();
+    const windows = process.platform === 'win32' && ['npm', 'corepack'].includes(command);
+    const result = spawnSync(windows ? `${command}.cmd` : command, args, {
+      cwd,
+      stdio: 'inherit',
+      shell: windows,
+    });
+    if (result.error || result.status !== 0)
+      refuse(
+        'QUALITY_COMMAND_FAILED',
+        `${command} exited ${result.status}: ${result.error?.message ?? ''}`,
+      );
+  } finally {
+    release();
+  }
 }
 try {
   if (values['final-group-sha256'] !== undefined) {
@@ -106,6 +118,7 @@ try {
     const baseline = JSON.parse(readFileSync('scripts/quality-peer-baseline.json'));
     const plan = selectCiTests({
       repositories: manifest.repositories,
+      sourceOnly: values['source-only'],
       repo: 'dsh-agent-workbench',
       base:
         process.env.QUALITY_BASE_SHA ||

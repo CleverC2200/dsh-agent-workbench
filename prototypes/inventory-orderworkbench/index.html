@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>订单工作台</title>
     <style>
       :root {
@@ -176,18 +176,35 @@
       }
       .main {
         display: grid;
-        grid-template-rows: minmax(0, 1fr);
+        grid-template-rows: 56px minmax(0, 1fr);
         height: 100%;
         min-width: 0;
         min-height: 0;
       }
       .topbar {
+        position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 0 20px;
         border-bottom: 1px solid var(--line);
         background: #fff;
+      }
+      .topbar > #toggleAssistant {
+        position: absolute;
+        right: 20px;
+        min-height: 32px;
+        padding: 0 12px;
+        border: 1px solid #dce2eb;
+        border-radius: 6px;
+        color: #687486;
+        background: #fff;
+        font-size: 11px;
+      }
+      .topbar > #toggleAssistant:hover {
+        border-color: #f2aab0;
+        color: var(--brand);
+        background: #fff8f8;
       }
       .page-tabs {
         display: inline-flex;
@@ -223,51 +240,129 @@
         font-size: 12px;
         font-weight: 700;
       }
-      .period-switch {
-        display: inline-flex;
-        padding: 3px;
-        border: 1px solid #e6eaf1;
-        border-radius: 8px;
-        background: #f6f8fb;
+      .period-picker {
+        position: relative;
+        z-index: 20;
       }
-      .period-switch button {
-        min-width: 58px;
-        height: 29px;
-        padding: 0 11px;
-        border: 0;
-        border-radius: 6px;
-        color: #6e7785;
-        background: transparent;
-        font-size: 12px;
-      }
-      .period-switch button.active {
-        color: var(--brand);
-        background: #fff;
-        box-shadow: 0 1px 5px rgba(35, 44, 62, 0.12);
-        font-weight: 700;
-      }
-      .period-control {
+      .period-picker-trigger {
         display: flex;
         align-items: center;
-        gap: 7px;
-        color: #667080;
-        font-size: 12px;
+        justify-content: space-between;
+        gap: 18px;
+        width: 210px;
+        min-width: 180px;
+        height: 36px;
+        padding: 0 11px;
+        border: 1px solid #c9ced7;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        box-shadow: 0 1px 2px #1822300a;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
       }
-      .period-control[hidden] {
+      .period-picker-trigger:hover {
+        border-color: #e8a4ae;
+        background: #fff7f8;
+        box-shadow: 0 2px 8px #df173214;
+      }
+      .period-picker-trigger:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .period-picker-trigger svg {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+        color: #697386;
+        transition: transform 160ms ease;
+      }
+      .period-picker-trigger[aria-expanded='true'] {
+        border-color: #ce7280;
+        box-shadow: 0 0 0 3px #df173212;
+      }
+      .period-picker-trigger[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+      .period-picker-menu {
+        position: absolute;
+        top: calc(100% + 7px);
+        left: 0;
+        z-index: 90;
+        display: grid;
+        grid-template-columns: minmax(132px, 0.78fr) minmax(220px, 1.22fr);
+        width: min(440px, calc(100vw - 32px));
+        max-height: min(310px, calc(100vh - 100px));
+        overflow: auto;
+        padding: 5px;
+        border: 1px solid #e7e9ee;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow:
+          0 14px 38px #18223024,
+          0 2px 8px #1822300a;
+      }
+      .period-picker-menu[hidden] {
         display: none;
       }
-      .period-control input,
-      .period-control select {
-        min-height: 32px;
-        padding: 4px 9px;
-        border: 1px solid #dce2eb;
-        border-radius: 6px;
-        color: #343b47;
-        background: #fff;
-        font-size: 12px;
+      .period-picker-months,
+      .period-picker-weeks {
+        display: grid;
+        align-content: start;
+        gap: 3px;
       }
-      .period-control select {
-        max-width: 245px;
+      .period-picker-months {
+        padding-right: 4px;
+        border-right: 1px solid #eceef1;
+      }
+      .period-picker-weeks {
+        padding-left: 4px;
+      }
+      .period-picker-option {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        min-width: 0;
+        min-height: 36px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 6px;
+        color: #343b46;
+        background: #fff;
+        font:
+          700 12px/18px 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+        text-align: left;
+        cursor: pointer;
+      }
+      .period-picker-option:hover,
+      .period-picker-option:focus-visible {
+        outline: 0;
+        color: #343b46;
+        background: #ffedf0;
+      }
+      .period-picker-option[aria-pressed='true'] {
+        color: #fff;
+        background: #df1732;
+      }
+      .period-picker-weeks .period-picker-option[aria-pressed='true'] {
+        color: #c91029;
+        background: #fff5f6;
+      }
+      .period-picker-option:focus-visible {
+        box-shadow: inset 0 0 0 2px #df1732;
+      }
+      .period-picker-weeks .period-picker-option {
+        white-space: nowrap;
       }
       .period-meta {
         position: absolute;
@@ -278,8 +373,13 @@
         white-space: nowrap;
       }
       .layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 420px;
         min-height: 0;
         overflow: hidden;
+      }
+      .layout.assistant-hidden {
+        grid-template-columns: minmax(0, 1fr);
       }
       .workspace {
         height: 100%;
@@ -287,6 +387,10 @@
         min-height: 0;
         overflow: auto;
         background: #fff;
+        scrollbar-width: none;
+      }
+      .workspace::-webkit-scrollbar {
+        display: none;
       }
       .content {
         max-width: 1500px;
@@ -338,6 +442,9 @@
         min-width: 1000px;
         border-collapse: collapse;
         font-size: 12px;
+      }
+      .fulfillment-page .orders {
+        min-width: 1320px;
       }
       .orders th {
         padding: 11px 12px;
@@ -529,6 +636,12 @@
         font-size: 13px;
       }
       @media (max-width: 1050px) {
+        .fulfillment-summary {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .fulfillment-grid {
+          grid-template-columns: 1fr;
+        }
         .order-filters {
           width: 100%;
           margin-left: 0;
@@ -539,8 +652,9 @@
         .warehouse-picker {
           flex: 1 1 148px;
         }
-        #omsStatusFilter {
-          flex: 1 1 142px;
+        #omsStatusFilter,
+        #shortageWindowFilter {
+          flex: 1 1 124px;
         }
       }
       .period-empty {
@@ -573,18 +687,1663 @@
         color: #a96900;
         background: #fff5e5;
       }
+      .fulfillment-summary {
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 4.5px;
+        margin-bottom: 4px;
+      }
+      @media (max-width: 1050px) {
+        .fulfillment-summary {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      .fulfillment-summary.delivery-summary {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(
+            0,
+            1fr
+          ) minmax(0, 0.95fr);
+      }
+      @media (max-width: 1050px) {
+        .fulfillment-summary.delivery-summary {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 800px) {
+        .fulfillment-summary.delivery-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .fulfillment-summary.warehouse-summary {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr) minmax(0, 1.9fr) minmax(0, 0.95fr);
+      }
+      @media (max-width: 1050px) {
+        .fulfillment-summary.warehouse-summary {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 800px) {
+        .fulfillment-summary.warehouse-summary {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .fulfillment-summary .metric {
+        position: relative;
+        min-height: 116px;
+        padding: 14px 14px 12px;
+        overflow: hidden;
+      }
+      .delivery-summary .metric {
+        min-height: 160px;
+        padding: 0 0 8px;
+        border: 1px solid #d9dde3;
+        border-radius: 10px;
+        background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
+      }
+      .delivery-summary .metric::after {
+        display: none;
+      }
+      .delivery-summary .metric .metric-head {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 6px;
+        min-height: 80px;
+        padding: 11px 8px 8px;
+        border-bottom: 1px dashed #cfd2d6;
+      }
+      .delivery-summary .metric .metric-head > span {
+        display: block;
+        min-width: 0;
+        overflow: hidden;
+        color: #24324a;
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .delivery-summary .metric .metric-head > strong {
+        flex: 0 0 auto;
+        margin: 0;
+        color: #10264a;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+      }
+      .delivery-summary .metric .metric-head .metric-unit {
+        margin-left: 3px;
+        font-size: 13px;
+      }
+      .fulfillment-summary .metric::after {
+        content: '';
+        position: absolute;
+        right: -18px;
+        bottom: -22px;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: #f6f8fb;
+      }
+      .fulfillment-summary .metric.danger::after {
+        background: #fff1f2;
+      }
+      .fulfillment-summary .metric.warning::after {
+        background: #fff7e9;
+      }
+      .fulfillment-summary .metric.info::after {
+        background: #eef5ff;
+      }
+      .fulfillment-summary .metric strong {
+        position: relative;
+        z-index: 1;
+        margin: 9px 0 4px;
+        font-size: 25px;
+      }
+      .fulfillment-summary .metric.danger strong {
+        color: #d83d49;
+      }
+      .fulfillment-summary .metric.warning strong {
+        color: #c67b20;
+      }
+      .fulfillment-summary .metric.info strong {
+        color: #2f70c9;
+      }
+      .delivery-summary .metric .metric-head > strong {
+        margin: 0;
+        color: #10264a;
+        font-size: 24px;
+      }
+      .delivery-summary .metric.info .metric-head > strong {
+        color: #2f70c9;
+      }
+      .delivery-summary .metric.danger .metric-head > strong {
+        color: #d83d49;
+      }
+      .delivery-summary .metric.warning .metric-head > strong {
+        color: #c67b20;
+      }
+      .fulfillment-summary .metric small {
+        position: relative;
+        z-index: 1;
+        display: block;
+        line-height: 1.55;
+      }
+      .fulfillment-summary .metric strong {
+        white-space: nowrap;
+      }
+      .fulfillment-summary .metric .metric-unit {
+        display: inline;
+        margin-left: 4px;
+        color: #66707e;
+        font-size: 11px;
+        font-weight: 500;
+      }
+      .metric-breakdown {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 9px;
+        margin: 8px 8px 0;
+        color: #a0a4ac;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .metric-breakdown > span {
+        display: flex;
+        justify-content: flex-start;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+      }
+      .metric-breakdown[data-breakdown='open-total'] {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+      .metric-breakdown[data-breakdown='open-total'] > span {
+        justify-content: flex-start;
+        gap: 6px;
+      }
+      .metric-breakdown strong {
+        margin: 0 !important;
+        color: #a0a4ac !important;
+        font-size: 11px !important;
+        font-weight: 500;
+      }
+      .fulfillment-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      .fulfillment-grid .card {
+        margin: 0;
+      }
+      .fulfillment-grid.single-column {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .fulfillment-tabs-card {
+        padding: 0;
+        overflow: hidden;
+      }
+      .fulfillment-tabs {
+        display: flex;
+        gap: 26px;
+        overflow-x: auto;
+        padding: 0 20px;
+        border-bottom: 1px solid var(--line);
+        background: #fff;
+      }
+      .fulfillment-tabs [role='tab'] {
+        position: relative;
+        flex: 0 0 auto;
+        min-height: 52px;
+        padding: 0 2px;
+        border: 0;
+        color: #7b8696;
+        background: transparent;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .fulfillment-tabs [role='tab'].active {
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .fulfillment-tabs [role='tab'].active::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 3px;
+        border-radius: 3px 3px 0 0;
+        background: var(--brand);
+      }
+      .fulfillment-tabs [role='tab']:focus-visible {
+        outline: 2px solid #e79aa5;
+        outline-offset: -5px;
+      }
+      .fulfillment-tab-panel {
+        min-width: 0;
+        padding: 20px;
+      }
+      .fulfillment-analysis {
+        margin-bottom: 16px;
+        padding: 18px 20px;
+        border: 1px solid #f1cfd5;
+        border-radius: 9px;
+        background: linear-gradient(110deg, #fff9fa, #fff 65%);
+      }
+      .fulfillment-analysis-head,
+      .fulfillment-analysis-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .fulfillment-analysis-label {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+      }
+      .fulfillment-analysis-label i {
+        display: grid;
+        place-items: center;
+        width: 25px;
+        height: 25px;
+        border-radius: 7px;
+        color: #ef526c;
+        background: #fff0f3;
+        font-style: normal;
+      }
+      .fulfillment-analysis-label h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+      .fulfillment-analysis-label small {
+        display: block;
+        margin-top: 3px;
+        color: #8992a1;
+        font-size: 10px;
+      }
+      .fulfillment-analysis-head > span {
+        color: #9aa3b0;
+        font-size: 10px;
+      }
+      .fulfillment-analysis h3 {
+        margin: 15px 0 7px;
+        color: #343d4b;
+        font-size: 16px;
+      }
+      .fulfillment-analysis > p {
+        margin: 0;
+        color: #768194;
+        font-size: 11px;
+        line-height: 1.8;
+      }
+      .fulfillment-analysis-copy {
+        display: grid;
+        gap: 7px;
+        margin: 13px 0 17px;
+        color: #768194;
+        font-size: 11px;
+        line-height: 1.85;
+      }
+      .fulfillment-analysis-copy p {
+        margin: 0;
+      }
+      .fulfillment-analysis-copy strong {
+        color: #4c586b;
+        font-weight: 600;
+      }
+      .fulfillment-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+        color: #626e80;
+        font-size: 12px;
+      }
+      .fulfillment-toolbar select {
+        min-width: 160px;
+        padding: 8px 30px 8px 11px;
+        border: 1px solid #dce3ed;
+        border-radius: 6px;
+        color: #748195;
+        background: #fff;
+        font-size: 10px;
+      }
+      .fulfillment-toolbar small {
+        color: #939dab;
+        font-size: 10px;
+      }
+      .fulfillment-toolbar .freshness {
+        margin-left: auto;
+        color: #8792a3;
+      }
+      .fulfillment-toolbar #fulfillmentBaseScope,
+      .fulfillment-toolbar .freshness {
+        display: none;
+      }
+      .fulfillment-dimensions {
+        margin: 0 0 16px;
+        padding: 0;
+        overflow: hidden;
+      }
+      .fulfillment-dimensions.delivery-dimension-active {
+        padding: 0;
+        overflow: visible;
+        border: 0;
+        background: transparent;
+      }
+      .fulfillment-dimensions.delivery-dimension-active > #deliveryDimensionPanel {
+        padding: 0;
+      }
+      .fulfillment-dimensions.item-dimension-active {
+        padding: 0;
+        overflow: visible;
+        border: 0;
+        background: transparent;
+      }
+      .fulfillment-dimensions.item-dimension-active > #itemDimensionPanel {
+        padding: 0;
+      }
+      .delivery-order-detail-card {
+        margin-top: 16px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .delivery-order-head {
+        align-items: flex-start;
+        gap: 16px;
+      }
+      .delivery-order-tools {
+        display: grid;
+        justify-items: end;
+        gap: 7px;
+        flex: 1;
+        min-width: 0;
+      }
+      .delivery-order-tools > small {
+        color: #8d98a8;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .delivery-order-searches {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 7px;
+        width: min(100%, 800px);
+      }
+      .delivery-order-searches input,
+      .delivery-order-searches select {
+        width: 100%;
+        min-width: 0;
+        height: 32px;
+        padding: 0 9px;
+        border: 1px solid #dce3ed;
+        border-radius: 6px;
+        color: #748195;
+        background: #fff;
+        font-size: 10px;
+      }
+      .delivery-order-searches input::placeholder {
+        color: #748195;
+        opacity: 1;
+      }
+      .delivery-order-panel-tools > small#deliveryOrderCount {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        .delivery-order-head {
+          flex-wrap: wrap;
+        }
+        .delivery-order-tools {
+          flex-basis: 100%;
+        }
+        .delivery-order-searches {
+          width: 100%;
+        }
+      }
+      @media (max-width: 560px) {
+        .delivery-order-searches {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .sales-confirm-trigger {
+        padding: 5px 9px;
+        border: 1px solid #d8e6fb;
+        border-radius: 5px;
+        color: #2673cc;
+        background: #f5f9ff;
+        font-size: 10px;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .sales-confirm-trigger:hover {
+        border-color: #8eb9ed;
+        background: #edf5ff;
+      }
+      .confirmation-status {
+        padding: 4px 0;
+        border: 0;
+        border-radius: 0;
+        font-size: 10px;
+        white-space: nowrap;
+        cursor: pointer;
+        background: transparent;
+      }
+      .confirmation-status.status-pending {
+        color: #b17a1f;
+        background: transparent;
+      }
+      .confirmation-status.status-confirming {
+        color: #287ac3;
+        background: transparent;
+      }
+      .confirmation-status.status-confirmed {
+        color: #258262;
+        background: transparent;
+      }
+      .confirmation-status.status-hold {
+        color: #c64e5c;
+        background: transparent;
+      }
+      .fulfillment-dimension-tabs {
+        display: flex;
+        gap: 24px;
+        padding: 0 18px;
+        border-bottom: 1px solid var(--line);
+        overflow-x: auto;
+      }
+      .fulfillment-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin: 0 0 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .fulfillment-view-tabs {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 20px;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+      }
+      .fulfillment-view-tabs button {
+        min-width: 90px;
+      }
+      .fulfillment-header .fulfillment-toolbar {
+        flex: 0 1 auto;
+        justify-content: flex-end;
+        gap: 7px;
+        margin: 0;
+      }
+      .fulfillment-header .fulfillment-toolbar select {
+        min-width: 125px;
+        padding: 7px 25px 7px 9px;
+      }
+      .fulfillment-dimension-tabs button {
+        position: relative;
+        min-width: 0;
+        min-height: 48px;
+        padding: 0 3px;
+        border: 0;
+        color: #758195;
+        background: transparent;
+        font-size: 13px;
+        text-align: center;
+      }
+      .fulfillment-dimension-tabs button.active {
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .fulfillment-dimension-tabs button.active::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 3px;
+        border-radius: 3px 3px 0 0;
+        background: var(--brand);
+      }
+      .fulfillment-dimension-panel {
+        padding: 18px;
+      }
+      .dimension-panel-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 14px;
+        margin-bottom: 14px;
+      }
+      .dimension-panel-head h2 {
+        margin: 0 0 5px;
+        font-size: 15px;
+      }
+      .dimension-panel-head p {
+        margin: 0;
+        color: #8490a2;
+        font-size: 11px;
+        line-height: 1.6;
+      }
+      .dimension-panel-head small {
+        color: #8d98a8;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .dimension-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .dimension-card {
+        min-width: 0;
+        padding: 14px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+      }
+      .dimension-card h3 {
+        margin: 0 0 5px;
+        font-size: 12px;
+      }
+      .dimension-card > p {
+        margin: 0 0 12px;
+        color: #8792a3;
+        font-size: 10px;
+        line-height: 1.6;
+      }
+      .dimension-table-wrap {
+        overflow: auto;
+      }
+      .item-summary {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: 14px;
+      }
+      #itemMetricFilters[hidden] {
+        display: none !important;
+      }
+      .item-analysis {
+        margin: 0 0 14px;
+      }
+      .item-detail-card {
+        margin-bottom: 12px;
+      }
+      .item-progress-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 12px;
+        padding: 0 0 8px;
+        border-bottom: 1px solid #e5e8ed;
+      }
+      .item-progress-tabs {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 5px;
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+      }
+      .item-progress-tabs button {
+        flex: 0 0 auto;
+        min-height: 30px;
+        padding: 5px 13px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #748195;
+        background: transparent;
+        font-size: 11px;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .item-progress-tabs button[aria-selected='true'] {
+        border-color: #d7e8ff;
+        color: #1677d2;
+        background: #f4f9ff;
+        font-weight: 600;
+      }
+      .item-coordination-filters {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+        margin-left: auto;
+      }
+      .item-coordination-filters[hidden] {
+        display: none !important;
+      }
+      .item-coordination-filters input,
+      .item-coordination-filters select {
+        min-width: 150px;
+        height: 30px;
+        padding: 0 9px;
+        border: 1px solid #dce3ec;
+        border-radius: 6px;
+        color: #748195;
+        background: #fff;
+        font: inherit;
+        font-size: 10px;
+      }
+      .item-coordination-filters input::placeholder {
+        color: #748195;
+        opacity: 1;
+      }
+      .item-progress-panel {
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .item-content-panel[hidden] {
+        display: none !important;
+      }
+      .item-detail-table {
+        min-width: 1900px;
+      }
+      .item-order-progress-table {
+        min-width: 4200px;
+      }
+      .item-coordination-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 0 0 10px;
+        color: #7b8798;
+        font-size: 11px;
+      }
+      .item-coordination-table {
+        min-width: 5600px;
+      }
+      .item-coordination-table thead tr:first-child th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        text-align: center;
+        color: #435064;
+        background: #edf2f8;
+      }
+      .item-coordination-table thead tr:nth-child(2) th {
+        position: sticky;
+        top: 34px;
+        z-index: 1;
+      }
+      .item-coordination-table thead tr:first-child .coord-group-1 {
+        background: #e8f0ff !important;
+      }
+      .item-coordination-table thead tr:first-child .coord-group-2 {
+        background: #e8f7f1 !important;
+      }
+      .item-coordination-table thead tr:first-child .coord-group-3 {
+        background: #f1ebff !important;
+      }
+      .item-coordination-table thead tr:first-child .coord-group-4 {
+        background: #fff3df !important;
+      }
+      .item-coordination-table thead tr:nth-child(2) .coord-group-1 {
+        background: #f3f7ff !important;
+      }
+      .item-coordination-table thead tr:nth-child(2) .coord-group-2 {
+        background: #f1faf6 !important;
+      }
+      .item-coordination-table thead tr:nth-child(2) .coord-group-3 {
+        background: #f7f4ff !important;
+      }
+      .item-coordination-table thead tr:nth-child(2) .coord-group-4 {
+        background: #fff9ef !important;
+      }
+      .item-coordination-table .coord-group-start {
+        border-left: 2px solid #d6deea !important;
+      }
+      .item-coordination-table tbody td {
+        background: #fff !important;
+      }
+      .item-coordination-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 10px;
+        color: #7b8798;
+        font-size: 11px;
+      }
+      .item-coordination-pagination button {
+        min-height: 28px;
+        padding: 4px 10px;
+        border: 1px solid #dce3ec;
+        border-radius: 5px;
+        color: #435064;
+        background: #fff;
+        cursor: pointer;
+      }
+      .item-coordination-pagination button:disabled {
+        color: #aab2bf;
+        background: #f7f8fa;
+        cursor: not-allowed;
+      }
+      @media (max-width: 760px) {
+        .item-summary {
+          grid-template-columns: 1fr;
+        }
+        .item-progress-bar {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+        .item-progress-tabs {
+          width: 100%;
+        }
+        .item-coordination-filters {
+          margin-left: 0;
+        }
+      }
+      .dimension-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .dimension-table th,
+      .dimension-table td {
+        padding: 9px 8px;
+        border-bottom: 1px solid #edf0f4;
+        text-align: left;
+      }
+      .dimension-table th {
+        color: #748094;
+        background: #f8f9fb;
+        font-weight: 600;
+      }
+      .dimension-table td {
+        color: #384252;
+      }
+      .dimension-table .pending-cell {
+        color: #9aa3b1;
+      }
+      .delivery-line-chart {
+        display: block;
+        width: 100%;
+        min-width: 390px;
+        height: auto;
+        margin: 4px 0 0;
+        overflow: visible;
+      }
+      .delivery-line-chart .chart-grid {
+        stroke: #edf0f4;
+        stroke-width: 1;
+      }
+      .delivery-line-chart .chart-axis {
+        fill: #8a95a4;
+        font:
+          11px ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      .delivery-line-chart .chart-line {
+        fill: none;
+        stroke: #f05a6a;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .delivery-line-chart .chart-line.total {
+        stroke: #687b95;
+        stroke-width: 2.5;
+      }
+      .delivery-line-chart .chart-line.warning {
+        stroke: #e9a02b;
+        stroke-width: 2.5;
+        stroke-dasharray: 6 4;
+      }
+      .delivery-line-chart .chart-line.timeout {
+        stroke: #e5485d;
+        stroke-width: 2.5;
+        stroke-dasharray: 2 4;
+      }
+      .delivery-line-chart .chart-line.normal {
+        stroke: #2ca77a;
+        stroke-width: 2.5;
+      }
+      .delivery-line-chart .chart-line.placeholder {
+        stroke: #bac3cf;
+        stroke-width: 2;
+        stroke-dasharray: 6 6;
+      }
+      .delivery-line-chart .chart-dot {
+        fill: #fff;
+        stroke: #ed5363;
+        stroke-width: 3;
+      }
+      .delivery-line-chart .chart-dot.total {
+        stroke: #687b95;
+      }
+      .delivery-line-chart .chart-dot.warning {
+        stroke: #e9a02b;
+      }
+      .delivery-line-chart .chart-dot.timeout {
+        stroke: #e5485d;
+      }
+      .delivery-line-chart .chart-dot.normal {
+        stroke: #2ca77a;
+      }
+      .delivery-line-chart .chart-legend {
+        font:
+          10px ui-sans-serif,
+          system-ui,
+          sans-serif;
+      }
+      .delivery-line-chart .chart-dot.placeholder {
+        stroke: #aeb8c5;
+        stroke-dasharray: 3 2;
+      }
+      .delivery-line-chart .chart-value {
+        fill: #313b49;
+        font:
+          600 12px ui-sans-serif,
+          system-ui,
+          sans-serif;
+        text-anchor: middle;
+      }
+      .delivery-line-chart .chart-value.placeholder {
+        fill: #929dad;
+        font-weight: 500;
+      }
+      .order-status-chart .chart-status-hit {
+        fill: transparent;
+        stroke: transparent;
+        cursor: pointer;
+      }
+      .order-status-chart .chart-status-hit:focus-visible {
+        fill: rgba(59, 130, 246, 0.06);
+        stroke: #3b82f6;
+        stroke-width: 1.5;
+        outline: none;
+      }
+      .order-status-chart-detail {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 18px;
+        margin: 0 18px 12px;
+        padding: 10px 12px;
+        border-radius: 8px;
+        background: #f5f8fc;
+        color: #687b95;
+        font-size: 11px;
+      }
+      .order-status-chart-detail[hidden] {
+        display: none;
+      }
+      .order-status-chart-detail strong {
+        color: #263447;
+      }
+      .order-status-chart-detail b {
+        color: #263447;
+      }
+      .dimension-table-wrap:has(.delivery-order-table) {
+        overflow-x: hidden;
+      }
+      .delivery-order-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+        font-size: 9px;
+        white-space: normal;
+      }
+      .delivery-order-table th,
+      .delivery-order-table td {
+        min-width: 0 !important;
+        padding: 7px 3px;
+        line-height: 1.35;
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+      .delivery-order-table th {
+        font-size: 8px;
+      }
+      .delivery-order-table th:nth-child(1),
+      .delivery-order-table td:nth-child(1) {
+        width: 2.5%;
+      }
+      .delivery-order-table th:nth-child(2),
+      .delivery-order-table td:nth-child(2) {
+        width: 7%;
+      }
+      .delivery-order-table th:nth-child(3),
+      .delivery-order-table td:nth-child(3) {
+        width: 7%;
+      }
+      .delivery-order-table th:nth-child(4),
+      .delivery-order-table td:nth-child(4) {
+        width: 9%;
+      }
+      .delivery-order-table th:nth-child(5),
+      .delivery-order-table td:nth-child(5) {
+        width: 5%;
+      }
+      .delivery-order-table th:nth-child(6),
+      .delivery-order-table td:nth-child(6) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(7),
+      .delivery-order-table td:nth-child(7) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(8),
+      .delivery-order-table td:nth-child(8) {
+        width: 5%;
+      }
+      .delivery-order-table th:nth-child(9),
+      .delivery-order-table td:nth-child(9) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(10),
+      .delivery-order-table td:nth-child(10) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(11),
+      .delivery-order-table td:nth-child(11) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(12),
+      .delivery-order-table td:nth-child(12) {
+        width: 5%;
+      }
+      .delivery-order-table th:nth-child(13),
+      .delivery-order-table td:nth-child(13) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(14),
+      .delivery-order-table td:nth-child(14) {
+        width: 5%;
+      }
+      .delivery-order-table th:nth-child(15),
+      .delivery-order-table td:nth-child(15) {
+        width: 4%;
+      }
+      .delivery-order-table th:nth-child(n + 16):nth-child(-n + 20),
+      .delivery-order-table td:nth-child(n + 16):nth-child(-n + 20) {
+        width: 3.5%;
+      }
+      .delivery-order-table th:nth-child(21),
+      .delivery-order-table td:nth-child(21),
+      .delivery-order-table th:nth-child(22),
+      .delivery-order-table td:nth-child(22) {
+        width: 4.5%;
+      }
+      .delivery-order-table .sales-confirm-trigger {
+        width: 100%;
+        min-width: 0;
+        padding: 3px 1px;
+        font-size: 8px;
+      }
+      .delivery-order-expander {
+        display: inline-grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        appearance: none;
+        border: 0 !important;
+        border-radius: 0;
+        box-shadow: none;
+        color: #59677a;
+        background: transparent;
+        cursor: pointer;
+      }
+      .delivery-order-expander:hover,
+      .delivery-order-expander:focus-visible {
+        color: #d94c5c;
+        background: transparent;
+      }
+      .delivery-order-expander:focus-visible {
+        outline: 0;
+      }
+      .delivery-order-expander svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 0.16s ease;
+      }
+      .delivery-order-expander[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+      .delivery-order-sku-row[hidden] {
+        display: none;
+      }
+      .delivery-order-sku-row > td {
+        padding: 12px 16px 14px !important;
+        background: #fbfcfe;
+      }
+      .delivery-order-sku-table {
+        width: min(100%, calc(100vw - 500px));
+        table-layout: fixed;
+        border-collapse: collapse;
+        font-size: 11px;
+        white-space: normal;
+      }
+      .delivery-order-sku-table th,
+      .delivery-order-sku-table td {
+        min-width: 0 !important;
+        padding: 8px 10px;
+        border: 1px solid #e8edf3;
+        text-align: left;
+        overflow-wrap: anywhere;
+      }
+      .delivery-order-sku-table th:first-child,
+      .delivery-order-sku-table td:first-child {
+        width: 52%;
+      }
+      .layout.assistant-hidden .delivery-order-sku-table {
+        width: min(100%, calc(100vw - 100px));
+      }
+      @media (max-width: 800px) {
+        .delivery-order-sku-table,
+        .layout.assistant-hidden .delivery-order-sku-table {
+          width: min(100%, calc(100vw - 40px));
+        }
+      }
+      .delivery-order-sku-table th {
+        color: #738096;
+        background: #f3f6fa;
+        font-weight: 600;
+      }
+      .warehouse-base-table {
+        min-width: 900px;
+      }
+      .warehouse-base-fields-table {
+        min-width: 4300px;
+      }
+      .warehouse-waybill-table {
+        min-width: 1350px;
+      }
+      .warehouse-carrier-table {
+        min-width: 900px;
+      }
+      .warehouse-heading-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .warehouse-detail-tabs,
+      .delivery-order-view-tabs {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+        margin: 0 0 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      .warehouse-detail-tabs button,
+      .delivery-order-view-tabs button {
+        min-height: 30px;
+        padding: 5px 13px;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #748195;
+        background: transparent;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .warehouse-detail-tabs button[aria-selected='true'],
+      .delivery-order-view-tabs button[aria-selected='true'] {
+        border-color: #d7e8ff;
+        color: #1677d2;
+        background: #f4f9ff;
+        font-weight: 600;
+      }
+      .delivery-order-view-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        width: 100%;
+        margin: 0 0 12px;
+        padding: 0 0 8px;
+        border-bottom: 1px solid #e5e8ed;
+      }
+      .delivery-order-view-tabs {
+        display: flex;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 4px;
+        width: auto;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .delivery-order-view-tabs button {
+        position: relative;
+        flex: 0 0 auto;
+        width: auto;
+        min-width: 96px;
+        min-height: 40px;
+        padding: 0 12px;
+        border: 0 !important;
+        border-radius: 0;
+        color: #667386;
+        background: transparent;
+        font-size: 13px;
+        text-align: center;
+      }
+      .delivery-order-view-tabs button[aria-selected='true'] {
+        border: 0;
+        color: var(--brand);
+        background: transparent;
+        font-weight: 700;
+      }
+      .delivery-order-view-tabs button:focus-visible {
+        outline: 2px solid #e79aa5;
+        outline-offset: -4px;
+      }
+      .warehouse-detail-tabs.delivery-order-view-tabs {
+        width: 100%;
+        margin: 0 0 12px;
+        padding: 0 0 8px;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .delivery-order-view-panel[hidden] {
+        display: none !important;
+      }
+      .delivery-base-compare-table,
+      .delivery-region-compare-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+      }
+      .delivery-chart-grid-single {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .delivery-chart-grid-single > .dimension-card:has(.order-status-chart) {
+        display: none;
+      }
+      .delivery-base-compare-table th,
+      .delivery-base-compare-table td,
+      .delivery-region-compare-table th,
+      .delivery-region-compare-table td {
+        padding: 7px 5px;
+        font-size: 10px;
+        line-height: 1.35;
+        white-space: normal;
+      }
+      .compare-drilldown {
+        padding: 0;
+        border: 0;
+        color: inherit;
+        background: transparent;
+        font: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .compare-drilldown:hover,
+      .compare-drilldown:focus-visible {
+        color: var(--brand);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .compare-drilldown:focus-visible {
+        outline: 2px solid #f2a0a8;
+        outline-offset: 3px;
+      }
+      .delivery-base-compare-table th:first-child,
+      .delivery-base-compare-table td:first-child,
+      .delivery-region-compare-table th:first-child,
+      .delivery-region-compare-table td:first-child {
+        width: 4%;
+        min-width: 0;
+      }
+      .delivery-base-compare-table th:nth-child(2),
+      .delivery-base-compare-table td:nth-child(2),
+      .delivery-region-compare-table th:nth-child(2),
+      .delivery-region-compare-table td:nth-child(2) {
+        width: 9%;
+      }
+      .delivery-base-compare-table th:nth-child(n + 3):nth-child(-n + 8),
+      .delivery-base-compare-table td:nth-child(n + 3):nth-child(-n + 8),
+      .delivery-region-compare-table th:nth-child(n + 3):nth-child(-n + 8),
+      .delivery-region-compare-table td:nth-child(n + 3):nth-child(-n + 8) {
+        width: 7.5%;
+      }
+      .delivery-base-compare-table th:nth-child(n + 9),
+      .delivery-base-compare-table td:nth-child(n + 9),
+      .delivery-region-compare-table th:nth-child(n + 9),
+      .delivery-region-compare-table td:nth-child(n + 9) {
+        width: 8.4%;
+      }
+      .delivery-base-compare-table thead tr:first-child th:last-child,
+      .delivery-region-compare-table thead tr:first-child th:last-child {
+        width: 42%;
+      }
+      .delivery-base-compare-detail[hidden],
+      .delivery-region-compare-detail[hidden] {
+        display: none;
+      }
+      .delivery-base-compare-detail > td,
+      .delivery-region-compare-detail > td {
+        padding: 8px 12px !important;
+        background: #fbfcfe;
+      }
+      .base-status-detail-wrap {
+        padding: 8px;
+        border-radius: 6px;
+        background: #fbfcfe;
+      }
+      .base-status-detail-table {
+        width: 100%;
+        min-width: 0;
+        table-layout: fixed;
+        background: #fff;
+      }
+      .base-status-detail-table th,
+      .base-status-detail-table td {
+        padding: 7px 8px;
+        font-size: 10px;
+      }
+      .delivery-order-panel-tools {
+        display: flex;
+        flex: 1 1 auto;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        margin: 0;
+      }
+      .delivery-order-panel-tools[hidden] {
+        display: none !important;
+      }
+      .warehouse-detail-panel[hidden] {
+        display: none !important;
+      }
+      .warehouse-base-detail-panel[hidden] {
+        display: none !important;
+      }
+      .warehouse-status-detail[hidden] {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        .delivery-order-view-toolbar {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+        .delivery-order-view-tabs {
+          width: 100%;
+        }
+        .delivery-order-panel-tools {
+          flex-basis: 100%;
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+      @media (max-width: 760px) {
+        .warehouse-detail-tabs {
+          overflow-x: auto;
+        }
+      }
+      .dimension-note {
+        margin: 12px 0 0;
+        padding: 9px 11px;
+        border-radius: 6px;
+        color: #718096;
+        background: #f5f7fa;
+        font-size: 10px;
+        line-height: 1.65;
+      }
+      .dimension-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      .dimension-links button {
+        padding: 7px 10px;
+        border: 1px solid #dce3ed;
+        border-radius: 6px;
+        color: #53647b;
+        background: #fff;
+        font-size: 10px;
+      }
+      .dimension-links button:hover {
+        border-color: #eaa5af;
+        color: #d94c5c;
+      }
+      .fulfillment-analysis-dimension {
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #eee5e9;
+        border-radius: 7px;
+        background: rgba(255, 255, 255, 0.8);
+      }
+      .fulfillment-analysis-dimension > span {
+        display: block;
+        color: #7e8998;
+        font-size: 11px;
+      }
+      .fulfillment-analysis-dimension strong {
+        display: block;
+        margin: 7px 0 4px;
+        color: #3b4554;
+        font-size: 17px;
+      }
+      .fulfillment-analysis-dimension.risk strong {
+        color: #d74a5d;
+      }
+      .fulfillment-analysis-dimension.pending strong {
+        color: #939cab;
+        font-size: 14px;
+      }
+      .fulfillment-analysis-dimension p {
+        margin: 0;
+        color: #8791a0;
+        font-size: 10px;
+        line-height: 1.65;
+      }
+      .fulfillment-analysis-foot > span {
+        color: #9aa3b0;
+        font-size: 10px;
+      }
+      .fulfillment-analysis-foot button {
+        flex-shrink: 0;
+        padding: 7px 11px;
+        border: 1px solid #efcbd2;
+        border-radius: 5px;
+        color: #df5264;
+        background: #fff;
+        font-size: 11px;
+      }
+      .fulfillment-analysis-foot button:hover {
+        background: #fff1f3;
+      }
+      @media (max-width: 1200px) {
+        .fulfillment-analysis-dimensions {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 560px) {
+        .fulfillment-analysis-dimensions {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .fulfillment-analysis {
+          padding: 15px;
+        }
+        .fulfillment-analysis-head,
+        .fulfillment-analysis-foot {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+      }
+      .card-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 15px;
+      }
+      .card-head h2 {
+        margin: 0 0 5px;
+      }
+      .card-head p {
+        margin: 0;
+        color: #8a94a2;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .card-head > span {
+        color: #9aa4b1;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .trace-steps {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .trace-step {
+        position: relative;
+        min-width: 0;
+        padding: 13px 12px;
+        border: 1px solid #e8ebf0;
+        border-radius: 8px;
+        background: #fbfcfd;
+      }
+      .trace-step:not(:last-child)::after {
+        content: '›';
+        position: absolute;
+        top: 38px;
+        right: -7px;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 14px;
+        height: 20px;
+        color: #b5bdc9;
+        background: #fff;
+      }
+      .trace-step span,
+      .trace-step small {
+        display: block;
+      }
+      .trace-step span {
+        color: #667180;
+        font-size: 11px;
+      }
+      .trace-step strong {
+        display: block;
+        margin: 8px 0 6px;
+        font-size: 22px;
+      }
+      .trace-step small {
+        color: #9aa4b1;
+        font-size: 10px;
+        line-height: 1.5;
+      }
+      .trace-step b {
+        color: #d64a55;
+        font-weight: 600;
+      }
+      .trace-step.done strong {
+        color: #2d9b70;
+      }
+      .trace-rule {
+        margin: 13px 0 0;
+        padding: 9px 11px;
+        border-radius: 6px;
+        color: #718096;
+        background: #f5f7fa;
+        font-size: 10px;
+        line-height: 1.6;
+      }
+      .shortage-formula {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        align-items: stretch;
+      }
+      .formula-item {
+        padding: 11px 10px;
+        border: 1px solid #e8ebf0;
+        border-radius: 7px;
+        background: #fbfcfd;
+        text-align: center;
+      }
+      .formula-item span,
+      .formula-item small {
+        display: block;
+        color: #87919f;
+        font-size: 10px;
+      }
+      .formula-item strong {
+        display: block;
+        margin: 7px 0 3px;
+        font-size: 18px;
+      }
+      .formula-item.final {
+        border-color: #f0cfd3;
+        background: #fff7f8;
+      }
+      .formula-item.final strong {
+        color: #d93f4c;
+      }
+      .shortage-bars {
+        display: grid;
+        gap: 9px;
+        margin-top: 14px;
+      }
+      .shortage-bar {
+        display: grid;
+        grid-template-columns: 80px minmax(0, 1fr) 58px;
+        align-items: center;
+        gap: 9px;
+        color: #687484;
+        font-size: 10px;
+      }
+      .shortage-bar-track {
+        height: 8px;
+        overflow: hidden;
+        border-radius: 4px;
+        background: #f0f2f5;
+      }
+      .shortage-bar-track i {
+        display: block;
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #ffb5bc, #ef5968);
+      }
+      .shortage-bar b {
+        color: #4b5664;
+        text-align: right;
+      }
+      .risk-list {
+        display: grid;
+        gap: 9px;
+      }
+      .risk-item {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 11px;
+        border: 1px solid #e9edf2;
+        border-radius: 8px;
+        background: #fbfcfd;
+      }
+      .risk-item > span {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        color: #d84754;
+        background: #fff0f1;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .risk-item strong,
+      .risk-item small {
+        display: block;
+      }
+      .risk-item strong {
+        color: #3d4653;
+        font-size: 11px;
+      }
+      .risk-item small {
+        margin-top: 4px;
+        color: #8d97a5;
+        font-size: 10px;
+        line-height: 1.45;
+      }
+      .risk-item b {
+        color: #d84754;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .fulfillment-rules {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 9px;
+        margin: 0 0 16px;
+      }
+      .fulfillment-rule {
+        padding: 12px 13px;
+        border: 1px solid #e8ebf0;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .fulfillment-rule strong {
+        display: block;
+        margin-bottom: 6px;
+        color: #3d4653;
+        font-size: 11px;
+      }
+      .fulfillment-rule p {
+        margin: 0;
+        color: #838e9c;
+        font-size: 10px;
+        line-height: 1.6;
+      }
+      .orders .quantity-cell strong {
+        color: #3a4553;
+      }
+      .orders .quantity-cell b {
+        display: block;
+        margin-top: 4px;
+        color: #d84754;
+        font-size: 11px;
+      }
+      .orders .quantity-cell small {
+        line-height: 1.45;
+      }
+      .orders .alert-tag {
+        display: inline-block;
+        margin-top: 5px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #cb4450;
+        background: #fff0f1;
+        font-size: 10px;
+      }
+      .orders .alert-tag.warning {
+        color: #b87722;
+        background: #fff5e7;
+      }
+      .orders .alert-tag.normal {
+        color: #278663;
+        background: #eaf8f1;
+      }
+      #shortageWindowFilter {
+        width: 124px;
+        cursor: pointer;
+      }
       .wb-hero {
         display: flex;
         align-items: center;
         gap: 20px;
         flex-wrap: wrap;
         margin-bottom: 8px;
-      }
-      .wb-hero > .wb-link {
-        margin-left: auto;
-      }
-      .wb-hero .wb-context {
-        margin: 0;
       }
       .wb-hero-main {
         min-width: 0;
@@ -685,48 +2444,161 @@
       }
       .wb-kpis {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 10px;
+        grid-auto-flow: row;
+        grid-auto-columns: auto;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        grid-template-rows: auto;
+        gap: 12px;
+        overflow: visible;
+        padding: 2px 2px 8px;
       }
       .wb-kpi {
-        min-height: 126px;
-        padding: 15px 17px;
-        border: 1px solid var(--line);
+        min-width: 0;
+        min-height: 200px;
+        padding: 11px 8px 10px;
+        border: 1px solid #d9dde3;
         border-radius: 10px;
         background: #fff;
+        font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
         text-align: left;
+        transition:
+          border-color 160ms ease,
+          box-shadow 160ms ease;
       }
       .wb-kpi:hover {
-        border-color: #f1b5bb;
-        box-shadow: 0 5px 16px rgba(190, 70, 80, 0.07);
+        border-color: #efabb4;
+        background: #fffafb;
+        box-shadow: 0 8px 20px #20273312;
       }
-      .wb-kpi span {
-        display: block;
-        color: #68717e;
-        font-size: 12px;
+      .wb-kpi:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
       }
-      .wb-kpi strong {
-        display: block;
-        margin: 10px 0 3px;
-        font-size: 28px;
+      .wb-kpi-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 7px;
       }
-      .wb-kpi small {
-        display: block;
-        color: #9aa2af;
+      .wb-kpi-title {
+        min-width: 0;
+        overflow: hidden;
+        color: #24324a;
+        font-size: 13px;
+        font-weight: 700;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-kpi .wb-kpi-state {
+        display: inline-flex;
+        align-items: center;
+        flex: 0 0 auto;
+        padding: 4px 10px;
+        border-radius: 999px;
+        color: #fff;
+        background: #00bd12;
         font-size: 11px;
+        font-weight: 700;
       }
-      .wb-kpi em {
-        display: block;
-        margin-top: 8px;
-        color: #c24f5b;
-        font-size: 10px;
+      .wb-kpi .wb-kpi-state.bad {
+        color: #fff;
+        background: #f00000;
+      }
+      .wb-kpi .wb-kpi-state.unknown {
+        color: #667085;
+        background: #eef1f5;
+      }
+      .wb-kpi-value {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        min-height: 48px;
+        margin-top: 3px;
+        padding: 5px 2px 10px;
+        border-bottom: 1px dashed #cfd2d6;
+      }
+      .wb-kpi-main {
+        display: flex;
+        align-items: baseline;
+        gap: 2px;
+        min-width: 0;
+      }
+      .wb-kpi-value strong {
+        color: #10264b;
+        font-size: 20px;
+        line-height: 1.1;
+        letter-spacing: -0.04em;
+      }
+      .wb-kpi-value em {
+        color: #10264b;
+        font-size: 13px;
         font-style: normal;
       }
-      .wb-kpi.urgent strong {
-        color: #e33740;
+      .wb-kpi-target {
+        flex: 0 0 auto;
+        color: #a0a4ac;
+        font-size: 11px;
+        white-space: nowrap;
       }
-      .wb-kpi.warning strong {
-        color: #df7c29;
+      .wb-kpi-compare {
+        display: grid;
+        gap: 0;
+        padding: 3px 2px 2px;
+        border-bottom: 0;
+      }
+      .wb-kpi-compare-group {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 8px 0;
+      }
+      .wb-kpi-compare-group + .wb-kpi-compare-group {
+        border-top: 1px dashed #cfd2d6;
+      }
+      .wb-kpi-compare-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 5px;
+        min-width: 0;
+        padding: 0;
+        color: #a0a4ac;
+        font-size: 11px;
+      }
+      .wb-kpi-compare-row > span {
+        min-width: 0;
+        white-space: nowrap;
+      }
+      .wb-kpi-compare-row b {
+        color: #a0a4ac;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .wb-kpi-compare-row:first-child {
+        justify-content: flex-start;
+        gap: 8px;
+      }
+      .wb-kpi-compare-row:last-child {
+        justify-content: flex-end;
+        gap: 8px;
+      }
+      .wb-kpi-foot {
+        min-height: 31px;
+        display: flex;
+        align-items: flex-start;
+        margin-top: 0;
+        padding: 2px 5px 0;
+        color: #858c96;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+      }
+      .wb-kpi-foot > span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .wb-card {
         min-width: 0;
@@ -740,6 +2612,287 @@
         color: #7a8290;
         font-size: 11px;
         line-height: 1.6;
+      }
+      .wb-improvement-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-section {
+        margin: 18px 0 24px;
+        padding: 18px;
+        border: 1px solid #e3e6ea;
+        border-radius: 10px;
+        background: #fff;
+      }
+      .wb-reference-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .wb-reference-head h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-reference-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-reference-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-reference-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-list {
+        display: grid;
+        gap: 8px;
+      }
+      .wb-reference-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fff;
+      }
+      .wb-reference-main {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+        flex: 1;
+      }
+      .wb-reference-main strong {
+        overflow: hidden;
+        color: #343b46;
+        font-size: 12px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a {
+        overflow: hidden;
+        color: #65758b;
+        font-size: 11px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .wb-reference-main a:hover {
+        color: #df1732;
+      }
+      .wb-reference-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .wb-reference-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-reference-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-reference-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-reference-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-reference-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-reference-empty {
+        margin: 0;
+        padding: 14px;
+        border: 1px dashed #d9dde3;
+        border-radius: 8px;
+        color: #858c96;
+        background: #fafafa;
+        font-size: 11px;
+        text-align: center;
+      }
+      .wb-improvement-section > h2 {
+        margin: 0 0 16px;
+        color: #20232a;
+        font-size: 18px;
+        line-height: 1.35;
+      }
+      .wb-improvement-block + .wb-improvement-block {
+        margin-top: 20px;
+      }
+      .wb-improvement-block-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 0 0 12px;
+      }
+      .wb-improvement-block h3 {
+        margin: 0;
+        color: #343d4b;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .wb-improvement-add {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        color: #df1732;
+        background: transparent;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-improvement-add:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-improvement-add:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #d9dde3;
+        border-radius: 6px;
+      }
+      .wb-improvement-table {
+        width: 100%;
+        min-width: 1080px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        color: #303844;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-improvement-table th,
+      .wb-improvement-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #d9dde3;
+        border-bottom: 1px solid #d9dde3;
+        text-align: left;
+        vertical-align: top;
+        overflow-wrap: anywhere;
+      }
+      .wb-improvement-table th:last-child,
+      .wb-improvement-table td:last-child {
+        border-right: 0;
+      }
+      .wb-improvement-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-improvement-table th {
+        color: #343b46;
+        background: #f1f2f4;
+        font-weight: 700;
+      }
+      .wb-improvement-table .direction,
+      .wb-improvement-table .issue,
+      .wb-improvement-table .goal,
+      .wb-improvement-table .status {
+        width: auto;
+      }
+      .wb-improvement-table td.status {
+        display: table-cell;
+        padding: 8px 10px;
+        border-radius: 0;
+        color: #303844;
+        background: #fff;
+        white-space: normal;
+      }
+      .wb-improvement-table .actions {
+        width: 82px;
+        text-align: center;
+      }
+      .wb-improvement-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+      .wb-improvement-action {
+        display: inline-grid;
+        place-items: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-improvement-action:hover {
+        border-color: #dbe2ea;
+        color: #df1732;
+        background: #fff7f8;
+      }
+      .wb-improvement-action.delete:hover {
+        border-color: #f5d1d6;
+        color: #d92d42;
+        background: #fff3f4;
+      }
+      .wb-improvement-action:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-improvement-action svg {
+        width: 15px;
+        height: 15px;
+      }
+      .wb-improvement-table td.is-editing {
+        outline: 2px solid #91caff;
+        outline-offset: -2px;
+        background: #f7fbff;
+      }
+      .wb-improvement-table.long-term {
+        min-width: 1122px;
+        table-layout: auto;
+      }
+      .wb-improvement-table.long-term .direction {
+        width: 112px;
+      }
+      .wb-improvement-table.long-term .goal {
+        width: 135px;
+      }
+      .wb-improvement-table.long-term .status {
+        width: 72px;
+      }
+      .wb-improvement-table strong {
+        color: #303844;
+        font-weight: 700;
       }
       .wb-analysis {
         border-color: #f0d8dc;
@@ -810,7 +2963,7 @@
         color: #df5161;
       }
       .wb-panels {
-        display: grid;
+        display: none;
         grid-template-columns: minmax(0, 1.12fr) minmax(300px, 0.88fr);
         gap: 14px;
       }
@@ -942,68 +3095,75 @@
         height: 2px;
         background: var(--brand);
       }
-      .wb-context {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-        margin: 0 0 15px;
-        color: #788391;
-        font-size: 11px;
+      .wb-dimension-table .category-toggle,
+      .wb-dimension-table .region-change-toggle {
+        padding: 0;
+        border: 0;
+        color: #435267;
+        background: none;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
       }
-      .wb-context strong {
-        color: #425066;
-        font-size: 12px;
+      .wb-dimension-table .category-toggle::before,
+      .wb-dimension-table .region-change-toggle::before {
+        display: inline-block;
+        width: 16px;
+        color: #8d98a8;
+        content: '▸';
       }
-      .wb-context span {
-        padding: 6px 10px;
-        border: 1px solid #e3e8f0;
-        border-radius: 6px;
+      .wb-dimension-table .category-toggle[aria-expanded='true']::before,
+      .wb-dimension-table .region-change-toggle[aria-expanded='true']::before {
+        content: '▾';
+      }
+      .wb-dimension-table .sku-detail-row td,
+      .wb-dimension-table .region-customer-detail-row td {
+        padding: 0;
+        background: #fafbfd;
+      }
+      .wb-sku-detail,
+      .wb-region-customer-detail {
+        padding: 11px 13px 13px 29px;
+      }
+      .wb-sku-detail > p,
+      .wb-region-customer-detail > p {
+        margin: 0 0 8px;
+        color: #9aa3af;
+        font-size: 10px;
+      }
+      .wb-sku-table,
+      .wb-region-customer-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 10px;
+      }
+      .wb-sku-table th,
+      .wb-sku-table td,
+      .wb-region-customer-table th,
+      .wb-region-customer-table td {
+        padding: 7px 8px;
+        border: 1px solid #e9edf2;
+      }
+      .wb-sku-table th,
+      .wb-region-customer-table th {
+        color: #778395;
+        background: #f2f4f7;
+        font-weight: 600;
+      }
+      .wb-sku-table td,
+      .wb-region-customer-table td {
+        color: #586475;
         background: #fff;
       }
-      .wb-context small {
-        margin-left: auto;
-        color: #a0a8b5;
-        font-size: 10px;
+      .wb-sku-table .sku-code,
+      .wb-region-customer-table .customer-code {
+        color: #94a0ae;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       }
-      .wb-report-date {
-        margin: 0 0 15px;
-        color: #a0a8b5;
-        font-size: 10px;
-        text-align: right;
-      }
-      .wb-kpi {
-        position: relative;
-      }
-      .wb-kpi .wb-kpi-goal {
-        margin-top: 5px;
-        color: #8d98a8;
-      }
-      .wb-kpi .wb-kpi-state {
-        display: inline-flex;
-        align-items: center;
-        width: auto;
-        margin-top: 8px;
-        padding: 3px 7px;
-        border-radius: 4px;
-        color: #278565;
-        background: #eaf8f1;
-        font-size: 10px;
-      }
-      .wb-kpi .wb-kpi-state.bad {
-        color: #cb4751;
-        background: #fff0f1;
-      }
-      .wb-kpi .wb-kpi-state.unknown {
-        color: #7d8898;
-        background: #f0f3f7;
-      }
-      .wb-kpi .wb-kpi-trend {
-        position: absolute;
-        right: 15px;
-        bottom: 17px;
-        color: #9aa4b2;
-        font-size: 10px;
+      .wb-region-customer-empty {
+        color: #8d98a8 !important;
+        text-align: center;
       }
       .wb-analysis {
         position: relative;
@@ -1031,6 +3191,93 @@
         color: #8390a2;
         background: #fff;
         font-size: 10px;
+      }
+      .wb-metric-analysis {
+        border-color: #e3e6ea;
+        background: #fff;
+      }
+      .wb-metric-analysis::before {
+        display: none;
+      }
+      .wb-metric-analysis .wb-analysis-head {
+        align-items: center;
+        padding: 16px 18px 4px;
+      }
+      .wb-analysis-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .wb-analysis-label i {
+        display: inline-block;
+        color: inherit;
+        font-size: 18px;
+        font-style: normal;
+        line-height: 1;
+      }
+      .wb-analysis-label h2 {
+        margin: 0;
+        color: #20232a;
+        font-size: 16px;
+      }
+      .wb-analysis-label small {
+        display: block;
+        margin-top: 3px;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-summary-edit {
+        min-height: 30px;
+        padding: 0 10px;
+        border: 0;
+        border-radius: 0;
+        color: #df1732;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .wb-summary-edit:hover {
+        color: #b91229;
+        background: transparent;
+      }
+      .wb-summary-edit:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-metric-analysis .wb-analysis-body {
+        padding: 0 18px 16px;
+      }
+      .wb-summary-lines {
+        display: grid;
+        gap: 4px;
+      }
+      .wb-summary-lines p {
+        display: grid;
+        grid-template-columns: 24px minmax(0, 1fr);
+        gap: 6px;
+        margin: 0;
+        color: #303844;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .wb-summary-lines strong {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-summary-lines [data-wb-summary-content] {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-summary-icon {
+        text-align: center;
+        white-space: nowrap;
+      }
+      .wb-summary-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
       }
       .wb-panels {
         align-items: stretch;
@@ -1325,6 +3572,87 @@
         margin: 16px 0 5px;
         font-size: 12px;
       }
+      .wb-region-order-count {
+        padding: 0;
+        border: 0;
+        color: #48566b;
+        background: transparent;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .wb-region-order-count:hover {
+        color: #e43d52;
+        text-decoration: underline;
+      }
+      .wb-region-order-count:focus-visible {
+        outline: 2px solid #4f9cf8;
+        outline-offset: 3px;
+        border-radius: 2px;
+      }
+      .wb-detail-dialog.order-list-dialog {
+        display: flex;
+        width: min(1000px, 96vw);
+        max-height: 85vh;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+      }
+      .order-list-dialog .wb-detail-head {
+        flex: none;
+        padding: 19px 22px;
+        border-bottom: 1px solid #edf0f4;
+      }
+      .order-list-dialog #wbDetailBody {
+        min-height: 0;
+        overflow: auto;
+        padding: 0 22px 22px;
+      }
+      .wb-changed-order-note {
+        margin: 14px 0 12px;
+        padding: 9px 12px;
+        border: 1px solid #dce8fb;
+        border-radius: 6px;
+        color: #6e7f98;
+        background: #f7faff;
+      }
+      .wb-changed-order-wrap {
+        overflow: auto;
+        border: 1px solid #e5e9ef;
+        border-radius: 7px;
+      }
+      .wb-changed-order-table {
+        width: 100%;
+        min-width: 780px;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 12px;
+      }
+      .wb-changed-order-table th,
+      .wb-changed-order-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e9edf2;
+        white-space: nowrap;
+      }
+      .wb-changed-order-table th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        color: #596679;
+        background: #f2f4f7;
+        font-weight: 600;
+      }
+      .wb-changed-order-table td {
+        color: #465368;
+        background: #fff;
+      }
+      .wb-changed-order-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-changed-order-table .order-code {
+        color: #75859b;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
       .wb-adopt-overlay {
         position: fixed;
         inset: 0;
@@ -1576,6 +3904,379 @@
         font-size: 11px;
         white-space: nowrap;
       }
+      .wb-dimensions {
+        overflow: hidden;
+      }
+      .wb-dimension-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 18px;
+        padding: 17px 18px 14px;
+      }
+      .wb-dimension-head h2 {
+        margin: 0;
+        color: #303844;
+        font-size: 15px;
+      }
+      .wb-dimension-head p {
+        margin: 5px 0 0;
+        color: #8a94a2;
+        font-size: 11px;
+      }
+      .wb-dimension-head > span {
+        color: #9aa3af;
+        font-size: 10px;
+        white-space: nowrap;
+      }
+      .wb-dimension-tabs {
+        display: flex;
+        gap: 25px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0 18px;
+        border-top: 1px solid #eef0f3;
+        border-bottom: 1px solid #eef0f3;
+      }
+      .wb-dimension-tabs button {
+        position: relative;
+        min-height: 42px;
+        flex: 0 0 auto;
+        padding: 0;
+        border: 0;
+        color: #7e8897;
+        background: transparent;
+        font-size: 11px;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .wb-dimension-tabs button:hover {
+        color: #d64656;
+      }
+      .wb-dimension-tabs button.active {
+        color: var(--brand);
+        font-weight: 700;
+      }
+      .wb-dimension-tabs button.active::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 2px;
+        background: var(--brand);
+      }
+      .wb-dimension-panel {
+        min-height: 270px;
+        padding: 18px;
+      }
+      .wb-dimension-summary {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 15px;
+        margin: 0 0 11px;
+      }
+      .wb-dimension-summary strong {
+        color: #384252;
+        font-size: 13px;
+      }
+      .wb-dimension-summary span {
+        color: #98a1ae;
+        font-size: 10px;
+      }
+      .wb-dimension-insight {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        margin: 0 0 14px;
+        padding: 11px 13px;
+        border: 1px solid #f1d9de;
+        border-radius: 7px;
+        color: #687485;
+        background: #fff8f9;
+        font-size: 11px;
+        line-height: 1.65;
+      }
+      .wb-dimension-insight strong {
+        flex: 0 0 auto;
+        color: #d24757;
+      }
+      .wb-dimension-table-wrap {
+        overflow-x: auto;
+        border: 1px solid #e4e8ee;
+        border-radius: 7px;
+      }
+      .wb-dimension-table {
+        width: 100%;
+        min-width: 1280px;
+        border-collapse: collapse;
+        text-align: left;
+        font-size: 11px;
+      }
+      .wb-dimension-table.region-change-table {
+        min-width: 100%;
+        table-layout: fixed;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(1) {
+        width: 22%;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(2) {
+        width: 14%;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(3) {
+        width: 11%;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(4) {
+        width: 14%;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(5) {
+        width: 16%;
+      }
+      .wb-dimension-table.region-change-table th:nth-child(6) {
+        width: 23%;
+      }
+      .wb-dimension-table.region-change-table .issue-col {
+        min-width: 0;
+      }
+      .wb-dimension-table th {
+        padding: 10px 12px;
+        border-right: 1px solid #e4e8ee;
+        border-bottom: 1px solid #dfe4ea;
+        color: #4d5765;
+        background: #f4f5f7;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .wb-dimension-table td {
+        padding: 10px 12px;
+        border-right: 1px solid #edf0f3;
+        border-bottom: 1px solid #edf0f3;
+        color: #4f5967;
+        line-height: 1.55;
+        vertical-align: top;
+      }
+      .wb-dimension-table th:last-child,
+      .wb-dimension-table td:last-child {
+        border-right: 0;
+      }
+      .wb-dimension-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-dimension-table tbody tr:hover {
+        background: #fffafb;
+      }
+      .wb-dimension-table .good-value {
+        color: #1264d8;
+        font-weight: 700;
+      }
+      .wb-dimension-table .risk-value {
+        color: #e0313b;
+        font-weight: 700;
+      }
+      .wb-dimension-table .status-ok {
+        color: #13a24f;
+        font-weight: 700;
+      }
+      .wb-dimension-table .status-warn {
+        color: #d58a15;
+        font-weight: 700;
+      }
+      .wb-dimension-table .status-bad {
+        color: #e0313b;
+        font-weight: 700;
+      }
+      .wb-dimension-table .status-muted {
+        color: #9aa3af;
+      }
+      .wb-dimension-table .issue-col {
+        width: 38%;
+        min-width: 350px;
+        white-space: normal;
+      }
+      .wb-dimension-table td.issue-cell {
+        color: #687485;
+      }
+      .wb-dimension-issue + .wb-dimension-issue {
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px dashed #e4e8ee;
+      }
+      .wb-dimension-issue-title {
+        display: block;
+        margin-bottom: 5px;
+        color: #384252;
+        font-size: 11px;
+      }
+      .wb-dimension-issue > div + div {
+        margin-top: 5px;
+      }
+      .wb-dimension-issue b {
+        color: #526174;
+        font-weight: 600;
+      }
+      .wb-dimension-empty {
+        display: grid;
+        place-items: center;
+        min-height: 230px;
+        padding: 30px;
+        border: 1px dashed #dfe4ec;
+        border-radius: 8px;
+        color: #8792a2;
+        background: #fbfcfd;
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.8;
+      }
+      .wb-dimension-issue {
+        position: relative;
+        padding-right: 34px;
+      }
+      .wb-issue-edit-button {
+        position: absolute;
+        top: 0;
+        right: 0;
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 50%;
+        color: #7d8b9c;
+        background: transparent;
+        cursor: pointer;
+      }
+      .wb-issue-edit-button:hover,
+      .wb-issue-edit-button.saved {
+        border-color: #f0d6da;
+        color: #cf4354;
+        background: #fff5f6;
+      }
+      .wb-issue-edit-button svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-issue-category-label {
+        display: block;
+        margin: 0 0 7px;
+        color: #8994a3;
+        font-size: 10px;
+      }
+      .wb-issue-modal-fields {
+        display: grid;
+        gap: 16px;
+        margin-top: 18px;
+      }
+      .wb-issue-modal-fields select,
+      .wb-issue-modal-fields textarea {
+        width: 100%;
+        padding: 10px 11px;
+        border: 1px solid #dce4f2;
+        border-radius: 7px;
+        color: #596779;
+        background: #fff;
+        font: 400 13px sans-serif;
+      }
+      .wb-issue-modal-fields select {
+        height: 42px;
+      }
+      .wb-issue-modal-fields textarea {
+        min-height: 105px;
+        resize: vertical;
+        line-height: 1.6;
+      }
+      .wb-issue-modal-fields textarea:focus,
+      .wb-issue-modal-fields select:focus {
+        outline: 2px solid #dce8ff;
+        border-color: #9bb9f4;
+      }
+      .wb-issue-modal-fields label {
+        display: grid;
+        gap: 8px;
+        color: #748195;
+        font-size: 12px;
+      }
+      .wb-issue-modal-foot {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 17px 28px;
+        border-top: 1px solid #edf0f4;
+      }
+      .wb-issue-modal-foot p {
+        flex: 1;
+        margin: 0;
+        color: #9aa4b2;
+        font-size: 11px;
+      }
+      .wb-issue-modal-foot button {
+        min-height: 36px;
+        padding: 0 15px;
+        border: 1px solid #dce4f0;
+        border-radius: 7px;
+        color: #778397;
+        background: #fff;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .wb-issue-modal-foot button.primary {
+        border-color: #d84456;
+        color: #fff;
+        background: #d84456;
+      }
+      .wb-task-edit-row td {
+        background: #fbfcfe;
+      }
+      .wb-task-edit-form {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(120px, 1fr));
+        gap: 10px;
+        padding: 5px;
+      }
+      .wb-task-edit-form label {
+        display: grid;
+        gap: 5px;
+        color: #7a8798;
+        font-size: 10px;
+      }
+      .wb-task-edit-form input,
+      .wb-task-edit-form textarea,
+      .wb-task-edit-form select {
+        width: 100%;
+        min-height: 34px;
+        padding: 7px 8px;
+        border: 1px solid #dfe5ed;
+        border-radius: 5px;
+        color: #4f5c6d;
+        background: #fff;
+        font: 400 11px sans-serif;
+      }
+      .wb-task-edit-form .wide {
+        grid-column: 1/-1;
+      }
+      .wb-task-edit-form textarea {
+        resize: vertical;
+      }
+      .wb-task-edit-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 7px;
+        grid-column: 1/-1;
+      }
+      .wb-task-edit-actions button {
+        padding: 7px 11px;
+        border: 1px solid #dfe5ed;
+        border-radius: 5px;
+        color: #788497;
+        background: white;
+        font-size: 10px;
+      }
+      .wb-task-edit-actions .primary {
+        border-color: #d84456;
+        color: #fff;
+        background: #d84456;
+      }
       .orders tr.is-linked,
       .wb-task-table tr.is-linked {
         background: #fff8ea;
@@ -1710,69 +4411,145 @@
         font-size: 13px;
         line-height: 1.8;
       }
-      .quick-actions,
-      .prompts {
+      .assistant-suggested-questions {
         display: grid;
         gap: 8px;
+        padding: 0 0 14px;
       }
-      .quick-actions button,
-      .prompts button {
+      .assistant-suggested-questions h3 {
+        margin: 0 0 2px;
+        color: #303946;
+        font-size: 12px;
+      }
+      .assistant-suggested-questions button {
         width: 100%;
-        min-height: 49px;
-        padding: 8px 14px;
+        min-height: 39px;
+        padding: 9px 11px;
         border: 1px solid #dce4f5;
         border-radius: 11px;
-        color: #25303f;
+        color: #74839b;
+        background: rgba(255, 255, 255, 0.88);
+        font-size: 11px;
+        line-height: 1.55;
+        text-align: left;
+        white-space: normal;
+        cursor: pointer;
+      }
+      .assistant-suggested-questions button:hover {
+        border-color: #b8cdfa;
+        color: #4e72b8;
+        background: #fff;
+      }
+      .ai-snapshot {
+        margin: 0 0 16px;
+        padding: 12px;
+        border: 1px solid #ecdfe3;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+      .ai-snapshot-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 9px;
+        color: #434d5b;
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .ai-snapshot-head span {
+        color: #a18b94;
+        font-size: 9px;
+        font-weight: 500;
+      }
+      .ai-snapshot-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .ai-snapshot-grid button {
+        min-width: 0;
+        padding: 9px 10px;
+        border: 1px solid #e8eaf0;
+        border-radius: 8px;
         background: #fff;
         text-align: left;
-        font-size: 13px;
-        font-weight: 600;
-        box-shadow: 0 2px 4px rgba(63, 90, 136, 0.025);
       }
-      .quick-actions button:hover,
-      .prompts button:hover {
-        border-color: #f2a9af;
-        color: var(--brand);
-        background: #fffafa;
+      .ai-snapshot-grid button:hover {
+        border-color: #efb3bb;
+        background: #fffafb;
       }
-      .quick-actions button span {
-        display: inline-grid;
-        place-items: center;
-        width: 27px;
-        margin-right: 7px;
-        color: #ef3153;
-        vertical-align: middle;
+      .ai-snapshot-grid small,
+      .ai-snapshot-grid strong {
+        display: block;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      .quick-actions button:nth-child(2) span,
-      .quick-actions button:nth-child(3) span {
-        color: #3979ff;
+      .ai-snapshot-grid small {
+        color: #8994a4;
+        font-size: 9px;
       }
-      .quick-actions button:nth-child(4) span {
-        color: #ff7528;
-      }
-      .quick-actions svg {
-        width: 20px;
-        height: 20px;
-        fill: none;
-        stroke: currentColor;
-        stroke-width: 1.7;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      .prompt-section {
-        margin-top: 23px;
-      }
-      .prompt-section h3 {
-        margin: 0 0 12px;
+      .ai-snapshot-grid strong {
+        margin-top: 4px;
+        color: #303946;
         font-size: 14px;
       }
-      .prompts button {
-        min-height: 40px;
-        padding: 7px 19px;
-        border-radius: 22px;
-        color: #7c8a9f;
+      .ai-snapshot-grid button:nth-child(3) strong,
+      .ai-snapshot-grid button:nth-child(4) strong {
+        color: #d24755;
+      }
+      .ai-query-builder {
+        margin: 0 0 14px;
+        padding: 12px;
+        border: 1px solid #e2e8f3;
+        border-radius: 11px;
+        background: rgba(255, 255, 255, 0.76);
+      }
+      .ai-query-builder h3 {
+        margin: 0 0 9px;
+        color: #424d5d;
         font-size: 12px;
-        font-weight: 400;
+      }
+      .ai-query-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7px;
+      }
+      .ai-query-builder select,
+      .ai-query-builder input {
+        width: 100%;
+        min-width: 0;
+        height: 35px;
+        padding: 0 9px;
+        border: 1px solid #dce3ed;
+        border-radius: 7px;
+        color: #465367;
+        background: #fff;
+        font-size: 10px;
+      }
+      .ai-query-object {
+        grid-column: 1 / -1;
+      }
+      .ai-query-submit {
+        width: 100%;
+        min-height: 35px;
+        grid-column: 1 / -1;
+        border: 0;
+        border-radius: 7px;
+        color: #fff;
+        background: linear-gradient(100deg, #fb6e83, #e94764);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .ai-query-submit:hover {
+        filter: brightness(0.97);
+      }
+      .ai-query-hint {
+        margin: 8px 0 0;
+        color: #8c98a9;
+        font-size: 9px;
+        line-height: 1.55;
       }
       .assistant-foot {
         padding: 10px 12px 12px;
@@ -1929,6 +4706,201 @@
         margin-top: 4px;
         color: var(--faint);
       }
+      .confirmation-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 35;
+        display: grid;
+        place-items: center;
+        padding: 18px;
+        background: rgba(26, 35, 50, 0.34);
+      }
+      .confirmation-dialog {
+        width: min(820px, 100%);
+        max-height: 88vh;
+        overflow: auto;
+        padding: 22px;
+        border: 1px solid #e5eaf2;
+        border-radius: 13px;
+        background: #fff;
+        box-shadow: 0 20px 60px rgba(25, 31, 45, 0.2);
+      }
+      #salesConfirmOverlay .confirmation-dialog {
+        width: min(520px, 100%);
+      }
+      .confirmation-dialog header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+      .confirmation-dialog h2 {
+        margin: 0;
+        color: #2f3948;
+        font-size: 17px;
+      }
+      .confirmation-dialog header p {
+        margin: 6px 0 0;
+        color: #8792a3;
+        font-size: 11px;
+      }
+      #salesConfirmOrder {
+        white-space: pre-line;
+        line-height: 1.9;
+        color: #566276 !important;
+        font-size: 13px !important;
+      }
+      .confirmation-dialog header button {
+        width: 30px;
+        height: 30px;
+        border: 0;
+        color: #8994a3;
+        background: none;
+        font-size: 22px;
+        cursor: pointer;
+      }
+      .confirmation-dialog label {
+        display: grid;
+        gap: 7px;
+        margin: 12px 0 8px;
+        color: #647186;
+        font-size: 11px;
+      }
+      .confirmation-dialog input {
+        width: 100%;
+        height: 36px;
+        padding: 0 10px;
+        border: 1px solid #dce3ed;
+        border-radius: 6px;
+        color: #3c4859;
+        font-size: 12px;
+      }
+      .sales-options {
+        display: grid;
+        gap: 6px;
+        max-height: 230px;
+        overflow: auto;
+      }
+      .sales-option {
+        display: grid;
+        grid-template-columns: minmax(120px, 1fr) 1fr 110px;
+        align-items: center;
+        gap: 10px;
+        padding: 10px;
+        border: 1px solid #e7ebf2;
+        border-radius: 7px;
+        color: #59677a;
+        background: #fff;
+        text-align: left;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .sales-option:hover,
+      .sales-option[aria-selected='true'] {
+        border-color: #93baf0;
+        background: #f4f8ff;
+      }
+      .sales-option strong {
+        color: #334052;
+      }
+      .sales-option small {
+        color: #8b96a6;
+        font-size: 10px;
+      }
+      .sales-selected {
+        margin-top: 11px;
+        padding: 10px 12px;
+        border-radius: 7px;
+        color: #5d6f88;
+        background: #f4f7fb;
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      .sales-selected[hidden] {
+        display: none;
+      }
+      .confirmation-error {
+        margin: 8px 0 0;
+        color: #c84958;
+        font-size: 11px;
+      }
+      .confirmation-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid #edf0f4;
+      }
+      .confirmation-actions button {
+        min-height: 34px;
+        padding: 0 14px;
+        border: 1px solid #dce3ed;
+        border-radius: 6px;
+        color: #6f7c90;
+        background: #fff;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .confirmation-actions .primary {
+        border-color: #d84456;
+        color: #fff;
+        background: #d84456;
+      }
+      .confirmation-log-table-wrap {
+        max-height: 56vh;
+        overflow: auto;
+        border: 1px solid #e8edf4;
+        border-radius: 8px;
+      }
+      .confirmation-log-table {
+        width: 100%;
+        min-width: 640px;
+        border-collapse: collapse;
+        table-layout: fixed;
+        font-size: 11px;
+      }
+      .confirmation-log-table th,
+      .confirmation-log-table td {
+        padding: 11px 12px;
+        border-bottom: 1px solid #edf0f4;
+        text-align: left;
+        vertical-align: top;
+      }
+      .confirmation-log-table th {
+        position: sticky;
+        top: 0;
+        color: #748094;
+        background: #f6f8fb;
+        font-weight: 600;
+      }
+      .confirmation-log-table td {
+        color: #3f4c5f;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+      }
+      .confirmation-log-table th:nth-child(1),
+      .confirmation-log-table td:nth-child(1) {
+        width: 22%;
+      }
+      .confirmation-log-table th:nth-child(2),
+      .confirmation-log-table td:nth-child(2) {
+        width: 18%;
+      }
+      .confirmation-log-table th:nth-child(3),
+      .confirmation-log-table td:nth-child(3) {
+        width: 20%;
+      }
+      .confirmation-log-table th:nth-child(4),
+      .confirmation-log-table td:nth-child(4) {
+        width: 40%;
+      }
+      .confirmation-log-empty {
+        padding: 20px !important;
+        color: #8994a3 !important;
+        text-align: center !important;
+      }
       .toast {
         position: fixed;
         right: 20px;
@@ -1942,25 +4914,70 @@
         font-size: 12px;
       }
       @media (max-width: 1200px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr) 360px;
+        }
         .content {
           padding: 20px;
-        }
-        .wb-kpis {
-          grid-template-columns: repeat(3, minmax(0, 1fr));
         }
         .wb-panels {
           grid-template-columns: 1fr;
         }
+        .wb-kpis {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 1100px) {
+        .fulfillment-header {
+          align-items: stretch;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .fulfillment-view-tabs {
+          justify-content: flex-start;
+        }
+        .fulfillment-header .fulfillment-toolbar {
+          justify-content: flex-start;
+        }
       }
       @media (max-width: 800px) {
+        .layout {
+          grid-template-columns: minmax(0, 1fr);
+          overflow: auto;
+        }
+        .workspace {
+          height: auto;
+        }
+        .assistant {
+          min-height: 680px;
+          margin: 0 12px 12px;
+        }
         .summary {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .trace-steps {
+          grid-template-columns: repeat(5, minmax(150px, 1fr));
+          overflow-x: auto;
+          padding-bottom: 4px;
+        }
+        .fulfillment-rules {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .dimension-grid {
+          grid-template-columns: 1fr;
+        }
+        .fulfillment-toolbar .freshness {
+          margin-left: 0;
+          width: 100%;
         }
       }
       @media (max-width: 560px) {
         .topbar {
           height: 48px;
-          padding: 0 12px;
+          padding: 0 132px 0 12px;
+        }
+        .topbar > #toggleAssistant {
+          right: 12px;
         }
         .page-tabs {
           width: 100%;
@@ -1969,11 +4986,22 @@
           min-width: 0;
           flex: 1;
         }
-        .period-control select {
-          max-width: 200px;
+        .period-picker-trigger {
+          width: min(210px, calc(100vw - 150px));
+          min-width: 165px;
+        }
+        .period-picker-menu {
+          grid-template-columns: minmax(115px, 0.78fr) minmax(190px, 1.22fr);
+          width: min(390px, calc(100vw - 24px));
         }
         .content {
           padding: 16px 12px;
+        }
+        .shortage-formula {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .fulfillment-rules {
+          grid-template-columns: 1fr;
         }
         .wb-definition-grid {
           grid-template-columns: 1fr;
@@ -1987,13 +5015,29 @@
         }
         .wb-kpis {
           grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+        .wb-kpi-value {
+          gap: 4px;
+        }
+        .wb-kpi-target {
+          font-size: 10px;
+        }
+        .wb-kpi-compare-group {
+          grid-template-columns: 1fr;
+          gap: 6px;
+          padding: 5px 0;
+        }
+        .wb-kpi-compare-row {
+          justify-content: flex-start;
+          gap: 8px;
+          font-size: 10px;
+        }
+        .wb-kpi-compare-row b {
+          font-size: 10px;
         }
         .wb-boundary {
           flex-direction: column;
-        }
-        .wb-context small {
-          width: 100%;
-          margin-left: 0;
         }
         .wb-adopt-overlay {
           padding: 10px;
@@ -2018,149 +5062,944 @@
           flex-basis: 100%;
         }
       }
-    </style>
-    <style id="gea-compact-page-header">
-      /* Embedded business pages share compact inventory-page top spacing. */
-      .workspace > .content {
-        width: 100%;
-        max-width: none;
-        padding-top: 8px;
+      @media (max-width: 560px) {
+        .wb-issue-modal-foot {
+          flex-wrap: wrap;
+          padding-left: 17px;
+          padding-right: 17px;
+        }
+        .wb-issue-modal-foot p {
+          flex-basis: 100%;
+        }
       }
-      .wb-hero h1 {
+
+      .wb-sku-table {
+        table-layout: fixed;
+      }
+      .wb-sku-table th,
+      .wb-sku-table td {
+        overflow-wrap: anywhere;
+      }
+      .wb-sku-table:not(.has-owner) th:nth-child(1) {
+        width: 28%;
+      }
+      .wb-sku-table:not(.has-owner) th:nth-child(2) {
+        width: 18%;
+      }
+      .wb-sku-table:not(.has-owner) th:nth-child(3) {
+        width: 18%;
+      }
+      .wb-sku-table:not(.has-owner) th:nth-child(4) {
+        width: 20%;
+      }
+      .wb-sku-table:not(.has-owner) th:nth-child(5) {
+        width: 16%;
+      }
+      .wb-sku-table.has-owner th:nth-child(1) {
+        width: 23%;
+      }
+      .wb-sku-table.has-owner th:nth-child(2) {
+        width: 15%;
+      }
+      .wb-sku-table.has-owner th:nth-child(3) {
+        width: 18%;
+      }
+      .wb-sku-table.has-owner th:nth-child(4) {
+        width: 14%;
+      }
+      .wb-sku-table.has-owner th:nth-child(5) {
+        width: 16%;
+      }
+      .wb-sku-table.has-owner th:nth-child(6) {
+        width: 14%;
+      }
+      .wb-region-customer-table {
+        table-layout: fixed;
+      }
+      .wb-region-customer-table th:nth-child(1) {
+        width: 44%;
+      }
+      .wb-region-customer-table th:nth-child(2) {
+        width: 28%;
+      }
+      .wb-region-customer-table th:nth-child(3),
+      .wb-region-customer-table th:nth-child(4) {
+        width: 14%;
+      }
+      .wb-performance-period + .wb-performance-period {
+        margin-top: 22px;
+      }
+      #wbDimensionSection > .wb-dimension-head {
         display: none;
       }
-    </style>
-    <style>
+      .wb-performance-period h3 {
+        margin: 0 0 9px;
+        color: #303844;
+        font-size: 13px;
+        font-weight: 700;
+      }
+      .wb-performance-table-wrap {
+        max-width: 100%;
+        overflow: auto;
+        border: 1px solid #e3e6ea;
+        border-radius: 7px;
+        scrollbar-width: thin;
+      }
+      .wb-performance-table {
+        width: 100%;
+        min-width: 1120px;
+        border-collapse: collapse;
+        table-layout: auto;
+        text-align: left;
+        font-size: 11px;
+      }
+      .wb-performance-table.wide {
+        min-width: 1320px;
+      }
+      .wb-performance-table th,
+      .wb-performance-table td {
+        padding: 8px 10px;
+        border-right: 1px solid #e3e6ea;
+        border-bottom: 1px solid #e3e6ea;
+        white-space: nowrap;
+      }
+      .wb-performance-table th {
+        color: #4d5765;
+        background: #f2f3f5;
+        font-weight: 700;
+      }
+      .wb-performance-table thead tr:first-child th {
+        height: 38px;
+      }
+      .wb-performance-table thead tr:nth-child(2) th {
+        height: 34px;
+        font-weight: 600;
+      }
+      .wb-performance-table td {
+        height: 36px;
+        color: #4f5967;
+        background: #fff;
+      }
+      .wb-performance-table tbody tr:hover td {
+        background: #fffafb;
+      }
+      .wb-performance-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      .wb-performance-table th:last-child,
+      .wb-performance-table td:last-child {
+        border-right: 0;
+      }
+      .wb-performance-table td:first-child {
+        color: #303844;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-good {
+        color: #20232a;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-warning {
+        color: #956900;
+        font-weight: 700;
+      }
+      .wb-performance-table td.performance-bad {
+        color: #c8112a;
+        font-weight: 700;
+      }
+      .wb-performance-marker {
+        display: inline-grid;
+        place-items: center;
+        width: 14px;
+        height: 14px;
+        margin-right: 4px;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 10px;
+        line-height: 14px;
+        vertical-align: -2px;
+      }
+      .wb-performance-marker.warning {
+        border-radius: 3px 3px 5px 5px;
+        color: #624400;
+        background: #ffd34d;
+      }
+      .wb-performance-marker.bad {
+        border-radius: 50%;
+        color: #fff;
+        background: #df3038;
+        font-size: 8px;
+      }
+      .wb-performance-empty {
+        color: #858c96 !important;
+        text-align: center;
+      }
+      .wb-performance-filter-note {
+        display: block;
+        margin-top: 4px;
+        color: #667085;
+      }
+      .wb-performance-note {
+        margin: 9px 0 0;
+        color: #858c96;
+        font-size: 10px;
+      }
+      .wb-unmet-section {
+        display: grid;
+        gap: 12px;
+        margin-top: 24px;
+      }
+      .wb-unmet-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .wb-unmet-section-head h3 {
+        margin: 0;
+        color: #303844;
+        font-size: 16px;
+        line-height: 1.4;
+      }
+      .wb-unmet-section-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 0 0 auto;
+      }
+      .wb-unmet-add-button,
+      .wb-unmet-ai-button {
+        min-height: 32px;
+        padding: 0 8px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-add-button {
+        color: #555d68;
+      }
+      .wb-unmet-ai-button {
+        color: #df1732;
+      }
+      .wb-unmet-add-button:hover {
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-ai-button:hover {
+        color: #c91029;
+        background: #fffafb;
+      }
+      .wb-unmet-add-button:focus-visible,
+      .wb-unmet-ai-button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-add-fields {
+        display: grid;
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .wb-unmet-add-fields label {
+        display: grid;
+        gap: 7px;
+        color: #555d68;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select,
+      .wb-unmet-add-fields textarea {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 11px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #343b46;
+        background: #fff;
+        font:
+          400 12px/1.5 'Microsoft YaHei UI',
+          'PingFang SC',
+          'Noto Sans CJK SC',
+          Arial,
+          sans-serif;
+      }
+      .wb-unmet-add-fields input,
+      .wb-unmet-add-fields select {
+        height: 40px;
+      }
+      .wb-unmet-add-fields textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+      .wb-unmet-add-fields input:focus-visible,
+      .wb-unmet-add-fields select:focus-visible,
+      .wb-unmet-add-fields textarea:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+        border-color: #df1732;
+      }
+      .wb-unmet-add-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 16px 28px;
+        border-top: 1px solid #edf0f4;
+      }
+      .wb-unmet-add-foot button {
+        min-height: 36px;
+        padding: 0 15px;
+        border: 1px solid #d9dde3;
+        border-radius: 8px;
+        color: #555d68;
+        background: #fff;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .wb-unmet-add-foot button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-add-foot button.primary {
+        border-color: #df1732;
+        color: #fff;
+        background: #df1732;
+      }
+      .wb-unmet-add-foot button.primary:hover {
+        border-color: #c91029;
+        background: #c91029;
+      }
+      .wb-unmet-add-foot button.danger {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff;
+      }
+      .wb-unmet-add-foot button.danger:hover {
+        border-color: #c8112a;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-add-foot button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card {
+        padding: 14px 16px;
+        border: 1px solid #e3e6ea;
+        border-radius: 8px;
+        background: #fafafa;
+      }
+      .wb-unmet-card {
+        position: relative;
+      }
+      .wb-unmet-card h4 {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 0 78px 10px 0;
+        color: #303844;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+      .wb-unmet-card-actions {
+        position: absolute;
+        top: 10px;
+        right: 11px;
+        display: flex;
+        gap: 4px;
+      }
+      .wb-unmet-card-actions button {
+        display: grid;
+        place-items: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: 1px solid transparent;
+        border-radius: 7px;
+        color: #718096;
+        background: transparent;
+        cursor: pointer;
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+      .wb-unmet-card-actions button:hover {
+        border-color: #efabb4;
+        color: #df1732;
+        background: #fffafb;
+      }
+      .wb-unmet-card-actions button.delete:hover {
+        border-color: #f1c4ca;
+        color: #c8112a;
+        background: #fff0f2;
+      }
+      .wb-unmet-card-actions button:focus-visible {
+        outline: 2px solid #df1732;
+        outline-offset: 2px;
+      }
+      .wb-unmet-card-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+      .wb-unmet-delete-copy {
+        margin: 0;
+        padding: 6px 0;
+        color: #555d68;
+        font-size: 13px;
+        line-height: 1.7;
+      }
+      .wb-unmet-dot {
+        flex: 0 0 auto;
+        color: #cf2633;
+        font-size: 18px;
+        line-height: 1.1;
+      }
+      .wb-unmet-analysis {
+        margin: 0 0 8px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-analysis strong {
+        color: #303844;
+      }
+      .wb-unmet-card ul {
+        display: grid;
+        gap: 5px;
+        margin: 0 0 10px;
+        padding-left: 21px;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+      .wb-unmet-card li {
+        padding-left: 2px;
+      }
+      .wb-unmet-card li::marker {
+        color: #3972c4;
+      }
+      .wb-director-note-content {
+        margin: 0;
+        color: #555d68;
+        font-size: 12px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .wb-unmet-measures {
+        display: flex;
+        align-items: flex-start;
+        gap: 5px;
+        color: #3972c4;
+        font-size: 12px;
+        line-height: 1.75;
+      }
+      .wb-unmet-measures > strong {
+        flex: 0 0 auto;
+        font-weight: 600;
+      }
+      .wb-unmet-measures > strong span {
+        color: #168e58;
+      }
+      .wb-unmet-measures > div {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: 9px;
+        row-gap: 2px;
+      }
+      .wb-unmet-measures i {
+        margin-right: 3px;
+        color: #3972c4;
+        font-style: normal;
+      }
+      .wb-unmet-empty {
+        margin: 0;
+        padding: 15px;
+        border: 1px dashed #d9dde3;
+        border-radius: 7px;
+        color: #858c96;
+        font-size: 12px;
+      }
+      @media (max-width: 720px) {
+        .wb-dimension-tabs {
+          gap: 18px;
+          scrollbar-width: none;
+        }
+        .wb-dimension-tabs::-webkit-scrollbar {
+          display: none;
+        }
+        .wb-dimension-head {
+          flex-wrap: wrap;
+        }
+        .wb-performance-table {
+          min-width: 1120px;
+        }
+        .wb-unmet-add-foot {
+          padding-left: 17px;
+          padding-right: 17px;
+        }
+      }
+
       /* SHARED_THEME_RESOURCE */
       /* ORDER_THEME */
     </style>
   </head>
   <body>
-    <div class="prototype-notice">开发中 · 报告摘录与本地模拟；未连接真实订单或任务系统。</div>
+    <p class="prototype-notice">报告摘录与本地演示数据 · 非实时业务数据</p>
     <p id="pageSyncStatus" role="status" hidden></p>
-    <div class="shell">
-      <main class="main" id="mainPage">
-        <div class="layout" id="layout">
-          <div class="workspace">
-            <section class="content" id="workbenchView" aria-label="订单工作台">
-              <div class="wb-hero">
-                <div class="period-bar" role="group" aria-label="订单数据统计周期">
-                  <span class="period-label">统计周期</span>
-                  <div class="period-switch" role="group" aria-label="月度或周度">
-                    <button id="monthMode" class="active" type="button" aria-pressed="true">
-                      月度</button
-                    ><button id="weekMode" type="button" aria-pressed="false">周度</button>
-                  </div>
-                  <label class="period-control"
-                    >选择月份
-                    <input
-                      id="periodMonth"
-                      type="month"
-                      value="2026-09"
-                      aria-label="选择月份" /></label
-                  ><label class="period-control" id="weekControl" hidden
-                    >选择周次
-                    <select id="periodWeek" aria-label="选择周次"></select></label
-                  ><span class="period-meta" id="periodMeta" aria-live="polite"></span>
+    <main class="shell">
+      <div class="workspace">
+        <section class="content" id="workbenchView" aria-label="订单工作台">
+          <div class="wb-hero">
+            <div class="period-bar" role="group" aria-label="订单数据统计周期">
+              <span class="period-label">统计周期</span>
+              <div class="period-picker" id="periodPicker">
+                <button
+                  class="period-picker-trigger"
+                  id="periodPickerTrigger"
+                  type="button"
+                  aria-haspopup="dialog"
+                  aria-expanded="false"
+                  aria-controls="periodPickerMenu"
+                >
+                  <span id="periodPickerValue"></span
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </button>
+                <div
+                  class="period-picker-menu"
+                  id="periodPickerMenu"
+                  role="dialog"
+                  aria-label="选择统计周期"
+                  hidden=""
+                >
+                  <div
+                    class="period-picker-months"
+                    id="periodPickerMonths"
+                    role="group"
+                    aria-label="选择月份"
+                  ></div>
+                  <div
+                    class="period-picker-weeks"
+                    id="periodPickerWeeks"
+                    role="group"
+                    aria-label="选择周次"
+                  ></div>
                 </div>
-                <div class="wb-context">
-                  <strong>当前场景</strong><span>订单质量与交付协同</span
-                  ><span>全部基地 · 全部品类</span>
-                </div>
-                <button class="wb-link" type="button" data-order-workbench-page>
-                  查看订单履约 →
+              </div>
+              <span class="period-meta" id="periodMeta" aria-live="polite"></span>
+            </div>
+          </div>
+          <div class="period-empty" id="wbPeriodEmpty" role="status" hidden=""></div>
+          <section class="wb-section" aria-label="订单核心指标">
+            <div class="wb-kpis" id="wbKpis"></div>
+          </section>
+          <section
+            class="wb-card wb-analysis wb-metric-analysis"
+            id="wbMetricAnalysis"
+            aria-labelledby="wbMetricAnalysisTitle"
+          >
+            <div class="wb-analysis-head">
+              <div class="wb-analysis-label">
+                <i aria-hidden="true">📋</i>
+                <div><h2 id="wbMetricAnalysisTitle">本期结论摘要</h2></div>
+              </div>
+              <div class="wb-summary-actions">
+                <button
+                  class="wb-unmet-ai-button"
+                  type="button"
+                  data-wb-summary-ai=""
+                  aria-label="AI分析本期结论摘要"
+                >
+                  ✦ AI 分析</button
+                ><button
+                  class="wb-summary-edit"
+                  type="button"
+                  data-wb-summary-edit=""
+                  aria-label="编辑本期结论摘要"
+                >
+                  编辑
                 </button>
               </div>
-              <div class="period-empty" id="wbPeriodEmpty" role="status" hidden></div>
-              <div class="wb-report-date">月度报告截至 2026-09-13</div>
-              <section class="wb-section" aria-label="订单核心指标">
-                <div class="wb-kpis" id="wbKpis"></div>
-              </section>
-              <div class="wb-panels">
-                <section class="wb-card" aria-labelledby="wbEventsTitle">
-                  <div class="wb-card-title">
-                    <div>
-                      <h2 id="wbEventsTitle">事件预警</h2>
-                      <p>从报告中的未达标项与重点异常提炼</p>
-                    </div>
-                    <span id="wbEventCount"></span>
-                  </div>
-                  <div class="wb-events-tabs" role="group" aria-label="筛选预警事项">
-                    <button class="active" type="button" data-wb-event-filter="focus">
-                      重点关注</button
-                    ><button type="button" data-wb-event-filter="all">全部事项</button>
-                  </div>
-                  <div id="wbEvents"></div>
-                  <div class="wb-panel-foot">仅为报告异常事项，不等同于去重后的预警订单数。</div>
-                </section>
-                <section class="wb-card" aria-labelledby="wbActionsTitle">
-                  <div class="wb-card-title">
-                    <div>
-                      <h2 id="wbActionsTitle">行动建议</h2>
-                      <p>从根因到可复核的处理动作</p>
-                    </div>
-                    <span>待业务确认 ›</span>
-                  </div>
-                  <div id="wbActions"></div>
-                  <div class="wb-panel-foot">
-                    AI 提出建议，人员复核后推进；不会自动改变订单或任务状态。
-                  </div>
-                </section>
+            </div>
+            <div class="wb-analysis-body">
+              <div class="wb-summary-lines">
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">✅</span
+                  ><span
+                    ><strong>正向：</strong
+                    ><span data-wb-summary-content="positive"
+                      >满足率 95.27%（目标&gt;95%）本期达成，环比 +0.97pct、同比 +7.97pct；准交率
+                      99.15% 持续高位（环比 +2.23pct），各基地准交率全面达标；60天+货龄占比 2.21%
+                      较上期 -1.45pct 持续压降，汤圆环比 -3.87pct 改善明显。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">🔴</span
+                  ><span
+                    ><strong>风险：</strong
+                    ><span data-wb-summary-content="risk"
+                      >改单率 2.60% 未达目标（缺口 0.60pct），华东经销 3.41%、华南事业部
+                      3.78%、餐饮雪套 5.25%、高势能渠道 21.4% 为拐点；可发货天数 14.5
+                      天大幅超标（环比 +3.96 天、同比 +5.50 天），郑州 15.28、华南 13.20、西南
+                      16.32、遂平 13.73 均超 11 天阈值，库存沉淀明显；面点 91.56%、预制食材 88.76%
+                      为品项最弱两环。</span
+                    ></span
+                  >
+                </p>
+                <p>
+                  <span class="wb-summary-icon" aria-hidden="true">📋</span
+                  ><span
+                    ><strong>旬/周节奏：</strong
+                    ><span data-wb-summary-content="rhythm"
+                      >本周满足率 96.17%（周环比
+                      +1.63pct），较上期改善，这达标口径进一步扩大；西南本周 94.93%（周环比
+                      +6.31pct）修复显著；华东本周 95.01%（周环比 +1.15pct）已步入目标线上方。</span
+                    ></span
+                  >
+                </p>
               </div>
-              <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle">
-                <div class="wb-task-head">
-                  <div>
-                    <h2 id="wbTasksTitle">任务追踪</h2>
-                    <p>采纳建议后在本页创建本地跟进任务；不连接真实任务系统</p>
-                  </div>
-                  <div class="wb-task-summary">
-                    <span id="wbTaskSummary"></span
-                    ><button type="button" data-wb-export>⇩ 导出清单</button>
-                  </div>
-                </div>
-                <div class="wb-filters" role="group" aria-label="筛选任务">
-                  <button class="active" type="button" data-wb-task-filter="all">
-                    全部 <span id="wbTaskAllCount"></span></button
-                  ><button type="button" data-wb-task-filter="pending">
-                    待跟进 <span id="wbTaskPendingCount"></span></button
-                  ><button type="button" data-wb-task-filter="done">
-                    已完成 <span id="wbTaskDoneCount"></span>
-                  </button>
-                </div>
-                <div class="wb-task-table-wrap">
-                  <table class="wb-task-table">
-                    <thead>
-                      <tr>
-                        <th>任务 / 关联事项</th>
-                        <th>责任角色</th>
-                        <th>预计截止日期</th>
-                        <th>本地状态</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="wbTaskRows"></tbody>
-                  </table>
-                </div>
-                <div class="wb-foot">
-                  任务仅保存在本次打开的页面中，不代表实际派发、执行或验收。
-                </div>
-              </section>
-              <section class="wb-card wb-boundary">
-                <div>
-                  <strong>数据边界</strong>
-                  <p>
-                    9 月报告指标与异常事项 → 人工核实 → 改善建议 →
-                    演示任务；订单明细仍在“订单履约”页
-                  </p>
-                </div>
-                <span>报告摘录 · 非实时</span>
-              </section>
+            </div>
+          </section>
+          <section
+            class="wb-card wb-dimensions"
+            id="wbDimensionSection"
+            aria-labelledby="wbDimensionsTitle"
+          >
+            <div class="wb-dimension-head">
+              <div>
+                <h2 id="wbDimensionsTitle">多维分析</h2>
+                <p>基地、应责总监与品项月度及周度达成情况</p>
+              </div>
+              <span>月度报告 · 截至 2026-09-13</span>
+            </div>
+            <div class="wb-dimension-tabs" role="tablist" aria-label="订单工作台多维分析">
+              <button
+                class="active"
+                id="wbDimensionBasePerformanceTab"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                aria-controls="wbDimensionPanel"
+                tabindex="0"
+                data-wb-dimension-tab="base-performance"
+              >
+                基地维度达成分析</button
+              ><button
+                id="wbDimensionDirectorPerformanceTab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="wbDimensionPanel"
+                tabindex="-1"
+                data-wb-dimension-tab="director-performance"
+              >
+                应责总监维度达成分析</button
+              ><button
+                id="wbDimensionItemPerformanceTab"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                aria-controls="wbDimensionPanel"
+                tabindex="-1"
+                data-wb-dimension-tab="item-performance"
+              >
+                品项维度达成分析
+              </button>
+            </div>
+            <div
+              class="wb-dimension-panel"
+              id="wbDimensionPanel"
+              role="tabpanel"
+              aria-labelledby="wbDimensionBasePerformanceTab"
+              aria-live="polite"
+            ></div>
+          </section>
+          <section class="wb-card" id="wbTaskSection" aria-labelledby="wbTasksTitle" hidden="">
+            <div class="wb-task-head">
+              <div>
+                <h2 id="wbTasksTitle">任务追踪</h2>
+                <p>采纳建议后在本页创建本地跟进任务；不连接真实任务系统</p>
+              </div>
+              <div class="wb-task-summary">
+                <span id="wbTaskSummary"></span
+                ><button type="button" data-wb-export="">⇩ 导出清单</button>
+              </div>
+            </div>
+            <div class="wb-filters" role="group" aria-label="筛选任务">
+              <button class="active" type="button" data-wb-task-filter="all">
+                全部 <span id="wbTaskAllCount"></span></button
+              ><button type="button" data-wb-task-filter="pending">
+                待跟进 <span id="wbTaskPendingCount"></span></button
+              ><button type="button" data-wb-task-filter="done">
+                已完成 <span id="wbTaskDoneCount"></span>
+              </button>
+            </div>
+            <div class="wb-task-table-wrap">
+              <table class="wb-task-table">
+                <thead>
+                  <tr>
+                    <th>任务 / 关联事项</th>
+                    <th>责任角色</th>
+                    <th>预计截止日期</th>
+                    <th>本地状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="wbTaskRows"></tbody>
+              </table>
+            </div>
+            <div class="wb-foot">
+              问题及改进输入与改进任务保存在本机浏览器；不会连接真实任务系统。
+            </div>
+          </section>
+          <section class="wb-improvement-section" aria-labelledby="wbImprovementTitle">
+            <h2 id="wbImprovementTitle">改善措施：短期追进 + 长期机制</h2>
+            <section class="wb-improvement-block" aria-labelledby="wbShortTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbShortTermTitle">短期追进措施</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="short">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table">
+                  <colgroup>
+                    <col style="width: 10%" />
+                    <col style="width: 62%" />
+                    <col style="width: 18%" />
+                    <col style="width: 10%" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th class="direction">追进方向</th>
+                      <th>改善措施</th>
+                      <th class="issue">对应问题</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">高库存压降<br />（最紧急）</td>
+                      <td>
+                        可发货天数合计 14.5 天、环比 +3.96 天、同比 +5.50 天；西南 16.3 天（环比
+                        +7.16 天，全国最高）、郑州 15.3 天（环比 +4.70
+                        天）为主要拖累。本期定四条硬动作：① <strong>分级停排</strong>——对烤肠 39.2
+                        天、240g 水饺 35.3 天、ODM 水饺 32.0 天、玉汤圆 32.1 天、312 元宝汤圆 34.6
+                        天、大黄米汤圆 30.0 天、柿子组合装 122.4 天等超 30 天
+                        SKU，本周起增加休息停排安排，只做发货消化；② <strong>西南专项</strong>——10
+                        月底前把 16.3 天压到 13 天以内（日产再降，已排 25–27 日连续停产 3 天）；③
+                        <strong>每日监控</strong>——超 20 天 SKU 逐日跟进、逐日销号。
+                      </td>
+                      <td class="issue">可发货天数 14.5 天；烤肠 39.2 天；240g 水饺 35.3 天</td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">60天+货龄<br />结构治理</td>
+                      <td>
+                        全国 2.21%、环比 -1.45pct，但同比 +0.82pct，仍高于去年同期。需结构性处理：①
+                        <strong>郑州汤圆专项</strong>——郑州基地口径下汤圆 60天+ 达 7.85%（环比
+                        -15.24pct，已有大幅改善，但仍高于该基地其他品项；全国汤圆口径为 3.34%），318
+                        速玉汤圆 1.5 万件未按节点发货是根因，限期 10 月底发完；②
+                        <strong>刘成胜线烤肠恶化</strong>——本期 2.42%、环比
+                        +1.77pct，是唯一三项全升的线，纳入周会红牌督办；③
+                        <strong>火锅料回升</strong>——本期 2.42%、环比 +1.54pct，500g 烤肠新滚入
+                        8,000 件需单独消化；④ <strong>粽子清零</strong>——粽子 60天+ 占比
+                        100%，须跟进处理措施，尽快清零。
+                      </td>
+                      <td class="issue">
+                        60天+货龄 2.21%（同比 +0.82pct）；郑州汤圆 7.85%；刘成胜 2.42%
+                      </td>
+                      <td class="actions">
+                        <div class="wb-improvement-actions">
+                          <button
+                            class="wb-improvement-action"
+                            type="button"
+                            data-wb-improvement-edit=""
+                            aria-label="编辑改善措施"
+                            title="编辑"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"></path>
+                            </svg></button
+                          ><button
+                            class="wb-improvement-action delete"
+                            type="button"
+                            data-wb-improvement-delete=""
+                            aria-label="删除改善措施"
+                            title="删除"
+                          >
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              stroke-width="1.8"
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              aria-hidden="true"
+                            >
+                              <path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"></path>
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="direction">满足率缺口<br />（西南 / 华东）</td>
+                      <td>
+                        全国 95.3% 达标，但西南 93.6%（低于目标 1.4pct）、华东 94.2%（低于目标
+                        0.8pct）仍未收口，且西南是唯一修复中的缺口（本周已回到 96.9%、周环比
+                        +7.64pct）。① <strong>西南</strong>——前两周下单进度仅 52%、发货进度
+                        36%，需求确认滞后是主因，改为每周两次省区需求确认 + 下单进度日通报；②
+                        <strong>华东</strong>——水饺食材 80.2%、火锅料 89.2%、预制食材 80.2%、火锅料
+                        89.6% 等指标需跟进，盒马水饺 6,283 件缺货锁定购买点；③
+                        <strong>郑州</strong>——庞丽娟 96.7%、张培 96.7% 已达标，刘成胜 92.5%
+                        为全国最低，需单独复盘订单结构。
+                      </td>
+                      <td class="issue">西南 93.6%；华东 94.2%；刘成胜 92.5%；预制食材 88.8%</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">预制食材<br />产能缺口</td>
+                      <td>
+                        预制食材 88.8% 为八大品项最低，缺口 6.2pct，其中鸡调品（鸡米花 / 雪花鸡柳 /
+                        川香鸡柳）占缺货 70%、饭团糯米鸡占 18%。① 鸡米花 1–18 日累计欠产 11,500
+                        件，锁定代工厂全月产能并每日跟踪日产；② ODM 新代工资源本月内落地 1
+                        家，先补饭团 / 糯米鸡；③ 泰正第三条产线已开，月底前验证日产效果。
+                      </td>
+                      <td class="issue">预制食材 88.8%（全国最低品项）</td>
+                    </tr>
+                    <tr>
+                      <td class="direction">面点 / 馄饨<br />结构性缺货</td>
+                      <td>
+                        面点 91.6%、馄饨 94.0%。面点缺口集中在散装圆包 0.7 万、寿桃包 0.6
+                        万件；散装圆包郑州外协厂截至 18 日日产仅完成 47%、落后 10%。馄饨主因 2.5kg
+                        订单集中爆发（纠偏下单 91%）与 305g 同资源挤占，且 500g 馄饨周转 25.2
+                        天、170 遇见小面 20.5 天、金牌虾云吞 19.6 天。① 2.5kg 与 305g
+                        产线错峰排产，本周内排开；② 卡通包湖州基地缺货预计 25 日解决，需确认 25
+                        日前不断货；③ 寿桃包 / 切黄包 10 月底消化完并关闭补货入口。
+                      </td>
+                      <td class="issue">面点 91.6%；馄饨 94.0%；500g 馄饨 25.2 天</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </section>
-          </div>
-        </div>
-      </main>
-    </div>
-    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden>
+            <section class="wb-improvement-block" aria-labelledby="wbLongTermTitle">
+              <div class="wb-improvement-block-head">
+                <h3 id="wbLongTermTitle">长期机制建设</h3>
+                <button class="wb-improvement-add" type="button" data-wb-improvement-add="long">
+                  ＋ 添加
+                </button>
+              </div>
+              <div class="wb-improvement-table-wrap">
+                <table class="wb-improvement-table long-term">
+                  <thead>
+                    <tr>
+                      <th class="direction">机制</th>
+                      <th>机制内容（问题→对策）</th>
+                      <th class="goal">目标</th>
+                      <th class="status">状态</th>
+                      <th class="actions">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="direction">机制一<br />高库存 SKU<br />退出机制</td>
+                      <td>
+                        <strong>问题：</strong>本期可发货天数 14.5 天、同比 +5.50
+                        天，高库存不是偶发而是结构性的——烤肠 39.2 天、240g 水饺 35.3 天、312
+                        元宝汤圆 34.6 天等超过 30 天 SKU 长期占据产线，挤占短缺品产能。<br /><strong
+                          >机制：</strong
+                        >建立 SKU 分级退出制度。按可发货天数设四档：&gt;30 天自动停产待评审；20–30
+                        天强制提报去化方案（降价 / 调拨 / 渠道促销三选一）；15–20
+                        天纳入周会销号；&lt;15 天正常排产。每月对 &gt;30 天 SKU
+                        做一次产线腾挪复盘，把产能让给满足率缺口品。
+                      </td>
+                      <td class="goal">治理“高库存长期占产”</td>
+                      <td class="status">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+          <section class="wb-reference-section" aria-labelledby="wbReferenceTitle">
+            <div class="wb-reference-head">
+              <h2 id="wbReferenceTitle">参考链接</h2>
+              <button class="wb-reference-add" type="button" data-wb-reference-add="">
+                ＋ 添加
+              </button>
+            </div>
+            <div class="wb-reference-list" id="wbReferenceList" aria-live="polite"></div>
+          </section>
+        </section>
+      </div>
+    </main>
+    <div class="wb-detail-overlay" id="wbDetailOverlay" hidden="">
       <div class="wb-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="wbDetailTitle">
         <div class="wb-detail-head">
           <h2 id="wbDetailTitle"></h2>
@@ -2169,7 +6008,7 @@
         <div id="wbDetailBody"></div>
       </div>
     </div>
-    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden>
+    <div class="wb-adopt-overlay" id="wbAdoptOverlay" hidden="">
       <div
         class="wb-adopt-dialog"
         role="dialog"
@@ -2197,9 +6036,9 @@
             </div>
             <div class="wb-adopt-fields">
               <label class="wb-adopt-field"
-                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required /></label
+                >责任角色<input id="wbAdoptRole" type="text" maxlength="40" required="" /></label
               ><label class="wb-adopt-field"
-                >预计截止日期<input id="wbAdoptDue" type="date" required
+                >预计截止日期<input id="wbAdoptDue" type="date" required=""
               /></label>
             </div>
             <label class="wb-adopt-field note"
@@ -2213,12 +6052,326 @@
           <div class="wb-adopt-foot">
             <p>同一统计周期内的同一建议只创建一次；创建后可继续查看任务。</p>
             <button id="wbAdoptCancel" type="button">暂不采纳</button
-            ><button id="wbAdoptConfirm" class="primary" type="button">确认并创建任务</button>
+            ><button class="primary" type="submit">确认并创建任务</button>
           </div>
         </form>
       </div>
     </div>
-    <div class="toast" id="toast" role="status" hidden></div>
+    <div class="wb-adopt-overlay" id="wbIssueOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbIssueTitle"
+        aria-describedby="wbIssueSubtitle"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbIssueTitle">问题及改进</h2>
+            <p id="wbIssueSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbIssueClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbIssueForm">
+          <div class="wb-adopt-body">
+            <div class="wb-adopt-notice">
+              编辑内容仅保存在本机浏览器；生成任务后可在“任务追踪”中继续修改。
+            </div>
+            <div class="wb-issue-modal-fields">
+              <label>品类<select id="wbIssueCategory" required=""></select></label>
+              <div class="wb-adopt-fields">
+                <label class="wb-adopt-field"
+                  >责任角色<input
+                    id="wbIssueRole"
+                    type="text"
+                    maxlength="40"
+                    placeholder="填写责任角色" /></label
+                ><label class="wb-adopt-field"
+                  >预计截止日期<input id="wbIssueDue" type="date"
+                /></label>
+              </div>
+              <label
+                >问题<textarea
+                  id="wbIssueAnalysis"
+                  maxlength="1000"
+                  required=""
+                  placeholder="填写问题分析"
+                ></textarea></label
+              ><label
+                >改进<textarea
+                  id="wbIssueMeasure"
+                  maxlength="1000"
+                  required=""
+                  placeholder="填写改进措施"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-issue-modal-foot">
+            <p>选择“保存”只保存问题和改进；“保存并生成任务”会新增或更新对应任务。</p>
+            <button id="wbIssueCancel" type="button">取消</button
+            ><button id="wbIssueSave" type="button">保存</button
+            ><button class="primary" id="wbIssueGenerate" type="button">保存并生成任务</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbUnmetAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetAddTitle"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetAddTitle">添加未达成项</h2>
+            <p id="wbUnmetAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbUnmetAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label
+                ><span id="wbUnmetEntityLabel">基地</span
+                ><select id="wbUnmetEntity" required=""></select></label
+              ><label
+                >标题<input
+                  id="wbUnmetTitleInput"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写未达成项标题" /></label
+              ><label
+                >未达成原因<textarea
+                  id="wbUnmetReasonInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="描述未达成原因"
+                ></textarea></label
+              ><label
+                >改善措施<textarea
+                  id="wbUnmetMeasureInput"
+                  maxlength="2000"
+                  required=""
+                  placeholder="填写改善措施"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbUnmetAddCancel" type="button">取消</button
+            ><button class="primary" id="wbUnmetAddSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbDirectorNoteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbDirectorNoteTitle"
+        aria-describedby="wbDirectorNoteSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbDirectorNoteTitle">添加应责总监备注</h2>
+            <p id="wbDirectorNoteSubtitle">
+              选择应责总监并填写备注标题和内容；备注保存在本机浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbDirectorNoteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbDirectorNoteForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbDirectorNoteDirector"
+                >应责总监<select id="wbDirectorNoteDirector" required=""></select></label
+              ><label for="wbDirectorNoteHeading"
+                >标题<input
+                  id="wbDirectorNoteHeading"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="填写标题" /></label
+              ><label for="wbDirectorNoteContent"
+                >内容<textarea
+                  id="wbDirectorNoteContent"
+                  maxlength="3000"
+                  required=""
+                  placeholder="填写备注内容"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbDirectorNoteCancel" type="button">取消</button
+            ><button class="primary" id="wbDirectorNoteSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbUnmetDeleteOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="wbUnmetDeleteTitle"
+        aria-describedby="wbUnmetDeleteCopy"
+        style="width: min(460px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbUnmetDeleteTitle">确认删除</h2>
+            <p>删除后该未达成项将从列表中移除。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbUnmetDeleteClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <div class="wb-adopt-body">
+          <p class="wb-unmet-delete-copy" id="wbUnmetDeleteCopy">确认删除该未达成项吗？</p>
+        </div>
+        <div class="wb-unmet-add-foot">
+          <button id="wbUnmetDeleteCancel" type="button">取消</button
+          ><button class="danger" id="wbUnmetDeleteConfirm" type="button">确认删除</button>
+        </div>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbImprovementAddOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbImprovementAddTitle"
+        style="width: min(680px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbImprovementAddTitle">添加改善措施</h2>
+            <p id="wbImprovementAddSubtitle"></p>
+          </div>
+          <button class="wb-adopt-close" id="wbImprovementAddClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbImprovementAddForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields" id="wbImprovementAddFields"></div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbImprovementAddCancel" type="button">取消</button
+            ><button class="primary" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbReferenceOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbReferenceFormTitle"
+        aria-describedby="wbReferenceFormSubtitle"
+        style="width: min(600px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbReferenceFormTitle">添加参考链接</h2>
+            <p id="wbReferenceFormSubtitle">填写名称和网页地址；链接仅保存在本机浏览器。</p>
+          </div>
+          <button class="wb-adopt-close" id="wbReferenceClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbReferenceForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbReferenceName"
+                >链接名称<input
+                  id="wbReferenceName"
+                  type="text"
+                  maxlength="120"
+                  required=""
+                  placeholder="例如：月度履约报告" /></label
+              ><label for="wbReferenceUrl"
+                >参考链接<input
+                  id="wbReferenceUrl"
+                  type="url"
+                  maxlength="2048"
+                  required=""
+                  placeholder="https://example.com"
+              /></label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbReferenceCancel" type="button">取消</button
+            ><button class="primary" id="wbReferenceSubmit" type="submit">提交</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="wb-adopt-overlay" id="wbSummaryEditOverlay" hidden="">
+      <div
+        class="wb-adopt-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wbSummaryEditTitle"
+        aria-describedby="wbSummaryEditSubtitle"
+        style="width: min(760px, 100%)"
+      >
+        <div class="wb-adopt-head">
+          <div>
+            <h2 id="wbSummaryEditTitle">编辑本期结论摘要</h2>
+            <p id="wbSummaryEditSubtitle">
+              修改正向、风险和旬/周节奏内容；保存后保留在当前浏览器。
+            </p>
+          </div>
+          <button class="wb-adopt-close" id="wbSummaryEditClose" type="button" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <form class="wb-adopt-form" id="wbSummaryEditForm">
+          <div class="wb-adopt-body">
+            <div class="wb-unmet-add-fields">
+              <label for="wbSummaryPositiveInput"
+                >正向内容<textarea
+                  id="wbSummaryPositiveInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRiskInput"
+                >风险内容<textarea
+                  id="wbSummaryRiskInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea></label
+              ><label for="wbSummaryRhythmInput"
+                >旬/周节奏内容<textarea
+                  id="wbSummaryRhythmInput"
+                  maxlength="3000"
+                  required=""
+                ></textarea>
+              </label>
+            </div>
+          </div>
+          <div class="wb-unmet-add-foot">
+            <button id="wbSummaryEditCancel" type="button">取消</button
+            ><button class="primary" id="wbSummaryEditSubmit" type="submit">保存</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" hidden=""></div>
     <script>
       /* ORDER_ENTRY */
     </script>

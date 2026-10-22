@@ -185,12 +185,6 @@ export const prepareSalesPlanResubmit = (
   const nextStatus = salesPlanWorkflow(version.planTypeCode, rows).resubmit(version.status);
   const correction = version.orderType === 'Z';
   if (
-    correction &&
-    (source.detail.correctionContext?.contract !== 'absolute-net-v1' ||
-      source.detail.correctionContext.monthlyApproved !== true)
-  )
-    return fail('sourceMismatch');
-  if (
     !nextStatus ||
     !version.effective ||
     version.planId !== source.planId ||

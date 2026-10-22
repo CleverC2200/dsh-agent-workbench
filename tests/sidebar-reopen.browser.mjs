@@ -19,6 +19,11 @@ const bundle = await build({
  import{apply as layoutApply,inject as layoutInject}from ${JSON.stringify(resolve(core, 'packages/client/ui-layout/src/client/index.ts'))};
  import{ConversationMainPanel}from ${JSON.stringify(resolve(core, 'packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx'))};
  import{HeroShell}from ${JSON.stringify(resolve(core, 'packages/client/ui-conversation/src/client/skeleton/EmptyHero.tsx'))};
+ import{WorkspaceBrowser}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.tsx'))};
+ import{createWorkspaceViewStore}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/stores.ts'))};
+ import{createWorkspaceShortcutControls}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/shortcuts.ts'))};
+ import{zh as workspaceCopy}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/locales.ts'))};
+ import{zh as commonCopy}from ${JSON.stringify(resolve(core, 'packages/client/locale/src/locales/zh.ts'))};
  import{mountCompanyUI}from'./src/company/ui.tsx';import{WorkbenchController}from'./src/workbench.ts';
  import{mountFramePresentation}from'./src/frame-presenter.tsx';
  (async()=>{const source=value=>({getSnapshot:()=>value,subscribe:()=>()=>{}});
@@ -33,14 +38,26 @@ const bundle = await build({
  ctx.slots.installScope('session',{current:absent,bindingSource:()=>absent,renderArea:(_binding,{children})=>children});
  ctx.slots.provideRoot({hooks:{sessions:source({byId:{}}),workspaces:source({items:[]})},props:{selectWorkspace:()=>{},inputActions:{}}});
  await ctx.plugin({inject:layoutInject,apply:layoutApply}).await();
- ctx.slots.registerFactory({name:'conversation.content',scope:'session-maybe',locale:'companyWorkbench',children:{'conversation.hero.brand.mark':{kind:'single',scope:'root'},'conversation.hero.workspace':{kind:'single',scope:'root'},'conversation.hero.agentPreset':{kind:'single',scope:'session-maybe'}},slots:{views:{scope:'session-maybe'},widthControls:{scope:'session-maybe'}}},({renderSlot})=>{
+ ctx.slots.registerFactory({name:'conversation.content',scope:'session-maybe',locale:'companyWorkbench',children:{'conversation.hero.content':{kind:'single',scope:'root'},'conversation.hero.brand.mark':{kind:'single',scope:'root'},'conversation.hero.workspace':{kind:'single',scope:'root'},'conversation.hero.agentPreset':{kind:'single',scope:'session-maybe'}},slots:{views:{scope:'session-maybe'},widthControls:{scope:'session-maybe'}}},({renderSlot})=>{
    return <div data-core-content style={{height:'100%',display:'flex',flexDirection:'column'}}><HeroShell t={key=>key==='hero.headline'?'探索未至之境':key} renderSlot={renderSlot}/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></div>;
  });
  ctx.slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},({renderSlot})=>renderSlot('main.conversation',{}));
  ctx.slots.register({name:'main.conversation',children:{'conversation.header':{kind:'single',scope:'session-maybe'}}},ConversationMainPanel);
  ctx.slots.register({name:'conversation.header',children:{'settings.launcher':{kind:'single',scope:'root'}}},({renderSlot})=><header data-core-header style={{height:48,flexShrink:0}}>{renderSlot('settings.launcher',{})}</header>);
  const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),document:()=>ctx.layout.selectPanel(null),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
- mountCompanyUI(ctx,workbench,()=>null);
+ mountCompanyUI(ctx,workbench);
+ const workspaceStore=createWorkspaceViewStore().create();workspaceStore.actions.setGroupBy('flat');
+ const controls=createWorkspaceShortcutControls();const useSnapshot=observable=>selector=>selector(React.useSyncExternalStore(observable.subscribe,observable.getSnapshot,observable.getSnapshot));
+ const session={id:'fixture-session',title:'保留的示例会话',displayTitle:'保留的示例会话',running:false,blank:false,updatedAt:1,retainedBy:{}};
+ window.requestWorkspaceSearch=controls.search;
+ const workspaceSnapshot={items:[],archivedSessionIds:[],pinnedSessionIds:[],state:'idle',phase:'ready',error:null};
+ const sessionSnapshot={ids:[session.id],byId:{[session.id]:session},phase:'ready',projectionsBySession:{}};
+ const noPendingInteraction=new Map();
+ const workspaceProps={useShortcuts:select=>select([]),useWorkspaceShortcuts:useSnapshot(controls.state),requestSearch:controls.search,requestAddWorkspace:controls.add,closeAddWorkspace:controls.closeAdd,setDirectoryBusy:controls.directoryBusy,requestSessionRename:controls.rename,dismissForkError:controls.dismissForkError,
+ useSessions:select=>select(sessionSnapshot),useSessionStatus:select=>select(noPendingInteraction),useSessionRetainInfo:()=>undefined,usePanelInfo:select=>select({activePanelId:null}),useResource:()=>({status:'none'}),
+ useWorkspaces:select=>select(workspaceSnapshot),useStore:useSnapshot(workspaceStore),actions:workspaceStore.actions,startSession:()=>{},open:()=>{},searchSessions:async()=>({items:[],hasMore:false}),searchResultLimit:20,notifyArchivedNotOpenable:()=>{},renameWorkspace:async()=>{},deleteWorkspace:async()=>{},unarchiveSession:async()=>{},insertWorkspaceBefore:async()=>{},createWorkspace:async()=>{},useDirectoryFlow:select=>select(false),useHostInfo:select=>select({home:undefined,isLoopback:true})};
+ ctx.slots.inject('sidebar.workspaces',()=>ctx.slots.register({name:'sidebar.workspaces',children:{'sidebar.workspaces.session.menu.item':{kind:'list',scope:'root'},'sidebar.workspaces.session.row.action':{kind:'list',scope:'root'},'sidebar.session.row.leading':{kind:'single',scope:'root'},'sidebar.session.row.hover':{kind:'list',scope:'root'},'sidebar.workspaces.directoryFlow':{kind:'single',scope:'root'}}},props=><WorkspaceBrowser {...props} {...workspaceProps} t={key=>workspaceCopy[key]??commonCopy[key]??key}/>));
+
  ctx.provide('inputTriggers',{registerSource:()=>()=>{}});ctx.provide('conversation',{input:{for:()=>({})}});
  ctx.provide('remote',{session:{}});ctx.provide('businessAccount',{...source({state:'confirmed',scope:null,status:{authenticated:false}})});
  mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
@@ -53,7 +70,7 @@ const bundle = await build({
  window.selectSecond=()=>workbench.open(second.id);
  window.selectHome=()=>{workbench.leaveDocument();ctx.layout.selectPanel('conversation');};
  // A recording conversation body isolates shell controls from Session restoration.
- window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:-1},()=> <section><HeroShell t={key=>key==='hero.headline'?'探索未至之境':key} renderSlot={()=>null}/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
+ window.useConversationFixture=()=>ctx.slots.register({name:'main.conversation',priority:-1},()=> <section><HeroShell t={key=>key==='hero.headline'?'探索未至之境':key} renderSlot={(_name,_owner,options)=>options?.fallback??null}/><textarea aria-label="首页草稿" defaultValue="保留首页草稿"/></section>);
  window.fixtureReady=true;})().catch(error=>{console.error(error);window.fixtureFailure=error.message});
  `,
     resolveDir: process.cwd(),
@@ -122,13 +139,16 @@ async function fixture(t, platform = 'darwin', conversation = false) {
   page.on('pageerror', (error) => console.error(error));
   const officialCss = bundle.outputFiles.find((file) => file.path.endsWith('.css'))?.text ?? '';
   const tokens = await readFile('theme/tokens.css', 'utf8');
-  await page.setContent(
+  const documentHtml =
     '<style>' +
-      tokens +
-      '\n' +
-      officialCss +
-      '\nhtml,body,#root{margin:0;height:100%}</style><div id="root"></div>',
+    tokens +
+    '\n' +
+    officialCss +
+    '\nhtml,body,#root{margin:0;height:100%}</style><div id="root"></div>';
+  await page.route('http://client-ui.fixture.test/', (route) =>
+    route.fulfill({ contentType: 'text/html', body: documentHtml }),
   );
+  await page.goto('http://client-ui.fixture.test/');
   await page.evaluate((platform) => {
     document.documentElement.dataset.platform = platform;
     if (platform === 'win32') {
@@ -436,4 +456,80 @@ test('static Documents preserve their own body and mode while the actual Core ma
     null,
     'no business main key or invented Session is needed for static presentation',
   );
+});
+
+test('plugin welcome and workspace heading compose with the native browser', async (t) => {
+  const page = await fixture(t);
+  await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
+  await expect(page.getByText('懂业务 · 会协同 · 能行动', { exact: true })).toBeVisible();
+  await expect(page.getByText('预览版', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('历史会话', { exact: true })).toHaveCount(0);
+  const heading = page.getByRole('button', { name: '历史对话', exact: true });
+  const business = page.getByRole('button', { name: '业务工作台', exact: true });
+  assert.equal(
+    await heading.evaluate((node) => getComputedStyle(node).fontSize),
+    await business.evaluate((node) => getComputedStyle(node).fontSize),
+  );
+  await heading.click();
+  await expect(heading).toHaveAttribute('aria-expanded', 'true');
+  const row = page.getByText('保留的示例会话', { exact: true });
+  await expect(row).toBeVisible();
+  await row.evaluate((node) => (node.dataset.retainedProbe = 'original'));
+  await heading.click();
+  await expect(row).toBeHidden();
+  const geometry = await heading.evaluate((node) => {
+    const rect = node.getBoundingClientRect();
+    const label = node.querySelector('.gea-drawer-title');
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const text = range.getBoundingClientRect();
+    const clipping = [];
+    for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+      if (getComputedStyle(parent).overflowY === 'hidden') {
+        const box = parent.getBoundingClientRect();
+        clipping.push({ top: box.top, bottom: box.bottom });
+      }
+    }
+    const business = document.querySelector('.gea-drawer-function .gea-drawer-title');
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      textTop: text.top,
+      textBottom: text.bottom,
+      textLeft: text.left,
+      businessLeft: business.getBoundingClientRect().left,
+      clipping,
+    };
+  });
+  assert.ok(
+    Math.abs(geometry.textLeft - geometry.businessLeft) <= 1,
+    'collapsed history aligns with business navigation',
+  );
+  for (const clip of geometry.clipping) {
+    assert.ok(
+      geometry.top >= clip.top && geometry.bottom <= clip.bottom,
+      'the complete collapsed heading stays inside every clipping container',
+    );
+    assert.ok(
+      geometry.textTop >= clip.top && geometry.textBottom <= clip.bottom,
+      'the collapsed label is fully visible',
+    );
+  }
+  const proof = process.env.SIDEBAR_VERIFY_EVIDENCE;
+  if (proof) await page.screenshot({ path: resolve(proof, 'history-collapsed.png') });
+  await heading.click();
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute('data-retained-probe', 'original');
+  await heading.click();
+  await page.evaluate(() => window.requestWorkspaceSearch());
+  await expect(page.locator('.gea-workspace-heading')).toHaveAttribute('aria-expanded', 'true');
+  const searchInput = page.locator('input[type="text"]');
+  await expect(searchInput).toBeVisible();
+  await searchInput.press('Escape');
+  await expect(row).toBeVisible();
+  if (proof) await page.screenshot({ path: resolve(proof, 'welcome-workspace-desktop.png') });
+  await page.setViewportSize({ width: 760, height: 720 });
+  await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  if (proof) await page.screenshot({ path: resolve(proof, 'welcome-workspace-narrow.png') });
 });

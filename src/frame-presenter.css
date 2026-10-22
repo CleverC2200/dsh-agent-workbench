@@ -43,6 +43,9 @@
 .agent-workbench-document-chrome .gea-conversation-toolbar {
   border-bottom: 0;
 }
+.agent-workbench-document-chrome-tools {
+  display: block;
+}
 .agent-workbench-business {
   display: flex;
   flex-direction: column;
@@ -115,6 +118,40 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+.agent-workbench-native-conversation[data-order-assistant] {
+  margin: 8px 10px 8px 0;
+  border: 1px solid #e6e2ec;
+  border-radius: 18px;
+  background: linear-gradient(155deg, #fff5f6 0%, #fff9fb 27%, #f7faff 62%, #f3f8ff 100%);
+}
+.gea-order-assistant-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  height: 42px;
+  padding: 0 16px;
+  color: #828c9c;
+  font-size: 12px;
+}
+.gea-order-assistant-head strong {
+  margin-right: auto;
+  font-weight: 700;
+}
+.gea-order-assistant-head button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  color: #718095;
+  background: transparent;
+  font-size: 17px;
+  cursor: pointer;
+}
+.gea-order-assistant-head button:hover {
+  color: #e60012;
+  background: rgba(255, 255, 255, 0.72);
 }
 @media (max-width: 1200px) {
   .agent-workbench-document {

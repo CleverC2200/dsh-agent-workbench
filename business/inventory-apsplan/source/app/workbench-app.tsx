@@ -1,6 +1,6 @@
-import { usesConfiguredSql } from '../../../shared/sql-config';
-import sqlSourceConfiguration from '../../sql.config.json';
-import { ConfiguredFactsPage } from '../../../shared/configured-facts-page';
+import { QueryErrors } from '../../../shared/query-errors';
+import { BusinessToolbar } from '../../../shared/business-toolbar';
+import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
 import { productionOutputObservation } from 'dsh-agent-manage/aps-compute/production-output';
 import { action, reportElements } from '../../../shared/channel.js';
 import * as React from 'react';
@@ -194,7 +194,12 @@ type DiagnosticRiskItem = {
   rawGap: number;
   jump: () => void;
 };
-type DashboardContext = { id: string; scope: string; label: string; summary: string };
+type DashboardContext = {
+  id: string;
+  scope: string;
+  label: string;
+  summary: string;
+};
 type HelpContentRecord = {
   content: string;
   label: string;
@@ -365,11 +370,41 @@ const _metricMeta: Array<{
   targetText: string;
   lowerBetter: boolean;
 }> = [
-  { name: '订单满足率', unit: '%', target: 95, targetText: '目标 > 95%', lowerBetter: false },
-  { name: '可发货天数', unit: '天', target: 12, targetText: '目标 < 12天', lowerBetter: true },
-  { name: '作废率', unit: '%', target: 6, targetText: '目标 < 6%', lowerBetter: true },
-  { name: '改单率', unit: '%', target: 2, targetText: '目标 < 2%', lowerBetter: true },
-  { name: '准交率', unit: '%', target: 98.5, targetText: '目标 > 98.5%', lowerBetter: false },
+  {
+    name: '订单满足率',
+    unit: '%',
+    target: 95,
+    targetText: '目标 > 95%',
+    lowerBetter: false,
+  },
+  {
+    name: '可发货天数',
+    unit: '天',
+    target: 12,
+    targetText: '目标 < 12天',
+    lowerBetter: true,
+  },
+  {
+    name: '作废率',
+    unit: '%',
+    target: 6,
+    targetText: '目标 < 6%',
+    lowerBetter: true,
+  },
+  {
+    name: '改单率',
+    unit: '%',
+    target: 2,
+    targetText: '目标 < 2%',
+    lowerBetter: true,
+  },
+  {
+    name: '准交率',
+    unit: '%',
+    target: 98.5,
+    targetText: '目标 > 98.5%',
+    lowerBetter: false,
+  },
 ];
 
 const demoOverviewMetricMeta: Array<{
@@ -379,8 +414,20 @@ const demoOverviewMetricMeta: Array<{
   targetText: string;
   lowerBetter: boolean;
 }> = [
-  { name: '销售预算达成率', unit: '%', target: 95, targetText: '健康 > 95%', lowerBetter: false },
-  { name: '销售提报准确率', unit: '%', target: 70, targetText: '健康 > 70%', lowerBetter: false },
+  {
+    name: '销售预算达成率',
+    unit: '%',
+    target: 95,
+    targetText: '健康 > 95%',
+    lowerBetter: false,
+  },
+  {
+    name: '销售提报准确率',
+    unit: '%',
+    target: 70,
+    targetText: '健康 > 70%',
+    lowerBetter: false,
+  },
   {
     name: '销售提报达成率',
     unit: '%',
@@ -388,7 +435,13 @@ const demoOverviewMetricMeta: Array<{
     targetText: '按截止日动态',
     lowerBetter: false,
   },
-  { name: '需求预测准确率', unit: '%', target: 80, targetText: '健康 > 80%', lowerBetter: false },
+  {
+    name: '需求预测准确率',
+    unit: '%',
+    target: 80,
+    targetText: '健康 > 80%',
+    lowerBetter: false,
+  },
   {
     name: '需求预测达成率',
     unit: '%',
@@ -396,11 +449,41 @@ const demoOverviewMetricMeta: Array<{
     targetText: '按截止日动态',
     lowerBetter: false,
   },
-  { name: '生产计划达成率', unit: '%', target: 99, targetText: '健康 > 99%', lowerBetter: false },
-  { name: '订单满足率', unit: '%', target: 95, targetText: '目标 > 95%', lowerBetter: false },
-  { name: '订单缺货量', unit: '万箱', target: 0, targetText: '目标 = 0万箱', lowerBetter: true },
-  { name: '可发货天数', unit: '天', target: 12, targetText: '目标 < 12天', lowerBetter: true },
-  { name: '库存量', unit: '万箱', target: null, targetText: '无目标', lowerBetter: false },
+  {
+    name: '生产计划达成率',
+    unit: '%',
+    target: 99,
+    targetText: '健康 > 99%',
+    lowerBetter: false,
+  },
+  {
+    name: '订单满足率',
+    unit: '%',
+    target: 95,
+    targetText: '目标 > 95%',
+    lowerBetter: false,
+  },
+  {
+    name: '订单缺货量',
+    unit: '万箱',
+    target: 0,
+    targetText: '目标 = 0万箱',
+    lowerBetter: true,
+  },
+  {
+    name: '可发货天数',
+    unit: '天',
+    target: 12,
+    targetText: '目标 < 12天',
+    lowerBetter: true,
+  },
+  {
+    name: '库存量',
+    unit: '万箱',
+    target: null,
+    targetText: '无目标',
+    lowerBetter: false,
+  },
 ];
 
 const productionMetricNames: ProductionDrillMetricName[] = [
@@ -444,8 +527,14 @@ const overviewMetricGroups: Array<{
   label: OverviewMetricGroupLabel;
   names: OverviewMetricName[];
 }> = [
-  { label: '销售指标', names: ['销售预算达成率', '销售提报准确率', '销售提报达成率'] },
-  { label: '计划指标', names: ['需求预测准确率', '需求预测达成率', '生产计划达成率'] },
+  {
+    label: '销售指标',
+    names: ['销售预算达成率', '销售提报准确率', '销售提报达成率'],
+  },
+  {
+    label: '计划指标',
+    names: ['需求预测准确率', '需求预测达成率', '生产计划达成率'],
+  },
   { label: '订单指标', names: ['订单满足率', '订单缺货量'] },
   { label: '库存指标', names: ['可发货天数', '库存量'] },
 ];
@@ -635,57 +724,291 @@ type ComparisonDatum = {
   yoy: number | null;
 };
 const monthlyComparison: Record<OverviewMetricName, ComparisonDatum> = {
-  销售预算达成率: { current: 61.0, previous: 58.5, change: 2.5, same: 63.7, yoy: -2.7 },
-  销售提报准确率: { current: 95.6, previous: 94.2, change: 1.4, same: 96.1, yoy: -0.5 },
-  销售提报达成率: { current: 86.2, previous: 84.7, change: 1.5, same: 88.1, yoy: -1.9 },
-  需求预测准确率: { current: 95.5, previous: 94.8, change: 0.7, same: 95.9, yoy: -0.4 },
-  需求预测达成率: { current: 87.1, previous: 85.2, change: 1.9, same: 89.3, yoy: -2.2 },
-  生产计划达成率: { current: 61.7, previous: 65.3, change: -3.6, same: 68.4, yoy: -6.7 },
-  订单满足率: { current: 92.1, previous: 95.2, change: -3.1, same: 96.0, yoy: -4.0 },
+  销售预算达成率: {
+    current: 61.0,
+    previous: 58.5,
+    change: 2.5,
+    same: 63.7,
+    yoy: -2.7,
+  },
+  销售提报准确率: {
+    current: 95.6,
+    previous: 94.2,
+    change: 1.4,
+    same: 96.1,
+    yoy: -0.5,
+  },
+  销售提报达成率: {
+    current: 86.2,
+    previous: 84.7,
+    change: 1.5,
+    same: 88.1,
+    yoy: -1.9,
+  },
+  需求预测准确率: {
+    current: 95.5,
+    previous: 94.8,
+    change: 0.7,
+    same: 95.9,
+    yoy: -0.4,
+  },
+  需求预测达成率: {
+    current: 87.1,
+    previous: 85.2,
+    change: 1.9,
+    same: 89.3,
+    yoy: -2.2,
+  },
+  生产计划达成率: {
+    current: 61.7,
+    previous: 65.3,
+    change: -3.6,
+    same: 68.4,
+    yoy: -6.7,
+  },
+  订单满足率: {
+    current: 92.1,
+    previous: 95.2,
+    change: -3.1,
+    same: 96.0,
+    yoy: -4.0,
+  },
   订单缺货量: { current: 3.8, previous: 2.9, change: 0.9, same: 2.6, yoy: 1.2 },
-  可发货天数: { current: 10.2, previous: 11.0, change: -0.7, same: 13.6, yoy: -3.3 },
-  库存量: { current: 86.4, previous: 90.2, change: -3.8, same: 94.6, yoy: -8.2 },
+  可发货天数: {
+    current: 10.2,
+    previous: 11.0,
+    change: -0.7,
+    same: 13.6,
+    yoy: -3.3,
+  },
+  库存量: {
+    current: 86.4,
+    previous: 90.2,
+    change: -3.8,
+    same: 94.6,
+    yoy: -8.2,
+  },
 };
 const weeklyComparison: Record<OverviewMetricName, ComparisonDatum> = {
-  销售预算达成率: { current: 62.4, previous: 60.8, change: 1.6, same: 64.1, yoy: -1.7 },
-  销售提报准确率: { current: 96.2, previous: 95.4, change: 0.8, same: 96.8, yoy: -0.6 },
-  销售提报达成率: { current: 62.4, previous: 60.1, change: 2.3, same: 64.2, yoy: -1.8 },
-  需求预测准确率: { current: 96.0, previous: 95.1, change: 0.9, same: 96.2, yoy: -0.2 },
-  需求预测达成率: { current: 63.1, previous: 61.4, change: 1.7, same: 65.0, yoy: -1.9 },
-  生产计划达成率: { current: 64.8, previous: 63.0, change: 1.8, same: 67.5, yoy: -2.7 },
-  订单满足率: { current: 90.7, previous: 90.8, change: -0.2, same: 95.8, yoy: -5.1 },
+  销售预算达成率: {
+    current: 62.4,
+    previous: 60.8,
+    change: 1.6,
+    same: 64.1,
+    yoy: -1.7,
+  },
+  销售提报准确率: {
+    current: 96.2,
+    previous: 95.4,
+    change: 0.8,
+    same: 96.8,
+    yoy: -0.6,
+  },
+  销售提报达成率: {
+    current: 62.4,
+    previous: 60.1,
+    change: 2.3,
+    same: 64.2,
+    yoy: -1.8,
+  },
+  需求预测准确率: {
+    current: 96.0,
+    previous: 95.1,
+    change: 0.9,
+    same: 96.2,
+    yoy: -0.2,
+  },
+  需求预测达成率: {
+    current: 63.1,
+    previous: 61.4,
+    change: 1.7,
+    same: 65.0,
+    yoy: -1.9,
+  },
+  生产计划达成率: {
+    current: 64.8,
+    previous: 63.0,
+    change: 1.8,
+    same: 67.5,
+    yoy: -2.7,
+  },
+  订单满足率: {
+    current: 90.7,
+    previous: 90.8,
+    change: -0.2,
+    same: 95.8,
+    yoy: -5.1,
+  },
   订单缺货量: { current: 1.1, previous: 0.8, change: 0.3, same: 0.7, yoy: 0.4 },
-  可发货天数: { current: 10.2, previous: 11.5, change: -1.3, same: null, yoy: null },
-  库存量: { current: 84.9, previous: 86.4, change: -1.5, same: 92.1, yoy: -7.2 },
+  可发货天数: {
+    current: 10.2,
+    previous: 11.5,
+    change: -1.3,
+    same: null,
+    yoy: null,
+  },
+  库存量: {
+    current: 84.9,
+    previous: 86.4,
+    change: -1.5,
+    same: 92.1,
+    yoy: -7.2,
+  },
 };
 const yearlyComparison: Record<OverviewMetricName, ComparisonDatum> = {
-  销售预算达成率: { current: 66.8, previous: 69.5, change: -2.7, same: 71.2, yoy: -4.4 },
-  销售提报准确率: { current: 94.9, previous: 95.7, change: -0.8, same: 96.3, yoy: -1.4 },
-  销售提报达成率: { current: 88.0, previous: 89.1, change: -1.1, same: 90.0, yoy: -2.0 },
-  需求预测准确率: { current: 94.2, previous: 95.1, change: -0.9, same: 95.6, yoy: -1.4 },
-  需求预测达成率: { current: 89.2, previous: 90.0, change: -0.8, same: 91.1, yoy: -1.9 },
-  生产计划达成率: { current: 63.8, previous: 67.2, change: -3.4, same: 69.1, yoy: -5.3 },
-  订单满足率: { current: 93.3, previous: 95.4, change: -2.1, same: 96.1, yoy: -2.8 },
-  订单缺货量: { current: 28.6, previous: 21.4, change: 7.2, same: 19.8, yoy: 8.8 },
-  可发货天数: { current: 10.6, previous: 12.1, change: -1.5, same: 13.2, yoy: -2.6 },
-  库存量: { current: 87.2, previous: 93.8, change: -6.6, same: 96.4, yoy: -9.2 },
+  销售预算达成率: {
+    current: 66.8,
+    previous: 69.5,
+    change: -2.7,
+    same: 71.2,
+    yoy: -4.4,
+  },
+  销售提报准确率: {
+    current: 94.9,
+    previous: 95.7,
+    change: -0.8,
+    same: 96.3,
+    yoy: -1.4,
+  },
+  销售提报达成率: {
+    current: 88.0,
+    previous: 89.1,
+    change: -1.1,
+    same: 90.0,
+    yoy: -2.0,
+  },
+  需求预测准确率: {
+    current: 94.2,
+    previous: 95.1,
+    change: -0.9,
+    same: 95.6,
+    yoy: -1.4,
+  },
+  需求预测达成率: {
+    current: 89.2,
+    previous: 90.0,
+    change: -0.8,
+    same: 91.1,
+    yoy: -1.9,
+  },
+  生产计划达成率: {
+    current: 63.8,
+    previous: 67.2,
+    change: -3.4,
+    same: 69.1,
+    yoy: -5.3,
+  },
+  订单满足率: {
+    current: 93.3,
+    previous: 95.4,
+    change: -2.1,
+    same: 96.1,
+    yoy: -2.8,
+  },
+  订单缺货量: {
+    current: 28.6,
+    previous: 21.4,
+    change: 7.2,
+    same: 19.8,
+    yoy: 8.8,
+  },
+  可发货天数: {
+    current: 10.6,
+    previous: 12.1,
+    change: -1.5,
+    same: 13.2,
+    yoy: -2.6,
+  },
+  库存量: {
+    current: 87.2,
+    previous: 93.8,
+    change: -6.6,
+    same: 96.4,
+    yoy: -9.2,
+  },
 };
 const dailyComparison: Record<OverviewMetricName, ComparisonDatum> = {
-  销售预算达成率: { current: 59.8, previous: 62.3, change: -2.5, same: 64.0, yoy: -4.2 },
-  销售提报准确率: { current: 93.7, previous: 95.1, change: -1.4, same: 95.8, yoy: -2.1 },
-  销售提报达成率: { current: 3.1, previous: 3.0, change: 0.1, same: 3.2, yoy: -0.1 },
-  需求预测准确率: { current: 92.5, previous: 94.3, change: -1.8, same: 95.1, yoy: -2.6 },
-  需求预测达成率: { current: 3.2, previous: 3.1, change: 0.1, same: 3.3, yoy: -0.1 },
-  生产计划达成率: { current: 60.2, previous: 63.6, change: -3.4, same: 66.8, yoy: -6.6 },
-  订单满足率: { current: 89.4, previous: 91.6, change: -2.2, same: 95.2, yoy: -5.8 },
-  订单缺货量: { current: 0.32, previous: 0.24, change: 0.08, same: 0.18, yoy: 0.14 },
-  可发货天数: { current: 10.2, previous: 10.4, change: -0.2, same: 12.9, yoy: -2.7 },
-  库存量: { current: 86.4, previous: 87.1, change: -0.7, same: 93.2, yoy: -6.8 },
+  销售预算达成率: {
+    current: 59.8,
+    previous: 62.3,
+    change: -2.5,
+    same: 64.0,
+    yoy: -4.2,
+  },
+  销售提报准确率: {
+    current: 93.7,
+    previous: 95.1,
+    change: -1.4,
+    same: 95.8,
+    yoy: -2.1,
+  },
+  销售提报达成率: {
+    current: 3.1,
+    previous: 3.0,
+    change: 0.1,
+    same: 3.2,
+    yoy: -0.1,
+  },
+  需求预测准确率: {
+    current: 92.5,
+    previous: 94.3,
+    change: -1.8,
+    same: 95.1,
+    yoy: -2.6,
+  },
+  需求预测达成率: {
+    current: 3.2,
+    previous: 3.1,
+    change: 0.1,
+    same: 3.3,
+    yoy: -0.1,
+  },
+  生产计划达成率: {
+    current: 60.2,
+    previous: 63.6,
+    change: -3.4,
+    same: 66.8,
+    yoy: -6.6,
+  },
+  订单满足率: {
+    current: 89.4,
+    previous: 91.6,
+    change: -2.2,
+    same: 95.2,
+    yoy: -5.8,
+  },
+  订单缺货量: {
+    current: 0.32,
+    previous: 0.24,
+    change: 0.08,
+    same: 0.18,
+    yoy: 0.14,
+  },
+  可发货天数: {
+    current: 10.2,
+    previous: 10.4,
+    change: -0.2,
+    same: 12.9,
+    yoy: -2.7,
+  },
+  库存量: {
+    current: 86.4,
+    previous: 87.1,
+    change: -0.7,
+    same: 93.2,
+    yoy: -6.8,
+  },
 };
 
 type YearOption = { key: string; label: string };
 type MonthOption = { key: string; value: number; label: string };
-type WeekOption = { key: string; label: string; range: string; startDay: number; endDay: number };
+type WeekOption = {
+  key: string;
+  label: string;
+  range: string;
+  startDay: number;
+  endDay: number;
+};
 const yearOptions: YearOption[] = [
   { key: '2025', label: '2025年' },
   { key: '2026', label: '2026年' },
@@ -727,18 +1050,88 @@ const buildNaturalWeeks = (year: number, month: number): WeekOption[] => {
 };
 
 const base830 = [
-  { name: '华东', 作废率: 1.64, 改单率: 3.94, 订单满足率: 91.95, 准交率: 100, 可发货天数: 8.25 },
-  { name: '华南', 作废率: 4.68, 改单率: 4.27, 订单满足率: 94.07, 准交率: 99.77, 可发货天数: 8.24 },
-  { name: '西南', 作废率: 8.48, 改单率: 3.68, 订单满足率: 90.94, 准交率: 97.94, 可发货天数: 7.32 },
-  { name: '遂平', 作废率: 4.28, 改单率: 3.88, 订单满足率: 92.31, 准交率: 99.16, 可发货天数: 8.52 },
-  { name: '郑州', 作废率: 3.85, 改单率: 1.42, 订单满足率: 91.88, 准交率: 83.28, 可发货天数: 9.69 },
+  {
+    name: '华东',
+    作废率: 1.64,
+    改单率: 3.94,
+    订单满足率: 91.95,
+    准交率: 100,
+    可发货天数: 8.25,
+  },
+  {
+    name: '华南',
+    作废率: 4.68,
+    改单率: 4.27,
+    订单满足率: 94.07,
+    准交率: 99.77,
+    可发货天数: 8.24,
+  },
+  {
+    name: '西南',
+    作废率: 8.48,
+    改单率: 3.68,
+    订单满足率: 90.94,
+    准交率: 97.94,
+    可发货天数: 7.32,
+  },
+  {
+    name: '遂平',
+    作废率: 4.28,
+    改单率: 3.88,
+    订单满足率: 92.31,
+    准交率: 99.16,
+    可发货天数: 8.52,
+  },
+  {
+    name: '郑州',
+    作废率: 3.85,
+    改单率: 1.42,
+    订单满足率: 91.88,
+    准交率: 83.28,
+    可发货天数: 9.69,
+  },
 ];
 const _base823 = [
-  { name: '华东', 作废率: 2.02, 改单率: 2.46, 订单满足率: 90.69, 准交率: 100, 可发货天数: 8.32 },
-  { name: '华南', 作废率: 3.62, 改单率: 4.09, 订单满足率: 93.6, 准交率: 99.85, 可发货天数: 8.15 },
-  { name: '西南', 作废率: 5.21, 改单率: 2.84, 订单满足率: 92.65, 准交率: 99.2, 可发货天数: 8.24 },
-  { name: '遂平', 作废率: 3.21, 改单率: 3.44, 订单满足率: 92.69, 准交率: 99.8, 可发货天数: 9.67 },
-  { name: '郑州', 作废率: 3.06, 改单率: 1.2, 订单满足率: 92.7, 准交率: 85.48, 可发货天数: 10.64 },
+  {
+    name: '华东',
+    作废率: 2.02,
+    改单率: 2.46,
+    订单满足率: 90.69,
+    准交率: 100,
+    可发货天数: 8.32,
+  },
+  {
+    name: '华南',
+    作废率: 3.62,
+    改单率: 4.09,
+    订单满足率: 93.6,
+    准交率: 99.85,
+    可发货天数: 8.15,
+  },
+  {
+    name: '西南',
+    作废率: 5.21,
+    改单率: 2.84,
+    订单满足率: 92.65,
+    准交率: 99.2,
+    可发货天数: 8.24,
+  },
+  {
+    name: '遂平',
+    作废率: 3.21,
+    改单率: 3.44,
+    订单满足率: 92.69,
+    准交率: 99.8,
+    可发货天数: 9.67,
+  },
+  {
+    name: '郑州',
+    作废率: 3.06,
+    改单率: 1.2,
+    订单满足率: 92.7,
+    准交率: 85.48,
+    可发货天数: 10.64,
+  },
 ];
 const baseComparison823 = [
   {
@@ -927,13 +1320,62 @@ const categorySatisfaction830 = [
   },
 ];
 const categoryStock830 = [
-  { name: '汤圆', current: 10.4, previous: 10.4, mom: -2.4, same: 12.4, yoy: -2.0 },
-  { name: '水饺', current: 7.1, previous: 8.0, mom: -0.1, same: 10.8, yoy: -3.7 },
-  { name: '面点', current: 10.7, previous: 11.2, mom: 0, same: 13.9, yoy: -3.2 },
-  { name: '休闲', current: 11.3, previous: 11.8, mom: -0.7, same: 18.8, yoy: -7.5 },
-  { name: '馄饨', current: 11.3, previous: 11.0, mom: -0.8, same: 10.9, yoy: 0.4 },
-  { name: '预制食材', current: 10.3, previous: 9.5, mom: 0.4, same: 15.6, yoy: -5.4 },
-  { name: '火锅料', current: 16.9, previous: 20.0, mom: -1.2, same: 15.0, yoy: 1.9 },
+  {
+    name: '汤圆',
+    current: 10.4,
+    previous: 10.4,
+    mom: -2.4,
+    same: 12.4,
+    yoy: -2.0,
+  },
+  {
+    name: '水饺',
+    current: 7.1,
+    previous: 8.0,
+    mom: -0.1,
+    same: 10.8,
+    yoy: -3.7,
+  },
+  {
+    name: '面点',
+    current: 10.7,
+    previous: 11.2,
+    mom: 0,
+    same: 13.9,
+    yoy: -3.2,
+  },
+  {
+    name: '休闲',
+    current: 11.3,
+    previous: 11.8,
+    mom: -0.7,
+    same: 18.8,
+    yoy: -7.5,
+  },
+  {
+    name: '馄饨',
+    current: 11.3,
+    previous: 11.0,
+    mom: -0.8,
+    same: 10.9,
+    yoy: 0.4,
+  },
+  {
+    name: '预制食材',
+    current: 10.3,
+    previous: 9.5,
+    mom: 0.4,
+    same: 15.6,
+    yoy: -5.4,
+  },
+  {
+    name: '火锅料',
+    current: 16.9,
+    previous: 20.0,
+    mom: -1.2,
+    same: 15.0,
+    yoy: 1.9,
+  },
   { name: '粽子', current: null, previous: null, mom: 0, same: null, yoy: 0 },
 ];
 const categoryStockDetail823 = [
@@ -1065,7 +1507,10 @@ function demoBaseCategoryProductItems(categoryName: string): BaseProductItem[] {
   const matchedItems = baseProductHierarchy.flatMap((category) =>
     category.items
       .filter((item) => item.name === categoryName)
-      .map((item) => ({ name: `${category.name}系列`, materials: item.materials })),
+      .map((item) => ({
+        name: `${category.name}系列`,
+        materials: item.materials,
+      })),
   );
   if (matchedItems.length) return matchedItems;
   return [
@@ -1169,7 +1614,12 @@ const _bases = [
 
 const cadence = [
   { day: '24', title: '销售政策更新', owner: '计划管理部', done: true },
-  { day: '25', title: '需求计划评估', owner: '平台计划 / 基地计划', done: true },
+  {
+    day: '25',
+    title: '需求计划评估',
+    owner: '平台计划 / 基地计划',
+    done: true,
+  },
   { day: '27', title: '区域基地评审', owner: '计划管理部', done: false },
   { day: '28', title: '郑遂评审与调拨计划', owner: '计划管理部', done: false },
   { day: '29', title: '保供方案评估', owner: '计划 / 运营', done: false },
@@ -1294,7 +1744,11 @@ function buildMatrixRiskRows(mode: MatrixMode): MatrixRiskRow[] {
     .sort((a, b) => (lowerBetter ? b.gap - a.gap : a.gap - b.gap));
 }
 
-type AutoDispatchCandidate = { scopeType: TaskScope; scope: string; metric: string };
+type AutoDispatchCandidate = {
+  scopeType: TaskScope;
+  scope: string;
+  metric: string;
+};
 
 function severeProductionMetric(values: ProductionDrillValues): ProductionDrillMetricName | null {
   return (
@@ -1313,17 +1767,29 @@ function buildAutoDispatchCandidates(): AutoDispatchCandidate[] {
   const candidates: AutoDispatchCandidate[] = [];
   categorySatisfaction830.forEach((item) => {
     if (matrixRiskLevel('rate', item.current) === '严重')
-      candidates.push({ scopeType: '品类', scope: item.name, metric: '订单满足率' });
+      candidates.push({
+        scopeType: '品类',
+        scope: item.name,
+        metric: '订单满足率',
+      });
   });
   categoryStockDetail823.forEach((item) => {
     const values = [item.adjusted, item.currentMonth].filter(
       (value): value is number => value !== null,
     );
     if (values.some((value) => matrixRiskLevel('stock', value) === '严重'))
-      candidates.push({ scopeType: '品类', scope: item.name, metric: '可发货天数' });
+      candidates.push({
+        scopeType: '品类',
+        scope: item.name,
+        metric: '可发货天数',
+      });
   });
   baseComparison823.forEach((row) => {
-    const metrics: Array<{ metric: MetricName; mode: MatrixMode; value: number }> = [
+    const metrics: Array<{
+      metric: MetricName;
+      mode: MatrixMode;
+      value: number;
+    }> = [
       { metric: '订单满足率', mode: 'rate', value: row.fillRate },
       { metric: '可发货天数', mode: 'stock', value: row.stockDays },
       { metric: '作废率', mode: 'void', value: row.voidRate },
@@ -1333,7 +1799,11 @@ function buildAutoDispatchCandidates(): AutoDispatchCandidate[] {
     metrics
       .filter((item) => matrixRiskLevel(item.mode, item.value) === '严重')
       .forEach((item) =>
-        candidates.push({ scopeType: '基地', scope: row.name, metric: item.metric }),
+        candidates.push({
+          scopeType: '基地',
+          scope: row.name,
+          metric: item.metric,
+        }),
       );
   });
   crossMatrixModes.forEach((mode) => {
@@ -1431,7 +1901,10 @@ function mergeAutoDispatchedTasks(tasks: AssignedTask[]) {
       statisticType: metricStatisticType(item.metric),
       dataCutoff: '2026.08.30',
     }));
-  return { tasks: [...newTasks, ...governedTasks], addedCount: newTasks.length };
+  return {
+    tasks: [...newTasks, ...governedTasks],
+    addedCount: newTasks.length,
+  };
 }
 
 const workspaceMeta = {
@@ -1440,16 +1913,36 @@ const workspaceMeta = {
     title: '产销协同工作台V0.1',
     search: '搜索经营异常',
   },
-  demand: { eyebrow: 'DEMAND OPERATIONS', title: '需求运营管理', search: '搜索需求异常' },
-  plan: { eyebrow: 'S&OP WORKBENCH', title: '产销协同看板', search: '搜索风险项' },
-  'sales-plan': { eyebrow: 'SALES PLANNING', title: '销售计划', search: '搜索经销商名称或编码' },
-  digital: { eyebrow: 'S&OP DIGITAL COLLEAGUE', title: '产销协同数字人', search: '搜索数字人工作' },
+  demand: {
+    eyebrow: 'DEMAND OPERATIONS',
+    title: '需求运营管理',
+    search: '搜索需求异常',
+  },
+  plan: {
+    eyebrow: 'S&OP WORKBENCH',
+    title: '产销协同看板',
+    search: '搜索风险项',
+  },
+  'sales-plan': {
+    eyebrow: 'SALES PLANNING',
+    title: '销售计划',
+    search: '搜索经销商名称或编码',
+  },
+  digital: {
+    eyebrow: 'S&OP DIGITAL COLLEAGUE',
+    title: '产销协同数字人',
+    search: '搜索数字人工作',
+  },
   intelligent: {
     eyebrow: 'S&OP INTELLIGENT WORKBENCH',
     title: '产销协同智能工作台',
     search: '搜索智能协同工作',
   },
-  delivery: { eyebrow: 'DELIVERY OPERATIONS', title: '交付运营管理', search: '搜索交付订单' },
+  delivery: {
+    eyebrow: 'DELIVERY OPERATIONS',
+    title: '交付运营管理',
+    search: '搜索交付订单',
+  },
 } as const;
 
 function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
@@ -1497,7 +1990,13 @@ function CoordinationDashboardPage({ onOpenPlan }: { onOpenPlan: () => void }) {
       state: '预警',
       tone: 'watch',
     },
-    { name: '订单缺口', value: '1.4万箱', detail: '310张待补订单', state: '风险', tone: 'bad' },
+    {
+      name: '订单缺口',
+      value: '1.4万箱',
+      detail: '310张待补订单',
+      state: '风险',
+      tone: 'bad',
+    },
     {
       name: '订单履约',
       value: '97.5%',
@@ -1937,8 +2436,14 @@ function SalesPlanPage({ runId }: { runId: number }) {
   ];
   const generationCopy =
     generationStage === 'processing'
-      ? { title: '正在处理销售历史数据', detail: '汇总上月计划偏差、销售实绩与可用产量，请稍候…' }
-      : { title: '正在生成 AI 销售预测', detail: '结合历史偏差修正 M1～M+3 月预测结果，请稍候…' };
+      ? {
+          title: '正在处理销售历史数据',
+          detail: '汇总上月计划偏差、销售实绩与可用产量，请稍候…',
+        }
+      : {
+          title: '正在生成 AI 销售预测',
+          detail: '结合历史偏差修正 M1～M+3 月预测结果，请稍候…',
+        };
   return (
     <div className="sales-plan-page">
       <section className="panel sales-plan-board">
@@ -2394,12 +2899,34 @@ function IntelligentWorkbenchPage({
   const productionSourceDate = sourceDateLabel('production');
   const productionSection = live?.data?.sections.find((section) => section.id === 'production');
   const productionObservation =
-    productionSection?.status === 'ready'
+    live?.data?.missingValuePolicy !== 'zero' && productionSection?.status === 'ready'
       ? productionOutputObservation(productionSection.rows)
       : null;
+  const budgetObservation =
+    live?.data?.missingValuePolicy === 'zero' ? null : budgetPerformanceObservation(live?.data);
+  const budgetScopeNote = budgetObservation
+    ? `仅取同月、同客户、同SKU且预算和未税收入均完整的记录。匹配未税收入${formatNumber(budgetObservation.matchedIncome / 10000)}万元，匹配预算${formatNumber(budgetObservation.matchedBudget / 10000)}万元；预算快照${budgetObservation.budgetDate}。不代表公司完整预算达成率，不作健康判断和跨期比较。`
+    : '';
   const businessMetrics = metricTemplates.map((item) => {
     if (!comparison) return item;
     const datum = comparison[item.name as OverviewMetricName];
+    if (item.name === '销售预算达成率' && !Number.isFinite(datum.current) && budgetObservation)
+      return {
+        ...item,
+        value: formatNumber(budgetObservation.value),
+        unit: '%',
+        previous: '-',
+        same: '-',
+        delta: '-',
+        yoy: '-',
+        target: '仅作观察',
+        gap: `${budgetObservation.matchedKeys}/${budgetObservation.budgetKeys} 客户SKU`,
+        status: '匹配范围',
+        tone: 'neutral',
+        period: `未税收入 ÷ 月度预算 · 收入截至${sourceDateLabel('finance')}`,
+        deltaDirection: 'none',
+        yoyDirection: 'none',
+      };
     if (item.name === '生产计划达成率' && !Number.isFinite(datum.current) && productionObservation)
       return {
         ...item,
@@ -2569,8 +3096,18 @@ function IntelligentWorkbenchPage({
     },
   ];
   const actionHistory = [
-    { date: '09月19日', scope: '华东经销业务', metric: '5笔重点订单延期风险', result: '已建任务' },
-    { date: '09月17日', scope: '休闲品类', metric: '临期库存例行复盘', result: '方案已采纳' },
+    {
+      date: '09月19日',
+      scope: '华东经销业务',
+      metric: '5笔重点订单延期风险',
+      result: '已建任务',
+    },
+    {
+      date: '09月17日',
+      scope: '休闲品类',
+      metric: '临期库存例行复盘',
+      result: '方案已采纳',
+    },
   ];
   const activeHistory = live ? [] : historyDialog === 'warning' ? warningHistory : actionHistory;
   const completedTaskCount = tasks.filter((task) => task.status === '已完成').length;
@@ -2678,6 +3215,7 @@ function IntelligentWorkbenchPage({
                   type="button"
                   className="kpi-card period-kpi-card intelligent-period-kpi-card"
                   key={item.name}
+                  title={item.name === '销售预算达成率' ? budgetScopeNote || undefined : undefined}
                   data-context-id={`intelligent-metric-${item.name}`}
                   data-context-scope="经营指标"
                   data-context-label={item.name}
@@ -3426,13 +3964,21 @@ function DigitalHumanWorkbenchPage({
   }, []);
   const scanCountdownLabel = `${String(Math.floor(scanSecondsRemaining / 60)).padStart(2, '0')}:${String(scanSecondsRemaining % 60).padStart(2, '0')}`;
   const executionActivities = [
-    { time: '刚刚', text: '完成基地与品类六指标扫描', result: '发现 4 项需跟踪' },
+    {
+      time: '刚刚',
+      text: '完成基地与品类六指标扫描',
+      result: '发现 4 项需跟踪',
+    },
     {
       time: '1分钟前',
       text: '同步异常任务完成状态',
       result: `${Math.max(8, tasks.length)} 项任务在跟踪`,
     },
-    { time: '3分钟前', text: '校验责任人与处理时限', result: `${pendingReviews} 项等待人工审核` },
+    {
+      time: '3分钟前',
+      text: '校验责任人与处理时限',
+      result: `${pendingReviews} 项等待人工审核`,
+    },
   ];
   const reviewItems = [
     {
@@ -3467,29 +4013,69 @@ function DigitalHumanWorkbenchPage({
     {
       name: '销售指标',
       metrics: [
-        { name: '销售预算达成', value: '61.00%', target: '目标 ≥ 70%', state: '未达' },
-        { name: '销售计划准确率', value: '95.60%', target: '目标 ≥ 98%', state: '预警' },
+        {
+          name: '销售预算达成',
+          value: '61.00%',
+          target: '目标 ≥ 70%',
+          state: '未达',
+        },
+        {
+          name: '销售计划准确率',
+          value: '95.60%',
+          target: '目标 ≥ 98%',
+          state: '预警',
+        },
       ],
     },
     {
       name: '计划指标',
       metrics: [
-        { name: '需求预测准确率', value: '95.50%', target: '目标 ≥ 98%', state: '预警' },
-        { name: '生产计划达成', value: '61.70%', target: '目标 ≥ 95%', state: '未达' },
+        {
+          name: '需求预测准确率',
+          value: '95.50%',
+          target: '目标 ≥ 98%',
+          state: '预警',
+        },
+        {
+          name: '生产计划达成',
+          value: '61.70%',
+          target: '目标 ≥ 95%',
+          state: '未达',
+        },
       ],
     },
     {
       name: '订单指标',
       metrics: [
-        { name: '订单满足率', value: '92.07%', target: '目标 ≥ 95%', state: '严重' },
-        { name: '准交率', value: '93.05%', target: '目标 ≥ 98.5%', state: '严重' },
+        {
+          name: '订单满足率',
+          value: '92.07%',
+          target: '目标 ≥ 95%',
+          state: '严重',
+        },
+        {
+          name: '准交率',
+          value: '93.05%',
+          target: '目标 ≥ 98.5%',
+          state: '严重',
+        },
       ],
     },
     {
       name: '库存指标',
       metrics: [
-        { name: '可发货天数', value: '10.23天', target: '目标 ≤ 12天', state: '健康' },
-        { name: '大日期数量', value: '6.50万箱', target: '无目标', state: '健康' },
+        {
+          name: '可发货天数',
+          value: '10.23天',
+          target: '目标 ≤ 12天',
+          state: '健康',
+        },
+        {
+          name: '大日期数量',
+          value: '6.50万箱',
+          target: '无目标',
+          state: '健康',
+        },
       ],
     },
   ];
@@ -4244,7 +4830,11 @@ export default function Home({
   initialWorkspace = 'intelligent',
   embedMode = false,
   liveData = false,
-}: { initialWorkspace?: WorkspaceName; embedMode?: boolean; liveData?: boolean } = {}) {
+}: {
+  initialWorkspace?: WorkspaceName;
+  embedMode?: boolean;
+  liveData?: boolean;
+} = {}) {
   const [matrixMode, setMatrixMode] = usePageViewField<MatrixMode>(
     React,
     apsView,
@@ -4406,7 +4996,12 @@ export default function Home({
     taskId?: string;
     linkedFrom?: string;
   } | null>(null);
-  const [taskDraft, setTaskDraft] = useState({ metric: '', owner: '', content: '', due: '' });
+  const [taskDraft, setTaskDraft] = useState({
+    metric: '',
+    owner: '',
+    content: '',
+    due: '',
+  });
   const [completionTargetId, setCompletionTargetId] = useState<string | null>(null);
   const [completionDraft, setCompletionDraft] = useState('');
   const currentWorkspace = workspaceMeta[activeWorkspace];
@@ -4487,7 +5082,6 @@ export default function Home({
     timeGranularityOptions.find((item) => item.key === timeGranularity)?.label || periodMeta.label;
   const _overviewPeriodLabel = activeAnalysisPeriod;
   const liveDate = effectiveEnd.iso;
-  const [sourceSupplementOpen, setSourceSupplementOpen] = useState(false);
   const live = useWorkspace(
     liveData && ['intelligent', 'plan'].includes(activeWorkspace),
     liveDate,
@@ -4543,14 +5137,22 @@ export default function Home({
           : { ...meta, target: null, targetText: '目标待确认' },
       )
     : metricMetaWithDynamicTargets;
-  const liveMetricNotes = useMemo(() => (live.data ? deriveMetrics(live.data) : {}), [live.data]);
+  const liveMetricNotes = useMemo(
+    () =>
+      live.data
+        ? deriveMetrics(
+            scopedData(live.data, selectedBase === '全部基地' ? {} : { base: selectedBase }),
+          )
+        : {},
+    [live.data, selectedBase],
+  );
   const stockObservation = stockCoverageObservation(
     live.data,
     selectedBase === '全部基地' ? undefined : selectedBase,
   );
   const planProductionSection = live.data?.sections.find((section) => section.id === 'production');
   const planProductionObservation =
-    planProductionSection?.status === 'ready'
+    live.data?.missingValuePolicy !== 'zero' && planProductionSection?.status === 'ready'
       ? productionOutputObservation(
           planProductionSection.rows.filter(
             (row) => selectedBase === '全部基地' || row.base === selectedBase,
@@ -4558,6 +5160,10 @@ export default function Home({
         )
       : null;
   const liveScope = selectedBase === '全部基地' ? {} : { base: selectedBase };
+  const planBudgetObservation =
+    live.data?.missingValuePolicy === 'zero'
+      ? null
+      : budgetPerformanceObservation(live.data, liveScope);
   const scopedLiveValues = useMemo(
     () => createMetricReader(live.data, live.previous, live.annual),
     [live.data, live.previous, live.annual],
@@ -4609,7 +5215,11 @@ export default function Home({
     productionMetricDisplay(name, value) +
     (name === '库存量' && values.__observedStock ? '（已分类）' : '');
   const drillStatisticType = (name: string) =>
-    liveData && name === '订单缺货量' ? '累计指标' : metricStatisticType(name);
+    liveData && name === '订单缺货量'
+      ? '累计指标'
+      : liveData && name === '可发货天数'
+        ? '快照指标'
+        : metricStatisticType(name);
   const snapshotDateLabel = (name: string) =>
     liveData && ['库存量', '可发货天数'].includes(name)
       ? readSourceDateLabel(live.data, 'stock')
@@ -4684,8 +5294,11 @@ export default function Home({
       };
     if (liveData)
       return (
-        (values as ProductionDrillValues & { __comparison?: Record<string, ComparisonDatum> })
-          .__comparison?.[name] ?? {
+        (
+          values as ProductionDrillValues & {
+            __comparison?: Record<string, ComparisonDatum>;
+          }
+        ).__comparison?.[name] ?? {
           current: values[name],
           previous: NaN,
           change: NaN,
@@ -4798,7 +5411,12 @@ export default function Home({
     .flatMap((mode) =>
       buildPeriodMatrixRiskRows(mode)
         .slice(0, 3)
-        .map((row, index) => ({ mode, row, meta: matrixListMeta[mode], metricRank: index + 1 })),
+        .map((row, index) => ({
+          mode,
+          row,
+          meta: matrixListMeta[mode],
+          metricRank: index + 1,
+        })),
     )
     .filter(
       (item) =>
@@ -5013,121 +5631,161 @@ export default function Home({
     setSelectedMetric(metric);
     scrollToDashboardList('overview-detail-list');
   };
-  const renderPeriodKpiCard = (kpi: (typeof periodKpis)[number]) => (
-    <article
-      role="button"
-      tabIndex={0}
-      aria-pressed={selectedMetric === kpi.name}
-      className={`kpi-card period-kpi-card ${selectedMetric === kpi.name ? 'selected' : ''}`}
-      onClick={() => selectOverviewMetric(kpi.name)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') selectOverviewMetric(kpi.name);
-      }}
-      key={kpi.name}
-    >
-      <EditableHelp
-        key={`metric-help-${kpi.name}`}
-        compact
-        storageKey={`plan-metric-help-${kpi.name}`}
-        {...metricHelpIdentity[kpi.name]}
-        label={`查看并编辑${kpi.name}指标说明`}
-        defaultText={
-          liveData ? liveMetricNotes[kpi.name]?.note || metricHelp[kpi.name] : metricHelp[kpi.name]
-        }
-      />
-      <div className="kpi-name">
-        <span>{kpi.name}</span>
-        <i
-          className={`achievement-status ${kpi.ok === null ? 'status-neutral' : kpi.ok ? 'status-ok' : 'status-bad'}`}
-        >
-          {!Number.isFinite(kpi.value)
-            ? '数据不足'
-            : kpi.ok === null
-              ? liveData
-                ? '已更新'
-                : '无目标'
-              : kpi.ok
-                ? '达标'
-                : '未达'}
-        </i>
-      </div>
-      <div
-        className={`kpi-period-label ${drillStatisticType(kpi.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
+  const metricReadFailed = (name: string) => {
+    const sources: Record<string, string[]> = {
+      销售预算达成率: ['finance', 'sales-budget'],
+      销售提报准确率: ['sales-accuracy'],
+      销售提报达成率: ['sales-accuracy'],
+      需求预测准确率: ['demand-accuracy'],
+      需求预测达成率: ['demand-accuracy'],
+      生产计划达成率: ['production'],
+      库存量: ['stock'],
+      可发货天数: ['shippable'],
+      订单满足率: ['orders'],
+      订单缺货量: ['orders'],
+    };
+    return (
+      live.data?.sections.some(
+        (section) => sources[name]?.includes(section.id) && section.status === 'error',
+      ) ?? false
+    );
+  };
+  const renderPeriodKpiCard = (kpi: (typeof periodKpis)[number]) => {
+    // A usable subset is display-only; keep complete metrics, alerts and comparisons unchanged.
+    const observation =
+      live.data?.missingValuePolicy !== 'zero' && !Number.isFinite(kpi.value)
+        ? kpi.name === '生产计划达成率'
+          ? planProductionObservation
+          : kpi.name === '销售预算达成率'
+            ? planBudgetObservation
+            : kpi.name === '可发货天数' && stockObservation?.shippable?.days != null
+              ? { value: stockObservation.shippable.days }
+              : null
+        : null;
+    const displayValue = observation?.value ?? kpi.value;
+    const readFailed = metricReadFailed(kpi.name);
+    const comparisonValue = (value: number | null) =>
+      !observation && value !== null && Number.isFinite(value)
+        ? `${formatNumber(value, 2)}${kpi.unit}`
+        : '-';
+    return (
+      <article
+        role="button"
+        tabIndex={0}
+        aria-pressed={selectedMetric === kpi.name}
+        className={`kpi-card period-kpi-card ${selectedMetric === kpi.name ? 'selected' : ''}`}
+        onClick={() => selectOverviewMetric(kpi.name)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') selectOverviewMetric(kpi.name);
+        }}
+        key={kpi.name}
       >
-        <span>{drillStatisticType(kpi.name)}</span>
-        {drillStatisticType(kpi.name) === '快照指标'
-          ? `最新快照 · 截至${snapshotDateLabel(kpi.name)}`
-          : periodMeta.current}
-      </div>
-      <div className="kpi-value">
-        <strong>{Number.isFinite(kpi.value) ? formatNumber(kpi.value, 2) : '-'}</strong>
-        {Number.isFinite(kpi.value) && <span>{kpi.unit}</span>}
-      </div>
-      {kpi.name === '生产计划达成率' &&
-        !Number.isFinite(kpi.value) &&
-        planProductionObservation && (
-          <p className="kpi-source-note">
-            有效记录达成率 {formatNumber(planProductionObservation.value, 2)}%；
-            {planProductionObservation.count}/{planProductionObservation.total} 条记录，排除{' '}
-            {planProductionObservation.excluded} 条异常，仅作观察。
-          </p>
-        )}
-      <div className="kpi-comparison-head">
-        <span>{'对比指标'}</span>
-        <span>{'变化量'}</span>
-      </div>
-      <div className="kpi-comparison-grid">
-        <div className="comparison-values">
-          <span>
-            {periodMeta.previous} {formatNumber(kpi.previous, 2)}
-            {kpi.unit}
-          </span>
-          <span>
-            {periodMeta.same} {kpi.same === null ? '—' : `${formatNumber(kpi.same, 2)}${kpi.unit}`}
-          </span>
-        </div>
-        <div className="comparison-deltas">
-          <b className={kpi.delta < 0 ? 'trend-down' : kpi.delta > 0 ? 'trend-up' : 'trend-flat'}>
-            {kpi.delta < 0 ? <TrendingDown /> : kpi.delta > 0 ? <TrendingUp /> : null}
-            {periodMeta.change} {formatDelta(kpi.delta, kpi.unit)}
-          </b>
-          <b
-            className={
-              kpi.yoy === null
-                ? 'trend-flat'
-                : kpi.yoy < 0
-                  ? 'trend-down'
-                  : kpi.yoy > 0
-                    ? 'trend-up'
-                    : 'trend-flat'
-            }
+        <EditableHelp
+          key={`metric-help-${kpi.name}`}
+          compact
+          storageKey={`plan-metric-help-${kpi.name}`}
+          {...metricHelpIdentity[kpi.name]}
+          label={`查看并编辑${kpi.name}指标说明`}
+          defaultText={
+            liveData
+              ? liveMetricNotes[kpi.name]?.note || metricHelp[kpi.name]
+              : metricHelp[kpi.name]
+          }
+        />
+        <div className="kpi-name">
+          <span>{kpi.name}</span>
+          <i
+            className={`achievement-status ${kpi.ok === null ? 'status-neutral' : kpi.ok ? 'status-ok' : 'status-bad'}`}
           >
-            {kpi.yoy === null ? (
-              `${periodMeta.yoy} —`
-            ) : (
-              <>
-                {kpi.yoy < 0 ? <TrendingDown /> : kpi.yoy > 0 ? <TrendingUp /> : null}
-                {periodMeta.yoy} {formatDelta(kpi.yoy, kpi.unit)}
-              </>
-            )}
-          </b>
+            {observation
+              ? kpi.name === '生产计划达成率'
+                ? '有效范围'
+                : kpi.name === '可发货天数'
+                  ? '同范围'
+                  : '匹配范围'
+              : !Number.isFinite(kpi.value)
+                ? readFailed
+                  ? '读取失败'
+                  : '数据不足'
+                : kpi.ok === null
+                  ? liveData
+                    ? '已更新'
+                    : '无目标'
+                  : kpi.ok
+                    ? '达标'
+                    : '未达'}
+          </i>
         </div>
-      </div>
-      <div className="kpi-foot">
-        <span>{kpi.targetText}</span>
-        {kpi.target === null ? (
-          <b className="neutral">
-            {liveData && kpi.name !== '库存量' ? '待配置目标' : '数量观察项'}
-          </b>
-        ) : (
-          <b className={kpi.ok ? 'good' : 'bad'}>
-            {'差距 '}
-            {formatDelta(kpi.value - kpi.target, kpi.unit)}
-          </b>
-        )}
-      </div>
-    </article>
-  );
+        <div
+          className={`kpi-period-label ${drillStatisticType(kpi.name) === '快照指标' ? 'snapshot' : 'cumulative'}`}
+        >
+          <span>{drillStatisticType(kpi.name)}</span>
+          {drillStatisticType(kpi.name) === '快照指标'
+            ? `最新快照 · 截至${snapshotDateLabel(kpi.name)}`
+            : periodMeta.current}
+        </div>
+        <div className="kpi-value">
+          <strong>{Number.isFinite(displayValue) ? formatNumber(displayValue, 2) : '-'}</strong>
+          {Number.isFinite(displayValue) && <span>{kpi.unit}</span>}
+        </div>
+        <div className="kpi-comparison-head">
+          <span>{'对比指标'}</span>
+          <span>{'变化量'}</span>
+        </div>
+        <div className="kpi-comparison-grid">
+          <div className="comparison-values">
+            <span>
+              {periodMeta.previous} {comparisonValue(kpi.previous)}
+            </span>
+            <span>
+              {periodMeta.same} {comparisonValue(kpi.same)}
+            </span>
+          </div>
+          <div className="comparison-deltas">
+            <b className={kpi.delta < 0 ? 'trend-down' : kpi.delta > 0 ? 'trend-up' : 'trend-flat'}>
+              {kpi.delta < 0 ? <TrendingDown /> : kpi.delta > 0 ? <TrendingUp /> : null}
+              {periodMeta.change} {formatDelta(kpi.delta, kpi.unit)}
+            </b>
+            <b
+              className={
+                kpi.yoy === null
+                  ? 'trend-flat'
+                  : kpi.yoy < 0
+                    ? 'trend-down'
+                    : kpi.yoy > 0
+                      ? 'trend-up'
+                      : 'trend-flat'
+              }
+            >
+              {kpi.yoy === null ? (
+                `${periodMeta.yoy} —`
+              ) : (
+                <>
+                  {kpi.yoy < 0 ? <TrendingDown /> : kpi.yoy > 0 ? <TrendingUp /> : null}
+                  {periodMeta.yoy} {formatDelta(kpi.yoy, kpi.unit)}
+                </>
+              )}
+            </b>
+          </div>
+        </div>
+        <div className="kpi-foot">
+          <span>{kpi.targetText}</span>
+          {observation || !Number.isFinite(kpi.value) ? (
+            <b className="neutral">{readFailed ? '读取失败' : '差距 -'}</b>
+          ) : kpi.target === null ? (
+            <b className="neutral">
+              {liveData && kpi.name !== '库存量' ? '待配置目标' : '数量观察项'}
+            </b>
+          ) : (
+            <b className={kpi.ok ? 'good' : 'bad'}>
+              {'差距 '}
+              {formatDelta(kpi.value - kpi.target, kpi.unit)}
+            </b>
+          )}
+        </div>
+      </article>
+    );
+  };
   const selectCategory = (name: string, metric?: OverviewMetricName) => {
     const directCategory = activeProductHierarchy.find((category) => category.name === name);
     const itemCategory = directCategory
@@ -5578,16 +6236,18 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeCategoryMetric, values);
     const hasTarget = categoryMetricMeta.target !== null;
-    const periodOk = hasTarget
-      ? categoryMetricMeta.lowerBetter
-        ? datum.current <= categoryMetricMeta.target!
-        : datum.current > categoryMetricMeta.target!
-      : null;
-    const improved = hasTarget
-      ? categoryMetricMeta.lowerBetter
-        ? datum.change < 0
-        : datum.change > 0
-      : null;
+    const periodOk =
+      hasTarget && Number.isFinite(datum.current)
+        ? categoryMetricMeta.lowerBetter
+          ? datum.current <= categoryMetricMeta.target!
+          : datum.current > categoryMetricMeta.target!
+        : null;
+    const improved =
+      hasTarget && Number.isFinite(datum.change)
+        ? categoryMetricMeta.lowerBetter
+          ? datum.change < 0
+          : datum.change > 0
+        : null;
     return (
       <>
         <span role="gridcell">{categoryMetricMeta.targetText.replace('目标 ', '')}</span>
@@ -5647,16 +6307,18 @@ export default function Home({
     }
     const datum = categoryPeriodDatum(activeBaseMetric, values);
     const hasTarget = baseMetricMeta.target !== null;
-    const periodOk = hasTarget
-      ? baseMetricMeta.lowerBetter
-        ? datum.current <= baseMetricMeta.target!
-        : datum.current > baseMetricMeta.target!
-      : null;
-    const improved = hasTarget
-      ? baseMetricMeta.lowerBetter
-        ? datum.change < 0
-        : datum.change > 0
-      : null;
+    const periodOk =
+      hasTarget && Number.isFinite(datum.current)
+        ? baseMetricMeta.lowerBetter
+          ? datum.current <= baseMetricMeta.target!
+          : datum.current > baseMetricMeta.target!
+        : null;
+    const improved =
+      hasTarget && Number.isFinite(datum.change)
+        ? baseMetricMeta.lowerBetter
+          ? datum.change < 0
+          : datum.change > 0
+        : null;
     return (
       <>
         <span role="gridcell">{baseMetricMeta.targetText.replace('目标 ', '')}</span>
@@ -5782,9 +6444,12 @@ export default function Home({
   const chooseGranularity = (granularity: TimeGranularity) => {
     setTimeGranularity(granularity);
     closePeriodMenus();
-    const label = { year: '年度累计', month: '月度累计', week: '周度累计', day: '日度' }[
-      granularity
-    ];
+    const label = {
+      year: '年度累计',
+      month: '月度累计',
+      week: '周度累计',
+      day: '日度',
+    }[granularity];
     setToast(`已切换至${label}口径`);
     setTimeout(() => setToast(''), 1600);
   };
@@ -5882,7 +6547,11 @@ export default function Home({
     analysisScope,
     productionDimension,
     scope: viewScope,
-    selection: { base: selectedBase, category: selectedCategory, salesRegion: selectedSalesOrg },
+    selection: {
+      base: selectedBase,
+      category: selectedCategory,
+      salesRegion: selectedSalesOrg,
+    },
     filters: {
       allowedFields: [
         'date',
@@ -5909,7 +6578,12 @@ export default function Home({
     metrics: Object.fromEntries(
       apsVisibleNames.map((name) => [
         name,
-        apsViewMetrics[name] ?? { name, value: null, unit: '', note: '当前范围无可用指标' },
+        apsViewMetrics[name] ?? {
+          name,
+          value: null,
+          unit: '',
+          note: '当前范围无可用指标',
+        },
       ]),
     ),
     sources:
@@ -6055,7 +6729,11 @@ export default function Home({
         if (input.productionDimension !== undefined)
           setProductionDimension(input.productionDimension);
         if (input.base !== undefined) setSelectedBase(input.base);
-        return { querying: true, requested: changed, notice: '读取改动后的页面状态确认结果' };
+        return {
+          querying: true,
+          requested: changed,
+          notice: '读取改动后的页面状态确认结果',
+        };
       },
     );
   }, [liveData]);
@@ -6117,8 +6795,15 @@ export default function Home({
       : '';
     setMessages((previous) => [
       ...previous,
-      { role: 'user', text: question, contexts: selectedContexts.map((item) => item.label) },
-      { role: 'assistant', text: answerQuestion(`${question}${contextPayload}`) },
+      {
+        role: 'user',
+        text: question,
+        contexts: selectedContexts.map((item) => item.label),
+      },
+      {
+        role: 'assistant',
+        text: answerQuestion(`${question}${contextPayload}`),
+      },
     ]);
     setChatInput('');
     setSelectedContexts([]);
@@ -6319,19 +7004,32 @@ export default function Home({
         : salesRiskLevel === '省区'
           ? (region.children || [])
               .filter((node) => node.children?.length)
-              .map((node) => ({ path: `${region.name} / ${node.name}`, name: node.name }))
+              .map((node) => ({
+                path: `${region.name} / ${node.name}`,
+                name: node.name,
+              }))
           : (region.children || []).flatMap((node) =>
               node.children?.length
                 ? node.children.map((team) => ({
                     path: `${region.name} / ${node.name} / ${team.name}`,
                     name: team.name,
                   }))
-                : [{ path: `${region.name} / ${node.name}`, name: node.name }],
+                : [
+                    {
+                      path: `${region.name} / ${node.name}`,
+                      name: node.name,
+                    },
+                  ],
             );
     return nodes.flatMap((node) => {
       const values = salesOrgMetrics(node.path);
       const metrics = [
-        { metric: '销售预算达成率', value: values.budget, severe: 80, tab: 'budget' as const },
+        {
+          metric: '销售预算达成率',
+          value: values.budget,
+          severe: 80,
+          tab: 'budget' as const,
+        },
         {
           metric: '销售提报准确率',
           value: values.reporting,
@@ -6527,6 +7225,100 @@ export default function Home({
     setTimeout(() => setToast(''), 2600);
   };
 
+  const periodDatePicker = (
+    <div className="month-wrap date-picker-wrap">
+      <button
+        className="date-button date-picker-button"
+        aria-haspopup="menu"
+        aria-expanded={dateOpen}
+        onClick={() => {
+          setDateOpen((value) => !value);
+          setWeekOpen(false);
+        }}
+      >
+        <CalendarDays />
+        <span>
+          {timeGranularity === 'year'
+            ? selectedYear.label
+            : timeGranularity === 'day'
+              ? selectedDateLabel
+              : selectedPeriodLabel}
+        </span>
+        <ChevronDown />
+      </button>
+      {dateOpen && (
+        <div
+          className="month-menu period-filter-menu date-picker-menu"
+          role="menu"
+          aria-label="统计日期筛选"
+        >
+          <small>
+            {'选择'}
+            {timeGranularity === 'year' ? '年份' : timeGranularity === 'day' ? '日期' : '年月'}
+          </small>
+          <div className="date-picker-sections">
+            <section>
+              <strong>{'年'}</strong>
+              <div className="date-picker-year">
+                {yearOptions.map((year) => (
+                  <button
+                    key={year.key}
+                    className={selectedYear.key === year.key ? 'selected' : ''}
+                    onClick={() => chooseYear(year)}
+                  >
+                    <Check />
+                    {year.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+            {timeGranularity !== 'year' && (
+              <section>
+                <strong>{'月'}</strong>
+                <div className="date-picker-month">
+                  {monthOptions.map((month) => (
+                    <button
+                      key={month.key}
+                      disabled={
+                        liveData && isFutureCalendarDay(Number(selectedYear.key), month.value, 1)
+                      }
+                      className={selectedMonth.key === month.key ? 'selected' : ''}
+                      onClick={() => chooseMonth(month)}
+                    >
+                      <Check />
+                      {month.value}月
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            {timeGranularity === 'day' && (
+              <section>
+                <strong>{'日'}</strong>
+                <div className="date-picker-day">
+                  {dayOptions.map((day) => (
+                    <button
+                      key={day}
+                      disabled={
+                        liveData &&
+                        isFutureCalendarDay(Number(selectedYear.key), selectedMonth.value, day)
+                      }
+                      className={selectedDay === day ? 'selected' : ''}
+                      onClick={() => chooseDay(day)}
+                    >
+                      <Check />
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       className={`app-shell chat-${chatMode} ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${contextSelectionMode ? 'context-selecting' : ''} ${embedMode ? 'embed-mode' : ''}`}
@@ -6670,115 +7462,16 @@ export default function Home({
         </div>
       </aside>
 
-      <main className="main-content">
-        {liveData && (
-          <section className="aps-data-state" role={live.error ? 'alert' : 'status'}>
-            <strong>
-              {!['intelligent', 'plan'].includes(activeWorkspace)
-                ? '本页为原型预览，不代表正式执行状态'
-                : live.busy
-                  ? '当前范围正在读取'
-                  : live.error
-                    ? '部分来源不可用'
-                    : live.data
-                      ? '当前范围数据已读取'
-                      : '当前范围暂无可用数据'}
-            </strong>
-            <span>
-              {'截止 '}
-              {liveDate}
-              {' · '}
-              {selectedBase}
-              {typeof document !== 'undefined' && document.getElementById('agent-sql-direct')
-                ? ' · 本地数据库只读直连'
-                : ' · GEA 授权只读'}
-              {live.data
-                ? ' · 读取时间 ' +
-                  new Date(live.data.readAt).toLocaleString('zh-CN', {
-                    timeZone: 'Asia/Shanghai',
-                    hour12: false,
-                  })
-                : ''}
-            </span>
-            {live.error && (
-              <p>
-                {live.data?.sections.some((section) => section.status === 'error')
-                  ? `${live.data.sections.filter((section) => section.status === 'error').length} 项来源未齐，详见“来源与缺失说明”。`
-                  : live.error}
-              </p>
-            )}
-            {live.data?.sections
-              .filter(
-                (section) =>
-                  ['sales-accuracy', 'demand-accuracy'].includes(section.id) &&
-                  section.status === 'ready',
-              )
-              .map((section) => {
-                const unassigned = section.rows
-                  .filter((row) => row.base == null || row.base === '')
-                  .reduce((count, row) => count + Number(row.records ?? 0), 0);
-                return unassigned > 0 ? (
-                  <p key={section.id}>
-                    {section.id === 'sales-accuracy' ? '销售提报' : '需求预测'}
-                    {'有 ' +
-                      unassigned +
-                      ' 条记录未归属基地，保留在公司合计中；基地归属不全的完整指标保持未知，不分摊到各基地。'}
-                  </p>
-                ) : null;
-              })}
-            {stockObservation && (
-              <p>
-                {(
-                  [
-                    ['support', '计划库存支撑'],
-                    ['shippable', '可发货'],
-                  ] as const
-                ).map(([key, label]) => {
-                  const observation = stockObservation[key];
-                  return observation ? (
-                    <span key={key}>
-                      {label} {observation.days == null ? '-' : formatNumber(observation.days)} 天（
-                      {observation.count}/{observation.total} 个库存基地SKU；同范围
-                      {key === 'support' ? '现存' : '可用'}{' '}
-                      {formatNumber(observation.quantity / 10000)} 万箱 / 计划日均需求{' '}
-                      {formatNumber(observation.demand)} 件）。{' '}
-                    </span>
-                  ) : null;
-                })}
-                {'部分覆盖量仅作观察，不计算达标及同比环比；快照 ' +
-                  readSourceDateLabel(live.data, 'stock') +
-                  '，目标版本 ' +
-                  (live.data?.version ?? '按当前选择') +
-                  '。'}
-              </p>
-            )}
-            <details>
-              <summary>{'来源与缺失说明'}</summary>
-              <ul>
-                {(apsEvidence.sources as any[]).map((source) => (
-                  <li key={source.id}>
-                    {source.label}
-                    {'：'}
-                    {source.status}
-                    {' · 当前范围 '}
-                    {source.groups}
-                    {' 组'}
-                    {source.note ? ' · ' + source.note : ''}
-                    {source.error ? ' · ' + source.error.message : ''}
-                  </li>
-                ))}
-              </ul>
-              <p>
-                {'缺失指标：'}
-                {apsEvidence.missing
-                  .map((name) => `${name}（${apsViewMetrics[name]?.note || '当前范围无完整事实'}）`)
-                  .join('；') || '当前展示指标均有数值'}
-                {'。查询截止时间不等同于各来源实际快照；未返回的来源快照日期保持未知。'}
-              </p>
-              <p>{'任务及编辑属于本页预览，未保存或提交业务系统。'}</p>
-            </details>
-          </section>
+      <main className="main-content" aria-busy={liveData && live.busy}>
+        {liveData && !['intelligent', 'plan'].includes(activeWorkspace) && (
+          <p className="aps-data-state" role="status">
+            原型预览
+          </p>
         )}
+        <QueryErrors
+          errors={liveData && live.error ? [live.error] : []}
+          scope="inventory-apsplan"
+        />
         {contextSelectionMode && (
           <div className="context-selection-banner" role="status">
             <Link2 />
@@ -6799,25 +7492,41 @@ export default function Home({
           </div>
         )}
         {embedMode && ['intelligent', 'plan'].includes(activeWorkspace) && (
-          <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
-            <button
-              className={activeWorkspace === 'intelligent' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
-              onClick={() => setActiveWorkspace('intelligent')}
-            >
-              智能工作台
-            </button>
-            <button
-              className={activeWorkspace === 'plan' ? 'selected' : ''}
-              aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
-              onClick={() => {
-                setAnalysisScope('overview');
-                setActiveWorkspace('plan');
-              }}
-            >
-              产销协同看板
-            </button>
-          </nav>
+          <BusinessToolbar
+            filters={
+              <nav className="scope-tabs plugin-workspace-tabs" aria-label="产销工作区">
+                <button
+                  className={activeWorkspace === 'intelligent' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'intelligent' ? 'page' : undefined}
+                  onClick={() => setActiveWorkspace('intelligent')}
+                >
+                  智能工作台
+                </button>
+                <button
+                  className={activeWorkspace === 'plan' ? 'selected' : ''}
+                  aria-current={activeWorkspace === 'plan' ? 'page' : undefined}
+                  onClick={() => {
+                    setAnalysisScope('overview');
+                    setActiveWorkspace('plan');
+                  }}
+                >
+                  产销协同看板
+                </button>
+              </nav>
+            }
+            actions={
+              <>
+                {periodDatePicker}
+                <button
+                  type="button"
+                  disabled={liveData && live.busy}
+                  onClick={() => window.dispatchEvent(new Event('gea-page-refresh'))}
+                >
+                  刷新
+                </button>
+              </>
+            }
+          />
         )}
 
         {activeWorkspace === 'intelligent' ? (
@@ -6954,110 +7663,7 @@ export default function Home({
                         </button>
                       ))}
                     </div>
-                    <div className="month-wrap date-picker-wrap">
-                      <button
-                        className="date-button date-picker-button"
-                        aria-haspopup="menu"
-                        aria-expanded={dateOpen}
-                        onClick={() => {
-                          setDateOpen((value) => !value);
-                          setWeekOpen(false);
-                        }}
-                      >
-                        <CalendarDays />
-                        <span>
-                          {timeGranularity === 'year'
-                            ? selectedYear.label
-                            : timeGranularity === 'day'
-                              ? selectedDateLabel
-                              : selectedPeriodLabel}
-                        </span>
-                        <ChevronDown />
-                      </button>
-                      {dateOpen && (
-                        <div
-                          className="month-menu period-filter-menu date-picker-menu"
-                          role="menu"
-                          aria-label="统计日期筛选"
-                        >
-                          <small>
-                            {'选择'}
-                            {timeGranularity === 'year'
-                              ? '年份'
-                              : timeGranularity === 'day'
-                                ? '日期'
-                                : '年月'}
-                          </small>
-                          <div className="date-picker-sections">
-                            <section>
-                              <strong>{'年'}</strong>
-                              <div className="date-picker-year">
-                                {yearOptions.map((year) => (
-                                  <button
-                                    key={year.key}
-                                    className={selectedYear.key === year.key ? 'selected' : ''}
-                                    onClick={() => chooseYear(year)}
-                                  >
-                                    <Check />
-                                    {year.label}
-                                  </button>
-                                ))}
-                              </div>
-                            </section>
-                            {timeGranularity !== 'year' && (
-                              <section>
-                                <strong>{'月'}</strong>
-                                <div className="date-picker-month">
-                                  {monthOptions.map((month) => (
-                                    <button
-                                      key={month.key}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          month.value,
-                                          1,
-                                        )
-                                      }
-                                      className={selectedMonth.key === month.key ? 'selected' : ''}
-                                      onClick={() => chooseMonth(month)}
-                                    >
-                                      <Check />
-                                      {month.value}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                            {timeGranularity === 'day' && (
-                              <section>
-                                <strong>{'日'}</strong>
-                                <div className="date-picker-day">
-                                  {dayOptions.map((day) => (
-                                    <button
-                                      key={day}
-                                      disabled={
-                                        liveData &&
-                                        isFutureCalendarDay(
-                                          Number(selectedYear.key),
-                                          selectedMonth.value,
-                                          day,
-                                        )
-                                      }
-                                      className={selectedDay === day ? 'selected' : ''}
-                                      onClick={() => chooseDay(day)}
-                                    >
-                                      <Check />
-                                      {day}
-                                    </button>
-                                  ))}
-                                </div>
-                              </section>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    {!embedMode && periodDatePicker}
                     {timeGranularity === 'week' && (
                       <div className="month-wrap week-wrap">
                         <button
@@ -7250,16 +7856,18 @@ export default function Home({
                   {scopedOverviewMetricMeta.map((meta) => {
                     const datum = activeComparison[meta.name];
                     const hasTarget = meta.target !== null;
-                    const periodOk = hasTarget
-                      ? meta.lowerBetter
-                        ? datum.current <= meta.target!
-                        : datum.current > meta.target!
-                      : null;
-                    const improved = hasTarget
-                      ? meta.lowerBetter
-                        ? datum.change < 0
-                        : datum.change > 0
-                      : null;
+                    const periodOk =
+                      hasTarget && Number.isFinite(datum.current)
+                        ? meta.lowerBetter
+                          ? datum.current <= meta.target!
+                          : datum.current > meta.target!
+                        : null;
+                    const improved =
+                      hasTarget && Number.isFinite(datum.change)
+                        ? meta.lowerBetter
+                          ? datum.change < 0
+                          : datum.change > 0
+                        : null;
                     const metricClass = productionMetricClass(meta.name);
                     return (
                       <div
@@ -7291,7 +7899,9 @@ export default function Home({
                           className={`achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
                         >
                           {!Number.isFinite(datum.current)
-                            ? '无数据'
+                            ? metricReadFailed(meta.name)
+                              ? '读取失败'
+                              : '无数据'
                             : periodOk === null
                               ? '无目标'
                               : periodOk
@@ -7299,12 +7909,14 @@ export default function Home({
                                 : '未达'}
                         </em>
                         <b className={periodOk === null ? 'neutral' : periodOk ? 'good' : 'bad'}>
-                          {formatNumber(datum.current, 2)}
-                          {meta.unit}
+                          {Number.isFinite(datum.current)
+                            ? `${formatNumber(datum.current, 2)}${meta.unit}`
+                            : '—'}
                         </b>
                         <span>
-                          {formatNumber(datum.previous, 2)}
-                          {meta.unit}
+                          {Number.isFinite(datum.previous)
+                            ? `${formatNumber(datum.previous, 2)}${meta.unit}`
+                            : '—'}
                         </span>
                         <span className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}>
                           {formatDelta(datum.change, meta.unit)}
@@ -8643,30 +9255,6 @@ export default function Home({
             </section>
           </div>
         )}
-        {embedMode && liveData && usesConfiguredSql() && (
-          <details
-            className="plugin-source-supplement"
-            onToggle={(event) => setSourceSupplementOpen(event.currentTarget.open)}
-          >
-            <summary>业务明细</summary>
-            {sourceSupplementOpen && (
-              <ConfiguredFactsPage
-                key={'targets:' + liveDate + ':' + selectedBase}
-                config={sqlSourceConfiguration}
-                embedded
-                viewIds={[
-                  'monthly-targets',
-                  'base-stock-flows',
-                  'order-plan-source',
-                  'shipment-batches',
-                  'workflow-source',
-                ]}
-                date={liveDate}
-                initialFilters={selectedBase === '全部基地' ? {} : { base: selectedBase }}
-              />
-            )}
-          </details>
-        )}
       </main>
       <aside className="ai-chat" aria-label="产销协同数字人">
         {chatMode === 'sidebar' && (
@@ -9196,7 +9784,10 @@ export default function Home({
                     required
                     value={taskDraft.owner}
                     onChange={(event) =>
-                      setTaskDraft((draft) => ({ ...draft, owner: event.target.value }))
+                      setTaskDraft((draft) => ({
+                        ...draft,
+                        owner: event.target.value,
+                      }))
                     }
                     placeholder="请输入责任人"
                   />
@@ -9207,7 +9798,10 @@ export default function Home({
                     required
                     value={taskDraft.content}
                     onChange={(event) =>
-                      setTaskDraft((draft) => ({ ...draft, content: event.target.value }))
+                      setTaskDraft((draft) => ({
+                        ...draft,
+                        content: event.target.value,
+                      }))
                     }
                   />
                 </label>
@@ -9218,7 +9812,10 @@ export default function Home({
                     required
                     value={taskDraft.due}
                     onChange={(event) =>
-                      setTaskDraft((draft) => ({ ...draft, due: event.target.value }))
+                      setTaskDraft((draft) => ({
+                        ...draft,
+                        due: event.target.value,
+                      }))
                     }
                   />
                 </label>
@@ -9315,7 +9912,9 @@ export default function Home({
                       <span>{'实际完成时间'}</span>
                       <div className="completion-meta">
                         {task.completedAt
-                          ? new Date(task.completedAt).toLocaleString('zh-CN', { hour12: false })
+                          ? new Date(task.completedAt).toLocaleString('zh-CN', {
+                              hour12: false,
+                            })
                           : '—'}
                       </div>
                     </label>

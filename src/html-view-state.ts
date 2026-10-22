@@ -94,6 +94,7 @@ export type FcViewState = {
   cycles: Entry<FcCycle>[];
   preferences: Entry<FcPreferences>[];
   cycleEdits?: Entry<FcCycleEdit>[];
+  replenishmentCycleDays?: number;
 };
 export type AqkcViewState = {
   version: 1;
@@ -220,6 +221,16 @@ export type OrderWorkbenchViewState = {
 };
 export type FulfillmentViewState = {
   version: 1;
+  fulfillmentBaseFilter?: string;
+  deliveryOrgFilter?: string;
+  deliveryChannelFilter?: string;
+  warehouseProviderFilter?: string;
+  deliveryOrderNumberQuery?: string;
+  deliveryCustomerQuery?: string;
+  deliveryRegionQuery?: string;
+  deliveryBaseQuery?: string;
+  deliveryStatusQuery?: string;
+  dimension?: 'deliveryDimensionPanel' | 'warehouseDimensionPanel' | 'itemDimensionPanel';
   order?: string;
   customer?: string;
   warehouse?: string;
@@ -644,6 +655,19 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
         value,
         {
           version,
+          fulfillmentBaseFilter: text,
+          deliveryOrgFilter: text,
+          deliveryChannelFilter: text,
+          warehouseProviderFilter: text,
+          deliveryOrderNumberQuery: text,
+          deliveryCustomerQuery: text,
+          deliveryRegionQuery: text,
+          deliveryBaseQuery: text,
+          deliveryStatusQuery: text,
+          dimension: (v) =>
+            v === 'deliveryDimensionPanel' ||
+            v === 'warehouseDimensionPanel' ||
+            v === 'itemDimensionPanel',
           order: text,
           customer: text,
           warehouse: text,
@@ -732,6 +756,8 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
           cycles: entries('cycle-preview', cycle),
           preferences: entries('preferences', preferences),
           cycleEdits: entries('cycle-edit', cycleEdit),
+          replenishmentCycleDays: (v) =>
+            typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 365,
         },
         ['version', 'filters', 'drafts', 'plans', 'cycles', 'preferences'],
       );

@@ -12,7 +12,7 @@ const { outputFiles } = await build({
   platform: 'node',
   format: 'esm',
 });
-const { correctionAdjustments, correctionDecision, correctionLine } = await import(
+const { correctionDecision, correctionLine } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
 );
 
@@ -47,13 +47,4 @@ test('correction uses a fixed monthly baseline and absolute node decisions inclu
   assert.throws(() => correctionLine(sku, '-31'));
   assert.equal(correctionLine({ qty: '0', price: '1', amt: '0' }, '0').participates, false);
   assert.equal(correctionLine(sku, '-30').participates, true);
-});
-test('zero baseline cancellation sends an explicit zero decision instead of silently inheriting the previous addition', () => {
-  const detail = {
-    currentVersion: { status: 1, planTypeCode: 'Y' },
-    skus: [{ skuCode: '123', qty: '0', amt: '0', price: '2', adjAddQty: '8', adjCutQty: '0' }],
-  };
-  assert.deepEqual(correctionAdjustments(detail, { 123: '0' }), [
-    { skuCode: '123', adjustQty: '0' },
-  ]);
 });

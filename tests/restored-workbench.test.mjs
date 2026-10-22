@@ -81,7 +81,8 @@ test('an authorization failure stays local to its domain and is never retried', 
   });
   const r = await readConfiguredOverview(configs.fc, '2026-10-15', '', io);
   assert.equal(r.orders.error, 'denied');
-  assert.ok(r.plan.summary);
+  assert.ok(r.replenishment.summary);
+  assert.equal(io.calls.filter((c) => c.queryId === 'replenishment.summary').length, 1);
   assert.equal(io.calls.filter((c) => c.queryId === 'orders.summary').length, 1);
 });
 test('config changes across overview domains reject the combined overview', async () => {

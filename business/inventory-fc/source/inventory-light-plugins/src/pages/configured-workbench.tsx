@@ -1,6 +1,21 @@
+import {
+  FcConfiguredList,
+  FcWorkflowProvider,
+  fcTrialScope,
+  useFcWorkflow,
+} from './configured-fc-list';
+import { configuredCycleState } from '../native/memory-storage';
+import { Modal } from '../dsh-ui/controls';
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
-import { Fragment, useState } from 'react';
+import { QueryErrors } from '../../../../../shared/query-errors';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
+import { Fragment, useState, useEffect } from 'react';
 import config from '../../../../sql.config.json';
+import { readConfiguredFacts } from '../../../../../shared/configured-facts';
+import { currentShortageSum } from '../../../../../shared/current-shortage';
+import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
+import { originalFcView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import {
@@ -21,51 +36,80 @@ const tabs = [
   ['operations', '运营观察'],
 ];
 const views: Record<string, string[]> = {
-  replenishment: ['replenishment', 'branch-stock', 'shipments', 'flows'],
-  orders: ['orders', 'shipments', 'delivery'],
-  structure: ['inventory', 'health', 'flows'],
+  replenishment: ['replenishment'],
+  orders: ['orders'],
+  structure: ['inventory'],
   plan: ['plan'],
-  base: ['base-resources', 'base'],
-  operations: ['cost', 'flows', 'shipments', 'base-stock-flows'],
+  base: ['base-resources'],
+  operations: ['cost'],
 };
 const show = (n: number | null, unit = '') =>
   n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 export default function ConfiguredWorkbench() {
+  return (
+    <FcWorkflowProvider>
+      <WorkbenchBody />
+    </FcWorkflowProvider>
+  );
+}
+function WorkbenchBody() {
+  const { trial, setTrial } = useFcWorkflow();
   const [tab, setTab] = useState('replenishment'),
     [date, setDate] = useState(businessDay),
     [draft, setDraft] = useState(businessDay),
-    [revision, refresh] = useState(0);
-  const { parts, errors, busy } = useConfiguredOverview(config, date, '', revision, (value) =>
-    updateContext('overview', value),
+    [revision, refresh] = useState(0),
+    [cycleDays, setCycleDays] = useState(
+      () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
+    ),
+    [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
+    [cycleOpen, setCycleOpen] = useState(false);
+  useEffect(() => setTrial(null), [date, cycleDays, revision, setTrial]);
+  useEffect(
+    () =>
+      configuredCycleState.subscribe(() =>
+        setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays),
+      ),
+    [],
+  );
+  const { parts, errors, busy } = useConfiguredOverview(
+    config,
+    date,
+    '',
+    revision,
+    (value) => updateContext('overview', value),
+    cycleDays,
   );
   const order = parts.orders?.summary,
-    plan = parts.plan?.summary,
-    shipments = parts.shipments?.summary;
+    plan = parts.replenishment?.summary;
   const branchStock = parts['branch-stock']?.summary;
-  const planCoverage = (field: string) =>
-    `${plan?.['known_' + field + '_count'] ?? '-'} / ${plan?.row_count ?? '-'} 个仓库SKU`;
   const cards = [
     {
       title: '当前库存',
       value: knownNumber(branchStock?.total_qty),
       unit: '箱',
       color: 'blue',
-      scope: `快照 ${parts['branch-stock']?.snapshotDate ?? '-'} · ${branchStock?.warehouse_count ?? '-'}个分仓`,
       details: [
-        ['可用库存', knownNumber(branchStock?.available_qty), '箱'],
-        ['备单占用', knownNumber(branchStock?.pack_unit_qty), '箱'],
-        ['冻结库存', knownNumber(branchStock?.freeze_qty), '箱'],
+        ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
+        [
+          '展望周转',
+          trial?.scope === fcTrialScope(date, cycleDays)
+            ? trial.forwardTurnover
+            : knownNumber(plan?.calculation_daily) && Number(plan?.calculation_daily) > 0
+              ? (Number(plan.available_qty ?? 0) + Number(plan.open_transfer_reported_qty ?? 0)) /
+                Number(plan.calculation_daily)
+              : null,
+          '天',
+        ],
       ],
     },
     {
-      title: '最大库龄',
+      title: '当前货龄',
       value: knownNumber(branchStock?.max_age),
       unit: '天',
       color: 'purple',
-      scope: `最大库龄 · ${branchStock?.age_valid_count ?? '-'}个仓库SKU有值`,
       details: [
         ['超龄库存量', knownNumber(branchStock?.overaged_qty), '箱'],
-        ['平均货龄', null, '天'],
+        ['滞库风险量', knownNumber(branchStock?.stagnant_qty), '箱'],
       ],
     },
     {
@@ -73,50 +117,82 @@ export default function ConfiguredWorkbench() {
       value: fulfillmentPercent(order),
       unit: '%',
       color: 'green',
-      scope: `本月截至 ${date} · 分仓履约`,
       details: [
         ['已发订单量', completeValue(order, 'shipped_order_quantity'), '箱'],
-        ['订单口径发货量', completeValue(order, 'shipped'), '箱'],
-        ['仓库本月正向发货', knownNumber(shipments?.month_ship_positive), '箱'],
-        ['仓库近30日正向发货', knownNumber(shipments?.rolling_ship_positive), '箱'],
+        ['实际发货量', completeValue(order, 'shipped'), '箱'],
       ],
     },
     {
       title: '待补货量',
-      value: null,
+      value:
+        trial?.scope === fcTrialScope(date, cycleDays)
+          ? trial.recommended
+          : knownNumber(plan?.recommended_qty),
       unit: '箱',
       color: 'red',
-      scope: `备单覆盖 ${planCoverage('preparing')}；在途覆盖 ${planCoverage('in_transit')} · 源单位未知`,
       details: [
-        ['需补货SKU', null, '个'],
-        ['紧急补货SKU', null, '个'],
-        ['源备单量', knownNumber(plan?.known_preparing), ''],
-        ['源在途量', knownNumber(plan?.known_in_transit), ''],
+        ['调拨备单量', knownNumber(plan?.known_preparing), '箱'],
+        ['调拨在途量', knownNumber(plan?.known_in_transit), '箱'],
       ],
     },
     {
       title: '当前订单',
-      value: null,
+      value: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
       unit: '箱',
       color: 'amber',
-      scope: '当前待发缺来源 · 下列为本月累计',
+      description:
+        '当前未备单订单需求；缺货由三层模型按分仓与SKU扣可用库存后汇总，不是月累计履约缺货。',
       details: [
-        ['涉及订单', null, '单'],
-        ['缺货SKU', null, '个'],
-        ['本月订单量', completeValue(order, 'ordered'), '箱'],
-        ['本月缺货量', completeValue(order, 'shortage'), '箱'],
+        ['缺货量', currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '箱'],
+        ['未备单订单占用', currentShortageSum(parts['current-shortage']?.rows, 'allocated'), '箱'],
       ],
     },
   ];
   return (
     <main className={`agent-root ${common.root}`}>
       <div className="agent-shell">
-        <header className="agent-topbar compact-topbar">
-          <div className="agent-topbar-context">
-            <div className="workspace-heading">
-              <strong>分仓库存经营看板</strong>
-              <span>库存监控 · 补货决策 · 订单履约</span>
-            </div>
+        <BusinessToolbar
+          filters={
+            <>
+              <span className="warehouse-switch">全部分仓</span>
+              <button
+                type="button"
+                className="warehouse-cycle-context"
+                aria-label="补货周期配置"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCycleDraft(String(cycleDays));
+                  setCycleOpen(true);
+                }}
+              >
+                补货周期{' '}
+                <strong>
+                  {cycleDays}天
+                  {cycleDays === config.replenishmentPolicy.defaultCycleDays ? '（默认）' : ''}
+                </strong>
+              </button>
+            </>
+          }
+          actions={
+            <LocalQueryForm
+              className={common.controls}
+              onSubmit={(e) => {
+                e.preventDefault();
+                setDate(draft);
+                refresh((n) => n + 1);
+              }}
+            >
+              <BusinessDateInput
+                aria-label="读取时点"
+                value={draft}
+                max={businessDay()}
+                required
+                onValueChange={setDraft}
+              />
+              <button className="secondary-button">刷新</button>
+            </LocalQueryForm>
+          }
+          navigation={
             <div className="steps" aria-label="运营步骤">
               {['监控指标', '缺货订单', '补货下单', '滞库消化', '大日期处理'].map((s, i) => (
                 <Fragment key={s}>
@@ -133,44 +209,26 @@ export default function ConfiguredWorkbench() {
                 </Fragment>
               ))}
             </div>
-            <LocalQueryForm
-              className={common.controls}
-              onSubmit={(e) => {
-                e.preventDefault();
-                setDate(draft);
-                refresh((n) => n + 1);
-              }}
-            >
-              <input
-                aria-label="读取时点"
-                type="date"
-                value={draft}
-                max={businessDay()}
-                required
-                onChange={(e) => setDraft(e.target.value)}
-              />
-              <button className="secondary-button">刷新</button>
-            </LocalQueryForm>
-            <span className="warehouse-switch">全部分仓</span>
-            <button
-              className="warehouse-cycle-context"
-              disabled
-              title="新库缺少补货周期，无法计算或调整"
-            >
-              补货周期 <strong>-</strong>
-            </button>
-          </div>
-        </header>
+          }
+        />
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
-            {errors.map((e: string) => (
-              <p key={e} role="alert" className={common.error}>
-                {e}
-              </p>
-            ))}
-            <div className={`kpi-grid safety-stock-kpis ${common.kpis}`} aria-busy={busy}>
+            <QueryErrors errors={errors} />
+            <div
+              className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
+              data-overview-cards="fc"
+              aria-busy={busy}
+            >
               {cards.map((c) => (
-                <article key={c.title} className={`kpi-card ${c.color}`}>
+                <article
+                  key={c.title}
+                  className={`kpi-card ${c.color}`}
+                  title={
+                    c.title === '当前货龄'
+                      ? '当前货龄取分仓库存最大库龄；平均货龄未提供。'
+                      : c.description
+                  }
+                >
                   <div className="kpi-title">
                     <span>{c.title}</span>
                   </div>
@@ -178,7 +236,6 @@ export default function ConfiguredWorkbench() {
                     {show(c.value)}
                     {c.value != null && <small>{c.unit}</small>}
                   </div>
-                  <p className={common.metricScope}>{c.scope}</p>
                   <dl>
                     {c.details.map(([label, value, unit]) => (
                       <div key={String(label)}>
@@ -196,20 +253,9 @@ export default function ConfiguredWorkbench() {
                 <small>经营洞察</small>
               </h3>
               <p>
-                <b>核心判断：</b>
-                分仓现存、可用、备单占用、冻结和源超龄量已接入库存快照；货龄展示最大值。批次分布、安全目标、补货周期及有效计划不足时，建议补货量仍保持未知。
+                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '箱')}
+                ，建议补货 {show(knownNumber(plan?.recommended_qty), '箱')}。
               </p>
-              <details className={common.scopeDetails}>
-                <summary>统计范围与口径</summary>
-                <p>
-                  <b>数据边界：</b>
-                  订单满足率为所选月截至读取日的分仓履约；调拨量为当前源计划记录，单位与版本未确认，不能当作已计算补货量。当前待发订单不以月累计订单替代。仓库发货来源涵盖{' '}
-                  {shipments?.warehouse_count ?? '-'} 个仓库、{shipments?.row_count ?? '-'}{' '}
-                  个仓库SKU；本月发货有值 {shipments?.month_valid_skus ?? '-'} 行、近30日有值{' '}
-                  {shipments?.rolling_valid_skus ?? '-'} 行；末次发货日{' '}
-                  {shipments?.last_ship_date ?? '-'}。
-                </p>
-              </details>
             </section>
             <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
               {tabs.map(([id, label]) => (
@@ -224,23 +270,131 @@ export default function ConfiguredWorkbench() {
               ))}
             </nav>
             <div className="business-panel">
-              {tab === 'orders' && (
-                <p className={common.note}>
-                  当前待发、分配阶段来源缺失。下方展示本月订单履约与交货记录，不作为当前待发量。
-                </p>
+              {tab === 'orders' ? (
+                <CurrentShortageList
+                  config={config}
+                  revision={revision}
+                  onRead={(value) => updateContext('data', value)}
+                />
+              ) : tab === 'operations' ? (
+                <OriginalOperations config={config} date={date} revision={revision} />
+              ) : (
+                <ConfiguredFactsPage
+                  key={[tab, date, revision, cycleDays].join(':')}
+                  config={config}
+                  embedded
+                  presentation={originalFcView(config, tab)}
+                  businessList={FcConfiguredList}
+                  viewIds={views[tab]}
+                  date={date}
+                  cycleDays={cycleDays}
+                  onRead={(v) => updateContext('data', v)}
+                />
               )}
-              <ConfiguredFactsPage
-                key={[tab, date, revision].join(':')}
-                config={config}
-                embedded
-                viewIds={views[tab]}
-                date={date}
-                onRead={(v) => updateContext('data', v)}
-              />
             </div>
           </section>
         </div>
       </div>
+      <Modal
+        visible={cycleOpen}
+        title="补货周期配置"
+        footer={null}
+        onCancel={() => setCycleOpen(false)}
+        style={{ width: 'min(420px, calc(100vw - 32px))' }}
+      >
+        <LocalQueryForm
+          className={`${common.controls} ${common.cycleForm}`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const days = Number(cycleDraft);
+            if (!Number.isInteger(days) || days < 1 || days > 365) return;
+            configuredCycleState.save(days);
+            setCycleDays(days);
+            setCycleOpen(false);
+          }}
+        >
+          <label>
+            补货周期（天）{' '}
+            <input
+              aria-label="补货周期（天）"
+              type="number"
+              min={1}
+              max={365}
+              step={1}
+              required
+              value={cycleDraft}
+              onChange={(event) => setCycleDraft(event.target.value)}
+            />
+          </label>
+          <p>备货天数 {config.replenishmentPolicy.preparationDays} 天</p>
+          <div className={common.cycleActions}>
+            <button
+              type="button"
+              onClick={() => setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays))}
+            >
+              恢复默认
+            </button>
+            <button type="button" onClick={() => setCycleOpen(false)}>
+              取消
+            </button>
+            <button type="submit">应用</button>
+          </div>
+        </LocalQueryForm>
+      </Modal>
     </main>
+  );
+}
+
+function OriginalOperations({ config, date, revision }: any) {
+  const [{ parts, errors }, setState] = useState<any>({ parts: {}, errors: [] });
+  useEffect(() => {
+    const task = new AbortController();
+    setState({ parts: {}, errors: [] });
+    void Promise.all(
+      ['cost', 'shipments'].map(async (id) => {
+        try {
+          const result = await readConfiguredFacts(
+            config,
+            id,
+            { asOf: date },
+            { signal: task.signal, summaryOnly: true },
+          );
+          if (result.summaryError)
+            throw Object.assign(Error(result.summaryError.message), result.summaryError);
+          if (!task.signal.aborted)
+            setState((old: any) => ({ ...old, parts: { ...old.parts, [id]: result } }));
+        } catch (error) {
+          if (!task.signal.aborted)
+            setState((old: any) => ({ ...old, errors: [...old.errors, (error as Error).message] }));
+        }
+      }),
+    );
+    return () => task.abort();
+  }, [date, revision]);
+  const cost = parts.cost?.summary;
+  return (
+    <>
+      <QueryErrors errors={errors} scope="inventory-fc-resources" />
+      <div className="resource-grid">
+        {[
+          ['本月入库', null, '箱'],
+          ['本月出库', knownNumber(parts.shipments?.summary?.month_ship_positive), '箱'],
+          ['本月仓储费', knownNumber(cost?.ccfje), '元'],
+          ['本月运输费', knownNumber(cost?.ysfje), '元'],
+          ['分仓过仓量', knownNumber(cost?.fc_act_dl_qty), '箱'],
+          ['省区整体出货', null, '箱'],
+        ].map(([label, value, unit]) => (
+          <article className="resource-card" key={String(label)}>
+            <div>
+              <strong>{label}</strong>
+            </div>
+            <p>{show(value as number | null, String(unit))}</p>
+          </article>
+        ))}
+      </div>
+      <div className="observation-list">
+        <p className="empty-state">暂无运营观察。</p>
+      </div>
+    </>
   );
 }

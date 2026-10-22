@@ -42,10 +42,6 @@
   order: 1;
 }
 
-.gea-drawer-workspace {
-  order: 3;
-}
-
 .gea-sidebar-tab {
   display: flex;
   width: 100%;
@@ -65,6 +61,14 @@
   transition:
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.gea-workspace-owned span:has(> .gea-workspace-heading) {
+  margin-right: auto;
+}
+
+.gea-workspace-owned .gea-workspace-heading {
+  padding-left: calc(var(--gea-menu-left, 10px) - 4px);
 }
 
 .gea-sidebar-tab:hover {
@@ -133,31 +137,6 @@
   background: transparent;
 }
 
-[data-gea-drawer='function'] > [data-slot='sidebar.workspaces'],
-[data-gea-drawer='none'] > [data-slot='sidebar.workspaces'] {
-  display: none !important;
-}
-
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
-  display: flex !important;
-  flex-direction: column;
-  position: relative;
-  /* 会话列表在「历史会话」下面往下长，自己滚。
-     这里不做滚动容器：原生那一行的搜索/排序/新建按钮要能上移到抽屉标题那一行。 */
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: visible;
-}
-
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] > * {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-[data-gea-drawer='workspace'] .gea-drawer-workspace .gea-sidebar-tab {
-  padding-right: 8px;
-}
-
 [data-gea-drawer='workspace'] .gea-sidebar-panel {
   display: none;
 }
@@ -177,13 +156,8 @@
   animation: gea-panel-down 200ms ease-out;
 }
 
-[data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
-  animation: gea-panel-down 220ms ease-out;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .gea-panel-function,
-  [data-gea-drawer='workspace'] > [data-slot='sidebar.workspaces'] {
+  .gea-panel-function {
     animation: none;
   }
 }
@@ -483,47 +457,6 @@
   margin-right: 3px;
   border: 1.5px solid #9aa2af;
   border-radius: 2px;
-}
-
-.gea-shell-plugin-group {
-  display: grid;
-  gap: 2px;
-  margin-top: 2px;
-  padding-top: 4px;
-}
-
-.gea-shell-plugin {
-  min-height: 32px !important;
-  padding-block: 6px !important;
-  padding-left: 40px !important;
-  color: var(--gea-sidebar-ink) !important;
-  font-size: 12px !important;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.gea-shell-plugin:hover {
-  color: #df1732 !important;
-  background: #fffafb !important;
-}
-
-.gea-shell-plugin.is-active {
-  color: #d0132c !important;
-  background: #fff0f2 !important;
-}
-
-.gea-shell-plugin-dot {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #c7ced8;
-}
-
-.gea-shell-plugin:hover .gea-shell-plugin-dot,
-.gea-shell-plugin.is-active .gea-shell-plugin-dot {
-  background: #df1732;
 }
 
 .gea-shell-nav-section {
@@ -1055,31 +988,6 @@
   text-align: left;
 }
 
-.gea-home-panel-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 11px;
-}
-
-.gea-home-panel-head strong {
-  color: #2c2f34;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.gea-home-panel-head small {
-  color: #a0a4aa;
-  font-size: 11px;
-}
-
-.gea-home-panel-list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
 .gea-home-panel-item {
   display: flex;
   min-width: 0;
@@ -1105,67 +1013,12 @@
   outline-offset: 2px;
 }
 
-.gea-home-panel-copy {
-  display: grid;
-  min-width: 0;
-  flex: 1 1 auto;
-  gap: 2px;
-}
-
-.gea-home-panel-copy strong {
-  color: #2c2f34;
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.gea-home-panel-copy small {
-  color: #9a9a96;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.gea-home-panel-note {
-  margin: 2px 0 0;
-  color: #9a9a96;
-  font-size: 12px;
-  line-height: 1.7;
-}
-
-.gea-home-panel-foot {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 11px;
-}
-
-.gea-home-panel-more {
-  padding: 7px 13px;
-  border: 1px solid #e9d7da !important;
-  border-radius: 999px;
-  background: #fff7f8 !important;
-  color: #c14049;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.gea-home-panel-more:hover {
-  border-color: #e7a4ae !important;
-  background: #fff0f2 !important;
-}
-
 .gea-home-prompts {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 8px;
   margin-top: 16px;
-}
-
-.gea-home-panel .gea-home-prompts {
-  justify-content: flex-start;
-  margin-top: 0;
 }
 
 .gea-home-prompts button {
@@ -1931,4 +1784,141 @@
 
 .gea-unsent-history button:disabled {
   cursor: default;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome {
+  padding: 0 19px 14px;
+  background: transparent;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-identity {
+  display: grid;
+  justify-items: center;
+  padding: 17px 4px 26px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-identity h2 {
+  margin: 0 0 8px;
+  color: #303946;
+  font-size: 19px;
+  font-weight: 700;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-intro {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #77849a;
+  font-size: 13px;
+  line-height: 1.8;
+  text-align: center;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-intro b {
+  display: block;
+  color: inherit;
+  font-weight: 400;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 14px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts h3 {
+  margin: 0 0 2px;
+  color: #303946;
+  font-size: 12px;
+}
+.agent-workbench-document .gea-agent-welcome.gea-order-agent-welcome .gea-agent-prompts button {
+  width: 100%;
+  min-height: 39px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid #dce4f5;
+  border-radius: 11px;
+  color: #74839b;
+  background: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: normal;
+}
+.agent-workbench-document
+  .gea-agent-welcome.gea-order-agent-welcome
+  .gea-agent-prompts
+  button:hover {
+  border-color: #b8cdfa;
+  color: #4e72b8;
+  background: #fff;
+}
+.gea-order-agent-robot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 82px;
+  height: 68px;
+  margin: 8px 0 22px;
+  border: 6px solid #fff;
+  border-radius: 31px;
+  background: linear-gradient(150deg, #fff, #ffe3e8);
+  box-shadow:
+    0 12px 24px rgba(205, 89, 110, 0.19),
+    inset 0 -4px 9px rgba(236, 120, 144, 0.14);
+}
+.gea-order-agent-robot::before,
+.gea-order-agent-robot::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  width: 10px;
+  height: 23px;
+  border: 2px solid #fff;
+  border-radius: 9px;
+  background: #ff859b;
+}
+.gea-order-agent-robot::before {
+  left: -14px;
+}
+.gea-order-agent-robot::after {
+  right: -14px;
+}
+.gea-order-agent-robot i {
+  position: absolute;
+  top: -15px;
+  left: 34px;
+  width: 5px;
+  height: 13px;
+  border-radius: 5px;
+  background: #ffd5dd;
+}
+.gea-order-agent-robot i::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  top: -5px;
+  width: 11px;
+  height: 11px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #ffa3b3;
+}
+.gea-order-agent-robot span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 59px;
+  height: 36px;
+  border-radius: 18px;
+  background: radial-gradient(circle at 50% 0%, #ff7280, #9f0d27 65%, #650b1f);
+  box-shadow:
+    inset 0 2px 5px rgba(255, 255, 255, 0.7),
+    0 3px 8px rgba(142, 10, 36, 0.27);
+}
+.gea-order-agent-robot span::before,
+.gea-order-agent-robot span::after {
+  content: '';
+  width: 4px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 7px #fff;
 }

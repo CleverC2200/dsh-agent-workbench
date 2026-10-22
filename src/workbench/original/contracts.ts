@@ -12,6 +12,7 @@ export type GeaSalesPlanGroupMetrics = {
   diffAmount: string | null;
   planQty: string | null;
   amountProgress?: string | null;
+  shipmentError?: string | null;
   shipAmount?: string | null;
   shipQty?: string | null;
 };
@@ -60,6 +61,7 @@ export type GeaSalesPlanListItem = {
   hasCorrection?: boolean;
   mPlanAmount?: string | null;
   mPlanQty?: string | null;
+  shipmentError?: string | null;
   shipAmount?: string | null;
   shipQty?: string | null;
   corrPlanAmount?: string | null;
@@ -100,6 +102,7 @@ export type GeaSalesPlanListItem = {
 };
 
 export type GeaSalesPlanPageQuery = {
+  approvalRole?: GeaSalesPlanApprovalRole;
   versionIds?: string[];
   summaryOnly?: boolean;
   orderType?: 'M' | 'Z';
@@ -206,9 +209,8 @@ export type GeaSalesPlanActionContext = {
 };
 
 export type GeaSalesPlanDetail = {
-  /** 带版本的适配器契约；证据缺失时保持纠偏写入禁用。 */
   correctionContext?: {
-    contract: 'absolute-net-v1';
+    contract?: 'absolute-net-v1';
     monthlyApproved: boolean;
     hasCorrection?: boolean;
     approvalOpen: boolean;
@@ -242,6 +244,7 @@ export type GeaSalesPlanSkuDiff = {
 };
 
 export type GeaSalesPlanResourceQuery = {
+  approvalRole?: GeaSalesPlanApprovalRole;
   planId: string;
   orderType?: 'M' | 'Z';
   signal?: AbortSignal;

@@ -6,11 +6,13 @@ export function makeRequest(
   config: any,
   id: string,
   values: Record<string, unknown>,
-): {
-  sql: string;
-  parameters: Record<string, unknown>;
-  includeTotal: false;
-};
+):
+  | { cube: Record<string, unknown> }
+  | {
+      sql: string;
+      parameters: Record<string, unknown>;
+      includeTotal: false;
+    };
 export function createQueryClient(
   config: any,
   execute: (request: any, options: any) => Promise<any>,

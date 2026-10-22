@@ -31,7 +31,9 @@ async function fixture(
     channel: process.env.PLAYWRIGHT_CHANNEL,
   });
   t.after(() => browser.close());
-  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+  const page = await browser.newPage({
+    viewport: { width: 1500, height: 1000 },
+  });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
@@ -72,7 +74,10 @@ async function fixture(
           {
             protocol: 'gea-html-v2',
             type: 'connect',
-            context: { session: 'customer-offline-fixture', plugin: 'inventory-customer' },
+            context: {
+              session: 'customer-offline-fixture',
+              plugin: 'inventory-customer',
+            },
           },
           '*',
           [pair.port2],
@@ -87,6 +92,7 @@ async function fixture(
 test('no connection keeps six cards and table visible without claiming inventory facts', async (t) => {
   const { frame, errors } = await fixture(t, { connect: false });
   await expect(frame.locator('#customer-load-status')).toContainText('正在连接客户库存');
+  await expect(frame.locator('#customer-load-status')).toBeHidden();
   await expect(frame.locator('.metric-card')).toHaveCount(6);
   await expect(frame.locator('.dealer-table-card')).toBeVisible();
   assert.deepEqual(errors, []);
@@ -106,7 +112,10 @@ test('Host Agent denial is displayed in the inventory pane without a query or bl
   );
   await expect(frame.locator('#customer-load-status')).toContainText('当前用户无权访问客户库存');
   await expect(frame.locator('.metric-card')).toHaveCount(6);
-  await page.screenshot({ path: '.runtime/customer-inventory-access-denied.png', fullPage: true });
+  await page.screenshot({
+    path: '.runtime/customer-inventory-access-denied.png',
+    fullPage: true,
+  });
   assert.deepEqual(errors, []);
 });
 
@@ -142,7 +151,9 @@ test('a connection that never arrives gets a finite diagnostic without removing 
 });
 
 test('SQL failure preserves the interface and does not publish a fake empty success', async (t) => {
-  const { page, frame, errors } = await fixture(t, { error: 'DATA_PERMISSION_DENIED' });
+  const { page, frame, errors } = await fixture(t, {
+    error: 'DATA_PERMISSION_DENIED',
+  });
   await expect(frame.locator('#customer-load-status')).toContainText(
     '当前用户暂无客户库存数据权限',
   );
@@ -160,16 +171,18 @@ test('successful empty inventory is explicit rather than a loading or permission
   assert.deepEqual(errors, []);
 });
 
-test('refresh reloads the inventory document instead of reporting a demo success', async (t) => {
-  const { page, frame, errors } = await fixture(t, { error: 'DATA_PERMISSION_DENIED' });
+test('inventory has no whole-document refresh button and retains its permission-denied shell', async (t) => {
+  const { frame, errors } = await fixture(t, {
+    error: 'DATA_PERMISSION_DENIED',
+  });
   await expect(frame.locator('#customer-load-status')).toContainText(
     '当前用户暂无客户库存数据权限',
   );
-  const reloaded = page.waitForEvent('framenavigated', (item) => item.url().endsWith('/customer'));
-  await frame.getByRole('button', { name: '刷新', exact: true }).click();
-  await reloaded;
+  await expect(frame.getByRole('button', { name: '刷新', exact: true })).toHaveCount(0);
   await expect(frame.locator('.metric-card')).toHaveCount(6);
-  await expect(frame.locator('#customer-load-status')).toContainText('正在连接客户库存');
+  await expect(frame.locator('#customer-load-status')).toContainText(
+    '当前用户暂无客户库存数据权限',
+  );
   assert.deepEqual(errors, []);
 });
 
@@ -199,6 +212,16 @@ test('successful reads fill the same shell; identity changes remove previous inv
   const { page, frame, errors } = await fixture(t, { rows });
   await expect(frame.locator('#customer-load-status')).toBeHidden();
   await expect(frame.locator('.dealer-table-card')).toContainText('离线测试客户');
+  assert.deepEqual(
+    await frame.locator('#root').evaluate((root) =>
+      ['html', 'body', '#app', '#root', '.app-shell', '.app-main', '.workspace']
+        .map((selector) => root.ownerDocument.querySelector(selector))
+        .filter(Boolean)
+        .filter((node) => ['auto', 'scroll'].includes(getComputedStyle(node).overflowY))
+        .map((node) => node.className || node.id || node.tagName),
+    ),
+    [],
+  );
   await frame
     .locator('#root')
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));

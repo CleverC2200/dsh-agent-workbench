@@ -35,7 +35,6 @@ import loginCss from './login.css';
 import staticControlsCss from './formal-static-controls.css';
 import { IconNewChatOutline16 } from './formal-static-icons.tsx';
 
-const DIRECTORY = 'agent-workbench' as MainPanelId;
 const INBOX = 'gea-inbox' as MainPanelId;
 const agents: Record<string, prompts.ConversationPromptConfig> = {
   'gea-proof': prompts.approvalConversation,
@@ -52,6 +51,7 @@ const agents: Record<string, prompts.ConversationPromptConfig> = {
   'inventory-qll': prompts.fullChainStockConversation,
   'inventory-apsplan': prompts.supplyCoordinationConversation,
   'inventory-customer': prompts.customerStockConversation,
+  'inventory-orderworkbench': prompts.orderManagementConversation,
   'inventory-orderfulfillment': prompts.orderFulfillmentConversation,
 };
 const unavailableAccount = {
@@ -67,7 +67,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     companyWorkbench: CopyKey;
   }
   interface SlotMap {
-    'agent-workbench.directory': { kind: 'single'; scope: 'session-maybe' };
     'agent-workbench.documents': { kind: 'single'; scope: 'session-maybe' };
   }
 }
@@ -84,7 +83,11 @@ export function CompanyWelcome({
   const agent = page ? (agents[page] ?? prompts.homeConversation) : undefined;
   const copy = language === 'en' ? en : zh;
   return agent ? (
-    <AgentWelcome agent={agent} onFill={(prompt) => onFill?.(prompt)} />
+    <AgentWelcome
+      agent={agent}
+      orderTemplate={page === 'inventory-orderworkbench' || page === 'inventory-orderfulfillment'}
+      onFill={(prompt) => onFill?.(prompt)}
+    />
   ) : (
     <GeaHomeHero
       copy={{
@@ -101,7 +104,6 @@ export function CompanyWelcome({
 export function mountCompanyUI(
   ctx: Context,
   workbench: WorkbenchController,
-  Resources: React.ComponentType<{ cwd?: string }>,
   restorePageSession: PageSessionRestore = async () => {},
 ): void {
   ctx.effect(() => ctx.locale.register('companyWorkbench', { zh, en }));
@@ -522,7 +524,7 @@ export function mountCompanyUI(
     );
     const layoutPanel = usePanelInfo((value) => value.activePanelId);
     const activePanel = layoutPanel ?? documentState.selectedDocument?.id;
-    const business = Boolean(activePanel && ![DIRECTORY, 'gea-api-log'].includes(activePanel));
+    const business = Boolean(activePanel && activePanel !== 'gea-api-log');
     const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>(() =>
       business ? 'function' : 'workspace',
     );
@@ -580,7 +582,6 @@ export function mountCompanyUI(
       .entriesOfSlot('sidebar.panellist')
       .slice()
       .sort((a, b) => (a.options.order ?? 0) - (b.options.order ?? 0));
-    const modules = [{ id: DIRECTORY, label: '工作台' }];
     return (
       <aside
         className="gea-sidebar-owned"
@@ -702,18 +703,6 @@ export function mountCompanyUI(
               <Chevron open={drawer === 'function'} />
             </button>
           </div>
-          <div className="gea-sidebar-drawer gea-drawer-workspace">
-            <button
-              type="button"
-              className="gea-sidebar-tab"
-              aria-expanded={drawer === 'workspace'}
-              aria-controls="gea-panel-workspace"
-              onClick={() => toggleDrawer('workspace')}
-            >
-              <span className="gea-drawer-title">{t('workspaceArea')}</span>
-              <Chevron open={drawer === 'workspace'} />
-            </button>
-          </div>
           {drawer === 'function' && (
             <div className="gea-sidebar-panel gea-panel-function" id="gea-panel-function">
               <nav className="gea-shell-navigation" aria-label={t('businessNavigation')}>
@@ -758,47 +747,48 @@ export function mountCompanyUI(
                       )}
                     </div>
                   ))}
-                  <div className="gea-shell-plugin-group">
-                    {modules
-                      .filter((module) => available.has(module.id))
-                      .map((module) => (
-                        <button
-                          key={module.id}
-                          type="button"
-                          className={
-                            'gea-shell-nav-child gea-shell-plugin' +
-                            (activePanel === module.id ? ' is-active' : '')
-                          }
-                          aria-current={activePanel === module.id ? 'page' : undefined}
-                          onClick={() => void workbench.open(module.id)}
-                        >
-                          <span className="gea-shell-plugin-dot" aria-hidden="true" />
-                          <span className="gea-shell-label">{module.label}</span>
-                        </button>
-                      ))}
-                  </div>
                 </div>
               </nav>
             </div>
           )}
-          <div className="gea-workspace-owned" hidden={drawer !== 'workspace'}>
-            {documentState.historyPage &&
-              documentState.selectedDocument?.id === documentState.historyPage &&
-              documentState.selectedDocument.resourceId &&
-              documentState.selection?.cwd && (
-                <PageUnsentHistory
-                  page={documentState.selectedDocument}
-                  cwd={documentState.selection.cwd}
-                  sessions={ctx.sessions}
-                  selectedSessionId={documentState.selection.sessionId}
-                  request={fetch}
-                  language={ctx.locale.getSnapshot().active}
-                  onChoose={(id, preset, cwd) => {
-                    pageSessions.chooseHistory(documentState.historyPage!, id, { preset, cwd });
-                  }}
-                />
-              )}
-            {renderSlot('sidebar.workspaces', { wide: !collapsed, expandSidebar })}
+          <div className="gea-workspace-owned" data-gea-expanded={drawer === 'workspace'}>
+            <div hidden={drawer !== 'workspace'}>
+              {documentState.historyPage &&
+                documentState.selectedDocument?.id === documentState.historyPage &&
+                documentState.selectedDocument.resourceId &&
+                documentState.selection?.cwd && (
+                  <PageUnsentHistory
+                    page={documentState.selectedDocument}
+                    cwd={documentState.selection.cwd}
+                    sessions={ctx.sessions}
+                    selectedSessionId={documentState.selection.sessionId}
+                    request={fetch}
+                    language={ctx.locale.getSnapshot().active}
+                    onChoose={(id, preset, cwd) => {
+                      pageSessions.chooseHistory(documentState.historyPage!, id, { preset, cwd });
+                    }}
+                  />
+                )}
+            </div>
+            {renderSlot('sidebar.workspaces', {
+              wide: !collapsed,
+              expandSidebar: () => {
+                setDrawer('workspace');
+                expandSidebar();
+              },
+              expanded: drawer === 'workspace',
+              heading: (
+                <button
+                  type="button"
+                  className="gea-sidebar-tab gea-workspace-heading"
+                  aria-expanded={drawer === 'workspace'}
+                  onClick={() => toggleDrawer('workspace')}
+                >
+                  <span className="gea-drawer-title">{t('workspaceArea')}</span>
+                  <Chevron open={drawer === 'workspace'} />
+                </button>
+              ),
+            })}
           </div>
         </div>
         <footer className="gea-sidebar-footer">
@@ -903,79 +893,6 @@ export function mountCompanyUI(
       </>
     );
   }
-  function Directory({ sessionId, useSessions }: PropsRuntime<'agent-workbench.directory'>) {
-    const documentState = useSyncExternalStore(
-      workbench.subscribe,
-      workbench.getSnapshot,
-      workbench.getSnapshot,
-    );
-    useSyncExternalStore(
-      (listener) => ctx.locale.subscribe(listener),
-      () => ctx.locale.getSnapshot().active,
-      () => ctx.locale.getSnapshot().active,
-    );
-    const [entries, setEntries] = useState(() => ctx.slots.entries('main'));
-    useEffect(() => {
-      const refresh = () => setEntries([...ctx.slots.entries('main')]);
-      const offs = [
-        ctx.slots.subscribe('main', refresh),
-        ctx.slots.subscribe('sidebar.panellist', refresh),
-        workbench.subscribe(refresh),
-      ];
-      return () => offs.forEach((off) => off());
-    }, []);
-    const cwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
-    return (
-      <section className="gea-directory-owned">
-        <h1>工作台</h1>
-        <button
-          type="button"
-          className="gea-home-panel-item"
-          onClick={() => {
-            workbench.leaveDocument();
-            ctx.layout.selectPanel(null);
-          }}
-        >
-          原生对话
-        </button>
-        <section className="gea-home-panel">
-          <div className="gea-home-panel-head">
-            <strong>已接入页面</strong>
-          </div>
-          <div className="gea-home-panel-list">
-            {[
-              ...new Set([
-                ...entries
-                  .filter(
-                    (entry) =>
-                      entry.options.key && ![DIRECTORY, 'conversation'].includes(entry.options.key),
-                  )
-                  .map((entry) => entry.options.key! as MainPanelId),
-                ...documentState.pages
-                  .filter((page) => page.id !== DIRECTORY)
-                  .map((page) => page.id),
-              ]),
-            ].map((id) => {
-              const label = ctx.slots
-                .entries('sidebar.panellist')
-                .find((panel) => panel.options.id === id)?.options.label;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className="gea-home-panel-item"
-                  onClick={() => void workbench.open(id)}
-                >
-                  {typeof label === 'function' ? label() : (label ?? workbench.label(id))}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-        <Resources cwd={cwd} />
-      </section>
-    );
-  }
   ctx.slots.inject('sidebar', () =>
     ctx.slots.register(
       {
@@ -1069,19 +986,19 @@ export function mountCompanyUI(
       ShellLeading,
     ),
   );
-  ctx.slots.inject('conversation.hero.brand.mark', () =>
+  ctx.slots.inject('conversation.hero.content', () =>
     ctx.slots.register(
-      { name: 'conversation.hero.brand.mark', priority: -10, locale: 'companyWorkbench' },
-      function HeroBrand({ size, className }: PropsRuntime<'conversation.hero.brand.mark'>) {
+      { name: 'conversation.hero.content', priority: -10, locale: 'companyWorkbench' },
+      function Welcome() {
         return (
-          <img
-            data-company-hero-brand
-            src={brandLogo}
-            width={size}
-            height={size}
-            className={className}
-            alt={t('geaBusiness')}
-          />
+          <div className="gea-conversation-welcome">
+            <h1>
+              <span>{t('welcomeLead')}</span>
+              {t('welcomeMessage')}
+              <span>{t('welcomeWork')}</span>
+            </h1>
+            <p>{t('welcomeTagline')}</p>
+          </div>
         );
       },
     ),
@@ -1126,23 +1043,4 @@ export function mountCompanyUI(
       dispose?.();
     };
   });
-  ctx.slots.inject('main', () => {
-    const dispose = ctx.slots.register(
-      {
-        name: 'main',
-        key: DIRECTORY,
-        children: { 'agent-workbench.directory': { kind: 'single', scope: 'session-maybe' } },
-      },
-      ({ renderSlot }: PropsRuntime<'main'> & PropsRenderSlots<'agent-workbench.directory'>) =>
-        renderSlot('agent-workbench.directory', {}),
-    );
-    const unregister = workbench.register({ id: DIRECTORY, label: '工作台' });
-    return () => {
-      dispose();
-      unregister();
-    };
-  });
-  ctx.slots.inject('agent-workbench.directory', () =>
-    ctx.slots.register({ name: 'agent-workbench.directory' }, Directory),
-  );
 }

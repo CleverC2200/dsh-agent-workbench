@@ -1,3 +1,4 @@
+import { syncAgentResources } from './build-output.mjs';
 /** Assemble the retained offline prototype and current page-owned bridge. */
 import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
@@ -35,7 +36,7 @@ await writeFile(
   resolve(out, 'index.html'),
   '<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:; connect-src \'none\'"><meta name="viewport" content="width=device-width,initial-scale=1"><title>客户库存</title><style>' +
     styles +
-    '</style><body><main id="app"><p id="prototype-sync-status" class="prototype-notice" role="status" aria-live="polite"></p><p id="customer-load-status" role="status" aria-live="polite">客户库存界面尚未启动，数据尚未读取。</p><div id="root">' +
+    '</style><body><main id="app"><p id="prototype-sync-status" class="prototype-notice" role="status" aria-live="polite"></p><p id="customer-load-status" data-state="waiting" role="status" aria-live="polite">客户库存界面尚未启动，数据尚未读取。</p><div id="root">' +
     customerShellMarkup() +
     '</div></main><script>' +
     code.replace(/<\/script/gi, '<\\/script') +
@@ -44,8 +45,7 @@ await writeFile(
 for (const name of ['plugin.json', 'page.json'])
   await cp(resolve(source, name), resolve(out, name));
 const resources = resolve(root, '../dsh-agent-manage/business-resources/inventory-customer');
-for (const name of ['prompt.json', 'capability.json', 'mcp.json', 'skills'])
-  await cp(resolve(resources, name), resolve(out, name), { recursive: true });
+await syncAgentResources(resources, out);
 const inputs = {};
 for (const input of Object.keys(result.metafile.inputs)) {
   const file = resolve(input);
@@ -58,7 +58,10 @@ await writeFile(
   JSON.stringify(
     {
       sourceCommit: 'e5ba6db343dd31e0b362516db712e72aeae0e611',
-      sharedTheme: { version: '1.1.1', sha256: createHash('sha256').update(theme).digest('hex') },
+      sharedTheme: {
+        version: '1.1.1',
+        sha256: createHash('sha256').update(theme).digest('hex'),
+      },
       inputs,
     },
     null,

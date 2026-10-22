@@ -9,7 +9,7 @@ const out = await build({
   platform: 'node',
   format: 'esm',
 });
-const { readConfiguredOverview } = await import(
+const { readConfiguredOverview, completeCount } = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
@@ -34,7 +34,7 @@ test('fast overview cards render while another source is pending; shared snapsho
     },
   });
   await new Promise(setImmediate);
-  const early = progress.some((p) => p.plan?.summary && !p.orders);
+  const early = progress.some((p) => p.replenishment?.summary && !p.orders);
   finishSlow();
   const result = await promise;
   assert.ok(early, 'a slow source must not hide ready cards');
@@ -52,7 +52,7 @@ test('refresh creates a new snapshot scope and permission failures do not retry'
   };
   for (let n = 0; n < 2; n++) {
     const parts = await readConfiguredOverview(config, '2026-10-19', '', { execute });
-    assert.equal(parts.plan.error, 'denied');
+    assert.equal(parts.replenishment.error, 'denied');
     assert.equal(parts['branch-stock'].error, 'denied');
     assert.equal(parts.orders.summary.row_count, 1);
   }
@@ -123,3 +123,16 @@ for (const agent of ['qll', 'dealer'])
     assert.ok(early);
     assert.equal(result[ready].summary.row_count, 1);
   });
+
+test('complete SQL counts preserve zero and reject incomplete identities or malformed values', () => {
+  assert.equal(completeCount({ count: '2770', missing: '0' }, 'count', ['missing']), 2770);
+  assert.equal(completeCount({ count: 0, missing: 0 }, 'count', ['missing']), 0);
+  for (const source of [
+    { count: null, missing: 0 },
+    { count: 2, missing: 1 },
+    { count: 2 },
+    { count: -1, missing: 0 },
+    { count: 1.5, missing: 0 },
+  ])
+    assert.equal(completeCount(source, 'count', ['missing']), null);
+});

@@ -1,3 +1,4 @@
+import { salesPlanPeriodMonthForPlanId } from './models/salesPlanSubmitModel.ts';
 import type { GeaSalesPlanGroupMetrics } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import type { TFunction } from 'i18next';
@@ -291,36 +292,77 @@ export const groupRegionalApprovalLiveRows = (
     members.push(row);
     groups.set(key, members);
   }
-  return [...groups].map(([key, members]) => ({
-    key,
-    members,
-    summary:
-      members.length === 1
-        ? members[0]
-        : {
-            ...members[0],
-            amountProgress: groupMetrics.find(
-              (group) => JSON.stringify([group.dimension, group.key]) === key,
-            )?.amountProgress,
-            shipAmount: groupMetrics.find(
-              (group) => JSON.stringify([group.dimension, group.key]) === key,
-            )?.shipAmount,
-            shipQty: groupMetrics.find(
-              (group) => JSON.stringify([group.dimension, group.key]) === key,
-            )?.shipQty,
-            mPlanAmount: members.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.mPlanAmount ?? ''))
-              ? addExactDecimals(members.map((row) => row.mPlanAmount!))
-              : undefined,
-            mPlanQty: members.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.mPlanQty ?? ''))
-              ? addExactDecimals(members.map((row) => row.mPlanQty!))
-              : undefined,
-            targetAmount: addExactDecimals(members.map((row) => row.targetAmount)),
-            targetQty: addExactDecimals(members.map((row) => row.targetQty)),
-            currentAmount: addExactDecimals(members.map((row) => row.currentAmount)),
-            currentQty: addExactDecimals(members.map((row) => row.currentQty)),
-            skuCount: members.reduce((total, row) => total + row.skuCount, 0),
-          },
-  }));
+  return [...groups].map(([key, members]) => {
+    const metric = groupMetrics.find(
+      (group) => JSON.stringify([group.dimension, group.key]) === key,
+    );
+    const shipmentRows = [
+      ...new Map(
+        members.map((row) => [
+          JSON.stringify([
+            row.dealerCode,
+            salesPlanPeriodMonthForPlanId(row.planId) ?? row.periodId,
+          ]),
+          row,
+        ]),
+      ).values(),
+    ];
+    const sum = (
+      rows: readonly RegionalApprovalLiveRow[],
+      field:
+        | 'shipQty'
+        | 'shipAmount'
+        | 'prevAdjAddQty'
+        | 'prevAdjCutQty'
+        | 'corrPlanQty'
+        | 'corrPlanAmount',
+    ) =>
+      rows.every((row) => /^-?\d+(?:\.\d+)?$/.test(row[field] ?? ''))
+        ? addExactDecimals(rows.map((row) => row[field]!))
+        : undefined;
+    const shipAmount =
+      metric?.shipAmount === undefined ? sum(shipmentRows, 'shipAmount') : metric.shipAmount;
+    const shipQty = metric?.shipQty === undefined ? sum(shipmentRows, 'shipQty') : metric.shipQty;
+    const targetAmount = addExactDecimals(members.map((row) => row.targetAmount));
+    const corrPlanAmount = sum(members, 'corrPlanAmount');
+    return {
+      key,
+      members,
+      summary:
+        members.length === 1
+          ? members[0]
+          : {
+              ...members[0],
+              amountProgress:
+                metric?.amountProgress === undefined
+                  ? shipAmount != null && Number(targetAmount) > 0
+                    ? String((Number(shipAmount) / Number(targetAmount)) * 100)
+                    : undefined
+                  : metric.amountProgress,
+              shipAmount,
+              shipQty,
+              prevAdjAddQty: sum(members, 'prevAdjAddQty'),
+              prevAdjCutQty: sum(members, 'prevAdjCutQty'),
+              corrPlanQty: sum(members, 'corrPlanQty'),
+              corrPlanAmount,
+              correctionProgress:
+                corrPlanAmount != null && Number(targetAmount) > 0
+                  ? String((Number(corrPlanAmount) / Number(targetAmount)) * 100)
+                  : undefined,
+              mPlanAmount: members.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.mPlanAmount ?? ''))
+                ? addExactDecimals(members.map((row) => row.mPlanAmount!))
+                : undefined,
+              mPlanQty: members.every((row) => /^-?\d+(?:\.\d+)?$/.test(row.mPlanQty ?? ''))
+                ? addExactDecimals(members.map((row) => row.mPlanQty!))
+                : undefined,
+              targetAmount,
+              targetQty: addExactDecimals(members.map((row) => row.targetQty)),
+              currentAmount: addExactDecimals(members.map((row) => row.currentAmount)),
+              currentQty: addExactDecimals(members.map((row) => row.currentQty)),
+              skuCount: members.reduce((total, row) => total + row.skuCount, 0),
+            },
+    };
+  });
 };
 
 export const isOpenSalesPlanPeriod = (period: GeaSalesPlanPeriod | undefined): boolean =>

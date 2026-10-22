@@ -9,6 +9,7 @@
 | 全链库存 | [inventory-qll](../business/inventory-qll/sql.config.json) |
 | 产销协同 | [inventory-apsplan](../business/inventory-apsplan/sql.config.json) |
 | 经销商库存 | [inventory-dealer](../business/inventory-dealer/sql.config.json) |
+| 订单履约 | [inventory-orderfulfillment](../business/inventory-orderfulfillment/sql.config.json) |
 
 ## 配置内容
 
@@ -87,3 +88,5 @@ node --test tests/configured-facts.test.mjs
 ## 默认分页与加载优化
 
 当前来源列表默认每页10行，翻页重新查询；汇总独立全量计算。基地SKU采用服务端筛选、排序与分页，产销初始加载延后未使用的商品预测明细。同一筛选范围内只复用快照日期和配置版本，业务明细不缓存；刷新或筛选变化重新解析快照。
+
+订单履约 order01 使用相同 Host 命名查询通道，不启用本地直连预览。指标口径、权限失败及字段缺口见 [订单履约接入](order-fulfillment-data.md)。 / Fulfillment uses the same governed channel without a direct preview fallback.

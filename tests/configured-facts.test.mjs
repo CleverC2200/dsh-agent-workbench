@@ -91,6 +91,23 @@ test('month cost uses next month, stock reads the available snapshot, health res
   assert.equal(io.calls.find((c) => c.queryId === 'health.detail').values.stat_date, '2026-10-15');
 });
 
+test('FC planned daily demand uses the selected calendar month length, including leap February', async () => {
+  for (const [asOf, days] of [
+    ['2026-02-20', 28],
+    ['2024-02-20', 29],
+    ['2026-04-20', 30],
+    ['2026-10-20', 31],
+  ]) {
+    const io = source(configs.fc, (call, result) => {
+      if (call.queryId === 'source.branch-stock-date') result.rows = [{ day: asOf }];
+    });
+    await readConfiguredFacts(configs.fc, 'replenishment', { asOf }, io);
+    const detail = io.calls.find((call) => call.queryId === 'replenishment.detail');
+    assert.equal(detail.values.days_in_month, days);
+    assert.equal(detail.values.page_size, 10);
+  }
+});
+
 test('customer monthly plan binds selected customer and date on every ten-row page', async () => {
   const io = source(configs.dealer, (call, result) => {
     if (call.queryId === 'sales_plan.count') result.rows = [{ total: 25 }];
@@ -338,12 +355,131 @@ test('branch shipment windows retain the whole month plus exactly thirty calenda
   }
 });
 
-test('new branch inventory binds its own snapshot and warehouse type', async () => {
+test('inventory binds warehouse code and base name without a warehouse-class type', async () => {
   const io = source(configs.fc);
-  const r = await readConfiguredFacts(configs.fc, 'branch-stock', input, io);
+  const r = await readConfiguredFacts(
+    configs.fc,
+    'branch-stock',
+    { ...input, filters: { warehouse_code: 'A020', base: '遂平' } },
+    io,
+  );
   assert.equal(r.snapshotDate, '2026-10-15');
   const call = io.calls.find((c) => c.queryId === 'health.detail');
-  assert.equal(call.values.warehouse_type, '分仓');
-  assert.equal(call.values.warehouse_type_mode, 'equal');
+  assert.equal(call.values.warehouse_code, 'A020');
+  assert.equal(call.values.warehouse_code_mode, 'equal');
+  assert.equal(call.values.bases_enabled, true);
+  assert.deepEqual(call.values.bases, ['遂平']);
+  assert.equal('warehouse_type' in call.values, false);
   assert.equal(call.values.stat_date, '2026-10-15');
+});
+test('production base defaults are kept only on compatible source views', async () => {
+  const { initialFiltersForView } = await import(
+    'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+  );
+  const aps = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+  assert.deepEqual(
+    initialFiltersForView(aps, 'base-shipments', { base: '华东', warehouse_id: 'wrong' }),
+    { base: '华东' },
+  );
+  assert.deepEqual(initialFiltersForView(aps, 'warehouse-health', { base: '华东' }), {
+    base: '华东',
+  });
+  assert.deepEqual(initialFiltersForView(aps, 'branch-stock', { base: '华东' }), { base: '华东' });
+  assert.deepEqual(
+    initialFiltersForView(aps, 'branch-operations', { base: '华东', warehouse_id: 'W1' }),
+    { warehouse_id: 'W1' },
+  );
+});
+test('all four Agent views carry their count, atomic page and snapshot query dependencies', async () => {
+  for (const agent of ['aqkc', 'fc', 'qll', 'apsplan']) {
+    const config = JSON.parse(
+      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    );
+    for (const view of config.sourceViews.views)
+      for (const key of ['queryId', 'summaryId', 'snapshotQuery'])
+        if (view[key]) assert.ok(config.queries[view[key]], agent + ':' + view.id + ':' + key);
+    for (const [id, query] of Object.entries(config.queries))
+      for (const dependency of Object.entries(query.pagination ?? {})
+        .filter(([key]) => ['countQuery', 'atomicQuery'].includes(key))
+        .map(([, value]) => value))
+        assert.ok(config.queries[dependency], agent + ':' + id + ':' + dependency);
+  }
+});
+
+test('customer analysis resolves a month-specific source date and queries each ten-row page afresh', async () => {
+  const config = configs.dealer;
+  config.queries['customer_analysis.detail'].pagination.atomicQuery =
+    'customer_analysis.detail.atomic';
+  const calls = [];
+  const execute = async (_, call) => {
+    calls.push(call);
+    const q = config.queries[call.queryId];
+    const returnedColumns = q.resultColumns;
+    const rows =
+      call.queryId === 'source.customer-analysis-date'
+        ? [{ day: '2026-10-19' }]
+        : Array.from({ length: 10 }, (_, i) => ({
+            ...Object.fromEntries(returnedColumns.map((field) => [field, null])),
+            cust_code: 'C1',
+            material_code: String(call.values.offset + i),
+            page_scope_total: 25,
+            page_row_present: 1,
+          }));
+    return { rows, returnedColumns, rejectedColumns: [], configVersion: 'analysis-v1' };
+  };
+  const first = await readConfiguredFacts(
+    config,
+    'customer-plan-analysis',
+    { asOf: '2026-10-20', customer: 'C1' },
+    { execute },
+  );
+  assert.equal(first.total, 25);
+  assert.equal(calls[0].values.month, '202610');
+  assert.equal(calls[0].values.as_of, '2026-10-20');
+  const boundary = calls.length;
+  const second = await readConfiguredFacts(
+    config,
+    'customer-plan-analysis',
+    { asOf: '2026-10-20', customer: 'C1', page: 2, readContext: first.readContext },
+    { execute },
+  );
+  assert.equal(second.rows[0].material_code, '10');
+  assert.deepEqual(
+    calls.slice(boundary).map((x) => x.queryId),
+    ['customer_analysis.detail.atomic'],
+  );
+  assert.equal(calls.at(-1).values.customer, 'C1');
+  assert.equal(calls.at(-1).values.stat_date, '2026-10-19');
+  assert.equal(calls.at(-1).values.page_size, 10);
+  assert.equal(calls.at(-1).values.offset, 10);
+});
+
+test('FC cycle setting binds the same integer to detail, count and whole-scope summary', async () => {
+  const io = source(configs.fc, (call, result) => {
+    if (call.queryId === 'replenishment.count') result.rows = [{ total: 25 }];
+    if (call.queryId === 'replenishment.detail')
+      result.rows = Array.from({ length: 10 }, () => ({ ...result.rows[0] }));
+    if (call.queryId === 'replenishment.summary') result.rows[0].row_count = 25;
+  });
+  for (const cycleDays of [7, 14, 365]) {
+    await readConfiguredFacts(configs.fc, 'replenishment', { ...input, cycleDays, page: 2 }, io);
+    await readConfiguredFacts(
+      configs.fc,
+      'replenishment',
+      { ...input, cycleDays },
+      { ...io, summaryOnly: true },
+    );
+    const reads = io.calls.filter((call) => call.queryId.startsWith('replenishment.')).splice(-3);
+    assert.ok(reads.some((call) => call.queryId === 'replenishment.summary'));
+    for (const call of reads) {
+      assert.equal(call.values.cycle_days, cycleDays);
+      assert.equal(call.values.preparation_days, 3);
+    }
+  }
+  for (const cycleDays of [0, -1, 1.5, 366]) {
+    await assert.rejects(
+      readConfiguredFacts(configs.fc, 'replenishment', { ...input, cycleDays }, source(configs.fc)),
+      (error) => error.code === 'PARAMETER_TYPE_MISMATCH',
+    );
+  }
 });

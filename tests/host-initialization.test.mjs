@@ -136,9 +136,9 @@ test('Host initializes package resources in a Chinese path and serves the regist
     assert.equal(pages.filter((page) => page.id === id).length, 1);
   assert.equal(
     pages.some((page) => page.id === 'inventory-orderworkbench'),
-    false,
+    true,
   );
-  assert.equal(context.workbenchPages.packages().length, 11);
+  assert.equal(context.workbenchPages.packages().length, 12);
   assert.equal(
     pages.filter((page) => page.id === 'inventory-apsplan').length,
     1,

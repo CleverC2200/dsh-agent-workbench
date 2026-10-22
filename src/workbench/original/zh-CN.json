@@ -905,7 +905,8 @@
           "detailUnavailable": "暂不可操作：计划详情读取失败，请刷新重试；列表中的记录可能与详情不一致。",
           "queueNotFresh": "审批队列正在刷新或已读取失败；保留的行可能陈旧，必须刷新成功后才能操作。",
           "closedPeriod": "只有 OPEN 周期可以发起审批。",
-          "notCurrentStage": "该计划已不在当前审批节点，请刷新队列。"
+          "notCurrentStage": "该计划已不在当前审批节点，请刷新队列。",
+          "invalidQuantity": "请先修正汇总数量，最多三位小数"
         },
         "errors": {
           "validation": "请求内容不合法；请核对状态和退回原因后重新发起。",
@@ -1156,6 +1157,8 @@
         "henan": "河南省区",
         "sichuan": "四川省区"
       },
+      "versionCompare": "版本对比",
+      "versionCompareUnavailable": "当前没有可读取的销售计划",
       "organizationGroupCount": "{{count}} 份计划",
       "mixedApprovalStatus": "多个审批节点",
       "expandOrganization": "展开 {{plan}} 下级组织",
@@ -1180,7 +1183,32 @@
       "inlineAdjustments": "查看调整明细",
       "versionTargetMissing": "该版本不含月度目标",
       "comparePlan": "版本②：{{amount}} / {{qty}}",
-      "compareProgress": "版本②金额进度：{{value}}"
+      "compareProgress": "版本②金额进度：{{value}}",
+      "inlineComparison": {
+        "title": "列表版本对比",
+        "primary": "版本①",
+        "compared": "版本②",
+        "current": "当前版本",
+        "previous": "上一版本",
+        "earlier": "前 {{count}} 版",
+        "monthlyPrimary": "月计划①",
+        "monthlyCompared": "月计划②",
+        "difference": "差异（① − ②）",
+        "returnReason": "退回原因",
+        "hint": "按各计划距当前版本的顺序对比；缺失版本显示 —",
+        "plan": "月计划",
+        "confirmed": "确认计划量",
+        "confirmedPrimary": "确认计划量①",
+        "confirmedCompared": "确认计划量②",
+        "missing": "当前计划没有所选版本",
+        "allocation": "按各计划原确认数量占比分摊，最多三位小数；原数量合计为 0 时平均分摊。",
+        "allocationFailed": "分摊草稿未全部暂存成功，请重试",
+        "allocationSaving": "正在暂存分摊草稿",
+        "allocationRetry": "重试暂存",
+        "allocationReadOnly": "组内计划须全部可编辑，历史版本只读",
+        "invalidQuantity": "请输入非负数量，最多三位小数",
+        "groupScope": "{{plans}} 份计划 · {{skus}} 种 SKU，按版本①汇总"
+      }
     },
     "contract": {
       "name": "合同审查 Agent",
@@ -1247,6 +1275,8 @@
     }
   },
   "correction": {
+    "correctionSourceReadOnly": "纠偏来源（只读）",
+    "monthlySourceReadOnly": "月初来源（只读）",
     "monthly": "月初",
     "correction": "纠偏",
     "tabs": "计划单据类型",
@@ -1260,10 +1290,12 @@
     "plan": "月计划",
     "progress": "月达成进度",
     "noTarget": "未设置有效目标",
+    "adjustmentAmount": "纠偏金额",
     "adjustment": "追加/追减",
     "correctedProgress": "纠偏后进度",
     "status": "审批状态",
     "actions": "操作",
+    "monthlyVerificationPending": "月初终审数据待核验",
     "notApproved": "不可纠偏：月初未终审",
     "absent": "暂无纠偏单",
     "detail": "调整明细",

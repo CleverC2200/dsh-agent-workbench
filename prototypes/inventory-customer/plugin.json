@@ -4,7 +4,14 @@
   "name": "客户库存",
   "version": "0.2.0-preview.1",
   "html": "index.html",
-  "skills": ["skills/customer/SKILL.md"],
+  "skills": [
+    "skills/customer/SKILL.md",
+    "skills/customer-inventory-age-risk/SKILL.md",
+    "skills/customer-inventory-change/SKILL.md",
+    "skills/customer-inventory-diagnosis/SKILL.md",
+    "skills/customer-overstock-control/SKILL.md",
+    "skills/customer-stockout-replenishment/SKILL.md"
+  ],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "customer_inventory",

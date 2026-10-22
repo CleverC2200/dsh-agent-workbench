@@ -1,11 +1,16 @@
+import { BusinessToolbar } from '../../../../../shared/business-toolbar';
+import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
+import { QueryErrors } from '../../../../../shared/query-errors';
 import React, { useState, useEffect } from 'react';
 import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
 import { reportElements } from '../channel.js';
 import config from '../../../../sql.config.json';
+import { originalDealerView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import { businessDay, completeValue, knownNumber } from '../../../../../shared/configured-overview';
+import { Tabs } from '../dsh-ui/controls';
 import { DealerOverview } from '../pages/dealer/overview';
 import { updateContext, beginQuery } from './context';
 import css from '../pages/dealer/workbench.module.css';
@@ -23,13 +28,6 @@ const orders = [
   ['policies', '本月政策'],
   ['sku-stock', '当前库存'],
   ['suggested-order', '建议订单'],
-  ['orders', '订单履约'],
-  ['customer-plan', '客户月计划'],
-  ['customer-plan-analysis', '客户计划分析'],
-  ['delivery', '交货记录'],
-  ['vehicles', '客户车型'],
-  ['pickup', '提货点'],
-  ['customer', '客户目录 / 收货地址'],
 ];
 const view = createPageViewState('inventory-dealer');
 const stockTab = (value: unknown) =>
@@ -76,8 +74,8 @@ export default function ConfiguredWorkbench() {
   const navigate = (value: string) => {
     setPage(1);
     if (value === 'customer') {
-      setArea('order');
-      setTab('customer');
+      setArea('stock');
+      setTab('customer-stock');
       return;
     }
     setArea('stock');
@@ -150,97 +148,112 @@ export default function ConfiguredWorkbench() {
   };
   return (
     <main className={`${css.shell} ${common.root}`}>
-      <header className={css.topbar}>
-        <nav className={css.navigation} aria-label="客户库存与客户订单">
-          <button
-            aria-current={area === 'stock'}
-            onClick={() => {
+      <BusinessToolbar
+        className={css.sharedTopbar}
+        filters={
+          <div className={css.customerPicker}>
+            <details className={css.customerMenu} title={`库存快照：${stock?.snapshotDate ?? '-'}`}>
+              <summary>
+                {customer ? `客户 ${customer}` : '全部负责客户'}
+                <span aria-hidden="true">⌄</span>
+              </summary>
+              <div className={css.customerOptions}>
+                <LocalQueryForm
+                  className={common.controls}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    setPage(1);
+                    setCustomer(draft.trim());
+                    setDate(dateDraft);
+                    refresh((n) => n + 1);
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
+                  }}
+                >
+                  <input
+                    aria-label="客户编码"
+                    placeholder="输入客户编码"
+                    maxLength={100}
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                  />
+                  <button>查询 / 刷新</button>
+                </LocalQueryForm>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    setPage(1);
+                    setArea('stock');
+                    setTab('customer-stock');
+                    setDraft('');
+                    setCustomer('');
+                    const menu = event.currentTarget.closest('details');
+                    if (menu) menu.open = false;
+                  }}
+                >
+                  全部负责客户
+                </button>
+              </div>
+            </details>
+          </div>
+        }
+        actions={
+          <LocalQueryForm
+            className={common.controls}
+            onSubmit={(event) => {
+              event.preventDefault();
               setPage(1);
-              setArea('stock');
-              setTab('customer-stock');
+              setDate(dateDraft);
+              refresh((n) => n + 1);
             }}
           >
-            客户库存
-          </button>
-          <button
-            aria-current={area === 'order'}
-            onClick={() => {
-              setPage(1);
-              setArea('order');
-              setTab('catalog');
-            }}
-          >
-            客户订单
-          </button>
-        </nav>
-        <LocalQueryForm
-          className={`${css.customerPicker} ${common.controls}`}
-          onSubmit={(e) => {
-            e.preventDefault();
-            setPage(1);
-            setCustomer(draft.trim());
-            setDate(dateDraft);
-            refresh((n) => n + 1);
-          }}
-        >
-          <input
-            aria-label="客户编码"
-            placeholder="全部客户 / 输入客户编码"
-            maxLength={100}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <input
-            aria-label="读取时点"
-            type="date"
-            required
-            max={businessDay()}
-            value={dateDraft}
-            onChange={(e) => setDateDraft(e.target.value)}
-          />
-          <button>查询 / 刷新</button>
-          <button
-            type="button"
-            onClick={() => {
-              setPage(1);
-              setArea('order');
-              setTab('customer');
-              setDraft('');
-              setCustomer('');
-            }}
-          >
-            选择客户
-          </button>
-        </LocalQueryForm>
-      </header>
-      {errors.map((e: string) => (
-        <p key={e} role="alert" className={common.error}>
-          {e}
-        </p>
-      ))}
+            <BusinessDateInput
+              aria-label="读取时点"
+              required
+              max={businessDay()}
+              value={dateDraft}
+              onValueChange={setDateDraft}
+            />
+            <button>查询 / 刷新</button>
+          </LocalQueryForm>
+        }
+        navigation={
+          <nav className={css.navigation} aria-label="客户库存与客户订单">
+            <button
+              aria-current={area === 'stock'}
+              onClick={() => {
+                setPage(1);
+                setArea('stock');
+                setTab('customer-stock');
+              }}
+            >
+              客户库存
+            </button>
+            <button
+              aria-current={area === 'order'}
+              onClick={() => {
+                setPage(1);
+                setArea('order');
+                setTab('catalog');
+              }}
+            >
+              客户订单
+            </button>
+          </nav>
+        }
+      />
+      <QueryErrors errors={errors} />
       {area === 'stock' && (
         <div aria-busy={busy}>
-          {stock?.snapshotDate && (
-            <p className={common.note}>
-              库存统计日：{stock.snapshotDate}；读取截止：{date}
-              。各指标只统计有效记录，具体范围见卡片及明细；上传日较早的库存请核实后使用。
-            </p>
-          )}
           <DealerOverview data={data} onNavigate={navigate} />
         </div>
       )}
-      <section className={css.listPanel} data-page-reference-ready={referenceReady}>
-        <p role="status" className={common.note}>
-          {referenceReady ? 'GEA 授权只读数据 · 当前查询范围' : '正在确认当前查询范围'}
-        </p>
-        <nav
-          className={common.tabs}
-          aria-label={area === 'stock' ? '库存业务页签' : '客户订单内容'}
-        >
-          {(area === 'stock' ? stocks : orders).map(([id, label]) => (
+      {area === 'order' && (
+        <nav className={css.orderNavigation} aria-label="客户订单内容">
+          {orders.map(([id, label]) => (
             <button
               key={id}
-              aria-current={id === tab ? 'page' : undefined}
+              aria-current={id === tab}
               onClick={() => {
                 setPage(1);
                 setTab(id);
@@ -250,10 +263,26 @@ export default function ConfiguredWorkbench() {
             </button>
           ))}
         </nav>
+      )}
+      <section className={css.listPanel} data-page-reference-ready={referenceReady}>
+        {area === 'stock' && (
+          <Tabs
+            activeTab={tab}
+            onChange={(id: string) => {
+              setPage(1);
+              setTab(id);
+            }}
+          >
+            {stocks.map(([id, label]) => (
+              <Tabs.TabPane key={id} title={label} />
+            ))}
+          </Tabs>
+        )}
         <ConfiguredFactsPage
           key={[tab, date, customer, revision].join(':')}
           config={config}
           embedded
+          presentation={originalDealerView(config, tab)}
           viewIds={[tab]}
           date={date}
           customerCode={customer}

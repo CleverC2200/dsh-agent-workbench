@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, globSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { isBuiltin } from 'node:module';
 
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const git = (root, ...args) =>
@@ -13,6 +14,9 @@ const git = (root, ...args) =>
 const sourceFile = /\.(?:[cm]?[jt]sx?|css|html|json|ya?ml)$/;
 const browserDependency = '@ci/playwright';
 const workbenchBuildDependency = '@ci/workbench-build';
+const packageDependency = '@ci/packages';
+const sdkDependency = '@ci/sdk';
+const upstreamDependency = '@ci/upstreams';
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
 
 function references(file, roots, known, importsOnly = false) {
@@ -249,10 +253,19 @@ function references(file, roots, known, importsOnly = false) {
     const token = tokens[index];
     if (['from', 'import'].includes(token) && literal(tokens[index + 1]))
       names.push([tokens[index + 1].slice(1, -1), true, true]);
-    if (['import', 'require'].includes(token) && tokens[index + 1] === '(') {
-      const argument = argumentsOf(index + 1)[0];
+    const moduleCall = ['import', 'require'].includes(token) && tokens[index + 1] === '(';
+    const packageResolution =
+      token === 'require' &&
+      tokens[index + 1] === '.' &&
+      tokens[index + 2] === 'resolve' &&
+      tokens[index + 3] === '(';
+    if (moduleCall || packageResolution) {
+      const argument = argumentsOf(index + (packageResolution ? 3 : 1))[0];
+      const fileURL =
+        moduleCall && token === 'import' && tokens[argument?.start] === 'pathToFileURL';
       if (argument)
-        for (const name of pathNames(argument.start, argument.end)) names.push([name, true, true]);
+        for (const name of pathNames(argument.start, argument.end))
+          names.push([name, true, !fileURL]);
     }
     if (importsOnly) continue;
     let start;
@@ -282,15 +295,33 @@ function references(file, roots, known, importsOnly = false) {
     if (start === undefined) continue;
     for (const name of pathNames(start, endOf(start))) names.push([name, recursive]);
   }
+  const owner = roots.find((root) => file.startsWith(root + '/'));
+  const upstreamRoots = owner
+    ? [
+        '../../upstream-inputs',
+        '../../quality-upstreams',
+        'node_modules/@changfenhuang/dsh-genui',
+        'node_modules/dsh-better-sidebar',
+      ].map((path) => resolve(owner, path))
+    : [];
   for (const [name, recursive, module] of names) {
+    if (module && !name.startsWith('.') && !name.startsWith('/') && !isBuiltin(name))
+      result.set(packageDependency, true);
+    if (name.includes('official-latest-standard') || (module && name.startsWith('@deepseek-ai/')))
+      result.set(sdkDependency, true);
+    const upstreamPackage =
+      module && /^(?:@changfenhuang\/dsh-genui|dsh-better-sidebar)(?:\/|$)/.test(name);
+    if (upstreamPackage) result.set(upstreamDependency, true);
+    if (module && upstreamPackage) result.set(sdkDependency, true);
     if (module && /^(?:@playwright\/test|playwright(?:-core)?)(?:\/|$)/.test(name)) {
       result.set(browserDependency, true);
       continue;
     }
     if (name.length > 300) continue;
-    const owner = roots.find((root) => file.startsWith(root + '/'));
     for (const base of [dirname(file), owner].filter(Boolean)) {
       const target = resolve(base, name.split('${')[0]);
+      if (upstreamRoots.some((path) => target === path || target.startsWith(path + '/')))
+        result.set(upstreamDependency, true);
       const workbench = roots.find((root) => root.endsWith('/dsh-agent-workbench'));
       if (
         workbench &&
@@ -322,8 +353,11 @@ export function selectCiTests({
   repo,
   base,
   testOwners = {},
+  sourceOnly = false,
+  workingTree = false,
   root = repositories.find((entry) => entry.repo === repo)?.path,
 }) {
+  if (workingTree && !sourceOnly) throw Error('CI_TEST_WORKING_TREE_SOURCE_ONLY');
   if (!root || !/^[a-f0-9]{40}$/.test(base ?? ''))
     throw Error('CI_TEST_BASE_REQUIRED: explicit full base commit');
   git(root, 'cat-file', '-e', `${base}^{commit}`);
@@ -371,7 +405,7 @@ export function selectCiTests({
     executedBy[file] = testOwners[file];
     return testOwners[file];
   };
-  const required = [...new Set(expand(policy.required).map(directFile))].sort();
+  const required = sourceOnly ? [] : [...new Set(expand(policy.required).map(directFile))].sort();
   if (
     policy.browserFixtures !== undefined &&
     (!Array.isArray(policy.browserFixtures) ||
@@ -380,29 +414,43 @@ export function selectCiTests({
     throw Error('CI_TEST_BROWSER_FIXTURE_REJECTED: explicit test-pool files required');
   const browserFixtures = [...new Set(policy.browserFixtures ?? [])].sort();
   const own = repositories.find((entry) => entry.repo === repo);
-  const diffBase = git(root, 'merge-base', base, own.head).trim();
+  const diffBase = sourceOnly ? base : git(root, 'merge-base', base, own.head).trim();
   let baselineBytes;
   try {
-    baselineBytes = git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
+    baselineBytes = sourceOnly
+      ? '{"repositories":[]}'
+      : git(root, 'show', `${diffBase}:scripts/quality-peer-baseline.json`);
   } catch {
     throw Error('CI_TEST_PEER_BASE_REQUIRED: committed peer baseline at comparison base');
   }
   const baseline = JSON.parse(baselineBytes);
-  const changes = repositories.flatMap((entry) => {
-    const before =
-      entry.repo === repo
-        ? diffBase
-        : baseline.repositories.find((item) => item.repo === entry.repo)?.head;
-    if (!/^[a-f0-9]{40}$/.test(before ?? '')) throw Error('CI_TEST_PEER_BASE_REQUIRED');
-    return git(entry.path, 'diff', '--name-only', '--no-renames', '-z', before, entry.head)
-      .split('\0')
-      .filter(Boolean)
-      .map((file) => ({
+  const changes = repositories
+    .filter((entry) => !sourceOnly || entry.repo === repo)
+    .flatMap((entry) => {
+      const before =
+        entry.repo === repo
+          ? diffBase
+          : baseline.repositories.find((item) => item.repo === entry.repo)?.head;
+      if (!/^[a-f0-9]{40}$/.test(before ?? '')) throw Error('CI_TEST_PEER_BASE_REQUIRED');
+      const files = git(
+        entry.path,
+        'diff',
+        '--name-only',
+        '--no-renames',
+        '-z',
+        before,
+        entry.head,
+      );
+      const local = workingTree
+        ? git(entry.path, 'diff', 'HEAD', '--name-only', '--no-renames', '-z') +
+          git(entry.path, 'ls-files', '--others', '--exclude-standard', '-z')
+        : '';
+      return [...new Set((files + local).split('\0').filter(Boolean))].sort().map((file) => ({
         repo: entry.repo,
         file,
         path: resolve(entry.path, file),
       }));
-  });
+    });
   const roots = repositories.map((entry) => entry.path);
   const known = new Set(
     repositories.flatMap((entry) =>
@@ -457,16 +505,24 @@ export function selectCiTests({
   const selected = new Set(docsOnly ? [] : required),
     reasons = {};
   for (const change of changes) {
-    const rules = policy.rules.filter(
-      (rule) =>
-        (!rule.repo || rule.repo === change.repo) && new RegExp(rule.pattern).test(change.file),
-    );
-    const mapped = rules.flatMap((rule) => expand(rule.tests));
+    const rules =
+      sourceOnly && change.repo === repo && pool.includes(change.file)
+        ? []
+        : policy.rules.filter(
+            (rule) =>
+              (!rule.repo || rule.repo === change.repo) &&
+              new RegExp(rule.pattern).test(change.file),
+          );
+    const sourceRules = sourceOnly ? rules.filter((rule) => rule.sourceTests !== undefined) : [];
+    const mapped = sourceRules.length
+      ? sourceRules.flatMap((rule) => expand(rule.sourceTests))
+      : rules.flatMap((rule) => expand(rule.tests));
     const ownTestInput =
       change.repo === repo &&
       (pool.includes(change.file) || /^(?:tests|scripts\/fixtures)\//.test(change.file));
     const matched =
-      rules.some((rule) => rule.exclusive === true) && !ownTestInput
+      (sourceRules.length && !pool.includes(change.file)) ||
+      (rules.some((rule) => rule.exclusive === true) && !ownTestInput)
         ? mapped
         : [...mapped, ...pool.filter((file) => reaches(resolve(root, file), change.path))];
     const files = [...new Set(matched.map(directFile))].sort();
@@ -474,8 +530,9 @@ export function selectCiTests({
     if (
       !files.length &&
       !rules.length &&
-      existsSync(change.path) &&
-      ((ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
+      (sourceOnly || existsSync(change.path)) &&
+      (sourceOnly ||
+        (ownTestInput && (testFile.test(change.file) || /(?:^|\/)fixtures\//.test(change.file))) ||
         /^(?:src|scripts|business|static|theme|presets|default-presets|business-resources)\//.test(
           change.file,
         )) &&
@@ -505,7 +562,24 @@ export function selectCiTests({
       dependencies(resolve(root, file), false).has(browserDependency)
     )
       throw Error(`CI_TEST_BROWSER_FIXTURE_REJECTED: real browser consumer ${file}`);
-  const browserFiles = files.filter(
+  const sourceFixtures = sourceOnly ? (policy.sourceFixtures ?? {}) : {};
+  for (const [file, preparation] of Object.entries(sourceFixtures)) {
+    if (
+      !pool.includes(file) ||
+      typeof preparation?.dependencies !== 'boolean' ||
+      Object.keys(preparation).join(',') !== 'dependencies' ||
+      (!preparation.dependencies &&
+        dependencies(resolve(root, file), true).has(packageDependency)) ||
+      runtimeFiles.includes(file) ||
+      dependencies(resolve(root, file), true).has(browserDependency) ||
+      dependencies(resolve(root, file), true).has(sdkDependency) ||
+      dependencies(resolve(root, file), false).has(upstreamDependency) ||
+      reaches(resolve(root, file), upstreamDependency, new Set(), true)
+    )
+      throw Error(`CI_TEST_SOURCE_FIXTURE_REJECTED: ${file}`);
+  }
+  const preparedFiles = files.filter((file) => !Object.hasOwn(sourceFixtures, file));
+  const browserFiles = preparedFiles.filter(
     (file) =>
       runtimeFiles.includes(file) ||
       (!browserFixtures.includes(file) && reaches(resolve(root, file), browserDependency)),
@@ -513,14 +587,15 @@ export function selectCiTests({
   const browser = browserFiles.length > 0;
   return {
     schemaVersion: 1,
-    mode: 'required-and-affected',
+    mode: sourceOnly ? 'source-affected' : 'required-and-affected',
+    ...(workingTree ? { workingTree: true } : {}),
     applicability,
     repo,
     head: own.head,
     base,
     diffBase,
     policySha256: digest(policyBytes),
-    peerBaselineSha256: digest(baselineBytes),
+    peerBaselineSha256: sourceOnly ? null : digest(baselineBytes),
     changes: changes.map(({ repo, file }) => ({ repo, file })),
     required,
     files,
@@ -531,7 +606,12 @@ export function selectCiTests({
     browserFixtures: browserFixtures.filter((file) => selected.has(file)),
     runtime,
     browser,
-    build: files.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
+    build: preparedFiles.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
+    dependencies:
+      preparedFiles.some((file) => reaches(resolve(root, file), packageDependency)) ||
+      files.some((file) => sourceFixtures[file]?.dependencies),
+    sdk: runtime || preparedFiles.some((file) => reaches(resolve(root, file), sdkDependency)),
+    upstreams: !sourceOnly || runtime || preparedFiles.length ? 'artifacts' : 'source-links',
     fullSuite: 'not-run',
   };
 }

@@ -4,6 +4,6 @@
   "pageIds": [
     "inventory-orderworkbench"
   ],
-  "consumerCode": "orderworkbench-preview",
+  "consumerCode": "order",
   "maxEffect": "view"
 }
