@@ -6895,9 +6895,13 @@ html body[data-ds-dark-theme] {
       };
       showStatus("\u9875\u9762\u4F1A\u8BDD\u5DF2\u5931\u6548\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9875\u9762\u3002");
     };
+    const heartbeat = setInterval(() => {
+      if (connected) update();
+    }, 3e4);
     function dispose() {
       if (!active) return;
       active = false;
+      clearInterval(heartbeat);
       epoch++;
       lifetime.abort();
       latest = void 0;
@@ -9093,66 +9097,66 @@ html body[data-ds-dark-theme] {
       (link) => `<article class="wb-reference-row"><div class="wb-reference-main"><strong title="${escapeHtml(link.name)}">${escapeHtml(link.name)}</strong><a href="${escapeHtml(link.href)}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(link.href)}">${escapeHtml(link.href)}</a></div><div class="wb-reference-actions"><button type="button" data-wb-edit-reference="${escapeHtml(link.id)}" aria-label="\u7F16\u8F91${escapeHtml(link.name)}" title="\u7F16\u8F91"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 4 4 4M4 20l4.3-.9L19 8.4 15.6 5 4.9 15.7 4 20Z"/></svg></button><button class="delete" type="button" data-wb-delete-reference="${escapeHtml(link.id)}" aria-label="\u5220\u9664${escapeHtml(link.name)}" title="\u5220\u9664"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M5 7l1 13h12l1-13M9 7V4h6v3"/></svg></button></div></article>`
     ).join("");
   }
+  var topMetricCards = [
+    {
+      key: "\u4F5C\u5E9F\u7387",
+      label: "\u4F5C\u5E9F\u7387",
+      value: "2.05",
+      unit: "%",
+      target: "<6%",
+      status: "\u8FBE\u6807",
+      footer: "\u672C\u5468\u4F5C\u5E9F\u7387 1.90%"
+    },
+    {
+      key: "\u6539\u5355\u7387",
+      label: "\u6539\u5355\u7387",
+      value: "2.05",
+      unit: "%",
+      target: "<6%",
+      status: "\u672A\u8FBE",
+      footer: "\u672C\u5468\u6539\u5355\u7387 1.90%"
+    },
+    {
+      key: "\u8BA2\u5355\u6EE1\u8DB3\u7387",
+      label: "\u6EE1\u8DB3\u7387",
+      value: "2.05",
+      unit: "%",
+      target: ">95%\uFF08\u6311\u6218 97%\uFF09",
+      status: "\u8FBE\u6807",
+      footer: "\u672C\u5468\u6EE1\u8DB3\u7387 1.90%"
+    },
+    {
+      key: "\u51C6\u4EA4\u7387",
+      label: "\u51C6\u4EA4\u7387",
+      value: "2.05",
+      unit: "%",
+      target: ">95%\uFF08\u6311\u6218 97%\uFF09",
+      status: "\u8FBE\u6807",
+      footer: "\u672C\u5468\u51C6\u4EA4\u7387 1.90%"
+    },
+    {
+      key: "\u8D27\u9F84\uFF08>60\u5929\u5E93\u5B58\u5360\u6BD4\uFF09",
+      label: "60\u5929\u4EE5\u4E0A\u8D27\u9F84\u5360\u6BD4",
+      value: "2.05",
+      unit: "%",
+      target: "\u8D8A\u4F4E\u8D8A\u597D",
+      status: "\u8FBE\u6807",
+      footer: "\u672C\u5468\u8D27\u9F84\u5360\u6BD4 1.90%"
+    },
+    {
+      key: "\u5468\u8F6C\u5929\u6570",
+      label: "\u53EF\u53D1\u8D27\u5929\u6570",
+      value: "14.5",
+      unit: "\u5929",
+      target: "<12.5\u5929\uFF08\u57FA\u5730<11\u5929\uFF09",
+      status: "\u8FBE\u6807",
+      footer: "\u672C\u5468\u53EF\u53D1\u8D27\u5929\u6570 14.5\u5929"
+    }
+  ];
   function renderWorkbench() {
     renderWorkbenchSummary();
     const report = activeReport();
     if (!report) return;
-    const topMetricCards = [
-      {
-        key: "\u4F5C\u5E9F\u7387",
-        label: "\u4F5C\u5E9F\u7387",
-        value: "2.05",
-        unit: "%",
-        target: "<6%",
-        status: "\u8FBE\u6807",
-        footer: "\u672C\u5468\u4F5C\u5E9F\u7387 1.90%"
-      },
-      {
-        key: "\u6539\u5355\u7387",
-        label: "\u6539\u5355\u7387",
-        value: "2.05",
-        unit: "%",
-        target: "<6%",
-        status: "\u672A\u8FBE",
-        footer: "\u672C\u5468\u6539\u5355\u7387 1.90%"
-      },
-      {
-        key: "\u8BA2\u5355\u6EE1\u8DB3\u7387",
-        label: "\u6EE1\u8DB3\u7387",
-        value: "2.05",
-        unit: "%",
-        target: ">95%\uFF08\u6311\u6218 97%\uFF09",
-        status: "\u8FBE\u6807",
-        footer: "\u672C\u5468\u6EE1\u8DB3\u7387 1.90%"
-      },
-      {
-        key: "\u51C6\u4EA4\u7387",
-        label: "\u51C6\u4EA4\u7387",
-        value: "2.05",
-        unit: "%",
-        target: ">95%\uFF08\u6311\u6218 97%\uFF09",
-        status: "\u8FBE\u6807",
-        footer: "\u672C\u5468\u51C6\u4EA4\u7387 1.90%"
-      },
-      {
-        key: "\u8D27\u9F84\uFF08>60\u5929\u5E93\u5B58\u5360\u6BD4\uFF09",
-        label: "60\u5929\u4EE5\u4E0A\u8D27\u9F84\u5360\u6BD4",
-        value: "2.05",
-        unit: "%",
-        target: "\u8D8A\u4F4E\u8D8A\u597D",
-        status: "\u8FBE\u6807",
-        footer: "\u672C\u5468\u8D27\u9F84\u5360\u6BD4 1.90%"
-      },
-      {
-        key: "\u5468\u8F6C\u5929\u6570",
-        label: "\u53EF\u53D1\u8D27\u5929\u6570",
-        value: "14.5",
-        unit: "\u5929",
-        target: "<12.5\u5929\uFF08\u57FA\u5730<11\u5929\uFF09",
-        status: "\u8FBE\u6807",
-        footer: "\u672C\u5468\u53EF\u53D1\u8D27\u5929\u6570 14.5\u5929"
-      }
-    ];
     document.getElementById("wbKpis").innerHTML = topMetricCards.map((metric) => {
       const statusClass = metric.status === "\u672A\u8FBE" ? "bad" : "";
       return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="\u67E5\u770B${escapeHtml(metric.label)}\u53E3\u5F84"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">\u76EE\u6807 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>\u672C\u671F\u73AF\u6BD4</span><b>\u22121.9pct</b></span><span class="wb-kpi-compare-row"><span>\u672C\u671F\u540C\u6BD4</span><b>1.9pct</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>\u5468\u73AF\u6BD4</span><b>\u22121.9pct</b></span><span class="wb-kpi-compare-row"><span>\u5468\u540C\u6BD4</span><b>1.9pct</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
@@ -10425,13 +10429,39 @@ ${details}`
           dimension: dimensionTab,
           base: ""
         },
-        metrics: report?.metrics ?? [],
+        consumerCode: "order",
+        metrics: report ? topMetricCards.map((metric) => ({
+          ...metric,
+          value: metric.value + metric.unit,
+          note: metric.footer,
+          mock: true,
+          comparison: {
+            periodChange: "\u22121.9pct",
+            yearChange: "1.9pct",
+            weekChange: "\u22121.9pct",
+            weekYearChange: "1.9pct"
+          }
+        })) : [],
+        summary: report ? { ...workbenchSummaryContent } : null,
+        dimension: report ? {
+          key: dimensionTab,
+          report: workbenchPerformance[dimensionTab] ?? null,
+          unmet: dimensionTab === "base-performance" ? getWorkbenchUnmetItems("base") : dimensionTab === "item-performance" ? getWorkbenchUnmetItems("item") : [],
+          directorNotes: dimensionTab === "director-performance" ? workbenchDirectorNotes : []
+        } : null,
+        improvements: report ? [...workbenchView.querySelectorAll(".wb-improvement-block")].map((block) => ({
+          title: block.querySelector("h3").textContent,
+          rows: [...block.querySelectorAll("tbody tr")].map(
+            (row) => [...row.querySelectorAll("td:not(.actions)")].map((cell) => cell.textContent.trim())
+          )
+        })) : [],
+        references: workbenchReferenceLinks,
         events: (report?.events ?? []).filter((event) => eventFilter !== "focus" || event.focus),
         actions: report?.actions ?? [],
         tasks: tasks.filter(
           (task) => taskFilter === "all" || (taskFilter === "done" ? task.status === "\u5DF2\u5B8C\u6210" : task.status !== "\u5DF2\u5B8C\u6210")
         ),
-        coverage: "\u62A5\u544A\u6458\u5F55\u975E\u5B9E\u65F6\uFF1B\u65E0\u5355\u7B14\u8BA2\u5355\u660E\u7EC6\u3001\u771F\u5B9E\u4EFB\u52A1\u6D3E\u53D1\u6216\u4E1A\u52A1\u5199\u5165\u3002\u51B7\u5237\u65B0/\u91CD\u65B0\u8FDB\u5165\u4E0D\u4FDD\u5B58\u672C\u5730\u6F14\u793A\u4EFB\u52A1\u3002"
+        coverage: "\u6F14\u793A\u62A5\u544A\u6458\u5F55\uFF0C\u975E\u5B9E\u65F6\u4E1A\u52A1\u6570\u636E\uFF1B\u9876\u90E8\u5361\u7247\u3001\u7ED3\u8BBA\u6458\u8981\u4E0E\u7EF4\u5EA6\u8868\u53EF\u80FD\u5B58\u5728\u53E3\u5F84\u6216\u6F14\u793A\u503C\u5DEE\u5F02\uFF0C\u5FC5\u987B\u5206\u522B\u5F15\u7528\uFF0C\u4E0D\u66FF\u6362\u6216\u63A8\u7B97\u3002\u4EC5\u672C\u5730\u7F16\u8F91\uFF0C\u4E0D\u4EE3\u8868\u6570\u636E\u5E93\u4FDD\u5B58\u3001\u771F\u5B9E\u4EFB\u52A1\u6D3E\u53D1\u6216\u4E1A\u52A1\u5199\u5165\u3002"
       };
     },
     () => {

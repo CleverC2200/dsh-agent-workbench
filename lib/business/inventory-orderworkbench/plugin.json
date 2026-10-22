@@ -5,12 +5,22 @@
   "version": "0.1.0-preview.2-split.21",
   "html": "index.html",
   "skills": [
-    "skills/orderworkbench/SKILL.md"
+    "skills/orderworkbench/SKILL.md",
+    "skills/fulfillment-query-orchestrator/SKILL.md",
+    "skills/order-fulfillment-risk/SKILL.md",
+    "skills/sku-inventory-shortage/SKILL.md",
+    "skills/production-fulfillment-progress/SKILL.md",
+    "skills/warehouse-logistics-fulfillment/SKILL.md",
+    "skills/sales-organization-analysis/SKILL.md",
+    "skills/fulfillment-sales-confirmation-automation/SKILL.md",
+    "skills/operations-kpi-performance-analysis/SKILL.md",
+    "skills/operations-exception-root-cause/SKILL.md",
+    "skills/improvement-action-closure/SKILL.md"
   ],
   "mcp": "mcp.json",
   "mode": "mock",
   "gea": {
-    "consumerCode": "orderworkbench-preview",
+    "consumerCode": "order",
     "readonly": true,
     "contract": "gea-html-v2"
   },

@@ -19,11 +19,18 @@ test('order workbench reference interactions', () => {
       '',
     );
     window.eval(
-      'const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const draft=async()=>{}; const publishReport=(snapshot)=>{document.addEventListener("click",()=>snapshot()); snapshot(); return ()=>snapshot()};\n' +
+      'const createPageViewState=()=>({subscribe(fn){window.restoreView=fn},update(state){window.savedView=state}}); const draft=async()=>{}; const publishReport=(snapshot)=>{for(const type of ["click","change","submit"]) document.addEventListener(type,()=>{window.pageSnapshot=snapshot()}); window.pageSnapshot=snapshot(); return ()=>{window.pageSnapshot=snapshot()}};\n' +
         code,
     );
     const document = window.document;
     assert.equal(document.querySelectorAll('.wb-kpi').length, 6);
+    assert.equal(window.pageSnapshot.consumerCode, 'order');
+    assert.equal(window.pageSnapshot.mock, true);
+    assert.equal(window.pageSnapshot.metrics.length, 6);
+    assert.equal(window.pageSnapshot.metrics[2].value, '2.05%');
+    assert.equal(window.pageSnapshot.dimension.key, 'base-performance');
+    assert.ok(window.pageSnapshot.dimension.unmet.length);
+    assert.ok(window.pageSnapshot.improvements.length);
     assert.equal(document.querySelector('.assistant'), null);
     const click = (selector) => {
       const node = document.querySelector(selector);
@@ -55,6 +62,7 @@ test('order workbench reference interactions', () => {
       '测试正向结论',
     );
     assert.match(window.localStorage.getItem('order-workbench-summary-v1'), /测试正向结论/);
+    assert.equal(window.pageSnapshot.summary.positive, '测试正向结论');
     click('[data-wb-add-unmet="base"]');
     const entity = document.getElementById('wbUnmetEntity');
     entity.value = [...entity.options].find((option) => option.value).value;
