@@ -83,9 +83,13 @@ export function publishReport(snapshot, disposePage) {
     withdraw = () => {};
     showStatus('页面会话已失效，请重新打开页面。');
   };
+  const heartbeat = setInterval(() => {
+    if (connected) update();
+  }, 30000);
   function dispose() {
     if (!active) return;
     active = false;
+    clearInterval(heartbeat);
     epoch++;
     lifetime.abort();
     latest = undefined;

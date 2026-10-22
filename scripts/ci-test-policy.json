@@ -41,6 +41,12 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:(?:prototypes|lib/business)/inventory-orderworkbench/|scripts/build-orderworkbench\\.mjs$)",
+      "tests": ["tests/orderworkbench-reference.test.mjs"],
+      "sourceTests": ["tests/orderworkbench-reference.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^\\.codex/environments/environment\\.toml$",
       "tests": ["scripts/source-quality.test.mjs"],
       "sourceTests": ["scripts/source-quality.test.mjs"]
