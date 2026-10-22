@@ -183,16 +183,19 @@ test('received customer mock preserves filters, pagination and visible current r
 test('received order report restores the selected week and publishes current supported elements', async (t) => {
   const page = await fixture(t, ['orderworkbench']);
   await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
-  await page.frameLocator('iframe').locator('#weekMode').click();
+  await page.frameLocator('iframe').locator('#periodPickerTrigger').click();
+  await page.frameLocator('iframe').locator('[data-period-week="2026-08-31"]').click();
   await expect
     .poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.mode))
     .toBe('week');
   await page.evaluate(() => window.hidePage());
   await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
-  await expect(page.frameLocator('iframe').locator('#weekMode')).toHaveAttribute(
-    'aria-pressed',
-    'true',
+  await expect(page.frameLocator('iframe').locator('#periodPickerTrigger')).toContainText(
+    '2026年9月 · 第一周',
   );
+  await expect
+    .poll(() => page.evaluate(() => window.readState('inventory-orderworkbench')?.week))
+    .toBe('2026-08-31');
   await expect
     .poll(() => page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.period.mode))
     .toBe('week');
@@ -215,23 +218,39 @@ for (const [taskFilter, taskLabel] of [
   ['pending', '待跟进'],
   ['done', '已完成'],
 ]) {
-  test(`received order report restores the ${taskLabel} task filter and its visible list`, async (t) => {
+  test(`received order report restores the retained ${taskLabel} filter while task controls remain hidden`, async (t) => {
     const page = await fixture(t, ['orderworkbench']);
+    await page.evaluate(
+      (task) =>
+        window.seedState('inventory-orderworkbench', {
+          version: 1,
+          mode: 'week',
+          month: '2026-09',
+          week: '2026-08-31',
+          task,
+        }),
+      taskFilter,
+    );
     await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
     const frame = page.frameLocator('iframe');
-    await frame.getByRole('button', { name: new RegExp(`^${taskLabel}`) }).click();
     await expect
       .poll(() =>
         page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.filters.task),
       )
       .toBe(taskFilter);
-    await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
-    await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
+    await expect(frame.locator('#wbTaskSection')).toBeHidden();
+    await expect
+      .poll(() => page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.tasks))
+      .toEqual([]);
     await page.evaluate(() => window.hidePage());
     await page.evaluate(() => window.openPage('inventory-orderworkbench', 'orderworkbench'));
-    await expect(frame.locator('[data-wb-task-filter].active')).toContainText(taskLabel);
-    await expect(frame.locator('#wbTaskRows')).toContainText('尚未建立任务');
-    await expect(frame.getByRole('tab', { name: '品类满足率维度', exact: true })).toHaveAttribute(
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.mockContexts['inventory-orderworkbench']?.filters.task),
+      )
+      .toBe(taskFilter);
+    await expect(frame.locator('#wbTaskSection')).toBeHidden();
+    await expect(frame.locator('[data-wb-dimension-tab="base-performance"]')).toHaveAttribute(
       'aria-selected',
       'true',
     );
@@ -467,38 +486,52 @@ test('regional mounted author restores and republishes after its existing channe
 });
 
 // MPS reception observes the existing authored iframe and current channel output.
-test('received MPS publishes the committed visible demand edits and removes the previous step context', async (t) => {
+test('received MPS publishes committed source edits and removes the previous step context', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.navigation?.tab),
-    )
-    .toBe('process');
-  assert.deepEqual(
-    await page.evaluate(
-      () => window.mockContexts['plan-category-production'].parts.process.weights,
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: 'products.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
     ),
-    { report: 40, growth: 40, ship: 20 },
-  );
-  assert.equal(
-    await page.evaluate(
-      () => window.mockContexts['plan-category-production'].parts.process.rows[0].initialDemand,
+  });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: 'report.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,18,20',
     ),
-    2032500,
-  );
-  const input = frame.locator('tbody tr').first().locator('input');
-  await input.fill('2100000');
-  await input.blur();
+  });
   await expect
     .poll(() =>
       page.evaluate(
-        () => window.mockContexts['plan-category-production']?.parts?.process?.rows[0].finalDemand,
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.check?.sourceSummaries?.report
+            ?.quantity,
       ),
     )
-    .toBe(2100000);
+    .toBe(18);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.process?.rows[0]?.reportQuantity,
+      ),
+    )
+    .toBe(18);
+  const processed = await page.evaluate(
+    () => window.mockContexts['plan-category-production'].parts.process,
+  );
+  assert.equal(processed.rows[0].demand, null);
+  assert.ok(processed.rows[0].missing.demand.length);
+  assert.equal(Object.hasOwn(processed, 'weights'), false);
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect
     .poll(() =>
@@ -508,8 +541,8 @@ test('received MPS publishes the committed visible demand edits and removes the 
     )
     .toEqual(['navigation', 'ship']);
   assert.equal(
-    await page.evaluate(() => window.mockContexts['plan-category-production'].mock),
-    true,
+    await page.evaluate(() => window.mockContexts['plan-category-production'].scope),
+    'read-only-master-data-local-drafts',
   );
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
   assert.equal(
@@ -591,29 +624,20 @@ test('received MPS restores separate steps and unfinished text when switching Se
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS context covers each mounted original step and preserves sample gaps and reference-only plans', async (t) => {
+test('received MPS context covers the seven current steps and preserves unassessed results', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
   for (const [key, label] of [
     ['check', '需求确认'],
-    ['process', '需求加工'],
     ['ship', '本月预估发货'],
+    ['process', '需求加工'],
     ['masterdata', '主数据对应'],
     ['constraints', '约束与配置'],
-    ['plans', '月度计划编制'],
     ['capacity', '产能评估'],
-    ['gap', '缺口处置'],
+    ['report', '产销存报告'],
   ]) {
-    if (['plans', 'gap'].includes(key)) {
-      await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
-      await frame
-        .getByRole('button', {
-          name: key === 'plans' ? '查看原月度计划模拟' : '查看原缺口模拟',
-          exact: true,
-        })
-        .click();
-    } else await frame.locator('.ap-page-tab').filter({ hasText: label }).click();
+    await frame.locator('.ap-page-tab').filter({ hasText: label }).click();
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -641,23 +665,32 @@ test('received MPS context covers each mounted original step and preserves sampl
       assert.equal(data.sourceSummaries.report.rowCount, 0);
       assert.equal(data.businessSave, 'not-connected');
     }
-    if (key === 'process')
-      assert.equal(data.rows.find((row) => row.sku === '300g 奶黄包').report, null);
     if (key === 'ship') {
-      assert.equal(data.scope, 'local-check-only');
       assert.equal(data.unit, '件');
       assert.equal(data.businessSave, 'not-connected');
-      assert.equal(data.nextStage, 'not-connected');
+      assert.equal(data.nextStage, 'shared-snapshot');
+      assert.equal(data.sourceKind, 'demo');
       assert.equal(data.bases.length, 5);
       assert.equal(
         data.bases.some((base) => base.who === '濮阳'),
         false,
       );
     }
-    if (key === 'masterdata')
-      assert.ok(data.skuMappings.some((row) => !row.base || !row.shop || !row.lineId));
-    if (key === 'plans') assert.ok(data.rows.some((row) => row.ref === true));
-    if (key === 'gap') assert.ok(data.rows.every((row) => row.over));
+    if (['process', 'constraints', 'capacity', 'report'].includes(key)) {
+      assert.equal(data.businessSave, 'not-connected');
+      assert.equal(data.months.length, 4);
+      assert.ok(data.categoryRows.every((row) => row.quantity === null));
+      assert.ok(
+        data.rows.every((row) => row.demand === null && row.mainPlan === null && row.gap === null),
+      );
+      assert.ok(data.missing.length);
+      assert.equal(Object.hasOwn(data, 'weights'), false);
+    }
+    if (key === 'masterdata') {
+      assert.equal(data.status, 'failed');
+      assert.ok(data.error);
+      assert.equal(data.total, 0);
+    }
   }
   assert.equal(
     await page.evaluate(() => Object.hasOwn(window.readState('plan-category-production'), 'parts')),
@@ -666,23 +699,39 @@ test('received MPS context covers each mounted original step and preserves sampl
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS commits the restored inputs before publishing into a rebound Session in the same iframe', async (t) => {
+test('received MPS commits restored navigation and clears local inputs before publishing into a rebound Session', async (t) => {
   const page = await fixture(t, ['mps']);
+  await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: 'products.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+    ),
+  });
+  await frame.getByLabel('选择计划提报CSV', { exact: true }).setInputFiles({
+    name: 'session-a.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列,组,18,20',
+    ),
+  });
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
   await expect
     .poll(() =>
-      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.process?.weights),
+      page.evaluate(
+        () =>
+          window.mockContexts['plan-category-production']?.parts?.process?.rows[0]?.reportQuantity,
+      ),
     )
-    .toEqual({ report: 40, growth: 40, ship: 20 });
+    .toBe(18);
   await page.evaluate(() => {
     window.setViewSession('session-22222222-2222-4222-8222-222222222222');
     window.seedState('plan-category-production', {
       version: 1,
-      tab: 'process',
-      weights: { report: 20, growth: 50, ship: 30 },
-      demandEdits: { '400g 黑芝麻': 1900000 },
+      tab: 'capacity',
       assistantDraft: 'Session B 未发文字',
     });
     window.setViewSession('mock-session');
@@ -692,32 +741,24 @@ test('received MPS commits the restored inputs before publishing into a rebound 
   await expect(frame.locator('.author-draft-recovery pre')).toHaveText('Session B 未发文字');
   await expect
     .poll(() =>
-      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.process?.weights),
+      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.navigation?.tab),
     )
-    .toEqual({ report: 20, growth: 50, ship: 30 });
+    .toBe('capacity');
   const records = await page.evaluate(() =>
     window.contextMessages.filter(
       (row) => row.session === 'session-22222222-2222-4222-8222-222222222222',
     ),
   );
   assert.ok(records.length > 0);
-  assert.ok(
-    records.every((row) => row.context.parts.process?.rows[0].finalDemand === 1900000),
-    JSON.stringify(
-      records.map((row) => ({
-        session: row.session,
-        parts: Object.keys(row.context.parts),
-        tab: row.context.parts.navigation?.tab,
-        weights: row.context.parts.process?.weights,
-        row: row.context.parts.process?.rows[0],
-      })),
-      null,
-      2,
-    ),
-  );
   for (const row of records) {
-    assert.equal(row.context.parts.navigation.tab, 'process');
-    assert.deepEqual(row.context.parts.process.weights, { report: 20, growth: 50, ship: 30 });
+    assert.deepEqual(Object.keys(row.context.parts).sort(), ['capacity', 'navigation']);
+    assert.equal(row.context.parts.navigation.tab, 'capacity');
+    assert.ok(
+      row.context.parts.capacity.rows.every(
+        (item) => item.reportQuantity === null && item.demand === null,
+      ),
+    );
+    assert.equal(JSON.stringify(row.context).includes('session-a.csv'), false);
   }
   await page.evaluate(() => {
     window.contextMessages = [];
@@ -725,17 +766,20 @@ test('received MPS commits the restored inputs before publishing into a rebound 
   });
   await expect
     .poll(() =>
-      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.process?.weights),
+      page.evaluate(() => window.mockContexts['plan-category-production']?.parts?.navigation?.tab),
     )
-    .toEqual({ report: 40, growth: 40, ship: 20 });
+    .toBe('process');
   const returning = await page.evaluate(() =>
     window.contextMessages.filter((row) => row.session === 'mock-session'),
   );
   assert.ok(returning.length > 0);
   for (const row of returning) {
-    assert.equal(row.context.parts.navigation.tab, 'process');
-    assert.deepEqual(row.context.parts.process.weights, { report: 40, growth: 40, ship: 20 });
-    assert.deepEqual(row.context.parts.process.adjustments, {});
+    assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
+    assert.ok(
+      row.context.parts.process.rows.every(
+        (item) => item.reportQuantity === null && item.demand === null,
+      ),
+    );
   }
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
@@ -938,17 +982,18 @@ async function publicMpsContext(t, page) {
     };
   });
   const observed = new Map();
-  return async (session = 'session-11111111-1111-4111-8111-111111111111') => {
+  return async (session = 'session-11111111-1111-4111-8111-111111111111', focus) => {
     const result = await ctx.tools.execute({
       callId: crypto.randomUUID(),
       name: 'gea_page',
-      arguments: { action: 'context' },
+      arguments: { action: 'context', ...(focus ? { focus } : {}) },
       agent: agents.get(session),
       signal: new AbortController().signal,
     });
     const value = JSON.parse(result.value);
-    if (!value.unchanged) observed.set(session, value.context);
-    return observed.get(session);
+    const key = JSON.stringify([session, focus ?? '']);
+    if (!value.unchanged) observed.set(key, value.context);
+    return observed.get(key);
   };
 }
 test('MPS Host context stays at the latest visible step when an earlier transport delivery is delayed', async (t) => {
@@ -956,14 +1001,14 @@ test('MPS Host context stays at the latest visible step when an earlier transpor
     readHost = await publicMpsContext(t, page);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   await expect.poll(async () => (await readHost())?.parts?.navigation?.tab).toBe('check');
-  await page.evaluate(() => window.holdHostContext('process'));
+  await page.evaluate(() => window.holdHostContext('ship'));
   const frame = page.frameLocator('iframe');
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
-    .toBe('process');
-  await frame.locator('tbody tr').first().locator('input').fill('2100000');
-  await frame.locator('tbody tr').first().locator('input').blur();
+    .toBe('ship');
+  await frame.getByLabel('西南 剩余天数入库', { exact: true }).fill('2100000');
+  await frame.getByLabel('西南 剩余天数入库', { exact: true }).blur();
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估' }).click();
   await expect(frame.locator('.ap-board-title')).toHaveText('产能评估与缺口');
   await page.evaluate(() => window.releaseHostContext());
@@ -973,30 +1018,28 @@ test('MPS Host context stays at the latest visible step when an earlier transpor
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('MPS Host context keeps the latest edited demand when an earlier value arrives late', async (t) => {
+test('MPS Host context keeps the latest edited shipment input when an earlier value arrives late', async (t) => {
   const page = await fixture(t, ['mps']),
     readHost = await publicMpsContext(t, page);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   await expect.poll(async () => (await readHost())?.parts?.navigation?.tab).toBe('check');
-  await page.evaluate(() => window.holdHostContext('process'));
+  await page.evaluate(() => window.holdHostContext('ship'));
   const frame = page.frameLocator('iframe');
-  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工' }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
   await expect
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
-    .toBe('process');
-  const input = frame.locator('tbody tr').first().locator('input');
+    .toBe('ship');
+  const input = frame.getByLabel('西南 剩余天数入库', { exact: true });
   await input.fill('2100000');
   await input.blur();
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () => window.readState('plan-category-production')?.demandEdits?.['400g 黑芝麻'],
-      ),
-    )
-    .toBe(2100000);
+  await expect(input).toHaveValue('2100000');
   await page.evaluate(() => window.releaseHostContext());
   await expect
-    .poll(async () => (await readHost())?.parts?.process?.rows[0].finalDemand)
+    .poll(
+      async () =>
+        (await readHost(undefined, '西南'))?.parts?.ship?.bases.find((row) => row.who === '西南')
+          ?.remaining,
+    )
     .toBe(2100000);
 });
 test('MPS Host context discards a held old Session publication before restored authors publish into the new Session', async (t) => {
@@ -1118,9 +1161,7 @@ test('received MPS clears local files and in-flight file reads when the current 
     };
   });
   await upload();
-  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
-    '正在读取本地文件',
-  );
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('正在读取…');
   await page.evaluate(() =>
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
   );
@@ -1179,7 +1220,7 @@ for (const boundary of ['Session', 'identity']) {
         '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,郑州,OLD,旧身份输入,汤圆,系列,组,1,0,0,1,0,0,0',
       ),
     });
-    await expect(frame.getByRole('status')).toContainText('正在校验');
+    await expect(frame.getByRole('status')).toContainText('正在读取或校验输入');
     if (boundary === 'Session')
       await page.evaluate(() =>
         window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
@@ -1222,7 +1263,7 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
   assert.equal(data.rows[0][data.rowFields.indexOf('shipped')], 220);
   assert.equal(data.rows[0][data.rowFields.indexOf('end')], 80);
   assert.equal(data.carryToMonth, '2026-10');
-  assert.equal(data.nextStage, 'not-connected');
+  assert.equal(data.nextStage, 'shared-snapshot');
   await frame.getByRole('button', { name: '下一步：需求加工与收敛', exact: true }).click();
   await expect
     .poll(async () => Object.keys((await readHost())?.parts ?? {}).sort())
