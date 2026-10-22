@@ -50,10 +50,7 @@
         "tests/fulfillment-presentation.test.mjs",
         "tests/fulfillment-live.browser.mjs"
       ],
-      "sourceTests": [
-        "tests/fulfillment-governed.test.mjs",
-        "tests/fulfillment-metrics.test.mjs"
-      ]
+      "sourceTests": ["tests/fulfillment-governed.test.mjs", "tests/fulfillment-metrics.test.mjs"]
     },
     {
       "repo": "dsh-agent-workbench",
