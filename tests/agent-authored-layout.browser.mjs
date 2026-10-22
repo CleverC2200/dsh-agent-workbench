@@ -1543,3 +1543,32 @@ for (const [inventory, inTransit, stockDays] of [
     await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
+
+test('FC actual quantity can clear zero, type a replacement and retain decimal drafts', async (t) => {
+  const { frame, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId.startsWith('replenishment.'))
+      for (const row of result.rows) {
+        row.recommended_qty = 0;
+        row.warehouse_code = 'W01';
+        row.warehouse_name = '分仓1';
+      }
+    return result;
+  });
+  const input = frame.getByRole('spinbutton', { name: /实际补货量/ }).first();
+  await expect(input).toHaveValue('0');
+  await input.focus();
+  await input.press('Backspace');
+  await expect(input).toHaveValue('');
+  await input.pressSequentially('100');
+  await expect(input).toHaveValue('100');
+  await input.blur();
+  await expect(input).toHaveValue('100');
+  await input.fill('12.5');
+  await input.blur();
+  await expect(input).toHaveValue('12.5');
+  await input.fill('');
+  await expect(input).toHaveValue('');
+  await input.blur();
+  await expect(input).toHaveValue('0');
+  assert.deepEqual(errors, []);
+});
