@@ -810,7 +810,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       setErrors({});
       setBusy({});
     };
-    const begin = (type) => {
+    const sourceRead = (entry, type, period, read) =>
+      period
+        ? { ...entry[type + 'Read'], periods: { ...entry[type + 'Read']?.periods, [period]: read } }
+        : read;
+    const begin = (type, period) => {
       controllers.current[type]?.abort();
       const controller = new AbortController();
       controllers.current[type] = controller;
@@ -821,7 +825,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       setErrors((state) => ({ ...state, [type]: '' }));
       setDrafts((entries) =>
         entries.map((entry) =>
-          entry.id === selected ? { ...entry, [type + 'Read']: { status: 'loading' } } : entry,
+          entry.id === selected
+            ? { ...entry, [type + 'Read']: sourceRead(entry, type, period, { status: 'loading' }) }
+            : entry,
         ),
       );
       return {
@@ -836,7 +842,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const id = draft.id;
       const fact = type === 'report' || type === 'history';
       const period = fact ? sourceSelection(draft, type).period : undefined;
-      const { signal, valid } = begin(type);
+      const { signal, valid } = begin(type, period);
       try {
         const result =
           type === 'products'
@@ -869,7 +875,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? { annualSource: 'business' }
                       : {}),
                   files: { ...entry.files, [type]: null },
-                  [type + 'Read']: { status: 'ready' },
+                  [type + 'Read']: sourceRead(entry, type, period, { status: 'ready' }),
                 }
               : entry,
           ),
@@ -881,7 +887,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           setDrafts((entries) =>
             entries.map((entry) =>
               entry.id === id
-                ? { ...entry, [type + 'Read']: { status: 'failed', error: failure.message } }
+                ? {
+                    ...entry,
+                    [type + 'Read']: sourceRead(entry, type, period, {
+                      status: 'failed',
+                      error: failure.message,
+                    }),
+                  }
                 : entry,
             ),
           );

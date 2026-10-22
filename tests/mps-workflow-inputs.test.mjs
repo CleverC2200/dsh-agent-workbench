@@ -93,3 +93,75 @@ test('仅同版同月非演示结存进入期初，空白不变0，原型产品�
   source.productSource = 'demo-edited';
   assert.deepEqual(buildMpsWorkflow(source).rows, []);
 });
+
+test('按实际期间撤销失效提报与历史，别月成功或失败不改变本月可用性', () => {
+  const source = draft();
+  source.reportRead = {
+    periods: {
+      '2026-12': { status: 'ready' },
+      '2027-01': { status: 'failed', error: '一月提报拒权' },
+    },
+  };
+  source.historyRead = {
+    periods: {
+      '2025-12': { status: 'failed', error: '十二月历史拒权' },
+      '2024-12': { status: 'ready' },
+    },
+  };
+  const failed = buildMpsWorkflow(source);
+  assert.equal(failed.rows[0].historyQuantity, null);
+  assert.equal(failed.rows[0].reportQuantity, 30);
+  assert.equal(failed.rows[0].demand, null);
+  assert.match(failed.rows[0].missing.demand.join(''), /十二月历史拒权/);
+  source.historyRead.periods['2025-12'] = { status: 'ready' };
+  source.historyRead.periods['2024-12'] = { status: 'failed', error: '前年拒权' };
+  assert.ok(Math.abs(buildMpsWorkflow(source).rows[0].demand - 54) < 1e-12);
+  source.reportRead.periods['2026-12'] = { status: 'loading' };
+  assert.equal(buildMpsWorkflow(source).rows[0].reportQuantity, null);
+  assert.equal(source.report[0].月初数量, 30);
+});
+
+test('产品读取中或失败撤销依赖分类的拆分，但保留独立数量与结存', () => {
+  const source = draft();
+  const snapshot = {
+    draftId: 'v1',
+    month: '2026-12',
+    shipmentMonth: '2026-11',
+    source: 'local-csv',
+    rows: [{ base: '甲', code: 'A', end: -8 }],
+  };
+  for (const status of ['loading', 'failed']) {
+    source.productsRead = { status, error: '产品权限已失效' };
+    const row = buildMpsWorkflow(source, null, snapshot).rows[0];
+    assert.equal(row.demand, null);
+    assert.equal(row.share, null);
+    assert.equal(row.reportShare, null);
+    assert.equal(row.historyShare, null);
+    assert.equal(row.reportQuantity, 30);
+    assert.equal(row.historyQuantity, 60);
+    assert.equal(row.openingInventory, -8);
+    assert.match(row.missing.demand.join(''), status === 'loading' ? /正在读取/ : /产品权限已失效/);
+  }
+});
+
+test('有效结存按原始基地和编码补齐产品对应，独立于提报历史及产能', () => {
+  const source = draft();
+  source.report = [];
+  source.history = [];
+  const snapshot = {
+    draftId: 'v1',
+    month: '2026-12',
+    shipmentMonth: '2026-11',
+    source: 'local-csv',
+    rows: [{ base: '郑州', code: 'A', end: -8 }],
+  };
+  const result = buildMpsWorkflow(source, null, snapshot);
+  assert.equal(result.rows[0].base, '郑州');
+  assert.equal(result.rows[0].openingInventory, -8);
+  assert.ok(!result.missing.some((reason) => reason.includes('无本版本产品对应')));
+  snapshot.rows[0].code = 'A-别名';
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].openingInventory, null);
+  snapshot.rows[0].code = 'A';
+  snapshot.status = 'failed';
+  assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].base, '');
+});

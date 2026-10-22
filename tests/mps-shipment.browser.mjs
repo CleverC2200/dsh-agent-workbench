@@ -284,7 +284,7 @@ test('MPS shipment reads actual quantities through cutoff and a separate complet
   assert.match(csv, /220,,,4,,,,/);
   assert.match(csv, /业务来源/);
 });
-test('MPS actual shipment failure withdraws prior business output without falling back to demo rows or replacing a CSV override', async (t) => {
+test('MPS actual shipment failure withdraws prior business output and switches explicitly between preserved CSV and current business rows', async (t) => {
   let denied = false;
   const { frame, table } = await businessShipment(t, (query) => {
     if (denied && query.queryId === 'facts.shipment') throw Error('AGENT_ACCESS_DENIED');
@@ -308,10 +308,31 @@ test('MPS actual shipment failure withdraws prior business output without fallin
   await expect(frame.getByRole('button', { name: '同步实际发货', exact: true })).toBeEnabled();
   await expect(
     table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
+  ).toHaveText('220');
+  await expect(frame.getByLabel('发货数据来源', { exact: true })).toHaveValue('business');
+  await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
+  await expect(
+    table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
   ).toHaveText('22');
   await expect(frame.getByRole('region', { name: '发货本地核对' })).toContainText(
     '本地CSV：发货核对.csv',
   );
+  await frame.getByLabel('发货数据来源', { exact: true }).selectOption('business');
+  await expect(
+    table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
+  ).toHaveText('220');
+  denied = true;
+  await frame.getByRole('button', { name: '同步实际发货', exact: true }).click();
+  await expect(
+    frame.getByRole('region', { name: '发货本地核对' }).getByRole('alert'),
+  ).toContainText('暂无数据权限');
+  await expect(
+    table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
+  ).toHaveText('待定');
+  await frame.getByLabel('发货数据来源', { exact: true }).selectOption('local-file');
+  await expect(
+    table.getByRole('button', { name: '郑州 本月已发货 计算过程', exact: true }),
+  ).toHaveText('22');
 });
 test('MPS actual shipment preserves full paging, zero and NULL while a failed recent range does not block cutoff quantities', async (t) => {
   const { frame, table, calls } = await businessShipment(t, (query) => {

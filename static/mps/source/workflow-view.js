@@ -340,7 +340,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           ...selectedFields.map((field) => numericCell(row, field)),
           h(
             'span',
-            { className: reasons(row, selectedFields).length ? 'wf-unavailable' : undefined },
+            {
+              className: `wf-reasons${reasons(row, selectedFields).length ? ' wf-unavailable' : ''}`,
+              title: status(row, selectedFields),
+            },
             status(row, selectedFields),
           ),
         ]),

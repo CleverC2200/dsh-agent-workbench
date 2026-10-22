@@ -95,3 +95,38 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   ).toHaveCount(0);
   assert.equal(await page.evaluate(() => window.peerDraft), '历史草稿，请保留。');
 });
+
+test('MPS missing reasons remain readable in two-line rows at a 600px document width', async (t) => {
+  const page = await authorPage(t);
+  await page.evaluate(() => window.openAuthor('mps', 600));
+  const frame = page.frameLocator('iframe');
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: '产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,组甲,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  const table = frame.getByRole('table', { name: '产销存报告', exact: true });
+  const row = table.locator('tbody tr').first();
+  assert.ok((await row.boundingBox()).height <= 90);
+  const reason = row.locator('td').last().locator('span');
+  await expect(reason).toHaveAttribute('title', /主计划.*调拨/);
+  assert.ok(
+    await table.evaluate(
+      (element) => element.parentElement.scrollWidth > element.parentElement.clientWidth,
+    ),
+  );
+  await table.evaluate(
+    (element) => (element.parentElement.scrollLeft = element.parentElement.scrollWidth),
+  );
+  if (process.env.MPS_VISUAL_OUTPUT_DIR) {
+    await page.screenshot({ path: process.env.MPS_VISUAL_OUTPUT_DIR + '/report-600.png' });
+    await page.evaluate(() => (document.getElementById('root').style.width = '1720px'));
+    await page.screenshot({ path: process.env.MPS_VISUAL_OUTPUT_DIR + '/report-1200.png' });
+  }
+});

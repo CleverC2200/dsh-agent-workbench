@@ -14,8 +14,9 @@ const number = (value) => {
 const text = (value) => (typeof value === 'string' ? value.trim() : '');
 const demo = (value) => /demo|演示|原型/i.test(String(value ?? ''));
 const rowKey = (row) => JSON.stringify([row.base, row.code]);
-const sourceIssues = (draft, source) => {
-  const read = draft[source + 'Read'];
+const sourceIssues = (draft, source, month) => {
+  const current = draft[source + 'Read'];
+  const read = current?.periods?.[month] ?? current;
   const status = typeof read === 'string' ? read : read?.status;
   return [
     ...(status === 'loading' ? ['当前来源正在读取，旧数据暂不参与计算'] : []),
@@ -36,8 +37,13 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
       code: text(row['产品编码']),
       quantity: number(row[column]),
     }));
-  const report = readQuantity(draft.report, reportColumn);
-  const history = readQuantity(draft.history, '数量');
+  const availableQuantity = (source, column) =>
+    readQuantity(draft[source], column).map((row) => ({
+      ...row,
+      quantity: sourceIssues(draft, source, row.month).length ? null : row.quantity,
+    }));
+  const report = availableQuantity('report', reportColumn);
+  const history = availableQuantity('history', '数量');
   const relationSources =
     relations && (!relations.month || relations.month === draft.month) ? relations.sources : null;
   const capacities = (relationSources?.sku_capacity ?? []).map((row) => ({
@@ -54,7 +60,24 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
       ...(number(row.standard_daily_output_ton) === null ? ['缺标准日产吨数'] : []),
     ],
   }));
-  const candidates = [...report, ...history, ...capacities];
+  const date = new Date(`${draft.month}-01T00:00:00Z`);
+  date.setUTCMonth(date.getUTCMonth() - 1);
+  const shipmentMonth = date.toISOString().slice(0, 7);
+  const validShipment =
+    shipmentSnapshot?.draftId === draft.id &&
+    shipmentSnapshot.month === draft.month &&
+    shipmentSnapshot.shipmentMonth === shipmentMonth &&
+    shipmentSnapshot.sourceKind !== 'demo' &&
+    !demo(shipmentSnapshot.source) &&
+    !['loading', 'failed', 'error', 'denied'].includes(shipmentSnapshot.status);
+  const openingInventory = validShipment
+    ? (shipmentSnapshot.rows ?? []).map((row) => ({
+        base: text(row.base),
+        code: text(row.code),
+        quantity: number(row.end),
+      }))
+    : [];
+  const candidates = [...report, ...history, ...capacities, ...openingInventory];
   const products = demo(draft.productSource)
     ? []
     : (draft.products ?? []).flatMap((row) => {
@@ -77,23 +100,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
             ];
         return bases.length ? bases.map((base) => ({ ...product, base })) : [product];
       });
-  const date = new Date(`${draft.month}-01T00:00:00Z`);
-  date.setUTCMonth(date.getUTCMonth() - 1);
-  const shipmentMonth = date.toISOString().slice(0, 7);
-  const validShipment =
-    shipmentSnapshot?.draftId === draft.id &&
-    shipmentSnapshot.month === draft.month &&
-    shipmentSnapshot.shipmentMonth === shipmentMonth &&
-    shipmentSnapshot.sourceKind !== 'demo' &&
-    !demo(shipmentSnapshot.source) &&
-    !['loading', 'failed', 'error', 'denied'].includes(shipmentSnapshot.status);
-  const openingInventory = validShipment
-    ? (shipmentSnapshot.rows ?? []).map((row) => ({
-        base: text(row.base),
-        code: text(row.code),
-        quantity: number(row.end),
-      }))
-    : [];
+  const productIssues = sourceIssues(draft, 'products');
   const result = computeMpsWorkflow({
     context,
     products,
@@ -105,8 +112,8 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     report,
     history,
     sourceIssues: {
-      report: sourceIssues(draft, 'report'),
-      history: sourceIssues(draft, 'history'),
+      report: productIssues,
+      history: productIssues,
     },
     openingInventory,
     capacities,
@@ -118,7 +125,21 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
       rules: structuredClone(draft.constraints?.rules ?? {}),
     },
   });
+  for (const row of result.rows) {
+    const date = new Date(`${row.month}-01T00:00:00Z`);
+    date.setUTCFullYear(date.getUTCFullYear() - 1);
+    for (const source of ['report', 'history']) {
+      const issues = sourceIssues(
+        draft,
+        source,
+        source === 'report' ? row.month : date.toISOString().slice(0, 7),
+      );
+      for (const field of [source + 'Quantity', source + 'Share', 'share', 'demand'])
+        row.missing[field] = [...new Set([...row.missing[field], ...issues])];
+    }
+  }
   const knownProducts = new Set(products.map(rowKey));
+  result.missing.push(...productIssues);
   if (demo(draft.productSource)) result.missing.push('原型产品清单未接入后续计算');
   if (validShipment && openingInventory.some((row) => !knownProducts.has(rowKey(row))))
     result.missing.push('部分发货结存尚无本版本产品对应');
