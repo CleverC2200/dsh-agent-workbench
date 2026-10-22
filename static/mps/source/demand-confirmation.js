@@ -1445,7 +1445,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           onNext,
         }),
       ),
-      active && step === 'masterdata' && masterData,
+      h('div', { hidden: step !== 'masterdata' }, masterData),
       active &&
         ['process', 'constraints', 'capacity', 'report'].includes(step) &&
         h(Workflow, {
@@ -1761,7 +1761,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 'div',
                 { className: 'dc-source-body' },
                 h('p', {}, '分子分母、历史窗口与粒度待确认。'),
-                h('p', { className: 'dc-muted' }, '未接入业务来源，结果为空。'),
+                h('p', { className: 'dc-muted' }, '计算期间与口径待确认，结果为空。'),
               ),
               h(
                 'div',

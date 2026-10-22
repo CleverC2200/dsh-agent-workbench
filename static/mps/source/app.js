@@ -107,10 +107,12 @@ function Mps() {
           step,
           onScopeChange: setScope,
           relations,
-          masterData:
-            step === 'masterdata'
-              ? y.createElement(Relations, { scope, onResult: setRelations })
-              : null,
+          masterData: y.createElement(Relations, {
+            scope,
+            onResult: setRelations,
+            active: step === 'masterdata',
+            enabled: !['check', 'ship'].includes(step) || Boolean(relations?.sources),
+          }),
           onNext: () =>
             select(mpsSteps[Math.min(mpsSteps.findIndex((item) => item.key === step) + 1, 6)].key),
           assistant,

@@ -101,7 +101,7 @@ function cells(kind, row) {
 }
 export function createRelations(react, useMpsPart) {
   const h = react.createElement;
-  return function Relations({ scope, onResult }) {
+  return function Relations({ scope, onResult, active = true, enabled = true }) {
     const [kind, setKind] = react.useState('sku');
     const [search, setSearch] = react.useState('');
     const [onlyMissing, setOnlyMissing] = react.useState(false);
@@ -114,7 +114,7 @@ export function createRelations(react, useMpsPart) {
       onResult?.({ ...state, scopeKey });
     }, [loaded, scopeKey, onResult]);
     react.useEffect(() => {
-      if (!scope?.month) return;
+      if (!scope?.month || !enabled) return;
       const controller = new AbortController();
       setLoaded({ scopeKey, busy: true });
       const invalidate = () => {
@@ -154,7 +154,7 @@ export function createRelations(react, useMpsPart) {
         controller.abort();
         events.forEach((event) => window.removeEventListener(event, invalidate));
       };
-    }, [scopeKey, attempt]);
+    }, [scopeKey, attempt, enabled]);
     const records = state.records?.[kind] ?? [];
     const filtered = react.useMemo(
       () =>
@@ -188,6 +188,7 @@ export function createRelations(react, useMpsPart) {
         rows: visible,
       },
       '主数据对应关系',
+      active,
     );
     return h(
       'section',

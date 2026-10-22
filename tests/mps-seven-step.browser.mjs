@@ -12,6 +12,13 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
   const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: '当前评估产品.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,001,产品甲,汤圆,系列甲,物料组甲,,',
+    ),
+  });
   const steps = [
     '需求确认',
     '本月预估发货',
