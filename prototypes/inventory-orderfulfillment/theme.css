@@ -25,12 +25,43 @@ body {
 .topbar {
   display: none;
 }
-
-body[data-ds-dark-theme] .delivery-order-searches :is(input, select) {
-  color: var(--workbench-body);
-  background: var(--workbench-surface);
-  border-color: var(--workbench-control-border);
+.order-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 0;
+  color: var(--muted, #7b8696);
+  font-size: 12px;
 }
-body[data-ds-dark-theme] .delivery-order-searches input::placeholder {
-  color: var(--workbench-muted);
+.order-pagination[hidden] {
+  display: none;
+}
+.order-pagination button,
+.order-pagination select {
+  border: 1px solid var(--line, #e3e8ef);
+  border-radius: 6px;
+  background: var(--card, #fff);
+  color: inherit;
+  padding: 6px 10px;
+  font: inherit;
+}
+.order-pagination button:not(:disabled) {
+  cursor: pointer;
+}
+.order-pagination button:not(:disabled):hover {
+  color: var(--brand, #ef2843);
+}
+.order-pagination button:disabled {
+  opacity: 0.45;
+}
+
+.item-coordination-filters {
+  margin-left: auto;
+}
+@media (max-width: 900px) {
+  .delivery-order-panel-tools {
+    align-items: flex-end;
+  }
 }

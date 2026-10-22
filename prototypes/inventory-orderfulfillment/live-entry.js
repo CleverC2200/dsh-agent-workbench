@@ -133,6 +133,7 @@ function placeholder(body, message = '待数据接入') {
   target.textContent = message;
 }
 function clear(message = '正在读取当前授权数据…') {
+  for(const state of orderPagination.values()){state.context=null;state.page=0;state.nav.hidden=true;}
   clearPanels();
   currentDetailData=null;
   $('salesConfirmOverlay').hidden=true;
@@ -200,6 +201,9 @@ function activateTab(button) {
   if (button.dataset.itemProgressTab)
     $('itemCoordinationFilters').hidden =
       button.dataset.itemProgressTab !== 'itemCoordinationPanel';
+  if (button.dataset.deliveryOrderTab)
+    document.querySelector('.delivery-order-panel-tools').hidden =
+      button.dataset.deliveryOrderTab !== 'deliveryOrderListPanel';
 }
 for (const button of document.querySelectorAll('[role="tab"][aria-controls]'))
   button.addEventListener('click', () => {
@@ -257,9 +261,40 @@ function updateSourceFilters(rows) {
     ...values('region_name').map(value=>['area:'+value,'大区 · '+value]),
   ],'全部');
 }
-function renderOrders(body, orders, quantities, traces, warehouse) {
+const orderPagination=new Map();
+function orderPage(body,context,reset,render=renderOrders) {
+  let state=orderPagination.get(body);
+  if(!state) {
+    const nav=document.createElement('nav');nav.className='order-pagination';nav.setAttribute('aria-label',body.id==='warehouseOrderDetailRows'?'仓配订单分页':body.id==='deliveryOrderDetailRows'?'订单明细分页':(body.closest('[role="tabpanel"]')?.getAttribute('aria-label')||'明细')+'分页');
+    const count=document.createElement('span'),size=document.createElement('select'),previous=document.createElement('button'),info=document.createElement('span'),next=document.createElement('button');
+    size.setAttribute('aria-label',body.id==='warehouseOrderDetailRows'||body.id==='deliveryOrderDetailRows'?'每页订单条数':'每页条数');
+    for(const n of [20,50,100])size.append(new Option(`${n}条/页`,String(n)));
+    previous.type=next.type='button';previous.textContent='上一页';next.textContent='下一页';info.setAttribute('aria-live','polite');
+    nav.append(count,size,previous,info,next);
+    const table=body.closest('table');
+    (table.parentElement.id==='itemInventoryPanel'?table:table.parentElement).after(nav);
+    state={nav,count,size,previous,info,next,page:0,limit:20,context:null};orderPagination.set(body,state);
+    const update=()=>{if(state.context)state.render(body,...state.context,false);};
+    previous.addEventListener('click',()=>{state.page--;update();});
+    next.addEventListener('click',()=>{state.page++;update();});
+    size.addEventListener('change',()=>{state.limit=Number(size.value);state.page=0;update();});
+  }
+  if(reset)state.page=0;
+  state.context=context;state.render=render;state.nav.hidden=false;
+  return state;
+}
+function pageRows(state,rows) {
+  const pages=Math.max(1,Math.ceil(rows.length/state.limit));
+  state.page=Math.min(Math.max(0,state.page),pages-1);
+  state.count.textContent=`共 ${rows.length} 条`;
+  state.info.textContent=`第 ${state.page+1} / ${pages} 页`;
+  state.previous.disabled=state.page===0;state.next.disabled=state.page===pages-1;
+  return rows.slice(state.page*state.limit,(state.page+1)*state.limit);
+}
+function renderOrders(body, orders, quantities, traces, warehouse, resetPage=true) {
   if (!body) return;
   if (!orders) {
+    const state=orderPagination.get(body);if(state){state.context=null;state.nav.hidden=true;}
     placeholder(body, '订单数据不可用或未获授权');
     return;
   }
@@ -271,8 +306,9 @@ function renderOrders(body, orders, quantities, traces, warehouse) {
     if(!orderGroups.has(id))orderGroups.set(id,new Map());
     if(!orderGroups.get(id).has(key(row)))orderGroups.get(id).set(key(row),row);
   }
+  const pagination=orderPage(body,[orders,quantities,traces,warehouse],resetPage);
   const rendered=new Set();
-  for (const items of orderGroups.values()) {
+  for (const items of pageRows(pagination,[...orderGroups.values()])) {
     const lines=[...items.values()];
     const row=lines[0];
     if(rendered.has(key(row)))continue;
@@ -350,7 +386,7 @@ function renderOrders(body, orders, quantities, traces, warehouse) {
       if(v==='—')node.title='当前授权结果缺少该字段，或完整计算条件不足；不是零';
       tr.append(node);
     }
-    tr.cells[14].title=q?.quantity_issue||'整单占单满足率＝（原始数量－当前缺货量）÷原始数量；整单全部SKU有有效数量才计算';
+    tr.cells[14].title=q?.quantity_issue||'整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
     if (body.id === 'deliveryOrderDetailRows') {
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
       const statusButton=document.createElement('button');statusButton.type='button';statusButton.className='confirmation-status';statusButton.textContent='未接入';
@@ -405,20 +441,24 @@ function renderOrders(body, orders, quantities, traces, warehouse) {
   const note=body.closest('section, .warehouse-detail-panel')?.querySelector('.dimension-note');
   if(note)note.textContent='按订单、客户及基地归并全部已授权明细，主行展示整单数量，展开显示SKU；缺少人员、物流及确认字段时保持未知。';
 }
-function renderInventory(result, ages) {
+function renderInventory(result, ages, owners=null, resetPage=true) {
   const body = $('itemInventoryPanel').querySelector('tbody');
   if (!result) {
+    const state=orderPagination.get(body);if(state){state.context=null;state.nav.hidden=true;}
     placeholder(body, '库存数据不可用或未获授权');
     return;
   }
   body.replaceChildren();
   const calculatedAges=ages?batchAges(ages.rows,selectedFilters().start):[];
-  for (const row of result.rows) {
+  const pagination=orderPage(body,[result,ages,owners],resetPage,(_body,...args)=>renderInventory(...args));
+  for (const row of pageRows(pagination,result.rows)) {
+    const matching=(owners?.rows??[]).filter(owner=>owner.base===row.base&&owner.sku===row.sku);
+    const ownerNames=[...new Set(matching.map(owner=>owner.director).filter(Boolean))];
     const age = calculatedAges.find(item => item.base === row.base && item.sku === row.sku);
     const tr = document.createElement('tr');
     for (const text of [
       value(row, 'material_name', result) + ' / ' + value(row, 'sku', result),
-      '—',
+      ownerNames.length?ownerNames.join('、'):'—',
       value(row, 'product_item', result),
       value(row, 'series', result),
       value(row, 'product_tag', result),
@@ -435,6 +475,7 @@ function renderInventory(result, ages) {
     ])
       tr.append(cell(text));
     body.append(tr);
+    tr.cells[1].title=owners?'执行明细中当前基地及SKU的应责总监；多个负责人并列展示':'应责总监字段未发布、未授权或源值缺失，未补值';
   }
   if (!body.children.length) placeholder(body, '当前授权范围无库存记录');
   const note = $('itemDimensionPanel').querySelector(':scope > .dimension-note');
@@ -442,7 +483,7 @@ function renderInventory(result, ages) {
     note.textContent =
       '源库存日期：' +
       [...new Set(result.rows.map((row) => row.stock_date).filter(Boolean))].join('、') +
-      '；可发货天数按10日初版、20日纠偏、月末下月初版计划计算。批次货龄独立读取截至所选日期前一日的工厂仓快照，缺日期或负库存不计算；数量沿源单位，OEM归属未确认。';
+      '；可发货天数=可用库存÷((当月销售计划+当月调拨出库计划×0.5)÷当月天数)，纠偏>0取纠偏否则取初版。批次货龄仍按原区间展示，缺日期或负库存不计算；数量沿源单位，OEM归属未确认。';
 }
 function drillOrders(body,row,orderIds) {
   if(!currentDetailData)return;
@@ -455,36 +496,41 @@ function drillOrders(body,row,orderIds) {
   renderOrders($(warehousePanel?'warehouseOrderDetailRows':'deliveryOrderDetailRows'),filtered,quantities,trace,warehouse);
   $(warehousePanel?'warehouseOrderTab':'deliveryOrderListTab').click();
   const note=$(warehousePanel?'warehouseOrderDetailPanel':'deliveryOrderListPanel').querySelector('.dimension-note');
-  if(note)note.textContent=`当前下钻：${row.group_name}，${ids.size}张订单；切换筛选后按新范围重新查询。`;
+  if(note)note.textContent=`当前下钻：${row.group_name??'图表所选范围'}，${ids.size}张订单；切换筛选后按新范围重新查询。`;
 }
-function renderComparison(body, result, warehouse = false, calculated = null) {
+function renderComparison(body, result, warehouse = false, calculated = null, resetPage=true) {
   if (!body || !result) return;
   const expanded=new Set([...body.querySelectorAll('tr[data-compare-group]')].filter(row=>row.querySelector('[aria-expanded="true"]')).map(row=>row.dataset.compareGroup));
   body.replaceChildren();
-  for (const row of calculated??result.rows) {
+  const pagination=orderPage(body,[result,warehouse,calculated],resetPage,renderComparison);
+  for (const row of pageRows(pagination,calculated??result.rows)) {
     const tr = document.createElement('tr');
     tr.dataset.compareGroup=row.group_name;
     for (const item of warehouse
       ? ['', value(row, 'group_name', result),
-          calculated?(row.unknown?'≥':'')+row.overdue:'—',
-          calculated?(row.unknown?'≥':'')+row.warning:'—',
+          calculated?row.overdue:'—',
+          calculated?row.warning:'—',
           calculated?row.preparing:'—',
           calculated&&row.allocation_rate!==null?row.allocation_rate.toFixed(1)+'%':'—',
-          calculated&&row.shortage_orders!==null?(row.shortage_coverage<row.shortage_total?'≥':'')+row.shortage_orders:'—']
+          calculated&&row.shortage_orders!==null?row.shortage_orders:'—']
       : [
           '',
           value(row, 'group_name', result),
           calculated?row.source_orders:value(row, 'source_orders', result),
-          calculated?(row.unknown?'≥':'')+row.overdue:'—',
-          calculated?(row.unknown?'≥':'')+row.warning:'—',
+          calculated?row.overdue:'—',
+          calculated?row.warning:'—',
           calculated?row.preparing:'—',
-          calculated&&row.shortage_qty!==null?(row.shortage_coverage<row.shortage_total?'≥':'')+row.shortage_qty:'—',
+          calculated&&row.shortage_qty!==null?row.shortage_qty:'—',
           calculated&&row.allocation_rate!==null?row.allocation_rate.toFixed(1)+'%':'—',
-          ...(calculated?row.buckets.map(count=>row.rate_coverage<row.rate_total?'≥'+count:count):['—','—','—','—','—']),
+          ...(calculated?row.buckets:['—','—','—','—','—']),
         ])
       tr.append(cell(item));
     for(const index of warehouse?[2,3,4,6]:[2,3,4,5,8,9,10,11,12])tr.cells[index].textContent=withUnit(tr.cells[index].textContent,'张');
     if(!warehouse)tr.cells[6].textContent=withUnit(tr.cells[6].textContent,'件');
+    if(calculated&&warehouse) {
+      tr.cells[2].title=tr.cells[3].title=`已判定订单数；信息不完整${row.unknown}张，不计作正常`;
+      tr.cells[6].title=`已关联缺货订单数；覆盖${row.shortage_coverage}/${row.shortage_total}项，未覆盖不补零`;
+    }
     if(calculated&&!warehouse) {
       tr.cells[2].title=`有效订单${row.source_orders}张；含作废及未纳统来源订单${row.source_order_count}张`;
       tr.cells[3].title=tr.cells[4].title=`按最末有效节点判断；信息不完整${row.unknown}张，不计作正常`;
@@ -525,7 +571,7 @@ function renderComparison(body, result, warehouse = false, calculated = null) {
   }
   if (!body.children.length) placeholder(body, '当前授权范围无记录');
   const note=body.closest('section')?.querySelector('.dimension-note');
-  if(note)note.textContent='按当前筛选及授权范围完整明细汇总有效订单；满足率为占单满足率，区间按订单去重，未覆盖订单不补零；≥表示仅已知部分。';
+  if(note)note.textContent='按当前筛选及授权范围汇总；超时、预警、缺货及满足率区间展示已知部分，覆盖情况见数值提示；缺失数据不补零。';
 }
 function renderGrantedDetails(results) {
   const sourceFacts=get(results,'orders.facts');
@@ -538,7 +584,7 @@ function renderGrantedDetails(results) {
     renderOrders($('warehouseOrderDetailRows'), orders, quantities, trace, warehouse);
     currentDetailData={orders,quantities,trace,warehouse,factSource:sourceFacts};
   }
-  if(results['sku.detail'])renderInventory(get(results, 'sku.detail'), get(results, 'sku.age'));
+  if(results['sku.detail'])renderInventory(get(results, 'sku.detail'), get(results, 'sku.age'),get(results,'sku.owners'));
   const facts=get(results,'orders.facts');
   const shortage=get(results,'shortage.detail');
   const comparison=(dimension)=>facts?comparisonMetrics(facts.rows,dimension,shortage?.rows??null):null;
@@ -587,13 +633,17 @@ function renderSummary(results, selected) {
       if(notes[2])notes[2].textContent='缺少可确认的未来5日排产明细';
       continue;
     }
+    const isWarehouse=group.classList.contains('warehouse-summary');
     const openMetric=metrics[0]?.querySelector('.metric-head strong');
     if(openMetric) {
-      setMetric(openMetric,value(open,'preparing_orders',get(results,'orders.open.summary')));
-      openMetric.title='有效明细状态10、备单状态为备单中的来源订单去重张数；混合状态订单可能同时出现在已开分类中';
+      setMetric(openMetric,value(open,isWarehouse?'opened_orders':'preparing_orders',get(results,'orders.open.summary')));
+      openMetric.title=isWarehouse?'当前授权范围有效已开来源订单去重张数':'有效明细状态10、备单状态为备单中的来源订单去重张数；混合状态订单可能同时出现在已开分类中';
     }
     const shortMetric=metrics[3]?.querySelector('.metric-head strong');
-    if(shortMetric) {
+    if(shortMetric&&isWarehouse) {
+      setMetric(shortMetric,computed?.openedShipmentRate===null||computed?.openedShipmentRate===undefined?'—':computed.openedShipmentRate.toFixed(1));
+      shortMetric.title=`当前列表已开订单发货满足率=发货数量÷原始数量×100%；覆盖${computed?.openedCoverage??0}/${computed?.openedGroups??0}个来源订单SKU组合，未覆盖不补零；不是全月发货指标`;
+    } else if(shortMetric) {
       const complete=Number(shortage?.matched_sku_rows)>0 && Number(shortage?.matched_sku_rows)===Number(shortage?.after_inventory_coverage);
       setMetric(shortMetric,complete?value(shortage,'after_inventory_short_qty',get(results,'shortage.summary')):'—');
       shortMetric.title=`待备订单减库存后源缺货；覆盖${shortage?.matched_orders??'—'}张订单、${shortage?.after_inventory_coverage??'—'}/${shortage?.matched_sku_rows??'—'}项；尚未扣减排产调拨，不等于终缺，不代表全部未开订单；重复键保持未知`;
@@ -603,7 +653,7 @@ function renderSummary(results, selected) {
     const allocation=metrics[4]?.querySelector('.metric-head strong');
     if(allocation&&computed) {
       setMetric(allocation,computed.pendingAllocationRate===null?'—':computed.pendingAllocationRate.toFixed(1));
-      allocation.title=`按完整待备SKU调整需求与换算后实占量计算；覆盖${computed.pendingCoverage}/${computed.pendingGroups}项；重复需求不直接求和`;
+      allocation.title=`按新版文档：|原始数量合计－当前缺货合计|÷原始数量合计×100%；当前缺货=|原始数量－实占数量|；覆盖${computed.pendingCoverage}/${computed.pendingGroups}项；重复需求不直接求和`;
     }
     for (const [index, field] of [
       [1, 'overdue_orders'],
@@ -616,11 +666,11 @@ function renderSummary(results, selected) {
       const overdue=metrics[1]?.querySelector('.metric-head strong');
       const warning=metrics[2]?.querySelector('.metric-head strong');
       if(overdue) {
-        setMetric(overdue,computed.nodes.unknown?'≥'+computed.nodes.overdue:computed.nodes.overdue);
+        setMetric(overdue,computed.nodes.overdue);
         overdue.title=`按文档四个节点时限计算，订单按最末已知节点去重；${computed.nodes.unknown}张订单存在缺失时间或未确认状态，未计作正常`;
       }
       if(warning) {
-        setMetric(warning,computed.nodes.unknown?'≥'+computed.nodes.warning:computed.nodes.warning);
+        setMetric(warning,computed.nodes.warning);
         warning.title=`按文档2小时及夜间规则计算四个节点预警；${computed.nodes.unknown}张订单信息不完整`;
       }
     }
@@ -638,7 +688,7 @@ function renderSummary(results, selected) {
           if(computed) {
             const counts=computed.nodes.stages[stage];
             const count=counts[suffix];
-            nodes[i].textContent=(counts.unknown?'≥'+count:String(count))+' 张';
+            nodes[i].textContent=String(count)+' 张';
             nodes[i].title=`依据文档节点时限，当前节点${counts.total}张，未知${counts.unknown}张；判定时点${computed.readAt}`;
           }
         }
@@ -652,6 +702,8 @@ function renderSummary(results, selected) {
         total.textContent = value(open, 'valid_orders', get(results, 'orders.open.summary')) + ' 张';
       const opened=[...breakdown.children].find(node=>node.textContent.startsWith('已开'))?.querySelector('strong');
       if(opened) opened.textContent=value(open,'opened_orders',get(results,'orders.open.summary'))+' 张';
+      const unopened=[...breakdown.children].find(node=>node.textContent.startsWith('未开'))?.querySelector('strong');
+      if(unopened) unopened.textContent=value(open,'preparing_orders',get(results,'orders.open.summary'))+' 张';
     }
   }
   const h3 = document.querySelector('#fulfillmentView > .fulfillment-analysis h3');
@@ -685,10 +737,10 @@ function renderSummary(results, selected) {
     ['改单率', '已接客户改单时间；锁定期、有效提报分母及数量取值规则未完整确认，暂不计算。'],
     [
       '满足率',
-      '订单明细已按（原始数量－当前缺货）÷原始数量计算整单及SKU满足率，EA按换算率对齐；多个执行单的需求归并不明确时保持未知。全量发货满足率仍缺产品归集与完整排除依据。',
+      '订单明细满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|。EA按换算率对齐，拆单需求归并不明确时保持未知。已开发货满足率仅覆盖当前筛选列表，不冒充全月指标。',
     ],
-    ['准交率', '已有完成样本及准时标记，但缺当期全部应交付订单分母及加12小时口径的确认。'],
-    ['可发货天数', '品项表已按指定库存快照及计划版本计算；缺值或零计划不补零。'],
+    ['准交率', '按新版文档以到货时间统计已发货订单，期限取三个到货时间最大值加12小时；缺GPS围栏到货/到货确认时间，不用关单时间代替。'],
+    ['可发货天数', '按库存日期所在月计算：可用库存÷[(月销售计划＋月调拨出库计划×0.5)÷当月天数]；各计划纠偏值大于0时取纠偏，否则取初版。缺值或零分母不补零。'],
   ]) {
     const line = document.createElement('p');
     const label = document.createElement('strong');
@@ -732,12 +784,13 @@ async function load() {
     'trace.summary',
     'sku.detail',
     'sku.age',
+    'sku.owners',
   ];
   const progressive = {};
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
       try {
-        const value = await (id==='orders.facts'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'
+        const value = await (id==='orders.facts'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
           ? reader.all(id,selected,{signal:task.signal}) : id.endsWith('.summary')
           ? reader.summary(id, selected, task.signal)
           : reader.collection(id, selected, {
@@ -762,7 +815,7 @@ async function load() {
         }
         if (progressive['orders.summary'])
           renderSummary(progressive, selected);
-        if(get(progressive,'orders.facts')&&['orders.facts','shortage.detail','sku.detail','sku.age'].includes(id))renderGrantedDetails(progressive);
+        if(get(progressive,'orders.facts')&&['orders.facts','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
         return value;
       } catch (reason) {
         if (task.current()) progressive[id] = { status: 'rejected', reason };
@@ -798,7 +851,7 @@ async function load() {
       ids.map((id) => [
         id,
         results[id].status === 'fulfilled'
-          ? { state: 'ready', ...results[id].value, ...(['orders.facts','sku.detail','sku.age','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
+          ? { state: 'ready', ...results[id].value, ...(['orders.facts','sku.detail','sku.age','sku.owners','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
           : {
               state: 'unavailable',
               code: results[id].reason?.code ?? 'QUERY_FAILED',
