@@ -18555,6 +18555,475 @@
         "invalid"
       ],
       "notes": "仅统一GEA受控SQL；复用已验证三层逻辑和11种状态含创建，短拨调账同步层已排除；无日期截断；当前状态不可重建历史；可用库存只扣一次；跨SKU不抵消。"
+    },
+    "batch-age.groups": {
+      "title": "批次货龄结构",
+      "grain": "snapshot + warehouse/SKU FIFO -> selected group",
+      "notes": "批次生产日期计算货龄；正库存有效批次数量加权，未知货龄单列，不用最大值冒充平均值。FIFO在仓库/SKU内扣近30日正向发货日均×窗口，按SKU截零后汇总。基地未来7/14日为新增跨60天风险，排除当前60+。全链未来7/14日为基地>60/分仓>=90的期末风险量。不以其他SKU库存或销量抵消。",
+      "request": {
+        "sql": "WITH inventory_batch_dates AS (\nSELECT b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid, b.material_code AS material_code,\n b.month_date AS month_date,\n b.warehouse_name AS warehouse_name, b.belong_base AS belong_base, b.material_name AS material_name,\n b.live_qty AS live_qty, b.available_qty AS available_qty,\n b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty,\n CAST(SUBSTRING(b.month_date, 1, 4) AS INTEGER) AS snapshot_year,\n CAST(SUBSTRING(b.month_date, 5, 2) AS INTEGER) AS snapshot_month,\n CAST(SUBSTRING(b.month_date, 7, 2) AS INTEGER) AS snapshot_day,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 1, 4) AS INTEGER) AS production_year,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 6, 2) AS INTEGER) AS production_month,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 9, 2) AS INTEGER) AS production_day\nFROM agents_scm_inventory_sku_data_d AS b\nWHERE TRUE AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') AND (:gea_p2 = FALSE OR b.belong_base IN (:gea_p3)) AND (:gea_p4 IS NULL OR b.warehouseid = :gea_p4) AND (:gea_p5 IS NULL OR b.material_code = :gea_p5)\n), inventory_batch_ages AS (\nSELECT d.warehouse_classify AS warehouse_classify, d.warehouseid AS warehouseid, d.material_code AS material_code,\n d.month_date AS month_date,\n d.warehouse_name AS warehouse_name, d.belong_base AS belong_base, d.material_name AS material_name,\n d.live_qty AS live_qty, d.available_qty AS available_qty,\n d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty,\n CASE WHEN d.live_qty > 0 AND d.production_year > 0\n AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month=2 THEN CASE WHEN (d.production_year-4*FLOOR(d.production_year/4.0)=0 AND (d.production_year-100*FLOOR(d.production_year/100.0)<>0 OR d.production_year-400*FLOOR(d.production_year/400.0)=0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4,6,9,11) THEN 30 ELSE 31 END\n AND (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) >= (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) THEN (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) - (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) ELSE NULL END AS age_days\nFROM inventory_batch_dates AS d\n), batch_skus AS (\n SELECT a.month_date AS month_date, a.warehouseid AS warehouseid, a.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.belong_base),''))=1 THEN MAX(NULLIF(TRIM(a.belong_base),'')) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.warehouse_name),''))=1 THEN MAX(NULLIF(TRIM(a.warehouse_name),'')) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.material_name),''))=1 THEN MAX(NULLIF(TRIM(a.material_name),'')) ELSE NULL END AS material_name,\n SUM(COALESCE(a.live_qty,0)) AS total_qty, SUM(COALESCE(a.available_qty,0)) AS available_qty, SUM(COALESCE(a.pack_unit_qty,0)) AS pack_unit_qty, SUM(COALESCE(a.freeze_qty,0)) AS freeze_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_weight_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty*a.age_days ELSE 0 END) AS weighted_age,\n SUM(CASE WHEN a.live_qty>0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty,\n MAX(a.age_days) AS max_age,\n SUM(CASE WHEN a.age_days BETWEEN 0 AND 30 THEN a.live_qty ELSE 0 END) AS age0_30,\n SUM(CASE WHEN a.age_days BETWEEN 31 AND 40 THEN a.live_qty ELSE 0 END) AS age31_40,\n SUM(CASE WHEN a.age_days BETWEEN 41 AND 60 THEN a.live_qty ELSE 0 END) AS age41_60,\n SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS age60_plus,\n SUM(CASE WHEN a.age_days > 30 AND a.age_days <= 60 THEN a.live_qty ELSE 0 END) AS age31_60,\n SUM(CASE WHEN a.age_days > 60 AND a.age_days <= 90 THEN a.live_qty ELSE 0 END) AS age61_90,\n SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS age90_plus,\n SUM(CASE WHEN a.age_days >= 60 AND a.age_days < 90 THEN a.live_qty ELSE 0 END) AS age60_89,\n SUM(CASE WHEN a.age_days >= 90 AND a.age_days < 120 THEN a.live_qty ELSE 0 END) AS age90_119,\n SUM(CASE WHEN a.age_days >= 60 THEN a.live_qty ELSE 0 END) AS overaged_qty,\n SUM(CASE WHEN a.age_days >= 90 THEN a.live_qty ELSE 0 END) AS stagnant_qty,\n SUM(CASE WHEN a.age_days >= 53 THEN a.live_qty ELSE 0 END) AS future7_candidates,\n SUM(CASE WHEN a.age_days >= 46 THEN a.live_qty ELSE 0 END) AS future14_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 60) OR (a.warehouse_classify = '20' AND a.age_days >= 90) THEN a.live_qty ELSE 0 END) AS risk_current,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 53) OR (a.warehouse_classify = '20' AND a.age_days >= 83) THEN a.live_qty ELSE 0 END) AS risk7_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 46) OR (a.warehouse_classify = '20' AND a.age_days >= 76) THEN a.live_qty ELSE 0 END) AS risk14_candidates\n FROM inventory_batch_ages AS a GROUP BY a.month_date,a.warehouseid,a.material_code\n), batch_names AS (\n SELECT n.warehouseid AS warehouseid,n.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(n.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.material_group_name),''))=1 THEN MAX(NULLIF(TRIM(n.material_group_name),'')) ELSE NULL END AS material_group\n FROM agents_scm_material_in_out_summary_d AS n\n INNER JOIN batch_skus AS b ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n GROUP BY n.warehouseid,n.material_code\n), batch_sales AS (\n SELECT s.warehouse AS warehouseid,s.material_code AS material_code,\n SUM(CASE WHEN s.act_dl_qty>0 THEN s.act_dl_qty ELSE 0 END)/30.0 AS daily_movement\n FROM agents_scm_cust_deliv_daily_di AS s\n WHERE s.act_ship_date>=:gea_p6 AND s.act_ship_date<:gea_p7\n AND (:gea_p4 IS NULL OR s.warehouse=:gea_p4) AND (:gea_p5 IS NULL OR s.material_code=:gea_p5)\n GROUP BY s.warehouse,s.material_code\n), batch_facts AS (\n SELECT b.warehouseid AS warehouseid,b.belong_base AS belong_base,b.warehouse_name AS warehouse_name,\n b.material_code AS material_code,b.material_name AS material_name,\n COALESCE(n.category,'未分类') AS product_categ_name,n.material_group AS material_group_name,\n b.available_qty AS available_qty,b.pack_unit_qty AS pack_unit_qty,b.freeze_qty AS freeze_qty,b.total_qty AS total_qty,b.age_weight_qty AS age_weight_qty,b.weighted_age AS weighted_age,\n b.unknown_age_qty AS unknown_age_qty,b.max_age AS max_age,\n b.age0_30 AS age0_30, b.age31_40 AS age31_40, b.age41_60 AS age41_60, b.age60_plus AS age60_plus, b.age31_60 AS age31_60, b.age61_90 AS age61_90, b.age90_plus AS age90_plus, b.age60_89 AS age60_89, b.age90_119 AS age90_119, b.overaged_qty AS overaged_qty, b.stagnant_qty AS stagnant_qty, b.risk_current AS risk_current,\n COALESCE(s.daily_movement,0) AS daily_movement,\n (CASE WHEN b.future7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.future7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-7*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS future7,\n (CASE WHEN b.future14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.future14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-14*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS future14,\n (CASE WHEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk7,\n (CASE WHEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk14\n FROM batch_skus AS b LEFT JOIN batch_names AS n ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n LEFT JOIN batch_sales AS s ON b.warehouseid=s.warehouseid AND b.material_code=s.material_code\n WHERE (:gea_p8 IS NULL OR COALESCE(n.category,'未分类')=:gea_p8)\n AND (:gea_p12 IS NULL OR b.material_code LIKE :gea_p12 OR b.material_name LIKE :gea_p12)\n), batch_groups AS (\n SELECT CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END AS level,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END AS warehouseid,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END AS material_code,\n CASE WHEN COUNT(DISTINCT b.belong_base)=1 THEN MAX(b.belong_base) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT b.warehouse_name)=1 THEN MAX(b.warehouse_name) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT b.material_name)=1 THEN MAX(b.material_name) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT b.product_categ_name)=1 THEN MAX(b.product_categ_name) ELSE NULL END AS product_categ_name,\n CASE WHEN COUNT(DISTINCT b.material_group_name)=1 THEN MAX(b.material_group_name) ELSE NULL END AS material_group_name,\n COUNT(*) AS row_count,COUNT(CASE WHEN b.age_weight_qty>0 THEN 1 ELSE NULL END) AS age_valid_count, COUNT(DISTINCT CASE WHEN b.overaged_qty>0 THEN b.material_code ELSE NULL END) AS is_overaged_sku_count, CAST(NULL AS INTEGER) AS is_low_stock_sku_count,CAST(NULL AS INTEGER) AS is_high_stock_sku_count,CAST(NULL AS INTEGER) AS conflicting_stock_flag_skus,CAST(NULL AS VARCHAR(255)) AS source_updated_at,COUNT(DISTINCT b.material_code) AS sku_count,\n SUM(b.available_qty) AS available_qty,SUM(b.pack_unit_qty) AS pack_unit_qty,SUM(b.freeze_qty) AS freeze_qty,CAST(:gea_p1 AS DATE) AS stat_date,MAX(b.max_age) AS age_days,SUM(b.total_qty) AS total_qty, SUM(b.age_weight_qty) AS age_weight_qty,SUM(b.weighted_age) AS weighted_age,\n SUM(b.unknown_age_qty) AS unknown_age_qty,MAX(b.max_age) AS max_age,\n CASE WHEN SUM(b.age_weight_qty)>0 THEN SUM(b.weighted_age)*1.0/SUM(b.age_weight_qty) ELSE NULL END AS average_age,\n SUM(b.age0_30) AS age0_30, SUM(b.age31_40) AS age31_40, SUM(b.age41_60) AS age41_60, SUM(b.age60_plus) AS age60_plus, SUM(b.age31_60) AS age31_60, SUM(b.age61_90) AS age61_90, SUM(b.age90_plus) AS age90_plus, SUM(b.age60_89) AS age60_89, SUM(b.age90_119) AS age90_119, SUM(b.overaged_qty) AS overaged_qty, SUM(b.stagnant_qty) AS stagnant_qty, SUM(b.risk_current) AS risk_current,\n SUM(b.daily_movement) AS daily_movement,SUM(b.future7) AS future7,SUM(b.future14) AS future14,\n SUM(b.projected_risk7) AS projected_risk7,SUM(b.projected_risk14) AS projected_risk14,\n CASE WHEN SUM(b.daily_movement)>0 THEN SUM(b.total_qty)*1.0/SUM(b.daily_movement) ELSE NULL END AS historical_turnover,\n CASE WHEN SUM(b.age_weight_qty)=0 THEN NULL WHEN SUM(b.stagnant_qty)>0 THEN '滞库' WHEN SUM(b.overaged_qty)>0 THEN '预警' ELSE '正常' END AS warning\n FROM batch_facts AS b\n GROUP BY CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END\n) SELECT g.row_count AS row_count, g.age_valid_count AS age_valid_count, g.is_overaged_sku_count AS is_overaged_sku_count, g.is_low_stock_sku_count AS is_low_stock_sku_count, g.is_high_stock_sku_count AS is_high_stock_sku_count, g.conflicting_stock_flag_skus AS conflicting_stock_flag_skus, g.source_updated_at AS source_updated_at, g.available_qty AS available_qty, g.pack_unit_qty AS pack_unit_qty, g.freeze_qty AS freeze_qty, g.stat_date AS stat_date, g.age_days AS age_days, g.level AS level, g.warehouseid AS warehouseid, g.material_code AS material_code, g.belong_base AS belong_base, g.warehouse_name AS warehouse_name, g.material_name AS material_name, g.product_categ_name AS product_categ_name, g.material_group_name AS material_group_name, g.sku_count AS sku_count, g.total_qty AS total_qty, g.age_weight_qty AS age_weight_qty, g.weighted_age AS weighted_age, g.unknown_age_qty AS unknown_age_qty, g.max_age AS max_age, g.average_age AS average_age, g.age0_30 AS age0_30, g.age31_40 AS age31_40, g.age41_60 AS age41_60, g.age60_plus AS age60_plus, g.age31_60 AS age31_60, g.age61_90 AS age61_90, g.age90_plus AS age90_plus, g.age60_89 AS age60_89, g.age90_119 AS age90_119, g.overaged_qty AS overaged_qty, g.stagnant_qty AS stagnant_qty, g.risk_current AS risk_current, g.daily_movement AS daily_movement, g.future7 AS future7, g.future14 AS future14, g.projected_risk7 AS projected_risk7, g.projected_risk14 AS projected_risk14, g.historical_turnover AS historical_turnover, g.warning AS warning FROM batch_groups AS g ORDER BY CASE WHEN :gea_p13='total_qty' AND :gea_p14='asc' THEN g.total_qty ELSE NULL END ASC, CASE WHEN :gea_p13='total_qty' AND :gea_p14='desc' THEN g.total_qty ELSE NULL END DESC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='asc' THEN g.age60_plus ELSE NULL END ASC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='desc' THEN g.age60_plus ELSE NULL END DESC, CASE WHEN :gea_p13='average_age' AND :gea_p14='asc' THEN g.average_age ELSE NULL END ASC, CASE WHEN :gea_p13='average_age' AND :gea_p14='desc' THEN g.average_age ELSE NULL END DESC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='asc' THEN g.daily_movement ELSE NULL END ASC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='desc' THEN g.daily_movement ELSE NULL END DESC, g.level,g.warehouseid,g.material_code LIMIT :gea_p10 OFFSET :gea_p11",
+        "parameters": {
+          "gea_p1": "2026-10-22",
+          "gea_p2": false,
+          "gea_p3": ["郑州"],
+          "gea_p4": null,
+          "gea_p5": null,
+          "gea_p6": "20260923",
+          "gea_p7": "20261023",
+          "gea_p8": null,
+          "gea_p9": "base",
+          "gea_p10": 200,
+          "gea_p11": 0,
+          "gea_p12": null,
+          "gea_p13": "key",
+          "gea_p14": "asc"
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "stat_date",
+          "type": "string",
+          "example": "2026-10-22",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "bases",
+          "type": "array",
+          "example": ["郑州"],
+          "required": true,
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "material_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "batch_rolling_start",
+          "type": "string",
+          "example": "20260923",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p7": {
+          "name": "batch_end_exclusive",
+          "type": "string",
+          "example": "20261023",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p8": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "group_level",
+          "type": "string",
+          "example": "base",
+          "required": true,
+          "nullable": false,
+          "enum": ["base", "category", "sku", "detail"]
+        },
+        "gea_p10": {
+          "name": "page_size",
+          "type": "integer",
+          "example": 200,
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p11": {
+          "name": "offset",
+          "type": "integer",
+          "example": 0,
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p12": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p13": {
+          "name": "sort_field",
+          "type": "string",
+          "example": "key",
+          "required": true,
+          "nullable": false,
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
+        },
+        "gea_p14": {
+          "name": "sort_direction",
+          "type": "string",
+          "example": "asc",
+          "required": true,
+          "nullable": false,
+          "enum": ["asc", "desc"]
+        }
+      },
+      "resultColumns": [
+        "row_count",
+        "age_valid_count",
+        "is_overaged_sku_count",
+        "is_low_stock_sku_count",
+        "is_high_stock_sku_count",
+        "conflicting_stock_flag_skus",
+        "source_updated_at",
+        "available_qty",
+        "pack_unit_qty",
+        "freeze_qty",
+        "stat_date",
+        "age_days",
+        "level",
+        "warehouseid",
+        "material_code",
+        "belong_base",
+        "warehouse_name",
+        "material_name",
+        "product_categ_name",
+        "material_group_name",
+        "sku_count",
+        "total_qty",
+        "age_weight_qty",
+        "weighted_age",
+        "unknown_age_qty",
+        "max_age",
+        "average_age",
+        "age0_30",
+        "age31_40",
+        "age41_60",
+        "age60_plus",
+        "age31_60",
+        "age61_90",
+        "age90_plus",
+        "age60_89",
+        "age90_119",
+        "overaged_qty",
+        "stagnant_qty",
+        "risk_current",
+        "daily_movement",
+        "future7",
+        "future14",
+        "projected_risk7",
+        "projected_risk14",
+        "historical_turnover",
+        "warning"
+      ],
+      "pagination": {
+        "mode": "sql_limit_offset",
+        "countQuery": "batch-age.count",
+        "atomicQuery": "batch-age.atomic"
+      }
+    },
+    "batch-age.count": {
+      "title": "批次货龄结构",
+      "grain": "snapshot + warehouse/SKU FIFO -> selected group",
+      "notes": "批次生产日期计算货龄；正库存有效批次数量加权，未知货龄单列，不用最大值冒充平均值。FIFO在仓库/SKU内扣近30日正向发货日均×窗口，按SKU截零后汇总。基地未来7/14日为新增跨60天风险，排除当前60+。全链未来7/14日为基地>60/分仓>=90的期末风险量。不以其他SKU库存或销量抵消。",
+      "request": {
+        "sql": "WITH inventory_batch_dates AS (\nSELECT b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid, b.material_code AS material_code,\n b.month_date AS month_date,\n b.warehouse_name AS warehouse_name, b.belong_base AS belong_base, b.material_name AS material_name,\n b.live_qty AS live_qty, b.available_qty AS available_qty,\n b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty,\n CAST(SUBSTRING(b.month_date, 1, 4) AS INTEGER) AS snapshot_year,\n CAST(SUBSTRING(b.month_date, 5, 2) AS INTEGER) AS snapshot_month,\n CAST(SUBSTRING(b.month_date, 7, 2) AS INTEGER) AS snapshot_day,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 1, 4) AS INTEGER) AS production_year,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 6, 2) AS INTEGER) AS production_month,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 9, 2) AS INTEGER) AS production_day\nFROM agents_scm_inventory_sku_data_d AS b\nWHERE TRUE AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') AND (:gea_p2 = FALSE OR b.belong_base IN (:gea_p3)) AND (:gea_p4 IS NULL OR b.warehouseid = :gea_p4) AND (:gea_p5 IS NULL OR b.material_code = :gea_p5)\n), inventory_batch_ages AS (\nSELECT d.warehouse_classify AS warehouse_classify, d.warehouseid AS warehouseid, d.material_code AS material_code,\n d.month_date AS month_date,\n d.warehouse_name AS warehouse_name, d.belong_base AS belong_base, d.material_name AS material_name,\n d.live_qty AS live_qty, d.available_qty AS available_qty,\n d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty,\n CASE WHEN d.live_qty > 0 AND d.production_year > 0\n AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month=2 THEN CASE WHEN (d.production_year-4*FLOOR(d.production_year/4.0)=0 AND (d.production_year-100*FLOOR(d.production_year/100.0)<>0 OR d.production_year-400*FLOOR(d.production_year/400.0)=0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4,6,9,11) THEN 30 ELSE 31 END\n AND (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) >= (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) THEN (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) - (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) ELSE NULL END AS age_days\nFROM inventory_batch_dates AS d\n), batch_skus AS (\n SELECT a.month_date AS month_date, a.warehouseid AS warehouseid, a.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.belong_base),''))=1 THEN MAX(NULLIF(TRIM(a.belong_base),'')) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.warehouse_name),''))=1 THEN MAX(NULLIF(TRIM(a.warehouse_name),'')) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.material_name),''))=1 THEN MAX(NULLIF(TRIM(a.material_name),'')) ELSE NULL END AS material_name,\n SUM(COALESCE(a.live_qty,0)) AS total_qty, SUM(COALESCE(a.available_qty,0)) AS available_qty, SUM(COALESCE(a.pack_unit_qty,0)) AS pack_unit_qty, SUM(COALESCE(a.freeze_qty,0)) AS freeze_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_weight_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty*a.age_days ELSE 0 END) AS weighted_age,\n SUM(CASE WHEN a.live_qty>0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty,\n MAX(a.age_days) AS max_age,\n SUM(CASE WHEN a.age_days BETWEEN 0 AND 30 THEN a.live_qty ELSE 0 END) AS age0_30,\n SUM(CASE WHEN a.age_days BETWEEN 31 AND 40 THEN a.live_qty ELSE 0 END) AS age31_40,\n SUM(CASE WHEN a.age_days BETWEEN 41 AND 60 THEN a.live_qty ELSE 0 END) AS age41_60,\n SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS age60_plus,\n SUM(CASE WHEN a.age_days > 30 AND a.age_days <= 60 THEN a.live_qty ELSE 0 END) AS age31_60,\n SUM(CASE WHEN a.age_days > 60 AND a.age_days <= 90 THEN a.live_qty ELSE 0 END) AS age61_90,\n SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS age90_plus,\n SUM(CASE WHEN a.age_days >= 60 AND a.age_days < 90 THEN a.live_qty ELSE 0 END) AS age60_89,\n SUM(CASE WHEN a.age_days >= 90 AND a.age_days < 120 THEN a.live_qty ELSE 0 END) AS age90_119,\n SUM(CASE WHEN a.age_days >= 60 THEN a.live_qty ELSE 0 END) AS overaged_qty,\n SUM(CASE WHEN a.age_days >= 90 THEN a.live_qty ELSE 0 END) AS stagnant_qty,\n SUM(CASE WHEN a.age_days >= 53 THEN a.live_qty ELSE 0 END) AS future7_candidates,\n SUM(CASE WHEN a.age_days >= 46 THEN a.live_qty ELSE 0 END) AS future14_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 60) OR (a.warehouse_classify = '20' AND a.age_days >= 90) THEN a.live_qty ELSE 0 END) AS risk_current,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 53) OR (a.warehouse_classify = '20' AND a.age_days >= 83) THEN a.live_qty ELSE 0 END) AS risk7_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 46) OR (a.warehouse_classify = '20' AND a.age_days >= 76) THEN a.live_qty ELSE 0 END) AS risk14_candidates\n FROM inventory_batch_ages AS a GROUP BY a.month_date,a.warehouseid,a.material_code\n), batch_names AS (\n SELECT n.warehouseid AS warehouseid,n.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(n.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.material_group_name),''))=1 THEN MAX(NULLIF(TRIM(n.material_group_name),'')) ELSE NULL END AS material_group\n FROM agents_scm_material_in_out_summary_d AS n\n INNER JOIN batch_skus AS b ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n GROUP BY n.warehouseid,n.material_code\n), batch_sales AS (\n SELECT s.warehouse AS warehouseid,s.material_code AS material_code,\n SUM(CASE WHEN s.act_dl_qty>0 THEN s.act_dl_qty ELSE 0 END)/30.0 AS daily_movement\n FROM agents_scm_cust_deliv_daily_di AS s\n WHERE s.act_ship_date>=:gea_p6 AND s.act_ship_date<:gea_p7\n AND (:gea_p4 IS NULL OR s.warehouse=:gea_p4) AND (:gea_p5 IS NULL OR s.material_code=:gea_p5)\n GROUP BY s.warehouse,s.material_code\n), batch_facts AS (\n SELECT b.warehouseid AS warehouseid,b.belong_base AS belong_base,b.warehouse_name AS warehouse_name,\n b.material_code AS material_code,b.material_name AS material_name,\n COALESCE(n.category,'未分类') AS product_categ_name,n.material_group AS material_group_name,\n b.available_qty AS available_qty,b.pack_unit_qty AS pack_unit_qty,b.freeze_qty AS freeze_qty,b.total_qty AS total_qty,b.age_weight_qty AS age_weight_qty,b.weighted_age AS weighted_age,\n b.unknown_age_qty AS unknown_age_qty,b.max_age AS max_age,\n b.age0_30 AS age0_30, b.age31_40 AS age31_40, b.age41_60 AS age41_60, b.age60_plus AS age60_plus, b.age31_60 AS age31_60, b.age61_90 AS age61_90, b.age90_plus AS age90_plus, b.age60_89 AS age60_89, b.age90_119 AS age90_119, b.overaged_qty AS overaged_qty, b.stagnant_qty AS stagnant_qty, b.risk_current AS risk_current,\n COALESCE(s.daily_movement,0) AS daily_movement,\n (CASE WHEN b.future7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.future7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-7*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS future7,\n (CASE WHEN b.future14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.future14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-14*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS future14,\n (CASE WHEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk7,\n (CASE WHEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk14\n FROM batch_skus AS b LEFT JOIN batch_names AS n ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n LEFT JOIN batch_sales AS s ON b.warehouseid=s.warehouseid AND b.material_code=s.material_code\n WHERE (:gea_p8 IS NULL OR COALESCE(n.category,'未分类')=:gea_p8)\n AND (:gea_p12 IS NULL OR b.material_code LIKE :gea_p12 OR b.material_name LIKE :gea_p12)\n), batch_groups AS (\n SELECT CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END AS level,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END AS warehouseid,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END AS material_code,\n CASE WHEN COUNT(DISTINCT b.belong_base)=1 THEN MAX(b.belong_base) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT b.warehouse_name)=1 THEN MAX(b.warehouse_name) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT b.material_name)=1 THEN MAX(b.material_name) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT b.product_categ_name)=1 THEN MAX(b.product_categ_name) ELSE NULL END AS product_categ_name,\n CASE WHEN COUNT(DISTINCT b.material_group_name)=1 THEN MAX(b.material_group_name) ELSE NULL END AS material_group_name,\n COUNT(*) AS row_count,COUNT(CASE WHEN b.age_weight_qty>0 THEN 1 ELSE NULL END) AS age_valid_count, COUNT(DISTINCT CASE WHEN b.overaged_qty>0 THEN b.material_code ELSE NULL END) AS is_overaged_sku_count, CAST(NULL AS INTEGER) AS is_low_stock_sku_count,CAST(NULL AS INTEGER) AS is_high_stock_sku_count,CAST(NULL AS INTEGER) AS conflicting_stock_flag_skus,CAST(NULL AS VARCHAR(255)) AS source_updated_at,COUNT(DISTINCT b.material_code) AS sku_count,\n SUM(b.available_qty) AS available_qty,SUM(b.pack_unit_qty) AS pack_unit_qty,SUM(b.freeze_qty) AS freeze_qty,CAST(:gea_p1 AS DATE) AS stat_date,MAX(b.max_age) AS age_days,SUM(b.total_qty) AS total_qty, SUM(b.age_weight_qty) AS age_weight_qty,SUM(b.weighted_age) AS weighted_age,\n SUM(b.unknown_age_qty) AS unknown_age_qty,MAX(b.max_age) AS max_age,\n CASE WHEN SUM(b.age_weight_qty)>0 THEN SUM(b.weighted_age)*1.0/SUM(b.age_weight_qty) ELSE NULL END AS average_age,\n SUM(b.age0_30) AS age0_30, SUM(b.age31_40) AS age31_40, SUM(b.age41_60) AS age41_60, SUM(b.age60_plus) AS age60_plus, SUM(b.age31_60) AS age31_60, SUM(b.age61_90) AS age61_90, SUM(b.age90_plus) AS age90_plus, SUM(b.age60_89) AS age60_89, SUM(b.age90_119) AS age90_119, SUM(b.overaged_qty) AS overaged_qty, SUM(b.stagnant_qty) AS stagnant_qty, SUM(b.risk_current) AS risk_current,\n SUM(b.daily_movement) AS daily_movement,SUM(b.future7) AS future7,SUM(b.future14) AS future14,\n SUM(b.projected_risk7) AS projected_risk7,SUM(b.projected_risk14) AS projected_risk14,\n CASE WHEN SUM(b.daily_movement)>0 THEN SUM(b.total_qty)*1.0/SUM(b.daily_movement) ELSE NULL END AS historical_turnover,\n CASE WHEN SUM(b.age_weight_qty)=0 THEN NULL WHEN SUM(b.stagnant_qty)>0 THEN '滞库' WHEN SUM(b.overaged_qty)>0 THEN '预警' ELSE '正常' END AS warning\n FROM batch_facts AS b\n GROUP BY CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END\n) SELECT COUNT(*) AS total FROM batch_groups AS g",
+        "parameters": {
+          "gea_p1": "2026-10-22",
+          "gea_p2": false,
+          "gea_p3": ["郑州"],
+          "gea_p4": null,
+          "gea_p5": null,
+          "gea_p6": "20260923",
+          "gea_p7": "20261023",
+          "gea_p8": null,
+          "gea_p9": "base",
+          "gea_p12": null
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "stat_date",
+          "type": "string",
+          "example": "2026-10-22",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "bases",
+          "type": "array",
+          "example": ["郑州"],
+          "required": true,
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "material_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "batch_rolling_start",
+          "type": "string",
+          "example": "20260923",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p7": {
+          "name": "batch_end_exclusive",
+          "type": "string",
+          "example": "20261023",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p8": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "group_level",
+          "type": "string",
+          "example": "base",
+          "required": true,
+          "nullable": false,
+          "enum": ["base", "category", "sku", "detail"]
+        },
+        "gea_p12": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        }
+      },
+      "resultColumns": ["total"]
+    },
+    "batch-age.atomic": {
+      "title": "批次货龄结构",
+      "grain": "snapshot + warehouse/SKU FIFO -> selected group",
+      "notes": "批次生产日期计算货龄；正库存有效批次数量加权，未知货龄单列，不用最大值冒充平均值。FIFO在仓库/SKU内扣近30日正向发货日均×窗口，按SKU截零后汇总。基地未来7/14日为新增跨60天风险，排除当前60+。全链未来7/14日为基地>60/分仓>=90的期末风险量。不以其他SKU库存或销量抵消。",
+      "request": {
+        "sql": "WITH inventory_batch_dates AS (\nSELECT b.warehouse_classify AS warehouse_classify, b.warehouseid AS warehouseid, b.material_code AS material_code,\n b.month_date AS month_date,\n b.warehouse_name AS warehouse_name, b.belong_base AS belong_base, b.material_name AS material_name,\n b.live_qty AS live_qty, b.available_qty AS available_qty,\n b.pack_unit_qty AS pack_unit_qty, b.freeze_qty AS freeze_qty,\n CAST(SUBSTRING(b.month_date, 1, 4) AS INTEGER) AS snapshot_year,\n CAST(SUBSTRING(b.month_date, 5, 2) AS INTEGER) AS snapshot_month,\n CAST(SUBSTRING(b.month_date, 7, 2) AS INTEGER) AS snapshot_day,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 1, 4) AS INTEGER) AS production_year,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 6, 2) AS INTEGER) AS production_month,\n CAST(SUBSTRING(NULLIF(b.prod_date, ''), 9, 2) AS INTEGER) AS production_day\nFROM agents_scm_inventory_sku_data_d AS b\nWHERE TRUE AND b.month_date = REPLACE(CAST(:gea_p1 AS VARCHAR(10)), '-', '') AND (:gea_p2 = FALSE OR b.belong_base IN (:gea_p3)) AND (:gea_p4 IS NULL OR b.warehouseid = :gea_p4) AND (:gea_p5 IS NULL OR b.material_code = :gea_p5)\n), inventory_batch_ages AS (\nSELECT d.warehouse_classify AS warehouse_classify, d.warehouseid AS warehouseid, d.material_code AS material_code,\n d.month_date AS month_date,\n d.warehouse_name AS warehouse_name, d.belong_base AS belong_base, d.material_name AS material_name,\n d.live_qty AS live_qty, d.available_qty AS available_qty,\n d.pack_unit_qty AS pack_unit_qty, d.freeze_qty AS freeze_qty,\n CASE WHEN d.live_qty > 0 AND d.production_year > 0\n AND d.production_month BETWEEN 1 AND 12 AND d.production_day >= 1 AND d.production_day <= CASE WHEN d.production_month=2 THEN CASE WHEN (d.production_year-4*FLOOR(d.production_year/4.0)=0 AND (d.production_year-100*FLOOR(d.production_year/100.0)<>0 OR d.production_year-400*FLOOR(d.production_year/400.0)=0)) THEN 29 ELSE 28 END WHEN d.production_month IN (4,6,9,11) THEN 30 ELSE 31 END\n AND (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) >= (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) THEN (365 * (d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.snapshot_year - CASE WHEN d.snapshot_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.snapshot_month + CASE WHEN d.snapshot_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.snapshot_day) - (365 * (d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 4.0) - FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 100.0) + FLOOR((d.production_year - CASE WHEN d.production_month <= 2 THEN 1 ELSE 0 END) / 400.0) + FLOOR((153 * (d.production_month + CASE WHEN d.production_month > 2 THEN -3 ELSE 9 END) + 2) / 5.0) + d.production_day) ELSE NULL END AS age_days\nFROM inventory_batch_dates AS d\n), batch_skus AS (\n SELECT a.month_date AS month_date, a.warehouseid AS warehouseid, a.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.belong_base),''))=1 THEN MAX(NULLIF(TRIM(a.belong_base),'')) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.warehouse_name),''))=1 THEN MAX(NULLIF(TRIM(a.warehouse_name),'')) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(a.material_name),''))=1 THEN MAX(NULLIF(TRIM(a.material_name),'')) ELSE NULL END AS material_name,\n SUM(COALESCE(a.live_qty,0)) AS total_qty, SUM(COALESCE(a.available_qty,0)) AS available_qty, SUM(COALESCE(a.pack_unit_qty,0)) AS pack_unit_qty, SUM(COALESCE(a.freeze_qty,0)) AS freeze_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty ELSE 0 END) AS age_weight_qty,\n SUM(CASE WHEN a.age_days IS NOT NULL THEN a.live_qty*a.age_days ELSE 0 END) AS weighted_age,\n SUM(CASE WHEN a.live_qty>0 AND a.age_days IS NULL THEN a.live_qty ELSE 0 END) AS unknown_age_qty,\n MAX(a.age_days) AS max_age,\n SUM(CASE WHEN a.age_days BETWEEN 0 AND 30 THEN a.live_qty ELSE 0 END) AS age0_30,\n SUM(CASE WHEN a.age_days BETWEEN 31 AND 40 THEN a.live_qty ELSE 0 END) AS age31_40,\n SUM(CASE WHEN a.age_days BETWEEN 41 AND 60 THEN a.live_qty ELSE 0 END) AS age41_60,\n SUM(CASE WHEN a.age_days > 60 THEN a.live_qty ELSE 0 END) AS age60_plus,\n SUM(CASE WHEN a.age_days > 30 AND a.age_days <= 60 THEN a.live_qty ELSE 0 END) AS age31_60,\n SUM(CASE WHEN a.age_days > 60 AND a.age_days <= 90 THEN a.live_qty ELSE 0 END) AS age61_90,\n SUM(CASE WHEN a.age_days > 90 THEN a.live_qty ELSE 0 END) AS age90_plus,\n SUM(CASE WHEN a.age_days >= 60 AND a.age_days < 90 THEN a.live_qty ELSE 0 END) AS age60_89,\n SUM(CASE WHEN a.age_days >= 90 AND a.age_days < 120 THEN a.live_qty ELSE 0 END) AS age90_119,\n SUM(CASE WHEN a.age_days >= 60 THEN a.live_qty ELSE 0 END) AS overaged_qty,\n SUM(CASE WHEN a.age_days >= 90 THEN a.live_qty ELSE 0 END) AS stagnant_qty,\n SUM(CASE WHEN a.age_days >= 53 THEN a.live_qty ELSE 0 END) AS future7_candidates,\n SUM(CASE WHEN a.age_days >= 46 THEN a.live_qty ELSE 0 END) AS future14_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 60) OR (a.warehouse_classify = '20' AND a.age_days >= 90) THEN a.live_qty ELSE 0 END) AS risk_current,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 53) OR (a.warehouse_classify = '20' AND a.age_days >= 83) THEN a.live_qty ELSE 0 END) AS risk7_candidates,\n SUM(CASE WHEN (a.warehouse_classify IN ('01','02') AND a.age_days > 46) OR (a.warehouse_classify = '20' AND a.age_days >= 76) THEN a.live_qty ELSE 0 END) AS risk14_candidates\n FROM inventory_batch_ages AS a GROUP BY a.month_date,a.warehouseid,a.material_code\n), batch_names AS (\n SELECT n.warehouseid AS warehouseid,n.material_code AS material_code,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.product_categ_name),''))=1 THEN MAX(NULLIF(TRIM(n.product_categ_name),'')) ELSE NULL END AS category,\n CASE WHEN COUNT(DISTINCT NULLIF(TRIM(n.material_group_name),''))=1 THEN MAX(NULLIF(TRIM(n.material_group_name),'')) ELSE NULL END AS material_group\n FROM agents_scm_material_in_out_summary_d AS n\n INNER JOIN batch_skus AS b ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n GROUP BY n.warehouseid,n.material_code\n), batch_sales AS (\n SELECT s.warehouse AS warehouseid,s.material_code AS material_code,\n SUM(CASE WHEN s.act_dl_qty>0 THEN s.act_dl_qty ELSE 0 END)/30.0 AS daily_movement\n FROM agents_scm_cust_deliv_daily_di AS s\n WHERE s.act_ship_date>=:gea_p6 AND s.act_ship_date<:gea_p7\n AND (:gea_p4 IS NULL OR s.warehouse=:gea_p4) AND (:gea_p5 IS NULL OR s.material_code=:gea_p5)\n GROUP BY s.warehouse,s.material_code\n), batch_facts AS (\n SELECT b.warehouseid AS warehouseid,b.belong_base AS belong_base,b.warehouse_name AS warehouse_name,\n b.material_code AS material_code,b.material_name AS material_name,\n COALESCE(n.category,'未分类') AS product_categ_name,n.material_group AS material_group_name,\n b.available_qty AS available_qty,b.pack_unit_qty AS pack_unit_qty,b.freeze_qty AS freeze_qty,b.total_qty AS total_qty,b.age_weight_qty AS age_weight_qty,b.weighted_age AS weighted_age,\n b.unknown_age_qty AS unknown_age_qty,b.max_age AS max_age,\n b.age0_30 AS age0_30, b.age31_40 AS age31_40, b.age41_60 AS age41_60, b.age60_plus AS age60_plus, b.age31_60 AS age31_60, b.age61_90 AS age61_90, b.age90_plus AS age90_plus, b.age60_89 AS age60_89, b.age90_119 AS age90_119, b.overaged_qty AS overaged_qty, b.stagnant_qty AS stagnant_qty, b.risk_current AS risk_current,\n COALESCE(s.daily_movement,0) AS daily_movement,\n (CASE WHEN b.future7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.future7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-7*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS future7,\n (CASE WHEN b.future14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.future14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END)-(CASE WHEN b.age60_plus-14*COALESCE(s.daily_movement,0) > 0 THEN b.age60_plus-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS future14,\n (CASE WHEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) > 0 THEN b.risk7_candidates-7*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk7,\n (CASE WHEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) > 0 THEN b.risk14_candidates-14*COALESCE(s.daily_movement,0) ELSE 0 END) AS projected_risk14\n FROM batch_skus AS b LEFT JOIN batch_names AS n ON b.warehouseid=n.warehouseid AND b.material_code=n.material_code\n LEFT JOIN batch_sales AS s ON b.warehouseid=s.warehouseid AND b.material_code=s.material_code\n WHERE (:gea_p8 IS NULL OR COALESCE(n.category,'未分类')=:gea_p8)\n AND (:gea_p12 IS NULL OR b.material_code LIKE :gea_p12 OR b.material_name LIKE :gea_p12)\n), batch_groups AS (\n SELECT CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END AS level,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END AS warehouseid,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END AS material_code,\n CASE WHEN COUNT(DISTINCT b.belong_base)=1 THEN MAX(b.belong_base) ELSE NULL END AS belong_base,\n CASE WHEN COUNT(DISTINCT b.warehouse_name)=1 THEN MAX(b.warehouse_name) ELSE NULL END AS warehouse_name,\n CASE WHEN COUNT(DISTINCT b.material_name)=1 THEN MAX(b.material_name) ELSE NULL END AS material_name,\n CASE WHEN COUNT(DISTINCT b.product_categ_name)=1 THEN MAX(b.product_categ_name) ELSE NULL END AS product_categ_name,\n CASE WHEN COUNT(DISTINCT b.material_group_name)=1 THEN MAX(b.material_group_name) ELSE NULL END AS material_group_name,\n COUNT(*) AS row_count,COUNT(CASE WHEN b.age_weight_qty>0 THEN 1 ELSE NULL END) AS age_valid_count, COUNT(DISTINCT CASE WHEN b.overaged_qty>0 THEN b.material_code ELSE NULL END) AS is_overaged_sku_count, CAST(NULL AS INTEGER) AS is_low_stock_sku_count,CAST(NULL AS INTEGER) AS is_high_stock_sku_count,CAST(NULL AS INTEGER) AS conflicting_stock_flag_skus,CAST(NULL AS VARCHAR(255)) AS source_updated_at,COUNT(DISTINCT b.material_code) AS sku_count,\n SUM(b.available_qty) AS available_qty,SUM(b.pack_unit_qty) AS pack_unit_qty,SUM(b.freeze_qty) AS freeze_qty,CAST(:gea_p1 AS DATE) AS stat_date,MAX(b.max_age) AS age_days,SUM(b.total_qty) AS total_qty, SUM(b.age_weight_qty) AS age_weight_qty,SUM(b.weighted_age) AS weighted_age,\n SUM(b.unknown_age_qty) AS unknown_age_qty,MAX(b.max_age) AS max_age,\n CASE WHEN SUM(b.age_weight_qty)>0 THEN SUM(b.weighted_age)*1.0/SUM(b.age_weight_qty) ELSE NULL END AS average_age,\n SUM(b.age0_30) AS age0_30, SUM(b.age31_40) AS age31_40, SUM(b.age41_60) AS age41_60, SUM(b.age60_plus) AS age60_plus, SUM(b.age31_60) AS age31_60, SUM(b.age61_90) AS age61_90, SUM(b.age90_plus) AS age90_plus, SUM(b.age60_89) AS age60_89, SUM(b.age90_119) AS age90_119, SUM(b.overaged_qty) AS overaged_qty, SUM(b.stagnant_qty) AS stagnant_qty, SUM(b.risk_current) AS risk_current,\n SUM(b.daily_movement) AS daily_movement,SUM(b.future7) AS future7,SUM(b.future14) AS future14,\n SUM(b.projected_risk7) AS projected_risk7,SUM(b.projected_risk14) AS projected_risk14,\n CASE WHEN SUM(b.daily_movement)>0 THEN SUM(b.total_qty)*1.0/SUM(b.daily_movement) ELSE NULL END AS historical_turnover,\n CASE WHEN SUM(b.age_weight_qty)=0 THEN NULL WHEN SUM(b.stagnant_qty)>0 THEN '滞库' WHEN SUM(b.overaged_qty)>0 THEN '预警' ELSE '正常' END AS warning\n FROM batch_facts AS b\n GROUP BY CASE WHEN :gea_p9='base' THEN b.belong_base WHEN :gea_p9='category' THEN b.product_categ_name ELSE b.material_code END,\n CASE WHEN :gea_p9='detail' THEN b.warehouseid ELSE NULL END,\n CASE WHEN :gea_p9 IN ('sku','detail') THEN b.material_code ELSE NULL END\n), batch_page AS (SELECT g.row_count AS row_count, g.age_valid_count AS age_valid_count, g.is_overaged_sku_count AS is_overaged_sku_count, g.is_low_stock_sku_count AS is_low_stock_sku_count, g.is_high_stock_sku_count AS is_high_stock_sku_count, g.conflicting_stock_flag_skus AS conflicting_stock_flag_skus, g.source_updated_at AS source_updated_at, g.available_qty AS available_qty, g.pack_unit_qty AS pack_unit_qty, g.freeze_qty AS freeze_qty, g.stat_date AS stat_date, g.age_days AS age_days, g.level AS level, g.warehouseid AS warehouseid, g.material_code AS material_code, g.belong_base AS belong_base, g.warehouse_name AS warehouse_name, g.material_name AS material_name, g.product_categ_name AS product_categ_name, g.material_group_name AS material_group_name, g.sku_count AS sku_count, g.total_qty AS total_qty, g.age_weight_qty AS age_weight_qty, g.weighted_age AS weighted_age, g.unknown_age_qty AS unknown_age_qty, g.max_age AS max_age, g.average_age AS average_age, g.age0_30 AS age0_30, g.age31_40 AS age31_40, g.age41_60 AS age41_60, g.age60_plus AS age60_plus, g.age31_60 AS age31_60, g.age61_90 AS age61_90, g.age90_plus AS age90_plus, g.age60_89 AS age60_89, g.age90_119 AS age90_119, g.overaged_qty AS overaged_qty, g.stagnant_qty AS stagnant_qty, g.risk_current AS risk_current, g.daily_movement AS daily_movement, g.future7 AS future7, g.future14 AS future14, g.projected_risk7 AS projected_risk7, g.projected_risk14 AS projected_risk14, g.historical_turnover AS historical_turnover, g.warning AS warning, 1 AS page_row_present FROM batch_groups AS g ORDER BY CASE WHEN :gea_p13='total_qty' AND :gea_p14='asc' THEN g.total_qty ELSE NULL END ASC, CASE WHEN :gea_p13='total_qty' AND :gea_p14='desc' THEN g.total_qty ELSE NULL END DESC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='asc' THEN g.age60_plus ELSE NULL END ASC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='desc' THEN g.age60_plus ELSE NULL END DESC, CASE WHEN :gea_p13='average_age' AND :gea_p14='asc' THEN g.average_age ELSE NULL END ASC, CASE WHEN :gea_p13='average_age' AND :gea_p14='desc' THEN g.average_age ELSE NULL END DESC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='asc' THEN g.daily_movement ELSE NULL END ASC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='desc' THEN g.daily_movement ELSE NULL END DESC, g.level,g.warehouseid,g.material_code LIMIT :gea_p10 OFFSET :gea_p11), batch_count AS (SELECT COUNT(*) AS page_scope_total FROM batch_groups AS g) SELECT p.row_count AS row_count, p.age_valid_count AS age_valid_count, p.is_overaged_sku_count AS is_overaged_sku_count, p.is_low_stock_sku_count AS is_low_stock_sku_count, p.is_high_stock_sku_count AS is_high_stock_sku_count, p.conflicting_stock_flag_skus AS conflicting_stock_flag_skus, p.source_updated_at AS source_updated_at, p.available_qty AS available_qty, p.pack_unit_qty AS pack_unit_qty, p.freeze_qty AS freeze_qty, p.stat_date AS stat_date, p.age_days AS age_days, p.level AS level, p.warehouseid AS warehouseid, p.material_code AS material_code, p.belong_base AS belong_base, p.warehouse_name AS warehouse_name, p.material_name AS material_name, p.product_categ_name AS product_categ_name, p.material_group_name AS material_group_name, p.sku_count AS sku_count, p.total_qty AS total_qty, p.age_weight_qty AS age_weight_qty, p.weighted_age AS weighted_age, p.unknown_age_qty AS unknown_age_qty, p.max_age AS max_age, p.average_age AS average_age, p.age0_30 AS age0_30, p.age31_40 AS age31_40, p.age41_60 AS age41_60, p.age60_plus AS age60_plus, p.age31_60 AS age31_60, p.age61_90 AS age61_90, p.age90_plus AS age90_plus, p.age60_89 AS age60_89, p.age90_119 AS age90_119, p.overaged_qty AS overaged_qty, p.stagnant_qty AS stagnant_qty, p.risk_current AS risk_current, p.daily_movement AS daily_movement, p.future7 AS future7, p.future14 AS future14, p.projected_risk7 AS projected_risk7, p.projected_risk14 AS projected_risk14, p.historical_turnover AS historical_turnover, p.warning AS warning, p.page_row_present AS page_row_present,c.page_scope_total AS page_scope_total FROM batch_count AS c LEFT JOIN batch_page AS p ON 1=1 ORDER BY CASE WHEN :gea_p13='total_qty' AND :gea_p14='asc' THEN p.total_qty ELSE NULL END ASC, CASE WHEN :gea_p13='total_qty' AND :gea_p14='desc' THEN p.total_qty ELSE NULL END DESC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='asc' THEN p.age60_plus ELSE NULL END ASC, CASE WHEN :gea_p13='age60_plus' AND :gea_p14='desc' THEN p.age60_plus ELSE NULL END DESC, CASE WHEN :gea_p13='average_age' AND :gea_p14='asc' THEN p.average_age ELSE NULL END ASC, CASE WHEN :gea_p13='average_age' AND :gea_p14='desc' THEN p.average_age ELSE NULL END DESC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='asc' THEN p.daily_movement ELSE NULL END ASC, CASE WHEN :gea_p13='daily_movement' AND :gea_p14='desc' THEN p.daily_movement ELSE NULL END DESC, p.level,p.warehouseid,p.material_code",
+        "parameters": {
+          "gea_p1": "2026-10-22",
+          "gea_p2": false,
+          "gea_p3": ["郑州"],
+          "gea_p4": null,
+          "gea_p5": null,
+          "gea_p6": "20260923",
+          "gea_p7": "20261023",
+          "gea_p8": null,
+          "gea_p9": "base",
+          "gea_p10": 200,
+          "gea_p11": 0,
+          "gea_p12": null,
+          "gea_p13": "key",
+          "gea_p14": "asc"
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "stat_date",
+          "type": "string",
+          "example": "2026-10-22",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "bases_enabled",
+          "type": "boolean",
+          "example": false,
+          "required": true,
+          "nullable": false
+        },
+        "gea_p3": {
+          "name": "bases",
+          "type": "array",
+          "example": ["郑州"],
+          "required": true,
+          "nullable": false
+        },
+        "gea_p4": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "material_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "batch_rolling_start",
+          "type": "string",
+          "example": "20260923",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p7": {
+          "name": "batch_end_exclusive",
+          "type": "string",
+          "example": "20261023",
+          "required": true,
+          "nullable": false,
+          "format": "YYYYMMDD"
+        },
+        "gea_p8": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "group_level",
+          "type": "string",
+          "example": "base",
+          "required": true,
+          "nullable": false,
+          "enum": ["base", "category", "sku", "detail"]
+        },
+        "gea_p10": {
+          "name": "page_size",
+          "type": "integer",
+          "example": 200,
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p11": {
+          "name": "offset",
+          "type": "integer",
+          "example": 0,
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p12": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p13": {
+          "name": "sort_field",
+          "type": "string",
+          "example": "key",
+          "required": true,
+          "nullable": false,
+          "enum": ["key", "total_qty", "age60_plus", "average_age", "daily_movement"]
+        },
+        "gea_p14": {
+          "name": "sort_direction",
+          "type": "string",
+          "example": "asc",
+          "required": true,
+          "nullable": false,
+          "enum": ["asc", "desc"]
+        }
+      },
+      "resultColumns": [
+        "row_count",
+        "age_valid_count",
+        "is_overaged_sku_count",
+        "is_low_stock_sku_count",
+        "is_high_stock_sku_count",
+        "conflicting_stock_flag_skus",
+        "source_updated_at",
+        "available_qty",
+        "pack_unit_qty",
+        "freeze_qty",
+        "stat_date",
+        "age_days",
+        "level",
+        "warehouseid",
+        "material_code",
+        "belong_base",
+        "warehouse_name",
+        "material_name",
+        "product_categ_name",
+        "material_group_name",
+        "sku_count",
+        "total_qty",
+        "age_weight_qty",
+        "weighted_age",
+        "unknown_age_qty",
+        "max_age",
+        "average_age",
+        "age0_30",
+        "age31_40",
+        "age41_60",
+        "age60_plus",
+        "age31_60",
+        "age61_90",
+        "age90_plus",
+        "age60_89",
+        "age90_119",
+        "overaged_qty",
+        "stagnant_qty",
+        "risk_current",
+        "daily_movement",
+        "future7",
+        "future14",
+        "projected_risk7",
+        "projected_risk14",
+        "historical_turnover",
+        "warning",
+        "page_row_present",
+        "page_scope_total"
+      ]
     }
   },
   "templates": {
@@ -19669,12 +20138,13 @@
       {
         "id": "aging",
         "title": "库存库龄",
-        "queryId": "health.detail",
-        "description": "按快照日期、仓库和SKU合计批次库存，不按仓库分类编码过滤；基地按所属基地名称、分仓按仓库编码取值。现存、可用、占用、冻结各自展示，不重复相加；零数量按0合计。age_days为正库存且生产日期有效批次的最大货龄，不代表平均货龄。源已删除超龄阈值标志、安全/目标库存和更新时间，不能从现库存反推。 产品名称仅按当前来源中唯一的SKU名称关联，名称冲突保持为空；不改变库存量或记录范围。 当前订单无名称时补用出入库来源的唯一SKU名称；订单名称有冲突时不另选其他名称。 可用、备单、冻结的有值数量单独汇总并显示记录范围，不把部分已知数量当完整合计。",
+        "queryId": "batch-age.groups",
+        "description": "批次生产日期计算货龄；正库存有效批次数量加权，未知货龄单列，不用最大值冒充平均值。FIFO在仓库/SKU内扣近30日正向发货日均×窗口，按SKU截零后汇总。基地未来7/14日为新增跨60天风险，排除当前60+。全链未来7/14日为基地>60/分仓>=90的期末风险量。不以其他SKU库存或销量抵消。",
         "columns": [
           {
             "field": "warehouse_type",
-            "label": "分仓编码"
+            "label": "分仓编码",
+            "valueField": "warehouseid"
           },
           {
             "field": "belong_base",
@@ -19705,14 +20175,14 @@
           {
             "field": "missing_expired",
             "label": "超期/熔断（箱）",
-            "unavailable": true,
-            "reason": "缺批次年龄分布及分层阈值，不能从平均货龄推算"
+            "valueField": "risk_current",
+            "format": "decimal2"
           },
           {
             "field": "missing_age60_89",
             "label": "60–89天关注带（箱）",
-            "unavailable": true,
-            "reason": "缺批次年龄分布及分层阈值，不能从平均货龄推算"
+            "valueField": "age60_89",
+            "format": "decimal2"
           },
           {
             "field": "missing_age90_119",
@@ -19723,14 +20193,14 @@
           {
             "field": "missing_future7",
             "label": "7天后（箱）",
-            "unavailable": true,
-            "reason": "缺批次年龄分布及分层阈值，不能从平均货龄推算"
+            "valueField": "projected_risk7",
+            "format": "decimal2"
           },
           {
             "field": "missing_future14",
             "label": "14天后（箱）",
-            "unavailable": true,
-            "reason": "缺批次年龄分布及分层阈值，不能从平均货龄推算"
+            "valueField": "projected_risk14",
+            "format": "decimal2"
           },
           {
             "field": "available_qty",
@@ -19762,27 +20232,12 @@
             "label": "分仓编码"
           }
         ],
-        "gapIds": ["qll.age", "fc.batch", "dealer.stock"],
-        "summaryId": "health.summary",
+        "gapIds": [],
         "timeMode": "health",
-        "overrides": {},
-        "metrics": [
-          {
-            "field": "known_available_qty",
-            "label": "可用库存（有值范围，箱）",
-            "coverage": "known_available_qty_count"
-          },
-          {
-            "field": "known_pack_unit_qty",
-            "label": "备单占用（有值范围，箱）",
-            "coverage": "known_pack_unit_qty_count"
-          },
-          {
-            "field": "known_freeze_qty",
-            "label": "冻结库存（有值范围，箱）",
-            "coverage": "known_freeze_qty_count"
-          }
-        ],
+        "overrides": {
+          "group_level": "detail"
+        },
+        "metrics": [],
         "defaultColumns": []
       },
       {

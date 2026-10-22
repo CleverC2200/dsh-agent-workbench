@@ -355,7 +355,7 @@ export function FcConfiguredList(
               ? (draft.quantities[rowKey(row)] ?? row.recommended_qty)
               : column.field === 'missing_reason'
                 ? (draft.reasons[rowKey(row)] ?? '')
-                : (displayPlan(row, column.field) ?? row[column.field]),
+                : (displayPlan(row, column.field) ?? row[column.valueField ?? column.field]),
           );
         }),
       ]
