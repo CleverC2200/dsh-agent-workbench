@@ -19,6 +19,7 @@ const retiredMpsStudio = new Set([
   'Gd',
   'fu',
   'Yd',
+  'fH',
 ]);
 function initializer(file, text, name, alias, retired = false) {
   const ast = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);

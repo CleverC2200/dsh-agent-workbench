@@ -88,6 +88,12 @@ function fixture(
         'scripts/write-hosted-group.mjs',
         `import { writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; writeFileSync(resolve('../../candidate-input.json'), '{"group":"fixture"}\\n');`,
       );
+      put(
+        path,
+        'scripts/run-quality-ci.mjs',
+        `import { parseArgs } from 'node:util'; import { writeFileSync } from 'node:fs'; parseArgs({ options: { 'source-only': { type: 'boolean' }, input: { type: 'string' }, 'core-source': { type: 'string' }, 'final-group-sha256': { type: 'string' }, browser: { type: 'boolean' }, 'prepare-browser': { type: 'boolean' } } }); writeFileSync('.runtime/joint-admitted', 'workbench');`,
+      );
+      put(path, 'tests/profile.mjs', 'export const profile = true;');
     }
     if (jointAdmission && repo === 'dsh-gea-plugin') {
       put(path, 'tests/profile.mjs', 'export const profile = true;');
@@ -346,6 +352,20 @@ test('joint GEA checks receive the exact Workbench reader and hashed candidate b
     readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'),
     realpathSync(f.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path),
   );
+});
+
+test('joint Workbench checks receive only arguments supported by its quality CLI', (t) => {
+  const f = fixture(
+    t,
+    {
+      'scripts/tool.mjs': 'export const value = 2;',
+      'tests/tool.test.mjs': 'import "../scripts/tool.mjs"; import "../lib/generated.mjs";',
+    },
+    { sdk: true, jointAdmission: true },
+  );
+  const checked = f.run('affected-check');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.equal(readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'), 'workbench');
 });
 
 test('affected behavior failure blocks source checks without preparing unrelated inputs', (t) => {
