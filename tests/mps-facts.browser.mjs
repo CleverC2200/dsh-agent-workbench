@@ -65,12 +65,25 @@ test('confirmed monthly versions and shipment measures populate independently wh
   await expect(preview).toContainText('含赠品数量');
   await expect(preview).toContainText('不含税收入');
   await expect(preview).toContainText('未提供');
+  const previewDownload = page.waitForEvent('download');
+  await preview.getByRole('button', { name: '下载明细', exact: true }).click();
+  const previewCsv = await readFile(await (await previewDownload).path(), 'utf8');
+  assert.match(previewCsv, /数量,含赠品数量,不含税收入/);
+  assert.match(previewCsv, /,7,9,\r?\n?$/);
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const downloaded = page.waitForEvent('download');
   await history.getByRole('button', { name: '导出当前明细' }).click();
   const csv = await readFile(await (await downloaded).path(), 'utf8');
   assert.match(csv, /数量,含赠品数量,不含税收入/);
   assert.match(csv, /,7,9,\r?\n?$/);
+  assert.equal(previewCsv, csv);
+  await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
+  const reportDownload = page.waitForEvent('download');
+  await frame.getByRole('dialog').getByRole('button', { name: '下载明细', exact: true }).click();
+  const reportCsv = await readFile(await (await reportDownload).path(), 'utf8');
+  assert.match(reportCsv, /月初数量,纠偏数量/);
+  assert.match(reportCsv, /,10,20\r?\n?$/);
+  await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗' }).click();
   await expect(
     frame
       .getByRole('region', { name: '模型双期预测' })

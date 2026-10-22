@@ -563,11 +563,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 className: 'dc-primary',
                 onClick: () =>
                   preview === '明细'
-                    ? downloadCsv(
-                        `${definition.short}-${period}.csv`,
-                        [...sourceColumns, column],
-                        rows,
-                      )
+                    ? downloadCsv(`${definition.short}-${period}.csv`, detailColumns, rows)
                     : downloadCsv(
                         `${definition.short}-${period}-${preview}汇总.csv`,
                         columns,
