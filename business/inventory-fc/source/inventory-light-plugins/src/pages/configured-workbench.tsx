@@ -109,7 +109,7 @@ function WorkbenchBody() {
       color: 'purple',
       details: [
         ['超龄库存量', knownNumber(branchStock?.overaged_qty), '箱'],
-        ['滞库风险量', null, '箱'],
+        ['滞库风险量', knownNumber(branchStock?.stagnant_qty), '箱'],
       ],
     },
     {

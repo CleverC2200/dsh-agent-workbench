@@ -13,12 +13,12 @@ def ordinal(year, month, day):
     return f'(365 * {adjusted_year} + FLOOR({adjusted_year} / 4.0) - FLOOR({adjusted_year} / 100.0) + FLOOR({adjusted_year} / 400.0) + FLOOR((153 * {adjusted_month} + 2) / 5.0) + {day})'
 
 
-def adapter(predicate=''):
+def adapter(predicate='', branch_risks=False):
     # Civil-day ordinals use only gateway-approved arithmetic/functions and agree
     # across PostgreSQL and Doris; subtracting Doris DATEs subtracts YYYYMMDD.
     snapshot = ordinal('d.snapshot_year', 'd.snapshot_month', 'd.snapshot_day')
     production = ordinal('d.production_year', 'd.production_month', 'd.production_day')
-    return f"""inventory_batch_dates AS (
+    sql = f"""inventory_batch_dates AS (
 SELECT b.warehouseid AS warehouseid, b.material_code AS material_code,
  b.month_date AS month_date,
  b.warehouse_name AS warehouse_name, b.belong_base AS belong_base, b.material_name AS material_name,
@@ -77,8 +77,15 @@ FROM inventory_batch_totals AS a
 LEFT JOIN inventory_batch_names AS n ON n.warehouseid = a.warehouseid AND n.material_code = a.material_code
 )"""
 
+    if branch_risks:
+        # Original branch rules: >=60 days is big-date stock; >=90 is stagnant.
+        # Sum positive batch quantities before grouping; SKU maximum age is not a quantity classifier.
+        sql = sql.replace('MAX(a.age_days) AS age_days', "MAX(a.age_days) AS age_days,\n SUM(CASE WHEN a.age_days >= 60 THEN a.live_qty ELSE 0 END) AS overaged_qty,\n SUM(CASE WHEN a.age_days >= 90 THEN a.live_qty ELSE 0 END) AS stagnant_qty")
+        sql = sql.replace('CAST(NULL AS INTEGER) AS is_overaged, CAST(NULL AS DECIMAL(18, 3)) AS overaged_qty', 'CASE WHEN a.overaged_qty > 0 THEN 1 ELSE 0 END AS is_overaged, a.overaged_qty AS overaged_qty, a.stagnant_qty AS stagnant_qty')
+    return sql
 
-def migrate(sql):
+
+def migrate(sql, branch_risks=False):
     if SOURCE not in sql:
         return sql
     if 'inventory_batch_dates AS (' in sql:
@@ -87,7 +94,7 @@ def migrate(sql):
         end = sql.index('\n)', sql.index('), inventory_batch_source AS (')) + 2
         prefix, rest = sql[:end], sql[end:]
         predicate = re.search(r" AND b\.month_date = REPLACE\(CAST\(:gea_p\d+ AS VARCHAR\(10\)\), '-', ''\)", prefix)
-        return 'WITH ' + adapter(predicate.group(0) if predicate else '') + rest
+        return 'WITH ' + adapter(predicate.group(0) if predicate else '', branch_risks) + rest
     if 'inventory_batch_source AS' in sql:
         # Calendar adapters expose only snapshot date and the legacy grouping
         # alias; that alias now contains the source warehouse code, not a type.
@@ -108,7 +115,7 @@ SELECT CAST(CONCAT(SUBSTRING(b.month_date, 1, 4), '-', SUBSTRING(b.month_date, 5
 FROM {SOURCE} AS b
 )"""
     else:
-        prefix = adapter(predicate)
+        prefix = adapter(predicate, branch_risks)
     sql = re.sub(r'\b' + SOURCE + r'\b', 'inventory_batch_source', sql)
     if sql.startswith('WITH '):
         return 'WITH ' + prefix + ', ' + sql[5:]
@@ -173,17 +180,36 @@ def source_dimensions(query):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--agent', choices=[p.name for p in (ROOT / 'business').iterdir() if (p / 'sql.config.json').exists()])
+    selected = parser.parse_args().agent
     for path in sorted((ROOT / 'business').glob('*/sql.config.json')):
+        if selected and path.parent.name != selected:
+            continue
         config = json.loads(path.read_text())
         before = json.dumps(config, ensure_ascii=False)
         changed = []
         for name, query in config.get('queries', {}).items():
+            if name.startswith('current-shortage.'):
+                continue  # This source owns raw batch identities for the three-stage calculation.
             old = query.get('request', {}).get('sql', '')
-            new = attribution_columns(migrate(old), name)
+            branch_risks = path.parent.name == 'inventory-fc'
+            new = attribution_columns(migrate(old, branch_risks), name)
+            if branch_risks and name == 'health.summary':
+                if 't.stagnant_qty' not in new:
+                    new = new.replace('MAX(t.source_updated_at) AS source_updated_at FROM inventory_batch_source', 'MAX(t.source_updated_at) AS source_updated_at, MAX(t.stagnant_qty) AS stagnant_qty FROM inventory_batch_source')
+                    new = new.replace('r.overaged_qty AS overaged_qty,', 'r.overaged_qty AS overaged_qty, r.stagnant_qty AS stagnant_qty,')
+                    end = new.rfind(' FROM filtered AS r')
+                    new = new[:end] + ', SUM(COALESCE(r.stagnant_qty, 0)) AS stagnant_qty' + new[end:]
+                if 'stagnant_qty' not in query['resultColumns']:
+                    query['resultColumns'].append('stagnant_qty')
             notes = query.get('notes', [])
             new_notes = notes
             if 'inventory_batch_dates AS (' in new:
                 note = '批次现库存按仓库/SKU求和；不按 warehouse_classify 过滤或归类；分仓用 warehouseid 编码关联和筛选、warehouse_name 展示名称；基地用 belong_base 名称关联和筛选；商品名称取 material_name；基地与分仓为同一事实集的维度，不重复相加；正库存且生产日期有效的批次计算最大货龄。源已移除超龄阈值标志、安全/目标库存及更新时间，保持未知。'
+                if branch_risks:
+                    note = note.replace('源已移除超龄阈值标志、安全/目标库存及更新时间，保持未知。', '按原分仓规则逐批次汇总60天及以上超龄库存、90天及以上滞库库存；非正库存或无有效货龄的批次数量不计入风险量。安全/目标库存及更新时间仍保持未知。')
                 if isinstance(notes, list):
                     new_notes = [x for x in notes if not x.startswith('批次现库存按仓库/SKU求和；')] + [note]
                 else:
