@@ -616,7 +616,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                         ['①需求确认', '大类需求与缺项随当前版本重算'],
                         ['②本月预估发货', `${result.shipmentMonth}月末结存，缺数留空`],
                         ['③需求加工与收敛', '同月同大类两占比平均拆分'],
-                        ['④主数据对应关系', relations ? '已接当前关系结果' : '关系尚未读取'],
+                        [
+                          '④主数据对应关系',
+                          relations?.sources ? '已接当前关系结果' : '关系尚未读取',
+                        ],
                         ['⑤约束与配置', '本地隔离草稿；正式保存未就绪'],
                         ['⑥产能评估与缺口', '未裁定规则留空'],
                       ],
