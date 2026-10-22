@@ -127,6 +127,101 @@ test('owner TypeScript checks fixed peer source types and emits no peer business
   );
 });
 
+test('peer source retains Core declaration aliases while owner paths and application isolation stay authoritative', async (t) => {
+  const runtime = join(process.cwd(), '.runtime');
+  mkdirSync(runtime, { recursive: true });
+  const parent = mkdtempSync(join(runtime, 'peer-core-types-'));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const put = (root, file, content) => {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), content);
+  };
+  const repositories = ['dsh-agent-workbench', 'dsh-gea-plugin'].map((repo) => ({
+    repo,
+    path: join(parent, 'candidate', repo),
+    head: 'a'.repeat(40),
+  }));
+  const [workbench, gea] = repositories;
+  for (const peer of repositories)
+    put(
+      peer.path,
+      'package.json',
+      JSON.stringify({
+        name: peer.repo,
+        type: 'module',
+        exports: { './contract': { types: './lib/types/contract.d.ts' } },
+      }),
+    );
+  const core = join(parent, 'official-latest-standard');
+  put(core, 'package.json', '{"type":"module"}');
+  put(
+    core,
+    'fixture/src/client.ts',
+    `
+    export interface Contract { count: number }
+    declare global { interface FixtureRegistry { chat: { identity: 'source' } } }
+  `,
+  );
+  const declaration = `
+    export interface Contract { count: number }
+    declare global { interface FixtureRegistry { chat: { identity: 'declaration' } } }
+  `;
+  put(core, 'fixture/lib/types/client.d.ts', declaration);
+  const paths = {
+    '@fixture/core': ['../../official-latest-standard/fixture/lib/types/client.d.ts'],
+    '@fixture/core/*': ['../../official-latest-standard/fixture/*'],
+  };
+  const alias = '@fixture/core/src/client.ts';
+  const config = (paths) =>
+    JSON.stringify({
+      compilerOptions: {
+        strict: true,
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        target: 'ES2023',
+        paths,
+      },
+      include: ['src/**/*.ts'],
+    });
+  put(
+    workbench.path,
+    'tsconfig.official.json',
+    config({
+      ...paths,
+      [alias]: paths['@fixture/core'],
+      '@fixture/private': ['./src/private.d.ts'],
+    }),
+  );
+  put(workbench.path, 'src/private.d.ts', 'export interface PrivateContract { count: number }');
+  put(
+    workbench.path,
+    'src/contract.ts',
+    `import type {} from '@fixture/core'; export type { Contract } from '${alias}';`,
+  );
+  put(gea.path, 'tsconfig.official.json', config(paths));
+  const consumer =
+    'import type { Contract } from "dsh-agent-workbench/contract"; export const value: Contract = { count: 2 };';
+  put(gea.path, 'src/consumer.ts', consumer);
+  await checkTypes(gea.path, repositories, gea.repo);
+  put(gea.path, 'src/consumer.ts', consumer.replace('count: 2', 'count: "wrong"'));
+  await assert.rejects(() => checkTypes(gea.path, repositories, gea.repo), /SOURCE_TYPES_FAILED/);
+  put(core, 'fixture/lib/types/owner.d.ts', 'export interface Contract { count: string }');
+  put(
+    gea.path,
+    'tsconfig.official.json',
+    config({ ...paths, [alias]: ['../../official-latest-standard/fixture/lib/types/owner.d.ts'] }),
+  );
+  await checkTypes(gea.path, repositories, gea.repo);
+  put(
+    gea.path,
+    'src/consumer.ts',
+    'import type { PrivateContract } from "@fixture/private"; export const value: PrivateContract = { count: 2 };',
+  );
+  await assert.rejects(() => checkTypes(gea.path, repositories, gea.repo), /SOURCE_TYPES_FAILED/);
+  assert.equal(readFileSync(join(core, 'fixture/lib/types/client.d.ts'), 'utf8'), declaration);
+  for (const peer of repositories) assert.equal(existsSync(join(peer.path, 'lib')), false);
+});
+
 test('peer source keeps its explicit SDK declarations while owner aliases and real errors remain authoritative', async (t) => {
   const runtime = join(process.cwd(), '.runtime');
   mkdirSync(runtime, { recursive: true });

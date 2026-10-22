@@ -8,7 +8,7 @@ import {
   symlinkSync,
   realpathSync,
 } from 'node:fs';
-import { resolve, dirname, sep } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { selectCiTests } from './ci-test-plan.mjs';
@@ -20,21 +20,25 @@ const run = (command, args, cwd = process.cwd(), env = {}) =>
   execFileSync(command, args, { cwd, stdio: 'inherit', env: { ...process.env, ...env } });
 const modules = ['dsh-agent-workbench', 'dsh-agent-manage', 'dsh-gea-plugin'];
 export async function sourceChecks(result, phase) {
+  const local = result.workingTree === true;
+  if (local && phase !== 'affected-plan') throw Error('SOURCE_WORKING_TREE_PLAN_ONLY');
   const root = process.cwd();
   const repo = process.env.SOURCE_REPOSITORY || modules.find((name) => root.endsWith('/' + name));
   if (!modules.includes(repo) || !result.base) throw Error('SOURCE_CHECK_INPUT_REQUIRED');
-  const baseline = json(resolve(root, 'scripts/quality-peer-baseline.json'));
+  const baseline = local ? null : json(resolve(root, 'scripts/quality-peer-baseline.json'));
   const repositories = modules.map((name) => {
     const path =
       name === repo
         ? root
-        : name === 'dsh-agent-workbench' && repo === 'dsh-gea-plugin'
+        : !local && name === 'dsh-agent-workbench' && repo === 'dsh-gea-plugin'
           ? resolve(root, '../../source', name)
           : resolve(root, '..', name);
     const head =
       name === repo
         ? result.head
-        : baseline.repositories.find((entry) => entry.repo === name)?.head;
+        : local
+          ? git(path, 'rev-parse', 'HEAD')
+          : baseline.repositories.find((entry) => entry.repo === name)?.head;
     if (!/^[a-f0-9]{40}$/.test(head || '') || git(path, 'rev-parse', 'HEAD') !== head)
       throw Error(`SOURCE_PEER_MISMATCH: ${name}`);
     return { repo: name, path, head };
@@ -53,6 +57,7 @@ export async function sourceChecks(result, phase) {
     base: result.base,
     testOwners,
     sourceOnly: true,
+    workingTree: result.workingTree === true,
   });
   const desktopTools =
     repo === 'dsh-gea-plugin' && selected.files.includes('scripts/package-desktop.test.mjs');
@@ -69,12 +74,18 @@ export async function sourceChecks(result, phase) {
     selected.runtime ||
     selected.build ||
     selected.files.some((file) => Object.values(lanes).some((lane) => file in lane));
+  const staticChecks = joint ? [] : ['check:knowledge', 'lint', 'format:check'];
+  let upstreams = 'none';
+  if (repo === 'dsh-gea-plugin' || joint)
+    upstreams = typecheck || joint ? 'artifacts' : selected.upstreams;
   const plan = {
     ...selected,
+    staticChecks,
     typecheck,
     dependencies:
       typecheck ||
       joint ||
+      staticChecks.some((check) => check !== 'check:knowledge') ||
       desktopTools ||
       selected.dependencies ||
       selected.files.some((file) => file.endsWith('.ts')),
@@ -83,6 +94,7 @@ export async function sourceChecks(result, phase) {
       joint ||
       selected.sdk ||
       (repo === 'dsh-agent-manage' && selected.files.some((file) => file.endsWith('.ts'))),
+    upstreams,
     joint,
   };
   mkdirSync('.runtime', { recursive: true });
@@ -100,6 +112,15 @@ export async function sourceChecks(result, phase) {
     if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
       throw Error('SOURCE_PEER_LINK_MISMATCH');
   }
+  const ownerCheck = (check) =>
+    run(
+      repo === 'dsh-agent-workbench' ? 'npm' : 'corepack',
+      repo === 'dsh-agent-workbench' ? ['run', check] : ['pnpm', 'run', check],
+      root,
+      { QUALITY_BASE_SHA: selected.diffBase, DSH_WORKBENCH_CHECKOUT: workbench },
+    );
+  if (phase === 'affected-check' && staticChecks.includes('check:knowledge'))
+    ownerCheck('check:knowledge');
   let coreHead;
   if (plan.sdk) {
     const { ciCores } = await import(pathToFileURL(resolve(gea, 'scripts/ci-core-policy.mjs')));
@@ -116,13 +137,14 @@ export async function sourceChecks(result, phase) {
   }
   if (phase === 'affected-prepare') {
     if (plan.dependencies && (repo === 'dsh-gea-plugin' || joint)) {
-      const { prepareQualityUpstreams, bindQualityUpstreamInputs } = await import(
-        pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs'))
-      );
+      const { prepareQualityUpstreamSources, prepareQualityUpstreams, bindQualityUpstreamInputs } =
+        await import(pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs')));
       const upstream = resolve(root, '../../quality-upstreams');
-      await prepareQualityUpstreams(upstream);
+      const sourceOnly = plan.upstreams === 'source-links';
+      await (sourceOnly ? prepareQualityUpstreamSources : prepareQualityUpstreams)(upstream);
       await bindQualityUpstreamInputs(upstream, resolve(root, '../../upstream-inputs'), {
         prepare: true,
+        sourceOnly,
       });
     }
     if (plan.dependencies && !joint) {
@@ -167,6 +189,16 @@ export async function sourceChecks(result, phase) {
       }
     }
     return;
+  }
+  if (plan.upstreams === 'source-links') {
+    const { bindQualityUpstreamInputs } = await import(
+      pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs'))
+    );
+    await bindQualityUpstreamInputs(
+      resolve(root, '../../quality-upstreams'),
+      resolve(root, '../../upstream-inputs'),
+      { sourceOnly: true },
+    );
   }
   if (joint) {
     if (repo === 'dsh-agent-manage') {
@@ -260,6 +292,8 @@ export async function sourceChecks(result, phase) {
     run(process.execPath, args, root, env);
     return;
   }
+  for (const check of staticChecks.filter((check) => check !== 'check:knowledge'))
+    ownerCheck(check);
   if (typecheck) await checkTypes(root, repositories, repo, result.files);
   if (plan.browser)
     run(
@@ -303,32 +337,26 @@ export async function sourceChecks(result, phase) {
 export async function checkTypes(root, repositories, repo, changed = []) {
   const require = createRequire(resolve(root, 'package.json'));
   const ts = require('typescript');
+  const parseConfig = (file) => {
+    const parsed = ts.getParsedCommandLineOfConfigFile(
+      file,
+      { noEmit: true, emitDeclarationOnly: false },
+      {
+        ...ts.sys,
+        onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
+          throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+        },
+      },
+    );
+    if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
+    return parsed;
+  };
+  const core = resolve(root, '../../official-latest-standard');
   const peerPaths = {},
-    sdkPaths = {};
-  const sdkRoot = resolve(root, '../../official-latest-standard');
+    peerCorePaths = {};
   for (const peer of repositories) {
-    if (peer.repo !== repo) {
-      const config = resolve(
-        peer.path,
-        existsSync(resolve(peer.path, 'tsconfig.official-paths.json'))
-          ? 'tsconfig.official-paths.json'
-          : 'tsconfig.official.json',
-      );
-      if (existsSync(config)) {
-        const options = json(config).compilerOptions ?? {};
-        for (const [alias, paths] of Object.entries(options.paths ?? {})) {
-          if (alias.includes('*') || !paths.length) continue;
-          const absolute = paths.map((path) =>
-            resolve(dirname(config), options.baseUrl ?? '.', path),
-          );
-          if (
-            absolute.every((path) => path.startsWith(sdkRoot + sep) && /\.d\.[cm]?ts$/.test(path))
-          )
-            sdkPaths[alias] = absolute;
-        }
-      }
-    }
     const pkg = json(resolve(peer.path, 'package.json'));
+    let mapsSource = false;
     for (const [name, entry] of Object.entries(pkg.exports || {})) {
       const type = typeof entry === 'object' ? entry.types : null;
       if (
@@ -347,7 +375,26 @@ export async function checkTypes(root, repositories, repo, changed = []) {
         type.replace('./lib/types/', 'src/').replace(/\.d\.ts$/, '.ts'),
       );
       const target = existsSync(source) ? source : source.replace(/\.ts$/, '.tsx');
-      if (existsSync(target)) peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [target];
+      if (existsSync(target)) {
+        peerPaths[pkg.name + (name === '.' ? '' : name.slice(1))] = [target];
+        mapsSource = true;
+      }
+    }
+    const config = resolve(peer.path, 'tsconfig.official.json');
+    if (peer.repo === repo || !mapsSource || !existsSync(config)) continue;
+    const parsed = parseConfig(config);
+    for (const [name, paths] of Object.entries(parsed.options.paths ?? {})) {
+      const targets = paths.map((path) =>
+        resolve(parsed.options.baseUrl ?? parsed.options.pathsBasePath ?? peer.path, path),
+      );
+      if (
+        targets.length &&
+        targets.every(
+          (target) =>
+            target.startsWith(core + sep) && /[/\\]lib[/\\]types[/\\].*\.d\.[cm]?ts$/.test(target),
+        )
+      )
+        peerCorePaths[name] = targets;
     }
   }
   const configs =
@@ -355,18 +402,8 @@ export async function checkTypes(root, repositories, repo, changed = []) {
       ? ['tsconfig.json', 'tsconfig.client.json']
       : ['tsconfig.official.json'];
   for (const file of configs) {
-    const parsed = ts.getParsedCommandLineOfConfigFile(
-      resolve(root, file),
-      { noEmit: true, emitDeclarationOnly: false },
-      {
-        ...ts.sys,
-        onUnRecoverableConfigFileDiagnostic: (diagnostic) => {
-          throw Error(ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
-        },
-      },
-    );
-    if (!parsed) throw Error(`SOURCE_TYPES_CONFIG_REQUIRED: ${file}`);
-    parsed.options.paths = { ...sdkPaths, ...parsed.options.paths, ...peerPaths };
+    const parsed = parseConfig(resolve(root, file));
+    parsed.options.paths = { ...peerCorePaths, ...parsed.options.paths, ...peerPaths };
     parsed.options.rootDir = resolve(root, '../..');
     parsed.options.typeRoots = [resolve(root, 'node_modules/@types')];
     const ambient = repositories
