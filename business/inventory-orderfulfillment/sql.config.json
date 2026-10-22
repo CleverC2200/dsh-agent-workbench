@@ -5,6 +5,191 @@
   "source": "ai_db",
   "templates": {},
   "queries": {
+    "sku.age": {
+      "title": "基地SKU批次货龄",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT b.belong_base AS base,b.material_code AS sku,b.month_date AS batch_date,b.prod_date AS production_date,SUM(b.live_qty) AS quantity,COUNT(*) AS batch_rows,COUNT(b.live_qty) AS known_quantities,MIN(b.live_qty) AS minimum_quantity FROM agents_scm_inventory_sku_data_d b INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=b.belong_base AND scope.material_code=b.material_code WHERE b.month_date=(SELECT MAX(month_date) FROM agents_scm_inventory_sku_data_d WHERE month_date < REPLACE(:gea_p1,'-','')) AND b.warehouse_classify='01' GROUP BY b.belong_base,b.material_code,b.month_date,b.prod_date ORDER BY b.belong_base,b.material_code,b.month_date,b.prod_date LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "base",
+        "sku",
+        "batch_date",
+        "batch_rows",
+        "production_date",
+        "quantity",
+        "known_quantities",
+        "minimum_quantity"
+      ],
+      "pagination": {
+        "countQuery": "sku.age.count"
+      }
+    },
+    "sku.age.count": {
+      "title": "批次货龄计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT b.belong_base,b.material_code,b.month_date,b.prod_date FROM agents_scm_inventory_sku_data_d b INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=b.belong_base AND scope.material_code=b.material_code WHERE b.month_date=(SELECT MAX(month_date) FROM agents_scm_inventory_sku_data_d WHERE month_date < REPLACE(:gea_p1,'-','')) AND b.warehouse_classify='01' GROUP BY b.belong_base,b.material_code,b.month_date,b.prod_date) counted",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
     "orders.detail": {
       "title": "orders.detail",
       "parameterSpec": {
@@ -93,7 +278,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.material_code AS sku,e.header_addtime AS created_at,e.cust_name AS customer_name,e.belong_base AS base,e.region_name AS region,e.province_region_name AS province,e.sales_group_name AS sales_group,e.cust_type AS channel,e.bizflowstatus AS source_status,e.timeout_name AS source_reason,e.material_name AS material_name,CASE WHEN COUNT(DISTINCT e.sales_person)=1 THEN MAX(e.sales_person) END AS sales_person, CASE WHEN COUNT(DISTINCT e.order_person)=1 THEN MAX(e.order_person) END AS order_person, COUNT(*) AS source_rows FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name ORDER BY e.header_addtime DESC,e.cust_order_no,e.cust_code,e.material_code,e.belong_base,e.bizflowstatus,e.timeout_name,e.cust_name,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.material_name LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.material_code AS sku,e.header_addtime AS created_at,e.cust_name AS customer_name,e.belong_base AS base,e.region_name AS region,e.province_region_name AS province,e.sales_group_name AS sales_group,e.cust_type AS channel,e.bizflowstatus AS source_status,e.timeout_name AS source_reason,e.material_name AS material_name,CASE WHEN COUNT(DISTINCT e.sales_person)=1 THEN MAX(e.sales_person) END AS sales_person, CASE WHEN COUNT(DISTINCT e.order_person)=1 THEN MAX(e.order_person) END AS order_person, COUNT(*) AS source_rows FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name ORDER BY e.header_addtime DESC,e.cust_order_no,e.cust_code,e.material_code,e.belong_base,e.bizflowstatus,e.timeout_name,e.cust_name,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.material_name LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -192,7 +377,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.region_name,e.province_region_name,e.sales_group_name,e.cust_type,e.bizflowstatus,e.timeout_name,e.material_name) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -271,7 +456,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(DISTINCT e.cust_order_no) AS source_orders,COUNT(*) AS source_rows,MIN(e.header_addtime) AS first_created,MAX(e.header_addtime) AS latest_created FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)",
+        "sql": "SELECT COUNT(DISTINCT e.cust_order_no) AS source_orders,COUNT(*) AS source_rows,MIN(e.header_addtime) AS first_created,MAX(e.header_addtime) AS latest_created FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)",
         "parameters": {},
         "includeTotal": false
       },
@@ -365,7 +550,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.material_code AS sku,e.belong_base AS base,COUNT(*) AS source_rows, MAX(e.header_addtime) AS latest_created,CASE WHEN COUNT(*)=1 THEN MAX(e.order_qty) END AS original_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.adjust_order_qty) END AS adjusted_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.qtyallocated) END AS allocated_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.qtyshipped) END AS shipped_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.stockout_qty) END AS source_short_qty, CASE WHEN COUNT(*)=1 THEN MAX(e.order_qty_origin) END AS ordered_qty FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.belong_base ORDER BY MAX(e.header_addtime) DESC,e.cust_order_no,e.cust_code,e.material_code,e.belong_base LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.material_code AS sku,e.belong_base AS base,COUNT(*) AS source_rows, MAX(e.header_addtime) AS latest_created,CASE WHEN COUNT(*)=1 THEN MAX(e.order_qty) END AS original_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.adjust_order_qty) END AS adjusted_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.qtyallocated) END AS allocated_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.qtyshipped) END AS shipped_qty,CASE WHEN COUNT(*)=1 THEN MAX(e.stockout_qty) END AS source_short_qty, CASE WHEN COUNT(*)=1 THEN MAX(e.order_qty_origin) END AS ordered_qty FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.belong_base ORDER BY MAX(e.header_addtime) DESC,e.cust_order_no,e.cust_code,e.material_code,e.belong_base LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -460,7 +645,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.material_code,e.belong_base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.belong_base) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.material_code,e.belong_base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.belong_base) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -554,7 +739,7 @@
         }
       },
       "request": {
-        "sql": "SELECT t.fromorderno AS order_no,t.cust_code AS customer_code,t.source_flag AS source_kind,t.executeorderno AS execute_no,t.material_code AS sku,t.needbillingdate AS need_billing_at,t.pickup_point AS pickup_point,t.track_status AS source_stage,t.peidan_status AS prepare_status,t.paiche_status AS dispatch_status,t.zhuangche_status AS loading_status,t.zaitu_status AS transit_status,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(t.after_inventory_short_qty) END AS after_inventory_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.final_short_qty) END AS final_short_qty FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE (:gea_p10 IS NULL OR t.material_code = :gea_p10) GROUP BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status ORDER BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT t.fromorderno AS order_no,t.cust_code AS customer_code,t.source_flag AS source_kind,t.executeorderno AS execute_no,t.material_code AS sku,t.needbillingdate AS need_billing_at,t.pickup_point AS pickup_point,t.track_status AS source_stage,t.peidan_status AS prepare_status,t.paiche_status AS dispatch_status,t.zhuangche_status AS loading_status,t.zaitu_status AS transit_status,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(t.after_inventory_short_qty) END AS after_inventory_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.final_short_qty) END AS final_short_qty FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE (:gea_p10 IS NULL OR t.material_code = :gea_p10) GROUP BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status ORDER BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -652,7 +837,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE (:gea_p10 IS NULL OR t.material_code = :gea_p10) GROUP BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE (:gea_p10 IS NULL OR t.material_code = :gea_p10) GROUP BY t.fromorderno,t.cust_code,t.source_flag,t.executeorderno,t.material_code,t.needbillingdate,t.pickup_point,t.track_status,t.peidan_status,t.paiche_status,t.zhuangche_status,t.zaitu_status) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -731,7 +916,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(DISTINCT t.fromorderno) AS matched_orders,COUNT(DISTINCT CASE WHEN (t.peidan_status LIKE '%超时%' OR t.paiche_status LIKE '%超时%' OR t.zhuangche_status LIKE '%超时%' OR t.zaitu_status LIKE '%超时%' OR t.track_status LIKE '%超时%') THEN t.fromorderno END) AS overdue_orders,COUNT(DISTINCT CASE WHEN (t.peidan_status LIKE '%预警%' OR t.paiche_status LIKE '%预警%' OR t.zhuangche_status LIKE '%预警%' OR t.zaitu_status LIKE '%预警%' OR t.track_status LIKE '%预警%') THEN t.fromorderno END) AS warning_orders,COUNT(DISTINCT CASE WHEN t.peidan_status LIKE '%超时%' THEN t.fromorderno END) AS allocation_overdue,COUNT(DISTINCT CASE WHEN t.peidan_status LIKE '%预警%' THEN t.fromorderno END) AS allocation_warning,COUNT(DISTINCT CASE WHEN t.paiche_status LIKE '%超时%' THEN t.fromorderno END) AS dispatch_overdue,COUNT(DISTINCT CASE WHEN t.paiche_status LIKE '%预警%' THEN t.fromorderno END) AS dispatch_warning,COUNT(DISTINCT CASE WHEN t.zhuangche_status LIKE '%超时%' THEN t.fromorderno END) AS loading_overdue,COUNT(DISTINCT CASE WHEN t.zhuangche_status LIKE '%预警%' THEN t.fromorderno END) AS loading_warning,COUNT(DISTINCT CASE WHEN t.zaitu_status LIKE '%超时%' THEN t.fromorderno END) AS transit_overdue,COUNT(DISTINCT CASE WHEN t.zaitu_status LIKE '%预警%' THEN t.fromorderno END) AS transit_warning FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE t.source_flag='履约追踪' AND (:gea_p10 IS NULL OR t.material_code = :gea_p10)",
+        "sql": "SELECT COUNT(DISTINCT t.fromorderno) AS matched_orders,COUNT(DISTINCT CASE WHEN (t.peidan_status LIKE '%超时%' OR t.paiche_status LIKE '%超时%' OR t.zhuangche_status LIKE '%超时%' OR t.zaitu_status LIKE '%超时%' OR t.track_status LIKE '%超时%') THEN t.fromorderno END) AS overdue_orders,COUNT(DISTINCT CASE WHEN (t.peidan_status LIKE '%预警%' OR t.paiche_status LIKE '%预警%' OR t.zhuangche_status LIKE '%预警%' OR t.zaitu_status LIKE '%预警%' OR t.track_status LIKE '%预警%') THEN t.fromorderno END) AS warning_orders,COUNT(DISTINCT CASE WHEN t.peidan_status LIKE '%超时%' THEN t.fromorderno END) AS allocation_overdue,COUNT(DISTINCT CASE WHEN t.peidan_status LIKE '%预警%' THEN t.fromorderno END) AS allocation_warning,COUNT(DISTINCT CASE WHEN t.paiche_status LIKE '%超时%' THEN t.fromorderno END) AS dispatch_overdue,COUNT(DISTINCT CASE WHEN t.paiche_status LIKE '%预警%' THEN t.fromorderno END) AS dispatch_warning,COUNT(DISTINCT CASE WHEN t.zhuangche_status LIKE '%超时%' THEN t.fromorderno END) AS loading_overdue,COUNT(DISTINCT CASE WHEN t.zhuangche_status LIKE '%预警%' THEN t.fromorderno END) AS loading_warning,COUNT(DISTINCT CASE WHEN t.zaitu_status LIKE '%超时%' THEN t.fromorderno END) AS transit_overdue,COUNT(DISTINCT CASE WHEN t.zaitu_status LIKE '%预警%' THEN t.fromorderno END) AS transit_warning FROM agents_scm_shortage_trace_f t INNER JOIN (SELECT DISTINCT e.cust_order_no,e.cust_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.cust_order_no=t.fromorderno AND scope.cust_code=t.cust_code WHERE t.source_flag='履约追踪' AND (:gea_p10 IS NULL OR t.material_code = :gea_p10)",
         "parameters": {},
         "includeTotal": false
       },
@@ -837,7 +1022,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.belong_base AS base,e.logistics_provider AS carrier,e.waybill_no AS waybill_no,e.waybill_status AS waybill_status FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status ORDER BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.belong_base AS base,e.logistics_provider AS carrier,e.waybill_no AS waybill_no,e.waybill_status AS waybill_status FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status ORDER BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -926,7 +1111,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.belong_base,e.logistics_provider,e.waybill_no,e.waybill_status) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -1020,7 +1205,7 @@
         }
       },
       "request": {
-        "sql": "SELECT s.belong_base AS base,s.material_code AS sku,MAX(s.material_name) AS material_name,s.the_date AS stock_date,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock) END AS stock_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.available_stock) END AS available_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock_60) END AS over60_source_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_plan) END AS production_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_in_qty) END AS production_in_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.product_item) END AS product_item,CASE WHEN COUNT(*)=1 THEN MAX(s.series) END AS series,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_v1) END AS main_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_v1) END AS bp_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_adj) END AS main_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_adj) END AS bp_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_v1) END AS transfer_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_adj) END AS transfer_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_sales_plan) END AS next_month_sales_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_out_plan) END AS next_month_out_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.day_count_of_month) END AS month_days,MAX(d.product_tag) AS product_tag,MAX(g.transfer_tag) AS transfer_tag FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT NULLIF(responsible_item,''))=1 THEN MAX(NULLIF(responsible_item,'')) END AS product_tag FROM agents_dim_product_list_mi GROUP BY material_code) d ON d.material_code=s.material_code LEFT JOIN (SELECT stat_period,target_base,material_code,CASE WHEN COUNT(DISTINCT NULLIF(transfer_tag,''))=1 THEN MAX(NULLIF(transfer_tag,'')) END AS transfer_tag FROM agents_dim_transfer_direction_mi GROUP BY stat_period,target_base,material_code) g ON g.material_code=s.material_code AND g.target_base=s.belong_base AND g.stat_period=SUBSTRING(s.the_date,1,7) WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date ORDER BY s.belong_base,s.material_code,s.the_date LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT s.belong_base AS base,s.material_code AS sku,MAX(s.material_name) AS material_name,s.the_date AS stock_date,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock) END AS stock_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.available_stock) END AS available_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock_60) END AS over60_source_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_plan) END AS production_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_in_qty) END AS production_in_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.product_item) END AS product_item,CASE WHEN COUNT(*)=1 THEN MAX(s.series) END AS series,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_v1) END AS main_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_v1) END AS bp_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_adj) END AS main_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_adj) END AS bp_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_v1) END AS transfer_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_adj) END AS transfer_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_sales_plan) END AS next_month_sales_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_out_plan) END AS next_month_out_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.day_count_of_month) END AS month_days,MAX(d.product_tag) AS product_tag,MAX(g.transfer_tag) AS transfer_tag FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT NULLIF(responsible_item,''))=1 THEN MAX(NULLIF(responsible_item,'')) END AS product_tag FROM agents_dim_product_list_mi GROUP BY material_code) d ON d.material_code=s.material_code LEFT JOIN (SELECT stat_period,target_base,material_code,CASE WHEN COUNT(DISTINCT NULLIF(transfer_tag,''))=1 THEN MAX(NULLIF(transfer_tag,'')) END AS transfer_tag FROM agents_dim_transfer_direction_mi GROUP BY stat_period,target_base,material_code) g ON g.material_code=s.material_code AND g.target_base=s.belong_base AND g.stat_period=SUBSTRING(s.the_date,1,7) WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date ORDER BY s.belong_base,s.material_code,s.the_date LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -1126,7 +1311,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT s.belong_base,s.material_code,s.the_date FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT s.belong_base,s.material_code,s.the_date FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -1220,7 +1405,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.belong_base AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.belong_base ORDER BY e.belong_base LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.belong_base AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.belong_base ORDER BY e.belong_base LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -1302,7 +1487,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.belong_base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.belong_base) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.belong_base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.belong_base) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -1396,7 +1581,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.province_region_name AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.province_region_name ORDER BY e.province_region_name LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.province_region_name AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.province_region_name ORDER BY e.province_region_name LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -1478,7 +1663,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.province_region_name FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.province_region_name) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.province_region_name FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.province_region_name) g",
         "parameters": {},
         "includeTotal": false
       },
@@ -1572,7 +1757,7 @@
         }
       },
       "request": {
-        "sql": "SELECT e.logistics_provider AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.logistics_provider ORDER BY e.logistics_provider LIMIT :gea_p12 OFFSET :gea_p13",
+        "sql": "SELECT e.logistics_provider AS group_name, COUNT(DISTINCT e.cust_order_no) AS source_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.logistics_provider ORDER BY e.logistics_provider LIMIT :gea_p12 OFFSET :gea_p13",
         "parameters": {},
         "includeTotal": false
       },
@@ -1654,7 +1839,718 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.logistics_provider FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR e.cust_code LIKE :gea_p8 OR e.cust_name LIKE :gea_p8) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.logistics_provider) g",
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.logistics_provider FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.logistics_provider) g",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "orders.evidence": {
+      "title": "订单执行与变更来源证据",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT e.cust_order_no AS order_no,e.cust_code AS customer_code,e.material_code AS sku,e.belong_base AS base,COUNT(*) AS source_rows, MAX(e.header_addtime) AS latest_created,CASE WHEN COUNT(*)=1 THEN MAX(e.executeorderno) END AS execution_order,CASE WHEN COUNT(*)=1 THEN MAX(e.fromorderno) END AS source_order,CASE WHEN COUNT(*)=1 THEN MAX(e.fromorderlineno) END AS source_line,CASE WHEN COUNT(*)=1 THEN MAX(e.detailstatus) END AS detail_status,CASE WHEN COUNT(*)=1 THEN MAX(e.is_virtual) END AS is_virtual,CASE WHEN COUNT(*)=1 THEN MAX(e.is_short_transfer) END AS is_short_transfer,CASE WHEN COUNT(*)=1 THEN MAX(e.canceltime) END AS cancelled_at,CASE WHEN COUNT(*)=1 THEN MAX(e.custchangetime) END AS changed_at,CASE WHEN COUNT(*)=1 THEN MAX(e.requireddeliverytime) END AS required_delivery_at,CASE WHEN COUNT(*)=1 THEN MAX(e.price_sap) END AS sap_unit_price,CASE WHEN COUNT(*)=1 THEN MAX(e.goods_age_days) END AS source_goods_age_days,CASE WHEN COUNT(*)=1 THEN MAX(e.packingunitconvertrate) END AS packing_unit_rate FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) GROUP BY e.cust_order_no,e.cust_code,e.material_code,e.belong_base ORDER BY MAX(e.header_addtime) DESC,e.cust_order_no,e.cust_code,e.material_code,e.belong_base LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "order_no",
+        "customer_code",
+        "sku",
+        "base",
+        "source_rows",
+        "latest_created",
+        "execution_order",
+        "source_order",
+        "source_line",
+        "detail_status",
+        "is_virtual",
+        "is_short_transfer",
+        "cancelled_at",
+        "changed_at",
+        "required_delivery_at",
+        "sap_unit_price",
+        "source_goods_age_days",
+        "packing_unit_rate"
+      ],
+      "pagination": {
+        "countQuery": "orders.quantities.count"
+      }
+    },
+    "orders.open.summary": {
+      "title": "有效订单备单状态",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(DISTINCT e.cust_order_no) AS valid_orders,COUNT(DISTINCT CASE WHEN e.prapare_order_status='备单中' THEN e.cust_order_no END) AS preparing_orders,COUNT(DISTINCT CASE WHEN e.prapare_order_status IN ('已开未派','已派未到','运输中','已发货','装车中','备单完毕') THEN e.cust_order_no END) AS opened_orders,COUNT(DISTINCT CASE WHEN e.prapare_order_status IS NULL OR e.prapare_order_status NOT IN ('备单中','已开未派','已派未到','运输中','已发货','装车中','备单完毕') THEN e.cust_order_no END) AS unclassified_orders FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) AND e.detailstatus=10 AND e.is_stat='1'",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["valid_orders", "preparing_orders", "opened_orders", "unclassified_orders"]
+    },
+    "shortage.summary": {
+      "title": "授权待备订单源终缺",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS matched_sku_rows,COUNT(DISTINCT scope.order_no) AS matched_orders,COUNT(t.final_short_qty) AS final_quantity_coverage,COUNT(t.after_inventory_short_qty) AS after_inventory_coverage,COUNT(CASE WHEN t.source_rows>1 THEN 1 END) AS duplicate_sku_rows,SUM(t.final_short_qty) AS final_short_qty,SUM(t.after_inventory_short_qty) AS after_inventory_short_qty,COUNT(CASE WHEN t.final_short_qty>0 THEN 1 END) AS shortage_sku_rows,COUNT(DISTINCT CASE WHEN t.final_short_qty>0 THEN scope.order_no END) AS shortage_orders FROM (SELECT t.executeorderno,t.material_code,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(t.final_short_qty) END AS final_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.after_inventory_short_qty) END AS after_inventory_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.needbillingdate) END AS need_billing_at FROM agents_scm_shortage_trace_f t WHERE t.source_flag='缺货供应匹配' GROUP BY t.executeorderno,t.material_code) t INNER JOIN (SELECT e.executeorderno,e.material_code,MAX(e.cust_order_no) AS order_no,MAX(e.cust_code) AS customer_code,MAX(e.belong_base) AS base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) AND e.detailstatus=10 AND e.is_stat='1' AND e.prapare_order_status='备单中' GROUP BY e.executeorderno,e.material_code HAVING COUNT(DISTINCT e.cust_order_no)=1 AND COUNT(DISTINCT e.cust_code)=1 AND COUNT(DISTINCT e.belong_base)=1) scope ON scope.executeorderno=t.executeorderno AND scope.material_code=t.material_code",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "matched_sku_rows",
+        "matched_orders",
+        "final_quantity_coverage",
+        "duplicate_sku_rows",
+        "final_short_qty",
+        "after_inventory_short_qty",
+        "shortage_sku_rows",
+        "shortage_orders",
+        "after_inventory_coverage"
+      ]
+    },
+    "shortage.detail": {
+      "title": "授权待备订单SKU源缺货",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT scope.order_no,scope.customer_code,scope.base,t.executeorderno AS execution_order,t.material_code AS sku,t.need_billing_at,t.source_rows,t.after_inventory_short_qty,t.final_short_qty FROM (SELECT t.executeorderno,t.material_code,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(t.final_short_qty) END AS final_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.after_inventory_short_qty) END AS after_inventory_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.needbillingdate) END AS need_billing_at FROM agents_scm_shortage_trace_f t WHERE t.source_flag='缺货供应匹配' GROUP BY t.executeorderno,t.material_code) t INNER JOIN (SELECT e.executeorderno,e.material_code,MAX(e.cust_order_no) AS order_no,MAX(e.cust_code) AS customer_code,MAX(e.belong_base) AS base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) AND e.detailstatus=10 AND e.is_stat='1' AND e.prapare_order_status='备单中' GROUP BY e.executeorderno,e.material_code HAVING COUNT(DISTINCT e.cust_order_no)=1 AND COUNT(DISTINCT e.cust_code)=1 AND COUNT(DISTINCT e.belong_base)=1) scope ON scope.executeorderno=t.executeorderno AND scope.material_code=t.material_code ORDER BY scope.order_no,scope.customer_code,scope.base,t.executeorderno,t.material_code LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "order_no",
+        "customer_code",
+        "base",
+        "execution_order",
+        "sku",
+        "need_billing_at",
+        "source_rows",
+        "after_inventory_short_qty",
+        "final_short_qty"
+      ],
+      "pagination": {
+        "countQuery": "shortage.detail.count"
+      }
+    },
+    "shortage.detail.count": {
+      "title": "源缺货明细计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT t.executeorderno,t.material_code,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(t.final_short_qty) END AS final_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.after_inventory_short_qty) END AS after_inventory_short_qty,CASE WHEN COUNT(*)=1 THEN MAX(t.needbillingdate) END AS need_billing_at FROM agents_scm_shortage_trace_f t WHERE t.source_flag='缺货供应匹配' GROUP BY t.executeorderno,t.material_code) t INNER JOIN (SELECT e.executeorderno,e.material_code,MAX(e.cust_order_no) AS order_no,MAX(e.cust_code) AS customer_code,MAX(e.belong_base) AS base FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) AND e.detailstatus=10 AND e.is_stat='1' AND e.prapare_order_status='备单中' GROUP BY e.executeorderno,e.material_code HAVING COUNT(DISTINCT e.cust_order_no)=1 AND COUNT(DISTINCT e.cust_code)=1 AND COUNT(DISTINCT e.belong_base)=1) scope ON scope.executeorderno=t.executeorderno AND scope.material_code=t.material_code",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "orders.facts": {
+      "title": "订单指标完整明细输入",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT e.cust_order_no,e.cust_code,e.material_code,e.header_addtime,e.cust_name,e.belong_base,e.province_region_name,e.region_name,e.sales_group_name,e.cust_type,e.material_name,e.executeorderno,e.executeorderlineno,e.fromorderno,e.fromorderlineno,e.source_material_code,e.detailstatus,e.is_stat,e.is_virtual,e.is_short_transfer,e.order_type,e.order_type_name,e.prapare_order_status,e.bizflowstatus,e.order_qty,e.adjust_order_qty,e.qtyallocated,e.qtyshipped,e.pack_unitqty,e.delivery_qty,e.receipt_qty,e.packingunitmain,e.packingunitconvertrate,e.need_qty_origin,e.change_order_qty,e.originalqtybak,e.order_qty_origin,e.order_qty_convert,e.needbillingdate,e.lastbillingdate,e.latestdispatchdate,e.latestarrivaldate,e.latestsendcardate,e.requireddeliverytime,e.requireddeliverytimebak,e.system_calc_arrival_date,e.bdwctime,e.wms_close_time,e.order_close_time,e.signstatus,e.sign_desc,e.canceltime,e.custchangetime,e.load_time,e.warehouseid,e.pickup_point,e.pickup_point_name,e.sales_person,e.order_person,e.logistics_provider,e.waybill_no,e.waybill_status,e.price_sap,e.goods_age_days FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) ORDER BY e.executeorderno,e.executeorderlineno LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "cust_order_no",
+        "cust_code",
+        "material_code",
+        "header_addtime",
+        "cust_name",
+        "belong_base",
+        "province_region_name",
+        "region_name",
+        "sales_group_name",
+        "cust_type",
+        "material_name",
+        "executeorderno",
+        "executeorderlineno",
+        "fromorderno",
+        "fromorderlineno",
+        "source_material_code",
+        "detailstatus",
+        "is_stat",
+        "is_virtual",
+        "is_short_transfer",
+        "order_type",
+        "order_type_name",
+        "prapare_order_status",
+        "bizflowstatus",
+        "order_qty",
+        "adjust_order_qty",
+        "qtyallocated",
+        "qtyshipped",
+        "pack_unitqty",
+        "delivery_qty",
+        "receipt_qty",
+        "packingunitmain",
+        "packingunitconvertrate",
+        "need_qty_origin",
+        "change_order_qty",
+        "originalqtybak",
+        "order_qty_origin",
+        "order_qty_convert",
+        "needbillingdate",
+        "lastbillingdate",
+        "latestdispatchdate",
+        "latestarrivaldate",
+        "latestsendcardate",
+        "requireddeliverytime",
+        "requireddeliverytimebak",
+        "system_calc_arrival_date",
+        "bdwctime",
+        "wms_close_time",
+        "order_close_time",
+        "signstatus",
+        "sign_desc",
+        "canceltime",
+        "custchangetime",
+        "load_time",
+        "warehouseid",
+        "pickup_point",
+        "pickup_point_name",
+        "sales_person",
+        "order_person",
+        "logistics_provider",
+        "waybill_no",
+        "waybill_status",
+        "price_sap",
+        "goods_age_days"
+      ],
+      "pagination": {
+        "countQuery": "orders.facts.count"
+      }
+    },
+    "orders.facts.count": {
+      "title": "订单指标输入计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM agents_scm_execute_detail_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)",
         "parameters": {},
         "includeTotal": false
       },
@@ -1664,21 +2560,21 @@
   "sourceGaps": [
     {
       "metric": "未开订单数 / 未开满足率",
-      "reason": "执行表缺有效执行单映射及待开状态字段；OCP已下发不能解释成已开或未开。调整需求取值、排除规则、数量单位待确认。",
+      "reason": "有效明细状态10、纳统标志1与备单状态=备单中确定待备订单；占单量换算为CS箱，完整需求按来源单行去重。需求冲突、未知换算或重复执行键不使用部分结果代替整体满足率。",
       "metricEn": "Unopened orders / allocation fulfillment",
-      "reasonEn": "Valid execution mapping, unopened status, demand rules and quantity units are missing; OCP issued does not establish opened/unopened status."
+      "reasonEn": "Preparing counts use detail status 10, statistical inclusion 1 and explicit preparation state. Allocation is converted to CS boxes and demand is deduplicated by source line. Conflicting demand, unknown conversion and duplicate execution keys do not produce partial overall fulfillment rates."
     },
     {
       "metric": "发货订单满足率",
-      "reason": "缺执行单有效性、虚拟/短拨/调账/人工排除及KA需求取值规则；同源单同SKU的重复需求不能相加。",
+      "reason": "已接明细有效性、虚拟/短拨标记；调账、安全库存、内部订单、人工排除及KA需求取值仍未完整确认，同源单同SKU重复需求不能相加。",
       "metricEn": "Shipment fulfillment",
-      "reasonEn": "Execution validity, exclusions and KA demand rules are missing. Repeated demand across execution lines must not be summed."
+      "reasonEn": "Validity and virtual/short-transfer flags are available; remaining exclusions and KA demand selection are not fully confirmed. Repeated demand cannot be summed."
     },
     {
       "metric": "作废率 / 改单率",
-      "reason": "数量表无订单主键、锁定期及变更事件时间，不能证明12小时后作废/锁定期改单或计算按张数比例；阈值文档改单严重值方向冲突。",
+      "reason": "已接来源单、执行单、作废时间及客户改单时间；全部O接收订单分母、锁定期与有效提报量仍待确认，改单严重阈值存在方向冲突。",
       "metricEn": "Cancellation / change rate",
-      "reasonEn": "No unique order key, lock-period event or change time is available. Quantity ratios cannot replace order counts. The change-rate severity inequality is conflicting."
+      "reasonEn": "Source/execution identities and cancellation/change timestamps are available; full received-order denominators, lock periods and valid submitted demand remain unconfirmed. Severity thresholds conflict."
     },
     {
       "metric": "准交率",
@@ -1688,9 +2584,9 @@
     },
     {
       "metric": "终缺 / 当天及之前 / 未来5日累计终缺",
-      "reason": "源终缺只按原字段展示；无快照时间、分配账本、供需单位及时间版本，不能重建去重供应分配或作为完整当前终缺。",
+      "reason": "已通过当前授权执行单与SKU关联缺货供应匹配记录，汇总唯一源键的final_short_qty并发布覆盖；重复键或未关联记录不补零。源快照与完整分配账本未确认，暂不重算时间窗及供应分配。",
       "metricEn": "Final shortage / current and five-day windows",
-      "reasonEn": "Source shortages are shown as source values only. Snapshot dates, allocation ledger, supply dates and common units are missing."
+      "reasonEn": "Unique source final_short_qty facts are joined through authorized execution orders and SKUs with explicit coverage. Duplicates and unmatched records are not filled with zero. Snapshot and allocation ledger remain unconfirmed; time windows and supply allocations are not recomputed."
     },
     {
       "metric": "可发货天数",
@@ -1700,9 +2596,9 @@
     },
     {
       "metric": "未来5日排产 / 调拨 / OEM / 货龄分箱",
-      "reason": "当前库存日汇总不能证明未来确认供应、OEM归属或批次40/60/90/120天分布；超60天源字段与文档≥60天边界未统一。",
+      "reason": "已按生产日期接入昨日工厂仓批次40/60/90/120天分箱；无昨日快照时保持未知。未来确认供应及OEM归属仍缺依据。",
       "metricEn": "Five-day supply / OEM / age bins",
-      "reasonEn": "Inventory daily aggregates do not establish confirmed future supply, OEM ownership or 40/60/90/120-day batch bins. The source over-60 boundary differs from at-least-60."
+      "reasonEn": "Factory batch age bins use production dates and a prior-day snapshot; absent snapshots remain unknown. Confirmed future supplies and OEM mapping remain unavailable."
     },
     {
       "metric": "销售确认与业务下发",

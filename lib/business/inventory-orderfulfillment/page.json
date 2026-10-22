@@ -4,6 +4,6 @@
   "pageIds": [
     "inventory-orderfulfillment"
   ],
-  "consumerCode": "orderfulfillment-preview",
+  "consumerCode": "order01",
   "maxEffect": "view"
 }
