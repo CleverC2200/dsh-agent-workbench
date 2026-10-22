@@ -315,7 +315,14 @@ export async function sourceChecks(result, phase) {
       createHash('sha256').update(readFileSync(input)).digest('hex'),
     ];
     if (repo === 'dsh-gea-plugin')
-      args.push('--final-group-workbench', workbench, '--prepare-inputs', '--prepare-sdk');
+      args.push(
+        '--final-group-workbench',
+        workbench,
+        '--prepare-inputs',
+        '--prepare-sdk',
+        '--test-file-concurrency',
+        '3',
+      );
     if (repo === 'dsh-agent-workbench') args.push('--browser', '--prepare-browser');
     run(process.execPath, args, root, env);
     return;
