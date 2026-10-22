@@ -3,6 +3,7 @@ import { createShipment } from './shipment.js';
 import { prototypeProducts } from './prototype-products.js';
 import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
+import { readFactMonth } from './facts.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -278,14 +279,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       ),
     );
-  function Source({ type, draft, read, update, error, busy }) {
+  function Source({ type, draft, read, sync, update, error, busy }) {
     const definition = sourceDefinitions[type];
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
+    const business = draft[type + 'Source'] === 'business';
+    const detailColumns = business
+      ? [
+          ...sourceColumns,
+          ...(type === 'report' ? ['月初数量', '纠偏数量'] : ['数量', '含赠品数量', '不含税收入']),
+        ]
+      : [...sourceColumns, column];
     react.useEffect(() => setPage(0), [draft[type]]);
     const missing = rows.filter((row) => row[column] === '').length;
-    const total = rows.some((row) => row[column] !== '') ? quantity(rows, column) : null;
+    const total =
+      rows.some((row) => row[column] !== '') && (!business || !missing)
+        ? quantity(rows, column)
+        : null;
     const change = (changes) => {
       update(changes);
       setPage(0);
@@ -295,7 +306,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           const records = rows.filter((row) => row[preview] === name);
           return {
             名称: name,
-            数量合计: records.some((row) => row[column] !== '') ? quantity(records, column) : '',
+            数量合计:
+              records.some((row) => row[column] !== '') &&
+              (!business || records.every((row) => row[column] !== ''))
+                ? quantity(records, column)
+                : '',
             缺失数量条数: records.filter((row) => row[column] === '').length,
             代入: records.map((row) => (row[column] === '' ? '缺失' : row[column])).join(' + '),
           };
@@ -303,9 +318,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       : [];
     const displayed = preview === '明细' ? rows : grouped;
     const columns =
-      preview === '明细'
-        ? [...sourceColumns, column]
-        : ['名称', '数量合计', '缺失数量条数', '代入'];
+      preview === '明细' ? detailColumns : ['名称', '数量合计', '缺失数量条数', '代入'];
     return h(
       'section',
       { 'aria-label': definition.title, className: 'dc-card dc-source' },
@@ -313,7 +326,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         'div',
         { className: 'dc-card-head' },
         h('h3', {}, definition.title),
-        h('span', { className: 'dc-status' }, draft.files[type] ? '本地文件' : '待建表'),
+        h(
+          'span',
+          { className: 'dc-status' },
+          draft.files[type]
+            ? '本地文件'
+            : business
+              ? '业务来源'
+              : type === 'forecast'
+                ? '待建表'
+                : '待同步',
+        ),
       ),
       h(
         'div',
@@ -381,6 +404,30 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ),
           h('span', { className: 'dc-muted' }, `核对期间 ${period}`),
         ),
+        business &&
+          h(
+            'p',
+            { className: 'dc-muted' },
+            type === 'report'
+              ? '期初与纠偏为两个完整版本，分别使用，不相加；按基地×SKU汇总，源记录按客户×基地×SKU校验唯一性，缺基地或源值不可用时留空。'
+              : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',
+          ),
+        business &&
+          type === 'history' &&
+          h(
+            'p',
+            {},
+            ['数量', '含赠品数量', '不含税收入']
+              .map((field) => {
+                const known = rows.length && rows.every((row) => row[field] !== '');
+                return `${field === '数量' ? '发货数量' : field}：${known ? quantity(rows, field) + (field === '不含税收入' ? '元' : '件') : '未提供'}`;
+              })
+              .join('；'),
+          ),
+        business &&
+          draft[type + 'Metadata']?.period === period &&
+          draft[type + 'Metadata']?.partial &&
+          h('p', { className: 'dc-muted' }, '来源含不可用值，已知字段仍可核对；空值未补零。'),
         h(
           'div',
           { className: 'dc-coverage' },
@@ -416,7 +463,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             {},
             type === 'forecast'
               ? 'M+1为评估月份，M+2为下一月，后续月份依次顺延，跨年按实际年月核对。'
-              : '本页CSV仅用于本地核对。数量保留文件原值，不推断正负号的业务含义。',
+              : business
+                ? '业务数量单位为件，收入单位为元；来源缺失的分类维度保持空。任一数量缺失时，其汇总留空。'
+                : '本页CSV仅用于本地核对。数量保留文件原值，不推断正负号的业务含义。',
           ),
           h(
             'p',
@@ -452,7 +501,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               className: 'dc-link',
               disabled: !draft[type].length,
               onClick: () =>
-                downloadCsv(`${definition.short}-全部已读.csv`, definition.columns, draft[type]),
+                downloadCsv(
+                  `${definition.short}-全部已读.csv`,
+                  business ? detailColumns : definition.columns,
+                  draft[type],
+                ),
             },
             '导出全部已读明细',
           ),
@@ -465,7 +518,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h(
         'div',
         { className: 'dc-source-actions' },
-        h('button', { disabled: true, title: '业务来源表尚未建立' }, '同步'),
+        h(
+          'button',
+          {
+            disabled: type === 'forecast' || !hasMpsSource() || busy,
+            title: type === 'forecast' ? '模型预测来源待补' : undefined,
+            onClick: () => sync(type),
+          },
+          '同步',
+        ),
         h(Upload, { label: `选择${definition.short}CSV`, read: (file) => read(type, file) }),
         h(
           'button',
@@ -484,8 +545,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {
             'aria-label': '导出当前明细',
             disabled: !rows.length,
-            onClick: () =>
-              downloadCsv(`${definition.short}-${period}.csv`, [...sourceColumns, column], rows),
+            onClick: () => downloadCsv(`${definition.short}-${period}.csv`, detailColumns, rows),
           },
           '下载',
         ),
@@ -764,19 +824,40 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     };
     const sync = async (type) => {
       const id = draft.id;
+      const fact = type === 'report' || type === 'history';
+      const period = fact ? sourceSelection(draft, type).period : undefined;
       const { signal, valid } = begin(type);
       try {
-        const result = type === 'products' ? await readProducts(signal) : await readAnnual(signal);
+        const result =
+          type === 'products'
+            ? await readProducts(signal)
+            : type === 'annual'
+              ? await readAnnual(signal)
+              : await readFactMonth(type, period, signal);
         if (!valid()) return;
         setDrafts((entries) =>
           entries.map((entry) =>
             entry.id === id
               ? {
                   ...entry,
-                  [type]: type === 'products' ? result.rows : result,
+                  [type]: fact
+                    ? [
+                        ...(entry[type + 'Source'] === 'business'
+                          ? entry[type].filter((row) => row['月份'] !== period)
+                          : []),
+                        ...result.rows,
+                      ]
+                    : type === 'products'
+                      ? result.rows
+                      : result,
+                  ...(fact
+                    ? { [type + 'Source']: 'business', [type + 'Metadata']: result.metadata }
+                    : {}),
                   ...(type === 'products'
                     ? { productSource: 'business' }
-                    : { annualSource: 'business' }),
+                    : type === 'annual'
+                      ? { annualSource: 'business' }
+                      : {}),
                   files: { ...entry.files, [type]: null },
                 }
               : entry,
@@ -813,7 +894,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     ? { productSource: 'local-file' }
                     : type === 'annual'
                       ? { annualSource: 'local-file' }
-                      : {}),
+                      : { [type + 'Source']: 'local-file', [type + 'Metadata']: null }),
                   files: { ...entry.files, [type]: file.name },
                 }
               : entry,
@@ -893,6 +974,26 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         current = false;
       };
     }, [draft.id, draft.month, active]);
+    react.useEffect(() => {
+      let current = true;
+      if (active && hasMpsSource())
+        ready.then(() => {
+          if (current && !draft.files.report) void sync('report');
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, active]);
+    react.useEffect(() => {
+      let current = true;
+      if (active && hasMpsSource())
+        ready.then(() => {
+          if (current && !draft.files.history) void sync('history');
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, draft.historyYears, active]);
     const update = (changes) =>
       setDrafts((entries) =>
         entries.map((entry) => (entry.id === draft.id ? { ...entry, ...changes } : entry)),
@@ -944,10 +1045,25 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           {
             period,
             column,
-            businessSource: 'table-not-built',
+            businessSource:
+              draft[type + 'Source'] === 'business'
+                ? 'cube'
+                : type === 'forecast'
+                  ? 'table-not-built'
+                  : 'not-read',
             localFile: draft.files[type] ?? null,
             rowCount: rows.length,
-            quantity: rows.some((row) => row[column] !== '') ? quantity(rows, column) : null,
+            quantity:
+              rows.some((row) => row[column] !== '') &&
+              (draft[type + 'Source'] !== 'business' || rows.every((row) => row[column] !== ''))
+                ? quantity(rows, column)
+                : null,
+            metadata: draft[type + 'Metadata'] ?? null,
+            versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
+            shipmentMetrics:
+              type === 'history' && draft.historySource === 'business'
+                ? ['数量', '含赠品数量', '不含税收入']
+                : undefined,
             missingQuantity: rows.filter((row) => row[column] === '').length,
             dimensions: Object.fromEntries(
               dimensions.map((dimension) => [
@@ -984,7 +1100,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         productSource: draft.productSource,
         sourceSummaries,
         calculation: {
-          status: 'waiting-for-source-tables-and-business-rules',
+          status: 'waiting-for-forecast-and-business-rules',
           parameterInputs: ['report', 'history'],
           basicIndicatorInputs: ['report', 'history'],
           monthlyCalculation: 'derived-from-inputs-without-result-table',
@@ -1563,6 +1679,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               type,
               draft,
               read,
+              sync,
               update,
               error: errors[type],
               busy: busy[type],

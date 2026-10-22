@@ -41,6 +41,11 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:business/shared|lib)/configured-query-client\\.(?:mjs|d\\.mts)$",
+      "tests": ["tests/agent-sql-config.test.mjs", "tests/mps-facts.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:(?:prototypes|lib/business)/inventory-orderworkbench/|scripts/build-orderworkbench\\.mjs$)",
       "tests": ["tests/orderworkbench-reference.test.mjs"],
       "sourceTests": ["tests/orderworkbench-reference.test.mjs"]

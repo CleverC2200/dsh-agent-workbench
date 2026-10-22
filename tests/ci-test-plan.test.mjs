@@ -84,6 +84,30 @@ function fixture(t, repo = 'dsh-agent-workbench') {
   };
 }
 
+test('published named-query declarations select SQL and MPS Cube regressions', (t) => {
+  const policy = JSON.parse(readFileSync('scripts/ci-test-policy.json', 'utf8'));
+  const rule = policy.rules.find((rule) =>
+    new RegExp(rule.pattern).test('lib/configured-query-client.d.mts'),
+  );
+  assert(rule);
+  for (const file of [
+    'business/shared/configured-query-client.mjs',
+    'business/shared/configured-query-client.d.mts',
+    'lib/configured-query-client.mjs',
+    'lib/configured-query-client.d.mts',
+  ]) {
+    const f = fixture(t);
+    f.policy.rules.push(rule);
+    for (const test of rule.tests) f.put(f.root, test, 'export const fixture = true;');
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.put(f.root, file, 'export const before = true;');
+    f.checkpoint();
+    f.put(f.root, file, 'export const after = true;');
+    f.repositories[0].head = f.commit(f.root);
+    assert.deepEqual(f.plan(undefined, { sourceOnly: true }).files, [...rule.tests].sort());
+  }
+});
+
 test('local source plans combine committed, staged, unstaged and untracked inputs without changing frozen plans', (t) => {
   const f = fixture(t);
   for (const name of ['committed', 'staged', 'unstaged', 'untracked']) {

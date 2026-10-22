@@ -143,6 +143,29 @@ export function makeRequest(config, id, values) {
     )
       fail('INVALID_PERIOD', '基地计划执行须从本月月初起，交货截止不跨月');
   }
+  if (q.request.cube) {
+    const bind = (value) => {
+      if (Array.isArray(value)) return value.map(bind);
+      if (value && typeof value === 'object') {
+        if (Object.keys(value).length === 1 && own(value, '$parameter')) {
+          if (!own(parameters, value.$parameter)) fail('PARAMETER_MISMATCH', 'Cube参数未登记');
+          return structuredClone(parameters[value.$parameter]);
+        }
+        if (Object.keys(value).length === 1 && own(value, '$monthRange')) {
+          const start = parameters[value.$monthRange];
+          if (typeof start !== 'string' || !validDate(start, 'YYYY-MM-01'))
+            fail('INVALID_PERIOD', 'Cube查询必须限定单月');
+          const end = new Date(start + 'T00:00:00Z');
+          end.setUTCMonth(end.getUTCMonth() + 1);
+          end.setUTCDate(0);
+          return [start, end.toISOString().slice(0, 10)];
+        }
+        return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, bind(child)]));
+      }
+      return value;
+    };
+    return { cube: bind(q.request.cube) };
+  }
   return { sql: q.request.sql, parameters, includeTotal: false };
 }
 
