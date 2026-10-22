@@ -1,10 +1,16 @@
 # 必需检查与受影响测试
 
-PR 与 main push 由 `.github/workflows/source-quality.yml` 执行本仓 JavaScript/JSON 语法、差分空白、包版本标识和 workflow 中列出的独立回归。PR 同时执行依赖审查，`candidate-quality` 汇总并拒绝失败、取消或缺失的适用检查。该流程只检出本仓，不读取 peer baseline、不要求跨仓凭据，也不装配另外两仓。
+PR 与 main push 由 `.github/workflows/source-quality.yml` 按实际 Git 差异选择检查。纯说明文档只完成适用性判断与必需状态汇总；包内 Prompt、Skill、资源声明及其资产走资源检查；代码与未知输入保留工程检查。`candidate-quality` 拒绝失败、取消、缺失或非预期跳过的适用检查。冷分类与资源检查只需本仓；代码检查核固定 peer 后复用共享 `sourceChecks` 计划，按适用需求准备材料和运行检查。联合检查显式传入候选输入原字节摘要与已核 Workbench 源码读取器路径，交由现有候选准入验证。
 
-三仓冻结、SDK 准备、完整类型/构建、受影响集成与浏览器测试改由 `.github/workflows/quality.yml` 的手动 `workflow_dispatch` 执行，最终检查名为 `joint-quality`，不再作为日常合并条件。手动 alpha compatibility 入口保留。日常绿灯只证明上述本仓检查，不能表示三仓或客户端验收通过。
+`scripts/source-quality.mjs --phase plan|check|final` 是冷目录入口，不要求安装依赖。`plan` 从事件文件读取 PR 的 base/head 或 push 的 before/after，校验检出 HEAD，PR 按 merge-base 比较，push 按实际推送区间比较。未提供差异范围时保守选择代码检查；已提供的基线无法解析或 HEAD 不符时拒绝继续。输出 `mode=docs|resources|code` 与 `engineering`、`dependency-review`、`codeql`，供 workflow 选择适用 job；`final` 重算分类并核实际结果，不修改分支保护。
 
-下文描述手动三仓流程及其历史范围，涉及联合合并门禁的旧说明不再适用于日常 PR/main。
+资源检查覆盖变更资源组的 JSON、JS/Python 语法、Skill 元数据、相对文件引用与声明的打包字节摘要。Skill 删除或改名时同时核包内 Prompt/能力声明的 Skill 引用。资源组中的依赖清单和锁仍按代码处理。Markdown 双空格换行不再参与差分空白阻断。CodeQL 开关独立于资源分类；已有 CodeQL 的仓在资源中新增、修改或删除 JavaScript/TypeScript 源码时仍需执行现有扫描。Python 资源执行语法检查，现有 CodeQL 语言配置不覆盖 Python。工程检查的具体集合由 workflow 维护。
+
+日常代码路径通过 `affected-plan|affected-prepare|affected-check` 消费同一计划。非联合路径执行适用的知识、lint、format、类型和选中测试；需要联合消费者时进入既有联合 quality 入口。显式冻结三仓入口仍由 `.github/workflows/quality.yml` 的手动 `workflow_dispatch` 提供，alpha compatibility 保持独立。日常绿灯只证明实际选择和执行的范围，不能表示客户端或业务验收通过。
+
+本地未提交修改使用[开发构建入口](../../dsh-gea-plugin/docs/development-builds.md)的轻预检与影响计划。源码 CI 使用提交差异；本地计划明确标识当前工作树，两者不互作冻结执行回执。
+
+下文描述选择和联合执行合同；实际检查与准备需求以本次计划及回执为准。
 
 本轮按用户授权移除 GitHub 的全量测试执行。手动三仓与兼容检查使用必需检查与受影响集合，不另建定时全量任务。本地完整测试命令保留为显式工具，本轮不执行本地全量构建。
 
@@ -44,8 +50,20 @@ GEA 按冻结的完整必需及受影响集合分片。单片在已准备、构�
 
 质量汇总继续拒绝失败、取消、缺失和必需任务跳过。普通 source 事件按 PR/分支取消过期运行；手动冻结运行按 run ID 隔离。原失败和原输入保留。
 
-Workbench 的 dependency review 仅适用于同一计划中本仓 package manifest 或 npm 锁发生变化的 PR，沿 Manage 已有 action 检查 high 及以上依赖风险。最终汇总在适用时要求真实成功；无关源码与文档记为不适用。该轻量检查不代替其他仓已有安全检查，也不证明安装或发行完成。
+三仓 source-quality 的 dependency review 当前适用于代码分类的 PR，检查 high 及以上依赖风险，最终汇总要求真实成功。纯说明、资源分类及 main push 记为不适用。该检查不代替现有 CodeQL，也不证明安装或发行完成。
 
 十分钟是 PR 的实测验收目标，不能用提前超时失败、截断受影响集合或未执行的全量结果代替。冷准备、缓存命中、实际测试文件与端到端时间须分别记录。CI 通过不证明正式客户端、Native、真实业务、模型或发行验收。
 
 历史业务修复的固定源码与分支分派已封存，Git 保留原授权、输入和失败记录。当前事件由各仓已有 peer 快照及事件 reader 绑定，统一进入普通质量检查与当前选择计划。
+
+## 工具检查的材料准备
+
+纯工具与已登记隔离夹具仍执行 owner 的知识、lint、format 和实际受影响测试。工具依赖由当前清单及原锁投影，保留锁中的版本、完整性和 peer 解析，不重解版本、不修改产品清单或锁。工具下载缓存独立于产品依赖；安装成功后保存 miss，检查失败仍阻断。
+
+未登记的消费者、SDK、实际类型、构建和运行检查继续完整准备。工具路径的零 Core 检出不适用于这些消费者。准备回执 `.runtime/source-tools.json` 记录锁投影、工具、准备耗时及安装/下载分配量；缓存命中本身不证明耗时收益。
+
+## PR 到 main 的工具结果复用
+
+工具路径在实际影响计划生成后尝试复用同仓已合并PR的最新完整成功source-quality结果。回执绑定相同源码树、比较基线、固定peer、原锁、完整Node/ABI、原包管理器、平台/架构、runner镜像及实际检查集合，并核当前attempt的GitHub artifact摘要与required jobs。校验实现变更、真实类型、SDK、业务、联合和浏览器路径重新执行。凭证仅在24小时内有效，缺失、输入不同或读取异常时走原检查。
+
+分类、影响选择、workflow语义与最终candidate汇总每次重新运行。dependency review保持PR职责，Manage CodeQL保持原运行。复用决策保存在 `.runtime/source-result-reuse.json`，引用原run/attempt和artifact；它不表示在main再次执行了测试，也不授予客户端或业务运行通过。
