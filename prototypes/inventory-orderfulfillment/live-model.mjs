@@ -38,26 +38,16 @@ export function plannedShippingDays(row) {
     row[key] === null || row[key] === undefined || row[key] === '' ? null : Number(row[key]);
   const date = new Date(row.stock_date + 'T00:00:00Z');
   if (!Number.isFinite(date.getTime()) || number('source_rows') !== 1) return null;
-  const day = date.getUTCDate();
   const days = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-  if (![10, 20, days].includes(day) || number('month_days') !== days) return null;
+  if (number('month_days') !== days) return null;
   const effective = (name) => {
     const adjusted = number(name + '_adjusted');
     return adjusted !== null && adjusted > 0 ? adjusted : number(name + '_initial');
   };
-  let sales,
-    transfer,
-    divisor = days;
-  if (day === days) {
-    sales = number('next_month_sales_plan');
-    transfer = number('next_month_out_plan');
-    divisor = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 2, 0)).getUTCDate();
-  } else {
-    const main = day === 10 ? number('main_plan_initial') : effective('main_plan');
-    const bp = day === 10 ? number('bp_plan_initial') : effective('bp_plan');
-    sales = main === null || bp === null ? null : main + bp;
-    transfer = day === 10 ? number('transfer_plan_initial') : effective('transfer_plan');
-  }
+  const main = effective('main_plan');
+  const bp = effective('bp_plan');
+  const sales = main === null || bp === null ? null : main + bp;
+  const transfer = effective('transfer_plan');
   const available = number('available_qty');
   if (
     [available, sales, transfer].some(
@@ -65,7 +55,7 @@ export function plannedShippingDays(row) {
     )
   )
     return null;
-  const daily = (sales + transfer * 0.5) / divisor;
+  const daily = (sales + transfer * 0.5) / days;
   return daily > 0 ? available / daily : null;
 }
 const alias = (value) =>

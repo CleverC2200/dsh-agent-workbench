@@ -41,7 +41,8 @@ test('EA conversion, demand-based rates and distinct quantity formulas', () => {
   assert.equal(q.allocationRate, 62.5);
   assert.equal(lineQuantities({ ...line, pack_unitqty: 49 }).allocated, null);
   assert.equal(lineQuantities({ ...line, packingunitmain: null }).skuRate, null);
-  assert.equal(lineQuantities({ ...line, pack_unitqty: 110, qtyallocated: 880 }).skuRate, 100);
+  assert.equal(lineQuantities({ ...line, pack_unitqty: 110, qtyallocated: 880 }).skuRate, 90);
+  assert.equal(lineQuantities({ ...line, pack_unitqty: 110, qtyallocated: 880 }).currentShort, 10);
   assert.equal(lineQuantities({ ...line, order_qty: 0 }).skuRate, null);
 });
 test('whole-order allocation is quantity weighted, not an average of SKU percentages', () => {
@@ -59,7 +60,26 @@ test('whole-order allocation is quantity weighted, not an average of SKU percent
   ]);
   assert.equal(result.quantities[0].order_allocation_rate, 87.5);
   assert.equal(result.quantities[1].order_allocation_rate, 87.5);
-  assert.equal(result.pendingAllocationRate, (100 * (380 - 30)) / 380);
+  assert.equal(result.pendingAllocationRate, 87.5);
+});
+
+test('latest glossary keeps pending demand distinct from adjusted demand and computes opened shipment rate', () => {
+  assert.equal(computeOrderMetrics([line]).pendingAllocationRate, 50);
+  const shipped = { ...line, prapare_order_status: '运输中' };
+  assert.equal(computeOrderMetrics([shipped]).openedShipmentRate, 20);
+  assert.equal(
+    computeOrderMetrics([{ ...shipped, qtyshipped: null, delivery_qty: null }]).openedShipmentRate,
+    null,
+  );
+  assert.equal(computeOrderMetrics([shipped, shipped]).openedShipmentRate, null);
+  const now = shanghaiTime('2026-10-22 15:00:00');
+  assert.equal(
+    nodeMetrics(
+      [{ ...line, prapare_order_status: '厂外候车', latestsendcardate: '2026-10-22 14:00:00' }],
+      now,
+    ).stages.loading.overdue,
+    1,
+  );
 });
 test('duplicate execution keys and ambiguous split demand do not become partial totals', () => {
   assert.equal(computeOrderMetrics([line, line]).pendingAllocationRate, null);
