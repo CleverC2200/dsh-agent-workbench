@@ -79,6 +79,7 @@ export async function readConfiguredFacts(
     summaryOnly?: boolean;
     detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
+    scopeReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
   const config = agentSqlConfig(fallback);
@@ -108,13 +109,14 @@ export async function readConfiguredFacts(
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
     const key = JSON.stringify([config.agentId, id, values]);
-    let job = snapshot ? options.snapshotReads?.get(key) : undefined;
+    const shared = snapshot ? options.snapshotReads : options.scopeReads;
+    let job = shared?.get(key);
     if (!job) {
       job = client.read(id, values, {
         signal: options.signal,
         requiredColumns: config.queries[id].resultColumns,
       });
-      if (snapshot) options.snapshotReads?.set(key, job);
+      shared?.set(key, job);
     }
     const result = await job;
     options.signal?.throwIfAborted();
@@ -205,6 +207,12 @@ export async function readConfiguredFacts(
       value = new Date(
         Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
       ).getUTCDate();
+    if (name === 'days_remaining_in_month') {
+      const day = dateOnly(input.asOf);
+      value =
+        new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate() -
+        day.getUTCDate();
+    }
     if (name === 'next_days_in_month') {
       const next = nextMonth(month);
       value = new Date(
