@@ -12,6 +12,7 @@ import { resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { selectCiTests } from './ci-test-plan.mjs';
+import { sourceTools, writeToolProject, prepareSourceTools } from './source-tools.mjs';
 
 const git = (root, ...args) =>
   execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
@@ -78,8 +79,11 @@ export async function sourceChecks(result, phase) {
   let upstreams = 'none';
   if (repo === 'dsh-gea-plugin' || joint)
     upstreams = typecheck || joint ? 'artifacts' : selected.upstreams;
+  const tools = sourceTools(root, repo, selected, { typecheck, joint, desktopTools });
   const plan = {
     ...selected,
+    tools,
+    core: tools === null,
     staticChecks,
     typecheck,
     dependencies:
@@ -100,8 +104,17 @@ export async function sourceChecks(result, phase) {
   mkdirSync('.runtime', { recursive: true });
   writeFileSync('.runtime/source-checks-plan.json', JSON.stringify(plan, null, 2) + '\n');
   if (phase === 'affected-plan') {
+    if (tools !== null) {
+      const project = writeToolProject(root, tools);
+      if (process.env.GITHUB_OUTPUT) {
+        appendFileSync(process.env.GITHUB_OUTPUT, `tools-key=${project.key}\n`);
+        appendFileSync(process.env.GITHUB_OUTPUT, `tools-downloads=${project.downloads}\n`);
+      }
+    }
     if (process.env.GITHUB_OUTPUT)
-      for (const key of ['dependencies', 'sdk', 'browser', 'joint'])
+      appendFileSync(process.env.GITHUB_OUTPUT, `tooling=${tools !== null}\n`);
+    if (process.env.GITHUB_OUTPUT)
+      for (const key of ['dependencies', 'sdk', 'browser', 'joint', 'core'])
         appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${plan[key]}\n`);
     console.log(JSON.stringify(plan));
     return;
@@ -112,13 +125,23 @@ export async function sourceChecks(result, phase) {
     if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
       throw Error('SOURCE_PEER_LINK_MISMATCH');
   }
-  const ownerCheck = (check) =>
-    run(
+  const ownerCheck = (check) => {
+    if (tools !== null) {
+      const script = json(resolve(root, 'package.json')).scripts[check];
+      if (!script) throw Error(`SOURCE_OWNER_CHECK_REQUIRED: ${check}`);
+      return run('sh', ['-c', script], root, {
+        QUALITY_BASE_SHA: selected.diffBase,
+        DSH_WORKBENCH_CHECKOUT: workbench,
+        PATH: resolve(root, 'node_modules/.bin') + ':' + process.env.PATH,
+      });
+    }
+    return run(
       repo === 'dsh-agent-workbench' ? 'npm' : 'corepack',
       repo === 'dsh-agent-workbench' ? ['run', check] : ['pnpm', 'run', check],
       root,
       { QUALITY_BASE_SHA: selected.diffBase, DSH_WORKBENCH_CHECKOUT: workbench },
     );
+  };
   if (phase === 'affected-check' && staticChecks.includes('check:knowledge'))
     ownerCheck('check:knowledge');
   let coreHead;
@@ -136,6 +159,10 @@ export async function sourceChecks(result, phase) {
     });
   }
   if (phase === 'affected-prepare') {
+    if (tools !== null) {
+      prepareSourceTools(root, tools);
+      return;
+    }
     if (plan.dependencies && (repo === 'dsh-gea-plugin' || joint)) {
       const { prepareQualityUpstreamSources, prepareQualityUpstreams, bindQualityUpstreamInputs } =
         await import(pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs')));
@@ -190,7 +217,7 @@ export async function sourceChecks(result, phase) {
     }
     return;
   }
-  if (plan.upstreams === 'source-links') {
+  if (tools === null && plan.upstreams === 'source-links') {
     const { bindQualityUpstreamInputs } = await import(
       pathToFileURL(resolve(gea, 'scripts/quality-upstreams.mjs'))
     );

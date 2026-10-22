@@ -30,6 +30,9 @@
     },
     "tests/source-typecheck.test.mjs": {
       "dependencies": true
+    },
+    "tests/source-tools.test.mjs": {
+      "dependencies": false
     }
   },
   "rules": [
@@ -226,6 +229,16 @@
       "pattern": "^scripts/quality-peer-baseline\\.json$",
       "tests": [],
       "sourceTests": ["tests/hosted-peer-input.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/source-tools\\.mjs$",
+      "tests": ["tests/source-tools.test.mjs", "tests/source-checks.test.mjs"],
+      "sourceTests": ["tests/source-tools.test.mjs", "tests/source-checks.test.mjs"]
     }
-  ]
+  ],
+  "sourceTools": {
+    "tests/source-typecheck.test.mjs": ["typescript"],
+    "tests/source-tools.test.mjs": []
+  }
 }

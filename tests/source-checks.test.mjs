@@ -26,6 +26,7 @@ function fixture(
     staticFailure,
     preparation = false,
     localLayout = false,
+    tooling = false,
     jointAdmission = false,
   } = {},
 ) {
@@ -124,6 +125,7 @@ function fixture(
     JSON.stringify({
       type: 'module',
       packageManager: owner === 'dsh-agent-workbench' ? 'npm@11.11.0' : 'pnpm@11.7.0',
+      ...(tooling ? { devDependencies: { oxlint: '1', oxfmt: '1' } } : {}),
       scripts: {
         'check:knowledge': knowledge
           ? 'node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json'
@@ -153,6 +155,19 @@ function fixture(
       repositories: repositories.map(({ repo, head }) => ({ repo, head })),
     }),
   );
+  if (tooling)
+    put(
+      root,
+      'package-lock.json',
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          '': {},
+          'node_modules/oxlint': { version: '1', integrity: 'sha512-fixture' },
+          'node_modules/oxfmt': { version: '1', integrity: 'sha512-fixture' },
+        },
+      }),
+    );
   put(root, 'scripts/tool.mjs', 'export const value = 1;');
   put(
     root,
@@ -175,7 +190,7 @@ function fixture(
           sourceTests: ['tests/tool.test.mjs'],
         },
       ],
-      ...(preparation
+      ...(preparation || tooling
         ? { sourceFixtures: { 'tests/tool.test.mjs': { dependencies: false } } }
         : {}),
     }),
@@ -445,4 +460,26 @@ test('only the selected desktop packaging consumer prepares its small tools unde
   assert.equal(JSON.parse(planned.stdout).dependencies, true);
   const checked = f.run('affected-check');
   assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+});
+
+test('tool-only execution preserves the owner static commands and rejects their failures without Core', async (t) => {
+  for (const staticFailure of [undefined, 'lint', 'format:check'])
+    await t.test(staticFailure ?? 'success', (t) => {
+      const f = fixture(
+        t,
+        { 'scripts/tool.mjs': 'export const value = 2;' },
+        { tooling: true, staticFailure },
+      );
+      const planned = f.run('affected-plan');
+      assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+      const plan = JSON.parse(planned.stdout);
+      assert.deepEqual(plan.tools, ['oxfmt', 'oxlint']);
+      assert.equal(plan.core, false);
+      assert.equal(plan.sdk, false);
+      const checked = f.run('affected-check');
+      if (staticFailure) {
+        assert.notEqual(checked.status, 0);
+        assert.match(checked.stderr, /OWNER_STATIC_FAILURE/);
+      } else assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    });
 });
