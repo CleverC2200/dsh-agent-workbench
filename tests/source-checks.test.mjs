@@ -26,6 +26,7 @@ function fixture(
     staticFailure,
     preparation = false,
     localLayout = false,
+    jointAdmission = false,
   } = {},
 ) {
   const parent = mkdtempSync(join(tmpdir(), 'source-checks-'));
@@ -76,8 +77,26 @@ function fixture(
       put(
         path,
         'scripts/prepare-official-sdk.mjs',
-        `export function verifyOfficialSDK({coreHead}) { throw Error('SDK_SELECTED_CORE:' + coreHead); }`,
+        jointAdmission
+          ? 'export function verifyOfficialSDK() {}'
+          : `export function verifyOfficialSDK({coreHead}) { throw Error('SDK_SELECTED_CORE:' + coreHead); }`,
       );
+    if (jointAdmission && repo === 'dsh-agent-workbench') {
+      put(path, 'scripts/read-hosted-peer-input.mjs', 'console.log(JSON.stringify({}));');
+      put(
+        path,
+        'scripts/write-hosted-group.mjs',
+        `import { writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; writeFileSync(resolve('../../candidate-input.json'), '{"group":"fixture"}\\n');`,
+      );
+    }
+    if (jointAdmission && repo === 'dsh-gea-plugin') {
+      put(path, 'tests/profile.mjs', 'export const profile = true;');
+      put(
+        path,
+        'scripts/run-quality-ci.mjs',
+        `import assert from 'node:assert/strict'; import { parseArgs } from 'node:util'; import { readFileSync, writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; import { createHash } from 'node:crypto'; const { values } = parseArgs({ options: { 'source-only': { type: 'boolean' }, input: { type: 'string' }, 'core-source': { type: 'string' }, 'final-group-sha256': { type: 'string' }, 'final-group-workbench': { type: 'string' }, 'prepare-inputs': { type: 'boolean' }, 'prepare-sdk': { type: 'boolean' } } }); assert.equal(values['final-group-workbench'], resolve('../../source/dsh-agent-workbench'), 'CANDIDATE_FINAL_GROUP_REQUIRED'); assert.equal(values['final-group-sha256'], createHash('sha256').update(readFileSync(values.input)).digest('hex')); writeFileSync('.runtime/joint-admitted', values['final-group-workbench']);`,
+      );
+    }
     if (preparation && repo === 'dsh-gea-plugin') {
       put(
         path,
@@ -310,6 +329,23 @@ test('a tool-only source change runs its behavior test cold and excludes unrelat
   const executed = f.run('affected-check');
   assert.equal(executed.status, 0, executed.stderr);
   assert.match(executed.stdout, /passed/);
+});
+
+test('joint GEA checks receive the exact Workbench reader and hashed candidate bytes', (t) => {
+  const f = fixture(
+    t,
+    {
+      'scripts/tool.mjs': 'export const value = 2;',
+      'tests/tool.test.mjs': 'import "../scripts/tool.mjs"; import "./profile.mjs";',
+    },
+    { repo: 'dsh-gea-plugin', sdk: true, jointAdmission: true },
+  );
+  const checked = f.run('affected-check');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.equal(
+    readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'),
+    realpathSync(f.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path),
+  );
 });
 
 test('affected behavior failure blocks source checks without preparing unrelated inputs', (t) => {
