@@ -49,7 +49,7 @@ function fixture(t, files, changed) {
   };
 }
 
-test('a README-only pull request needs no engineering checks, including Markdown hard breaks', (t) => {
+test('a README-only PR retains classification and final status without engineering checks', (t) => {
   const repo = fixture(
     t,
     { 'README.md': 'Before\n', 'unrelated.js': 'broken syntax !' },
