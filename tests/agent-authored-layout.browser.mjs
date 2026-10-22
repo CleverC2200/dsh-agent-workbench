@@ -230,8 +230,11 @@ test('fc: order card displays monthly shortage and stock allocation without inve
   await expect(card.locator('dl')).toContainText('库存备单占用86,814.2箱');
   await expect(card.locator('.kpi-value')).toHaveText('0箱');
   await expect(card).toHaveAttribute('title', /按缺失值规则显示0，不代表实际没有待发订单/);
+  assert.ok(calls.some((q) => q.queryId === 'health.summary'));
   assert.ok(
-    calls.some((q) => q.queryId === 'health.summary' && q.parameters.warehouse_type === '分仓'),
+    calls
+      .filter((q) => q.queryId === 'health.summary')
+      .every((q) => !('warehouse_type' in q.parameters)),
   );
   assert.ok(
     calls.some((q) => q.queryId === 'orders.summary' && q.parameters.pickup_type === '分仓'),
@@ -335,7 +338,7 @@ test('QLL cards retain layer maximum ages and monthly shortage values, including
     if (query.queryId === 'health.summary')
       Object.assign(result.rows[0], {
         base_max_age: 405,
-        max_age: query.parameters.warehouse_type === '分仓' ? 381 : 405,
+        max_age: 381,
       });
     if (query.queryId === 'orders.summary')
       Object.assign(result.rows[0], {
