@@ -313,10 +313,9 @@ export async function sourceChecks(result, phase) {
       resolve(root, '../../source/official-core'),
       '--final-group-sha256',
       createHash('sha256').update(readFileSync(input)).digest('hex'),
-      '--final-group-workbench',
-      workbench,
     ];
-    if (repo === 'dsh-gea-plugin') args.push('--prepare-inputs', '--prepare-sdk');
+    if (repo === 'dsh-gea-plugin')
+      args.push('--final-group-workbench', workbench, '--prepare-inputs', '--prepare-sdk');
     if (repo === 'dsh-agent-workbench') args.push('--browser', '--prepare-browser');
     run(process.execPath, args, root, env);
     return;
