@@ -41,6 +41,22 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^(?:(?:business|prototypes|lib/business)/inventory-orderfulfillment/|scripts/build-order-fulfillment\\.mjs$)",
+      "tests": [
+        "tests/fulfillment-governed.test.mjs",
+        "tests/fulfillment-live-dom.test.mjs",
+        "tests/fulfillment-metrics.test.mjs",
+        "tests/fulfillment-panels.test.mjs",
+        "tests/fulfillment-presentation.test.mjs",
+        "tests/fulfillment-live.browser.mjs"
+      ],
+      "sourceTests": [
+        "tests/fulfillment-governed.test.mjs",
+        "tests/fulfillment-metrics.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:business/shared|lib)/configured-query-client\\.(?:mjs|d\\.mts)$",
       "tests": ["tests/agent-sql-config.test.mjs", "tests/mps-facts.browser.mjs"]
     },
