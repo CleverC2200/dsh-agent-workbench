@@ -324,13 +324,19 @@ export function originalQllLayerView(
 ): BusinessPresentation {
   const dealer = layer === 'customer',
     base = layer === 'base';
-  const id = base ? 'organization' : dealer ? 'channel-sku' : 'branch-stock';
+  const id = base
+    ? 'organization'
+    : dealer
+      ? 'channel-sku'
+      : config.sourceViews.views.some((v: any) => v.id === 'branch-structure')
+        ? 'branch-structure'
+        : 'branch-stock';
   const source = config.sourceViews.views.find((v: any) => v.id === id);
   const missing = (field: string, label: string) => ({ field, label, unavailable: true });
   const col = (field: string, valueField: string, label: string, secondary?: string[]) => ({
     ...source.columns.find((c: any) => c.field === valueField),
     field,
-    valueField,
+    valueField: source.columns.find((c: any) => c.field === valueField)?.valueField ?? valueField,
     label,
     secondary,
   });
@@ -354,7 +360,11 @@ export function originalQllLayerView(
             ? ['material_name', 'sku']
             : ['material_name', 'material_code'],
       ),
-      missing('missing_business_status', '经营状态'),
+      base
+        ? col('missing_business_status', 'missing_judgment', '经营状态')
+        : dealer
+          ? missing('missing_business_status', '经营状态')
+          : col('missing_business_status', 'warning', '经营状态'),
       dealer
         ? zero('company_inventory', '公司实物库存（箱）')
         : col('company_inventory', inventory, '公司实物库存（箱）'),
@@ -378,13 +388,15 @@ export function originalQllLayerView(
         ? col('turnover', 'matched_stock_days', '周转（天）')
         : dealer
           ? col('turnover', 'stock_days', '周转（天）')
-          : missing('turnover', '周转（天）'),
+          : col('turnover', 'historical_turnover', '周转（天）'),
       dealer
         ? col('average_age', 'analysis_avg_stock_age', '平均货龄（天）')
-        : missing('average_age', '平均货龄（天）'),
+        : col('average_age', 'average_age', '平均货龄（天）'),
       base
         ? col('big_date', 'known_over60', '大日期库存（箱）')
-        : missing('big_date', '大日期库存（箱）'),
+        : !dealer
+          ? col('big_date', 'overaged_qty', '大日期库存（箱）')
+          : missing('big_date', '大日期库存（箱）'),
       base
         ? col('target_turnover', 'matched_target_days', '目标周转（天）')
         : missing('target_turnover', '目标周转（天）'),
