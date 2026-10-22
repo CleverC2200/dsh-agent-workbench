@@ -61,3 +61,9 @@ Workbench 的 dependency review 仅适用于同一计划中本仓 package manife
 纯工具与已登记隔离夹具仍执行 owner 的知识、lint、format 和实际受影响测试。工具依赖由当前清单及原锁投影，保留锁中的版本、完整性和 peer 解析，不重解版本、不修改产品清单或锁。工具下载缓存独立于产品依赖；安装成功后保存 miss，检查失败仍阻断。
 
 未登记的消费者、SDK、实际类型、构建和运行检查继续完整准备。工具路径的零 Core 检出不适用于这些消费者。准备回执 `.runtime/source-tools.json` 记录锁投影、工具、准备耗时及安装/下载分配量；缓存命中本身不证明耗时收益。
+
+## PR 到 main 的工具结果复用
+
+工具路径在实际影响计划生成后尝试复用同仓已合并PR的最新完整成功source-quality结果。回执绑定相同源码树、比较基线、固定peer、原锁、完整Node/ABI、原包管理器、平台/架构、runner镜像及实际检查集合，并核当前attempt的GitHub artifact摘要与required jobs。校验实现变更、真实类型、SDK、业务、联合和浏览器路径重新执行。凭证仅在24小时内有效，缺失、输入不同或读取异常时走原检查。
+
+分类、影响选择、workflow语义与最终candidate汇总每次重新运行。dependency review保持PR职责，Manage CodeQL保持原运行。复用决策保存在 `.runtime/source-result-reuse.json`，引用原run/attempt和artifact；它不表示在main再次执行了测试，也不授予客户端或业务运行通过。
