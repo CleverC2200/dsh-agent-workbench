@@ -127,7 +127,9 @@ test('complete read starts first page before count returns and still checks the 
     calls.push(options.queryId);
     if (options.queryId.endsWith('.count')) {
       if (calls.filter((id) => id.endsWith('.count')).length === 1)
-        await new Promise((resolve) => { releaseCount = resolve; });
+        await new Promise((resolve) => {
+          releaseCount = resolve;
+        });
       return { rows: [{ total: 0 }], configVersion: 'v1' };
     }
     return { rows: [], configVersion: 'v1' };
