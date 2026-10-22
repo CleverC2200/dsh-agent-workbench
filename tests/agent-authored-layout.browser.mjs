@@ -1470,9 +1470,17 @@ for (const [inventory, inTransit, stockDays] of [
       .getByRole('button')
       .filter({ has: frame.getByText('库存周转', { exact: true }) });
     await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
-    await expect.poll(() => calls.some((q) => q.queryId === 'dealer.stock.summary')).toBe(true);
-    const summaryReads = calls.filter((q) => q.queryId === 'dealer.stock.summary').length;
+    await expect(stock).toContainText('5,580');
+    assert.equal(
+      calls.filter((q) => q.queryId === 'dealer.stock.summary').length,
+      0,
+      'disabled channel does not load the customer summary',
+    );
     await frame.getByRole('checkbox', { name: '含渠道', exact: true }).check();
+    await expect
+      .poll(() => calls.filter((q) => q.queryId === 'dealer.stock.summary').length)
+      .toBe(1);
+    const summaryReads = 1;
     const value = (card, label) =>
       card
         .locator('dl > div')
@@ -1513,7 +1521,7 @@ for (const [inventory, inTransit, stockDays] of [
     assert.equal(
       calls.filter((q) => q.queryId === 'dealer.stock.summary').length,
       summaryReads,
-      'switch reuses the SQL summary',
+      'customer pagination reuses the loaded SQL summary',
     );
     for (const width of [1280, 560, 480, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });

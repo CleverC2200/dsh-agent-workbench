@@ -65,3 +65,12 @@ body {
     align-items: flex-end;
   }
 }
+
+/* The retained white search fields need body-text contrast in either Host theme. */
+.delivery-order-searches input,
+.delivery-order-searches select {
+  color: #555d68;
+}
+.delivery-order-searches input::placeholder {
+  color: #667085;
+}
