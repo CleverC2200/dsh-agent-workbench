@@ -855,7 +855,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     : {}),
                   ...(type === 'products'
                     ? { productSource: 'business' }
-                    : { annualSource: 'business' }),
+                    : type === 'annual'
+                      ? { annualSource: 'business' }
+                      : {}),
                   files: { ...entry.files, [type]: null },
                 }
               : entry,

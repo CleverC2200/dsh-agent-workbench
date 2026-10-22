@@ -104,6 +104,26 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   await report.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog').locator('tbody tr').first()).toContainText('0');
 });
+test('refreshing facts keeps an uploaded annual plan marked as a local file', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, fixture);
+  const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
+  const annual = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await frame.getByLabel('选择年度计划CSV', { exact: true }).setInputFiles({
+    name: '年度计划.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('月份,大类,数量\n2026-10,汤圆,123'),
+  });
+  await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
+  const before = calls.filter((call) => call.queryId === 'facts.report').length;
+  await report.getByRole('button', { name: '同步', exact: true }).click();
+  await expect
+    .poll(() => calls.filter((call) => call.queryId === 'facts.report').length)
+    .toBe(before + 1);
+  await expect(report.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+  await expect(annual.getByText('本地文件', { exact: true })).toBeVisible();
+  await expect(annual.getByText('业务数据 · 源数量', { exact: true })).toHaveCount(0);
+});
 test('truncated facts are rejected and a late historical period cannot overwrite the selected year', async (t) => {
   let release;
   const pending = new Promise((resolve) => {
