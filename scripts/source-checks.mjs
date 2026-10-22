@@ -290,6 +290,8 @@ export async function sourceChecks(result, phase) {
         '--prepare-sdk',
         '--test-file-concurrency',
         '3',
+        '--test-timings',
+        resolve(root, 'scripts/quality-test-timings.json'),
       );
     if (repo === 'dsh-agent-workbench') args.push('--browser', '--prepare-browser');
     run(process.execPath, args, root, env);

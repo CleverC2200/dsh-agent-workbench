@@ -12,6 +12,8 @@
 
 日常综合门禁与冻结 CI 入口见 [质量门禁](../QUALITY.md)。
 
+推送或冻结发布候选前，先完成已有轻预检、影响计划、适用静态检查及定向回归，再集中提交。核对计划中的选择原因、Profile 范围和未知成本。发布候选固定后，仅必要修复或合并要求改变输入，并重新核对应证据。日常成本和计时参考更新见 [当前 CI 规则](ci-required-and-affected.md)。
+
 ```sh
 npm ci --ignore-scripts --prefer-offline
 npm run check:knowledge

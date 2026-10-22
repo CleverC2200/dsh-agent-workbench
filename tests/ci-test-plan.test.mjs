@@ -84,6 +84,80 @@ function fixture(t, repo = 'dsh-agent-workbench') {
   };
 }
 
+test('version-only manifests and generated stamps select their declared contracts without Host consumers', (t) => {
+  const f = fixture(t);
+  f.policy.versionTests = ['tests/version.test.mjs'];
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.0' }));
+  const lock = (version) =>
+    JSON.stringify({
+      version,
+      packages: { '': { version }, 'node_modules/helper': { version: '2.0.0' } },
+    });
+  f.put(f.root, 'package-lock.json', lock('1.0.0'));
+  const stamp = (version) =>
+    `export const pluginPackageVersion = Object.freeze({\n  name: 'fixture',\n  version: '${version}',\n} as const);\n`;
+  f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.0'));
+  f.put(f.root, 'src/consumer.ts', 'import "./value.js"; import "./plugin-package-version.js";');
+  f.put(f.root, 'tests/version.test.mjs', 'readFileSync("package.json");');
+  f.put(
+    f.root,
+    'tests/profile.test.mjs',
+    'import "../src/consumer.js"; readFileSync("package.json");',
+  );
+  f.checkpoint();
+  f.put(f.root, 'package.json', JSON.stringify({ name: 'fixture', version: '1.0.1' }));
+  f.put(f.root, 'package-lock.json', lock('1.0.1'));
+  f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.1'));
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan(undefined, { sourceOnly: true });
+  assert.deepEqual(plan.files, ['tests/version.test.mjs']);
+  assert.equal(plan.changes.find((change) => change.file === 'package.json').versionOnly, true);
+  assert.equal(
+    plan.changes.find((change) => change.file === 'package-lock.json').versionOnly,
+    true,
+  );
+});
+
+test('dependency, export, stamp logic and Host changes retain their real consumers beside a version bump', (t) => {
+  for (const change of ['dependency', 'export', 'export-order', 'stamp', 'host']) {
+    const f = fixture(t);
+    const manifest = { name: 'fixture', version: '1.0.0', dependencies: { helper: '1' } };
+    if (change === 'export-order')
+      manifest.exports = { '.': { node: './src/value.ts', default: './src/consumer.ts' } };
+    f.policy.versionTests = ['tests/version.test.mjs'];
+    f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+    f.put(f.root, 'package.json', JSON.stringify(manifest));
+    const stamp = (version) =>
+      `export const pluginPackageVersion = Object.freeze({\n  name: 'fixture',\n  version: '${version}',\n} as const);\n`;
+    f.put(f.root, 'src/plugin-package-version.ts', stamp('1.0.0'));
+    f.put(f.root, 'src/consumer.ts', 'import "./value.js"; import "./plugin-package-version.js";');
+    f.put(f.root, 'tests/version.test.mjs', 'readFileSync("package.json");');
+    f.put(
+      f.root,
+      'tests/profile.test.mjs',
+      'import "../src/consumer.js"; readFileSync("package.json");',
+    );
+    f.checkpoint();
+    const next = { ...manifest, version: '1.0.1' };
+    if (change === 'dependency') next.dependencies = { helper: '2' };
+    if (change === 'export') next.exports = './src/consumer.ts';
+    if (change === 'export-order')
+      next.exports = { '.': { default: './src/consumer.ts', node: './src/value.ts' } };
+    f.put(f.root, 'package.json', JSON.stringify(next));
+    f.put(
+      f.root,
+      'src/plugin-package-version.ts',
+      stamp('1.0.1') + (change === 'stamp' ? 'run();' : ''),
+    );
+    if (change === 'host') f.put(f.root, 'src/value.ts', 'export const value = 2;');
+    f.repositories[0].head = f.commit(f.root);
+    const plan = f.plan(undefined, { sourceOnly: true });
+    assert.ok(plan.files.includes('tests/profile.test.mjs'), change);
+    assert.ok(plan.files.includes('tests/affected.test.mjs'), change);
+  }
+});
+
 test('published named-query declarations select SQL and MPS Cube regressions', (t) => {
   const policy = JSON.parse(readFileSync('scripts/ci-test-policy.json', 'utf8'));
   const rule = policy.rules.find((rule) =>
