@@ -184,25 +184,21 @@ export function prepareSourceTools(root, packages) {
   const project = writeToolProject(root, packages);
   const npm = project.manifest.packageManager.startsWith('npm@');
   const command = npm ? 'npm' : 'corepack';
+  const privateDownloads =
+    Boolean(process.env.CI) ||
+    (!npm &&
+      existsSync(resolve(project.directory, 'node_modules/.modules.yaml')) &&
+      existsSync(project.downloads));
   const args = npm
-    ? [
-        'ci',
-        '--ignore-scripts',
-        '--prefer-offline',
-        '--no-audit',
-        '--no-fund',
-        '--cache',
-        project.downloads,
-      ]
-    : [
-        'pnpm',
-        'install',
-        '--frozen-lockfile',
-        '--ignore-scripts',
-        '--prefer-offline',
-        '--store-dir',
-        project.downloads,
-      ];
+    ? ['ci', '--ignore-scripts', '--prefer-offline', '--no-audit', '--no-fund']
+    : ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'];
+  if (privateDownloads) args.push(npm ? '--cache' : '--store-dir', project.downloads);
+  const downloads = privateDownloads
+    ? project.downloads
+    : execFileSync(command, npm ? ['config', 'get', 'cache'] : ['pnpm', 'store', 'path'], {
+        cwd: project.directory,
+        encoding: 'utf8',
+      }).trim();
   const start = Date.now();
   execFileSync(command, args, { cwd: project.directory, stdio: 'inherit' });
   if (
@@ -224,7 +220,8 @@ export function prepareSourceTools(root, packages) {
   const receipt = {
     key: project.key,
     installedKiB: allocatedKiB(modules),
-    downloadsKiB: allocatedKiB(project.downloads),
+    downloadsKiB: privateDownloads ? allocatedKiB(downloads) : null,
+    downloads: { path: downloads, shared: !privateDownloads },
     packages,
     preparationMs: Date.now() - start,
     core: false,
