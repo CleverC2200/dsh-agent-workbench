@@ -1,6 +1,6 @@
 # 必需检查与受影响测试
 
-PR 与 main push 由 `.github/workflows/source-quality.yml` 按实际 Git 差异选择检查。纯说明文档只完成适用性判断与必需状态汇总；包内 Prompt、Skill、资源声明及其资产走资源检查；代码与未知输入保留工程检查。`candidate-quality` 拒绝失败、取消、缺失或非预期跳过的适用检查。冷分类与资源检查只需本仓；代码检查核固定 peer 后复用共享 `sourceChecks` 计划，按适用需求准备材料和运行检查。
+PR 与 main push 由 `.github/workflows/source-quality.yml` 按实际 Git 差异选择检查。纯说明文档只完成适用性判断与必需状态汇总；包内 Prompt、Skill、资源声明及其资产走资源检查；代码与未知输入保留工程检查。`candidate-quality` 拒绝失败、取消、缺失或非预期跳过的适用检查。冷分类与资源检查只需本仓；代码检查核固定 peer 后复用共享 `sourceChecks` 计划，按适用需求准备材料和运行检查。联合检查显式传入候选输入原字节摘要与已核 Workbench 源码读取器路径，交由现有候选准入验证。
 
 `scripts/source-quality.mjs --phase plan|check|final` 是冷目录入口，不要求安装依赖。`plan` 从事件文件读取 PR 的 base/head 或 push 的 before/after，校验检出 HEAD，PR 按 merge-base 比较，push 按实际推送区间比较。未提供差异范围时保守选择代码检查；已提供的基线无法解析或 HEAD 不符时拒绝继续。输出 `mode=docs|resources|code` 与 `engineering`、`dependency-review`、`codeql`，供 workflow 选择适用 job；`final` 重算分类并核实际结果，不修改分支保护。
 
