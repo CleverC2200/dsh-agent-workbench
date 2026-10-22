@@ -5,6 +5,7 @@ import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
 import { createWorkflow } from './workflow-view.js';
+import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 const productColumns = [
   '基地',
   '产品编码',
@@ -15,7 +16,6 @@ const productColumns = [
   '老品编码',
   '老品名称',
 ];
-const categories = ['饺子', '调理肉制品', '汤圆', '面点', '休闲', '馄饨', '粽子', '饼类'];
 const annualColumns = ['月份', '大类', '数量'];
 const dimensions = ['基地', '大类', '系列', '产品编码'];
 const sourceColumns = ['月份', ...productColumns.slice(0, 6)];
