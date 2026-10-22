@@ -55,7 +55,9 @@ function fixture(
     const path =
       owner === 'dsh-gea-plugin' && !localLayout
         ? join(parent, repo === 'dsh-agent-workbench' ? 'source' : 'candidate', repo)
-        : join(parent, repo);
+        : jointAdmission
+          ? join(parent, 'candidate', repo)
+          : join(parent, repo);
     mkdirSync(path, { recursive: true });
     git(path, 'init', '-q');
     put(path, 'README.md', 'fixture');
@@ -88,6 +90,12 @@ function fixture(
         'scripts/write-hosted-group.mjs',
         `import { writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; writeFileSync(resolve('../../candidate-input.json'), '{"group":"fixture"}\\n');`,
       );
+      if (owner === 'dsh-agent-workbench')
+        put(
+          path,
+          'scripts/run-quality-ci.mjs',
+          `import assert from 'node:assert/strict'; import { parseArgs } from 'node:util'; import { readFileSync, writeFileSync } from 'node:fs'; import { createHash } from 'node:crypto'; const { values } = parseArgs({ options: { 'source-only': { type: 'boolean' }, input: { type: 'string' }, 'core-source': { type: 'string' }, 'final-group-sha256': { type: 'string' }, browser: { type: 'boolean' }, 'prepare-browser': { type: 'boolean' } } }); assert.equal(values['final-group-sha256'], createHash('sha256').update(readFileSync(values.input)).digest('hex')); writeFileSync('.runtime/joint-admitted', 'workbench');`,
+        );
     }
     if (jointAdmission && repo === 'dsh-gea-plugin') {
       put(path, 'tests/profile.mjs', 'export const profile = true;');
@@ -346,6 +354,20 @@ test('joint GEA checks receive the exact Workbench reader and hashed candidate b
     readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'),
     realpathSync(f.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path),
   );
+});
+
+test('joint Workbench checks use their own reader without GEA-only CLI options', (t) => {
+  const f = fixture(
+    t,
+    {
+      'scripts/tool.mjs': 'export const value = 2;',
+      'tests/tool.test.mjs': 'import "../scripts/tool.mjs"; import "../lib/generated.mjs";',
+    },
+    { sdk: true, jointAdmission: true },
+  );
+  const checked = f.run('affected-check');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.equal(readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'), 'workbench');
 });
 
 test('affected behavior failure blocks source checks without preparing unrelated inputs', (t) => {
