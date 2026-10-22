@@ -84,7 +84,7 @@ test('base age original columns map to batch measures and retain the average/max
     assert.notEqual(columns[field].unavailable, true);
     assert.ok(returned.includes(measure), measure);
   }
-  assert.equal(columns.max_age.label, '平均货龄');
+  assert.equal(columns.max_age.label, '平均货龄（天）');
   assert.ok(fields('aqkc', 'health').includes('warehouseid'));
 });
 test('real count columns may not accidentally be hidden as missing source columns', () => {
