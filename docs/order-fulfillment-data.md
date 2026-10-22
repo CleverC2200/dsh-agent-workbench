@@ -8,7 +8,7 @@ The installed order01 declarations use the existing configured-query channel. GE
 
 ## 需求来源 / Requirements
 
-已读取[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)，修订版 3109，以及其链接的[订单字段说明表](https://klvcodtump.feishu.cn/docx/R2uGdsXjFoGCqtxCPNmcOW76nig)，修订版 1311，读取日期 2026-10-21。嵌入表格、图片说明与正文不是源数据库字段发布回执。运行面板保留原版 DOM、卡片、图表区域、筛选位置和表格列，只清除样例值与模拟脚本，在原位置绑定受控查询。不得新增筛选栏、汇总卡片或重排布局。
+已读取[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)，修订版 3111，以及其链接的[订单字段说明表](https://klvcodtump.feishu.cn/docx/R2uGdsXjFoGCqtxCPNmcOW76nig)，修订版 1311；2026-10-22 补读节点时限嵌入表。嵌入表格、图片说明与正文不是源数据库字段发布回执。运行面板保留原版 DOM、卡片、图表区域、筛选位置和表格列，只清除样例值与模拟脚本，在原位置绑定受控查询。不得新增筛选栏、汇总卡片或重排布局。
 
 The live document distinguishes allocation fulfillment for unopened orders from shipment fulfillment for opened orders. Shipment demand needs exclusions and per-source-order/SKU execution merging; quantities cannot be summed blindly. Its future-five-day formula, change-rate severity inequality and on-time tolerance contain unresolved alternatives. Those branches are reported as pending rather than silently chosen. Referenced attachments and embedded sheets have not been fully validated against the source schema.
 
@@ -17,11 +17,11 @@ The live document distinguishes allocation fulfillment for unopened orders from 
 | 内容 / Content | 当前行为 / Behavior |
 | --- | --- |
 | 交付/销售 | 来源订单和 SKU 明细、源状态与处理原因、独立去重来源订单数；默认本日，按源创建时间左闭右开筛选。不是文档的期望交付时间口径。 |
-| 源数量 | 独立查询原始、调整、实占、发货、源缺货数量；同订单/客户/SKU/基地源键重复时数量未知，不任选一条或相加重复需求。数量单位待确认。 |
-| 追踪风险 | 通过订单号和客户编码关联当前授权执行范围；独立查询已关联超时/预警去重订单数。只说明覆盖范围，不冒充全量节点状态或实时快照。 |
+| 源数量 | 完整授权明细按执行单及行号检查重复，EA 通过换算率对齐 CS（箱）。同源单行的相同重复需求只取一次；不同源行或需求冲突保持未知。整单数量与展开 SKU 使用同一归并结果。 |
+| 追踪风险 | 当前最末已知节点按最晚开单、最晚到厂、最晚发车和开单确认到货时间计算；保留两小时和夜间预警规则。时限缺失和未识别状态不计作正常。 |
 | 仓配 | 查询当前授权运单和承运商；空值保持未知，无映射资料不自行匹配。 |
 | 品项 | 读取截止日前最近源库存日快照，并限定当前获准订单涉及的基地/SKU；补齐品项、系列、产品标签。自产品标签仅在月度、基地、SKU精确匹配且标签唯一时显示，重复或不匹配不猜测。 |
-| 正式满足率、未开订单 | 源表缺有效执行单、完整排除及需求取值规则；不将 OCP 已下发等源状态硬映射为已开/未开。 |
+| 占单满足率、未开订单 | 有效状态 10、纳统标志 1、备单状态明确取值；占单满足率按完整需求加权，分档按订单去重。正式发货满足率仍缺完整排除及产品归集依据，不与占单满足率混用。 |
 | 终缺和未来5日覆盖 | 源缺口字段可查看；缺分配账本、来源快照、完整计划/调拨到货依据与单位，不能重新分配或宣称当前完整终缺。 |
 | 作废率、改单率、准交率 | 缺锁定期事件及当期应交付分母，不用数量比率或完成样本冒充正式订单张数比例。 |
 | 可发货天数 | 已按源库存表内同粒度数量计算：可用库存÷((思念销售计划+BP销售计划+月调出计划×0.5)/月天数)。10日取初版，20日各计划纠偏>0取纠偏否则初版；月末取下月销售及调出初版并使用下月天数。不以近30日发货替代，不对分页行求平均冒充整体指标。 |
@@ -61,6 +61,16 @@ Different role scopes must be configured server-side for these published resourc
 Missing values remain distinct from genuine zero and denied columns. The additional product tables must be published and granted through GEA before production use; the local database-account check does not establish user permissions.
 
 本地运行在 127.0.0.1:8891 的数据库账户预览与 127.0.0.1:3198 的 GEA 当前用户入口独立。生产入口仍通过 GEA，不在拒权后切换数据库账户预览。
+
+## 页面接线补齐（2026-10-22） / Page bindings
+
+基地、省区与仓配对比使用完整授权输入；状态展开、数量与满足率区间下钻共用同一组订单。订单状态图和满足率分布图支持点击与键盘下钻。产销协同表读取源库存、销售和生产计划，支持产品搜索、基地筛选与分页；没有日期依据的计划不作为未来五日供应。筛选选项来自当前授权结果，客户搜索同时匹配编码或名称。
+
+批次货龄查询仅读取分组生产日期、数量与完整性计数，避免网关未开放的日期运算函数；页面按上一日快照计算 40/60/90/120 天区间，缺日期、负库存、缺数量及旧快照均保持未知。查询与计数使用同一分组。
+
+销售确认和历史弹窗保留模板入口；未安装真实推送及回调接口时禁用提交，不创建模拟成功记录。身份变化清除明细、图表、协同表、下钻缓存和弹窗内容。源表为空不恢复旧数据。完整数据验收与受影响测试通过分别记录。
+
+Comparisons, charts and drilldowns share complete granted facts. The coordination table supports search, base selection and paging without treating undated plans as five-day supply. Batch ages are computed from complete prior-day source dates and quantities without widening gateway function permissions. Confirmation dialogs remain usable, but submission stays disabled until real mutation and callback contracts exist. Identity changes clear all data-derived UI state.
 
 ## GEA 实际接入修复（2026-10-21）
 

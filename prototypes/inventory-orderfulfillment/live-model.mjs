@@ -9,6 +9,30 @@ export function shanghaiToday(now = new Date()) {
 export function nextDay(day) {
   return new Date(Date.parse(day + 'T00:00:00Z') + 86400000).toISOString().slice(0, 10);
 }
+export function batchAges(rows,asOf=null) {
+  const date=value=>{
+    const raw=String(value??'');
+    const day=/^\d{8}$/.test(raw)?`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`:raw.slice(0,10);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(day))return null;
+    const time=Date.parse(day+'T00:00:00Z');
+    return Number.isFinite(time)&&time>=Date.UTC(2000,0,1)&&new Date(time).toISOString().slice(0,10)===day?time:null;
+  };
+  const fields=['age_lt40','age_40_60','age_60_90','age_90_120','age_ge120'];
+  const groups=new Map();
+  for(const row of rows){const key=JSON.stringify([row.base,row.sku]);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(row);}
+  return [...groups.values()].map(group=>{
+    const result={base:group[0].base,sku:group[0].sku,batch_date:group[0].batch_date,...Object.fromEntries(fields.map(field=>[field,0]))};
+    let valid=new Set(group.map(row=>row.batch_date)).size===1;
+    for(const row of group){
+      const snapshot=date(row.batch_date),production=date(row.production_date),quantity=row.quantity===null?NaN:Number(row.quantity);
+      const age=snapshot!==null&&production!==null?(snapshot-production)/86400000:null;
+      if(age===null||age<0||(asOf!==null&&snapshot!==date(asOf)-86400000)||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
+      result[fields[age<40?0:age<60?1:age<90?2:age<120?3:4]]+=quantity;
+    }
+    if(!valid)for(const field of fields)result[field]=null;
+    return result;
+  });
+}
 export function plannedShippingDays(row) {
   const number = (key) =>
     row[key] === null || row[key] === undefined || row[key] === '' ? null : Number(row[key]);
@@ -105,6 +129,29 @@ export function createFulfillmentReader(config, execute) {
   }
   return {
     collection,
+    async all(id,filters,{signal}={}) {
+      const first=await collection(id,filters,{signal,size:200});
+      const rows=[...first.rows];
+      const columns=JSON.stringify([first.returnedColumns,first.rejectedColumns]);
+      const pages=Math.ceil(first.total/200);
+      for(let page=2;page<=pages;page+=4) {
+        const batch=await Promise.all(Array.from({length:Math.min(4,pages-page+1)},(_,index)=>{
+          const offset=(page+index-1)*200;
+          return client.read(id,{...filters,page_size:200,offset},{signal}).then(result=>({result:visibleResult(result),offset}));
+        }));
+        for(const {result,offset} of batch) {
+          if(result.configVersion!==first.configVersion||JSON.stringify([result.returnedColumns,result.rejectedColumns])!==columns||result.rows.length!==Math.min(200,first.total-offset))
+            throw new QueryContractError('RESULT_INCOMPLETE','指标输入或字段权限在分页期间发生变化');
+          rows.push(...result.rows);
+        }
+      }
+      if(pages>1) {
+        const after=await client.read(config.queries[id].pagination.countQuery,filters,{signal,requiredColumns:['total']});
+        if(after.configVersion!==first.configVersion||after.rows.length!==1||Number(after.rows[0].total)!==first.total||rows.length!==first.total)
+          throw new QueryContractError('RESULT_INCOMPLETE','指标总数在分页期间发生变化');
+      }
+      return {...first,rows,scope:'当前筛选与授权范围完整输入'};
+    },
     async summary(id, filters, signal) {
       const result = await client.read(id, filters, { signal });
       if (result.rows.length !== 1)
