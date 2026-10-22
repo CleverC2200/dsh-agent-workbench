@@ -17,6 +17,7 @@ const { values } = parseArgs({
     'core-source': { type: 'string' },
     'core-head': { type: 'string' },
     'prepare-sdk': { type: 'boolean' },
+    'source-only': { type: 'boolean' },
     browser: { type: 'boolean' },
     'prepare-browser': { type: 'boolean' },
     'dealer-history': { type: 'string' },
@@ -117,6 +118,7 @@ try {
     const baseline = JSON.parse(readFileSync('scripts/quality-peer-baseline.json'));
     const plan = selectCiTests({
       repositories: manifest.repositories,
+      sourceOnly: values['source-only'],
       repo: 'dsh-agent-workbench',
       base:
         process.env.QUALITY_BASE_SHA ||

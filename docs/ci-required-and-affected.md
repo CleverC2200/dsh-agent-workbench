@@ -1,10 +1,16 @@
 # 必需检查与受影响测试
 
-PR 与 main push 由 `.github/workflows/source-quality.yml` 执行本仓 JavaScript/JSON 语法、差分空白、包版本标识和 workflow 中列出的独立回归。PR 同时执行依赖审查，`candidate-quality` 汇总并拒绝失败、取消或缺失的适用检查。该流程只检出本仓，不读取 peer baseline、不要求跨仓凭据，也不装配另外两仓。
+PR 与 main push 由 `.github/workflows/source-quality.yml` 按实际 Git 差异选择检查。纯说明文档只完成适用性判断与必需状态汇总；包内 Prompt、Skill、资源声明及其资产走资源检查；代码与未知输入保留工程检查。`candidate-quality` 拒绝失败、取消、缺失或非预期跳过的适用检查。冷分类与资源检查只需本仓；代码检查核固定 peer 后复用共享 `sourceChecks` 计划，按适用需求准备材料和运行检查。
 
-三仓冻结、SDK 准备、完整类型/构建、受影响集成与浏览器测试改由 `.github/workflows/quality.yml` 的手动 `workflow_dispatch` 执行，最终检查名为 `joint-quality`，不再作为日常合并条件。手动 alpha compatibility 入口保留。日常绿灯只证明上述本仓检查，不能表示三仓或客户端验收通过。
+`scripts/source-quality.mjs --phase plan|check|final` 是冷目录入口，不要求安装依赖。`plan` 从事件文件读取 PR 的 base/head 或 push 的 before/after，校验检出 HEAD，PR 按 merge-base 比较，push 按实际推送区间比较。未提供差异范围时保守选择代码检查；已提供的基线无法解析或 HEAD 不符时拒绝继续。输出 `mode=docs|resources|code` 与 `engineering`、`dependency-review`、`codeql`，供 workflow 选择适用 job；`final` 重算分类并核实际结果，不修改分支保护。
 
-下文描述手动三仓流程及其历史范围，涉及联合合并门禁的旧说明不再适用于日常 PR/main。
+资源检查覆盖变更资源组的 JSON、JS/Python 语法、Skill 元数据、相对文件引用与声明的打包字节摘要。Skill 删除或改名时同时核包内 Prompt/能力声明的 Skill 引用。资源组中的依赖清单和锁仍按代码处理。Markdown 双空格换行不再参与差分空白阻断。CodeQL 开关独立于资源分类；已有 CodeQL 的仓在资源中新增、修改或删除 JavaScript/TypeScript 源码时仍需执行现有扫描。Python 资源执行语法检查，现有 CodeQL 语言配置不覆盖 Python。工程检查的具体集合由 workflow 维护。
+
+日常代码路径通过 `affected-plan|affected-prepare|affected-check` 消费同一计划。非联合路径执行适用的知识、lint、format、类型和选中测试；需要联合消费者时进入既有联合 quality 入口。显式冻结三仓入口仍由 `.github/workflows/quality.yml` 的手动 `workflow_dispatch` 提供，alpha compatibility 保持独立。日常绿灯只证明实际选择和执行的范围，不能表示客户端或业务验收通过。
+
+本地未提交修改使用[开发构建入口](../../dsh-gea-plugin/docs/development-builds.md)的轻预检与影响计划。源码 CI 使用提交差异；本地计划明确标识当前工作树，两者不互作冻结执行回执。
+
+下文描述选择和联合执行合同；实际检查与准备需求以本次计划及回执为准。
 
 本轮按用户授权移除 GitHub 的全量测试执行。手动三仓与兼容检查使用必需检查与受影响集合，不另建定时全量任务。本地完整测试命令保留为显式工具，本轮不执行本地全量构建。
 
