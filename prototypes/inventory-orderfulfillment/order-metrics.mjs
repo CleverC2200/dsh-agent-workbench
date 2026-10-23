@@ -51,8 +51,7 @@ export function nodeMetrics(rows,now) {
   }
   const states=[];
   for(const [order,lines] of orders) {
-    const stageOf=row=>row.execution_trace?.order_stage||row.prapare_order_status;
-    if(lines.some(row=>row.trace_stage_conflict||row.trace_status_unknown)){states.push({order,stage:null,status:'unknown'});continue;}
+    const stageOf=row=>row.prapare_order_status;
     if(lines.every(row=>stageOf(row)==='已完成')){states.push({order,stage:'completed',status:'normal'});continue;}
     const active=lines.filter(row=>stageOf(row)!=='已完成');
     const indices=active.map(row=>nodeDefinitions.findIndex(node=>node.names.includes(stageOf(row))));
@@ -117,7 +116,7 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
       sales_person:consistent('sales_person'),order_person:consistent('order_person'),carrier:consistent('logistics_provider'),
       sku_allocation_rate:q.skuRate??null,allocation_rate:q.allocationRate??null,
       business_stage:new Set(valid.map(row=>row.prapare_order_status)).size===1?valid[0]?.prapare_order_status:null,
-      quantity_issue:valid.length===0?'无有效执行明细':q.original===null||q.adjusted===null?'拆单需求不一致或缺失，归并未确认':''});
+      quantity_issue:valid.length===0?'无有效执行明细':valid.length===1&&q.original===null?'源原始数量缺失':q.original===null||q.adjusted===null?'拆单需求不一致或缺失，归并未确认':''});
   }
   const pending=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&row.prapare_order_status==='备单中');
   const orderGroups=new Map();
@@ -143,7 +142,7 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
     missingAdjustedField:pending.filter(row=>number(row.adjust_order_qty)===null).length,
     missingOrInconsistentAllocation:eligible.filter(q=>q.allocated===null).length};
   const demand=covered.reduce((sum,q)=>sum+q.original,0),raw=covered.reduce((sum,q)=>sum+q.currentShort,0);
-  const opened=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&['派车中','已开未派','已派未到','厂外侯车','厂外候车','厂内侯车','厂内候车','装车中','运输中','在途','已完成'].includes(row.prapare_order_status));
+  const opened=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&['派车中','已开未派','已派未到','厂外侯车','厂外候车','厂内侯车','厂内候车','装车中','备单完毕','运输中','在途','已发货','已完成'].includes(row.prapare_order_status));
   const openedGroups=new Map();
   for(const row of opened){const id=key(row);if(!openedGroups.has(id))openedGroups.set(id,[]);openedGroups.get(id).push(row);}
   const openedQuantities=[...openedGroups.values()].map(groupedQuantities);

@@ -56,11 +56,11 @@ test('trace header facts enrich only matching execution/customer and never repla
   assert.equal(
     attachExecutionTrace(facts, { rows: [{ ...source, cust_code: 'OTHER' }] }).rows[0]
       .prapare_order_status,
-    null,
+    '备单中',
   );
   assert.equal(
     attachExecutionTrace(facts, { rows: [source, source] }).rows[0].prapare_order_status,
-    null,
+    '备单中',
   );
   assert.equal(
     attachExecutionTrace(facts, { rows: [source], rejectedColumns: ['carrier_name'] }).rows[0]
@@ -72,10 +72,10 @@ test('trace header facts enrich only matching execution/customer and never repla
       .logistics_provider,
     undefined,
   );
-  assert.equal(attachExecutionTrace(facts, null).rows[0].prapare_order_status, null);
+  assert.equal(attachExecutionTrace(facts, null).rows[0].prapare_order_status, '备单中');
 });
 
-test('latest trace status is shared by cards, detail, comparison expansion and drilldowns, never stale main status', () => {
+test('main status is preserved across cards, detail, comparison and incomplete trace enrichment', () => {
   const facts = { rows: [line] };
   const rows = attachExecutionTrace(facts, {
     rows: [
@@ -88,36 +88,36 @@ test('latest trace status is shared by cards, detail, comparison expansion and d
       },
     ],
   }).rows;
-  assert.equal(rows[0].prapare_order_status, '已开未派');
+  assert.equal(rows[0].prapare_order_status, '备单中');
   const m = computeOrderMetrics(rows),
     c = comparisonMetrics(rows, 'belong_base')[0];
   assert.deepEqual(m.orderCounts, {
     valid_orders: 1,
-    preparing_orders: 0,
-    opened_orders: 1,
+    preparing_orders: 1,
+    opened_orders: 0,
     unclassified_orders: 0,
   });
-  assert.equal(m.quantities[0].business_stage, '已开未派');
-  assert.equal(c.preparing, 0);
-  assert.equal(c.stages.find((s) => s.name === '派车中').total, 1);
-  assert.deepEqual(c.stages.find((s) => s.name === '派车中').orders, ['O1']);
+  assert.equal(m.quantities[0].business_stage, '备单中');
+  assert.equal(c.preparing, 1);
+  assert.equal(c.stages.find((s) => s.name === '备单中').total, 1);
+  assert.deepEqual(c.stages.find((s) => s.name === '备单中').orders, ['O1']);
   const absent = attachExecutionTrace(facts, { rows: [] }).rows;
-  assert.equal(computeOrderMetrics(absent).orderCounts.unclassified_orders, 1);
-  assert.equal(computeOrderMetrics(absent).orderCounts.preparing_orders, 0);
+  assert.equal(computeOrderMetrics(absent).orderCounts.unclassified_orders, 0);
+  assert.equal(computeOrderMetrics(absent).orderCounts.preparing_orders, 1);
   const conflict = attachExecutionTrace(facts, {
     rows: [
       { executeorderno: 'E1', cust_code: 'C1', order_stage: '派车中', order_stage_conflict: 1 },
     ],
   }).rows;
-  assert.equal(computeOrderMetrics(conflict).orderCounts.unclassified_orders, 1);
+  assert.equal(computeOrderMetrics(conflict).orderCounts.preparing_orders, 1);
   const completed = attachExecutionTrace(facts, {
     rows: [
       { executeorderno: 'E1', cust_code: 'C1', order_stage: '已完成', odo_order_status: '已完成' },
     ],
   }).rows;
-  assert.equal(computeOrderMetrics(completed).orderCounts.opened_orders, 1);
+  assert.equal(computeOrderMetrics(completed).orderCounts.preparing_orders, 1);
   assert.equal(
-    comparisonMetrics(completed, 'belong_base')[0].stages.find((s) => s.name === '已完成').total,
+    comparisonMetrics(completed, 'belong_base')[0].stages.find((s) => s.name === '备单中').total,
     1,
   );
   const split = {
@@ -126,14 +126,21 @@ test('latest trace status is shared by cards, detail, comparison expansion and d
   const partial = attachExecutionTrace(split, {
     rows: [{ executeorderno: 'E1', cust_code: 'C1', order_stage: '备单中' }],
   }).rows;
-  assert.ok(partial.every((r) => r.prapare_order_status === null));
-  assert.equal(computeOrderMetrics(partial).orderCounts.unclassified_orders, 1);
+  assert.ok(partial.every((r) => r.prapare_order_status === '备单中'));
+  assert.equal(computeOrderMetrics(partial).orderCounts.unclassified_orders, 0);
+  assert.equal(
+    computeOrderMetrics(
+      attachExecutionTrace({ rows: [{ ...line, prapare_order_status: '已发货' }] }, null).rows,
+    ).orderCounts.opened_orders,
+    1,
+  );
 });
 
 test('trace node flags are stage-specific; conflicts and completed orders are not overdue', () => {
   const now = shanghaiTime('2026-10-22 18:00:00');
   const traced = {
     ...line,
+    prapare_order_status: '已开未派',
     latestarrivaldate: '2026-10-22 20:00:00',
     execution_trace: {
       order_stage: '派车中',
@@ -142,9 +149,12 @@ test('trace node flags are stage-specific; conflicts and completed orders are no
     },
   };
   assert.equal(nodeMetrics([traced], now).overdue, 1);
-  assert.equal(nodeMetrics([{ ...traced, trace_stage_conflict: true }], now).unknown, 1);
+  assert.equal(nodeMetrics([{ ...traced, trace_stage_conflict: true }], now).overdue, 1);
   assert.equal(
-    nodeMetrics([{ ...traced, execution_trace: { order_stage: '已完成' } }], now).overdue,
+    nodeMetrics(
+      [{ ...traced, prapare_order_status: '已完成', execution_trace: { order_stage: '已完成' } }],
+      now,
+    ).overdue,
     0,
   );
   assert.equal(
@@ -159,6 +169,39 @@ test('trace node flags are stage-specific; conflicts and completed orders are no
       now,
     ).unknown,
     1,
+  );
+});
+
+test('authorized node trace supplements metrics without replacing main status or accepting other keys', () => {
+  const t = { execute_no: 'E1', customer_code: 'C1', order_no: 'O1', prepare_status: '备单预警' };
+  const facts = { rows: [line] };
+  const enriched = attachExecutionTrace(facts, null, { rows: [t] }).rows;
+  assert.equal(enriched[0].prapare_order_status, '备单中');
+  assert.equal(enriched[0].order_qty, 100);
+  assert.equal(nodeMetrics(enriched, shanghaiTime('2026-10-22 12:00:00')).warning, 1);
+  for (const change of [
+    { customer_code: 'OTHER' },
+    { execute_no: 'OTHER' },
+    { order_no: 'OTHER' },
+  ]) {
+    assert.equal(
+      attachExecutionTrace(facts, null, { rows: [{ ...t, ...change }] }).rows[0].execution_trace,
+      undefined,
+    );
+  }
+  assert.equal(
+    attachExecutionTrace(facts, null, { rows: [t], rejectedColumns: ['prepare_status'] }).rows[0]
+      .execution_trace,
+    undefined,
+  );
+  const conflict = attachExecutionTrace(facts, null, {
+    rows: [t, { ...t, prepare_status: '备单超时' }],
+  }).rows[0];
+  assert.ok(conflict.trace_conflicts.includes('peidan_status'));
+  const primary = { rows: [{ executeorderno: 'E1', cust_code: 'C1', peidan_status: '备单正常' }] };
+  assert.equal(
+    attachExecutionTrace(facts, primary, { rows: [t] }).rows[0].execution_trace.peidan_status,
+    '备单正常',
   );
 });
 

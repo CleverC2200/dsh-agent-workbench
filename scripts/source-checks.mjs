@@ -126,11 +126,11 @@ export async function sourceChecks(result, phase) {
     if (realpathSync(linkedWorkbench) !== realpathSync(workbench))
       throw Error('SOURCE_PEER_LINK_MISMATCH');
   }
-  const ownerCheck = (check) => {
+  const ownerCheck = (check, args = []) => {
     if (tools !== null) {
       const script = json(resolve(root, 'package.json')).scripts[check];
       if (!script) throw Error(`SOURCE_OWNER_CHECK_REQUIRED: ${check}`);
-      return run('sh', ['-c', script], root, {
+      return run('sh', ['-c', `${script}${args.length ? ' "$@"' : ''}`, check, ...args], root, {
         QUALITY_BASE_SHA: selected.diffBase,
         DSH_WORKBENCH_CHECKOUT: workbench,
         PATH: resolve(root, 'node_modules/.bin') + ':' + process.env.PATH,
@@ -138,13 +138,15 @@ export async function sourceChecks(result, phase) {
     }
     return run(
       repo === 'dsh-agent-workbench' ? 'npm' : 'corepack',
-      repo === 'dsh-agent-workbench' ? ['run', check] : ['pnpm', 'run', check],
+      repo === 'dsh-agent-workbench'
+        ? ['run', check, ...(args.length ? ['--', ...args] : [])]
+        : ['pnpm', 'run', check, ...args],
       root,
       { QUALITY_BASE_SHA: selected.diffBase, DSH_WORKBENCH_CHECKOUT: workbench },
     );
   };
   if (phase === 'affected-check' && staticChecks.includes('check:knowledge'))
-    ownerCheck('check:knowledge');
+    ownerCheck('check:knowledge', ['--source-only']);
   let coreHead;
   if (plan.sdk) {
     const { ciCores } = await import(pathToFileURL(resolve(gea, 'scripts/ci-core-policy.mjs')));

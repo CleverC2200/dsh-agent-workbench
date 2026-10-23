@@ -1,5 +1,7 @@
 # 订单履约数据接入 / Order fulfillment data
 
+最新基础字段、指标计算与保留缺口以[2026-10-23完整核对](order-fulfillment-source-audit-20261023.md)为准。主表状态保留，追踪表仅补充指标事实；未匹配追踪不清空主表数据。
+
 ## 当前合同 / Current contract
 
 订单履约 Consumer 为 `order01`。页面、Prompt、capability、MCP 声明保持一致。作者查询配置为 [sql.config.json](../business/inventory-orderfulfillment/sql.config.json)，构建复制到页面包旁；Workbench Host 在作者脚本前注入它。页面只传 `{queryId, parameters}`，不传 SQL、身份、Consumer 或凭据；GEA Host 根据可信安装声明执行，Gateway 按当前用户和委托强制行列权限。筛选器仅收窄范围，不根据前端角色选择数据源，不新增角色授权表。

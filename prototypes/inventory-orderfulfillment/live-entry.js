@@ -242,12 +242,12 @@ function calculatedMetrics(results) {
 }
 const traceFactCache=new WeakMap();
 function enrichedFacts(results) {
-  const facts=get(results,'orders.facts'),trace=get(results,'execution.trace');
+  const facts=get(results,'orders.facts'),trace=get(results,'execution.trace'),nodes=get(results,'trace.detail');
   if(!facts)return facts;
   const saved=traceFactCache.get(facts);
-  if(saved?.trace===trace)return saved.value;
-  const value=attachExecutionTrace(facts,trace);
-  traceFactCache.set(facts,{trace,value});return value;
+  if(saved?.trace===trace&&saved?.nodes===nodes)return saved.value;
+  const value=attachExecutionTrace(facts,trace,nodes);
+  traceFactCache.set(facts,{trace,nodes,value});return value;
 }
 function sourceCountsAgree(results) {
   const facts=get(results,'orders.facts'),summary=get(results,'orders.summary');
@@ -348,7 +348,7 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
     const same=field=>qs.every(q=>q&&q[field]!==null&&q[field]!==undefined)&&new Set(qs.map(q=>q[field])).size===1?qs[0][field]:null;
     const demand=sum('original_qty'),short=sum('source_short_qty');
     const q=qs.some(Boolean)?{original_qty:demand,adjusted_qty:sum('adjusted_qty'),allocated_qty:sum('allocated_qty'),shipped_qty:sum('shipped_qty'),ordered_qty:sum('ordered_qty'),
-      order_allocation_rate:demand>0&&short!==null?100*(demand-short)/demand:null,
+      order_allocation_rate:demand>0&&short!==null?100*Math.abs(demand-short)/demand:null,
       business_stage:same('business_stage'),node_status:same('node_status')??'unknown',sales_person:same('sales_person'),order_person:same('order_person'),carrier:same('carrier'),
       quantity_issue:qs.map(q=>q?.quantity_issue).filter(Boolean).join('；')}:null;
     const trace = (traces?.rows ?? []).find(
@@ -645,7 +645,7 @@ function renderGrantedDetails(results) {
 function renderSummary(results, selected) {
   const computed=calculatedMetrics(results);
   const summary = get(results, 'orders.summary')?.rows[0],
-    trace = computed?{matched_orders:computed.orderCounts.valid_orders-computed.orderCounts.unclassified_orders,overdue_orders:computed.nodes.overdue,warning_orders:computed.nodes.warning}:undefined,
+    trace = computed?{matched_orders:new Set((enrichedFacts(results)?.rows??[]).filter(r=>Number(r.detailstatus)===10&&String(r.is_stat)==='1'&&(r.execution_trace||r.node_trace_matched)).map(r=>r.cust_order_no)).size,overdue_orders:computed.nodes.overdue,warning_orders:computed.nodes.warning}:undefined,
     open = computed?.orderCounts,
     shortage = pendingShortageSummary(pendingShortage(results));
   for (const group of document.querySelectorAll('.summary.fulfillment-summary')) {
@@ -667,7 +667,7 @@ function renderSummary(results, selected) {
     const openMetric=metrics[0]?.querySelector('.metric-head strong');
     if(openMetric) {
       setMetric(openMetric,value(open,isWarehouse?'opened_orders':'preparing_orders',get(results,'orders.open.summary')));
-      openMetric.title=`按穿透表最新状态归并有效来源订单；未知状态${open?.unclassified_orders??'—'}/${open?.valid_orders??'—'}张，未关联或冲突不按旧状态补齐`;
+      openMetric.title=`按主表订单状态统计有效来源订单；节点状态未确认${open?.unclassified_orders??'—'}/${open?.valid_orders??'—'}张，追踪数据仅补充指标字段`;
     }
     const shortMetric=metrics[3]?.querySelector('.metric-head strong');
     if(shortMetric&&isWarehouse) {
@@ -745,7 +745,7 @@ function renderSummary(results, selected) {
   const p = document.querySelector('#fulfillmentView > .fulfillment-analysis > p');
   if (p)
     p.textContent = `当前范围来源订单 ${value(summary, 'source_orders', get(results, 'orders.summary'))} 张；有效待备 ${value(open,'preparing_orders',get(results,'orders.open.summary'))} 张；源缺货关联 ${value(shortage,'matched_orders',get(results,'shortage.summary'))} 张，减库存后缺货 ${value(shortage,'after_inventory_short_qty',get(results,'shortage.summary'))}，源终缺 ${value(shortage,'final_short_qty',get(results,'shortage.summary'))}，终缺覆盖 ${value(shortage,'final_quantity_coverage',get(results,'shortage.summary'))}/${value(shortage,'matched_sku_rows',get(results,'shortage.summary'))} 项，重复键 ${value(shortage,'duplicate_sku_rows',get(results,'shortage.summary'))} 项。已关联追踪 ${value(trace, 'matched_orders', get(results, 'trace.summary'))} 张，超时 ${value(trace, 'overdue_orders', get(results, 'trace.summary'))} 张，预警 ${value(trace, 'warning_orders', get(results, 'trace.summary'))} 张。源终缺按上游字段展示，未重新分配供应，不把未关联记录补零。`;
-  if(p&&computed) p.textContent+=` 统一穿透状态计算：待备超时至少${computed.preparingOverdue}张、预警至少${computed.preparingWarning}张，缺最晚开单时间${computed.preparingUnknown}张；待备需求覆盖${computed.pendingCoverage}/${computed.pendingGroups}项。整单满足率按完整原始需求与缺货量加权，不是SKU百分比平均；归并不明确时不计算。`;
+  if(p&&computed) p.textContent+=` 主表状态与已关联指标计算：待备超时至少${computed.preparingOverdue}张、预警至少${computed.preparingWarning}张，缺最晚开单时间${computed.preparingUnknown}张；待备需求覆盖${computed.pendingCoverage}/${computed.pendingGroups}项。整单满足率按完整原始需求与缺货量加权，不是SKU百分比平均；归并不明确时不计算。`;
   const inventory = get(results, 'sku.detail');
   const itemAnalysis = document.querySelector('.item-analysis');
   if (results['sku.detail']) {
@@ -814,6 +814,7 @@ async function load() {
   const ids = [
     'orders.facts',
     'execution.trace',
+    'trace.detail',
     'orders.summary',
     'shortage.detail',
     'sku.detail',
@@ -824,7 +825,7 @@ async function load() {
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
       try {
-        const value = await (id==='orders.facts'||id==='execution.trace'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
+        const value = await (id==='orders.facts'||id==='execution.trace'||id==='trace.detail'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
           ? reader.all(id,selected,{signal:task.signal}) : id.endsWith('.summary')
           ? reader.summary(id, selected, task.signal)
           : reader.collection(id, selected, {
@@ -849,7 +850,7 @@ async function load() {
         }
         if (progressive['orders.summary'])
           renderSummary(progressive, selected);
-        if(get(progressive,'orders.facts')&&['orders.facts','execution.trace','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
+        if(get(progressive,'orders.facts')&&['orders.facts','execution.trace','trace.detail','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
         return value;
       } catch (reason) {
         if (task.current()) progressive[id] = { status: 'rejected', reason };
@@ -904,7 +905,7 @@ async function load() {
       ids.map((id) => [
         id,
         results[id].status === 'fulfilled'
-          ? { state: 'ready', ...results[id].value, ...(['orders.facts','execution.trace','sku.detail','sku.age','sku.owners','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
+          ? { state: 'ready', ...results[id].value, ...(['orders.facts','execution.trace','trace.detail','sku.detail','sku.age','sku.owners','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
           : {
               state: 'unavailable',
               code: results[id].reason?.code ?? 'QUERY_FAILED',
