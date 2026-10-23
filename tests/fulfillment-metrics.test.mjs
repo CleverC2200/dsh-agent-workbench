@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  attachExecutionTrace,
+  assessTraceArrivals,
+} from '../prototypes/inventory-orderfulfillment/execution-trace.mjs';
+import {
   computeOrderMetrics,
   lineQuantities,
   deadlineStatus,
@@ -31,6 +35,167 @@ const line = {
   originalqtybak: 100,
   lastbillingdate: '2026-10-22 16:00:00',
 };
+
+test('trace header facts enrich only matching execution/customer and never replace SKU quantities', () => {
+  const source = {
+    executeorderno: 'E1',
+    cust_code: 'C1',
+    fromorderno: 'F1',
+    carrier_name: '承运商A',
+    oms_order_qty: 900,
+    order_qty_convert: 999,
+    delivery_qty: 888,
+    source_rows: 2,
+  };
+  const facts = { rows: [line, { ...line, executeorderlineno: '2', material_code: 'M2' }] };
+  const enriched = attachExecutionTrace(facts, { rows: [source] });
+  assert.equal(enriched.rows.length, 2);
+  assert.equal(enriched.rows[0].order_qty, 100);
+  assert.equal(enriched.rows[0].delivery_qty, 20);
+  assert.equal(enriched.rows[0].logistics_provider, '承运商A');
+  assert.equal(
+    attachExecutionTrace(facts, { rows: [{ ...source, cust_code: 'OTHER' }] }).rows[0]
+      .prapare_order_status,
+    null,
+  );
+  assert.equal(
+    attachExecutionTrace(facts, { rows: [source, source] }).rows[0].prapare_order_status,
+    null,
+  );
+  assert.equal(
+    attachExecutionTrace(facts, { rows: [source], rejectedColumns: ['carrier_name'] }).rows[0]
+      .logistics_provider,
+    undefined,
+  );
+  assert.equal(
+    attachExecutionTrace(facts, { rows: [{ ...source, carrier_name_conflict: 1 }] }).rows[0]
+      .logistics_provider,
+    undefined,
+  );
+  assert.equal(attachExecutionTrace(facts, null).rows[0].prapare_order_status, null);
+});
+
+test('latest trace status is shared by cards, detail, comparison expansion and drilldowns, never stale main status', () => {
+  const facts = { rows: [line] };
+  const rows = attachExecutionTrace(facts, {
+    rows: [
+      {
+        executeorderno: 'E1',
+        cust_code: 'C1',
+        order_stage: '派车中',
+        odo_order_status: '已开未派',
+        paiche_status: '派车正常',
+      },
+    ],
+  }).rows;
+  assert.equal(rows[0].prapare_order_status, '已开未派');
+  const m = computeOrderMetrics(rows),
+    c = comparisonMetrics(rows, 'belong_base')[0];
+  assert.deepEqual(m.orderCounts, {
+    valid_orders: 1,
+    preparing_orders: 0,
+    opened_orders: 1,
+    unclassified_orders: 0,
+  });
+  assert.equal(m.quantities[0].business_stage, '已开未派');
+  assert.equal(c.preparing, 0);
+  assert.equal(c.stages.find((s) => s.name === '派车中').total, 1);
+  assert.deepEqual(c.stages.find((s) => s.name === '派车中').orders, ['O1']);
+  const absent = attachExecutionTrace(facts, { rows: [] }).rows;
+  assert.equal(computeOrderMetrics(absent).orderCounts.unclassified_orders, 1);
+  assert.equal(computeOrderMetrics(absent).orderCounts.preparing_orders, 0);
+  const conflict = attachExecutionTrace(facts, {
+    rows: [
+      { executeorderno: 'E1', cust_code: 'C1', order_stage: '派车中', order_stage_conflict: 1 },
+    ],
+  }).rows;
+  assert.equal(computeOrderMetrics(conflict).orderCounts.unclassified_orders, 1);
+  const completed = attachExecutionTrace(facts, {
+    rows: [
+      { executeorderno: 'E1', cust_code: 'C1', order_stage: '已完成', odo_order_status: '已完成' },
+    ],
+  }).rows;
+  assert.equal(computeOrderMetrics(completed).orderCounts.opened_orders, 1);
+  assert.equal(
+    comparisonMetrics(completed, 'belong_base')[0].stages.find((s) => s.name === '已完成').total,
+    1,
+  );
+  const split = {
+    rows: [line, { ...line, executeorderno: 'E2', executeorderlineno: '2', material_code: 'M2' }],
+  };
+  const partial = attachExecutionTrace(split, {
+    rows: [{ executeorderno: 'E1', cust_code: 'C1', order_stage: '备单中' }],
+  }).rows;
+  assert.ok(partial.every((r) => r.prapare_order_status === null));
+  assert.equal(computeOrderMetrics(partial).orderCounts.unclassified_orders, 1);
+});
+
+test('trace node flags are stage-specific; conflicts and completed orders are not overdue', () => {
+  const now = shanghaiTime('2026-10-22 18:00:00');
+  const traced = {
+    ...line,
+    latestarrivaldate: '2026-10-22 20:00:00',
+    execution_trace: {
+      order_stage: '派车中',
+      paiche_status: '派车超时',
+      peidan_status: '备单正常',
+    },
+  };
+  assert.equal(nodeMetrics([traced], now).overdue, 1);
+  assert.equal(nodeMetrics([{ ...traced, trace_stage_conflict: true }], now).unknown, 1);
+  assert.equal(
+    nodeMetrics([{ ...traced, execution_trace: { order_stage: '已完成' } }], now).overdue,
+    0,
+  );
+  assert.equal(
+    nodeMetrics(
+      [
+        {
+          ...traced,
+          trace_conflicts: ['paiche_status'],
+          execution_trace: { order_stage: '派车中' },
+        },
+      ],
+      now,
+    ).unknown,
+    1,
+  );
+});
+
+test('arrival assessment uses destination GPS first, all three promises plus twelve hours and order deduplication', () => {
+  const t = {
+    order_stage: '已完成',
+    requireddeliverytimebak: '2026-10-22 08:00:00',
+    requireddeliverytime: '2026-10-22 09:00:00',
+    expected_deliv_time: '2026-10-22 10:00:00',
+    gpsisinraildate_to: '2026-10-22 21:00:00',
+    arriveconfirm_time: '2026-10-23 01:00:00',
+  };
+  const rows = [
+    { ...line, execution_trace: t },
+    { ...line, executeorderlineno: '2', material_code: 'M2', execution_trace: t },
+  ];
+  const a = assessTraceArrivals(rows, { start: '2026-10-22', end: '2026-10-23' });
+  assert.equal(a.assessed, 1);
+  assert.equal(a.onTime, 1);
+  assert.equal(a.rate, 100);
+  assert.equal(
+    assessTraceArrivals([{ ...line, execution_trace: { ...t, gpsisinraildate_to: null } }], {
+      start: '2026-10-22',
+      end: '2026-10-23',
+    }).outsidePeriod,
+    1,
+  );
+  assert.equal(
+    assessTraceArrivals([{ ...line, execution_trace: { ...t, expected_deliv_time: null } }])
+      .unknown,
+    1,
+  );
+  assert.equal(
+    assessTraceArrivals([{ ...line, delivery_qty: null, execution_trace: t }]).rate,
+    null,
+  );
+});
 test('EA conversion, demand-based rates and distinct quantity formulas', () => {
   const q = lineQuantities(line);
   assert.equal(q.allocated, 50);

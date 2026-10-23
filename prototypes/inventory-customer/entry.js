@@ -2,6 +2,8 @@ import { mountCustomerPrototype } from './application.js';
 import { loadCustomerInventory } from './data-source.js';
 import { ready, publish, reportElements } from '../../business/shared/channel.js';
 import { customerLoadLocales, customerLoadFailure } from './load-state.js';
+import { keepPageObservation } from '../../business/shared/page-observation.js';
+import { customerPageContext } from './page-context.js';
 
 let snapshot;
 let inventorySnapshot;
@@ -102,7 +104,7 @@ async function publishLatest() {
 function report(value) {
   if (!hasData || !attached) return;
   snapshot = {
-    ...value,
+    ...customerPageContext(value),
     source: 'gea-governed-sql',
     dataAuthority: 'current-gea-identity',
     authorizationScope,
@@ -116,8 +118,10 @@ function report(value) {
   syncStatus('');
   if (!publishing) void publishLatest();
 }
-ready
-  .then(async () => {
+async function reloadCustomerInventory() {
+  try {
+    loadController?.abort();
+    attached = true;
     clearTimeout(connectionTimer);
     showLoadState('loading');
     const generation = ++loadGeneration;
@@ -136,10 +140,12 @@ ready
     syncStatus('');
     showLoadState(inventory.rows.length ? 'ready' : 'empty');
     presentation.update(inventory);
-  })
-  .catch((error) => {
+  } catch (error) {
     if (attached && !loadController?.signal.aborted) showLoadState(customerLoadFailure(error));
-  });
+  }
+}
+void ready.then(reloadCustomerInventory);
+keepPageObservation(() => attached && hasData && snapshot, () => report(snapshot));
 window.addEventListener('customer-render-failed', () => {
   hasData = false;
   loadGeneration++;
@@ -165,7 +171,7 @@ window.addEventListener('message', (event) => {
 });
 window.addEventListener('gea-session-changed', () => {
   attached = true;
-  if (snapshot) report(snapshot);
+  void reloadCustomerInventory();
 });
 function invalidateInventory() {
   attached = false;

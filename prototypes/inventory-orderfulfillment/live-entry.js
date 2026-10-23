@@ -1,7 +1,9 @@
 import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
+import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { computeOrderMetrics, comparisonMetrics } from './order-metrics.mjs';
+import {attachExecutionTrace,assessTraceArrivals} from './execution-trace.mjs';
 import {renderCharts,renderCoordination,clearPanels,bindPanelControls} from './live-panels.js';
 import {
   createFulfillmentReader,
@@ -228,10 +230,24 @@ function get(results, id) {
 }
 const metricCache=new WeakMap();
 function calculatedMetrics(results) {
-  const facts=get(results,'orders.facts');
+  const facts=enrichedFacts(results);
   if(!facts||!facts.rows.every(row=>Object.hasOwn(row,'executeorderno')&&Object.hasOwn(row,'executeorderlineno')))return null;
-  if(!metricCache.has(facts))metricCache.set(facts,computeOrderMetrics(facts.rows));
+  if(!metricCache.has(facts)){
+    const metrics=computeOrderMetrics(facts.rows);
+    metrics.arrivalAssessment=assessTraceArrivals(facts.rows,{start:selectedFilters().start,end:selectedFilters().end_exclusive});
+    if(get(results,'execution.trace'))metrics.gaps.onTimeRate='已接GPS与到货确认的执行单事实；当前创建日列表不是完整到货周期分母，缺任一承诺时间或到货事实时不判定';
+    metricCache.set(facts,metrics);
+  }
   return metricCache.get(facts);
+}
+const traceFactCache=new WeakMap();
+function enrichedFacts(results) {
+  const facts=get(results,'orders.facts'),trace=get(results,'execution.trace');
+  if(!facts)return facts;
+  const saved=traceFactCache.get(facts);
+  if(saved?.trace===trace)return saved.value;
+  const value=attachExecutionTrace(facts,trace);
+  traceFactCache.set(facts,{trace,value});return value;
 }
 function sourceCountsAgree(results) {
   const facts=get(results,'orders.facts'),summary=get(results,'orders.summary');
@@ -239,6 +255,20 @@ function sourceCountsAgree(results) {
   if(facts.rows.some(row=>!Object.hasOwn(row,'cust_order_no')))return true;
   const orders=new Set(facts.rows.map(row=>row.cust_order_no).filter(value=>value!==null&&value!==undefined));
   return Number(summary.rows[0]?.source_orders)===orders.size;
+}
+function pendingShortage(results) {
+  const facts=enrichedFacts(results),source=get(results,'shortage.detail');
+  if(!facts||!source)return null;
+  const keys=new Set(facts.rows.filter(r=>Number(r.detailstatus)===10&&String(r.is_stat)==='1'&&r.prapare_order_status==='备单中').map(r=>JSON.stringify([r.executeorderno,r.material_code,r.cust_code])));
+  return {...source,rows:source.rows.filter(r=>keys.has(JSON.stringify([r.execution_order,r.sku,r.customer_code])))};
+}
+function pendingShortageSummary(result) {
+  if(!result)return undefined;
+  const rows=result.rows,valid=field=>rows.filter(r=>Number(r.source_rows)===1&&r[field]!==null&&r[field]!==undefined&&Number.isFinite(Number(r[field])));
+  const after=valid('after_inventory_short_qty'),final=valid('final_short_qty');
+  return {matched_sku_rows:rows.length,matched_orders:new Set(rows.map(r=>r.order_no)).size,after_inventory_coverage:after.length,final_quantity_coverage:final.length,
+    after_inventory_short_qty:after.length?after.reduce((n,r)=>n+Number(r.after_inventory_short_qty),0):null,final_short_qty:final.length?final.reduce((n,r)=>n+Number(r.final_short_qty),0):null,
+    duplicate_sku_rows:rows.filter(r=>Number(r.source_rows)!==1).length};
 }
 function completeOrderRows(facts) {
   const aliases={order_no:'cust_order_no',customer_code:'cust_code',sku:'material_code',created_at:'header_addtime',customer_name:'cust_name',base:'belong_base',region:'region_name',province:'province_region_name',sales_group:'sales_group_name',channel:'cust_type',source_status:'prapare_order_status',material_name:'material_name',sales_person:'sales_person',order_person:'order_person',carrier:'logistics_provider'};
@@ -574,8 +604,8 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
   if(note)note.textContent='按当前筛选及授权范围汇总；超时、预警、缺货及满足率区间展示已知部分，覆盖情况见数值提示；缺失数据不补零。';
 }
 function renderGrantedDetails(results) {
-  const sourceFacts=get(results,'orders.facts');
-  const orders = get(results,'orders.facts')?completeOrderRows(get(results,'orders.facts')):get(results, 'orders.detail'),
+  const sourceFacts=enrichedFacts(results);
+  const orders = sourceFacts?completeOrderRows(sourceFacts):get(results, 'orders.detail'),
     quantities = calculatedMetrics(results) ? {...get(results,'orders.facts'),rows:calculatedMetrics(results).quantities,returnedColumns:undefined,rejectedColumns:[]} : null,
     trace = get(results, 'trace.detail'),
     warehouse = get(results, 'warehouse.detail');
@@ -585,13 +615,13 @@ function renderGrantedDetails(results) {
     currentDetailData={orders,quantities,trace,warehouse,factSource:sourceFacts};
   }
   if(results['sku.detail'])renderInventory(get(results, 'sku.detail'), get(results, 'sku.age'),get(results,'sku.owners'));
-  const facts=get(results,'orders.facts');
-  const shortage=get(results,'shortage.detail');
+  const facts=sourceFacts;
+  const shortage=pendingShortage(results);
   const comparison=(dimension)=>facts?comparisonMetrics(facts.rows,dimension,shortage?.rows??null):null;
   if(facts){
     const total=comparisonMetrics(facts.rows.map(row=>({...row,all_scope:'当前范围'})),'all_scope',shortage?.rows??null)[0];
     renderCharts(calculatedMetrics(results),total,ids=>drillOrders($('deliveryBaseCompareRows'),{group_name:null},ids));
-    updateSourceFilters(facts.rows);
+    updateSourceFilters(get(results,'orders.facts').rows);
   }
   if(results['sku.detail']&&currentDetailData.inventorySource!==get(results,'sku.detail')) {
     renderCoordination(get(results,'sku.detail'));currentDetailData.inventorySource=get(results,'sku.detail');
@@ -615,9 +645,9 @@ function renderGrantedDetails(results) {
 function renderSummary(results, selected) {
   const computed=calculatedMetrics(results);
   const summary = get(results, 'orders.summary')?.rows[0],
-    trace = get(results, 'trace.summary')?.rows[0],
-    open = get(results, 'orders.open.summary')?.rows[0],
-    shortage = get(results, 'shortage.summary')?.rows[0];
+    trace = computed?{matched_orders:computed.orderCounts.valid_orders-computed.orderCounts.unclassified_orders,overdue_orders:computed.nodes.overdue,warning_orders:computed.nodes.warning}:undefined,
+    open = computed?.orderCounts,
+    shortage = pendingShortageSummary(pendingShortage(results));
   for (const group of document.querySelectorAll('.summary.fulfillment-summary')) {
     const metrics = [...group.querySelectorAll(':scope > .metric')];
     if (group.classList.contains('item-summary')) {
@@ -637,15 +667,16 @@ function renderSummary(results, selected) {
     const openMetric=metrics[0]?.querySelector('.metric-head strong');
     if(openMetric) {
       setMetric(openMetric,value(open,isWarehouse?'opened_orders':'preparing_orders',get(results,'orders.open.summary')));
-      openMetric.title=isWarehouse?'当前授权范围有效已开来源订单去重张数':'有效明细状态10、备单状态为备单中的来源订单去重张数；混合状态订单可能同时出现在已开分类中';
+      openMetric.title=`按穿透表最新状态归并有效来源订单；未知状态${open?.unclassified_orders??'—'}/${open?.valid_orders??'—'}张，未关联或冲突不按旧状态补齐`;
     }
     const shortMetric=metrics[3]?.querySelector('.metric-head strong');
     if(shortMetric&&isWarehouse) {
       setMetric(shortMetric,computed?.openedShipmentRate===null||computed?.openedShipmentRate===undefined?'—':computed.openedShipmentRate.toFixed(1));
       shortMetric.title=`当前列表已开订单发货满足率=发货数量÷原始数量×100%；覆盖${computed?.openedCoverage??0}/${computed?.openedGroups??0}个来源订单SKU组合，未覆盖不补零；不是全月发货指标`;
     } else if(shortMetric) {
+      const noPending=open?.preparing_orders===0&&open?.unclassified_orders===0;
       const complete=Number(shortage?.matched_sku_rows)>0 && Number(shortage?.matched_sku_rows)===Number(shortage?.after_inventory_coverage);
-      setMetric(shortMetric,complete?value(shortage,'after_inventory_short_qty',get(results,'shortage.summary')):'—');
+      setMetric(shortMetric,noPending?'0':complete?value(shortage,'after_inventory_short_qty',get(results,'shortage.summary')):'—');
       shortMetric.title=`待备订单减库存后源缺货；覆盖${shortage?.matched_orders??'—'}张订单、${shortage?.after_inventory_coverage??'—'}/${shortage?.matched_sku_rows??'—'}项；尚未扣减排产调拨，不等于终缺，不代表全部未开订单；重复键保持未知`;
       const label=metrics[3].querySelector('.metric-head > span');
       if(label) { label.textContent='未开订单缺货量（已关联）';label.title=shortMetric.title; }
@@ -714,7 +745,7 @@ function renderSummary(results, selected) {
   const p = document.querySelector('#fulfillmentView > .fulfillment-analysis > p');
   if (p)
     p.textContent = `当前范围来源订单 ${value(summary, 'source_orders', get(results, 'orders.summary'))} 张；有效待备 ${value(open,'preparing_orders',get(results,'orders.open.summary'))} 张；源缺货关联 ${value(shortage,'matched_orders',get(results,'shortage.summary'))} 张，减库存后缺货 ${value(shortage,'after_inventory_short_qty',get(results,'shortage.summary'))}，源终缺 ${value(shortage,'final_short_qty',get(results,'shortage.summary'))}，终缺覆盖 ${value(shortage,'final_quantity_coverage',get(results,'shortage.summary'))}/${value(shortage,'matched_sku_rows',get(results,'shortage.summary'))} 项，重复键 ${value(shortage,'duplicate_sku_rows',get(results,'shortage.summary'))} 项。已关联追踪 ${value(trace, 'matched_orders', get(results, 'trace.summary'))} 张，超时 ${value(trace, 'overdue_orders', get(results, 'trace.summary'))} 张，预警 ${value(trace, 'warning_orders', get(results, 'trace.summary'))} 张。源终缺按上游字段展示，未重新分配供应，不把未关联记录补零。`;
-  if(p&&computed) p.textContent+=` 主表计算：待备超时至少${computed.preparingOverdue}张、预警至少${computed.preparingWarning}张，缺最晚开单时间${computed.preparingUnknown}张；待备需求覆盖${computed.pendingCoverage}/${computed.pendingGroups}项。整单满足率按完整原始需求与缺货量加权，不是SKU百分比平均；归并不明确时不计算。`;
+  if(p&&computed) p.textContent+=` 统一穿透状态计算：待备超时至少${computed.preparingOverdue}张、预警至少${computed.preparingWarning}张，缺最晚开单时间${computed.preparingUnknown}张；待备需求覆盖${computed.pendingCoverage}/${computed.pendingGroups}项。整单满足率按完整原始需求与缺货量加权，不是SKU百分比平均；归并不明确时不计算。`;
   const inventory = get(results, 'sku.detail');
   const itemAnalysis = document.querySelector('.item-analysis');
   if (results['sku.detail']) {
@@ -739,7 +770,12 @@ function renderSummary(results, selected) {
       '满足率',
       '订单明细满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|。EA按换算率对齐，拆单需求归并不明确时保持未知。已开发货满足率仅覆盖当前筛选列表，不冒充全月指标。',
     ],
-    ['准交率', '按新版文档以到货时间统计已发货订单，期限取三个到货时间最大值加12小时；缺GPS围栏到货/到货确认时间，不用关单时间代替。'],
+    ['准交率', (()=>{
+      const trace=get(results,'execution.trace'),facts=enrichedFacts(results);
+      if(!trace)return '穿透表ai_db.agents_scm_order_trace_final_di尚未获准读取；GPS/到货确认及准交事实未接入当前页面，不以关单时间代替。';
+      const a=assessTraceArrivals(facts?.rows??[],{start:selected.start,end:selected.end_exclusive});
+      return `实际到货首取目的地GPS，次取到货确认；期限＝MAX(要求交货备份、确认到货、系统期望到货)＋12小时。当前创建日列表内到货样本${a.assessed}张，准时${a.onTime}张，未完成判定${a.unknown}张；${a.scope}。`;
+    })()],
     ['可发货天数', '按库存日期所在月计算：可用库存÷[(月销售计划＋月调拨出库计划×0.5)÷当月天数]；各计划纠偏值大于0时取纠偏，否则取初版。缺值或零分母不补零。'],
   ]) {
     const line = document.createElement('p');
@@ -777,11 +813,9 @@ async function load() {
   saveView();
   const ids = [
     'orders.facts',
+    'execution.trace',
     'orders.summary',
-    'orders.open.summary',
-    'shortage.summary',
     'shortage.detail',
-    'trace.summary',
     'sku.detail',
     'sku.age',
     'sku.owners',
@@ -790,7 +824,7 @@ async function load() {
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
       try {
-        const value = await (id==='orders.facts'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
+        const value = await (id==='orders.facts'||id==='execution.trace'||id==='shortage.detail'||id==='sku.detail'||id==='sku.age'||id==='sku.owners'
           ? reader.all(id,selected,{signal:task.signal}) : id.endsWith('.summary')
           ? reader.summary(id, selected, task.signal)
           : reader.collection(id, selected, {
@@ -815,7 +849,7 @@ async function load() {
         }
         if (progressive['orders.summary'])
           renderSummary(progressive, selected);
-        if(get(progressive,'orders.facts')&&['orders.facts','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
+        if(get(progressive,'orders.facts')&&['orders.facts','execution.trace','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
         return value;
       } catch (reason) {
         if (task.current()) progressive[id] = { status: 'rejected', reason };
@@ -842,8 +876,27 @@ async function load() {
     authorization: localPreview ? 'database-account-only' : 'current-gea-identity',
     mock: false,
     consumerCode: 'order01',
+    fieldCoverage: facts ? {
+      totalRows: facts.rows.length,
+      fields: Object.fromEntries(['packingunitmain','bizunitconvertrate','lastbillingdate','latestarrivaldate','latestsendcardate','requireddeliverytime','requireddeliverytimebak','system_calc_arrival_date','sales_person','order_person','logistics_provider'].map(field => [field, {
+        coveredRows: facts.rows.filter(row => row[field] !== null && row[field] !== undefined && row[field] !== '').length,
+        note: field === 'order_person' ? '术语库明确待后期配置；不从销售人员推断' : '当前授权完整明细输入的非空覆盖；非空不代表已核验全部业务映射',
+      }])),
+    } : null,
     filters: selected,
     dimension,
+    metrics: [...document.querySelectorAll('.summary.fulfillment-summary:not([hidden]) .metric')].map(node => ({
+      label: node.querySelector('.metric-head > span')?.textContent?.trim() ?? node.querySelector(':scope > span')?.textContent?.trim(),
+      display: node.querySelector('strong')?.textContent?.trim(),
+      definition: node.querySelector('strong')?.title || node.querySelector('small')?.textContent?.trim(),
+      dimension: node.closest('.summary').className,
+    })),
+    metricSemantics: {
+      unknown: '未分类状态、未关联穿透记录、缺失时间及权限拒绝均不视为正常或零；缺货和满足率必须同时说明覆盖范围。',
+      scope: '当前 OMS 单据新增时间筛选与授权交集；不是全历史或按到货日统计的完整分母。',
+      reference: '订单履约及工作台术语库：DfoBw71VNivaOLkHU2mc2OB2nyd，revision 1548。订单人员待配置；承运商未提供时不能猜测。',
+      cube: 'Cube 相似指标未经页面归并和覆盖规则验证，不替代页面卡片；pending_order_count 不等同本页穿透状态确认的未开订单。',
+    },
     comparisons:facts?{base:comparison('belong_base'),province:comparison('province_region_name'),scope:'当前筛选与授权范围完整输入；缺失覆盖不补零'}:null,
     calculated:calculatedMetrics(results) ? {...calculatedMetrics(results),quantities:calculatedMetrics(results).quantities.slice(0,50),quantityTotal:calculatedMetrics(results).quantities.length,detailScope:'前50个订单SKU组合样本；汇总覆盖基于完整输入，不用样本替代全量'} : null,
     readAt: new Date().toISOString(),
@@ -851,7 +904,7 @@ async function load() {
       ids.map((id) => [
         id,
         results[id].status === 'fulfilled'
-          ? { state: 'ready', ...results[id].value, ...(['orders.facts','sku.detail','sku.age','sku.owners','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
+          ? { state: 'ready', ...results[id].value, ...(['orders.facts','execution.trace','sku.detail','sku.age','sku.owners','shortage.detail'].includes(id)?{rows:results[id].value.rows.slice(0,50),detailScope:'完整指标输入的前50行样本；total为完整总行数，不用样本代替全量'}:{}) }
           : {
               state: 'unavailable',
               code: results[id].reason?.code ?? 'QUERY_FAILED',
@@ -960,6 +1013,7 @@ action('context', '读取当前授权订单履约数据', () => {
   if (!snapshot || !connected) throw Error('PAGE_CONTEXT_NOT_READY');
   return snapshot;
 });
+keepPageObservation(() => connected && snapshot, (value) => publish(value));
 function invalidate(event) {
   owner.invalidate();
   clearTimeout(timer);
