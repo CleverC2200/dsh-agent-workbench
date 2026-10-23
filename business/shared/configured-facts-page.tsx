@@ -6,6 +6,7 @@ import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { factMetric, readConfiguredFacts, initialFiltersForView } from './configured-facts';
 import css from './configured-facts-page.module.css';
 import { formatFactValue } from './fact-display';
+import { batchAgeShare } from './batch-age';
 
 const display = (value: any) =>
   value == null || value === ''
@@ -16,6 +17,7 @@ const display = (value: any) =>
 const today = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
 function cellValue(row: any, field: string, format?: string) {
+  if (format === 'quantity-share') return batchAgeShare(row[field], row.age_weight_qty);
   if (field === 'receive_address' && typeof row[field] === 'string') {
     try {
       const addresses = JSON.parse(row[field]);
@@ -139,7 +141,8 @@ export function ConfiguredFactsPage({
       config,
       viewId,
       { asOf, page, pageSize, filters, customer, cycleDays, readContext },
-      { signal: controller.signal },
+      // Business lists display rows; their independent overview owns card totals.
+      { signal: controller.signal, detailsOnly: Boolean(presentation) },
     )
       .then((value) => {
         if (controller.signal.aborted) return;

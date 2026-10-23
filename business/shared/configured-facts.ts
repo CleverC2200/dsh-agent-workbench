@@ -79,6 +79,7 @@ export async function readConfiguredFacts(
     summaryOnly?: boolean;
     detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
+    scopeReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
   const config = agentSqlConfig(fallback);
@@ -108,13 +109,14 @@ export async function readConfiguredFacts(
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
     const key = JSON.stringify([config.agentId, id, values]);
-    let job = snapshot ? options.snapshotReads?.get(key) : undefined;
+    const shared = snapshot ? options.snapshotReads : options.scopeReads;
+    let job = shared?.get(key);
     if (!job) {
       job = client.read(id, values, {
         signal: options.signal,
         requiredColumns: config.queries[id].resultColumns,
       });
-      if (snapshot) options.snapshotReads?.set(key, job);
+      shared?.set(key, job);
     }
     const result = await job;
     options.signal?.throwIfAborted();
@@ -190,14 +192,33 @@ export async function readConfiguredFacts(
     if (name === 'shipment_start') value = month < rollingStart ? month : rollingStart;
     if (name === 'shipment_month_start') value = month;
     if (name === 'rolling_start') value = rollingStart;
+    if (name === 'batch_rolling_start') {
+      const from = dateOnly(snapshotDate ?? input.asOf);
+      from.setUTCDate(from.getUTCDate() - 29);
+      value = from.toISOString().slice(0, 10);
+    }
+    if (name === 'batch_end_exclusive') value = nextDay(snapshotDate ?? input.asOf);
     if (name === 'shipment_end_exclusive') value = nextDay(input.asOf);
     if (name === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? nextMonth(month) : nextDay(input.asOf);
     if (name === 'month') value = month;
+    if (name === 'next_month') value = nextMonth(month);
     if (name === 'days_in_month')
       value = new Date(
         Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
       ).getUTCDate();
+    if (name === 'days_remaining_in_month') {
+      const day = dateOnly(input.asOf);
+      value =
+        new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate() -
+        day.getUTCDate();
+    }
+    if (name === 'next_days_in_month') {
+      const next = nextMonth(month);
+      value = new Date(
+        Date.UTC(Number(next.slice(0, 4)), Number(next.slice(5, 7)), 0),
+      ).getUTCDate();
+    }
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = pageSize;

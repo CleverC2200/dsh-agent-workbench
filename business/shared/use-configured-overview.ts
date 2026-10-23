@@ -8,6 +8,7 @@ export function useConfiguredOverview(
   revision: number,
   onRead?: (data: any) => void,
   cycleDays?: number,
+  viewIds?: readonly string[],
 ) {
   const [state, setState] = useState<any>({ parts: {}, busy: true, errors: [] });
   useEffect(() => {
@@ -16,6 +17,7 @@ export function useConfiguredOverview(
     void readConfiguredOverview(config, date, customer, {
       signal: controller.signal,
       cycleDays,
+      viewIds,
       onProgress: (parts) => {
         if (!controller.signal.aborted)
           setState({
@@ -49,6 +51,6 @@ export function useConfiguredOverview(
         }
       });
     return () => controller.abort();
-  }, [config.agentId, date, customer, revision, cycleDays]);
+  }, [config.agentId, JSON.stringify(viewIds), date, customer, revision, cycleDays]);
   return state;
 }

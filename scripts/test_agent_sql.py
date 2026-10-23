@@ -5,6 +5,8 @@ import re
 import sqlglot
 from test_current_shortage_source import SourceFormula
 from test_fc_aging_source import BranchAgingSource
+from test_batch_age_lists import BatchAgeLists
+from test_qll_structure import QllStructureAgeTests
 from unittest.mock import patch
 from agent_sql import ContractError, bind, inspect, validate_parameters, Executor, direct_preview_document, config_for
 
@@ -371,9 +373,10 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
             'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
             'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
-            'agents_scm_material_in_out_summary_d': 'warehouseid material_code material_name material_group_name warehouse_name product_categ_name',
+            'agents_scm_execute_detail_d': 'cust_order_no material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyallocated',
+            'agents_scm_material_in_out_summary_d': 'warehouseid pickup_point material_code material_name material_group_name warehouse_name product_categ_name',
         }
-        numeric = set('live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan act_dl_qty'.split())
+        numeric = set('adjust_order_qty qtyallocated live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
@@ -405,6 +408,29 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
                 params.pop(key)
                 params.update(zip(names, value))
         return [dict(row) for row in self.db.execute(sql,params)]
+
+    def test_visible_order_columns_use_only_eligible_orders_and_same_sku_gap(self):
+        self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',pickup_point='P1',material_code='S1')
+        self.insert('agents_scm_execute_detail_d',cust_order_no='O1',material_code='S1',pickup_point='P1',belong_base='基地1',bizflowstatus='创建',adjust_order_qty=40,qtyallocated=5)
+        self.insert('agents_scm_execute_detail_d',cust_order_no='O2',material_code='S1',pickup_point='P1',belong_base='基地1',bizflowstatus='等待组波',adjust_order_qty=10,qtyallocated=20)
+        self.insert('agents_scm_execute_detail_d',cust_order_no='DONE',material_code='S1',pickup_point='P1',belong_base='基地1',bizflowstatus='OCP已下发',adjust_order_qty=1000,qtyallocated=900)
+        rows=self.read('replenishment.detail.atomic');row=next(r for r in rows if r['sku']=='S1')
+        self.assertEqual((row['current_order_demand'],row['current_order_allocated'],row['current_order_remaining'],row['current_order_shortage']),(50,25,35,10))
+        self.assertEqual(next(r for r in rows if r['sku']=='S2')['current_order_shortage'],0)
+        self.insert('agents_scm_execute_detail_d',cust_order_no='NO-STOCK',material_code='S3',pickup_point='P1',belong_base='基地1',bizflowstatus='创建',adjust_order_qty=12,qtyallocated=2)
+        row=next(r for r in self.read('replenishment.detail.atomic') if r['sku']=='S3')
+        self.assertEqual((row['available_qty'],row['current_order_shortage']),(0,10))
+        self.assertEqual(self.read('replenishment.count')[0]['total'],3)
+
+
+    def test_period_plan_columns_use_exact_months_and_absence_is_numeric_zero(self):
+        row=self.read('transfer_plan.detail')[0]
+        self.assertEqual((row['period_current_out'],row['period_next_out'],row['period_next_transfer']),(310,0,0))
+        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='S1',plan_month='2026-11-01',warehouse_month_out_plan=600,warehouse_month_transfer_plan=700,plan_source='月计划')
+        row=self.read('transfer_plan.detail.atomic')[0]
+        self.assertEqual((row['period_current_out'],row['period_next_out'],row['period_next_transfer']),(310,600,700))
+        row=next(r for r in self.read('replenishment.detail.atomic') if r['sku']=='S1')
+        self.assertEqual((row['period_current_daily'],row['period_next_daily']),(10,20))
 
     def test_batch_stock_sums_every_class_without_classification_filters(self):
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',material_code='S1',prod_date='2026-08-30',warehouse_classify='20',live_qty=10,available_qty=5,pack_unit_qty=5,freeze_qty=0)

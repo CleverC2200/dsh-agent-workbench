@@ -4,6 +4,7 @@ import { existsSync, readFileSync, globSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { isBuiltin } from 'node:module';
+import { isDeepStrictEqual } from 'node:util';
 
 const digest = (value) => createHash('sha256').update(value).digest('hex');
 const git = (root, ...args) =>
@@ -18,6 +19,54 @@ const packageDependency = '@ci/packages';
 const sdkDependency = '@ci/sdk';
 const upstreamDependency = '@ci/upstreams';
 const testFile = /\.(?:test\.[cm]?[jt]sx?|(?:browser|contract)\.mjs)$/;
+
+function versionOnlyFiles(root, base) {
+  const files = new Set();
+  try {
+    const before = JSON.parse(git(root, 'show', `${base}:package.json`));
+    const after = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
+    const { version: previous, ...oldFields } = before;
+    const { version: current, ...newFields } = after;
+    if (
+      typeof previous !== 'string' ||
+      !previous ||
+      typeof current !== 'string' ||
+      !current ||
+      current === previous ||
+      typeof before.name !== 'string' ||
+      JSON.stringify(oldFields) !== JSON.stringify(newFields)
+    )
+      return files;
+    files.add('package.json');
+    const file = 'src/plugin-package-version.ts';
+    const oldStamp = git(root, 'show', `${base}:${file}`);
+    const newStamp = readFileSync(resolve(root, file), 'utf8');
+    const literal = (value, quote) =>
+      quote === '"'
+        ? JSON.stringify(value)
+        : "'" + JSON.stringify(value).slice(1, -1).replaceAll("'", "\\'") + "'";
+    for (const quote of ['"', "'"]) {
+      const oldLine = `  version: ${literal(previous, quote)},`;
+      if (
+        oldStamp.includes(oldLine) &&
+        oldStamp.replace(oldLine, `  version: ${literal(current, quote)},`) === newStamp
+      )
+        files.add(file);
+    }
+    const lockFile = 'package-lock.json';
+    if (existsSync(resolve(root, lockFile))) {
+      const oldLock = JSON.parse(git(root, 'show', `${base}:${lockFile}`));
+      const newLock = JSON.parse(readFileSync(resolve(root, lockFile), 'utf8'));
+      const normalized = structuredClone(oldLock);
+      if (oldLock.version === previous) normalized.version = current;
+      if (oldLock.packages?.['']?.version === previous) normalized.packages[''].version = current;
+      if (isDeepStrictEqual(normalized, newLock)) files.add(lockFile);
+    }
+  } catch {
+    return files;
+  }
+  return files;
+}
 
 function references(file, roots, known, importsOnly = false) {
   const result = new Map();
@@ -502,9 +551,18 @@ export function selectCiTests({
         changes.some((change) => dependencies(file, false).has(change.path)),
     );
   const applicability = docsOnly ? 'docs' : 'source';
+  const versionTests = policy.versionTests === undefined ? [] : expand(policy.versionTests);
+  const versionFiles =
+    sourceOnly && versionTests.length ? versionOnlyFiles(root, diffBase) : new Set();
   const selected = new Set(docsOnly ? [] : required),
     reasons = {};
   for (const change of changes) {
+    if (change.repo === repo && versionFiles.has(change.file)) {
+      change.versionOnly = true;
+      reasons[`${change.repo}/${change.file}`] = versionTests;
+      for (const file of versionTests) selected.add(directFile(file));
+      continue;
+    }
     const rules =
       sourceOnly && change.repo === repo && pool.includes(change.file)
         ? []
@@ -596,7 +654,11 @@ export function selectCiTests({
     diffBase,
     policySha256: digest(policyBytes),
     peerBaselineSha256: sourceOnly ? null : digest(baselineBytes),
-    changes: changes.map(({ repo, file }) => ({ repo, file })),
+    changes: changes.map(({ repo, file, versionOnly }) => ({
+      repo,
+      file,
+      ...(versionOnly ? { versionOnly } : {}),
+    })),
     required,
     files,
     executedBy,

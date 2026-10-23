@@ -3,6 +3,7 @@ import sqlConfiguration from '../../../sql.config.json';
 import { createAgentQueries } from '../../../../shared/agent-query';
 import { agentSqlConfig } from '../../../../shared/sql-config';
 import { readWorkspaceQuery } from '../../../../shared/workspace-query';
+import { readBatchAge } from '../../../../shared/batch-age';
 import {
   resolveInitialSafetyStockScope,
   type SafetyStockScope,
@@ -402,27 +403,32 @@ export async function readConfiguredStockPage(
   };
 }
 
-/** Independent warehouse health snapshot; never joins repeated base totals into daily stock. */
+/** Batch aggregates supply base list ages and the existing maximum-age card in two reads. */
 export async function readConfiguredHealthSummary(
   bases: string[] | undefined,
   signal?: AbortSignal,
 ) {
-  const { readConfiguredFacts } = await import('../../../../shared/configured-facts');
-  const config = agentSqlConfig(sqlConfiguration);
-  const result = await readConfiguredFacts(
-    config,
-    'health-base',
+  const result = await readBatchAge(
+    sqlConfiguration,
     {
       asOf: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()),
-      filters: bases?.length ? { base: bases.join(',') } : {},
+      bases,
+      groupBy: 'base',
     },
     { signal },
   );
-  if (result.total > result.rows.length)
-    throw Error('基地货龄分组超过当前页范围，未使用不完整汇总');
-  if (result.summaryError)
-    throw Object.assign(Error(result.summaryError.message), result.summaryError);
-  return result;
+  if (result.total > result.rows.length) throw Error('基地货龄分组超过当前范围');
+  const ages = result.rows.flatMap((row) => (row.max_age === null ? [] : [row.max_age]));
+  return {
+    ...result,
+    summary: result.rows.length
+      ? {
+          max_age: ages.length ? Math.max(...ages) : null,
+          row_count: result.rows.reduce((n, row) => n + row.row_count, 0),
+          age_valid_count: result.rows.reduce((n, row) => n + row.age_valid_count, 0),
+        }
+      : null,
+  };
 }
 
 /** Server aggregates preserve per-SKU target rules before reducing transport volume. */

@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "versionTests": ["tests/plugin-package-version.test.mjs"],
   "required": ["tests/official-entry.test.mjs", "tests/workbench-recovery.test.mjs"],
   "tests": [
     "tests/*.test.mjs",
