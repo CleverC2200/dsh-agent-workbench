@@ -4,6 +4,7 @@ export const customerLoadLocales = {
     waiting: '正在连接客户库存，数据尚未读取。',
     timeout: '客户库存连接尚未就绪，请重新进入；当前未取得数据。',
     loading: '正在读取客户库存数据…',
+    enriching: '库存数据已加载，正在补充计划与在途信息…',
     denied: '当前用户无权访问客户库存，请联系管理员授权。',
     dataDenied: '当前用户暂无客户库存数据权限，请联系管理员核对数据授权。',
     login: '请先登录 GEA，再读取客户库存。',
@@ -19,6 +20,7 @@ export const customerLoadLocales = {
     waiting: 'Connecting to customer inventory. Data has not been read.',
     timeout: 'The inventory connection is not ready. Reopen this page; no data was received.',
     loading: 'Loading customer inventory…',
+    enriching: 'Inventory loaded. Loading plan and in-transit details…',
     denied: 'You do not have access to customer inventory. Contact an administrator.',
     dataDenied:
       'You do not have customer inventory data permission. Ask an administrator to check data grants.',

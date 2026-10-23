@@ -89,12 +89,12 @@ async function fixture(
   return { page, frame, errors };
 }
 
-test('no connection keeps six cards and table visible without claiming inventory facts', async (t) => {
+test('no connection shows loading and six cards without claiming inventory facts', async (t) => {
   const { frame, errors } = await fixture(t, { connect: false });
   await expect(frame.locator('#customer-load-status')).toContainText('正在连接客户库存');
-  await expect(frame.locator('#customer-load-status')).toBeHidden();
+  await expect(frame.locator('#customer-load-status')).toBeVisible();
   await expect(frame.locator('.metric-card')).toHaveCount(6);
-  await expect(frame.locator('.dealer-table-card')).toBeVisible();
+  await expect(frame.locator('.dealer-table-card')).toBeHidden();
   assert.deepEqual(errors, []);
 });
 
