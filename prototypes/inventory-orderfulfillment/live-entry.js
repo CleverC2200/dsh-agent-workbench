@@ -390,6 +390,10 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
     button.setAttribute('aria-label', '展开 SKU 明细');
     expand.append(button);
     tr.append(expand);
+    const channelCode=value(row,'channel',orders);
+    const customerTypeLabel={dc:'配送中心',kamd:'门店'}[channelCode]
+      ??(channelLabels[channelCode]?channelLabel(channelCode)
+        :['—','无权限'].includes(channelCode)?channelCode:'待确认');
     const values = [
       value(row, 'order_no', orders),
       value(row, 'created_at', orders),
@@ -397,11 +401,11 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
       value(row, 'sales_group', orders),
       value(row, 'province', orders),
       value(row, 'region', orders),
-      channelLabel(value(row, 'channel', orders)),
+      customerTypeLabel,
       q?value(q,'sales_person',quantities):value(row, 'sales_person', orders),
       q?value(q,'order_person',quantities):value(row, 'order_person', orders),
       value(row, 'base', orders),
-      (q?value(q,'carrier',quantities):value(carrier, 'carrier', warehouse))==='—'?'源数据未提供':q?value(q,'carrier',quantities):value(carrier,'carrier',warehouse),
+      q?value(q,'carrier',quantities):value(carrier,'carrier',warehouse),
       q?.business_stage??value(row, 'source_status', orders),
       risk,
       q?.order_allocation_rate===null||q?.order_allocation_rate===undefined?'—':Number(q.order_allocation_rate).toFixed(1)+'%',
@@ -416,6 +420,8 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
       if(v==='—')node.title='当前授权结果缺少该字段，或完整计算条件不足；不是零';
       tr.append(node);
     }
+    tr.cells[7].className='customer-type-cell';
+    if(!['—','无权限'].includes(channelCode))tr.cells[7].title=`${channelLabel(channelCode)}；原始编码：${channelCode}`;
     tr.cells[14].title=q?.quantity_issue||'整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
     if (body.id === 'deliveryOrderDetailRows') {
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
