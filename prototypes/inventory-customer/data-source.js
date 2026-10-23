@@ -17,7 +17,7 @@ WITH sku AS (
     MIN(cif_price) AS cif_price_min, MAX(cif_price) AS cif_price_max,
     CASE WHEN COUNT(cif_price) = COUNT(*) THEN 1 ELSE 0 END AS cif_price_complete,
     CASE WHEN COUNT(stock_qty) = COUNT(*) THEN SUM(stock_qty) END AS stock_qty,
-    CASE WHEN COUNT(stock_amt) = COUNT(*) THEN SUM(stock_amt) END AS stock_amt,
+    CASE WHEN COUNT(stock_qty * cif_price) = COUNT(*) THEN SUM(stock_qty * cif_price) END AS stock_amt,
     CASE WHEN COUNT(pack_unitqty) = COUNT(*) THEN SUM(pack_unitqty) END AS in_transit_qty,
     CASE WHEN COUNT(normal_stock_qty) = COUNT(*) THEN SUM(normal_stock_qty) END AS normal_stock_qty,
     CASE WHEN COUNT(big_final_qty) = COUNT(*) THEN SUM(big_final_qty) END AS large_date_qty,

@@ -5,11 +5,11 @@ export const customerMetricDefinitions = {
     title: '库存价值',
     purpose: '客户库存总金额。',
     formula: [
-      '客户库存价值（元）＝Σ（客户SKU库存数量 × SAP销售单单价）',
+      '客户库存价值（元）＝Σ（客户SKU库存数量 × 统一到岸价）',
       '库存价值（万元）＝Σ客户库存价值（元）÷ 10,000',
     ],
     rules: ['缺失：库存价值的健康、需关注及高风险判定标准。'],
-    notes: ['当前取数：Σ stock_amt ÷ 10,000。', '缺失：SAP销售单单价的源字段映射与计算核验结果。'],
+    notes: ['当前取数：Σ（stock_qty × cif_price）÷ 10,000；统一到岸价来源：agents_scm_cust_jxc_ai_daliy_d.cif_price。', '缺少库存数量或单价的客户不计入金额汇总，不补0；源stock_amt不作为本口径库存价值。'],
   },
   quantity: {
     title: '库存数量',
@@ -98,9 +98,9 @@ export const customerMetricDefinitions = {
 export const customerMetricDisplay = {
   value: {
     title: '库存价值', purpose: '当前客户库存的总金额。',
-    formula: ['库存价值＝Σ（SKU库存数量 × 单价）'],
+    formula: ['库存价值＝Σ（SKU库存数量 × 统一到岸价）'],
     rules: ['健康状态判定标准待确认。'],
-    notes: ['当前库存金额的单价口径待确认。'],
+    notes: ['按统一到岸价计价；缺少单价时不计入汇总。'],
   },
   quantity: {
     title: '库存数量', purpose: '客户当前库存总量，不含在途。',
@@ -134,7 +134,7 @@ export const customerMetricDisplay = {
 
 export function customerMetricCaption(key, summary, format) {
   return {
-    value: '当前库存总金额',
+    value: '按统一到岸价计价',
     quantity: '现库存，不含在途',
     structure: '健康≥80分；关注≥65分',
     freshness: '非大日期库存占比',
@@ -145,7 +145,7 @@ export function customerMetricCaption(key, summary, format) {
 
 export function customerMetricEvidence(summary, count, format) {
   return [
-    `库存 ${format(summary.quantity)} 箱；库存价值 ${format(summary.totalValue, 1)} 万；上游推演与SAP单价待核验。`,
+    `库存 ${format(summary.quantity)} 箱；库存价值 ${format(summary.totalValue, 1)} 万，按统一到岸价计价。`,
     `结构分 ${format(summary.structureScore, 1)}；有效覆盖 ${summary.structureCoverageCount}/${count} 客户（可售库存代理、绝对值待确认）。`,
     `周转 ${format(summary.turnover, 1)} 天（${summary.turnoverEstimated ? '在途缺失，含现货估算' : '含在途'}）；覆盖 ${summary.turnoverCoverageCount}/${count} 客户；低覆盖 ${summary.lowCoverageCount} 家。`,
     `大日期库存 ${format(summary.largeDateQty)} 箱，占比 ${format(summary.largeDateRatio, 1)}%；数量覆盖 ${summary.largeDateCoverageCount}/${count} 客户；占比覆盖 ${summary.largeDateRatioCoverageCount}/${count}；数量异常 ${summary.largeDateInvalidCount} 家。`,
