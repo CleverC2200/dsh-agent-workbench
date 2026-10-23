@@ -81,3 +81,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+#itemInventoryPanel { overflow: visible; min-width: 0; }
+.item-inventory-table-scroll { overflow-x: auto; width: 100%; }
+#itemInventoryPanel > .order-pagination { width: 100%; box-sizing: border-box; }
