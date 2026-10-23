@@ -42,6 +42,12 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^tests/dealer-menu\\.test\\.mjs$",
+      "tests": ["tests/company-ui.test.mjs"],
+      "sourceTests": ["tests/company-ui.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:static/mps/|scripts/(?:mps-compute-build|build-static-authors|static-author-provenance)\\.mjs$)",
       "tests": [
         "tests/mps-*.browser.mjs",
