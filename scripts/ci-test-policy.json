@@ -289,6 +289,11 @@
       "pattern": "^scripts/source-result\\.mjs$",
       "tests": ["tests/source-result.test.mjs"],
       "sourceTests": ["tests/source-result.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^\\.gitignore$",
+      "tests": ["tests/candidate-input.test.mjs", "tests/quality-ci.test.mjs"]
     }
   ],
   "sourceTools": {
