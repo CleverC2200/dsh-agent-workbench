@@ -40,6 +40,7 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   min-width: 0;
 }
 .gea-workspace-owned {
+  --dsw-alias-interactive-bg-hover: #fff1f4;
   position: relative;
   order: 4;
   flex: 0 1 auto;

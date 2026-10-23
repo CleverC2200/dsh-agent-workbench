@@ -488,8 +488,8 @@
 
 .gea-shell-navigation-content > button:hover,
 .gea-shell-navigation-content > .gea-shell-child:hover {
-  background: #eceef2 !important;
-  color: #202531;
+  background: #fff1f4 !important;
+  color: #d0132c;
 }
 
 .gea-shell-navigation button:focus-visible {
