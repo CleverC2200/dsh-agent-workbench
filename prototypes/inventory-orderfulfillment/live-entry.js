@@ -302,7 +302,12 @@ function orderPage(body,context,reset,render=renderOrders) {
     previous.type=next.type='button';previous.textContent='上一页';next.textContent='下一页';info.setAttribute('aria-live','polite');
     nav.append(count,size,previous,info,next);
     const table=body.closest('table');
-    (table.parentElement.id==='itemInventoryPanel'?table:table.parentElement).after(nav);
+    if(table.parentElement.id==='itemInventoryPanel') {
+      const scroll=document.createElement('div');
+      scroll.className='item-inventory-table-scroll';
+      table.before(scroll);scroll.append(table);
+    }
+    table.parentElement.after(nav);
     state={nav,count,size,previous,info,next,page:0,limit:20,context:null};orderPagination.set(body,state);
     const update=()=>{if(state.context)state.render(body,...state.context,false);};
     previous.addEventListener('click',()=>{state.page--;update();});
