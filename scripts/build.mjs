@@ -15,6 +15,14 @@ await import('./build-static-authors.mjs');
 await mkdir('lib', { recursive: true });
 for (const file of ['configured-query-client.mjs', 'configured-query-client.d.mts'])
   await copyFile(`business/shared/${file}`, `lib/${file}`);
+await copyFile('business/shared/configured-facts.d.mts', 'lib/configured-facts.d.mts');
+await build({
+  entryPoints: ['business/shared/configured-facts.ts'],
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  outfile: 'lib/configured-facts.mjs',
+});
 await mkdir('lib/theme', { recursive: true });
 await copyFile('theme/tokens.css', 'lib/theme/tokens.css');
 await copyFile('theme/html-defaults.css', 'lib/theme/html-defaults.css');
