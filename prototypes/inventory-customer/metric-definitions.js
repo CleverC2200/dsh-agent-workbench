@@ -86,7 +86,7 @@ export const customerMetricDefinitions = {
       '缺失：健康、需关注及高风险三级判定标准。',
     ],
     notes: [
-      '口径已变更：使用 big_final_qty 的上游结果，不沿用旧 over120 字段或在页面按120天重算。',
+      '按知识库修订434：批次货龄>90天为大日期；使用 big_final_qty 上游结果，不在页面重复推演批次。',
       '当前取数：Σ big_final_qty，单位：箱；使用数据侧提供的客户大日期库存结果。',
       '页面不重复推演批次，不再使用 stock_qty－normal_stock_qty 估算。',
       '源数量保留；SKU差异单独记录，不作为业务风险。仅汇总口径无法计算时保留空值并说明原因。',
@@ -102,6 +102,6 @@ export function customerMetricEvidence(summary, count, format) {
     `周转 ${format(summary.turnover, 1)} 天（${summary.turnoverEstimated ? '在途缺失，含现货估算' : '含在途'}）；覆盖 ${summary.turnoverCoverageCount}/${count} 客户；低覆盖 ${summary.lowCoverageCount} 家。`,
     `大日期库存 ${format(summary.largeDateQty)} 箱，占比 ${format(summary.largeDateRatio, 1)}%；数量覆盖 ${summary.largeDateCoverageCount}/${count} 客户；占比覆盖 ${summary.largeDateRatioCoverageCount}/${count}；数量异常 ${summary.largeDateInvalidCount} 家。`,
     `风险/待处理 ${summary.riskCount} 家（含需关注）；高风险及异常 ${summary.highRiskCount} 家；待评估 ${summary.unknownCount} 家。`,
-    '控补客户需要平均货龄≥90天；测算补货缺口需要周转标准、剩余计划与熔断信息，当前同快照来源未接入，不伪造结果。',
+    '控补SKU使用已关联计划来源的平均货龄≥90天；目标、标准和源预订单附覆盖与快照，缺失保持未知。测算补货缺口仍需剩余计划与熔断信息，不伪造结果。',
   ];
 }

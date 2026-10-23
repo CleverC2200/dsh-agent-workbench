@@ -21,6 +21,7 @@ const presentation = mountCustomerPrototype(report, emptyInventory());
 let loadState = 'waiting';
 function showLoadState(state) {
   loadState = state;
+  document.getElementById('root')?.setAttribute('aria-busy', String(state === 'waiting' || state === 'loading'));
   const status = document.getElementById('customer-load-status');
   if (status) {
     status.textContent = copy[state] ?? '';
@@ -119,20 +120,28 @@ function report(value) {
   if (!publishing) void publishLatest();
 }
 async function reloadCustomerInventory() {
+  const generation = ++loadGeneration;
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
   try {
-    loadController?.abort();
     attached = true;
     clearTimeout(connectionTimer);
     showLoadState('loading');
-    const generation = ++loadGeneration;
-    loadController = new AbortController();
     void readAuthorizationScope().then((scope) => {
       if (!attached || generation !== loadGeneration) return;
       authorizationScope = scope;
       if (snapshot) report(snapshot);
     });
     const inventory = await loadCustomerInventory({
-      signal: AbortSignal.any([loadController.signal, AbortSignal.timeout(90000)]),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]),
+      onInventory(inventory) {
+        if (!attached || generation !== loadGeneration) return;
+        inventorySnapshot = inventory.snapshot;
+        hasData = true;
+        presentation.update(inventory);
+        showLoadState(inventory.rows.length ? 'enriching' : 'empty');
+      },
     });
     if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
@@ -141,7 +150,8 @@ async function reloadCustomerInventory() {
     showLoadState(inventory.rows.length ? 'ready' : 'empty');
     presentation.update(inventory);
   } catch (error) {
-    if (attached && !loadController?.signal.aborted) showLoadState(customerLoadFailure(error));
+    if (attached && generation === loadGeneration && !controller.signal.aborted)
+      showLoadState(customerLoadFailure(error));
   }
 }
 void ready.then(reloadCustomerInventory);

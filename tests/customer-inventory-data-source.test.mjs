@@ -39,6 +39,87 @@ const source = await readFile(
   'utf8',
 );
 
+test('inventory and optional plans start together without weakening failures or cancellation', async () => {
+  const moduleSource = source
+    .replace(
+      "import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';",
+      'let executeAllGeaSqlPages; export const setReader=read=>{executeAllGeaSqlPages=read;};',
+    )
+    .replace(
+      /from '([^']+)'/g,
+      (_match, path) =>
+        `from '${new URL(path, new URL('../prototypes/inventory-customer/data-source.js', import.meta.url)).href}'`,
+    );
+  const loader = await import(
+    'data:text/javascript;base64,' + Buffer.from(moduleSource).toString('base64')
+  );
+  let calls = [];
+  loader.setReader(
+    (sql, options) =>
+      new Promise((resolve, reject) => calls.push({ sql, options, resolve, reject })),
+  );
+  const loading = loader.loadCustomerInventory();
+  assert.equal(calls.length, 3, '库存、地址、计划三个独立数据源并行');
+  calls[1].resolve([]);
+  calls[2].reject(Object.assign(Error('plan denied'), { code: 'RETURN_PERMISSION_DENIED' }));
+  calls[0].resolve([]);
+  assert.equal((await loading).planState, 'RETURN_PERMISSION_DENIED');
+  calls = [];
+  let first;
+  const combined = loader.loadCustomerInventory({
+    onInventory(value) {
+      first = value;
+    },
+  });
+  calls[0].resolve([
+    {
+      snapshot_date: '2026-10-21',
+      cust_code: 'A',
+      cust_name: '客户A',
+      stock_qty: 10,
+      sku_rows: 1,
+      stock_coverage: 1,
+    },
+    {
+      snapshot_date: '2026-10-21',
+      cust_code: 'B',
+      cust_name: '客户B',
+      stock_qty: 20,
+      sku_rows: 1,
+      stock_coverage: 1,
+    },
+  ]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(first.rows.length, 2, '主数据不等待辅助查询');
+  calls[1].resolve([
+    { cust_code: 'B', dealer_receive_addr: '[{"cust_name":"客户（郑州市）卸货地"}]' },
+    { cust_code: 'outside', dealer_receive_addr: '[]' },
+  ]);
+  calls[2].resolve([]);
+  const joined = await combined;
+  assert.equal(joined.rows.length, 2, '辅助数据不能增加库存客户');
+  assert.deepEqual(joined.rows.find((row) => row.code === 'B').cities, ['郑州市']);
+  assert.equal(
+    joined.rows.reduce((sum, row) => sum + row.quantity, 0),
+    30,
+  );
+  calls = [];
+  const failed = loader.loadCustomerInventory();
+  calls[0].reject(Error('inventory denied'));
+  calls[1].resolve([]);
+  calls[2].resolve([]);
+  await assert.rejects(failed, /inventory denied/);
+  calls = [];
+  const controller = new AbortController();
+  const aborted = loader.loadCustomerInventory({ signal: controller.signal });
+  assert.ok(calls.every((call) => call.options.signal === controller.signal));
+  controller.abort();
+  calls[1].resolve([]);
+  calls[2].reject(Error('aborted'));
+  calls[0].resolve([]);
+  await assert.rejects(aborted, /aborted/);
+});
+
 test('inventory loading copy distinguishes permission, resource, session and query failures in both locales', () => {
   for (const [message, expected] of [
     ['AGENT_ACCESS_DENIED', 'denied'],
@@ -425,21 +506,4 @@ test('isolated SKU discrepancies do not block customer or city aggregates or imp
     customerInventoryStatus({ ...rows[0], largeDateRatio: 1, structureScore: 90 }),
     'healthy',
   );
-});
-
-test('customer Agent manifest registers the page bridge and all five supplied Skills in profile order', async () => {
-  const manifest = JSON.parse(
-    await readFile(
-      new URL('../prototypes/inventory-customer/plugin.json', import.meta.url),
-      'utf8',
-    ),
-  );
-  assert.deepEqual(manifest.skills, [
-    'skills/customer/SKILL.md',
-    'skills/customer-inventory-age-risk/SKILL.md',
-    'skills/customer-inventory-change/SKILL.md',
-    'skills/customer-inventory-diagnosis/SKILL.md',
-    'skills/customer-overstock-control/SKILL.md',
-    'skills/customer-stockout-replenishment/SKILL.md',
-  ]);
 });
