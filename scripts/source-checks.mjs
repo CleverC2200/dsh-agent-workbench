@@ -73,6 +73,7 @@ export async function sourceChecks(result, phase) {
       : {};
   const joint =
     selected.runtime ||
+    selected.sourceWindow ||
     selected.build ||
     selected.files.some((file) => Object.values(lanes).some((lane) => file in lane));
   const staticChecks = joint ? [] : ['check:knowledge', 'lint', 'format:check'];
