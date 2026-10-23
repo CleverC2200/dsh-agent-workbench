@@ -59,6 +59,10 @@ test('coordination uses granted rows, supports search/base/paging and clears ide
     );
     document.querySelector('svg circle').dispatchEvent(new dom.window.Event('click'));
     assert.deepEqual(clicks, [['O1']]);
+    renderCharts(null, null, (ids) => clicks.push(ids));
+    assert.equal(document.querySelectorAll('svg circle').length, 0);
+    assert.match(document.getElementById('orderStatusChartDetail').textContent, /未评估/);
+    assert.match(document.querySelector('tbody').textContent, /SKU26/);
     clearPanels();
     assert.ok(!document.body.textContent.includes('SKU26'));
     assert.equal(document.querySelectorAll('svg circle').length, 0);
