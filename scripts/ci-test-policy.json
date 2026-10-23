@@ -302,7 +302,7 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^src/workbench/(?:original/workbenches/regionalApproval/|workbench\\.css$)",
+      "pattern": "^src/workbench/(?:original/workbenches/regionalApproval/(?:RegionalApprovalWorkbench\\.(?:tsx|module\\.css)|InlineSkuDetails\\.module\\.css)|workbench\\.css)$",
       "tests": ["tests/sales-plan-presentation.browser.mjs"]
     }
   ],
