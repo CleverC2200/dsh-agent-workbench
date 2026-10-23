@@ -95,6 +95,54 @@ export const customerMetricDefinitions = {
   },
 };
 
+export const customerMetricDisplay = {
+  value: {
+    title: '库存价值', purpose: '当前客户库存的总金额。',
+    formula: ['库存价值＝Σ（SKU库存数量 × 单价）'],
+    rules: ['健康状态判定标准待确认。'],
+    notes: ['当前库存金额的单价口径待确认。'],
+  },
+  quantity: {
+    title: '库存数量', purpose: '客户当前库存总量，不含在途。',
+    formula: ['库存数量＝Σ客户现库存数量'],
+    rules: ['健康状态判定标准待确认。'], notes: [],
+  },
+  structure: {
+    title: '结构合理性', purpose: '库存结构与近30日销量结构的匹配程度，越高越合理。',
+    formula: ['结构分＝100 ×（1－½ × Σ｜SKU库存占比－SKU销量占比｜）'],
+    rules: ['≥80分：健康；65～不足80分：需关注；<65分：高风险。'],
+    notes: ['仅统计可评分客户，汇总取平均值；可售库存范围及公式口径待确认。'],
+  },
+  freshness: {
+    title: '库存新鲜度', purpose: '非大日期库存占总库存的比例。',
+    formula: ['新鲜度＝（总库存－大日期库存）÷ 总库存 × 100%'],
+    rules: ['健康状态判定标准待确认。'], notes: [],
+  },
+  turnover: {
+    title: '周转天数', purpose: '按近30日销售速度，库存可支持的天数。',
+    formula: ['周转天数＝（现库存＋在途库存）÷（近30日销量 ÷ 30）'],
+    rules: ['覆盖不足60天的客户计入低覆盖客户；完整健康分级待确认。'],
+    notes: ['在途数据不全时，仅按现库存估算；无有效销量时不计算。'],
+  },
+  largeDate: {
+    title: '大日期情况', purpose: '大日期库存数量及其占总库存的比例。',
+    formula: ['大日期占比＝大日期库存数量 ÷ 总库存数量 × 100%'],
+    rules: ['客户大日期占比≥5%：大日期风险客户。'],
+    notes: ['沿用数据侧的大日期判定；货龄90天的边界口径待统一。'],
+  },
+};
+
+export function customerMetricCaption(key, summary, format) {
+  return {
+    value: '当前库存总金额',
+    quantity: '现库存，不含在途',
+    structure: '健康≥80分；关注≥65分',
+    freshness: '非大日期库存占比',
+    turnover: summary.turnoverEstimated ? '在途不全，按现库存估算' : '按近30日动销，含在途',
+    largeDate: `占总库存 ${format(summary.largeDateRatio, 1)}%`,
+  }[key];
+}
+
 export function customerMetricEvidence(summary, count, format) {
   return [
     `库存 ${format(summary.quantity)} 箱；库存价值 ${format(summary.totalValue, 1)} 万；上游推演与SAP单价待核验。`,
