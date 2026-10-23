@@ -1,3 +1,4 @@
+import { createAgentQueries } from './agent-query';
 import { readConfiguredFacts } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
@@ -34,6 +35,7 @@ export async function readConfiguredOverview(
   customer = '',
   options: {
     signal?: AbortSignal;
+    viewIds?: readonly string[];
     cycleDays?: number;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
@@ -41,7 +43,8 @@ export async function readConfiguredOverview(
 ) {
   config = agentSqlConfig(config);
   const ids: string[] = [
-    ...(config.overviewViewIds ??
+    ...(options.viewIds ??
+      config.overviewViewIds ??
       (config.agentId === 'inventory-fc'
         ? ['orders', 'plan']
         : config.agentId === 'inventory-qll'
@@ -49,57 +52,134 @@ export async function readConfiguredOverview(
           : ['customer'])),
   ];
   const snapshotReads = new Map<string, Promise<any>>();
+  const scopeReads = new Map<string, Promise<any>>();
   if (config.queries?.['current-shortage.summary']) ids.push('current-shortage');
+  const priority = [
+    'health',
+    'branch-stock',
+    'current-shortage',
+    'factory-overview',
+    'branch-overview',
+  ];
+  ids.sort((a, b) => {
+    const rank = (id: string) => {
+      const at = priority.indexOf(id);
+      return at < 0 ? priority.length : at;
+    };
+    return rank(a) - rank(b);
+  });
   const parts: Record<string, any> = {},
     versions = new Set<unknown>();
   let invalid: Error | undefined;
+  const publish = (id: string, part: any) => {
+    options.signal?.throwIfAborted();
+    if (part.configVersion) versions.add(part.configVersion);
+    if (versions.size > 1)
+      invalid = Object.assign(Error('读取期间配置发生变化，请刷新'), {
+        code: 'QUERY_CONFIG_CHANGED',
+      });
+    if (invalid) throw invalid;
+    parts[id] = part;
+    options.onProgress?.({ ...parts });
+  };
+  const fromResult = (result: any) =>
+    result.summaryError
+      ? { error: result.summaryError.message }
+      : {
+          summary: result.summary,
+          total: result.total,
+          snapshotDate: result.snapshotDate,
+          inventoryVersion: result.parameters?.inventory_version,
+          configVersion: result.configVersion,
+        };
+  let quickStockFailed = false;
+  if (config.overviewQuickStock && ids.some((id) => ['health', 'branch-stock'].includes(id))) {
+    try {
+      const result = await createAgentQueries(config, options.execute).read(
+        config.overviewQuickStock,
+        { as_of: asOf },
+        {
+          signal: options.signal,
+          requiredColumns: config.queries[config.overviewQuickStock].resultColumns,
+        },
+      );
+      for (const row of result.rows) {
+        const id =
+          row.location_type === '基地'
+            ? 'health'
+            : row.location_type === '分仓'
+              ? 'branch-stock'
+              : undefined;
+        if (!id || !ids.includes(id)) continue;
+        const { location_type: _type, snapshot_date: snapshotDate, ...summary } = row;
+        const instant =
+          typeof snapshotDate === 'string' ? Date.parse(snapshotDate + 'T00:00:00Z') : NaN;
+        if (
+          !Number.isFinite(instant) ||
+          new Date(instant).toISOString().slice(0, 10) !== snapshotDate ||
+          snapshotDate > asOf
+        ) {
+          publish(id, { error: '库存快照无效', partial: true });
+          continue;
+        }
+        publish(id, {
+          summary,
+          snapshotDate,
+          total: Number(row.row_count),
+          configVersion: result.configVersion,
+        });
+        const snapshotId = id === 'health' ? 'source.health-date' : 'source.branch-stock-date';
+        snapshotReads.set(
+          JSON.stringify([config.agentId, snapshotId, { as_of: asOf }]),
+          Promise.resolve({ ...result, rows: [{ day: snapshotDate }] }),
+        );
+      }
+    } catch (error: any) {
+      if (options.signal?.aborted || error.code === 'QUERY_CONFIG_CHANGED') throw error;
+      quickStockFailed = true;
+      for (const id of ['health', 'branch-stock'])
+        if (ids.includes(id)) publish(id, { error: error.message, partial: true });
+    }
+  }
   await Promise.all(
     ids.map(async (id) => {
       let part: any;
+      if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
       try {
         if (id === 'current-shortage') {
           const result = await readCurrentShortage(config, id + '.summary', {}, options);
           part = {
             rows: result.rows,
+            partial: result.partial,
             configVersion: result.configVersion,
             snapshotDate: result.rows[0]?.snapshot_date,
           };
         } else {
-          const result = await readConfiguredFacts(
-            config,
-            id,
-            {
-              asOf,
-              customer,
-              cycleDays: options.cycleDays,
-              filters: id === 'customer' && customer ? { customer } : {},
-            },
-            { ...options, snapshotReads, summaryOnly: true },
-          );
-          part = result.summaryError
-            ? { error: result.summaryError.message }
-            : {
-                summary: result.summary,
-                total: result.total,
-                snapshotDate: result.snapshotDate,
-                inventoryVersion: result.parameters?.inventory_version,
-                configVersion: result.configVersion,
-              };
+          const view = config.sourceViews?.views.find((view: any) => view.id === id);
+          const input = {
+            asOf,
+            customer,
+            cycleDays: options.cycleDays,
+            filters: id === 'customer' && customer ? { customer } : {},
+          };
+          const readOptions = { ...options, snapshotReads, scopeReads, summaryOnly: true };
+          // Quantities can be shown before batch-age calculation completes. A late
+          // age failure cannot invalidate the separately completed inventory read.
+          if (view?.inventorySummaryId && !parts[id]?.summary) {
+            const inventory = await readConfiguredFacts(config, id, input, {
+              ...readOptions,
+              inventoryOnly: true,
+            });
+            publish(id, fromResult(inventory));
+          }
+          part = fromResult(await readConfiguredFacts(config, id, input, readOptions));
         }
       } catch (e: any) {
         if (options.signal?.aborted) throw e;
         if (e.code === 'QUERY_CONFIG_CHANGED') invalid = e;
-        part = { error: e.message };
+        part = { ...parts[id], error: e.message, partial: true };
       }
-      options.signal?.throwIfAborted();
-      if (part.configVersion) versions.add(part.configVersion);
-      if (versions.size > 1)
-        invalid = Object.assign(Error('读取期间配置发生变化，请刷新'), {
-          code: 'QUERY_CONFIG_CHANGED',
-        });
-      if (invalid) throw invalid;
-      parts[id] = part;
-      options.onProgress?.({ ...parts });
+      publish(id, part);
     }),
   );
   options.signal?.throwIfAborted();

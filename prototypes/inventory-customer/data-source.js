@@ -1,6 +1,7 @@
 import { bindGovernedSql } from '../../business/shared/governed-parameters.ts';
 import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';
 import { mapCustomerInventoryRows } from './customer-inventory-model.js';
+import { CUSTOMER_PLAN_SQL, mergeCustomerPlanRows } from './plan-source.js';
 
 export { mapCustomerInventoryRows } from './customer-inventory-model.js';
 
@@ -13,6 +14,8 @@ WITH sku AS (
   SELECT stat_date, cust_code, material_code,
     MAX(cust_name) AS cust_name, MAX(region_name) AS region_name,
     MAX(province_region_name) AS province_region_name,
+    MIN(cif_price) AS cif_price_min, MAX(cif_price) AS cif_price_max,
+    CASE WHEN COUNT(cif_price) = COUNT(*) THEN 1 ELSE 0 END AS cif_price_complete,
     CASE WHEN COUNT(stock_qty) = COUNT(*) THEN SUM(stock_qty) END AS stock_qty,
     CASE WHEN COUNT(stock_amt) = COUNT(*) THEN SUM(stock_amt) END AS stock_amt,
     CASE WHEN COUNT(pack_unitqty) = COUNT(*) THEN SUM(pack_unitqty) END AS in_transit_qty,
@@ -26,6 +29,7 @@ WITH sku AS (
 ), weighted AS (
   SELECT sku.stat_date, sku.cust_code, sku.material_code,
     sku.cust_name, sku.region_name, sku.province_region_name,
+    sku.cif_price_min, sku.cif_price_max, sku.cif_price_complete,
     sku.stock_qty, sku.stock_amt, sku.in_transit_qty, sku.normal_stock_qty,
     sku.large_date_qty, sku.large_date_invalid_sku, sku.sales_qty_30days,
     SUM(stock_qty) OVER (PARTITION BY stat_date, cust_code) AS total_stock,
@@ -38,6 +42,8 @@ SELECT
   MAX(cust_name) AS cust_name,
   MAX(region_name) AS region_name,
   MAX(province_region_name) AS province_name,
+  MIN(cif_price_min) AS cif_price_min, MAX(cif_price_max) AS cif_price_max,
+  SUM(cif_price_complete) AS cif_price_coverage,
   SUM(stock_qty) AS stock_qty,
   SUM(stock_amt) AS stock_amt,
   SUM(sales_qty_30days) AS sales_qty_30days,
@@ -69,13 +75,7 @@ SELECT
   COUNT(stock_amt) AS value_coverage,
   COUNT(sales_qty_30days) AS sales_coverage,
   COUNT(normal_stock_qty) AS normal_coverage
-  ,MAX(dealer.dealer_receive_addr) AS dealer_receive_addr
 FROM weighted inventory
-LEFT JOIN (
-  SELECT cust_code, MAX(dealer_receive_addr) AS dealer_receive_addr
-  FROM agents_dim_dealer_data_d
-  GROUP BY cust_code
-) dealer ON dealer.cust_code = inventory.cust_code
 WHERE inventory.stat_date = (
   SELECT MAX(stat_date) FROM agents_scm_cust_jxc_ai_daliy_d
 )
@@ -83,12 +83,34 @@ GROUP BY stat_date, inventory.cust_code
 ORDER BY stock_amt DESC, inventory.cust_code
 `;
 
+export const CUSTOMER_ADDRESS_SQL = `SELECT cust_code, MAX(dealer_receive_addr) AS dealer_receive_addr FROM agents_dim_dealer_data_d GROUP BY cust_code ORDER BY cust_code`;
+
 export async function loadCustomerInventory(options = {}) {
   const input = bindGovernedSql(CUSTOMER_INVENTORY_SQL);
-  const rows = await executeAllGeaSqlPages(`/*customer-inventory:latest*/\n${input.sql}`, {
+  const inventoryRead = executeAllGeaSqlPages(`/*customer-inventory:latest*/\n${input.sql}`, {
     parameters: input.parameters,
     signal: options.signal,
     pageConcurrency: 3,
   });
-  return mapCustomerInventoryRows(rows);
+  const addressInput = bindGovernedSql(CUSTOMER_ADDRESS_SQL);
+  const addressRead = executeAllGeaSqlPages(addressInput.sql, { parameters: addressInput.parameters, signal: options.signal, pageConcurrency: 3 }).then(rows => ({ rows, state: "ready" }), error => { return { rows: [], state: error.code ?? "ADDRESS_SOURCE_UNAVAILABLE" }; });
+  const planRead = (async () => { try {
+    const planInput = bindGovernedSql(CUSTOMER_PLAN_SQL);
+    const plans = await executeAllGeaSqlPages(planInput.sql, {
+      parameters: planInput.parameters,
+      signal: options.signal,
+      pageConcurrency: 3,
+    });
+    return {plans,planState:'ready'};
+  } catch (error) {
+    return {plans:[],planState:error.code ?? 'PLAN_SOURCE_UNAVAILABLE'};
+  } })();
+  const rows = await inventoryRead;
+  options.signal?.throwIfAborted();
+  options.onInventory?.({ ...mapCustomerInventoryRows(rows), planState: 'loading' });
+  const [{plans,planState}, addresses] = await Promise.all([planRead,addressRead]);
+  options.signal?.throwIfAborted();
+  const addressByCustomer = new Map(addresses.rows.map(row => [String(row.cust_code), row.dealer_receive_addr]));
+  const joinedRows = rows.map(row => ({...row, dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null}));
+  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state };
 }

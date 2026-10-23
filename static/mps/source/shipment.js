@@ -1,4 +1,7 @@
 import { prototypeShipments } from './prototype-shipments.js';
+import { readShipmentRange } from './facts.js';
+import { hasMpsSource } from './master-data.js';
+const emptyRows = [];
 const bases = ['西南', '郑州', '遂平', '华东', '华南'];
 const fields = [
   'shipped',
@@ -120,7 +123,7 @@ export function createShipment(
       },
     });
   }
-  return function Shipment({ draft, update, active, onNext, scopeGeneration }) {
+  return function Shipment({ draft, update, active, onNext, scopeGeneration, onSnapshot }) {
     const month = monthOffset(draft.month, -1);
     const state = draft.shipment ?? {};
     const cutoff = state.cutoff ?? `${month}-22`;
@@ -128,8 +131,31 @@ export function createShipment(
     const [year, monthNumber] = month.split('-').map(Number);
     const totalDays = new Date(year, monthNumber, 0).getDate();
     const demo =
-      draft.productSource.startsWith('demo') && state.rows == null && cutoff === '2026-09-22';
-    const sourceRows = state.rows ?? (demo ? prototypeShipments : []);
+      draft.productSource.startsWith('demo') &&
+      state.rows == null &&
+      !state.businessAttempted &&
+      cutoff === '2026-09-22';
+    const business =
+      state.business?.month === month && state.business?.cutoff === cutoff ? state.business : null;
+    const activeSource = state.activeSource ?? (state.rows != null ? 'local-file' : 'business');
+    const sourceRows =
+      activeSource === 'local-file'
+        ? (state.rows ?? emptyRows)
+        : (business?.rows ?? (demo ? prototypeShipments : emptyRows));
+    const sourceKind =
+      activeSource === 'local-file' && state.rows != null
+        ? 'local-file'
+        : business && activeSource === 'business'
+          ? 'business'
+          : demo
+            ? 'demo'
+            : 'unread';
+    const stateRef = react.useRef(state);
+    stateRef.current = state;
+    const snapshotCallback = react.useRef(onSnapshot);
+    snapshotCallback.current = onSnapshot;
+    const controller = react.useRef(null);
+    const [syncStatus, setSyncStatus] = react.useState('unread');
     const [expanded, setExpanded] = react.useState([]);
     const [formula, setFormula] = react.useState(null);
     const [error, setError] = react.useState('');
@@ -141,10 +167,12 @@ export function createShipment(
       setError('');
       setExpanded([]);
       setBusy(false);
+      setSyncStatus('unread');
       return () => {
         generation.current++;
+        controller.current?.abort();
       };
-    }, [draft.id, draft.month, active]);
+    }, [draft.id, draft.month, active, cutoff]);
     const rows = react.useMemo(
       () =>
         sourceRows
@@ -189,12 +217,160 @@ export function createShipment(
       ),
     );
     const national = aggregate(rows, '全国合计');
-    const updateState = (changes) => update({ shipment: { ...state, ...changes } });
-    const source = demo
-      ? '演示数据 · 原型2026-09汤圆645条；四输入按原型确定性映射，剩余入库按本月生产入库÷22×8四舍五入演示推算'
-      : state.file
-        ? `本地CSV：${state.file}`
-        : '数仓、产销存与BI排产未接入，请上传本地CSV核对';
+    const updateState = (changes) => update({ shipment: { ...stateRef.current, ...changes } });
+    const selectSource = (next) => {
+      updateState({
+        activeSource: next,
+        sourceEdits: {
+          ...state.sourceEdits,
+          [activeSource]: { values: state.values, remaining: state.remaining },
+        },
+        values: state.sourceEdits?.[next]?.values ?? {},
+        remaining: state.sourceEdits?.[next]?.remaining ?? {},
+      });
+      setFormula(null);
+    };
+    const source =
+      sourceKind === 'demo'
+        ? '演示数据 · 原型2026-09汤圆645条；四输入按原型确定性映射，剩余入库按本月生产入库÷22×8四舍五入演示推算'
+        : sourceKind === 'local-file'
+          ? `本地CSV：${state.file}`
+          : business
+            ? `业务来源：实际发货 ${month}-01 至 ${cutoff}；近三天${business.metadata.recentStatus === 'ok' ? '截止日及前两日' : '未提供'}；已备未备与库存来源未接入`
+            : '实际发货尚未同步；已备未备、库存与BI排产未接入';
+    react.useEffect(() => {
+      snapshotCallback.current?.({
+        draftId: draft.id,
+        month: draft.month,
+        shipmentMonth: month,
+        cutoff,
+        source,
+        sourceKind,
+        status:
+          sourceKind === 'business' ? (business.metadata.partial ? 'partial' : 'ok') : sourceKind,
+        sourceRows,
+        sourceRecords: sourceKind === 'business' ? business.sourceRecords : sourceRows,
+        rows,
+        metadata: sourceKind === 'business' ? business.metadata : null,
+      });
+    }, [draft.id, draft.month, month, cutoff, source, sourceKind, sourceRows, rows, business]);
+    const sync = async () => {
+      controller.current?.abort();
+      const stop = new AbortController();
+      controller.current = stop;
+      const request = ++generation.current;
+      const scope = scopeGeneration.current;
+      const valid = () =>
+        !stop.signal.aborted && request === generation.current && scope === scopeGeneration.current;
+      setBusy(true);
+      setSyncStatus('loading');
+      setError('');
+      updateState({
+        business: null,
+        businessAttempted: true,
+        activeSource: 'business',
+        ...(activeSource === 'local-file'
+          ? {
+              sourceEdits: {
+                ...state.sourceEdits,
+                [activeSource]: { values: state.values, remaining: state.remaining },
+              },
+              values: {},
+              remaining: {},
+            }
+          : {}),
+      });
+      const recentStart = `${month}-${String(passed - 2).padStart(2, '0')}`;
+      const results = await Promise.allSettled([
+        readShipmentRange(`${month}-01`, cutoff, stop.signal),
+        passed >= 3 ? readShipmentRange(recentStart, cutoff, stop.signal) : Promise.resolve(null),
+      ]);
+      if (!valid()) return;
+      try {
+        if (results[0].status === 'rejected') throw results[0].reason;
+        const monthly = results[0].value;
+        const recent = results[1].status === 'fulfilled' ? results[1].value : null;
+        const summarize = (records) => {
+          const grouped = new Map();
+          for (const record of records) {
+            if (!record.base || !record.code || !bases.includes(record.base)) continue;
+            const key = keyOf(record);
+            const previous = grouped.get(key);
+            const value = previous
+              ? previous.shipped == null || record.shipped == null
+                ? null
+                : finite(previous.shipped + record.shipped)
+              : record.shipped;
+            grouped.set(key, {
+              ...record,
+              shipped: value,
+              ...Object.fromEntries(
+                ['name', 'category', 'group'].map((field) => [
+                  field,
+                  previous && previous[field] !== record[field] ? '' : record[field],
+                ]),
+              ),
+            });
+          }
+          return grouped;
+        };
+        const recentRows = summarize(recent?.rows ?? emptyRows);
+        const actualRows = [...summarize(monthly.rows).values()].map((row) => ({
+          ...row,
+          series: '',
+          prepped: null,
+          unprepped: null,
+          open: null,
+          inbound: null,
+          remaining: null,
+          daily3:
+            recentRows.get(keyOf(row))?.shipped == null
+              ? null
+              : finite(recentRows.get(keyOf(row)).shipped / 3),
+        }));
+        const omitted = monthly.rows.filter(
+          (row) => !row.base || !row.code || !bases.includes(row.base),
+        ).length;
+        updateState({
+          business: {
+            month,
+            cutoff,
+            rows: actualRows,
+            sourceRecords: monthly.rows,
+            metadata: {
+              ...monthly.metadata,
+              partial:
+                monthly.metadata.partial ||
+                !!omitted ||
+                !recent ||
+                recent.metadata.partial ||
+                actualRows.some(
+                  (row) => !row.name || !row.category || !row.group || row.shipped == null,
+                ),
+              recentStatus: recent ? 'ok' : passed < 3 ? 'insufficient-days' : 'failed',
+              recent: recent?.metadata ?? null,
+              recentError: results[1].status === 'rejected' ? results[1].reason.message : null,
+              omittedRows: omitted,
+              missingDimensions: actualRows.filter(
+                (row) => !row.name || !row.category || !row.group,
+              ).length,
+            },
+          },
+        });
+        setSyncStatus('ok');
+        if (results[1].status === 'rejected')
+          setError(`实际发货已读取；近三天读取失败：${results[1].reason.message}`);
+      } catch (failure) {
+        setSyncStatus('failed');
+        setError(
+          /AGENT_ACCESS_DENIED|PERMISSION_DENIED|RESOURCE_NOT_IN_DATASET/.test(failure.message)
+            ? '当前账号暂无实际发货数据权限'
+            : failure.message,
+        );
+      } finally {
+        if (valid()) setBusy(false);
+      }
+    };
     const explain = (row, field, who) => setFormula({ row, field, who });
     const change = (row, kind, text, who) => {
       try {
@@ -260,6 +436,7 @@ export function createShipment(
       }
     };
     const read = async (file) => {
+      controller.current?.abort();
       const request = ++generation.current;
       const scope = scopeGeneration.current;
       const valid = () => request === generation.current && scope === scopeGeneration.current;
@@ -304,7 +481,13 @@ export function createShipment(
           if (finite(parsed.reduce((sum, row) => sum + (row[field] ?? 0), 0)) == null)
             throw Error('输入合计超出安全范围，未替换原输入。');
         if (!valid()) return;
-        updateState({ rows: parsed, file: file.name, values: {}, remaining: {} });
+        updateState({
+          rows: parsed,
+          file: file.name,
+          activeSource: 'local-file',
+          values: {},
+          remaining: {},
+        });
         setError('');
         setExpanded([]);
         setFormula(null);
@@ -355,7 +538,11 @@ export function createShipment(
           调整来源: row.adjustment ? JSON.stringify(row.adjustment) : '默认单品预测值',
           剩余入库来源:
             row.remainingSource ??
-            (demo ? '演示推算：生产入库÷22×8，四舍五入' : '本地CSV；BI排产未核齐'),
+            (sourceKind === 'demo'
+              ? '演示推算：生产入库÷22×8，四舍五入'
+              : sourceKind === 'local-file'
+                ? '本地CSV；BI排产未核齐'
+                : 'BI排产未接入'),
         })),
       );
     };
@@ -381,7 +568,9 @@ export function createShipment(
         unit: '件',
         source,
         businessSave: 'not-connected',
-        nextStage: 'not-connected',
+        nextStage: 'shared-snapshot',
+        sourceKind,
+        metadata: sourceKind === 'business' ? business.metadata : null,
         rowFields: contextFields,
         rows: contextRows,
         rowCount: rows.length,
@@ -464,7 +653,7 @@ export function createShipment(
           remaining: [
             '剩余天数入库 = 原输入；基地覆盖按明细原剩余入库权重重摊并补偿残差',
             row.remainingSource ??
-              (demo
+              (sourceKind === 'demo'
                 ? '演示推算：本月生产入库 ÷ 22 × 8，逐SKU四舍五入'
                 : '本地CSV输入，BI排产未核齐'),
           ],
@@ -576,12 +765,31 @@ export function createShipment(
                 Number(value.slice(8)) >= 1 &&
                 Number(value.slice(8)) <= totalDays
               ) {
-                updateState({ cutoff: value, values: {}, remaining: {} });
+                generation.current++;
+                controller.current?.abort();
+                updateState({ cutoff: value, business: null, values: {}, remaining: {} });
                 setFormula(null);
               }
             },
           }),
         ),
+        (state.rows != null || state.businessAttempted || business) &&
+          h(
+            'label',
+            {},
+            '发货数据来源',
+            h(
+              'select',
+              {
+                'aria-label': '发货数据来源',
+                value: activeSource,
+                disabled: busy,
+                onChange: (event) => selectSource(event.target.value),
+              },
+              h('option', { value: 'business' }, '实际发货'),
+              h('option', { value: 'local-file', disabled: state.rows == null }, '本地CSV'),
+            ),
+          ),
         h('span', {}, '单位 件'),
       ),
       h(
@@ -591,7 +799,16 @@ export function createShipment(
           'div',
           { className: 'dc-card-head sp-toolbar' },
           h('h3', {}, '本月预估发货'),
-          demo && h('span', { className: 'dc-status' }, '演示数据'),
+          sourceKind === 'demo' && h('span', { className: 'dc-status' }, '演示数据'),
+          h(
+            'span',
+            { className: 'dc-status' },
+            sourceKind === 'business'
+              ? '业务来源'
+              : sourceKind === 'local-file'
+                ? '本地文件'
+                : '待同步',
+          ),
           h(
             'span',
             { className: 'sp-shipped' },
@@ -617,7 +834,29 @@ export function createShipment(
               '重置',
             ),
         ),
-        busy && h('p', { role: 'status' }, '正在校验本地文件…'),
+        h(
+          'p',
+          { role: 'status' },
+          busy
+            ? '正在读取或校验输入…'
+            : syncStatus === 'failed'
+              ? '实际发货同步失败，未采用旧业务结果'
+              : source,
+        ),
+        business?.metadata.omittedRows > 0 &&
+          h(
+            'p',
+            {},
+            `源数据${business.metadata.omittedRows}条缺基地或产品编码，或基地不在本表范围，未并入明细`,
+          ),
+        business?.metadata.missingDimensions > 0 &&
+          h(
+            'p',
+            {},
+            `源数据${business.metadata.missingDimensions}条产品名称、大类或物料组缺失或冲突，保留数量与源状态`,
+          ),
+        business?.metadata.recentStatus === 'insufficient-days' &&
+          h('p', {}, '截止日前本月不足三天，近三天日均未提供'),
         error && h('p', { role: 'alert', className: 'sp-error' }, error),
         h(
           'div',
@@ -732,7 +971,7 @@ export function createShipment(
                               className: 'sp-product-name',
                               title: `${row.name} · ${row.category} · ${row.series} · ${row.group}`,
                             },
-                            row.name,
+                            row.name || '产品名称未提供',
                           ),
                         ),
                         'sp-sku',
@@ -758,6 +997,7 @@ export function createShipment(
         h(
           'div',
           { className: 'dc-card-foot' },
+          h('button', { onClick: sync, disabled: busy || !hasMpsSource() }, '同步实际发货'),
           h(Upload, { label: '选择发货输入CSV', text: '上传输入', read }),
           h('button', { onClick: () => downloadCsv('发货输入-模板.csv', columns, []) }, 'CSV模板'),
           h('span', { className: 'sp-spacer' }),

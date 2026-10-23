@@ -1,5 +1,9 @@
 # 订单履约数据接入 / Order fulfillment data
 
+最新基础字段、指标计算与保留缺口以[2026-10-23完整核对](order-fulfillment-source-audit-20261023.md)为准。主表状态保留，追踪表仅补充指标事实；未匹配追踪不清空主表数据。
+
+批次货龄现按用户确认读取所选日期当天及之前的最新快照，不再强制昨日快照；货龄以该快照日减生产日期计算。缺生产日期、数量不完整、负库存和未来快照仍保持未知。
+
 ## 当前合同 / Current contract
 
 订单履约 Consumer 为 `order01`。页面、Prompt、capability、MCP 声明保持一致。作者查询配置为 [sql.config.json](../business/inventory-orderfulfillment/sql.config.json)，构建复制到页面包旁；Workbench Host 在作者脚本前注入它。页面只传 `{queryId, parameters}`，不传 SQL、身份、Consumer 或凭据；GEA Host 根据可信安装声明执行，Gateway 按当前用户和委托强制行列权限。筛选器仅收窄范围，不根据前端角色选择数据源，不新增角色授权表。
@@ -79,6 +83,18 @@ Comparisons, charts and drilldowns share complete granted facts. The coordinatio
 目录已补登履约执行明细，客户库存字段快照已更新为 `big_final_qty`。当前登录账号有 Agent 和受控 SQL 使用权限，新履约表原先没有人员数据范围；本次按用户授权，复用该账号库存明细已有的“郑州基地”范围，为新履约表增加只读岗位来源，未设为不受控。网关实际查询其他基地返回零行。此来源是现有范围的岗位授权快照，尚未验证组织变更自动同步；不代表已完成所有账号的组织授权迁移。
 
 当前账号的页面实测与不同真实账号的验收分开记录。后续仍需以不同范围、拒权及撤权账号验证行列、汇总和身份切换；源码授权桩不代替该验收。客户端安装和发布渠道未变更，界面布局未修改。
+
+## 最新术语库接线（2026-10-22） / Latest glossary
+
+当前口径以[订单履约及工作台术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)所指文档 `QN9AdJovRozeqCxmK3zcTg3Ynie`、revision 1548 为准；下述内容替代本页历史记录中相应的旧公式和缺口描述，历史验收不代表当前状态。
+
+- 商品缺货量＝|原始数量－实占数量|；整单及未开订单满足率＝|原始数量合计－当前缺货合计|÷原始数量合计×100%。全部有效输入、单位与拆单归并明确后才计算，不平均SKU百分比。
+- 已开订单满足率按当前列表发货数量÷原始数量计算并发布覆盖；创建日列表不是全月发货指标。准交率需要实际到货周期、已发货分母、GPS优先的到货事实及最大承诺时间加12小时规则，不能借用当前列表计算。
+- 可发货天数＝可用库存÷[(当月销售计划＋当月调拨出库计划×0.5)÷当月天数]。各计划纠偏值大于0取纠偏，否则取初版；不再限制10日、20日或月末快照，也不在月末自动切换下月计划。
+- 主表 `agents_scm_execute_detail_d` 已有 `director`、`product_item`、`series`；独立命名查询 `sku.owners` 已接线，当前GEA探测三列均返回 `FIELD_NOT_PUBLISHED`。不扩大授权，不使该独立失败阻断已有数据，总监未获返回时保持未知。
+- 厂内/厂外候车状态归入装车节点。缺货供应追踪仅展示已关联源事实，不冒充按同到货日倒序逐单分配的完整供应账本。未来五日确认供应、GPS/人工实际到货和确认回调仍需补齐。
+
+The latest glossary replaces the corresponding historical formulas above. Quantity-based rates use complete original demand and absolute shortage; the opened shipment rate is explicitly limited to the current list. Days of supply use positive adjusted plans or initial plans for the stock month on any date. New director/category/series fields exist in Doris but are not published by GEA; their optional failure neither widens access nor clears other sections. Conflicting period/threshold definitions and the existing age-bin boundaries are not silently reinterpreted. Layout, pagination and hidden charts remain unchanged.
 
 ## 加载与滚动验收（2026-10-21）
 

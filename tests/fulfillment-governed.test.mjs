@@ -10,7 +10,7 @@ import {
 } from '../prototypes/inventory-orderfulfillment/live-model.mjs';
 import { makeRequest } from '../business/shared/configured-query-client.mjs';
 
-test('planned shipping days use documented snapshot versions and preserve unknowns', () => {
+test('planned shipping days use current-month corrected plans on every snapshot day and preserve unknowns', () => {
   const row = {
     source_rows: 1,
     stock_date: '2026-10-20',
@@ -24,7 +24,8 @@ test('planned shipping days use documented snapshot versions and preserve unknow
     transfer_plan_adjusted: 0,
   };
   assert.equal(plannedShippingDays(row), 100 / 30);
-  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-10' }), 5);
+  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-10' }), 100 / 30);
+  assert.equal(plannedShippingDays({ ...row, stock_date: '2026-10-21' }), 100 / 30);
   assert.equal(
     plannedShippingDays({
       ...row,
@@ -32,11 +33,10 @@ test('planned shipping days use documented snapshot versions and preserve unknow
       next_month_sales_plan: 300,
       next_month_out_plan: 600,
     }),
-    5,
+    100 / 30,
   );
   assert.equal(plannedShippingDays({ ...row, available_qty: 0 }), 0);
   for (const change of [
-    { stock_date: '2026-10-21' },
     { source_rows: 2 },
     { available_qty: null },
     { main_plan_adjusted: null, main_plan_initial: null },
@@ -62,6 +62,12 @@ const config = JSON.parse(
     'utf8',
   ),
 );
+test('batch detail and count include the latest snapshot on the selected date', () => {
+  for (const id of ['sku.age', 'sku.age.count']) {
+    assert.match(config.queries[id].request.sql, /month_date <= REPLACE\(:gea_p1/);
+    assert.match(config.queries[id].request.sql, /warehouse_classify='01'/);
+  }
+});
 const filters = {
   start: '2026-10-20',
   end_exclusive: '2026-10-21',
@@ -84,7 +90,7 @@ test('complete inputs use bounded concurrent pages without repeated per-page cou
     const reader = createFulfillmentReader(config, async (_request, options) => {
       if (options.queryId.endsWith('.count'))
         return {
-          rows: [{ total: ++counts === 3 && fault === 'count' ? 871 : 870 }],
+          rows: [{ total: ++counts === 2 && fault === 'count' ? 871 : 870 }],
           configVersion: 'v1',
         };
       const offset = options.values.offset;
@@ -113,11 +119,33 @@ test('complete inputs use bounded concurrent pages without repeated per-page cou
       const result = await reader.all('orders.facts', filters);
       assert.equal(result.rows.length, 870);
       assert.equal(result.rows[200].cust_order_no, 'O200');
-      assert.equal(counts, 3);
+      assert.equal(counts, 2);
       assert.equal(dataCalls, 5);
       assert.ok(peak > 1 && peak <= 4);
     } else await assert.rejects(reader.all('orders.facts', filters));
   }
+});
+
+test('complete read starts first page before count returns and still checks the final count', async () => {
+  const calls = [];
+  let releaseCount;
+  const reader = createFulfillmentReader(config, async (_request, options) => {
+    calls.push(options.queryId);
+    if (options.queryId.endsWith('.count')) {
+      if (calls.filter((id) => id.endsWith('.count')).length === 1)
+        await new Promise((resolve) => {
+          releaseCount = resolve;
+        });
+      return { rows: [{ total: 0 }], configVersion: 'v1' };
+    }
+    return { rows: [], configVersion: 'v1' };
+  });
+  const loading = reader.all('orders.facts', filters);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.ok(calls.includes('orders.facts'), '首批数据不能等待计数返回');
+  releaseCount();
+  await loading;
+  assert.equal(calls.filter((id) => id === 'orders.facts.count').length, 2);
 });
 
 test('order01 queries bind business filters only and expose no transport credentials', () => {

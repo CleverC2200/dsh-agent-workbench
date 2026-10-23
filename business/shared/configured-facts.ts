@@ -77,12 +77,27 @@ export async function readConfiguredFacts(
     signal?: AbortSignal;
     execute?: any;
     summaryOnly?: boolean;
+    inventoryOnly?: boolean;
     detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
+    scopeReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
   const config = agentSqlConfig(fallback);
-  const view = config.sourceViews?.views.find((v: any) => v.id === viewId);
+  const configuredView = config.sourceViews?.views.find((v: any) => v.id === viewId);
+  const view =
+    options.summaryOnly &&
+    configuredView?.overviewSummaryId &&
+    Object.values(input.filters ?? {}).every((value) => !value.trim()) &&
+    !input.customer?.trim()
+      ? {
+          ...configuredView,
+          summaryId:
+            options.inventoryOnly && configuredView.inventorySummaryId
+              ? configuredView.inventorySummaryId
+              : configuredView.overviewSummaryId,
+        }
+      : configuredView;
   if (!view) return fail('VIEW_NOT_CONFIGURED', '未配置的数据视图');
   if (!view.queryId)
     return { status: 'unavailable', rows: [], total: null, viewId, description: view.description };
@@ -108,13 +123,14 @@ export async function readConfiguredFacts(
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
     const key = JSON.stringify([config.agentId, id, values]);
-    let job = snapshot ? options.snapshotReads?.get(key) : undefined;
+    const shared = snapshot ? options.snapshotReads : options.scopeReads;
+    let job = shared?.get(key);
     if (!job) {
       job = client.read(id, values, {
         signal: options.signal,
         requiredColumns: config.queries[id].resultColumns,
       });
-      if (snapshot) options.snapshotReads?.set(key, job);
+      shared?.set(key, job);
     }
     const result = await job;
     options.signal?.throwIfAborted();
@@ -190,14 +206,33 @@ export async function readConfiguredFacts(
     if (name === 'shipment_start') value = month < rollingStart ? month : rollingStart;
     if (name === 'shipment_month_start') value = month;
     if (name === 'rolling_start') value = rollingStart;
+    if (name === 'batch_rolling_start') {
+      const from = dateOnly(snapshotDate ?? input.asOf);
+      from.setUTCDate(from.getUTCDate() - 29);
+      value = from.toISOString().slice(0, 10);
+    }
+    if (name === 'batch_end_exclusive') value = nextDay(snapshotDate ?? input.asOf);
     if (name === 'shipment_end_exclusive') value = nextDay(input.asOf);
     if (name === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? nextMonth(month) : nextDay(input.asOf);
     if (name === 'month') value = month;
+    if (name === 'next_month') value = nextMonth(month);
     if (name === 'days_in_month')
       value = new Date(
         Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
       ).getUTCDate();
+    if (name === 'days_remaining_in_month') {
+      const day = dateOnly(input.asOf);
+      value =
+        new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 0)).getUTCDate() -
+        day.getUTCDate();
+    }
+    if (name === 'next_days_in_month') {
+      const next = nextMonth(month);
+      value = new Date(
+        Date.UTC(Number(next.slice(0, 4)), Number(next.slice(5, 7)), 0),
+      ).getUTCDate();
+    }
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = pageSize;
@@ -284,17 +319,60 @@ export async function readConfiguredFacts(
       return { summary: null, summaryError: errorInfo(error) };
     }
   };
+  // This auxiliary source cannot remove independently authorized stock rows.
+  const readProduction = async () => {
+    if (!view.productionQueryId) return { rows: [], error: null, configVersion: undefined };
+    const productionValues: Record<string, unknown> = {
+      bases_enabled: values.bases_enabled,
+      bases: values.bases,
+      sku: values.sku,
+    };
+    for (let i = 0; i < 7; i++) {
+      const day = dateOnly(input.asOf);
+      day.setUTCDate(day.getUTCDate() + i);
+      productionValues['production_day_' + i] = day.toISOString().slice(0, 10).replaceAll('-', '');
+    }
+    try {
+      const result = await client.read(view.productionQueryId, productionValues, {
+        signal: options.signal,
+        requiredColumns: config.queries[view.productionQueryId].resultColumns,
+      });
+      return { rows: result.rows, error: null, configVersion: result.configVersion };
+    } catch (error: any) {
+      if (options.signal?.aborted) throw error;
+      return { rows: [], error: errorInfo(error), configVersion: undefined };
+    }
+  };
   if (!options.summaryOnly && q.pagination?.atomicQuery) {
     const id = q.pagination.atomicQuery;
-    const [result, { summary, summaryError }] = await Promise.all([
+    const [result, { summary, summaryError }, production] = await Promise.all([
       read(id, subset(id)),
       readSummary(),
+      readProduction(),
     ]);
+    if (
+      !production.error &&
+      production.configVersion &&
+      production.configVersion !== result.configVersion
+    ) {
+      production.rows = [];
+      production.error = errorInfo(
+        Object.assign(Error('排程配置版本发生变化'), { code: 'QUERY_CONFIG_CHANGED' }),
+      );
+    }
     const { rows, total } = unpackAtomicPage(result, page, pageSize);
     options.signal?.throwIfAborted();
     return {
       status: total ? 'available' : 'empty',
-      rows,
+      rows: view.productionQueryId
+        ? rows.map((row: Record<string, unknown>) => {
+            const matches = production.rows.filter(
+              (p: Record<string, unknown>) => p.base === row.base,
+            );
+            return matches.length === 1 ? { ...row, ...matches[0] } : row;
+          })
+        : rows,
+      supplementaryError: production.error,
       total,
       page,
       pageSize,

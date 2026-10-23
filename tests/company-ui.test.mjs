@@ -237,7 +237,7 @@ test('company new-conversation buttons create through Core without adopting a st
       });
     }
   }
-  assert.equal(calls.length, 6, 'all three plugin controls create and open a fresh Session');
+  assert.equal(calls.length, 4, 'both plugin controls create and open a fresh Session');
   for (let i = 0; i < calls.length; i += 2) {
     assert.deepEqual(calls[i], ['create', { workspaceId: 'user-workspace' }]);
     assert.deepEqual(calls[i + 1], ['open', 'fresh']);
@@ -263,7 +263,7 @@ test('company new-conversation buttons create through Core without adopting a st
     document.querySelector('[role="alert"]').textContent,
     /新会话创建失败.*user-default/,
   );
-  assert.equal(calls.length, 6, 'failure must not replace the current Session');
+  assert.equal(calls.length, 4, 'failure must not replace the current Session');
 });
 test('formal sidebar renders original button/icon hierarchy and the actual workspace/settings seats without details redesign', () => {
   const { entries, renderSlot } = fixture();
@@ -280,7 +280,7 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
     'Synear GEA',
     '智能体工作台',
     '业务工作台',
-    '历史对话',
+    '历史会话',
     '本地原型',
     '品类计划（模拟）',
     '区域计划（模拟）',
@@ -289,7 +289,7 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
   ])
     assert.ok(markup.includes(text), text);
   assert.ok(markup.includes('sidebar.workspaces'));
-  assert.equal(markup.includes('历史会话'), false);
+  assert.ok(markup.includes('AI工作台'));
   assert.ok(markup.includes('sidebar.settings'));
   assert.ok(markup.includes('gea-brand-copy'));
   assert.ok(markup.includes('gea-shell-nav-heading'));
@@ -311,10 +311,10 @@ test('formal static controls restore original card and SVG structure without old
     }),
   );
   const dom = new JSDOM(markup);
-  const button = dom.window.document.querySelector('.gea-formal-new-session');
-  assert.ok(button, 'AI workbench uses the original card class rather than drawer-tab styling');
-  assert.equal(button.querySelector('svg').getAttribute('viewBox'), '0 0 16 16');
-  assert.ok(button.querySelector('.gea-formal-new-session-label'));
+  const button = dom.window.document.querySelector('.gea-ai-workbench-entry');
+  assert.ok(button, 'AI workbench uses its own card rather than drawer-tab styling');
+  assert.equal(button.querySelector('svg').getAttribute('viewBox'), '0 0 24 24');
+  assert.equal(button.querySelector('.gea-ai-entry-label').textContent, 'AI工作台');
   assert.equal(
     dom.window.document.querySelector('.gea-owned-sidebar-toggle svg').getAttribute('viewBox'),
     '0 0 16 16',
@@ -370,8 +370,8 @@ test('actual owned anchors constrain the bell and keep one workspace heading ins
   assert.ok(
     siblings.indexOf(document.querySelector('.gea-drawer-function')) < siblings.indexOf(browser),
   );
-  assert.equal(document.querySelector('.gea-drawer-workspace'), null);
-  assert.equal(browser.querySelectorAll('.gea-workspace-heading').length, 1);
+  assert.equal(document.querySelectorAll('.gea-drawer-recent').length, 1);
+  assert.equal(browser.querySelectorAll('.gea-workspace-heading').length, 0);
 });
 test('formal business navigation removes the Workbench directory and retains the registered public Plugins label', () => {
   const { entries, renderSlot } = fixture();
@@ -395,7 +395,10 @@ test('formal business navigation removes the Workbench directory and retains the
   assert.equal(entryButton.textContent, '插件管理');
   assert.equal(dom.window.document.querySelectorAll('.gea-plugin-entry').length, 1);
   assert.equal(dom.window.document.querySelector('.gea-shell-plugin-group'), null);
-  assert.equal(entryButton.previousElementSibling.classList.contains('gea-new-session'), true);
+  assert.equal(
+    entryButton.previousElementSibling.classList.contains('gea-ai-workbench-entry'),
+    true,
+  );
   assert.equal(entryButton.nextElementSibling.classList.contains('gea-sidebar-region'), true);
   dom.window.close();
   assert.ok(!markup.includes('公共工具与原型'));
@@ -835,14 +838,14 @@ test('entering a business page opens its functional drawer once and preserves ma
     );
   const drawer = () => document.querySelector('.gea-sidebar-region').dataset.geaDrawer;
   await render(null);
-  assert.equal(drawer(), 'workspace');
+  assert.equal(drawer(), 'function');
   await render('gea-inbox');
   assert.equal(
     drawer(),
     'function',
     'a directory/notification arrival opens the business navigation',
   );
-  await act(async () => document.querySelector('.gea-workspace-heading').click());
+  await act(async () => document.querySelector('.gea-drawer-recent .gea-sidebar-tab').click());
   assert.equal(drawer(), 'workspace');
   await render('inventory-fc');
   assert.equal(

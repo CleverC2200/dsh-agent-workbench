@@ -246,3 +246,6 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # The FC page is a branch inventory scope, independent of its grouping keys.
+    import runpy
+    runpy.run_path(str(ROOT / 'scripts/update-fc-inventory-scope.py'), run_name='__main__')

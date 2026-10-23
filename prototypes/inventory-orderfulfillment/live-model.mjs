@@ -26,7 +26,7 @@ export function batchAges(rows,asOf=null) {
     for(const row of group){
       const snapshot=date(row.batch_date),production=date(row.production_date),quantity=row.quantity===null?NaN:Number(row.quantity);
       const age=snapshot!==null&&production!==null?(snapshot-production)/86400000:null;
-      if(age===null||age<0||(asOf!==null&&snapshot!==date(asOf)-86400000)||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
+      if(age===null||age<0||(asOf!==null&&(date(asOf)===null||snapshot>date(asOf)))||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
       result[fields[age<40?0:age<60?1:age<90?2:age<120?3:4]]+=quantity;
     }
     if(!valid)for(const field of fields)result[field]=null;
@@ -38,26 +38,16 @@ export function plannedShippingDays(row) {
     row[key] === null || row[key] === undefined || row[key] === '' ? null : Number(row[key]);
   const date = new Date(row.stock_date + 'T00:00:00Z');
   if (!Number.isFinite(date.getTime()) || number('source_rows') !== 1) return null;
-  const day = date.getUTCDate();
   const days = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-  if (![10, 20, days].includes(day) || number('month_days') !== days) return null;
+  if (number('month_days') !== days) return null;
   const effective = (name) => {
     const adjusted = number(name + '_adjusted');
     return adjusted !== null && adjusted > 0 ? adjusted : number(name + '_initial');
   };
-  let sales,
-    transfer,
-    divisor = days;
-  if (day === days) {
-    sales = number('next_month_sales_plan');
-    transfer = number('next_month_out_plan');
-    divisor = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 2, 0)).getUTCDate();
-  } else {
-    const main = day === 10 ? number('main_plan_initial') : effective('main_plan');
-    const bp = day === 10 ? number('bp_plan_initial') : effective('bp_plan');
-    sales = main === null || bp === null ? null : main + bp;
-    transfer = day === 10 ? number('transfer_plan_initial') : effective('transfer_plan');
-  }
+  const main = effective('main_plan');
+  const bp = effective('bp_plan');
+  const sales = main === null || bp === null ? null : main + bp;
+  const transfer = effective('transfer_plan');
   const available = number('available_qty');
   if (
     [available, sales, transfer].some(
@@ -65,7 +55,7 @@ export function plannedShippingDays(row) {
     )
   )
     return null;
-  const daily = (sales + transfer * 0.5) / divisor;
+  const daily = (sales + transfer * 0.5) / days;
   return daily > 0 ? available / daily : null;
 }
 const alias = (value) =>
@@ -130,7 +120,18 @@ export function createFulfillmentReader(config, execute) {
   return {
     collection,
     async all(id,filters,{signal}={}) {
-      const first=await collection(id,filters,{signal,size:200});
+      const countId=config.queries[id].pagination.countQuery;
+      const [before,result]=await Promise.all([
+        client.read(countId,filters,{signal,requiredColumns:['total']}),
+        client.read(id,{...filters,page_size:200,offset:0},{signal}),
+      ]);
+      const rawTotal=before.rows.length===1?before.rows[0].total:null;
+      if(!/^(0|[1-9]\d*)$/.test(String(rawTotal))||!Number.isSafeInteger(Number(rawTotal)))
+        throw new QueryContractError('INVALID_COUNT','订单分页计数无效');
+      const total=Number(rawTotal);
+      if(before.configVersion!==result.configVersion||result.rows.length!==Math.min(200,total))
+        throw new QueryContractError('RESULT_INCOMPLETE','首批指标输入或配置不完整');
+      const first={...visibleResult(result),total,page:1,size:200,readAt:new Date().toISOString()};
       const rows=[...first.rows];
       const columns=JSON.stringify([first.returnedColumns,first.rejectedColumns]);
       const pages=Math.ceil(first.total/200);
@@ -145,7 +146,7 @@ export function createFulfillmentReader(config, execute) {
           rows.push(...result.rows);
         }
       }
-      if(pages>1) {
+      {
         const after=await client.read(config.queries[id].pagination.countQuery,filters,{signal,requiredColumns:['total']});
         if(after.configVersion!==first.configVersion||after.rows.length!==1||Number(after.rows[0].total)!==first.total||rows.length!==first.total)
           throw new QueryContractError('RESULT_INCOMPLETE','指标总数在分页期间发生变化');

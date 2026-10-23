@@ -86,7 +86,7 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
         return all.at(-1);
       }
       const r1 = await request(1);
-      assert.deepEqual(r1.parameters, { queryId: id, parameters: values });
+      assert.deepEqual(r1.parameters, { queryId: id, parameters: values, freshAfter: 0 });
       assert.equal(r1.session, 'owned');
       port.onmessage({ data: { type: 'response', id: r1.id, result: { rows: [{ fixture: 1 }] } } });
       assert.deepEqual((await first).rows, [{ fixture: 1 }]);

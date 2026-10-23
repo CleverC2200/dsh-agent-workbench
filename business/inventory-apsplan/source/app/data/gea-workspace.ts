@@ -75,6 +75,10 @@ const numericFields = new Set([
   'initial_plan',
   'demand_initial_plan',
   'demand_adjusted_plan',
+  'base_sales_plan',
+  'base_sales_adjusted_plan',
+  'base_production_plan',
+  'base_production_adjusted_plan',
   'missing_plan',
   'available',
   'invalid',
@@ -167,7 +171,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
     // separate maps, and each consumer receives its own converted row objects.
     const directReads = new Map<string, Promise<Row[]>>();
     const primary = usesConfiguredSql()
-      ? ['stock', 'orders', 'production', 'finance', 'sales-budget']
+      ? ['finance', 'stock', 'orders', 'production', 'sales-budget']
       : primarySources;
     const values: Row = {
       summary: input.summary,
@@ -189,14 +193,32 @@ export function createGeaWorkspace(transport: SqlTransport) {
       age_limit: 180,
       ratio_group: 'warehouse_examine',
     };
+    const normalize = (rows: Row[]) =>
+      rows.map((row) =>
+        Object.fromEntries(
+          Object.entries(row).map(([key, value]) => [
+            key,
+            numericFields.has(key) &&
+            typeof value === 'string' &&
+            value.trim() !== '' &&
+            Number.isFinite(Number(value))
+              ? Number(value)
+              : value,
+          ]),
+        ),
+      );
+    let publishInventory: ((rows: Row[]) => void) | undefined;
     async function read(name: string): Promise<Row[]> {
       if (usesConfiguredSql() && name === 'pending') {
-        const result = await readCurrentShortage(
-          sqlConfiguration,
-          'current-shortage.locations',
-          {},
-          { signal: input.signal },
-        );
+        const result = await limited(() => {
+          input.signal?.throwIfAborted();
+          return readCurrentShortage(
+            sqlConfiguration,
+            'current-shortage.locations',
+            {},
+            { signal: input.signal },
+          );
+        });
         return result.rows.map((row: Row) => ({
           ...row,
           scope: row.location_type,
@@ -223,6 +245,10 @@ export function createGeaWorkspace(transport: SqlTransport) {
             if (unavailable.has(permissionKey)) throw unavailable.get(permissionKey);
             return readWorkspaceQuery(sqlConfiguration, name, values, {
               signal: input.signal,
+              onInventory:
+                name === 'stock' && input.summary && !selected
+                  ? (rows) => publishInventory?.(normalize(rows))
+                  : undefined,
             });
           }).catch((error) => {
             if (
@@ -391,12 +417,19 @@ export function createGeaWorkspace(transport: SqlTransport) {
           returnedColumns?: any;
           rejectedColumns?: any;
         };
+        const known =
+          key === 'stock' && error.code !== 'QUERY_CONFIG_CHANGED' ? byId.get(key) : undefined;
         return {
           ...result,
+          ...(known?.partial ? known : {}),
           // Missing source mappings or snapshots are data limitations, not failed
           // gateway requests. Keep their structured reason in page/Agent context.
-          status: error.code === 'SOURCE_NOT_AVAILABLE' ? 'unavailable' : 'error',
-          rows: [],
+          status: known?.partial
+            ? 'ready'
+            : error.code === 'SOURCE_NOT_AVAILABLE'
+              ? 'unavailable'
+              : 'error',
+          rows: known?.partial ? known.rows : [],
           error: {
             code: error.code || 'GEA_QUERY_FAILED',
             message: error.message,
@@ -410,7 +443,9 @@ export function createGeaWorkspace(transport: SqlTransport) {
     }
     // These product forecast rows do not feed any initial card or current drill metric.
     // They remain queryable explicitly without delaying the initial workspace.
-    const deferred = usesConfiguredSql() ? ['forecast-products'] : [];
+    const deferred = usesConfiguredSql()
+      ? ['forecast-products', ...(input.summary ? ['branch', 'operations'] : [])]
+      : [];
     const keys =
       selected ??
       (input.stage === 'details'
@@ -467,6 +502,18 @@ export function createGeaWorkspace(transport: SqlTransport) {
         '正式派单与写回尚未接入。',
       ],
     });
+    publishInventory = (rows) => {
+      input.signal?.throwIfAborted();
+      byId.set('stock', {
+        id: 'stock',
+        label: labels.stock,
+        note: notes.stock,
+        status: rows.length ? 'ready' : 'empty',
+        rows,
+        partial: true,
+      });
+      input.onProgress?.(snapshot());
+    };
     let nextKey = 0;
     await Promise.all(
       Array.from({ length: Math.min(sourceConcurrency ?? keys.length, keys.length) }, async () => {

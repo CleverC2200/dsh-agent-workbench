@@ -217,11 +217,14 @@ test('every displayed field and source gap is declared in that Agent configurati
   for (const config of Object.values(configs))
     for (const view of config.sourceViews.views) {
       if (view.queryId) {
-        const columns = config.queries[view.queryId].resultColumns;
+        const columns = [
+          ...config.queries[view.queryId].resultColumns,
+          ...(config.queries[view.productionQueryId]?.resultColumns ?? []),
+        ];
         assert.ok(
           view.columns.every(
             (c) =>
-              columns.includes(c.field) ||
+              columns.includes(c.valueField ?? c.field) ||
               (c.unavailable === true && c.field.startsWith('missing_')) ||
               (c.context === 'stock_date' && c.field === 'stock_date') ||
               (c.context === 'layer_label' && c.field === 'layer_label' && c.value === '基地'),
@@ -454,7 +457,7 @@ test('customer analysis resolves a month-specific source date and queries each t
   assert.equal(calls.at(-1).values.offset, 10);
 });
 
-test('FC cycle setting binds the same integer to detail, count and whole-scope summary', async () => {
+test('FC cycle setting reaches quantity calculations while unfiltered counts remain cycle-independent', async () => {
   const io = source(configs.fc, (call, result) => {
     if (call.queryId === 'replenishment.count') result.rows = [{ total: 25 }];
     if (call.queryId === 'replenishment.detail')
@@ -471,7 +474,7 @@ test('FC cycle setting binds the same integer to detail, count and whole-scope s
     );
     const reads = io.calls.filter((call) => call.queryId.startsWith('replenishment.')).splice(-3);
     assert.ok(reads.some((call) => call.queryId === 'replenishment.summary'));
-    for (const call of reads) {
+    for (const call of reads.filter((call) => call.queryId !== 'replenishment.count')) {
       assert.equal(call.values.cycle_days, cycleDays);
       assert.equal(call.values.preparation_days, 3);
     }
@@ -483,3 +486,65 @@ test('FC cycle setting binds the same integer to detail, count and whole-scope s
     );
   }
 });
+
+for (const productionCase of ['ready', 'denied', 'changed'])
+  test(`base production ${productionCase} preserves independent stock and selected-day scope`, async () => {
+    const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+    const values = [];
+    const result = await readConfiguredFacts(
+      config,
+      'base-resources',
+      { asOf: '2026-10-23' },
+      {
+        detailsOnly: true,
+        execute: async (_request, options) => {
+          values.push(options);
+          const id = options.queryId;
+          if (id.startsWith('source.'))
+            return { configVersion: 'v1', rows: [{ day: '2026-10-22' }] };
+          if (id === 'base-production.days') {
+            if (productionCase === 'denied')
+              throw Object.assign(Error('not published'), { code: 'RESOURCE_NOT_IN_DATASET' });
+            return {
+              configVersion: productionCase === 'changed' ? 'v2' : 'v1',
+              rows: [
+                {
+                  base: '郑州',
+                  ...Object.fromEntries(
+                    Array.from({ length: 7 }, (_, i) => ['production_day_' + i, i]),
+                  ),
+                  production_total: 21,
+                },
+              ],
+            };
+          }
+          return {
+            configVersion: 'v1',
+            rows: [
+              {
+                base: '郑州',
+                row_count: 1,
+                known_available: 42,
+                known_available_count: 1,
+                page_scope_total: 1,
+                page_row_present: 1,
+              },
+            ],
+          };
+        },
+      },
+    );
+    assert.equal(result.rows[0].known_available, 42);
+    assert.equal(result.total, 1);
+    const read = values.find((v) => v.queryId === 'base-production.days');
+    assert.equal(read.values.production_day_0, '20261023');
+    assert.equal(read.values.production_day_6, '20261029');
+    if (productionCase === 'ready') assert.equal(result.rows[0].production_total, 21);
+    else {
+      assert.equal(result.rows[0].production_total, undefined);
+      assert.equal(
+        result.supplementaryError.code,
+        productionCase === 'changed' ? 'QUERY_CONFIG_CHANGED' : 'RESOURCE_NOT_IN_DATASET',
+      );
+    }
+  });

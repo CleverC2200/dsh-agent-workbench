@@ -72,7 +72,10 @@ export function mapCustomerInventoryRows(rows) {
     const quantity = complete('stock_coverage') ? finite(row.stock_qty) : null;
     const valueAmount = complete('value_coverage') ? finite(row.stock_amt) : null;
     const sales30 = complete('sales_coverage') ? finite(row.sales_qty_30days) : null;
-    const inTransit = complete('transit_coverage') ? finite(row.in_transit_qty) : null;
+    const planSameDate = row.plan_snapshot_date === rowSnapshot;
+    const completePlanTransit = planSameDate && finite(row.plan_sku_rows) > 0 && finite(row.plan_transit_coverage) === finite(row.plan_sku_rows);
+    const inTransit = complete('transit_coverage') ? finite(row.in_transit_qty)
+      : completePlanTransit ? finite(row.plan_in_transit_qty) : null;
     // SKU discrepancies are diagnostics, not a business-risk rule or a reason
     // to discard a customer's otherwise calculable aggregate.
     const largeDateQty = complete('large_date_coverage') ? finite(row.large_date_qty) : null;
@@ -85,7 +88,8 @@ export function mapCustomerInventoryRows(rows) {
     // The confirmed customer target metrics come from the dealer-side target
     // calculation. Do not derive a substitute from recent sales while that
     // governed source has no rows.
-    const targetQty = null;
+    const planComplete = (field) => finite(row.plan_sku_rows) > 0 && finite(row[field]) === finite(row.plan_sku_rows);
+    const targetQty = planComplete('target_coverage') ? finite(row.target_qty) : null;
     const targetValue = null;
     const cities = parseDeliveryCities(row.dealer_receive_addr);
     return {
@@ -101,7 +105,26 @@ export function mapCustomerInventoryRows(rows) {
       targetValue: targetValue === null ? null : targetValue / 10000,
       quantity,
       targetQty,
-      targetTurnover: null,
+      targetTurnover: planComplete('standard_coverage') && finite(row.minimum_standard_days) === finite(row.maximum_standard_days)
+        ? finite(row.minimum_standard_days) : null,
+      planSnapshot: row.plan_snapshot_date ?? null,
+      targetCoverage: finite(row.target_coverage),
+      standardCoverage: finite(row.standard_coverage),
+      ageCoverage: finite(row.age_coverage),
+      controlSkuCount: planComplete('age_coverage') ? finite(row.control_sku_count) : null,
+      sourcePreorderQty: planComplete('preorder_coverage') ? finite(row.source_preorder_qty) : null,
+      monthlyPlanQty: planComplete('monthly_plan_qty_coverage') ? finite(row.monthly_plan_qty) : null,
+      shippedQty: planComplete('shipped_qty_coverage') ? finite(row.shipped_qty) : null,
+      unshippedQty: planComplete('unshipped_qty_coverage') ? finite(row.unshipped_qty) : null,
+      budgetAmount: planComplete('budget_amount_coverage') ? finite(row.budget_amount) : null,
+      shippedAmount: planComplete('shipped_amount_coverage') ? finite(row.shipped_amount) : null,
+      unshippedAmount: planComplete('unshipped_amount_coverage') ? finite(row.unshipped_amount) : null,
+      cifPriceMin: finite(row.cif_price_min),
+      cifPriceMax: finite(row.cif_price_max),
+      cifPriceCoverage: finite(row.cif_price_coverage),
+      skuCount: skuRows,
+      planSkuCount: finite(row.plan_sku_rows),
+      planFieldCoverage: Object.fromEntries(['monthly_plan_qty','shipped_qty','unshipped_qty','budget_amount','shipped_amount','unshipped_amount'].map(field => [field, finite(row[field + '_coverage'])])),
       inventoryGap: null,
       sales30,
       dailySales: sales30 === null ? null : sales30 / 30,
@@ -160,6 +183,7 @@ export function summarizeCustomerInventory(rows) {
   const structureRows = rows.filter((row) => Number.isFinite(row.structureScore));
   return {
     totalValue: sum('value'),
+    customerCodes: rows.map((row) => row.code).filter(Boolean),
     quantity,
     sales30,
     targetValue: sum('targetValue'),
