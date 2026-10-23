@@ -111,11 +111,11 @@
 
 /* V1.8 #14：差额正数红、负数绿，颜色只作用于差额数值本身。 */
 .queueMetrics .variancePositive {
-  color: rgb(var(--danger-6));
+  color: #c8112a;
 }
 
 .queueMetrics .varianceNegative {
-  color: rgb(var(--success-6));
+  color: #168e58;
 }
 
 .scope :global(.arco-select) {
@@ -437,8 +437,8 @@
 }
 
 .dimensionTabs :global(.arco-btn)[data-active='true'] {
-  box-shadow: inset 0 -2px rgb(var(--danger-6));
-  color: rgb(var(--danger-6));
+  box-shadow: inset 0 -2px #df1732;
+  color: #df1732;
   font-weight: 600;
 }
 
@@ -990,6 +990,9 @@
   gap: 8px 12px;
   overflow-x: hidden;
 }
+.controls[hidden] {
+  display: none;
+}
 .advancedToggle {
   display: inline-flex;
   margin-left: auto;
@@ -1428,27 +1431,68 @@
 }
 
 .orderTabs {
+  position: relative;
+  isolation: isolate;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 2px;
   overflow: hidden;
   gap: 0;
   margin: 0;
-  border: 1px solid var(--bg-4);
-  border-radius: 7px;
+  border: 1px solid var(--workbench-border, #e1e4e8);
+  border-radius: 9px;
+  background: var(--workbench-muted-surface, #f4f5f7);
+}
+
+.orderTabs::before {
+  position: absolute;
+  z-index: 0;
+  top: 2px;
+  left: 2px;
+  width: calc((100% - 6px) / 2);
+  height: 30px;
+  border-radius: 6px;
+  background: var(--workbench-surface, #fff);
+  box-shadow: 0 1px 5px #1f29371f;
+  content: '';
+  transform: translateX(calc(var(--plan-tab-index) * 100%));
+  transition: transform 440ms cubic-bezier(0.2, 1.42, 0.4, 1);
 }
 
 .orderTabs :global(.arco-btn) {
-  min-width: 54px;
+  z-index: 1;
+  position: relative;
+  min-width: 66px;
   height: 30px;
+  padding: 0 11px;
   border: 0;
-  border-radius: 0;
-  background: transparent;
+  border-radius: 6px;
+  background: transparent !important;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  transition: color 220ms ease;
 }
 
 .orderTabs :global(.arco-btn-primary),
-.orderTabs :global(.arco-btn-primary):hover,
-.orderTabs :global(.arco-btn-primary):focus-visible {
-  background: var(--bg-2);
-  color: var(--text-primary);
+.orderTabs :global(.arco-btn-primary):hover {
+  color: var(--workbench-brand, #df1732) !important;
+}
+
+.orderTabs :global(.arco-btn:not(.arco-btn-primary):hover) {
+  color: var(--workbench-brand, #df1732) !important;
+}
+
+.orderTabs :global(.arco-btn:focus-visible) {
+  outline: 2px solid var(--workbench-brand, #df1732);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orderTabs::before,
+  .orderTabs :global(.arco-btn) {
+    transition: none;
+  }
 }
 
 .scope {
@@ -1469,7 +1513,60 @@
   width: 112px;
 }
 
-.scope :global(.arco-select-view),
+.scope .monthField {
+  align-items: center;
+  gap: 8px;
+}
+
+.monthSelect {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.monthCalendarIcon {
+  position: absolute;
+  z-index: 1;
+  left: 11px;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.monthSelect :global(.arco-select) {
+  width: 150px;
+  height: 36px;
+}
+
+.monthSelect :global(.arco-select-view) {
+  box-sizing: border-box;
+  height: 36px !important;
+  padding-left: 36px !important;
+  border: 1px solid var(--workbench-border, #c9ced7);
+  border-radius: 10px;
+  background: var(--workbench-surface, #fff);
+  box-shadow: 0 1px 2px #1822300a;
+  color: var(--text-primary);
+}
+
+.monthSelect :global(.arco-select-view:hover) {
+  border-color: #e8a4ae;
+  background: var(--workbench-brand-soft, #fff7f8);
+}
+
+.monthSelect :global(.arco-select-view:focus-within) {
+  border-color: #e59ca8;
+  box-shadow: 0 0 0 3px #df17321a;
+}
+
+.monthSelect :global(.arco-select-view-value),
+.monthSelect :global(.arco-select-view-input) {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .versionControls :global(.arco-select-view) {
   border: 0;
   background: transparent;
@@ -1639,6 +1736,86 @@
   flex-wrap: nowrap;
   justify-content: flex-start;
 }
+
+/* Sales plan shares the production-sales dashboard's white, connected KPI surface. */
+.dashboardHeader {
+  padding: 18px 20px 20px;
+  background: var(--bg-2);
+}
+.dashboardSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+.dashboardSectionTitle::before {
+  content: '';
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: rgb(var(--danger-6));
+}
+.queueMetrics {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--bg-3);
+  border-radius: 8px;
+  background: var(--bg-1);
+}
+.queueMetrics > span {
+  min-height: 94px;
+  padding: 16px 18px;
+  border-radius: 0;
+  border-right: 1px solid var(--bg-3);
+  background: var(--bg-1);
+}
+.queueMetrics > span:last-child {
+  border-right: 0;
+}
+.queueMetrics small {
+  margin-bottom: 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.queueMetrics strong {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 30px;
+  letter-spacing: -0.02em;
+}
+.queueHeader {
+  min-height: 72px;
+  padding: 0 12px;
+  background: var(--bg-1);
+}
+.dimensionTabs :global(.arco-btn)[data-active='true'] {
+  box-shadow: inset 0 -2px #df1732;
+}
+.approvalToolbarActions :global(.arco-btn-primary) {
+  background: #df1732;
+  border-color: #df1732;
+}
+.approvalToolbarActions :global(.arco-btn-primary:not(:disabled):hover) {
+  background: #c91029;
+  border-color: #c91029;
+}
+.organizationTable :global(.arco-table-content-inner > table > thead > tr > th.arco-table-th) {
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+@container (max-width: 620px) {
+  .queueMetrics > span:nth-child(2) {
+    border-right: 0;
+  }
+  .queueMetrics > span:nth-child(n + 3) {
+    border-top: 1px solid var(--bg-3);
+  }
+}
 .versionComparisonBar {
   display: inline-flex;
   flex: 0 0 auto;
@@ -1660,4 +1837,348 @@
 .returnReasons {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+/* Sales-plan controls use the workbench brand and neutral status palette. */
+.root .controlToolbar {
+  min-height: 72px;
+  align-items: stretch;
+}
+.root .dimensionControls,
+.root .dimensionTabs {
+  align-items: stretch;
+}
+.root .dimensionTabs :global(.arco-btn[role='tab']) {
+  min-height: 40px;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #555d68;
+}
+.root .dimensionTabs :global(.arco-btn[role='tab']:hover) {
+  background: #fff0f2;
+  color: #df1732;
+}
+.root .dimensionTabs :global(.arco-btn[role='tab'][data-active='true']),
+.root .dimensionTabs :global(.arco-btn[role='tab'][data-active='true']:hover) {
+  border-bottom-color: #df1732;
+  background: #fff0f2;
+  box-shadow: none;
+  color: #df1732;
+}
+.root :global(.arco-btn:not([role='tab'])) {
+  border-radius: 8px;
+}
+.root :global(.arco-btn-size-small:not([role='tab'])),
+.root :global(.arco-btn-size-mini:not([role='tab'])) {
+  border-radius: 6px;
+}
+.root :global(.arco-btn:focus-visible) {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+.root .headerRight :global(.arco-btn) {
+  min-height: 36px;
+}
+.root .toolbarActions > :global(.arco-btn:not(:disabled)) {
+  border: 1px solid #d9dde3;
+  background: #fff;
+  color: #555d68;
+}
+.root .toolbarActions > :global(.arco-btn:not(:disabled):hover),
+.root .toolbarActions > :global(.arco-btn:not(:disabled):focus-visible) {
+  border-color: #efabb4;
+  background: #fffafb;
+  color: #df1732;
+}
+.root .toolbarActions > .advancedToggle[data-active='true']:global(.arco-btn) {
+  border-color: #efabb4;
+  background: #fff0f2;
+  color: #df1732;
+}
+.root .toolbarActions > :global(.arco-btn) {
+  min-width: 32px;
+  min-height: 32px;
+}
+.root .approvalToolbarActions :global(.arco-btn) {
+  min-width: 64px;
+  min-height: 32px;
+  padding-inline: 12px;
+}
+.root .stageLaneToggle:global(.arco-btn-text) {
+  color: #555d68;
+}
+.root .stageLaneToggle:global(.arco-btn-text):hover,
+.root .stageLaneToggle:global(.arco-btn-text):focus-visible {
+  color: #df1732;
+  background: #fffafb;
+}
+.root
+  .stageLane[data-live-status='true']
+  .stageButton:global(.arco-btn-text)[data-selected='true'] {
+  background: #fff0f2;
+  color: #df1732;
+}
+.root .detailTrigger:global(.arco-btn-text),
+.root .categoryDetailTrigger:global(.arco-btn-text),
+.root .organizationCaret {
+  color: #df1732;
+}
+.root .detailTrigger:global(.arco-btn-text):hover,
+.root .categoryDetailTrigger:global(.arco-btn-text):hover {
+  color: #c91029;
+}
+.root :global(.arco-btn-outline:not(.arco-btn-status-danger):not(:disabled)) {
+  border-color: #d9dde3;
+  background: #fff;
+  color: #555d68;
+}
+.root :global(.arco-btn-outline:not(.arco-btn-status-danger):not(:disabled):hover) {
+  border-color: #efabb4;
+  background: #fffafb;
+  color: #df1732;
+}
+.root :global(.arco-btn-outline:disabled) {
+  border-color: #e3e6ea;
+  background: #f5f6f8;
+  color: #a0a4ac;
+}
+.root :global(.arco-btn-primary:not(:disabled)) {
+  border-color: #df1732;
+  background: #df1732;
+  color: #fff;
+}
+.root :global(.arco-btn-primary:not(:disabled):hover) {
+  border-color: #c91029;
+  background: #c91029;
+}
+.root :global(.arco-btn-primary:disabled),
+.root .approvalToolbarActions :global(.arco-btn:disabled) {
+  border-color: #e3e6ea;
+  background: #f5f6f8;
+  color: #a0a4ac;
+}
+.root :global(.arco-switch-checked) {
+  background: #df1732;
+}
+.root :global(.arco-switch-checked:hover) {
+  background: #c91029;
+}
+.root :global(.arco-switch-checked .arco-switch-dot) {
+  color: #df1732;
+}
+.root :global(.arco-switch:focus-visible),
+.root :global(.arco-checkbox:focus-within),
+.root :global(.arco-pagination-item:focus-visible) {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+.root :global(.arco-checkbox-checked .arco-checkbox-mask) {
+  border-color: #df1732;
+  background: #df1732;
+}
+.queueFooter :global(.arco-pagination-item-active) {
+  background: #fff0f2;
+  color: #df1732;
+}
+.approvalStatusTag[data-approval-tone='neutral'] {
+  background: #eef1f5;
+  color: #667085;
+}
+
+/* The month trigger and its floating menu follow the shared date-control states. */
+.scope .monthField {
+  gap: 8px;
+}
+.monthField > small {
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.monthCalendarIcon {
+  color: #697386;
+}
+.monthSelect :global(.arco-select-view) {
+  border-color: #c9ced7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px #1822300a;
+}
+.monthSelect :global(.arco-select-view-value),
+.monthSelect :global(.arco-select-view-input) {
+  color: #343b46;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  letter-spacing: normal;
+}
+.monthSelect :global(.arco-select-view-value) {
+  display: flex;
+  align-items: center;
+}
+.monthSelect :global(.arco-select-suffix) {
+  color: #697386;
+}
+.monthSelect :global(.arco-select:hover .arco-select-view) {
+  border-color: #e8a4ae;
+  background: #fff7f8;
+  box-shadow: 0 2px 8px #df173214;
+}
+.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-view) {
+  border-color: #ce7280;
+  background: #fff;
+  box-shadow: 0 0 0 3px #df173212;
+}
+.monthSelect :global(.arco-select:focus-visible .arco-select-view) {
+  border-color: #e59ca8;
+  box-shadow: 0 0 0 3px #df17321a;
+}
+.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
+  color: #c91029;
+  transform: rotate(180deg);
+}
+.brandSelectMenu {
+  padding: 5px;
+  border: 1px solid #e7e9ee;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow:
+    0 14px 38px #18223024,
+    0 2px 8px #1822300a;
+}
+.brandSelectMenu :global(.arco-select-option) {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: #343b46;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.brandSelectMenu :global(.arco-select-option:hover),
+.brandSelectMenu :global(.arco-select-option-hover) {
+  background: #ffedf0;
+  color: #343b46;
+}
+.brandSelectMenu :global(.arco-select-option-selected) {
+  justify-content: space-between;
+  background: #fff5f6;
+  color: #343b46;
+}
+.brandSelectMenu :global(.arco-select-option-selected)::after {
+  content: '✓';
+  padding-left: 8px;
+  color: #d61a35;
+  font-size: 13px;
+}
+
+/* Match the production-sales page's white canvas and quiet list states. */
+.root {
+  --bg-1: #fff;
+  background: var(--bg-1);
+}
+.dashboardHeader {
+  background: var(--bg-1);
+}
+.root .queueHeader {
+  min-height: 56px;
+  padding: 0 12px;
+}
+.root .controlToolbar {
+  min-width: 0;
+  min-height: 56px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 12px;
+}
+.root .dimensionControls {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 10px;
+  align-items: center;
+}
+.root .categorySwitch {
+  flex: 0 0 auto;
+}
+.root .dimensionTabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  align-items: stretch;
+  gap: 0;
+  scrollbar-width: none;
+}
+.root .dimensionTabs::-webkit-scrollbar {
+  display: none;
+}
+.root .dimensionTabs :global(.arco-btn[role='tab']) {
+  height: 56px;
+  min-width: 72px;
+  min-height: 56px;
+  padding-inline: 14px;
+  line-height: 22px;
+}
+.root .toolbarActions {
+  width: auto;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 7px;
+}
+.tableViewport {
+  margin: 16px 12px 12px;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+}
+.tableViewport > .querySpin {
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.tableViewport > .queueFooter {
+  min-height: 52px;
+  border-top: 1px solid #eceef1;
+}
+.organizationTable :global(.arco-table-th),
+.organizationTable :global(.arco-table-td) {
+  border-right: 0;
+  border-left: 0;
+}
+.organizationTable :global(.arco-table-content-inner > table > thead > tr > th.arco-table-th) {
+  height: 38px;
+  padding-block: 4px;
+  background: #f5f6f8;
+  color: #747b86;
+  border-bottom: 1px solid #eceef1;
+  font-weight: 700;
+}
+.organizationTable :global(.arco-table-tr > .arco-table-td) {
+  background: var(--bg-1);
+  border-bottom-color: #eceef1;
+  transition: background 180ms ease;
+}
+.root .organizationTable :global(.arco-table-tr:hover > .arco-table-td) {
+  background: #fff0f2;
+}
+.organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td) {
+  background: #fff2f4;
+}
+.organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td:first-child) {
+  box-shadow: inset 3px 0 #df1732;
+}
+.progressTreeHeader {
+  background: #f7f8fa;
+  color: #747b86;
+  border-bottom-color: #eceef1;
+}
+.progressTree :global(.arco-tree-node) {
+  border-bottom-color: #eceef1;
+}
+.progressTree :global(.arco-tree-node:hover) {
+  background: #fffafb;
 }

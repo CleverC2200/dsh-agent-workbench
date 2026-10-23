@@ -113,6 +113,11 @@
     },
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^business/inventory-personal/(?:source/|theme\\.css$)",
+      "tests": ["tests/inventory-pc-layout.browser.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^business/inventory-(?:apsplan|aqkc|dealer|fc|qll)/(?:source/|theme\\.css$)|^business/shared/.*\\.css$",
       "tests": [
         "tests/agent-authored-layout.browser.mjs",
@@ -294,6 +299,11 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^\\.gitignore$",
       "tests": ["tests/candidate-input.test.mjs", "tests/quality-ci.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^src/workbench/(?:original/workbenches/regionalApproval/(?:RegionalApprovalWorkbench\\.(?:tsx|module\\.css)|InlineSkuDetails\\.module\\.css)|workbench\\.css)$",
+      "tests": ["tests/sales-plan-presentation.browser.mjs"]
     }
   ],
   "sourceTools": {

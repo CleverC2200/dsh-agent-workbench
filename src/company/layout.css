@@ -21,9 +21,6 @@
 .gea-sidebar-brand-row {
   position: relative;
 }
-html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
-  right: 0;
-}
 .gea-sidebar-brand {
   flex: 1;
 }
@@ -43,9 +40,9 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   --dsw-alias-interactive-bg-hover: #fff1f4;
   position: relative;
   order: 4;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  max-height: min(48vh, 420px);
+  max-height: none;
   overflow: visible;
 }
 .gea-workspace-owned [class*='listArea'],
@@ -54,13 +51,15 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   flex: none;
 }
 .gea-workspace-owned [class*='_list'] {
-  max-height: min(40vh, 320px);
+  max-height: none;
+  overflow-y: visible;
+  scrollbar-gutter: auto;
 }
 .gea-workspace-owned [class*='sectionHeader'] {
   position: absolute;
   z-index: 2;
   top: -38px;
-  right: 0;
+  right: 35px;
   width: 68px;
   height: 36px;
   margin: 0;

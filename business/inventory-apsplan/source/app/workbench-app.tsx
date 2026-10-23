@@ -26,7 +26,6 @@ import {
 import { createPortal } from 'react-dom';
 import {
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Bell,
   Bot,
@@ -7577,38 +7576,31 @@ export default function Home({
             <section
               className={`analysis-workspace panel scope-${analysisScope}${analysisScope === 'production' ? ` production-${productionDimension}` : ''}`}
             >
-              <div className="dashboard-module-toolbar" aria-label="看板工具栏">
-                <span className="dashboard-module-label">
-                  <LayoutGrid />
-                  {'产销协同看板'}
-                </span>
-                <button
-                  className="open-intelligent-tasks"
-                  onClick={() => {
-                    setActiveWorkspace('intelligent');
-                    requestAnimationFrame(() =>
+              {!embedMode && (
+                <div className="dashboard-module-toolbar" aria-label="看板工具栏">
+                  <span className="dashboard-module-label">
+                    <LayoutGrid />
+                    {'产销协同看板'}
+                  </span>
+                  <button
+                    className="open-intelligent-tasks"
+                    onClick={() => {
+                      setActiveWorkspace('intelligent');
                       requestAnimationFrame(() =>
-                        document
-                          .querySelector<HTMLElement>('.intelligent-workspace-page')
-                          ?.scrollTo({ top: 0 }),
-                      ),
-                    );
-                  }}
-                >
-                  {embedMode ? (
-                    <>
-                      <ArrowLeft />
-                      {'返回智能工作台'}
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardCheck />
-                      {'任务统一到智能工作台管理'}
-                      <ArrowRight />
-                    </>
-                  )}
-                </button>
-              </div>
+                        requestAnimationFrame(() =>
+                          document
+                            .querySelector<HTMLElement>('.intelligent-workspace-page')
+                            ?.scrollTo({ top: 0 }),
+                        ),
+                      );
+                    }}
+                  >
+                    <ClipboardCheck />
+                    {'任务统一到智能工作台管理'}
+                    <ArrowRight />
+                  </button>
+                </div>
+              )}
               <div className="scope-tabs" role="tablist" aria-label="业务分析视角">
                 <button
                   role="tab"
@@ -9065,13 +9057,21 @@ export default function Home({
                     </h2>
                   </div>
                   <div
-                    className={`issue-filters risk-dimension-filters ${analysisScope === 'overview' ? 'sliding-risk-switch' : ''}`}
+                    className="issue-filters risk-dimension-filters sliding-risk-switch"
                     style={
-                      analysisScope === 'overview'
-                        ? ({
-                            '--risk-tab-index': overviewRiskPerspective === 'production' ? 0 : 1,
-                          } as CSSProperties)
-                        : undefined
+                      {
+                        '--risk-tab-count': analysisScope === 'overview' ? 2 : 3,
+                        '--risk-tab-index':
+                          analysisScope === 'overview'
+                            ? overviewRiskPerspective === 'production'
+                              ? 0
+                              : 1
+                            : analysisScope === 'sales'
+                              ? (['大区', '省区', '销售组'] as const).indexOf(salesRiskLevel)
+                              : (['category', 'base', 'cross'] as const).indexOf(
+                                  productionDimension,
+                                ),
+                      } as CSSProperties
                     }
                   >
                     {analysisScope === 'overview' ? (
