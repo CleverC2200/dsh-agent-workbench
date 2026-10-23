@@ -26,7 +26,7 @@ export function batchAges(rows,asOf=null) {
     for(const row of group){
       const snapshot=date(row.batch_date),production=date(row.production_date),quantity=row.quantity===null?NaN:Number(row.quantity);
       const age=snapshot!==null&&production!==null?(snapshot-production)/86400000:null;
-      if(age===null||age<0||(asOf!==null&&snapshot!==date(asOf)-86400000)||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
+      if(age===null||age<0||(asOf!==null&&(date(asOf)===null||snapshot>date(asOf)))||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
       result[fields[age<40?0:age<60?1:age<90?2:age<120?3:4]]+=quantity;
     }
     if(!valid)for(const field of fields)result[field]=null;

@@ -74,3 +74,10 @@ body {
 .delivery-order-searches input::placeholder {
   color: #667085;
 }
+.delivery-order-main-row .customer-type-cell {
+  min-width: 80px;
+  max-width: 104px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

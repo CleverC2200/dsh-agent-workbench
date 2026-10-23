@@ -286,6 +286,10 @@ test('built live page renders granted records, hides denied fields, and clears f
   );
   assert.ok(!window.document.querySelector('#deliveryOrderDetailRows').textContent.includes('400'));
   const baseCells = window.document.querySelector('#deliveryBaseCompareRows tr').cells;
+  const customerType = window.document.querySelector('#deliveryOrderDetailRows tr').cells[7];
+  assert.equal(customerType.textContent, '经销商');
+  assert.equal(customerType.className, 'customer-type-cell');
+  assert.match(customerType.title, /原始编码：jxs/);
   assert.equal(baseCells[1].textContent, '郑州');
   assert.equal(baseCells[2].textContent, '1 张');
   assert.equal(baseCells[5].textContent, '1 张');

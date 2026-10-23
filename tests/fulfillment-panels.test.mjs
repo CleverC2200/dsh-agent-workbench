@@ -85,7 +85,11 @@ test('batch age buckets validate complete dates and quantities without gateway d
   };
   assert.equal(batchAges([row])[0].age_lt40, 10);
   assert.equal(batchAges([row], '2026-10-22')[0].age_lt40, 10);
-  assert.equal(batchAges([row], '2026-10-23')[0].age_lt40, null);
+  assert.equal(batchAges([row], '2026-10-21')[0].age_lt40, 10);
+  assert.equal(batchAges([row], '2026-10-23')[0].age_lt40, 10);
+  assert.equal(batchAges([row], '2026-10-20')[0].age_lt40, null);
+  assert.equal(batchAges([row], 'invalid')[0].age_lt40, null);
+  assert.equal(batchAges([{ ...row, production_date: null }], '2026-10-21')[0].age_lt40, null);
   const old = { ...row, production_date: '2026-05-01', quantity: 20, minimum_quantity: 20 };
   assert.equal(batchAges([row, old])[0].age_ge120, 20);
   assert.equal(batchAges([{ ...row, production_date: '2026-10-22' }])[0].age_lt40, null);
