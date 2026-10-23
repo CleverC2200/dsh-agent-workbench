@@ -18,7 +18,9 @@ export const usesConfiguredSql = () =>
 
 /** The Host injects the current adjacent file before the application starts. */
 export function agentSqlConfig(fallback: AgentSqlConfig): AgentSqlConfig {
-  const previous = configs.get(fallback.agentId);
+  // A Host read supplies its installed config on each execution. Only a page
+  // owns a stable DOM-injected config for its lifetime.
+  const previous = typeof document === 'undefined' ? undefined : configs.get(fallback.agentId);
   if (previous) return previous;
   const element =
     typeof document === 'undefined' ? null : document.getElementById('agent-sql-config');
@@ -32,7 +34,7 @@ export function agentSqlConfig(fallback: AgentSqlConfig): AgentSqlConfig {
     typeof config.queries !== 'object'
   )
     throw Error('INVALID_AGENT_SQL_CONFIG');
-  configs.set(config.agentId, config);
+  if (typeof document !== 'undefined') configs.set(config.agentId, config);
   return config;
 }
 
