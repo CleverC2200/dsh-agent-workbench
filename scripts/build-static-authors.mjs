@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { compileHtmlAuthor } from './html-author.mjs';
 import { verifyFixedAuthoredData } from './static-author-provenance.mjs';
 import { syncAgentResources } from './build-output.mjs';
+import { mpsComputePlugin } from './mps-compute-build.mjs';
 const questionStyles = await readFile(
   new URL('../business/shared/author-questions.css', import.meta.url),
   'utf8',
@@ -37,6 +38,7 @@ for (const page of ['category', 'mps']) {
       resolveDir: fileURLToPath(root),
       sourcefile: `${page}-author.js`,
     },
+    plugins: page === 'mps' ? [await mpsComputePlugin()] : [],
     bundle: true,
     write: false,
     format: 'iife',
@@ -45,7 +47,11 @@ for (const page of ['category', 'mps']) {
     legalComments: 'inline',
   });
   const confirmationStyles =
-    page === 'mps' ? await readFile(new URL('demand-confirmation.css', root), 'utf8') : '';
+    page === 'mps'
+      ? (await readFile(new URL('demand-confirmation.css', root), 'utf8')) +
+        '\n' +
+        (await readFile(new URL('workflow.css', root), 'utf8'))
+      : '';
   const script = files['vendor.js'] + '\n' + author.outputFiles[0].text;
   const html = files['shell.html']
     .replace('__WORKBENCH_AUTHOR_SCRIPT__', () => script.replace(/<\/script/gi, '<\\/script'))
