@@ -1,11 +1,24 @@
 // Configuration-driven caller. The trusted host supplies execute and owns all
 // identity, data-source and authorization context. This module contains no SQL.
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+const immutableRegistries = new WeakSet();
+export function immutableQueryConfig(config) {
+  if (immutableRegistries.has(config)) return config;
+  const snapshot = structuredClone(config);
+  const freeze = (value) => {
+    if (!value || typeof value !== 'object' || Object.isFrozen(value)) return;
+    for (const child of Object.values(value)) freeze(child);
+    Object.freeze(value);
+  };
+  freeze(snapshot);
+  immutableRegistries.add(snapshot);
+  return snapshot;
+}
 // One HTML document shares this queue across its cards and collections. Avoid
 // multiplying collection concurrency by the number of independently loaded cards.
 let runningQueries = 0;
 const waitingQueries = [];
-function scheduledQuery(task, signal) {
+function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
   return new Promise((resolve, reject) => {
     const abort = () => {
       const index = waitingQueries.indexOf(start);
@@ -27,9 +40,12 @@ function scheduledQuery(task, signal) {
         });
     };
     if (signal?.aborted) return reject(signal.reason);
-    if (runningQueries < 4) start();
+    if (runningQueries < concurrency) start();
     else {
-      waitingQueries.push(start);
+      start.priority = priority;
+      const index = waitingQueries.findIndex((job) => job.priority < priority);
+      if (index < 0) waitingQueries.push(start);
+      else waitingQueries.splice(index, 0, start);
       signal?.addEventListener('abort', abort, { once: true });
     }
   });
@@ -192,7 +208,15 @@ export function requireColumns(result, columns) {
 
 export function createQueryClient(config, execute) {
   // Capture one immutable registry for a request chain, including paired counts.
-  config = structuredClone(config);
+  config = immutableRegistries.has(config) ? config : structuredClone(config);
+  const concurrency = [
+    'inventory-apsplan',
+    'inventory-aqkc',
+    'inventory-fc',
+    'inventory-qll',
+  ].includes(config.agentId)
+    ? 2
+    : 4;
   async function read(id, values, { signal, requiredColumns = [] } = {}) {
     signal?.throwIfAborted();
     const request = makeRequest(config, id, values);
@@ -200,6 +224,8 @@ export function createQueryClient(config, execute) {
     const result = await scheduledQuery(
       () => execute(request, { signal, queryId: id, values: structuredClone(values) }),
       signal,
+      query(config, id).priority ?? 0,
+      concurrency,
     );
     signal?.throwIfAborted();
     const failure = result?.failure ?? result?.error;
@@ -352,7 +378,10 @@ export function createQueryClient(config, execute) {
     const pageSignal = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
     if (firstAtomic) accept({ ...firstAtomic, rows: firstPage.rows }, 0);
     for (let offset = firstAtomic ? pageSize : 0; offset < total;) {
-      const width = Math.min(offset === 0 ? 1 : 3, Math.ceil((total - offset) / pageSize));
+      const width = Math.min(
+        offset === 0 ? 1 : Math.min(3, concurrency),
+        Math.ceil((total - offset) / pageSize),
+      );
       const offsets = Array.from({ length: width }, (_, index) => offset + index * pageSize);
       let failure;
       const results = await Promise.allSettled(

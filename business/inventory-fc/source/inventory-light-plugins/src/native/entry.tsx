@@ -1,3 +1,4 @@
+import { refreshConfiguredQueries } from '../../../../../shared/query-cache';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -59,6 +60,7 @@ async function mount() {
   window.addEventListener('gea-page-refresh', () => refreshPage());
   window.addEventListener('gea-session-changed', () => refreshPage());
   action('refresh', '清除本页快照并重新查询 GEA', () => {
+    refreshConfiguredQueries();
     refreshPage();
     return { refreshing: true };
   });

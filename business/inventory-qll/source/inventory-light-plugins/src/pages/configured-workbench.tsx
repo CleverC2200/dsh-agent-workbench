@@ -53,11 +53,8 @@ export default function ConfiguredWorkbench() {
     [revision, refresh] = useState(0);
   useEffect(() => setDraft(date), [date]);
   const overviewViews = React.useMemo(
-    () =>
-      config.overviewViewIds.filter(
-        (id) => id !== 'base-shipments' && (channel || id !== 'channel-overview'),
-      ),
-    [channel],
+    () => config.overviewViewIds.filter((id) => !['base-shipments', 'orders'].includes(id)),
+    [],
   );
   const { parts, errors, busy } = useConfiguredOverview(
     config,
@@ -69,12 +66,13 @@ export default function ConfiguredWorkbench() {
     overviewViews,
   );
   const stock = parts.base?.summary,
-    orders = parts.orders?.summary;
+    orders = parts['factory-overview']?.summary;
   const branch = parts['branch-stock']?.summary;
   const customer = parts['channel-overview']?.summary;
   const baseQty = knownNumber(parts.health?.summary?.total_qty),
     branchAvailable = knownNumber(branch?.available_qty);
-  const companyQty = baseQty;
+  const companyQty =
+    baseQty === null || branchAvailable === null ? null : baseQty + branchAvailable;
   const workspace: any = {
     scope: channel ? 'all-channel' : 'company',
     customerObservationRisks: [],
@@ -248,7 +246,7 @@ export default function ConfiguredWorkbench() {
                 />
               ) : (
                 <ConfiguredFactsPage
-                  key={[tab, date, revision, channel].join(':')}
+                  key={[tab, date, revision].join(':')}
                   config={config}
                   embedded
                   viewIds={views[tab]}

@@ -1,4 +1,5 @@
 /** SQL lives in the installed Agent configuration. No eval or executable config. */
+import { immutableQueryConfig } from './configured-query-client.mjs';
 export type AgentSqlConfig = {
   schemaVersion: number;
   agentId: string;
@@ -34,8 +35,9 @@ export function agentSqlConfig(fallback: AgentSqlConfig): AgentSqlConfig {
     typeof config.queries !== 'object'
   )
     throw Error('INVALID_AGENT_SQL_CONFIG');
-  if (typeof document !== 'undefined') configs.set(config.agentId, config);
-  return config;
+  const snapshot = immutableQueryConfig(config);
+  if (typeof document !== 'undefined') configs.set(snapshot.agentId, snapshot);
+  return snapshot;
 }
 
 /** Fixed SQL fragments retain their original composition; values stay bound separately. */

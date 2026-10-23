@@ -43,6 +43,8 @@ export function originalFcView(config: any, tab: string) {
         'target_inventory_qty',
         'remaining_outbound_qty',
         'rolling_ship_daily',
+        'last_month_actual_qty',
+        'current_day_avg_qty',
         'open_transfer_reported_qty',
         'missing_expectedMonthEndInventoryQty',
         'missing_currentRemainingTransferQty',
@@ -120,6 +122,8 @@ export function originalFcView(config: any, tab: string) {
         'missing_next_transfer',
         'missing_next_source',
         'missing_plan_status',
+        'last_month_actual_qty',
+        'current_day_avg_qty',
       ],
       ['warehouse_code', 'sku'],
     );

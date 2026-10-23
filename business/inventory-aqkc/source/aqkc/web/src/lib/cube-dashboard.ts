@@ -244,6 +244,15 @@ function numberOf(value: CubeRow[string]) {
   return Number.isFinite(valueAsNumber) ? valueAsNumber : 0;
 }
 
+function displayCurrentQuantity(
+  rows: Parameters<typeof currentShortageSum>[0],
+  field: string,
+  unit = '',
+) {
+  const value = currentShortageSum(rows, field);
+  return value === null ? '-' : displayNumber(value) + unit;
+}
+
 function displayNumber(value: number) {
   return new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(value);
 }
@@ -1286,8 +1295,7 @@ export async function loadInventoryDashboardTabs(
             (!normalizedCategory || categoryName(o.category) === normalizedCategory) &&
             (groupBy === 'base' ? o.base === r.level : categoryName(o.category) === r.level),
         );
-        const pendingValue = (field: string) =>
-          pending ? displayNumber(currentShortageSum(pending, field) ?? 0) : '-';
+        const pendingValue = (field: string) => displayCurrentQuantity(pending, field);
         const invalid =
           !orders?.length ||
           orders.some(
@@ -1535,6 +1543,7 @@ export async function loadInitialDashboard(
   signal?: AbortSignal,
   selectedBases?: string[],
   geaOnly = false,
+  onProgress?: (workspace: WorkspaceState) => void,
 ): Promise<WorkspaceState> {
   if (
     selectedBases !== undefined &&
@@ -1543,7 +1552,13 @@ export async function loadInitialDashboard(
     throw new Error('看板查询包含不支持的基地范围');
   }
   if (usesConfiguredSql())
-    return loadConfiguredSummaryDashboard(gatewayContextRef, operation, signal, selectedBases);
+    return loadConfiguredSummaryDashboard(
+      gatewayContextRef,
+      operation,
+      signal,
+      selectedBases,
+      onProgress,
+    );
   // 安全库存、当月履约与当前待发订单并行读取，各自保留来源口径。
   const [allSafetyRows, supportRows, pendingRows, insightOrders, sourceHealth] = await Promise.all([
     loadWorkbenchSqlQuery(
@@ -2502,29 +2517,85 @@ async function loadConfiguredSummaryDashboard(
   operation?: GatewayOperationContext,
   signal?: AbortSignal,
   selectedBases?: string[],
+  onProgress?: (workspace: WorkspaceState) => void,
 ): Promise<WorkspaceState> {
-  const [{ groups: sourceGroups, scope, day }, support, health, current] = await Promise.all([
-    readConfiguredStockSummary(selectedBases, { signal }),
+  let stock: Awaited<ReturnType<typeof readConfiguredStockSummary>> | undefined;
+  let support: CubeRow[] = [];
+  let health: any = { rows: [], summary: null };
+  let current: any = { rows: undefined };
+  const snapshot = () => configuredSummaryWorkspace(stock, support, health, current, selectedBases);
+  const publish = () => {
+    signal?.throwIfAborted();
+    onProgress?.(snapshot());
+  };
+  await Promise.all([
+    readConfiguredStockSummary(selectedBases, {
+      signal,
+      onInventory: (value) => {
+        stock = value;
+        publish();
+      },
+    })
+      .then((value) => {
+        stock = value;
+      })
+      .catch((e) => {
+        if (signal?.aborted) throw e;
+      })
+      .then(publish),
     loadWorkbenchSqlQuery(
       context,
       workbenchSql.supportByBase(WORKBENCH_OVER_AGE_DAYS),
       operation,
       signal,
-    ).catch((e) => {
-      if (signal?.aborted) throw e;
-      return [];
-    }),
-    readConfiguredHealthSummary(selectedBases, signal).catch((e) => {
-      if (signal?.aborted) throw e;
-      return { error: e.message } as any;
-    }),
-    readCurrentShortage(sqlConfiguration, 'current-shortage.locations', {}, { signal }).catch(
-      (e) => {
+    )
+      .then((value) => {
+        support = value;
+      })
+      .catch((e) => {
         if (signal?.aborted) throw e;
-        return { rows: undefined, error: e.message };
-      },
-    ),
+      })
+      .then(publish),
+    readConfiguredHealthSummary(selectedBases, signal)
+      .then((value) => {
+        health = value;
+      })
+      .catch((e) => {
+        if (signal?.aborted) throw e;
+        health = { error: e.message };
+      })
+      .then(publish),
+    readCurrentShortage(sqlConfiguration, 'current-shortage.locations', {}, { signal })
+      .then((value) => {
+        current = value;
+      })
+      .catch((e) => {
+        if (signal?.aborted) throw e;
+        current = { rows: undefined, error: e.message };
+      })
+      .then(publish),
   ]);
+  signal?.throwIfAborted();
+  return snapshot();
+}
+
+function configuredSummaryWorkspace(
+  stock: Awaited<ReturnType<typeof readConfiguredStockSummary>> | undefined,
+  support: CubeRow[],
+  health: any,
+  current: any,
+  selectedBases?: string[],
+): WorkspaceState {
+  const sourceGroups = stock?.groups ?? [];
+  const scope = stock?.scope ?? {
+    targetMonth: '',
+    targetMonthLabel: '',
+    versions: [],
+    versionLabel: '',
+    selectionRule: '',
+    fallbackUsed: false,
+  };
+  const day = stock?.day ?? '';
   const currentRows = current.rows?.filter(
     (r: any) => !selectedBases?.length || selectedBases.includes(r.base),
   );
@@ -2532,7 +2603,6 @@ async function loadConfiguredSummaryDashboard(
   const groups = sourceGroups
     .filter((r: any) => KNOWN_BASES.has(String(r.base)) && categoryName(r.category) !== '饺鲜说')
     .map((r: any) => ({ ...r, category: categoryName(r.category) }));
-  if (!groups.length) throw new Error('GEA 数据查询未返回安全库存数据');
   const stats = (rs: any[]) => {
     const sum = (key: string) => rs.reduce((n, r) => n + (numeric(r[key]) ?? 0), 0);
     const n = sum('row_count'),
@@ -2554,6 +2624,7 @@ async function loadConfiguredSummaryDashboard(
       ...new Set([
         ...groups.map((r: any) => String(r.base)),
         ...(currentRows ?? []).map((r: any) => String(r.base)),
+        ...(!stock ? support.map((r) => String(r['workbench.base'])).filter(Boolean) : []),
       ]),
     ];
   const business = workbenchBusinessSummaryFromRows(
@@ -2602,30 +2673,18 @@ async function loadConfiguredSummaryDashboard(
         business.orderByBase[base]?.rate == null
           ? '-'
           : `${(business.orderByBase[base].rate! * 100).toFixed(1)}%`,
-      orderQuantity: currentRows
-        ? displayNumber(
-            currentShortageSum(
-              currentRows.filter((r: any) => r.base === base),
-              'demand',
-            ) ?? 0,
-          )
-        : '-',
-      shortageQuantity: currentRows
-        ? displayNumber(
-            currentShortageSum(
-              currentRows.filter((r: any) => r.base === base),
-              'shortage',
-            ) ?? 0,
-          )
-        : '-',
-      allocatedQuantity: currentRows
-        ? displayNumber(
-            currentShortageSum(
-              currentRows.filter((r: any) => r.base === base),
-              'allocated',
-            ) ?? 0,
-          )
-        : '-',
+      orderQuantity: displayCurrentQuantity(
+        currentRows?.filter((r: any) => r.base === base),
+        'demand',
+      ),
+      shortageQuantity: displayCurrentQuantity(
+        currentRows?.filter((r: any) => r.base === base),
+        'shortage',
+      ),
+      allocatedQuantity: displayCurrentQuantity(
+        currentRows?.filter((r: any) => r.base === base),
+        'allocated',
+      ),
       skuCount: displayNumber(s.n),
     };
   });
@@ -2655,19 +2714,15 @@ async function loadConfiguredSummaryDashboard(
   // The daily fact provides an unprepared subset, not the full pending-order total.
   const orderCard = {
     title: '当前订单',
-    value: currentRows ? displayNumber(currentShortageSum(currentRows, 'demand') ?? 0) : '-',
+    value: displayCurrentQuantity(currentRows, 'demand'),
     helpers: [
       {
         label: '未备单订单占用',
-        value: currentRows
-          ? `${displayNumber(currentShortageSum(currentRows, 'allocated') ?? 0)}箱`
-          : '-',
+        value: displayCurrentQuantity(currentRows, 'allocated', '箱'),
       },
       {
         label: '缺货量',
-        value: currentRows
-          ? `${displayNumber(currentShortageSum(currentRows, 'shortage') ?? 0)}箱`
-          : '-',
+        value: displayCurrentQuantity(currentRows, 'shortage', '箱'),
       },
     ],
     tone: 'neutral' as const,
@@ -2788,7 +2843,8 @@ async function loadConfiguredSummaryDashboard(
       },
     },
   });
-  const complete = all.sum('target_count') === all.n && all.sum('inventory_count') === all.n;
+  const complete =
+    all.n > 0 && all.sum('target_count') === all.n && all.sum('inventory_count') === all.n;
   Object.assign(workspace.record, {
     id: 'sql-initial-dashboard',
     month: scope.targetMonthLabel,

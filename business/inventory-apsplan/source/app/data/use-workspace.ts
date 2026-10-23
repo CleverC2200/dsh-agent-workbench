@@ -30,6 +30,8 @@ export function useWorkspace(
     busy: false,
   });
   const generation = useRef(0);
+  const lastData = useRef({ key: result.key, data: result.data });
+  lastData.current = { key: result.key, data: result.data };
   useEffect(() => {
     if (!enabled) return;
     let active = true;
@@ -52,7 +54,7 @@ export function useWorkspace(
         : controller.signal;
       const id = ++generation.current;
       const current = () => active && id === generation.current && !signal.aborted;
-      let loaded: Data | null = null;
+      let loaded: Data | null = lastData.current.key === key ? lastData.current.data : null;
       function publish(data: Data, busy: boolean) {
         loaded = data;
         const failures = data.sections.filter((section) => section.status === 'error');
@@ -84,8 +86,12 @@ export function useWorkspace(
           data,
         );
       }
-      setResult({ key, data: null, previous: null, annual: null, error: '', busy: true });
-      setLiveContext({ realData: false, status: 'loading', period: input });
+      setResult((old) =>
+        old.key === key
+          ? { ...old, error: '', busy: true }
+          : { key, data: null, previous: null, annual: null, error: '', busy: true },
+      );
+      setLiveContext({ realData: !!loaded, status: 'loading', period: input });
       try {
         // Core cards enter the bounded queue first without blocking other slots.
         const data: Data = await workspace({
@@ -150,6 +156,7 @@ export function useWorkspace(
       }
     }
     const logout = () => {
+      lastData.current = { key: '', data: null };
       controller?.abort();
       ++generation.current;
       setLiveContext({ realData: false, status: 'identity-changed', period: input });
