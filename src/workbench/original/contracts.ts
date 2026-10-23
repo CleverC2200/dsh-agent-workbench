@@ -75,7 +75,7 @@ export type GeaSalesPlanListItem = {
   seq: number;
   periodId: GeaSalesPlanId;
   planTypeCode: string;
-  dealerCode: GeaSalesPlanId;
+  dealerCode?: GeaSalesPlanId | null;
   orgCode?: string | null;
   orgName?: string | null;
   provinceCode?: string | null;
@@ -127,7 +127,7 @@ export type GeaSalesPlanVersion = {
   seq: number;
   periodId: GeaSalesPlanId;
   planTypeCode: string;
-  dealerCode: GeaSalesPlanId;
+  dealerCode?: GeaSalesPlanId | null;
   orgCode?: string | null;
   orgName?: string | null;
   provinceCode?: string | null;

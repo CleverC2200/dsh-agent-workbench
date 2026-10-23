@@ -2,9 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 const { outputFiles } = await build({
-  entryPoints: [
-    'src/workbench/original/workbenches/regionalApproval/regionalApprovalQueryModel.ts',
-  ],
+  stdin: {
+    contents: [
+      "export * from './src/workbench/original/workbenches/regionalApproval/regionalApprovalQueryModel.ts';",
+      "export * from './src/workbench/original/workbenches/regionalApproval/models/salesPlanAdjustmentModel.ts';",
+    ].join('\n'),
+    resolveDir: process.cwd(),
+  },
   bundle: true,
   write: false,
   platform: 'node',
@@ -66,4 +70,109 @@ test('V1.6 derives monthly plan totals from SKU base values without rounding', (
     { quantity: categories[0].baseQuantity, amount: categories[0].baseAmount },
     { quantity: '11.000', amount: '101.00' },
   );
+});
+
+test('nullable customer reads retain unknown identity and keep separate plans out of the same customer group', () => {
+  const row = {
+    planId: 'p1',
+    versionId: 'v1',
+    periodId: 'period',
+    dealerCode: null,
+    dealerName: null,
+    status: 1,
+    skuCount: 1,
+    currentQty: '2',
+    currentAmount: '20',
+    targetQty: '4',
+    targetAmount: '40',
+    shipQty: '1',
+    shipAmount: '10',
+    orgCode: 'org',
+  };
+  const first = m.toRegionalApprovalLiveRow(row);
+  const second = m.toRegionalApprovalLiveRow({ ...row, planId: 'p2', versionId: 'v2' });
+  assert.deepEqual(m.projectRegionalApprovalLiveDimension(first, 'customer'), {
+    name: undefined,
+    context: [],
+  });
+  assert.equal(first.dealerCode, null);
+  const groups = m.groupRegionalApprovalLiveRows(
+    [
+      { ...first, dealerName: 'same display name' },
+      { ...second, dealerName: 'same display name' },
+    ],
+    'customer',
+  );
+  assert.deepEqual(
+    groups.map((group) => group.members.map((item) => item.planId)),
+    [['p1'], ['p2']],
+  );
+  const [{ summary }] = m.groupRegionalApprovalLiveRows([first, second], 'region');
+  assert.equal(summary.shipAmount, '20');
+  assert.equal(summary.shipQty, '2');
+  const [{ summary: missingShipment }] = m.groupRegionalApprovalLiveRows(
+    [first, { ...second, shipQty: null, shipAmount: null }],
+    'region',
+  );
+  assert.equal(missingShipment.shipQty, undefined);
+  assert.equal(missingShipment.shipAmount, undefined);
+});
+
+test('customer adjustments scope missing customer identifiers by plan and never distribute one plan into another', () => {
+  const first = m.toRegionalApprovalLiveRow({
+    planId: 'p1',
+    versionId: 'v1',
+    dealerCode: null,
+    status: 1,
+  });
+  const second = m.toRegionalApprovalLiveRow({
+    planId: 'p2',
+    versionId: 'v2',
+    dealerCode: undefined,
+    status: 1,
+  });
+  assert.deepEqual(m.adjustmentScopeRows([first, second], first, 'customer'), [first]);
+  const records = m.createSalesPlanAdjustmentRecords(
+    [first, second].map((plan) => ({
+      plan,
+      skus: [
+        {
+          versionId: plan.versionId,
+          skuCode: '789',
+          productCategName: 'category',
+          baseQty: '1',
+          qty: '2',
+          price: '10',
+          amtBase: '10',
+          amt: '20',
+        },
+      ],
+    })),
+  );
+  const groups = m.groupSalesPlanAdjustmentRecords(records, 'customer');
+  assert.equal(groups.length, 2);
+  assert.deepEqual(
+    groups.map((group) => group.records.map((record) => record.plan.planId)),
+    [['p1'], ['p2']],
+  );
+  const changed = m.updateCustomerQuantity(records, groups[0], 5);
+  assert.deepEqual(
+    changed.map((record) => record.qty),
+    ['5', '2'],
+  );
+  assert.equal(changed[0].plan.dealerCode, null);
+  assert.equal(changed[1].plan.dealerCode, undefined);
+  const identified = records.map((record) => ({
+    ...record,
+    plan: { ...record.plan, dealerCode: '456' },
+  }));
+  assert.equal(
+    m.adjustmentScopeRows(
+      identified.map((record) => record.plan),
+      identified[0].plan,
+      'customer',
+    ).length,
+    2,
+  );
+  assert.equal(m.groupSalesPlanAdjustmentRecords(identified, 'customer')[0].records.length, 2);
 });

@@ -497,7 +497,7 @@ test('opening an original plan name publishes the same displayed inline SKU fiel
   assert.equal(document.querySelector('input[aria-label$="10001"]')?.value, '3');
 });
 
-test('RegionalApproval restores scoped live filter intent through its actual query interface without granting or replaying actions', async (t) => {
+test('RegionalApproval restores scoped filters and displays unknown customer identity without granting or replaying actions', async (t) => {
   const dom = new JSDOM('<main id="root"></main>', {
     url: 'https://host.example/api/agent-workbench/native',
     pretendToBeVisual: true,
@@ -547,14 +547,36 @@ test('RegionalApproval restores scoped live filter intent through its actual que
     provinceCode: 'all',
     orgCode: 'all',
     dealerCode: 'all',
-    status: '4',
+    status: '3',
   };
   writeAssistantSurfaceState('forecast', scope + ':regional-approval-state', {
     draftLiveFilters: filters,
     appliedLiveFilters: filters,
+    currentStage: 'area',
+    dimension: 'customer',
   });
   const reads = [],
-    writes = [];
+    writes = [],
+    contexts = [];
+  const plan = {
+    planId: 'p-null-customer',
+    versionId: 'v-null-customer',
+    periodId: 'period-1',
+    seq: 1,
+    planTypeCode: 'Y',
+    dealerCode: null,
+    dealerName: null,
+    areaCode: 'A-1',
+    orgCode: null,
+    provinceCode: null,
+    baseName: null,
+    status: 3,
+    skuCount: 1,
+    targetQty: '12',
+    targetAmount: '24',
+    currentQty: '10',
+    currentAmount: '20',
+  };
   const page = (records) => ({ records, total: records.length, size: 20, current: 1, pages: 1 });
   const host = {
     salesPlan: {
@@ -573,7 +595,7 @@ test('RegionalApproval restores scoped live filter intent through its actual que
       list: {
         invoke: async (query) => {
           reads.push(query);
-          return page([]);
+          return page([plan]);
         },
       },
       versions: { invoke: async () => [] },
@@ -617,7 +639,7 @@ test('RegionalApproval restores scoped live filter intent through its actual que
             stateScope: 'own-tenant-account',
             approvalStages: ['area'],
             t: (key) => key,
-            onContextChange: () => {},
+            onContextChange: (value) => contexts.push(value),
             liveActionsEnabled: false,
           }),
         ),
@@ -626,13 +648,22 @@ test('RegionalApproval restores scoped live filter intent through its actual que
   await render();
   await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
   assert.ok(
-    reads.some((query) => query.areaCode === 'A-1' && query.status === 4),
+    reads.some((query) => query.areaCode === 'A-1' && query.status === 3),
     'restored UI filters reach the original public query DTO, not an invented result cache',
   );
   await act(async () => root.render(null));
   reads.length = 0;
   await render();
   await act(async () => new Promise((resolve) => setTimeout(resolve, 30)));
-  assert.ok(reads.some((query) => query.areaCode === 'A-1' && query.status === 4));
+  assert.ok(reads.some((query) => query.areaCode === 'A-1' && query.status === 3));
+  assert.ok(
+    document.body.textContent.includes(
+      'common.assistantSurface.regionalApproval.query.unnamedOrganization',
+    ),
+    document.body.textContent,
+  );
+  const entity = contexts.at(-1).visibleEntities.find((value) => value.id === plan.planId);
+  assert.equal(entity.dealerCode, null);
+  assert.equal(entity.organizationKey, plan.planId);
   assert.equal(writes.length, 0);
 });
