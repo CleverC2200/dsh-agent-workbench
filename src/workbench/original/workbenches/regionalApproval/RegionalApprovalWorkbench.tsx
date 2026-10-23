@@ -39,6 +39,7 @@ import {
   Typography,
 } from '@arco-design/web-react';
 import type { TableColumnProps } from '@arco-design/web-react';
+import { IconCalendar } from '@arco-design/web-react/icon';
 import {
   CheckOne,
   Down,
@@ -67,6 +68,11 @@ import {
   type ApprovalVersion,
 } from './salesPlanDomain.ts';
 const ALL_ORGANIZATIONS = 'all';
+const formatPlanMonthLabel = (value: string): string =>
+  salesPlanPeriodOptionLabel(value).replace(
+    /^(\d{4})-(\d{1,2})$/,
+    (_match, year: string, month: string) => `${year}年${Number(month)}月`,
+  );
 import RegionalApprovalLiveActionDialog, {
   type LiveActionKind,
 } from './RegionalApprovalLiveActionDialog.tsx';
@@ -2217,12 +2223,20 @@ const RegionalApprovalWorkbench: React.FC<{
     const row = tableRow.plan;
     return (
       <Tag
+        className={styles.approvalStatusTag}
+        data-approval-tone={
+          row.approvalState === 'approved'
+            ? 'success'
+            : row.approvalState === 'returned'
+              ? 'warning'
+              : 'neutral'
+        }
         color={
           row.approvalState === 'approved'
             ? 'green'
             : row.approvalState === 'returned'
               ? 'orange'
-              : 'arcoblue'
+              : 'gray'
         }
         data-testid={`regional-approval-status-${row.planId}`}
       >
@@ -2267,6 +2281,7 @@ const RegionalApprovalWorkbench: React.FC<{
                 <Button
                   type="text"
                   size="small"
+                  className={styles.categoryDetailTrigger}
                   aria-expanded={expandedLiveGroups.includes(tableRow.tableRowId)}
                   onClick={() =>
                     setExpandedLiveGroups((current) =>
@@ -3072,6 +3087,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{comparisonText(index === 0 ? 'primary' : 'compared')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     aria-label={comparisonText(index === 0 ? 'primary' : 'compared')}
                     value={inlineComparison[field]}
                     onChange={(value: number) =>
@@ -3110,7 +3126,8 @@ const RegionalApprovalWorkbench: React.FC<{
           >
             <span className={styles.monthField}>
               <small>{t('common.assistantSurface.regionalApproval.planMonth')}</small>
-              {
+              <span className={styles.monthSelect}>
+                <IconCalendar aria-hidden="true" className={styles.monthCalendarIcon} />
                 <Spin
                   loading={
                     liveQuery.periodsState.status === 'loading' && liveQuery.periods.length === 0
@@ -3119,9 +3136,13 @@ const RegionalApprovalWorkbench: React.FC<{
                 >
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={liveQuery.selectedPeriodMonth}
                     aria-label={t('common.assistantSurface.regionalApproval.query.periodSelect')}
                     placeholder={t('common.assistantSurface.regionalApproval.query.noPeriod')}
+                    renderFormat={(_option, value) =>
+                      value == null ? '' : formatPlanMonthLabel(String(value))
+                    }
                     onChange={(periodMonth) => {
                       setSelectedRowIds([]);
                       setPage(1);
@@ -3131,12 +3152,12 @@ const RegionalApprovalWorkbench: React.FC<{
                   >
                     {liveQuery.periodMonths.map((periodMonth) => (
                       <Select.Option key={periodMonth} value={periodMonth}>
-                        {salesPlanPeriodOptionLabel(periodMonth)}
+                        {formatPlanMonthLabel(periodMonth)}
                       </Select.Option>
                     ))}
                   </Select>
                 </Spin>
-              }
+              </span>
             </span>
             {null}
           </div>
@@ -3240,6 +3261,9 @@ const RegionalApprovalWorkbench: React.FC<{
           aria-label={t('common.assistantSurface.regionalApproval.queue.ariaLabel')}
         >
           <header className={styles.dashboardHeader}>
+            <div className={styles.dashboardSectionTitle}>
+              {t('common.assistantSurface.regionalApproval.scopeTotals.overview')}
+            </div>
             <div
               className={styles.queueMetrics}
               role="region"
@@ -3425,6 +3449,7 @@ const RegionalApprovalWorkbench: React.FC<{
           </div>
           <section
             className={styles.controls}
+            hidden={!narrowFiltersExpanded && !exportFeedback}
             aria-label={t('common.assistantSurface.regionalApproval.filters.ariaLabel')}
           >
             <div
@@ -3437,6 +3462,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{t('common.assistantSurface.regionalApproval.filters.area')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={draftLiveFilters.areaCode}
                     aria-label={t('common.assistantSurface.regionalApproval.filters.area')}
                     onChange={(value) => updateLiveDraftFilter('areaCode', value)}
@@ -3455,6 +3481,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{t('common.assistantSurface.regionalApproval.filters.branch')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={draftLiveFilters.provinceCode}
                     aria-label={t('common.assistantSurface.regionalApproval.filters.branch')}
                     onChange={(value) => updateLiveDraftFilter('provinceCode', value)}
@@ -3473,6 +3500,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{t('common.assistantSurface.regionalApproval.filters.department')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={draftLiveFilters.orgCode}
                     aria-label={t('common.assistantSurface.regionalApproval.filters.department')}
                     onChange={(value) => updateLiveDraftFilter('orgCode', value)}
@@ -3491,6 +3519,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{t('common.assistantSurface.regionalApproval.filters.customer')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={draftLiveFilters.dealerCode}
                     aria-label={t('common.assistantSurface.regionalApproval.filters.customer')}
                     onChange={(value) => updateLiveDraftFilter('dealerCode', value)}
@@ -3511,6 +3540,7 @@ const RegionalApprovalWorkbench: React.FC<{
                   <span>{t('common.assistantSurface.regionalApproval.filters.approval')}</span>
                   <Select
                     size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
                     value={draftLiveFilters.status}
                     aria-label={t('common.assistantSurface.regionalApproval.filters.approval')}
                     onChange={(value) => updateLiveDraftFilter('status', value)}
@@ -3832,43 +3862,44 @@ const RegionalApprovalWorkbench: React.FC<{
                 )}
               </Spin>
             }
-          </div>
-          <footer className={styles.queueFooter} data-testid="regional-approval-queue-footer">
-            <div className={styles.footerControls}>
-              <div className={styles.pageSizeControl}>
-                <span>{t('common.assistantSurface.regionalApproval.pagination.pageSize')}</span>
-                <Select
+            <footer className={styles.queueFooter} data-testid="regional-approval-queue-footer">
+              <div className={styles.footerControls}>
+                <div className={styles.pageSizeControl}>
+                  <span>{t('common.assistantSurface.regionalApproval.pagination.pageSize')}</span>
+                  <Select
+                    size="small"
+                    dropdownMenuClassName={styles.brandSelectMenu}
+                    value={pageSize}
+                    aria-label={t('common.assistantSurface.regionalApproval.pagination.pageSize')}
+                    onChange={(value) => {
+                      setPageSize(Number(value));
+                      setPage(1);
+                    }}
+                  >
+                    {[10, 20, 50, 100].map((size) => (
+                      <Select.Option key={size} value={size}>
+                        {t('common.assistantSurface.regionalApproval.pagination.pageSizeValue', {
+                          count: size,
+                        })}
+                      </Select.Option>
+                    ))}
+                  </Select>
+                </div>
+                <span>
+                  {t('common.assistantSurface.regionalApproval.pagination.total', {
+                    count: liveOuterRows.length,
+                  })}
+                </span>
+                <Pagination
                   size="small"
-                  value={pageSize}
-                  aria-label={t('common.assistantSurface.regionalApproval.pagination.pageSize')}
-                  onChange={(value) => {
-                    setPageSize(Number(value));
-                    setPage(1);
-                  }}
-                >
-                  {[10, 20, 50, 100].map((size) => (
-                    <Select.Option key={size} value={size}>
-                      {t('common.assistantSurface.regionalApproval.pagination.pageSizeValue', {
-                        count: size,
-                      })}
-                    </Select.Option>
-                  ))}
-                </Select>
+                  current={liveCurrentPage}
+                  pageSize={pageSize}
+                  total={liveOuterRows.length}
+                  onChange={(next) => setPage(Math.min(Math.max(1, next), livePageCount))}
+                />
               </div>
-              <span>
-                {t('common.assistantSurface.regionalApproval.pagination.total', {
-                  count: liveOuterRows.length,
-                })}
-              </span>
-              <Pagination
-                size="small"
-                current={liveCurrentPage}
-                pageSize={pageSize}
-                total={liveOuterRows.length}
-                onChange={(next) => setPage(Math.min(Math.max(1, next), livePageCount))}
-              />
-            </div>
-          </footer>
+            </footer>
+          </div>
         </section>
       </div>
 
@@ -3951,7 +3982,12 @@ const SalesPlanWorkbench: React.FC<React.ComponentProps<typeof RegionalApprovalW
     setOrderType(value);
   };
   const headerControls = (
-    <div role="tablist" aria-label={props.t('common.correction.tabs')} className={styles.orderTabs}>
+    <div
+      role="tablist"
+      aria-label={props.t('common.correction.tabs')}
+      className={styles.orderTabs}
+      style={{ '--plan-tab-index': orderType === 'M' ? 0 : 1 } as React.CSSProperties}
+    >
       {(['M', 'Z'] as const).map((value) => (
         <Button
           size="small"

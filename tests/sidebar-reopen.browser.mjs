@@ -45,6 +45,7 @@ const bundle = await build({
  ctx.slots.register({name:'main.conversation',children:{'conversation.header':{kind:'single',scope:'session-maybe'}}},ConversationMainPanel);
  ctx.slots.register({name:'conversation.header',children:{'settings.launcher':{kind:'single',scope:'root'}}},({renderSlot})=><header data-core-header style={{height:48,flexShrink:0}}>{renderSlot('settings.launcher',{})}</header>);
  const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),document:()=>ctx.layout.selectPanel(null),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
+ ctx.provide('sessions',{list:source({ids:[],byId:{}}),search:async()=>({ok:true,value:{items:[],hasMore:false}})});
  mountCompanyUI(ctx,workbench);
  const workspaceStore=createWorkspaceViewStore().create();workspaceStore.actions.setGroupBy('flat');
  const controls=createWorkspaceShortcutControls();const useSnapshot=observable=>selector=>selector(React.useSyncExternalStore(observable.subscribe,observable.getSnapshot,observable.getSnapshot));
@@ -463,6 +464,12 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
   await expect(page.getByText('懂业务 · 会协同 · 能行动', { exact: true })).toBeVisible();
   await expect(page.getByText('预览版', { exact: true })).toHaveCount(0);
+  const inset = await page.locator('.gea-ai-workbench-entry').evaluate((entry) => {
+    const card = entry.getBoundingClientRect();
+    const sidebar = entry.closest('.gea-sidebar-owned').getBoundingClientRect();
+    return { left: card.left - sidebar.left, right: sidebar.right - card.right };
+  });
+  assert.ok(inset.left >= 12 && inset.right >= 12, 'AI card retains both sidebar insets');
   const heading = page.getByRole('button', { name: '历史会话', exact: true });
   const business = page.getByRole('button', { name: '业务工作台', exact: true });
   assert.equal(

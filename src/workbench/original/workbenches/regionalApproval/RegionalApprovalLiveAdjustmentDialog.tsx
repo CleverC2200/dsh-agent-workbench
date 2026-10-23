@@ -373,7 +373,7 @@ const RegionalApprovalLiveAdjustmentDialog: React.FC<{
                 ),
               })}
             </span>
-            <Tag color={readOnly ? 'gray' : 'arcoblue'}>
+            <Tag color="gray">
               {t(
                 readOnly
                   ? 'common.assistantSurface.regionalApproval.liveAdjustment.readOnly'

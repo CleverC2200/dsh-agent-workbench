@@ -186,9 +186,15 @@
   height: 32px;
   padding: 0 10px;
   gap: 8px;
-  border: 1px solid #d9dde3;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid var(--workbench-control-border, #d9dde3);
+  border-radius: var(--workbench-control-radius, 8px);
+  background: var(--workbench-surface, #fff);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+.gea-api-search:hover {
+  border-color: var(--workbench-control-hover-border, #efabb4);
 }
 .gea-api-search label {
   display: flex;
@@ -198,8 +204,9 @@
   gap: 6px;
 }
 .gea-api-search:focus-within {
-  outline: 2px solid var(--api-accent);
-  outline-offset: 2px;
+  border-color: var(--workbench-brand, #df1732);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--workbench-control-focus-ring, #df173226);
 }
 .gea-api-search input {
   width: 100%;

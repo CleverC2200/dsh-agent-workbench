@@ -328,6 +328,13 @@ const copy = {
   apiLog: ['接口日志', 'API logs'],
   inboxNotConnected: ['消息待办接口尚未接入', 'Message inbox service is not connected'],
   messageInbox: ['消息待办', 'Message inbox'],
+  searchSessions: ['搜索会话', 'Search sessions'],
+  searchSessionPlaceholder: ['搜索会话名称或内容', 'Search conversation titles or content'],
+  searchResults: ['搜索结果', 'Search results'],
+  searchNoResults: ['没有找到会话', 'No conversations found'],
+  searchFailed: ['搜索暂时不可用，请重试', 'Search is unavailable. Try again.'],
+  searchMore: ['结果较多，请输入更具体的关键词', 'More results available. Refine your search.'],
+  clearSearch: ['清除搜索', 'Clear search'],
   agentPanel: ['需求预测', 'Demand forecast'],
   agentPanelModel: ['GEA Personal Model · 只读分析', 'GEA Personal Model · read-only analysis'],
   agentPanelHelp: [

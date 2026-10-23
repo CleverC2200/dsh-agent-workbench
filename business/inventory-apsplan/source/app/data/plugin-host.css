@@ -298,13 +298,13 @@ html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intel
 /* Keep the board's view and period controls visible while its document scrolls. */
 html.aps-plugin-host .analysis-workspace > .scope-tabs {
   position: sticky;
-  top: 50px;
+  top: 0;
   z-index: 11;
   background: #fff;
 }
 html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   position: sticky;
-  top: 98px;
+  top: 49px;
   z-index: 10;
   background: #fff;
 }
@@ -447,6 +447,20 @@ html.aps-plugin-host body[data-ds-dark-theme] .category-drill-head > span > smal
   margin-left: 0;
   margin-right: 0;
   overflow-x: auto;
+}
+/* Let the active workspace tab meet the toolbar divider. */
+html.aps-plugin-host [data-business-toolbar-row]:has(.plugin-workspace-tabs) {
+  padding-bottom: 0;
+}
+html.aps-plugin-host [data-business-toolbar-row]:has(.plugin-workspace-tabs) > :first-child {
+  flex: 0 1 auto;
+}
+html.aps-plugin-host [data-business-toolbar-row]:has(.plugin-workspace-tabs) > :last-child {
+  flex-basis: auto;
+}
+html.aps-plugin-host [data-business-toolbar-row] .plugin-workspace-tabs > button {
+  height: 46px;
+  min-height: 46px;
 }
 /* Keep every authored metric tab reachable inside a narrow client pane. */
 html.aps-plugin-host .analysis-workspace .category-table-tabs-scroll {

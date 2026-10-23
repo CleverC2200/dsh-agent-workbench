@@ -15,6 +15,7 @@ type NavIconKind =
   | 'warehouse'
   | 'grid'
   | 'folder'
+  | 'recent'
   | 'apps'
   | 'newChat'
   | BusinessGroupIcon;
@@ -341,6 +342,12 @@ export function NavIcon({ kind }: { kind: NavIconKind }) {
     folder: (
       <>
         <path d="M3 7V5.5A1.5 1.5 0 0 1 4.5 4h4l2 2.5h9A1.5 1.5 0 0 1 21 8v10.5A1.5 1.5 0 0 1 19.5 20h-15A1.5 1.5 0 0 1 3 18.5Z" />
+      </>
+    ),
+    recent: (
+      <>
+        <path d="M3 12a9 9 0 1 0 2.5-6.2M3 4v4h4" />
+        <path d="M12 7v5l3 2" />
       </>
     ),
   };

@@ -8,10 +8,13 @@ import { JSDOM } from 'jsdom';
 import { zh } from '../src/company/locales.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 const corePath = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
 verifyOfficialCore(corePath);
-const { SlotCore } = await import(resolve(corePath, 'packages/client/ui-slots/lib/index.js'));
+const { SlotCore } = await import(
+  pathToFileURL(resolve(corePath, 'packages/client/ui-slots/lib/index.js')).href
+);
 const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {

@@ -17131,7 +17131,7 @@ body {
   font-weight: 800;
 }
 .sales-plan-page {
-  background: #f7f8fa;
+  background: #fff;
   min-width: 0;
   height: 100%;
   padding: 12px;
@@ -17322,7 +17322,7 @@ body {
 .sales-plan-head {
   z-index: 2;
   color: #747b86;
-  background: #f5f6f8;
+  background: #f7f8fa;
   min-height: 42px;
   font-size: 9px;
   font-weight: 800;
@@ -17330,7 +17330,7 @@ body {
   top: 0;
 }
 .sales-plan-head:hover {
-  background: #f5f6f8;
+  background: #f7f8fa;
 }
 .sales-plan-index {
   color: #7890aa;
@@ -19637,9 +19637,9 @@ body {
   border: 1px solid var(--v02-border);
   border-radius: var(--v02-radius-control);
   background: var(--v02-surface-muted);
-  grid-template-columns: repeat(2, minmax(70px, 1fr));
+  grid-template-columns: repeat(var(--risk-tab-count, 2), minmax(70px, 1fr));
   gap: 0;
-  min-width: 150px;
+  min-width: calc(var(--risk-tab-count, 2) * 70px + 8px);
   padding: 3px;
   display: grid;
   position: relative;
@@ -19649,8 +19649,8 @@ body {
   z-index: 0;
   background: var(--v02-surface);
   content: '';
-  width: calc(50% - 3px);
-  transform: translateX(calc(var(--risk-tab-index)*100%));
+  width: calc((100% - 6px) / var(--risk-tab-count, 2));
+  transform: translateX(calc(var(--risk-tab-index, 0) * 100%));
   border-radius: 6px;
   transition: transform 0.36s cubic-bezier(0.2, 1.25, 0.4, 1);
   position: absolute;
@@ -20039,6 +20039,8 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .issue-filters.sliding-risk-switch:before,
+  .issue-filters.sliding-risk-switch button,
   .time-granularity-tabs.period-damped-switch:before,
   .time-granularity-tabs.period-damped-switch button {
     transition: none;

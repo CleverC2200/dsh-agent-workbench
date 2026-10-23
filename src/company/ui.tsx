@@ -10,6 +10,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import {
   IconPanelLeftOutlineRegular,
   IconNewChatOutlineRegular,
+  IconSearchOutlineRegular,
 } from '@deepseek-ai/dsh-client-ui-primitives/src/icons/index.tsx';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import type {
@@ -33,6 +34,7 @@ import css from './shell.css';
 import layoutCss from './layout.css';
 import loginCss from './login.css';
 import staticControlsCss from './formal-static-controls.css';
+import { SessionSearchDialog } from './session-search-dialog.tsx';
 
 const INBOX = 'gea-inbox' as MainPanelId;
 const agents: Record<string, prompts.ConversationPromptConfig> = {
@@ -478,6 +480,48 @@ export function mountCompanyUI(
       </>
     );
   }
+  function CompanySessionSearch({ onClose }: { onClose: () => void }) {
+    const sessions = useSyncExternalStore(
+      ctx.sessions.list.subscribe,
+      ctx.sessions.list.getSnapshot,
+      ctx.sessions.list.getSnapshot,
+    );
+    const searchMessages = useCallback(async (query: string, signal: AbortSignal) => {
+      const result = await ctx.sessions.search(query, signal);
+      if (!result.ok) throw new Error(result.error.message);
+      return result.value;
+    }, []);
+    return (
+      <SessionSearchDialog
+        sessions={sessions.ids
+          .map((id) => sessions.byId[id])
+          .filter((session) => session && !session.blank && !session.parentId)
+          .map((session) => ({
+            id: session.id,
+            displayTitle: session.displayTitle,
+            updatedAt: session.updatedAt,
+          }))}
+        searchMessages={searchMessages}
+        openSession={(id) => {
+          const session = sessions.byId[id as keyof typeof sessions.byId];
+          if (session) ctx.uiWorkspace.openSession(session.id);
+        }}
+        onClose={onClose}
+        copy={{
+          title: t('searchSessions'),
+          placeholder: t('searchSessionPlaceholder'),
+          recent: t('recentArea'),
+          results: t('searchResults'),
+          empty: t('searchNoResults'),
+          loading: t('loading'),
+          failed: t('searchFailed'),
+          more: t('searchMore'),
+          close: t('close'),
+          clear: t('clearSearch'),
+        }}
+      />
+    );
+  }
   function Sidebar({
     collapsed,
     width,
@@ -493,11 +537,6 @@ export function mountCompanyUI(
       | 'sidebar.settings'
       | 'sidebar.footer.action'
     >) {
-    const creation = useSyncExternalStore(
-      conversationStarter.state.subscribe,
-      conversationStarter.state.getSnapshot,
-      conversationStarter.state.getSnapshot,
-    );
     useSyncExternalStore(
       (listener) => ctx.locale.subscribe(listener),
       () => ctx.locale.getSnapshot().active,
@@ -525,11 +564,73 @@ export function mountCompanyUI(
     const activePanel = layoutPanel ?? documentState.selectedDocument?.id;
     const business = Boolean(activePanel && activePanel !== 'gea-api-log');
     const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>('function');
+    const sidebarRegionRef = useRef<HTMLDivElement>(null);
+    const workspacePanelRef = useRef<HTMLDivElement>(null);
+    const creation = useSyncExternalStore(
+      conversationStarter.state.subscribe,
+      conversationStarter.state.getSnapshot,
+      conversationStarter.state.getSnapshot,
+    );
+    const [searchOpen, setSearchOpen] = useState(false);
     const previousBusiness = useRef(business);
     useEffect(() => {
       if (business && !previousBusiness.current) setDrawer('function');
       previousBusiness.current = business;
     }, [business]);
+    useEffect(() => {
+      if (drawer !== 'workspace' || typeof IntersectionObserver === 'undefined') return;
+      const region = sidebarRegionRef.current;
+      const panel = workspacePanelRef.current;
+      if (!region || !panel) return;
+
+      const manuallyCollapsed = new Set<string>();
+      const onOverflowClick = (event: MouseEvent) => {
+        if (!event.isTrusted || !(event.target instanceof Element)) return;
+        const button = event.target.closest<HTMLButtonElement>('button[data-row-key^="overflow:"]');
+        const key = button?.dataset.rowKey;
+        if (!key) return;
+        if (button.getAttribute('aria-expanded') === 'true') manuallyCollapsed.add(key);
+        else manuallyCollapsed.delete(key);
+      };
+      panel.addEventListener('click', onOverflowClick, true);
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const button = entry.target;
+            observer.unobserve(button);
+            if (
+              button instanceof HTMLButtonElement &&
+              !manuallyCollapsed.has(button.dataset.rowKey ?? '') &&
+              button.getAttribute('aria-expanded') === 'false'
+            ) {
+              button.click();
+            }
+          }
+        },
+        { root: region, rootMargin: '0px 0px 80px 0px' },
+      );
+      const observeOverflow = () => {
+        panel
+          .querySelectorAll<HTMLButtonElement>(
+            'button[data-row-key^="overflow:"][aria-expanded="false"]',
+          )
+          .forEach((button) => observer.observe(button));
+      };
+      const mutations = new MutationObserver(observeOverflow);
+      mutations.observe(panel, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['aria-expanded'],
+      });
+      observeOverflow();
+      return () => {
+        panel.removeEventListener('click', onOverflowClick, true);
+        mutations.disconnect();
+        observer.disconnect();
+      };
+    }, [drawer]);
     const [sections, setSections] = useState({
       supply: true,
       plan: true,
@@ -604,6 +705,18 @@ export function mountCompanyUI(
                 >
                   <NavIcon kind="bell" />
                 </button>
+                <button
+                  type="button"
+                  className="gea-sidebar-search"
+                  aria-label={t('searchSessions')}
+                  title={t('searchSessions')}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSearchOpen(true);
+                  }}
+                >
+                  <IconSearchOutlineRegular size={16} />
+                </button>
               </>
             )}
             {!darwin && sidebarToggle}
@@ -668,7 +781,7 @@ export function mountCompanyUI(
             </button>
           );
         })}
-        <div className="gea-sidebar-region" data-gea-drawer={drawer}>
+        <div ref={sidebarRegionRef} className="gea-sidebar-region" data-gea-drawer={drawer}>
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
             {(
               [
@@ -766,6 +879,7 @@ export function mountCompanyUI(
             </div>
           )}
           <div
+            ref={workspacePanelRef}
             className="gea-workspace-owned"
             id="gea-panel-workspace"
             data-gea-expanded={drawer === 'workspace'}
@@ -807,6 +921,7 @@ export function mountCompanyUI(
               onClick={() => toggleDrawer('workspace')}
             >
               <span className="gea-drawer-title">{t('recentArea')}</span>
+              <Chevron open={drawer === 'workspace'} />
             </button>
           </div>
         </div>
@@ -814,6 +929,7 @@ export function mountCompanyUI(
           {renderSlot('sidebar.settings', { wide: !collapsed })}
           {renderSlot('sidebar.footer.action', { wide: !collapsed })}
         </footer>
+        {searchOpen && <CompanySessionSearch onClose={() => setSearchOpen(false)} />}
       </aside>
     );
   }
