@@ -47,8 +47,11 @@ test('overview uses whole-scope aggregates without count or detail round trips',
     await readConfiguredOverview(configs[a], '2026-10-15', '', io);
     assert.ok(
       io.calls.every((c) =>
-        /summary|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(c.queryId),
+        /^overview\.quick-stock$|summary|\.cards$|\.inventory$|source\.(?:(?:dealer-|branch-)?stock|health)-date/.test(
+          c.queryId,
+        ),
       ),
+      io.calls.map((call) => call.queryId).join(', '),
     );
     assert.ok(io.calls.some((c) => c.queryId.endsWith('.summary')));
   }

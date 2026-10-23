@@ -46,10 +46,19 @@ async function mount(t, id, width, override) {
 }
 test('QLL counts one inventory snapshot once across base and warehouse dimensions', async (t) => {
   const { frame, errors, calls } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId === 'health.summary') {
-      result.rows[0].total_qty = 100;
-      result.rows[0].available_qty = 40;
-    }
+    if (['health.cards', 'health.inventory'].includes(query.queryId))
+      Object.assign(result.rows[0], { total_qty: 60, available_qty: 50 });
+    if (['branch-health.cards', 'branch-health.inventory'].includes(query.queryId))
+      Object.assign(result.rows[0], { total_qty: 100, available_qty: 40 });
+    if (query.queryId === 'overview.quick-stock')
+      result.rows.forEach((row) =>
+        Object.assign(
+          row,
+          row.location_type === '基地'
+            ? { total_qty: 60, available_qty: 50 }
+            : { total_qty: 100, available_qty: 40 },
+        ),
+      );
     return result;
   });
   const inventoryCard = frame.locator('[data-overview-cards="qll"]').locator('button').first();
@@ -221,7 +230,8 @@ test('APS top month selector applies the original period and keeps its menu with
 });
 test('fc: current order card uses its own demand, allocation and three-stage gap', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    if (query.queryId === 'health.summary') result.rows[0].pack_unit_qty = 86814.2;
+    if (['health.cards', 'health.inventory'].includes(query.queryId))
+      result.rows[0].pack_unit_qty = 86814.2;
     if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
     if (query.queryId === 'current-shortage.summary')
       Object.assign(result.rows[0], { demand: 450, allocated: 50, shortage: 3 });
@@ -317,7 +327,7 @@ test('qll original current-order card retains new base snapshot quantities witho
 });
 test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId === 'replenishment.summary')
+    if (query.queryId === 'branch-turnover.cards')
       Object.assign(result.rows[0], { historical_turnover_days: 12.5, turnover_count: 30 });
     return result;
   });
@@ -325,18 +335,16 @@ test('QLL branch turnover reads its summary and its date control has a stable Ch
     .getByRole('button')
     .filter({ has: frame.getByText('库存周转', { exact: true }) });
   await expect(card).toContainText('12.5天');
-  assert.ok(calls.some((query) => query.queryId === 'replenishment.summary'));
+  assert.ok(calls.some((query) => query.queryId === 'branch-turnover.cards'));
   await expect(frame.getByLabel('读取时点')).toHaveValue('2026-10-20');
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
 test('QLL cards retain maximum ages and independent current gaps, including zero', async (t) => {
   const { frame, errors } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId === 'health.summary')
-      Object.assign(result.rows[0], {
-        base_max_age: 405,
-        max_age: 381,
-      });
+    if (query.queryId === 'health.cards')
+      Object.assign(result.rows[0], { base_max_age: 405, max_age: 405 });
+    if (query.queryId === 'branch-health.cards') Object.assign(result.rows[0], { max_age: 381 });
     if (query.queryId === 'current-shortage.summary')
       result.rows.forEach((row) =>
         Object.assign(row, { shortage: row.location_type === '分仓' ? 0 : 12345 }),
