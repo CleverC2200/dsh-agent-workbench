@@ -240,7 +240,9 @@
   font-weight: 600;
   text-align: left;
   cursor: pointer;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .gea-ai-workbench-entry:hover:not(:disabled) {
