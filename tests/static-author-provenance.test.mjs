@@ -28,24 +28,25 @@ for (const page of ['category', 'mps']) {
     verifyFixedAuthoredData(page, files, source);
   });
   test(`${page} actual authored data and metadata tampering still refuse the public build verifier`, () => {
+    const protectedFile = page === 'mps' ? 'data.js' : 'app.js';
     const name = Object.keys(source.fixedAuthoredData).find(
-      (name) => source.fixedAuthoredData[name].file === 'app.js',
+      (name) => source.fixedAuthoredData[name].file === protectedFile,
     );
     const changed = {
       ...files,
-      'app.js': files['app.js'].replace(
+      [protectedFile]: files[protectedFile].replace(
         new RegExp(`const ${name}\\s*=`),
         `const ${name} = null; const alteredFixedData =`,
       ),
     };
-    assert.notEqual(changed['app.js'], files['app.js']);
+    assert.notEqual(changed[protectedFile], files[protectedFile]);
     assert.throws(
       () => verifyFixedAuthoredData(page, changed, source),
       /STATIC_AUTHORED_DATA_CHANGED/,
     );
     const missing = {
       ...files,
-      'app.js': files['app.js'].replace(
+      [protectedFile]: files[protectedFile].replace(
         new RegExp(`const ${name}\\s*=`),
         'const missingFixedData =',
       ),
@@ -62,11 +63,12 @@ for (const page of ['category', 'mps']) {
     );
   });
   test(`${page} fixed numbers, keys, strings, element order and operators cannot change`, () => {
-    const text = files['app.js'];
+    const protectedFile = page === 'mps' ? 'data.js' : 'app.js';
+    const text = files[protectedFile];
     const ast = ts.createSourceFile('app.js', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const names = new Set(
       Object.entries(source.fixedAuthoredData)
-        .filter(([, value]) => value.file === 'app.js')
+        .filter(([, value]) => value.file === protectedFile)
         .map(([name]) => name),
     );
     const nodes = [];
@@ -102,7 +104,7 @@ for (const page of ['category', 'mps']) {
     for (const [node, replacement] of mutations) {
       const altered = text.slice(0, node.getStart(ast)) + replacement + text.slice(node.end);
       assert.throws(
-        () => verifyFixedAuthoredData(page, { ...files, 'app.js': altered }, source),
+        () => verifyFixedAuthoredData(page, { ...files, [protectedFile]: altered }, source),
         /STATIC_AUTHORED_DATA_CHANGED/,
       );
     }
@@ -148,4 +150,40 @@ test('development build refuses missing fixed Git history instead of adopting cu
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('retired MPS prototype inputs retain their exact provenance when restored', () => {
+  const source = JSON.parse(readFileSync('static/mps/source/SOURCE.json'));
+  const files = Object.fromEntries(
+    ['app.js', 'data.js'].map((file) => [file, readFileSync('static/mps/source/' + file, 'utf8')]),
+  );
+  const original = execFileSync('git', ['show', ref + ':static/mps/source/app.js'], {
+    encoding: 'utf8',
+  });
+  const ast = ts.createSourceFile(
+    'app.js',
+    original,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const item = ast.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => [...statement.declarationList.declarations])
+    .find((node) => node.name.getText(ast) === 'k1');
+  verifyFixedAuthoredData('mps', files, source);
+  verifyFixedAuthoredData(
+    'mps',
+    { ...files, 'app.js': files['app.js'] + '\nconst k1 = ' + item.initializer.getText(ast) + ';' },
+    source,
+  );
+  assert.throws(
+    () =>
+      verifyFixedAuthoredData(
+        'mps',
+        { ...files, 'app.js': files['app.js'] + '\nconst k1 = null;' },
+        source,
+      ),
+    /STATIC_AUTHORED_DATA_CHANGED: mps\/k1/,
+  );
 });

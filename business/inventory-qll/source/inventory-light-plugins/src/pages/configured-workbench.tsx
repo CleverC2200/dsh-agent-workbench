@@ -52,8 +52,21 @@ export default function ConfiguredWorkbench() {
     [draft, setDraft] = useState(businessDay),
     [revision, refresh] = useState(0);
   useEffect(() => setDraft(date), [date]);
-  const { parts, errors, busy } = useConfiguredOverview(config, date, '', revision, (v) =>
-    updateContext('overview', v),
+  const overviewViews = React.useMemo(
+    () =>
+      config.overviewViewIds.filter(
+        (id) => id !== 'base-shipments' && (channel || id !== 'channel-overview'),
+      ),
+    [channel],
+  );
+  const { parts, errors, busy } = useConfiguredOverview(
+    config,
+    date,
+    '',
+    revision,
+    (v) => updateContext('overview', v),
+    undefined,
+    overviewViews,
   );
   const stock = parts.base?.summary,
     orders = parts.orders?.summary;
@@ -273,7 +286,7 @@ function OrganizationHierarchy({ date, revision, channel, onRead }: any) {
     <div className={common.hierarchy} aria-label="组织结构分层">
       {[
         ['base', '基地', 'organization'],
-        ['branch', '分仓', 'branch-stock'],
+        ['branch', '分仓', 'branch-structure'],
         ...(channel ? [['customer', '渠道', 'channel-sku']] : []),
       ].map(([id, label, viewId]) => (
         <section key={id}>

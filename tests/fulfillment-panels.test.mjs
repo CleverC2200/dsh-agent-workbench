@@ -27,9 +27,14 @@ test('coordination uses granted rows, supports search/base/paging and clears ide
       main_plan_adjusted: null,
     }));
     renderCoordination({ rows });
-    assert.equal(document.querySelectorAll('tbody tr').length, 25);
+    assert.equal(document.querySelectorAll('tbody tr').length, 20);
     document.getElementById('itemCoordinationNext').click();
-    assert.equal(document.querySelectorAll('tbody tr').length, 2);
+    assert.equal(document.querySelectorAll('tbody tr').length, 7);
+    const size = document.querySelector('nav[aria-label="产销协同分页"] select');
+    size.value = '50';
+    size.dispatchEvent(new dom.window.Event('change'));
+    assert.equal(document.querySelectorAll('tbody tr').length, 27);
+    assert.match(document.getElementById('itemCoordinationPageInfo').textContent, /第 1 \/ 1 页/);
     const search = document.getElementById('itemCoordinationSearch');
     search.value = 'SKU26';
     search.dispatchEvent(new dom.window.Event('input'));
@@ -54,6 +59,10 @@ test('coordination uses granted rows, supports search/base/paging and clears ide
     );
     document.querySelector('svg circle').dispatchEvent(new dom.window.Event('click'));
     assert.deepEqual(clicks, [['O1']]);
+    renderCharts(null, null, (ids) => clicks.push(ids));
+    assert.equal(document.querySelectorAll('svg circle').length, 0);
+    assert.match(document.getElementById('orderStatusChartDetail').textContent, /未评估/);
+    assert.match(document.querySelector('tbody').textContent, /SKU26/);
     clearPanels();
     assert.ok(!document.body.textContent.includes('SKU26'));
     assert.equal(document.querySelectorAll('svg circle').length, 0);

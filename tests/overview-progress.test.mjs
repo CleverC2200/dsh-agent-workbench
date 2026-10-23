@@ -136,3 +136,31 @@ test('complete SQL counts preserve zero and reject incomplete identities or malf
   ])
     assert.equal(completeCount(source, 'count', ['missing']), null);
 });
+
+test('full-chain company view skips customer facts and coalesces identical health summaries per load', async () => {
+  const c = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  const calls = [];
+  const viewIds = c.overviewViewIds.filter(
+    (id) => !['channel-overview', 'base-shipments'].includes(id),
+  );
+  await readConfiguredOverview(c, '2026-10-22', '', {
+    viewIds,
+    execute: async (_, options) => {
+      calls.push(options.queryId);
+      return {
+        configVersion: 'v1',
+        rows: [
+          Object.fromEntries(
+            c.queries[options.queryId].resultColumns.map((key) => [
+              key,
+              key === 'day' ? '2026-10-22' : 1,
+            ]),
+          ),
+        ],
+      };
+    },
+  });
+  assert.ok(!calls.includes('dealer.stock.summary'));
+  assert.ok(!calls.includes('base_shipments.summary'));
+  assert.equal(calls.filter((id) => id === 'health.summary').length, 1);
+});

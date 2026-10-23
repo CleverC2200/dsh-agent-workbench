@@ -5,8 +5,13 @@ export function keepPageObservation(read, send, { interval = 30000 } = {}) {
     const value = read();
     if (!value || pending) return;
     pending = true;
-    try { await send(value); } catch { /* The page's publisher owns visible errors. */ }
-    finally { pending = false; }
+    try {
+      await send(value);
+    } catch {
+      /* The page's publisher owns visible errors. */
+    } finally {
+      pending = false;
+    }
   };
   const timer = setInterval(tick, interval);
   const dispose = () => clearInterval(timer);

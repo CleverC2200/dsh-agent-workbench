@@ -4,6 +4,12 @@ export function prepareFulfillmentPresentation(html) {
   const dom = new JSDOM(html);
   const d = dom.window.document;
   for (const script of d.querySelectorAll('script')) script.remove();
+  const orderTabs = d.querySelector('#deliveryOrderListTab').parentElement;
+  const orderTools = d.querySelector('.delivery-order-panel-tools');
+  const orderToolbar = d.createElement('div');
+  orderToolbar.className = 'delivery-order-view-toolbar';
+  orderTabs.before(orderToolbar);
+  orderToolbar.append(orderTabs, orderTools);
   d.querySelector('main').id = 'app';
   const status = d.createElement('span');
   status.id = 'prototypeStatus';

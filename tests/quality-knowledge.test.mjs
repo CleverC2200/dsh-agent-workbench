@@ -40,7 +40,10 @@ test('public fast quality checks its active documentation, declarations and actu
     );
     assert.equal(peer.status, 0, peer.stderr);
     // Source only; the gate must diagnose missing references before requiring dependency installation.
-    cpSync('package.json', join(fixture, 'package.json'));
+    const sourceManifest = JSON.parse(readFileSync('package.json'));
+    // This source-reference fixture has no build stage; prepared outputs are checked separately.
+    sourceManifest.exports = { './package.json': './package.json' };
+    writeFileSync(join(fixture, 'package.json'), JSON.stringify(sourceManifest));
     for (const file of [
       'run-quality-fast.mjs',
       'run-quality-checks.mjs',

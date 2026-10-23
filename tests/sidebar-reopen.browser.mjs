@@ -463,8 +463,7 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(page.getByRole('heading', { name: 'AI不止于对话，更融入工作' })).toBeVisible();
   await expect(page.getByText('懂业务 · 会协同 · 能行动', { exact: true })).toBeVisible();
   await expect(page.getByText('预览版', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('历史会话', { exact: true })).toHaveCount(0);
-  const heading = page.getByRole('button', { name: '历史对话', exact: true });
+  const heading = page.getByRole('button', { name: '历史会话', exact: true });
   const business = page.getByRole('button', { name: '业务工作台', exact: true });
   assert.equal(
     await heading.evaluate((node) => getComputedStyle(node).fontSize),
@@ -522,7 +521,10 @@ test('plugin welcome and workspace heading compose with the native browser', asy
   await expect(row).toHaveAttribute('data-retained-probe', 'original');
   await heading.click();
   await page.evaluate(() => window.requestWorkspaceSearch());
-  await expect(page.locator('.gea-workspace-heading')).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.gea-drawer-recent .gea-sidebar-tab')).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   const searchInput = page.locator('input[type="text"]');
   await expect(searchInput).toBeVisible();
   await searchInput.press('Escape');

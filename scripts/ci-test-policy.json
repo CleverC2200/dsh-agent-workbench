@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "versionTests": ["tests/plugin-package-version.test.mjs"],
   "required": ["tests/official-entry.test.mjs", "tests/workbench-recovery.test.mjs"],
   "tests": [
     "tests/*.test.mjs",
@@ -39,6 +40,26 @@
     }
   },
   "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:static/mps/|scripts/(?:mps-compute-build|build-static-authors|static-author-provenance)\\.mjs$)",
+      "tests": [
+        "tests/mps-*.browser.mjs",
+        "tests/mps-relations.test.mjs",
+        "tests/mps-workflow-inputs.test.mjs",
+        "tests/static-author-provenance.test.mjs",
+        "tests/static-author-source.test.mjs"
+      ]
+    },
+    {
+      "repo": "dsh-agent-manage",
+      "pattern": "^src/mps-compute/",
+      "tests": [
+        "tests/mps-workflow-inputs.test.mjs",
+        "tests/mps-workflow.browser.mjs",
+        "tests/mps-seven-step.browser.mjs"
+      ]
+    },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^(?:(?:business|prototypes|lib/business)/inventory-orderfulfillment/|scripts/build-order-fulfillment\\.mjs$)",
@@ -268,6 +289,11 @@
       "pattern": "^scripts/source-result\\.mjs$",
       "tests": ["tests/source-result.test.mjs"],
       "sourceTests": ["tests/source-result.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^\\.gitignore$",
+      "tests": ["tests/candidate-input.test.mjs", "tests/quality-ci.test.mjs"]
     }
   ],
   "sourceTools": {

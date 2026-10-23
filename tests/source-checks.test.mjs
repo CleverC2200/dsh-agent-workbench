@@ -101,7 +101,7 @@ function fixture(
       put(
         path,
         'scripts/run-quality-ci.mjs',
-        `import assert from 'node:assert/strict'; import { parseArgs } from 'node:util'; import { readFileSync, writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; import { createHash } from 'node:crypto'; const { values } = parseArgs({ options: { 'source-only': { type: 'boolean' }, input: { type: 'string' }, 'core-source': { type: 'string' }, 'final-group-sha256': { type: 'string' }, 'final-group-workbench': { type: 'string' }, 'prepare-inputs': { type: 'boolean' }, 'prepare-sdk': { type: 'boolean' }, 'test-file-concurrency': { type: 'string' } } }); assert.equal(values['test-file-concurrency'], '3', 'GEA_SOURCE_CAPACITY_REQUIRED'); assert.equal(values['final-group-workbench'], resolve('../../source/dsh-agent-workbench'), 'CANDIDATE_FINAL_GROUP_REQUIRED'); assert.equal(values['final-group-sha256'], createHash('sha256').update(readFileSync(values.input)).digest('hex')); writeFileSync('.runtime/joint-admitted', values['final-group-workbench']);`,
+        `import assert from 'node:assert/strict'; import { parseArgs } from 'node:util'; import { readFileSync, writeFileSync } from 'node:fs'; import { resolve } from 'node:path'; import { createHash } from 'node:crypto'; const { values } = parseArgs({ options: { 'source-only': { type: 'boolean' }, input: { type: 'string' }, 'core-source': { type: 'string' }, 'final-group-sha256': { type: 'string' }, 'final-group-workbench': { type: 'string' }, 'prepare-inputs': { type: 'boolean' }, 'prepare-sdk': { type: 'boolean' }, 'test-file-concurrency': { type: 'string' }, 'test-timings': { type: 'string' } } }); assert.equal(values['test-file-concurrency'], '3', 'GEA_SOURCE_CAPACITY_REQUIRED'); assert.equal(values['test-timings'], resolve('scripts/quality-test-timings.json')); assert.equal(values['final-group-workbench'], resolve('../../source/dsh-agent-workbench'), 'CANDIDATE_FINAL_GROUP_REQUIRED'); assert.equal(values['final-group-sha256'], createHash('sha256').update(readFileSync(values.input)).digest('hex')); writeFileSync('.runtime/joint-admitted', values['final-group-workbench']);`,
       );
     }
     if (preparation && repo === 'dsh-gea-plugin') {
@@ -129,7 +129,7 @@ function fixture(
       scripts: {
         'check:knowledge': knowledge
           ? 'node scripts/check-agent-knowledge.mjs --root . --config agent-knowledge.json'
-          : 'node --eval ""',
+          : 'node --eval "" --',
         lint: 'node --check scripts/tool.mjs',
         'format:check': 'node --eval ""',
         ...(staticFailure
@@ -245,6 +245,34 @@ test('nonjoint source checks reject a missing knowledge reference through the ow
   writeFileSync(join(f.root, 'docs/required.md'), 'required knowledge');
   const accepted = f.run('affected-check');
   assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+});
+
+test('cold source knowledge checks defer generated exports but retain source references', (t) => {
+  const f = fixture(t, { 'scripts/tool.mjs': 'export const value = 2;' }, { knowledge: true });
+  const packagePath = join(f.root, 'package.json');
+  const pkg = JSON.parse(readFileSync(packagePath, 'utf8'));
+  pkg.exports = { './configured-facts': { types: './lib/configured-facts.d.mts' } };
+  writeFileSync(packagePath, JSON.stringify(pkg));
+  writeFileSync(
+    join(f.root, 'agent-knowledge.json'),
+    JSON.stringify({ entries: [], paths: ['docs/required.md'], exports: true }),
+  );
+  const full = spawnSync(
+    process.execPath,
+    ['scripts/check-agent-knowledge.mjs', '--root', '.', '--config', 'agent-knowledge.json'],
+    { cwd: f.root, encoding: 'utf8' },
+  );
+  assert.notEqual(full.status, 0);
+  assert.match(full.stdout + full.stderr, /AGENT_REFERENCE_MISSING: export/);
+  const source = f.run('affected-check');
+  assert.equal(source.status, 0, source.stdout + source.stderr);
+  rmSync(join(f.root, 'docs/required.md'));
+  const missingSource = f.run('affected-check');
+  assert.notEqual(missingSource.status, 0);
+  assert.match(
+    missingSource.stdout + missingSource.stderr,
+    /AGENT_REFERENCE_MISSING: docs\/required\.md/,
+  );
 });
 
 test('local material plans use actual sibling peers and refuse preparing or executing a working tree', async (t) => {

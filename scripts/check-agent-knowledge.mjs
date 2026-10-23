@@ -191,9 +191,11 @@ const { values } = parseArgs({
     config: { type: 'string' },
     'compare-ref': { type: 'string' },
     'exports-only': { type: 'boolean' },
+    'source-only': { type: 'boolean' },
   },
 });
 if (!values.root || !values.config) throw Error('AGENT_INPUT_REQUIRED: --root and --config');
+if (values['exports-only'] && values['source-only']) throw Error('AGENT_PHASE_CONFLICT');
 const root = resolve(values.root);
 const config = JSON.parse(readFileSync(resolve(values.config), 'utf8'));
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8'));
@@ -207,6 +209,7 @@ if (config.exports) {
   const targets = (value) =>
     typeof value === 'string' ? [value] : Object.values(value ?? {}).flatMap(targets);
   for (const target of targets(pkg.exports)) {
+    if (values['source-only'] && /^\.\/(?:lib|client)\//.test(target)) continue;
     if (
       target.includes('*')
         ? globSync(target, { cwd: root }).length === 0

@@ -123,6 +123,21 @@ test('built live page renders granted records, hides denied fields, and clears f
             ],
             configVersion: 'v1',
           };
+        else if (id === 'execution.trace')
+          result = {
+            rows: [
+              {
+                executeorderno: 'E1',
+                cust_code: 'C01',
+                fromorderno: 'F1',
+                source_rows: 2,
+                carrier_name: 'GRANTED-CARRIER',
+                order_stage: '备单中',
+                peidan_status: '备单正常',
+              },
+            ],
+            configVersion: 'v1',
+          };
         else if (id === 'shortage.summary')
           result = {
             rows: [
@@ -133,6 +148,22 @@ test('built live page renders granted records, hides denied fields, and clears f
                 after_inventory_coverage: 4,
                 after_inventory_short_qty: 23,
                 duplicate_sku_rows: 0,
+                final_short_qty: 17,
+              },
+            ],
+            configVersion: 'v1',
+          };
+        else if (id === 'shortage.detail')
+          result = {
+            rows: [
+              {
+                order_no: 'AUTHORIZED-01',
+                customer_code: 'C01',
+                base: '郑州',
+                execution_order: 'E1',
+                sku: 'M1',
+                source_rows: 1,
+                after_inventory_short_qty: 23,
                 final_short_qty: 17,
               },
             ],
@@ -194,14 +225,28 @@ test('built live page renders granted records, hides denied fields, and clears f
   await until(() =>
     window.document
       .querySelector('.summary.fulfillment-summary .metric .metric-head strong')
-      ?.textContent.startsWith('5'),
+      ?.textContent.startsWith('1'),
   );
+  await until(() =>
+    window.document
+      .querySelector('.summary.fulfillment-summary .metric:nth-child(4) .metric-head strong')
+      .textContent.includes('23'),
+  );
+  const warehouseMetrics = window.document.querySelectorAll('.warehouse-summary > .metric');
+  assert.equal(warehouseMetrics[0].querySelector('.metric-head strong').textContent, '0张');
   assert.match(
-    window.document.querySelector(
-      '.summary.fulfillment-summary .metric:nth-child(4) .metric-head strong',
-    ).textContent,
-    /23/,
+    warehouseMetrics[0].querySelector('[data-breakdown="open-total"]').textContent,
+    /未开1 张/,
   );
+  assert.equal(
+    warehouseMetrics[3].querySelector('.metric-head > span').textContent,
+    '已开订单满足率',
+  );
+  assert.equal(warehouseMetrics[3].querySelector('.metric-head strong').textContent, '—%');
+  assert.ok(!window.document.querySelector('.delivery-summary').textContent.includes('≥'));
+  const charts = window.document.querySelectorAll('svg.delivery-line-chart');
+  assert.equal(window.getComputedStyle(charts[0].closest('.dimension-card')).display, 'none');
+  assert.equal(charts[1].closest('.dimension-card').hidden, true);
   assert.ok(window.document.querySelector('.item-analysis h3').textContent.includes('正在读取'));
   assert.match(window.document.querySelector('#deliveryOrderDetailRows').textContent, /50.0%/);
   assert.ok(window.document.querySelectorAll('svg.delivery-line-chart circle').length > 0);
@@ -237,7 +282,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   );
   assert.match(
     window.document.querySelector('.delivery-summary .metric:nth-child(5) strong').textContent,
-    /62.5/,
+    /50.0/,
   );
   assert.ok(!window.document.querySelector('#deliveryOrderDetailRows').textContent.includes('400'));
   const baseCells = window.document.querySelector('#deliveryBaseCompareRows tr').cells;
@@ -246,6 +291,17 @@ test('built live page renders granted records, hides denied fields, and clears f
   assert.equal(baseCells[5].textContent, '1 张');
   assert.equal(baseCells[7].textContent, '50.0%');
   assert.equal(baseCells[8].textContent, '1 张');
+  const pager = window.document.querySelector('nav[aria-label="订单明细分页"]');
+  assert.match(pager.textContent, /共 1 条/);
+  assert.match(pager.textContent, /第 1 \/ 1 页/);
+  assert.equal(pager.querySelector('select').value, '20');
+  assert.ok([...pager.querySelectorAll('button')].every((button) => button.disabled));
+  pager.querySelector('select').value = '50';
+  pager.querySelector('select').dispatchEvent(new window.Event('change'));
+  assert.equal(
+    window.document.querySelectorAll('#deliveryOrderDetailRows .delivery-order-main-row').length,
+    1,
+  );
   assert.equal(window.document.querySelector('.sales-confirm-trigger').disabled, false);
   window.document.querySelector('.sales-confirm-trigger').click();
   assert.equal(window.document.querySelector('#salesConfirmOverlay').hidden, false);
@@ -293,7 +349,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   assert.equal(
     window.document.querySelector('#deliveryOrderDetailRows .delivery-order-main-row').cells[11]
       .textContent,
-    '源数据未提供',
+    'GRANTED-CARRIER',
   );
   assert.equal(
     window.document.querySelector('#deliveryChannelFilter option:nth-child(2)').value,
@@ -326,7 +382,22 @@ test('built live page renders granted records, hides denied fields, and clears f
     window.document.querySelector('#itemCoordinationTable thead').textContent,
     /基本信息.*销售信息.*生产信息.*库存信息/,
   );
-  assert.match(window.document.querySelector('#itemCoordinationPageInfo').textContent, /每页25条/);
+  const inventoryPanel = window.document.querySelector('#itemInventoryPanel');
+  const inventoryPager = inventoryPanel.querySelector('.order-pagination');
+  assert.ok(inventoryPager, '库存分页必须位于库存面板内部，随面板隐藏');
+  assert.equal(inventoryPanel.querySelector('table').nextElementSibling, inventoryPager);
+  const orderToolbar = window.document.querySelector('.delivery-order-view-toolbar');
+  assert.ok(orderToolbar.contains(window.document.querySelector('#deliveryOrderListTab')));
+  assert.ok(orderToolbar.contains(window.document.querySelector('.delivery-order-panel-tools')));
+  window.document.querySelector('#deliveryBaseCompareTab').click();
+  assert.equal(window.document.querySelector('.delivery-order-panel-tools').hidden, true);
+  window.document.querySelector('#deliveryOrderListTab').click();
+  assert.equal(window.document.querySelector('.delivery-order-panel-tools').hidden, false);
+  assert.match(
+    window.document.querySelector('#itemCoordinationPageInfo').textContent,
+    /第 1 \/ 1 页/,
+  );
+  assert.equal(window.document.querySelector('nav[aria-label="产销协同分页"] select').value, '20');
   assert.equal(
     window.document.querySelector('#deliveryRegionCompareRows tr').cells[7].textContent,
     '50.0%',
@@ -337,6 +408,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   assert.match(window.document.querySelector('.delivery-order-sku-table').textContent, /50.0%/);
   await until(() => contexts.some((context) => context.parts?.['orders.facts']?.state === 'ready'));
   port.onmessage({ data: { type: 'identity-changed' } });
+  assert.equal(pager.hidden, true);
   assert.ok(
     !window.document
       .querySelector('#deliveryOrderDetailRows')
@@ -346,6 +418,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   connect('session-b');
   await until(() => window.document.body.textContent.includes('RETURN_PERMISSION_DENIED'));
   assert.ok(!window.document.body.textContent.includes('AUTHORIZED-01'));
+  assert.ok(!window.document.body.textContent.includes('GRANTED-CARRIER'));
   assert.ok(
     !window.document
       .querySelector('#deliveryOrderDetailRows')

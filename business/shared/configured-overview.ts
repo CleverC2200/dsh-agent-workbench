@@ -34,6 +34,7 @@ export async function readConfiguredOverview(
   customer = '',
   options: {
     signal?: AbortSignal;
+    viewIds?: readonly string[];
     cycleDays?: number;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
@@ -41,7 +42,8 @@ export async function readConfiguredOverview(
 ) {
   config = agentSqlConfig(config);
   const ids: string[] = [
-    ...(config.overviewViewIds ??
+    ...(options.viewIds ??
+      config.overviewViewIds ??
       (config.agentId === 'inventory-fc'
         ? ['orders', 'plan']
         : config.agentId === 'inventory-qll'
@@ -49,6 +51,7 @@ export async function readConfiguredOverview(
           : ['customer'])),
   ];
   const snapshotReads = new Map<string, Promise<any>>();
+  const scopeReads = new Map<string, Promise<any>>();
   if (config.queries?.['current-shortage.summary']) ids.push('current-shortage');
   const parts: Record<string, any> = {},
     versions = new Set<unknown>();
@@ -74,7 +77,7 @@ export async function readConfiguredOverview(
               cycleDays: options.cycleDays,
               filters: id === 'customer' && customer ? { customer } : {},
             },
-            { ...options, snapshotReads, summaryOnly: true },
+            { ...options, snapshotReads, scopeReads, summaryOnly: true },
           );
           part = result.summaryError
             ? { error: result.summaryError.message }

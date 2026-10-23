@@ -65,12 +65,25 @@ test('confirmed monthly versions and shipment measures populate independently wh
   await expect(preview).toContainText('含赠品数量');
   await expect(preview).toContainText('不含税收入');
   await expect(preview).toContainText('未提供');
+  const previewDownload = page.waitForEvent('download');
+  await preview.getByRole('button', { name: '下载明细', exact: true }).click();
+  const previewCsv = await readFile(await (await previewDownload).path(), 'utf8');
+  assert.match(previewCsv, /数量,含赠品数量,不含税收入/);
+  assert.match(previewCsv, /,7,9,\r?\n?$/);
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const downloaded = page.waitForEvent('download');
   await history.getByRole('button', { name: '导出当前明细' }).click();
   const csv = await readFile(await (await downloaded).path(), 'utf8');
   assert.match(csv, /数量,含赠品数量,不含税收入/);
   assert.match(csv, /,7,9,\r?\n?$/);
+  assert.equal(previewCsv, csv);
+  await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
+  const reportDownload = page.waitForEvent('download');
+  await frame.getByRole('dialog').getByRole('button', { name: '下载明细', exact: true }).click();
+  const reportCsv = await readFile(await (await reportDownload).path(), 'utf8');
+  assert.match(reportCsv, /月初数量,纠偏数量/);
+  assert.match(reportCsv, /,10,20\r?\n?$/);
+  await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗' }).click();
   await expect(
     frame
       .getByRole('region', { name: '模型双期预测' })
@@ -148,4 +161,51 @@ test('truncated facts are rejected and a late historical period cannot overwrite
   await expect(history).toContainText('发货数量：7件');
   await history.getByRole('button', { name: '预览当前明细' }).click();
   await expect(frame.getByRole('dialog')).toContainText(String(new Date().getFullYear() - 2));
+});
+
+test('history failures stay bound to the read period after switching historical years', async (t) => {
+  let deniedMonth = '';
+  const { frame } = await mpsPage(t, config, (query) => {
+    if (query.queryId === 'facts.history' && query.parameters.month === deniedMonth)
+      throw Error('AGENT_ACCESS_DENIED');
+    return fixture(query);
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+    name: '期间核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,',
+    ),
+  });
+  const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
+  await expect(history).toContainText('发货数量：7件');
+  deniedMonth = '2025-10-01';
+  await history.getByRole('button', { name: '同步', exact: true }).click();
+  await expect(history.getByRole('alert')).toContainText('暂无数据权限');
+  await history.getByLabel('历史同期').selectOption('2');
+  await expect(history).toContainText('2024-10');
+  await expect(history.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+  await expect(history.getByRole('alert')).toHaveCount(0);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const quantity = frame.getByRole('button', {
+    name: '基地甲 001 2026-10 历史发货数量 计算过程',
+    exact: true,
+  });
+  await expect(quantity).toHaveText('—');
+  await quantity.click();
+  await expect(frame.getByRole('dialog')).toContainText('暂无数据权限');
+  await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  deniedMonth = '';
+  await history.getByLabel('历史同期').selectOption('1');
+  await expect(history).toContainText('2025-10');
+  await expect(history.getByRole('button', { name: '同步', exact: true })).toBeEnabled();
+  deniedMonth = '2024-10-01';
+  await history.getByLabel('历史同期').selectOption('2');
+  await expect(history.getByRole('alert')).toContainText('暂无数据权限');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(quantity).toHaveText('7');
 });

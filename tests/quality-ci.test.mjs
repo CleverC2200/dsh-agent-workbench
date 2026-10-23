@@ -318,7 +318,7 @@ test('candidate fast checks reject stale identity before a declaration build can
         name: '@fixture/workbench',
         version: '1.2.3',
         scripts: {
-          'check:knowledge': 'node -e ""',
+          'check:knowledge': 'node -e "" --',
           lint: 'node -e ""',
           'format:check': 'node -e ""',
           'check:official-input': manifest.scripts['check:official-input'],
