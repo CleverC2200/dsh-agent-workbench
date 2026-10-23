@@ -25,10 +25,15 @@
   display: flex !important;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
   /* 两个抽屉（业务工作台菜单 / 历史会话列表）统一正文色，改这一处即可。 */
   --gea-sidebar-ink: var(--workbench-text);
   --gea-menu-left: 10px;
+}
+.gea-sidebar-region::-webkit-scrollbar {
+  display: none;
 }
 
 .gea-sidebar-drawer {
@@ -40,6 +45,9 @@
 
 .gea-drawer-function {
   order: 1;
+}
+.gea-drawer-recent {
+  order: 3;
 }
 
 .gea-sidebar-tab {
@@ -72,8 +80,8 @@
 }
 
 .gea-sidebar-tab:hover {
-  background: #eceff2 !important;
-  color: #202531;
+  background: #fffafb !important;
+  color: #df1732;
 }
 
 .gea-sidebar-tab[aria-expanded='true'] {
@@ -83,6 +91,12 @@
   color: #d0132c;
   font-weight: 600;
   box-shadow: none;
+}
+.gea-drawer-function .gea-sidebar-tab[aria-expanded='true'],
+.gea-drawer-recent .gea-sidebar-tab[aria-expanded='true'] {
+  background: transparent !important;
+  color: var(--gea-sidebar-ink);
+  font-weight: 400;
 }
 
 .gea-sidebar-tab:focus-visible {
@@ -125,8 +139,9 @@
 
 .gea-panel-function {
   order: 2;
-  flex: 1 1 auto;
-  overflow: auto;
+  flex: 0 0 auto;
+  overflow: visible;
+  max-height: none;
 }
 
 .gea-sidebar-panel .gea-shell-navigation,
@@ -201,18 +216,69 @@
   height: 36px;
 }
 
-[data-gea-narrow] .gea-new-session {
+[data-gea-narrow] .gea-ai-workbench-entry {
   display: none !important;
 }
 
-.gea-new-session {
-  justify-content: flex-start !important;
-  margin-left: -12px !important;
-  padding-left: 7px !important;
+.gea-ai-workbench-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  margin: 14px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #eadfe2;
+  border-radius: 12px;
+  background: linear-gradient(110deg, #fffdfd 0%, #fff8f9 65%, #fff1f4 100%);
+  box-shadow: 0 2px 7px #46212a08;
+  color: #242a34;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
-.gea-new-session :is(svg, img) {
-  margin-right: 8px;
+.gea-ai-workbench-entry:hover:not(:disabled) {
+  border-color: #e6bdc7;
+  box-shadow: 0 3px 10px #7c233010;
+}
+
+.gea-ai-entry-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 9px;
+  background: #ffe7eb;
+  color: #d91e43;
+}
+
+.gea-ai-entry-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.gea-ai-entry-plus {
+  flex: 0 0 auto;
+  color: #cf2445;
+}
+
+.gea-ai-workbench-entry:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+.gea-ai-workbench-entry:focus-visible {
+  outline: 2px solid var(--workbench-brand);
+  outline-offset: -2px;
 }
 
 .gea-sidebar-rail-item {

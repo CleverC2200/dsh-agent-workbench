@@ -33,7 +33,6 @@ import css from './shell.css';
 import layoutCss from './layout.css';
 import loginCss from './login.css';
 import staticControlsCss from './formal-static-controls.css';
-import { IconNewChatOutline16 } from './formal-static-icons.tsx';
 
 const INBOX = 'gea-inbox' as MainPanelId;
 const agents: Record<string, prompts.ConversationPromptConfig> = {
@@ -525,9 +524,7 @@ export function mountCompanyUI(
     const layoutPanel = usePanelInfo((value) => value.activePanelId);
     const activePanel = layoutPanel ?? documentState.selectedDocument?.id;
     const business = Boolean(activePanel && activePanel !== 'gea-api-log');
-    const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>(() =>
-      business ? 'function' : 'workspace',
-    );
+    const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>('function');
     const previousBusiness = useRef(business);
     useEffect(() => {
       if (business && !previousBusiness.current) setDrawer('function');
@@ -571,11 +568,6 @@ export function mountCompanyUI(
         }),
       [collapsed],
     );
-    const newConversation = () => {
-      setDrawer('workspace');
-      expandSidebar();
-      void conversationStarter.start();
-    };
     const toggleDrawer = (name: 'function' | 'workspace') =>
       setDrawer((value) => (value === name ? 'none' : name));
     const panels = ctx.slots
@@ -620,14 +612,38 @@ export function mountCompanyUI(
         {!collapsed && (
           <button
             type="button"
-            className="gea-formal-new-session gea-new-session"
+            className="gea-ai-workbench-entry"
             aria-label={t('newConversation')}
             disabled={creation.kind === 'creating'}
             aria-busy={creation.kind === 'creating'}
-            onClick={newConversation}
+            onClick={() => void conversationStarter.start()}
           >
-            <IconNewChatOutline16 size={14} />
-            <span className="gea-formal-new-session-label">AI工作台</span>
+            <span className="gea-ai-entry-icon" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path
+                  d="M12 2C10.8 8.2 8.2 10.8 2 12c6.2 1.2 8.8 3.8 10 10 1.2-6.2 3.8-8.8 10-10-6.2-1.2-8.8-3.8-10-10Z"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+            <span className="gea-ai-entry-label">{t('workspaceArea')}</span>
+            <svg
+              className="gea-ai-entry-plus"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 4v16M4 12h16"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
         )}
         {panels.map(({ options }) => {
@@ -656,7 +672,6 @@ export function mountCompanyUI(
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
             {(
               [
-                ['newChat', t('newConversation'), newConversation, false],
                 [
                   'apps',
                   t('functionArea'),
@@ -668,7 +683,7 @@ export function mountCompanyUI(
                 ],
                 [
                   'folder',
-                  t('workspaceArea'),
+                  t('recentArea'),
                   () => {
                     setDrawer('workspace');
                     expandSidebar();
@@ -684,7 +699,6 @@ export function mountCompanyUI(
                 title={label}
                 aria-label={label}
                 aria-current={selected ? 'page' : undefined}
-                disabled={kind === 'newChat' && creation.kind === 'creating'}
                 onClick={action}
               >
                 <NavIcon kind={kind} />
@@ -751,7 +765,11 @@ export function mountCompanyUI(
               </nav>
             </div>
           )}
-          <div className="gea-workspace-owned" data-gea-expanded={drawer === 'workspace'}>
+          <div
+            className="gea-workspace-owned"
+            id="gea-panel-workspace"
+            data-gea-expanded={drawer === 'workspace'}
+          >
             <div hidden={drawer !== 'workspace'}>
               {documentState.historyPage &&
                 documentState.selectedDocument?.id === documentState.historyPage &&
@@ -777,18 +795,19 @@ export function mountCompanyUI(
                 expandSidebar();
               },
               expanded: drawer === 'workspace',
-              heading: (
-                <button
-                  type="button"
-                  className="gea-sidebar-tab gea-workspace-heading"
-                  aria-expanded={drawer === 'workspace'}
-                  onClick={() => toggleDrawer('workspace')}
-                >
-                  <span className="gea-drawer-title">{t('workspaceArea')}</span>
-                  <Chevron open={drawer === 'workspace'} />
-                </button>
-              ),
+              heading: '',
             })}
+          </div>
+          <div className="gea-sidebar-drawer gea-drawer-recent">
+            <button
+              type="button"
+              className="gea-sidebar-tab"
+              aria-expanded={drawer === 'workspace'}
+              aria-controls="gea-panel-workspace"
+              onClick={() => toggleDrawer('workspace')}
+            >
+              <span className="gea-drawer-title">{t('recentArea')}</span>
+            </button>
           </div>
         </div>
         <footer className="gea-sidebar-footer">
