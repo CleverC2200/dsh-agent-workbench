@@ -4,6 +4,8 @@ import { prototypeProducts } from './prototype-products.js';
 import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
+import { createWorkflow } from './workflow-view.js';
+import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 const productColumns = [
   '基地',
   '产品编码',
@@ -14,7 +16,6 @@ const productColumns = [
   '老品编码',
   '老品名称',
 ];
-const categories = ['饺子', '调理肉制品', '汤圆', '面点', '休闲', '馄饨', '粽子', '饼类'];
 const annualColumns = ['月份', '大类', '数量'];
 const dimensions = ['基地', '大类', '系列', '产品编码'];
 const sourceColumns = ['月份', ...productColumns.slice(0, 6)];
@@ -563,11 +564,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 className: 'dc-primary',
                 onClick: () =>
                   preview === '明细'
-                    ? downloadCsv(
-                        `${definition.short}-${period}.csv`,
-                        [...sourceColumns, column],
-                        rows,
-                      )
+                    ? downloadCsv(`${definition.short}-${period}.csv`, detailColumns, rows)
                     : downloadCsv(
                         `${definition.short}-${period}-${preview}汇总.csv`,
                         columns,
@@ -760,6 +757,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
+  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv });
   const Shipment = createShipment(react, useMpsPart, {
     Dialog,
     Upload,
@@ -773,6 +771,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     step = 'check',
     onNext,
     onScopeChange,
+    relations,
+    masterData,
   }) {
     const [drafts, setDrafts] = react.useState(() => [makeDraft('local-1', currentMonth())]);
     const [selected, setSelected] = react.useState('local-1');
@@ -794,6 +794,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
     const [scopeGeneration, setScopeGeneration] = react.useState(0);
+    const [shipmentSnapshot, setShipmentSnapshot] = react.useState(null);
+    const receiveShipment = react.useCallback(
+      (snapshot) => setShipmentSnapshot({ ...snapshot, scopeGeneration }),
+      [scopeGeneration],
+    );
     const generation = react.useRef(0),
       requests = react.useRef({}),
       controllers = react.useRef({});
@@ -805,7 +810,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       setErrors({});
       setBusy({});
     };
-    const begin = (type) => {
+    const sourceRead = (entry, type, period, read) =>
+      period
+        ? { ...entry[type + 'Read'], periods: { ...entry[type + 'Read']?.periods, [period]: read } }
+        : read;
+    const begin = (type, period) => {
       controllers.current[type]?.abort();
       const controller = new AbortController();
       controllers.current[type] = controller;
@@ -814,6 +823,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       requests.current[type] = request;
       setBusy((state) => ({ ...state, [type]: true }));
       setErrors((state) => ({ ...state, [type]: '' }));
+      setDrafts((entries) =>
+        entries.map((entry) =>
+          entry.id === selected
+            ? { ...entry, [type + 'Read']: sourceRead(entry, type, period, { status: 'loading' }) }
+            : entry,
+        ),
+      );
       return {
         signal: controller.signal,
         valid: () =>
@@ -826,7 +842,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const id = draft.id;
       const fact = type === 'report' || type === 'history';
       const period = fact ? sourceSelection(draft, type).period : undefined;
-      const { signal, valid } = begin(type);
+      const { signal, valid } = begin(type, period);
       try {
         const result =
           type === 'products'
@@ -859,19 +875,36 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? { annualSource: 'business' }
                       : {}),
                   files: { ...entry.files, [type]: null },
+                  [type + 'Read']: sourceRead(entry, type, period, { status: 'ready' }),
                 }
               : entry,
           ),
         );
         if (type === 'products') resetEditor();
       } catch (failure) {
-        if (valid()) setErrors((state) => ({ ...state, [type]: failure.message }));
+        if (valid()) {
+          setErrors((state) => ({ ...state, [type]: failure.message }));
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? {
+                    ...entry,
+                    [type + 'Read']: sourceRead(entry, type, period, {
+                      status: 'failed',
+                      error: failure.message,
+                    }),
+                  }
+                : entry,
+            ),
+          );
+        }
       } finally {
         if (valid()) setBusy((state) => ({ ...state, [type]: false }));
       }
     };
     const read = async (type, file) => {
       const id = draft.id;
+      const previousRead = draft[type + 'Read'];
       const { valid } = begin(type);
       try {
         if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未读取任何行。');
@@ -896,6 +929,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       ? { annualSource: 'local-file' }
                       : { [type + 'Source']: 'local-file', [type + 'Metadata']: null }),
                   files: { ...entry.files, [type]: file.name },
+                  [type + 'Read']: { status: 'ready' },
                 }
               : entry,
           ),
@@ -903,7 +937,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setErrors((state) => ({ ...state, [type]: '' }));
         if (type === 'products') resetEditor();
       } catch (failure) {
-        if (valid()) setErrors((state) => ({ ...state, [type]: failure.message }));
+        if (valid()) {
+          setErrors((state) => ({ ...state, [type]: failure.message }));
+          setDrafts((entries) =>
+            entries.map((entry) =>
+              entry.id === id
+                ? { ...entry, [type + 'Read']: previousRead ?? { status: 'ready' } }
+                : entry,
+            ),
+          );
+        }
       } finally {
         if (valid()) setBusy((state) => ({ ...state, [type]: false }));
       }
@@ -1059,6 +1102,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? quantity(rows, column)
                 : null,
             metadata: draft[type + 'Metadata'] ?? null,
+            read: draft[type + 'Read'] ?? null,
             versions: type === 'report' ? ['月初数量', '纠偏数量'] : undefined,
             shipmentMetrics:
               type === 'history' && draft.historySource === 'business'
@@ -1126,7 +1170,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'h1',
               { className: active ? 'ap-board-title' : undefined },
-              step === 'ship' ? '本月预估发货' : '需求确认',
+              {
+                check: '需求确认',
+                ship: '本月预估发货',
+                process: '需求加工与收敛',
+                masterdata: '主数据对应关系',
+                constraints: '约束与配置',
+                capacity: '产能评估与缺口',
+                report: '产销存报告',
+              }[step],
             ),
             h(
               'button',
@@ -1392,14 +1444,32 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
       masterOpen &&
         h(MasterData, { key: draft.id, month: draft.month, close: () => setMasterOpen(false) }),
-      active &&
-        step === 'ship' &&
+      h(
+        'div',
+        { hidden: step !== 'ship' },
         h(Shipment, {
           key: `${draft.id}-${generation.current}`,
           scopeGeneration: generation,
           draft,
           update,
-          active: true,
+          active: active && step === 'ship',
+          onSnapshot: receiveShipment,
+          onNext,
+        }),
+      ),
+      h('div', { hidden: step !== 'masterdata' }, masterData),
+      active &&
+        ['process', 'constraints', 'capacity', 'report'].includes(step) &&
+        h(Workflow, {
+          step,
+          draft,
+          update,
+          relations:
+            relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+              ? relations
+              : null,
+          shipmentSnapshot:
+            shipmentSnapshot?.scopeGeneration === scopeGeneration ? shipmentSnapshot : null,
           onNext,
         }),
       h(
@@ -1703,7 +1773,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 'div',
                 { className: 'dc-source-body' },
                 h('p', {}, '分子分母、历史窗口与粒度待确认。'),
-                h('p', { className: 'dc-muted' }, '未接入业务来源，结果为空。'),
+                h('p', { className: 'dc-muted' }, '计算期间与口径待确认，结果为空。'),
               ),
               h(
                 'div',
@@ -1846,6 +1916,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h('button', { className: 'dc-primary', onClick: onNext }, '下一步：本月预估发货'),
           ),
       ),
+      !helpOpen && assistant,
     );
   };
 }

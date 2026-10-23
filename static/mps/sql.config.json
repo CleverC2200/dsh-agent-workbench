@@ -527,6 +527,91 @@
           }
         }
       }
+    },
+    "facts.shipment": {
+      "title": "shipment",
+      "grain": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code",
+        "agents_scm_cust_deliv_daily_di.material_name",
+        "agents_scm_cust_deliv_daily_di.product_categ_name",
+        "agents_scm_cust_deliv_daily_di.material_group_name"
+      ],
+      "columns": [
+        "agents_scm_cust_deliv_daily_di.belong_base",
+        "agents_scm_cust_deliv_daily_di.material_code",
+        "agents_scm_cust_deliv_daily_di.material_name",
+        "agents_scm_cust_deliv_daily_di.product_categ_name",
+        "agents_scm_cust_deliv_daily_di.material_group_name",
+        "agents_scm_cust_deliv_daily_di.act_dl_qty_total"
+      ],
+      "parameterSpec": {
+        "start": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "end": {
+          "name": "end",
+          "type": "string",
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "page_size": {
+          "name": "page_size",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "offset": {
+          "name": "offset",
+          "type": "integer",
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "cube": {
+          "measures": ["agents_scm_cust_deliv_daily_di.act_dl_qty_total"],
+          "dimensions": [
+            "agents_scm_cust_deliv_daily_di.belong_base",
+            "agents_scm_cust_deliv_daily_di.material_code",
+            "agents_scm_cust_deliv_daily_di.material_name",
+            "agents_scm_cust_deliv_daily_di.product_categ_name",
+            "agents_scm_cust_deliv_daily_di.material_group_name"
+          ],
+          "timeDimensions": [
+            {
+              "dimension": "agents_scm_cust_deliv_daily_di.shipment_date",
+              "dateRange": [
+                {
+                  "$parameter": "start"
+                },
+                {
+                  "$parameter": "end"
+                }
+              ]
+            }
+          ],
+          "timezone": "UTC",
+          "order": [
+            ["agents_scm_cust_deliv_daily_di.belong_base", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_code", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_name", "asc"],
+            ["agents_scm_cust_deliv_daily_di.product_categ_name", "asc"],
+            ["agents_scm_cust_deliv_daily_di.material_group_name", "asc"]
+          ],
+          "limit": {
+            "$parameter": "page_size"
+          },
+          "offset": {
+            "$parameter": "offset"
+          }
+        }
+      }
     }
   }
 }
