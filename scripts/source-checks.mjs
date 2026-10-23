@@ -409,8 +409,9 @@ export async function checkTypes(root, repositories, repo, changed = []) {
     repo === 'dsh-agent-manage'
       ? ['tsconfig.json', 'tsconfig.client.json']
       : ['tsconfig.official.json'];
-  for (const file of configs) {
-    const parsed = parseConfig(resolve(root, file));
+  const parsedConfigs = configs.map((file) => ({ file, parsed: parseConfig(resolve(root, file)) }));
+  const configuredSources = new Set(parsedConfigs.flatMap(({ parsed }) => parsed.fileNames));
+  for (const { file, parsed } of parsedConfigs) {
     parsed.options.paths = { ...peerCorePaths, ...parsed.options.paths, ...peerPaths };
     parsed.options.rootDir = resolve(root, '../..');
     parsed.options.typeRoots = [resolve(root, 'node_modules/@types')];
@@ -424,7 +425,8 @@ export async function checkTypes(root, repositories, repo, changed = []) {
           /\.(?:ts|tsx|mts|cts)$/.test(file) &&
           existsSync(resolve(root, file)),
       )
-      .map((file) => resolve(root, file));
+      .map((file) => resolve(root, file))
+      .filter((file) => !configuredSources.has(file) || parsed.fileNames.includes(file));
     const program = ts.createProgram(
       [...new Set([...parsed.fileNames, ...affected, ...ambient])],
       parsed.options,

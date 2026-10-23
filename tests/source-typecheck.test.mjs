@@ -4,6 +4,65 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync, readFileSync
 import { join, dirname } from 'node:path';
 import { checkTypes } from '../scripts/source-checks.mjs';
 
+test('Manage changed sources retain their Host and client configs and real type errors still fail', async (t) => {
+  const runtime = join(process.cwd(), '.runtime');
+  mkdirSync(runtime, { recursive: true });
+  const root = mkdtempSync(join(runtime, 'manage-source-types-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const put = (file, content) => {
+    mkdirSync(dirname(join(root, file)), { recursive: true });
+    writeFileSync(join(root, file), content);
+  };
+  put('package.json', '{"type":"module"}');
+  const compilerOptions = {
+    strict: true,
+    target: 'ES2023',
+    module: 'NodeNext',
+    moduleResolution: 'NodeNext',
+    types: [],
+    skipLibCheck: true,
+  };
+  put(
+    'tsconfig.json',
+    JSON.stringify({
+      compilerOptions: { ...compilerOptions, lib: ['ES2023'] },
+      include: ['src/**/*.ts'],
+      exclude: ['src/client/**'],
+    }),
+  );
+  put(
+    'tsconfig.client.json',
+    JSON.stringify({
+      compilerOptions: { ...compilerOptions, lib: ['ES2023', 'DOM'], jsx: 'preserve' },
+      include: ['src/client/**/*.ts', 'src/client/**/*.tsx'],
+    }),
+  );
+  put('src/client/jsx.d.ts', 'declare namespace JSX { interface IntrinsicElements { div: {} } }');
+  const client =
+    'export const element: HTMLElement = document.createElement("div"); export const view = <div />;';
+  put('src/client/view.tsx', client);
+  put('src/host.ts', 'export const value: number = 1;');
+  const changed = ['src/host.ts', 'src/client/view.tsx'];
+  await checkTypes(root, [], 'dsh-agent-manage', changed);
+  put('src/client/view.tsx', client + ' export const invalid: number = "wrong";');
+  await assert.rejects(
+    () => checkTypes(root, [], 'dsh-agent-manage', changed),
+    /SOURCE_TYPES_FAILED: tsconfig\.client\.json/,
+  );
+  put('src/client/view.tsx', client);
+  put('src/host.ts', 'export const value: number = "wrong";');
+  await assert.rejects(
+    () => checkTypes(root, [], 'dsh-agent-manage', changed),
+    /SOURCE_TYPES_FAILED: tsconfig\.json/,
+  );
+  put('src/host.ts', 'export const value: number = 1;');
+  put('business/extra.mts', 'export const value: number = "wrong";');
+  await assert.rejects(
+    () => checkTypes(root, [], 'dsh-agent-manage', [...changed, 'business/extra.mts']),
+    /SOURCE_TYPES_FAILED/,
+  );
+});
+
 test('owner TypeScript checks fixed peer source types and emits no peer business output', async (t) => {
   const runtime = join(process.cwd(), '.runtime');
   mkdirSync(runtime, { recursive: true });
