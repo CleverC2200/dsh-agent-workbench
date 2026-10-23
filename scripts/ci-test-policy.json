@@ -41,6 +41,12 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^tests/dealer-menu\\.test\\.mjs$",
+      "tests": ["tests/company-ui.test.mjs"],
+      "sourceTests": ["tests/company-ui.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:(?:business|prototypes|lib/business)/inventory-orderfulfillment/|scripts/build-order-fulfillment\\.mjs$)",
       "tests": [
         "tests/fulfillment-governed.test.mjs",

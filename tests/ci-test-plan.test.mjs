@@ -1728,3 +1728,22 @@ test('preflight module source changes select their own regression without workfl
       ]);
     });
 });
+
+test('retired static-menu test deletion selects the current company UI coverage in local and frozen source plans', (t) => {
+  const f = productionFixture(t);
+  const retired = 'tests/dealer-menu.test.mjs';
+  const consumer = 'tests/company-ui.test.mjs';
+  f.put(f.root, retired, 'export const previousMenu = true;');
+  f.put(f.root, consumer, 'export const currentMenu = true;');
+  f.checkpoint();
+  unlinkSync(join(f.root, retired));
+  const check = (plan) => {
+    assert.deepEqual(plan.reasons['dsh-agent-workbench/' + retired], [consumer]);
+    assert.ok(plan.files.includes(consumer));
+    assert.ok(!plan.files.includes(retired));
+  };
+  check(f.plan(undefined, { sourceOnly: true, workingTree: true }));
+  f.repositories[0].head = f.commit(f.root);
+  check(f.plan(undefined, { sourceOnly: true }));
+  check(f.plan());
+});
