@@ -160,6 +160,7 @@ export function summarizeCustomerInventory(rows) {
   const structureRows = rows.filter((row) => Number.isFinite(row.structureScore));
   return {
     totalValue: sum('value'),
+    customerCodes: rows.map((row) => row.code).filter(Boolean),
     quantity,
     sales30,
     targetValue: sum('targetValue'),

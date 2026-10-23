@@ -51,18 +51,31 @@ export function nodeMetrics(rows,now) {
   }
   const states=[];
   for(const [order,lines] of orders) {
-    const indices=lines.map(row=>nodeDefinitions.findIndex(node=>node.names.includes(row.prapare_order_status)));
+    const stageOf=row=>row.execution_trace?.order_stage||row.prapare_order_status;
+    if(lines.some(row=>row.trace_stage_conflict||row.trace_status_unknown)){states.push({order,stage:null,status:'unknown'});continue;}
+    if(lines.every(row=>stageOf(row)==='已完成')){states.push({order,stage:'completed',status:'normal'});continue;}
+    const active=lines.filter(row=>stageOf(row)!=='已完成');
+    const indices=active.map(row=>nodeDefinitions.findIndex(node=>node.names.includes(stageOf(row))));
     const index=Math.max(...indices);
     if(index<0||indices.includes(-1)) {states.push({order,stage:null,status:'unknown'});continue;}
     const node=nodeDefinitions[index];
-    const current=lines.filter((row,i)=>indices[i]===index);
-    const statuses=current.map(row=>deadlineStatus(row[node.field],now));
+    const current=active.filter((row,i)=>indices[i]===index);
+    const statusField={allocation:'peidan_status',dispatch:'paiche_status',loading:'zhuangche_status',transit:'zaitu_status'}[node.stage];
+    const statuses=current.map(row=>{
+      if(row.trace_conflicts?.includes(statusField))return 'unknown';
+      const source=row.execution_trace?.[statusField];
+      const prefix={allocation:'备单',dispatch:'派车',loading:'装车',transit:'在途'}[node.stage];
+      if(source===prefix+'超时')return 'overdue';
+      if(source===prefix+'预警')return 'warning';
+      if(source===prefix+'正常')return 'normal';
+      return deadlineStatus(row[node.field],now);
+    });
     const missing=lines.some(row=>nodeDefinitions.slice(0,index+1).some(def=>shanghaiTime(row[def.field])===null));
-    const status=statuses.includes('overdue')?'overdue':statuses.includes('warning')?'warning':missing?'unknown':'normal';
+    const status=statuses.includes('overdue')?'overdue':statuses.includes('warning')?'warning':missing||statuses.includes('unknown')?'unknown':'normal';
     states.push({order,stage:node.stage,status,missingTimes:missing});
   }
   const stages=Object.fromEntries(nodeDefinitions.map(node=>[node.stage,{overdue:0,warning:0,unknown:0,total:0}]));
-  for(const row of states)if(row.stage){stages[row.stage].total++;if(row.status in stages[row.stage])stages[row.stage][row.status]++;}
+  for(const row of states)if(stages[row.stage]){stages[row.stage].total++;if(row.status in stages[row.stage])stages[row.stage][row.status]++;}
   return {states,stages,overdue:states.filter(row=>row.status==='overdue').length,
     warning:states.filter(row=>row.status==='warning').length,
     unknown:states.filter(row=>row.status==='unknown'||row.missingTimes).length};
@@ -130,7 +143,7 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
     missingAdjustedField:pending.filter(row=>number(row.adjust_order_qty)===null).length,
     missingOrInconsistentAllocation:eligible.filter(q=>q.allocated===null).length};
   const demand=covered.reduce((sum,q)=>sum+q.original,0),raw=covered.reduce((sum,q)=>sum+q.currentShort,0);
-  const opened=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&['已开未派','已派未到','厂外侯车','厂外候车','厂内侯车','厂内候车','装车中','运输中','在途'].includes(row.prapare_order_status));
+  const opened=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&['派车中','已开未派','已派未到','厂外侯车','厂外候车','厂内侯车','厂内候车','装车中','运输中','在途','已完成'].includes(row.prapare_order_status));
   const openedGroups=new Map();
   for(const row of opened){const id=key(row);if(!openedGroups.has(id))openedGroups.set(id,[]);openedGroups.get(id).push(row);}
   const openedQuantities=[...openedGroups.values()].map(groupedQuantities);
@@ -147,10 +160,12 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
   const preparingStates=new Map(states.map(row=>[row.order,row.status]));
   for(const q of quantities) if(q.business_stage==='备单中') q.preparing_status=preparingStates.get(q.order_no)??'unknown';
   const nodes=nodeMetrics(facts,now);
+  const orderCounts={valid_orders:nodes.states.length,preparing_orders:new Set(pending.map(row=>row.cust_order_no)).size,opened_orders:new Set(opened.map(row=>row.cust_order_no)).size,
+    unclassified_orders:nodes.states.filter(row=>row.stage===null).length};
   const nodeStates=new Map(nodes.states.map(row=>[row.order,row.status]));
   for(const q of quantities)q.node_status=nodeStates.get(q.order_no)??'unknown';
   return {quantities,sourceRows:rows.length,duplicateExecutionKeys:duplicate.size,readAt:new Date(now).toISOString(),
-    nodes,
+    nodes,orderCounts,
     pendingGroups:pendingGroups.size,pendingCoverage:covered.length,pendingIssues,pendingRawShortQty:complete?raw:null,
     pendingAllocationRate:complete&&demand>0?100*Math.abs(demand-raw)/demand:null,
     openedShipmentRate:duplicate.size===0&&openedCoverage.length===openedGroups.size&&openedDemand>0?100*openedShipped/openedDemand:null,
@@ -192,10 +207,10 @@ export function comparisonMetrics(facts,dimension,shortages=null,{now=Date.now()
     const buckets=[0,0,0,0,0];
     for(const rate of orderRates.values())if(rate!==null)buckets[rate<70?0:rate<80?1:rate<90?2:rate<95?3:4]++;
     const pendingKeys=new Set(valid.filter(row=>row.prapare_order_status==='备单中').map(row=>JSON.stringify([row.executeorderno,row.material_code])));
-    const linked=shortages===null?[]:shortages.filter(row=>valid.some(fact=>fact.executeorderno===row.execution_order&&fact.material_code===row.sku));
+    const linked=shortages===null?[]:shortages.filter(row=>valid.some(fact=>fact.prapare_order_status==='备单中'&&fact.executeorderno===row.execution_order&&fact.material_code===row.sku));
     const covered=new Map();
     for(const row of linked){const id=JSON.stringify([row.execution_order,row.sku]);if(number(row.after_inventory_short_qty)!==null&&Number(row.source_rows)===1)covered.set(id,Number(row.after_inventory_short_qty));}
-    const stages=[['allocation','备单中'],['dispatch','派车中'],['loading','装车中'],['transit','在途'],[null,'状态未确认']].map(([stage,name])=>{
+    const stages=[['allocation','备单中'],['dispatch','派车中'],['loading','装车中'],['transit','在途'],['completed','已完成'],[null,'状态未确认']].map(([stage,name])=>{
       const states=computed.nodes.states.filter(row=>row.stage===stage);
       return {name,total:states.length,overdue:states.filter(row=>row.status==='overdue').length,warning:states.filter(row=>row.status==='warning').length,
         preparing:states.filter(row=>preparing.has(row.order)).length,orders:states.map(row=>row.order),
