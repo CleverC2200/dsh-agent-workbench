@@ -77,13 +77,27 @@ export async function readConfiguredFacts(
     signal?: AbortSignal;
     execute?: any;
     summaryOnly?: boolean;
+    inventoryOnly?: boolean;
     detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
     scopeReads?: Map<string, Promise<any>>;
   } = {},
 ): Promise<any> {
   const config = agentSqlConfig(fallback);
-  const view = config.sourceViews?.views.find((v: any) => v.id === viewId);
+  const configuredView = config.sourceViews?.views.find((v: any) => v.id === viewId);
+  const view =
+    options.summaryOnly &&
+    configuredView?.overviewSummaryId &&
+    Object.values(input.filters ?? {}).every((value) => !value.trim()) &&
+    !input.customer?.trim()
+      ? {
+          ...configuredView,
+          summaryId:
+            options.inventoryOnly && configuredView.inventorySummaryId
+              ? configuredView.inventorySummaryId
+              : configuredView.overviewSummaryId,
+        }
+      : configuredView;
   if (!view) return fail('VIEW_NOT_CONFIGURED', '未配置的数据视图');
   if (!view.queryId)
     return { status: 'unavailable', rows: [], total: null, viewId, description: view.description };
@@ -305,17 +319,60 @@ export async function readConfiguredFacts(
       return { summary: null, summaryError: errorInfo(error) };
     }
   };
+  // This auxiliary source cannot remove independently authorized stock rows.
+  const readProduction = async () => {
+    if (!view.productionQueryId) return { rows: [], error: null, configVersion: undefined };
+    const productionValues: Record<string, unknown> = {
+      bases_enabled: values.bases_enabled,
+      bases: values.bases,
+      sku: values.sku,
+    };
+    for (let i = 0; i < 7; i++) {
+      const day = dateOnly(input.asOf);
+      day.setUTCDate(day.getUTCDate() + i);
+      productionValues['production_day_' + i] = day.toISOString().slice(0, 10).replaceAll('-', '');
+    }
+    try {
+      const result = await client.read(view.productionQueryId, productionValues, {
+        signal: options.signal,
+        requiredColumns: config.queries[view.productionQueryId].resultColumns,
+      });
+      return { rows: result.rows, error: null, configVersion: result.configVersion };
+    } catch (error: any) {
+      if (options.signal?.aborted) throw error;
+      return { rows: [], error: errorInfo(error), configVersion: undefined };
+    }
+  };
   if (!options.summaryOnly && q.pagination?.atomicQuery) {
     const id = q.pagination.atomicQuery;
-    const [result, { summary, summaryError }] = await Promise.all([
+    const [result, { summary, summaryError }, production] = await Promise.all([
       read(id, subset(id)),
       readSummary(),
+      readProduction(),
     ]);
+    if (
+      !production.error &&
+      production.configVersion &&
+      production.configVersion !== result.configVersion
+    ) {
+      production.rows = [];
+      production.error = errorInfo(
+        Object.assign(Error('排程配置版本发生变化'), { code: 'QUERY_CONFIG_CHANGED' }),
+      );
+    }
     const { rows, total } = unpackAtomicPage(result, page, pageSize);
     options.signal?.throwIfAborted();
     return {
       status: total ? 'available' : 'empty',
-      rows,
+      rows: view.productionQueryId
+        ? rows.map((row: Record<string, unknown>) => {
+            const matches = production.rows.filter(
+              (p: Record<string, unknown>) => p.base === row.base,
+            );
+            return matches.length === 1 ? { ...row, ...matches[0] } : row;
+          })
+        : rows,
+      supplementaryError: production.error,
       total,
       page,
       pageSize,

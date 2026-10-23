@@ -78,6 +78,7 @@ function WorkbenchBody() {
     revision,
     (value) => updateContext('overview', value),
     cycleDays,
+    config.overviewViewIds.filter((id) => id !== 'shipments'),
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;

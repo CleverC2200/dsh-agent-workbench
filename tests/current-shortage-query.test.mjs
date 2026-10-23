@@ -130,3 +130,87 @@ test('query cancellation is preserved before any transport call', async () => {
   );
   assert.equal(calls, 0);
 });
+test('unmapped pickup diagnostics do not erase verified base and branch pools', async () => {
+  const active = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  const rows = [
+    {
+      snapshot_date: '2026-10-23',
+      location_type: '基地',
+      demand: 100,
+      allocated: 20,
+      remaining: 80,
+      available: 30,
+      shortage: 50,
+      invalid: 0,
+    },
+    {
+      snapshot_date: '2026-10-23',
+      location_type: '分仓',
+      demand: 40,
+      allocated: 10,
+      remaining: 30,
+      available: 20,
+      shortage: 10,
+      invalid: 0,
+    },
+    {
+      snapshot_date: '2026-10-23',
+      location_type: '待映射',
+      demand: 8,
+      allocated: 0,
+      remaining: 8,
+      available: null,
+      shortage: null,
+      invalid: 1,
+    },
+  ];
+  const value = await readCurrentShortage(
+    active,
+    'current-shortage.summary',
+    {},
+    { execute: async () => ({ rows }) },
+  );
+  assert.equal(value.partial, true);
+  assert.equal(currentShortageSum(value.rows, 'demand'), 148);
+  assert.equal(currentShortageSum(value.rows, 'shortage', '基地'), 50);
+  assert.equal(currentShortageSum(value.rows, 'shortage', '分仓'), 10);
+  assert.equal(currentShortageSum(value.rows, 'shortage'), null);
+});
+test('an invalid inventory pool does not erase another pool or known demand', async () => {
+  const active = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  const value = await readCurrentShortage(
+    active,
+    'current-shortage.summary',
+    {},
+    {
+      execute: async () => ({
+        rows: [
+          {
+            snapshot_date: '2026-10-23',
+            location_type: '基地',
+            demand: 100,
+            allocated: 20,
+            remaining: 80,
+            available: null,
+            shortage: null,
+            invalid: 1,
+          },
+          {
+            snapshot_date: '2026-10-23',
+            location_type: '分仓',
+            demand: 40,
+            allocated: 10,
+            remaining: 30,
+            available: 20,
+            shortage: 10,
+            invalid: 0,
+          },
+        ],
+      }),
+    },
+  );
+  assert.equal(value.partial, true);
+  assert.equal(currentShortageSum(value.rows, 'demand'), 140);
+  assert.equal(currentShortageSum(value.rows, 'shortage', '分仓'), 10);
+  assert.equal(currentShortageSum(value.rows, 'shortage', '基地'), null);
+});

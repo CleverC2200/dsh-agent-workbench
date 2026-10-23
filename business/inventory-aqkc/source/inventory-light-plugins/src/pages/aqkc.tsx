@@ -301,6 +301,15 @@ export function InventoryOperationsWorkbench() {
     let active = true;
     const controller = new AbortController();
     setDashboardLoading(true);
+    const progress = (event: Event) => {
+      if (!active || controller.signal.aborted || !(event instanceof CustomEvent)) return;
+      const workspace = normalizeWorkspaceState(event.detail?.workspace);
+      if (workspace) {
+        setDashboardWorkspaceState(workspace);
+        setDashboardLoading(false);
+      }
+    };
+    window.addEventListener('aqkc-dashboard-progress', progress);
     call('access', {}, { signal: controller.signal })
       .then(() => {
         if (!active || controller.signal.aborted) return null;
@@ -327,6 +336,7 @@ export function InventoryOperationsWorkbench() {
     return () => {
       active = false;
       controller.abort();
+      window.removeEventListener('aqkc-dashboard-progress', progress);
     };
   }, []);
   const loadDashboardTab = useCallback(

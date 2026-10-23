@@ -10,7 +10,18 @@ export async function configuredPageHtml(id) {
 export async function configuredWire(id) {
   const config = JSON.parse(await readFile(`lib/business/inventory-${id}/sql.config.json`, 'utf8'));
   return (payload) => {
-    assert.deepEqual(Object.keys(payload).sort(), ['parameters', 'queryId']);
+    assert.deepEqual(
+      Object.keys(payload)
+        .filter((key) => key !== 'freshAfter')
+        .sort(),
+      ['parameters', 'queryId'],
+    );
+    if (payload.freshAfter !== undefined)
+      assert.ok(
+        Number.isSafeInteger(payload.freshAfter) &&
+          payload.freshAfter >= 0 &&
+          payload.freshAfter <= Date.now() + 1000,
+      );
     const q = config.queries[payload.queryId];
     assert.ok(q, `unregistered fixture query ${payload.queryId}`);
     makeRequest(config, payload.queryId, payload.parameters);
@@ -62,6 +73,7 @@ export async function configuredWire(id) {
             onhand_days: 15,
             known_inventory: 5580,
             total_qty: 5580,
+            available_qty: payload.queryId.startsWith('branch-health.') ? 0 : 5500,
             known_available: 5500,
             known_inventory_count: 105,
             known_available_count: 105,
@@ -81,12 +93,21 @@ export async function configuredWire(id) {
       );
     let rows;
     if (payload.queryId.startsWith('source.')) rows = [makeRow(0)];
-    else if (payload.queryId.endsWith('.summary') || columns.includes('total')) rows = [makeRow(0)];
+    else if (/\.(summary|cards|inventory)$/.test(payload.queryId) || columns.includes('total'))
+      rows = [makeRow(0)];
     else
       rows = Array.from(
         { length: Math.max(0, Math.min(p.page_size ?? 10, total - offset)) },
         (_, i) => makeRow(offset + i),
       );
+    if (payload.queryId === 'overview.quick-stock') {
+      rows = ['基地', '分仓'].map((location_type) => ({
+        ...makeRow(0),
+        location_type,
+        snapshot_date: p.as_of,
+        available_qty: location_type === '分仓' ? 0 : 5500,
+      }));
+    }
     if (payload.queryId.startsWith('current-shortage.')) {
       const types = ['qll', 'apsplan'].includes(id)
         ? ['基地', '分仓']

@@ -1,3 +1,4 @@
+import { configuredQueryFreshAfter } from './query-cache';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { createQueryClient } from './configured-query-client.mjs';
 // Native pages install a business-fetch shim after module initialization.
@@ -70,7 +71,11 @@ export function createAgentQueries(fallback: AgentSqlConfig, execute?: Configure
       options.signal?.throwIfAborted();
       return call(
         'sql',
-        { queryId: options.queryId, parameters: options.values },
+        {
+          queryId: options.queryId,
+          parameters: options.values,
+          freshAfter: configuredQueryFreshAfter(),
+        },
         { signal: options.signal },
       );
     });

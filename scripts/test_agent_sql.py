@@ -388,16 +388,17 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.config = config_for('fc')
         self.db = sqlite3.connect(':memory:')
         self.db.row_factory = sqlite3.Row
+        self.db.create_function('CONCAT', -1, lambda *values: ''.join(str(v) for v in values if v is not None))
         tables = {
             'agents_dim_product_list_mi': 'material_code material_name product_item_name',
             'agents_scm_inventory_sku_data_d': 'warehouseid material_code prod_date sap_warehouseid plant quality_batch is_good_prod live_qty available_qty pack_unit_qty freeze_qty warehouse_classify unrestricted_qty month_date warehouse_name belong_base material_name',
             'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
-            'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at',
+            'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at last_month_actual_qty current_day_avg_qty',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
             'agents_scm_execute_detail_d': 'cust_order_no material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyallocated',
             'agents_scm_material_in_out_summary_d': 'warehouseid pickup_point material_code material_name material_group_name warehouse_name product_categ_name',
         }
-        numeric = set('adjust_order_qty qtyallocated live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan act_dl_qty'.split())
+        numeric = set('adjust_order_qty qtyallocated live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
@@ -429,6 +430,22 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
                 params.pop(key)
                 params.update(zip(names, value))
         return [dict(row) for row in self.db.execute(sql,params)]
+
+    def test_landing_quantities_and_ages_match_full_health_without_metadata_joins(self):
+        full=self.read('health.summary')[0]
+        stock=self.read('health.inventory')[0]
+        ages=self.read('health.cards')[0]
+        for field in ['row_count','total_qty','available_qty','pack_unit_qty','freeze_qty']:
+            self.assertEqual(stock[field],full[field],field)
+        for field in ['max_age','overaged_qty','stagnant_qty']:
+            self.assertEqual(ages[field],full[field],field)
+
+    def test_full_chain_base_and_branch_totals_do_not_share_a_warehouse_pool(self):
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='BASE',warehouse_classify='01',material_code='S1',live_qty=80,available_qty=60,prod_date='2026-01-01')
+        self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='OTHER',warehouse_classify='03',material_code='S1',live_qty=900,available_qty=900,prod_date='2020-01-01')
+        self.config=config_for('qll')
+        self.assertEqual(self.read('health.summary')[0]['total_qty'],80)
+        self.assertEqual(self.read('branch-health.summary')[0]['total_qty'],130)
 
     def test_visible_order_columns_use_only_eligible_orders_and_same_sku_gap(self):
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',pickup_point='P1',material_code='S1')
@@ -488,11 +505,11 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(sum(r['inventory_qty'] for r in rows),130)
         for agent in ['fc','aqkc','qll','apsplan']:
             self.config=config_for(agent)
-            rows=self.read('health.detail',bases_enabled=True,bases=['库存基地'],warehouse_code_mode='equal',warehouse_code='WH1')
+            rows=self.read('branch-health.detail' if agent=='qll' else 'health.detail',bases_enabled=True,bases=['库存基地'],warehouse_code_mode='equal',warehouse_code='WH1')
             self.assertEqual(len(rows),2,agent)
             self.assertTrue(all(r['belong_base']=='库存基地' and r['warehouse_name']=='库存分仓' and r['material_name']=='库存商品' for r in rows),agent)
             self.assertEqual(sum(r['total_qty'] for r in rows),130,agent)
-            self.assertEqual(self.read('health.detail',bases_enabled=True,bases=['历史基地1']),[],agent)
+            self.assertEqual(self.read('branch-health.detail' if agent=='qll' else 'health.detail',bases_enabled=True,bases=['历史基地1']),[],agent)
 
     def test_aps_branch_list_returns_source_base_and_preserves_stock_totals(self):
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET warehouse_name='库存分仓',belong_base='库存基地' WHERE warehouse_classify='20'")
@@ -512,11 +529,11 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH2',warehouse_name='分仓1',belong_base='基地2',material_code='S1',prod_date='2026-09-30',warehouse_classify='03',live_qty=900,available_qty=900)
         for agent in ['fc','aqkc','qll','apsplan']:
             self.config=config_for(agent)
-            row=self.read('health.summary',warehouse_code_mode='equal',warehouse_code='WH1')[0]
+            row=self.read('branch-health.summary' if agent=='qll' else 'health.summary',warehouse_code_mode='equal',warehouse_code='WH1')[0]
             self.assertEqual(row['total_qty'],130,agent)
             self.assertEqual(row['warehouse_count'],1,agent)
-            row=self.read('health.summary',bases_enabled=True,bases=['基地2'])[0]
-            self.assertEqual(row['total_qty'],None if agent == 'fc' else 900,agent)
+            row=self.read('branch-health.summary' if agent=='qll' else 'health.summary',bases_enabled=True,bases=['基地2'])[0]
+            self.assertEqual(row['total_qty'],None if agent in ['fc','qll'] else 900,agent)
         self.config=config_for('fc')
         rows=self.read('replenishment.detail',warehouse_code_mode='equal',warehouse_code='WH1')
         self.assertEqual(sum(r['inventory_qty'] for r in rows),130)

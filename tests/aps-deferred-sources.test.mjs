@@ -11,13 +11,19 @@ const out = await build({
     {
       name: 'source-seam',
       setup(api) {
+        api.onResolve({ filter: /\/current-shortage$/ }, () => ({
+          path: 'current-shortage',
+          namespace: 'fixture',
+        }));
         api.onResolve({ filter: /\/workspace-query$/ }, () => ({
           path: 'workspace-query',
           namespace: 'fixture',
         }));
-        api.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
+        api.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
           contents:
-            'export const readWorkspaceQuery=(config,name,values,options)=>globalThis.__apsSourceRead(name,values,options);',
+            args.path === 'current-shortage'
+              ? 'export const readCurrentShortage=(...args)=>globalThis.__apsPendingRead?.(...args) ?? Promise.resolve({rows:[]});'
+              : 'export const readWorkspaceQuery=(config,name,values,options)=>globalThis.__apsSourceRead(name,values,options);',
           loader: 'js',
         }));
       },
@@ -141,4 +147,135 @@ test('annual order and production queries overlap a slow stock query within thre
   await job;
   assert.ok(overlap, 'annual comparisons must not serialize behind the slow stock source');
   assert.ok(peak <= 3);
+});
+
+test('summary defers branch and operations until explicit details are requested', async (t) => {
+  const prior = globalThis.document;
+  t.after(() => {
+    globalThis.document = prior;
+    delete globalThis.__apsSourceRead;
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  const calls = [];
+  globalThis.__apsSourceRead = async (name) => {
+    calls.push(name);
+    return [];
+  };
+  const load = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const input = {
+    date: '2026-10-15',
+    granularity: 'month',
+    version: '滚动',
+    orderType: 'M',
+    summary: true,
+  };
+  const initial = await load(input);
+  assert.ok(!calls.includes('branch') && !calls.includes('operations'));
+  assert.equal(initial.sections.find((s) => s.id === 'branch').status, 'deferred');
+  const mark = calls.length;
+  await load({ ...input, stage: 'details' });
+  assert.deepEqual(calls.slice(mark), ['forecast-products', 'branch', 'operations']);
+});
+
+test('ready landing stock survives a later full-source failure without inventing target or demand', async (t) => {
+  const prior = globalThis.document;
+  t.after(() => {
+    globalThis.document = prior;
+    delete globalThis.__apsSourceRead;
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  const progress = [];
+  globalThis.__apsSourceRead = async (name, values, options) => {
+    if (name === 'stock') {
+      options.onInventory?.([
+        {
+          base: '郑州',
+          category: '汤圆',
+          inventory: '100',
+          records: 1,
+          missing_target: 1,
+          missing_demand: 1,
+          target: null,
+          demand: null,
+        },
+      ]);
+      throw Object.assign(Error('full source unavailable'), { code: 'GEA_QUERY_FAILED' });
+    }
+    return [];
+  };
+  const load = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const final = await load({
+    date: '2026-10-15',
+    granularity: 'month',
+    version: '滚动',
+    orderType: 'M',
+    summary: true,
+    onProgress: (p) => progress.push(p),
+  });
+  const stock = final.sections.find((s) => s.id === 'stock');
+  assert.equal(stock.status, 'ready');
+  assert.equal(stock.partial, true);
+  assert.equal(stock.rows[0].inventory, 100);
+  assert.equal(stock.rows[0].target, null);
+  assert.equal(stock.rows[0].demand, null);
+  assert.equal(stock.error.code, 'GEA_QUERY_FAILED');
+  assert.ok(
+    progress.some((p) => p.sections.find((s) => s.id === 'stock')?.rows[0]?.inventory === 100),
+  );
+});
+
+test('landing cards start before pending-order analysis and all sources share the same limit', async (t) => {
+  const prior = globalThis.document;
+  const releases = [];
+  t.after(() => {
+    releases.forEach((release) => release());
+    globalThis.document = prior;
+    delete globalThis.__apsSourceRead;
+    delete globalThis.__apsPendingRead;
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  let active = 0,
+    peak = 0,
+    pendingStarted = false;
+  const started = [];
+  globalThis.__apsSourceRead = async (name) => {
+    started.push(name);
+    peak = Math.max(peak, ++active);
+    try {
+      if (started.length <= 3) await new Promise((resolve) => releases.push(resolve));
+      return [];
+    } finally {
+      active--;
+    }
+  };
+  globalThis.__apsPendingRead = async () => {
+    pendingStarted = true;
+    peak = Math.max(peak, ++active);
+    await new Promise(setImmediate);
+    active--;
+    return { rows: [] };
+  };
+  const load = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const job = load({
+    date: '2026-10-15',
+    granularity: 'month',
+    version: '滚动',
+    orderType: 'M',
+    summary: true,
+  });
+  await new Promise(setImmediate);
+  const firstWave = [...started];
+  const pendingBeforeCards = pendingStarted;
+  releases.forEach((release) => release());
+  await job;
+  assert.deepEqual(firstWave, ['finance', 'stock', 'orders-month']);
+  assert.equal(pendingBeforeCards, false);
+  assert.equal(pendingStarted, true);
+  assert.ok(peak <= 3, `pending analysis created a fourth source: ${peak}`);
 });

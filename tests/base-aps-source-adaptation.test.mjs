@@ -159,7 +159,7 @@ const cube = await load('business/inventory-aqkc/source/aqkc/web/src/lib/cube-da
       );
       api.onLoad({ filter: /.*/, namespace: 'summary-fixture' }, () => ({
         contents:
-          'export const readConfiguredStockSummary=(...args)=>globalThis.__stockSummary(...args); export const readConfiguredHealthSummary=async()=>({rows:[],summary:null}); export const readConfiguredStockPage=()=>{throw Error("not used")};',
+          'export const readConfiguredStockSummary=(...args)=>globalThis.__stockSummary(...args); export const readConfiguredHealthSummary=(...args)=>globalThis.__healthSummary?.(...args)??Promise.resolve({rows:[],summary:null}); export const readConfiguredStockPage=()=>{throw Error("not used")};',
         loader: 'js',
       }));
       api.onResolve({ filter: /shared\/batch-age$/ }, (args) =>
@@ -185,10 +185,9 @@ const cube = await load('business/inventory-aqkc/source/aqkc/web/src/lib/cube-da
 ]);
 function install(t) {
   const before = new Map(
-    ['document', '__stockAdaptationRead', '__stockSummary', '__batchAge'].map((k) => [
-      k,
-      Object.getOwnPropertyDescriptor(globalThis, k),
-    ]),
+    ['document', '__stockAdaptationRead', '__stockSummary', '__batchAge', '__healthSummary'].map(
+      (k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)],
+    ),
   );
   globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
   globalThis.__stockAdaptationRead = async (query) => {
@@ -223,6 +222,7 @@ function install(t) {
     new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()).slice(0, 7) +
     '-01';
   stockFixture.invalidOrders = 0;
+  globalThis.__healthSummary = undefined;
   globalThis.__batchAge = async () => ({ rows: [], total: 0 });
   globalThis.__stockSummary = async (bases, options) => {
     const present = stockFixture.rows.some((r) => r['safety_stock.current_inventory'] !== null);
@@ -644,8 +644,8 @@ test('MES production is prioritized with core cards and read for both comparison
   const input = { date: '2026-10-15', granularity: 'month', version: '滚动', orderType: 'M' };
   await run({ ...input, stage: 'primary' });
   assert.deepEqual(
-    directWorkspaceCalls.slice(0, 3).map((call) => call.name),
-    ['stock', 'orders-month', 'production'],
+    directWorkspaceCalls.slice(0, 4).map((call) => call.name),
+    ['finance', 'stock', 'orders-month', 'production'],
   );
   directWorkspaceCalls.length = 0;
   await run({ ...input, comparison: true });
@@ -673,4 +673,34 @@ test('category dashboard never fetches all SKU rows just to aggregate categories
     !calls.includes('workbench-order-structure'),
     'category view unnecessarily reads order SKU details',
   );
+});
+
+test('base stock and fulfillment publish before a slow or failed age source', async (t) => {
+  install(t);
+  let finish;
+  const progress = [];
+  globalThis.__healthSummary = () => new Promise((_, reject) => (finish = reject));
+  const job = cube.loadInitialDashboard(undefined, undefined, undefined, undefined, false, (w) =>
+    progress.push(w),
+  );
+  await new Promise(setImmediate);
+  assert.ok(
+    progress.some(
+      (w) => w.workbench.cards[0].value === '150' && w.workbench.cards[3].value === '80.0%',
+    ),
+  );
+  finish(Error('AGE_SOURCE_FAILED'));
+  const w = await job;
+  assert.equal(w.workbench.cards[0].value, '150');
+  assert.equal(w.workbench.cards[2].value, '-');
+  assert.equal(w.workbench.cards[3].value, '80.0%');
+});
+test('a failed stock source still leaves verified fulfillment available', async (t) => {
+  install(t);
+  globalThis.__stockSummary = async () => {
+    throw Error('STOCK_SOURCE_FAILED');
+  };
+  const w = await cube.loadInitialDashboard();
+  assert.equal(w.workbench.cards[0].value, '-');
+  assert.equal(w.workbench.cards[3].value, '80.0%');
 });
