@@ -10,7 +10,13 @@ WITH snapshot AS (
     CASE WHEN COUNT(*) = 1 THEN MAX(label_turnover_days) END AS standard_days,
     CASE WHEN COUNT(*) = 1 THEN MAX(avg_stock_age) END AS average_age,
     CASE WHEN COUNT(*) = 1 THEN MAX(in_transit_qty) END AS in_transit_qty,
-    CASE WHEN COUNT(*) = 1 THEN MAX(pre_order_qty) END AS pre_order_qty
+    CASE WHEN COUNT(*) = 1 THEN MAX(pre_order_qty) END AS pre_order_qty,
+    CASE WHEN COUNT(*) = 1 THEN MAX(allnum) END AS monthly_plan_qty,
+    CASE WHEN COUNT(*) = 1 THEN MAX(ship_qty) END AS shipped_qty,
+    CASE WHEN COUNT(*) = 1 THEN MAX(unship_qty) END AS unshipped_qty,
+    CASE WHEN COUNT(*) = 1 THEN MAX(simulation_need_mny) END AS budget_amount,
+    CASE WHEN COUNT(*) = 1 THEN MAX(ship_amount) END AS shipped_amount,
+    CASE WHEN COUNT(*) = 1 THEN MAX(unship_amount) END AS unshipped_amount
   FROM agents_scm_cust_plan_order_analysis_d
   WHERE create_date = (SELECT plan_date FROM plan_date)
   GROUP BY cust_code, material_code
@@ -19,6 +25,12 @@ WITH snapshot AS (
   WHERE stat_date = (SELECT inventory_date FROM snapshot)
 )
 SELECT k.cust_code, MAX(p.plan_date) AS plan_snapshot_date,
+  COUNT(p.monthly_plan_qty) AS monthly_plan_qty_coverage, SUM(p.monthly_plan_qty) AS monthly_plan_qty,
+  COUNT(p.shipped_qty) AS shipped_qty_coverage, SUM(p.shipped_qty) AS shipped_qty,
+  COUNT(p.unshipped_qty) AS unshipped_qty_coverage, SUM(p.unshipped_qty) AS unshipped_qty,
+  COUNT(p.budget_amount) AS budget_amount_coverage, SUM(p.budget_amount) AS budget_amount,
+  COUNT(p.shipped_amount) AS shipped_amount_coverage, SUM(p.shipped_amount) AS shipped_amount,
+  COUNT(p.unshipped_amount) AS unshipped_amount_coverage, SUM(p.unshipped_amount) AS unshipped_amount,
   COUNT(*) AS plan_sku_rows, COUNT(p.target_qty) AS target_coverage,
   SUM(p.target_qty) AS target_qty,
   COUNT(p.standard_days) AS standard_coverage,
