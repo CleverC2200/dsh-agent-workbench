@@ -1,5 +1,35 @@
 /** 独立销售计划页面使用的本地化文案。 */
 const copy = {
+  businessCatalogEmpty: [
+    '暂未获取到可用应用，可刷新或联系管理员。原因暂无法确定。',
+    'No applications were returned. Refresh or contact your administrator; the reason is unknown.',
+  ],
+  businessCatalogFailed: ['业务应用读取失败', 'Business applications could not be loaded'],
+  businessCatalogLoading: ['正在读取业务应用…', 'Loading business applications…'],
+  businessCatalogUnavailable: [
+    '业务应用服务暂不可用',
+    'Business application service is unavailable',
+  ],
+  businessCatalogRefresh: ['刷新业务应用', 'Refresh business applications'],
+  businessLoginRequired: [
+    '请先登录 GEA 以查看业务应用。',
+    'Sign in to GEA to view business applications.',
+  ],
+  localPrototypes: ['本地原型', 'Local prototypes'],
+  prototypeCategory: ['品类计划（模拟）', 'Category planning (simulated)'],
+  prototypeRegional: ['区域计划（模拟）', 'Regional planning (simulated)'],
+  prototypeOrders: ['订单工作台（模拟）', 'Order workbench (simulated)'],
+  prototypeDms: ['DMS 回写演示（模拟）', 'DMS writeback demo (simulated)'],
+  prototypeCapacity: ['产能评估(待设计)', 'Capacity assessment (planned)'],
+  businessUnnamed: ['未命名应用', 'Unnamed application'],
+  businessOther: ['其他业务', 'Other business'],
+  businessConfigurationIncomplete: ['应用配置未完整', 'Application configuration is incomplete'],
+  businessNotConnected: ['当前客户端暂未接入', 'Not connected in this client'],
+  businessPageUnavailable: ['页面尚未安装或启用', 'Page is not installed or enabled'],
+  businessClassificationUnavailable: [
+    '业务分类暂不可用',
+    'Business categories are temporarily unavailable',
+  ],
   identityPending: ['正在确认 GEA 身份', 'Confirming GEA identity'],
   identityUnavailable: ['身份服务暂不可用', 'Identity service is temporarily unavailable'],
   identityUncertain: ['身份确认异常', 'Identity confirmation failed'],
