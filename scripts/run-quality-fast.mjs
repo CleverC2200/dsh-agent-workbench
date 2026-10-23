@@ -9,7 +9,10 @@ const check = (name) => ({
   name,
   execute() {
     const windows = process.platform === 'win32';
-    const child = spawnSync(windows ? 'npm.cmd' : 'npm', ['run', name], {
+    const args = ['run', name];
+    if (name === 'check:knowledge' && values['declarations-in-build'])
+      args.push('--', '--source-only');
+    const child = spawnSync(windows ? 'npm.cmd' : 'npm', args, {
       stdio: 'inherit',
       shell: windows,
     });

@@ -110,6 +110,7 @@ if (finalGroup)
         manifest.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path,
         'agent-knowledge.json',
       ),
+      '--source-only',
     ],
     { stdio: 'inherit' },
   );

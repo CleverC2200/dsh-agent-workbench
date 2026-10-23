@@ -334,3 +334,26 @@ test('separate code spans naming npm and pip sources cannot be joined into a com
   const result = run();
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('cold source admission defers generated exports while prepared admission still rejects missing outputs', (t) => {
+  const { root, config, run } = fixture(t);
+  writeFileSync(
+    resolve(root, 'package.json'),
+    JSON.stringify({
+      exports: { '.': { types: './lib/new-api.d.mts', default: './lib/new-api.mjs' } },
+    }),
+  );
+  config.exports = true;
+  assert.equal(run(['--source-only']).status, 0);
+  assert.notEqual(run().status, 0);
+  assert.notEqual(run(['--exports-only']).status, 0);
+  writeFileSync(resolve(root, 'README.md'), '[Missing implementation](src/missing-api.ts)\n');
+  assert.match(run(['--source-only']).stderr, /AGENT_REFERENCE_MISSING.*missing-api/);
+  writeFileSync(resolve(root, 'README.md'), '# Current guide\n');
+  mkdirSync(resolve(root, 'lib'));
+  writeFileSync(resolve(root, 'lib/new-api.mjs'), 'export const value = 1;\n');
+  assert.notEqual(run(['--exports-only']).status, 0);
+  writeFileSync(resolve(root, 'lib/new-api.d.mts'), 'export declare const value: 1;\n');
+  assert.equal(run(['--exports-only']).status, 0);
+  assert.notEqual(run(['--source-only', '--exports-only']).status, 0);
+});
