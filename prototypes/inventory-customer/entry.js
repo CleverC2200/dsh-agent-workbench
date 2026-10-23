@@ -2,6 +2,8 @@ import { mountCustomerPrototype } from './application.js';
 import { loadCustomerInventory } from './data-source.js';
 import { ready, publish, reportElements } from '../../business/shared/channel.js';
 import { customerLoadLocales, customerLoadFailure } from './load-state.js';
+import { keepPageObservation } from '../../business/shared/page-observation.js';
+import { customerPageContext } from './page-context.js';
 
 let snapshot;
 let inventorySnapshot;
@@ -19,6 +21,7 @@ const presentation = mountCustomerPrototype(report, emptyInventory());
 let loadState = 'waiting';
 function showLoadState(state) {
   loadState = state;
+  document.getElementById('root')?.setAttribute('aria-busy', String(state === 'waiting' || state === 'loading'));
   const status = document.getElementById('customer-load-status');
   if (status) {
     status.textContent = copy[state] ?? '';
@@ -102,7 +105,7 @@ async function publishLatest() {
 function report(value) {
   if (!hasData || !attached) return;
   snapshot = {
-    ...value,
+    ...customerPageContext(value),
     source: 'gea-governed-sql',
     dataAuthority: 'current-gea-identity',
     authorizationScope,
@@ -116,19 +119,29 @@ function report(value) {
   syncStatus('');
   if (!publishing) void publishLatest();
 }
-ready
-  .then(async () => {
+async function reloadCustomerInventory() {
+  const generation = ++loadGeneration;
+  loadController?.abort();
+  const controller = new AbortController();
+  loadController = controller;
+  try {
+    attached = true;
     clearTimeout(connectionTimer);
     showLoadState('loading');
-    const generation = ++loadGeneration;
-    loadController = new AbortController();
     void readAuthorizationScope().then((scope) => {
       if (!attached || generation !== loadGeneration) return;
       authorizationScope = scope;
       if (snapshot) report(snapshot);
     });
     const inventory = await loadCustomerInventory({
-      signal: AbortSignal.any([loadController.signal, AbortSignal.timeout(90000)]),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]),
+      onInventory(inventory) {
+        if (!attached || generation !== loadGeneration) return;
+        inventorySnapshot = inventory.snapshot;
+        hasData = true;
+        presentation.update(inventory);
+        showLoadState(inventory.rows.length ? 'enriching' : 'empty');
+      },
     });
     if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
@@ -136,10 +149,13 @@ ready
     syncStatus('');
     showLoadState(inventory.rows.length ? 'ready' : 'empty');
     presentation.update(inventory);
-  })
-  .catch((error) => {
-    if (attached && !loadController?.signal.aborted) showLoadState(customerLoadFailure(error));
-  });
+  } catch (error) {
+    if (attached && generation === loadGeneration && !controller.signal.aborted)
+      showLoadState(customerLoadFailure(error));
+  }
+}
+void ready.then(reloadCustomerInventory);
+keepPageObservation(() => attached && hasData && snapshot, () => report(snapshot));
 window.addEventListener('customer-render-failed', () => {
   hasData = false;
   loadGeneration++;
@@ -165,7 +181,7 @@ window.addEventListener('message', (event) => {
 });
 window.addEventListener('gea-session-changed', () => {
   attached = true;
-  if (snapshot) report(snapshot);
+  void reloadCustomerInventory();
 });
 function invalidateInventory() {
   attached = false;

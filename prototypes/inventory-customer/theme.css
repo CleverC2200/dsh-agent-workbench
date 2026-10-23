@@ -99,10 +99,19 @@ body,
   height: auto;
   overflow: visible;
 }
-#customer-load-status[data-state='waiting'],
-#customer-load-status[data-state='loading'],
 #customer-load-status[data-state='ready'] {
   display: none;
+}
+#root[aria-busy='true'] .metric-card-head > :last-child,
+#root[aria-busy='true'] .metric-benchmark,
+#root[aria-busy='true'] .dealer-table-card {
+  visibility: hidden;
+}
+#root[aria-busy='true'] .metric-card {
+  pointer-events: none;
+}
+#root[aria-busy='true'] .metric-value {
+  color: var(--muted, #7b8696);
 }
 .app-shell,
 .app-shell > .app-main,
@@ -235,3 +244,5 @@ body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span, small) {
     padding: 8px 12px;
   }
 }
+
+.customer-list-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; color: var(--muted, #7b8696); font-size: 12px; }
