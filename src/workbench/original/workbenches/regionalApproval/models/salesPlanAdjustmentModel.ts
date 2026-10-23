@@ -72,7 +72,8 @@ export const adjustmentDimensionKey = (
     return row.provinceCode?.trim() || adjustmentDimensionName(row, dimension);
   if (dimension === 'region') return row.orgCode?.trim() || adjustmentDimensionName(row, dimension);
   if (dimension === 'base') return row.baseName?.trim() || adjustmentDimensionName(row, dimension);
-  return row.dealerCode.trim();
+  const customerCode = row.dealerCode?.trim();
+  return customerCode || JSON.stringify(['plan', row.planId]);
 };
 
 export const adjustmentScopeRows = (

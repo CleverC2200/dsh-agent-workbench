@@ -19,6 +19,7 @@ const {
   salesPlanResubmitReadbackMatches,
   salesPlanSubmitReceiptMatches,
   SalesPlanSubmitAttempt,
+  SalesPlanSubmitError,
   replaceSalesPlanWorkflowRows,
 } = await import(
   'data:text/javascript;base64,' + Buffer.from(outputFiles[0].contents).toString('base64')
@@ -276,4 +277,21 @@ test('configuration conflicts and service authentication failures keep their own
       .retrySameIntent,
     false,
   );
+});
+
+test('resubmission rejects missing customers with a validation result and preserves exact positive Long identifiers', () => {
+  for (const dealerCode of [null, undefined, '', '0', '-1', '9223372036854775808']) {
+    const incomplete = source();
+    incomplete.detail.currentVersion.dealerCode = dealerCode;
+    assert.throws(
+      () => prepareSalesPlanResubmit(incomplete),
+      (error) =>
+        error instanceof SalesPlanSubmitError &&
+        error.kind === 'validation' &&
+        error.retrySameIntent === false,
+    );
+  }
+  const complete = source();
+  complete.detail.currentVersion.dealerCode = '9223372036854775807';
+  assert.equal(prepareSalesPlanResubmit(complete).request.dealerCode, '9223372036854775807');
 });
