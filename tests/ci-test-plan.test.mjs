@@ -1802,3 +1802,29 @@ test('preflight module source changes select their own regression without workfl
       ]);
     });
 });
+
+test('personal inventory stylesheet changes select the personal layout regression', (t) => {
+  const f = fixture(t);
+  const policy = JSON.parse(
+    readFileSync(new URL('../scripts/ci-test-policy.json', import.meta.url)),
+  );
+  const rule = policy.rules.find((entry) =>
+    entry.pattern.startsWith('^business/inventory-personal/'),
+  );
+  assert.ok(rule);
+  f.policy.rules.push(rule);
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  f.put(f.root, 'tests/inventory-pc-layout.browser.mjs', 'export const fixture = true;');
+  const source = 'business/inventory-personal/source/inventory-light-plugins/src/dsh-ui/base.css';
+  f.put(f.root, source, 'input { color: black; }');
+  f.checkpoint();
+  f.put(f.root, source, 'input { color: red; }');
+  f.repositories[0].head = f.commit(f.root);
+  const plan = f.plan();
+  assert.ok(
+    plan.reasons['dsh-agent-workbench/' + source].some(
+      (file) => file.replaceAll('\\', '/') === 'tests/inventory-pc-layout.browser.mjs',
+    ),
+  );
+  assert.equal(plan.fullSuite, 'not-run');
+});
