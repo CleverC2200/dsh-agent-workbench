@@ -293,7 +293,7 @@ export function GroupSkuSummary(props: {
         <p>{groupText('empty')}</p>
       ) : (
         <div className={styles.viewport} tabIndex={0} role="region" aria-label={groupText('title')}>
-          <table className={`${styles.table} ${styles.combinedTable}`}>
+          <table className={styles.table}>
             <colgroup>
               <col className={styles.skuColumn} />
               {columns.map((key) => (

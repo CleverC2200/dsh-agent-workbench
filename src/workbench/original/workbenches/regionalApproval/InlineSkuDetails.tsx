@@ -431,7 +431,7 @@ export function InlineSkuDetails({
         <Spin />
       ) : (
         <div className={styles.viewport} tabIndex={0} role="region" aria-label={tr('columns.sku')}>
-          <table className={`${styles.table} ${styles.combinedTable}`}>
+          <table className={styles.table}>
             <colgroup>
               <col className={styles.skuColumn} />
               {columns.map((key) => (

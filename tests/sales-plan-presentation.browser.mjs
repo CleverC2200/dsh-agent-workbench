@@ -93,6 +93,7 @@ const baseSkuFor = (versionId) => ({
   skuCode: "1001",
   versionId,
   productCategName: "汤圆",
+  materialDescription: "冷冻汤圆组合装（家庭分享装）支持完整查看的长物料描述与包装规格500g×12袋ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
   qty: "20",
   baseQty: "10",
   amt: "200",
@@ -668,6 +669,19 @@ test('无可读计划禁用版本对比，只读来源仍能在列表查看版�
   await expect(page.locator('tbody input[type="checkbox"]').first()).toBeDisabled();
   await page.getByRole('button', { name: '版本对比', exact: true }).click();
   await expect(page.getByRole('combobox', { name: '版本①', exact: true })).toBeVisible();
+  await page
+    .getByRole('button', { name: /宝阳销售组/ })
+    .first()
+    .click();
+  const region = page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
+  await expect(region.getByRole('spinbutton')).toHaveCount(0);
+  await expect(region.getByRole('row').filter({ hasText: '1001' })).toContainText(
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+  );
+  if (process.env.GEA_LAYOUT_EVIDENCE)
+    await page.screenshot({
+      path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-readonly.png'),
+    });
   await expect(page.getByRole('dialog')).toHaveCount(0);
   assert.deepEqual(await page.evaluate(() => window.writes), []);
 });
@@ -695,6 +709,18 @@ test(
       '差异（① − ②）',
     ]);
     const row = region.getByRole('row').filter({ hasText: '1001' });
+    assert.ok(
+      await region
+        .getByRole('table')
+        .evaluate((node) => node.getBoundingClientRect().width <= 1120),
+    );
+    assert.equal(
+      await row
+        .getByRole('cell')
+        .first()
+        .evaluate((node) => node.scrollWidth <= node.clientWidth),
+      true,
+    );
     await expect(row.getByRole('cell').nth(3)).toHaveText('10¥80.00');
     await expect(row.getByRole('cell').nth(4)).toHaveText('10¥120.00');
     await page.getByRole('combobox', { name: '版本①', exact: true }).click();
@@ -717,6 +743,11 @@ test(
     const summary = page.getByTestId('regional-approval-group-sku-summary').first();
     const input = summary.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
     await expect(input).toBeVisible();
+    assert.ok(
+      await summary
+        .getByRole('table')
+        .evaluate((node) => node.getBoundingClientRect().width <= 760),
+    );
     const old = Number(await input.inputValue());
     await input.fill(String(old * 2));
     await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(1);
@@ -742,6 +773,18 @@ test(
       summary.getByRole('spinbutton', { name: '确认计划量① 1001', exact: true }),
     ).toHaveValue('100');
     const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
+    assert.ok(
+      await summary
+        .getByRole('table')
+        .evaluate((node) => node.getBoundingClientRect().width <= 1120),
+    );
+    assert.equal(
+      await skuRow
+        .getByRole('cell')
+        .first()
+        .evaluate((node) => node.scrollWidth <= node.clientWidth),
+      true,
+    );
     await expect(skuRow.getByRole('cell').nth(3)).toHaveText('20¥160.00');
     await expect(skuRow.getByRole('cell').nth(4)).toHaveText('80¥960.00');
     assert.ok((await page.evaluate(() => window.writes)).every((kind) => kind === 'draft'));
@@ -842,4 +885,49 @@ test('split sales plan keeps actions on one row and separates the table header',
     await customerTab.scrollIntoViewIfNeeded();
     await expect(customerTab).toBeInViewport();
   }
+});
+
+test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘访问', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t);
+  await page
+    .getByRole('button', { name: /宝阳销售组/ })
+    .first()
+    .click();
+  const region = page.getByRole('region', { name: 'SKU 编码 / 物料描述', exact: true }).last();
+  const row = region.getByRole('row').filter({ hasText: '1001' });
+  await expect(row.getByRole('cell').first()).toContainText('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
+  await expect(row.getByRole('cell').nth(1)).toHaveText('10¥100');
+  const input = region.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
+  await expect(input).toHaveValue('20');
+  if (process.env.GEA_LAYOUT_EVIDENCE)
+    await page.screenshot({ path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-wide.png') });
+  const geometry = await region
+    .getByRole('columnheader')
+    .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
+  t.diagnostic(`wide SKU/metric column widths: ${geometry.join(', ')}`);
+  assert.ok(geometry[0] <= 360, `SKU column too wide: ${geometry[0]}`);
+  assert.ok(
+    geometry.slice(1).every((width) => width <= 220),
+    `metric columns too wide: ${geometry}`,
+  );
+  const description = row.getByRole('cell').first();
+  assert.equal(await description.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
+  await input.fill('30');
+  await expect(row.getByRole('cell').nth(2)).toContainText('¥300');
+  await page.setViewportSize({ width: 694, height: 820 });
+  const scroller = page.locator('.arco-table-content-inner').first();
+  await expect
+    .poll(() => scroller.evaluate((node) => node.scrollWidth > node.clientWidth))
+    .toBe(true);
+  await scroller.hover({ position: { x: 10, y: 10 } });
+  await page.mouse.wheel(300, 0);
+  await expect.poll(() => scroller.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+  await region.focus();
+  await expect(region).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(input).toBeFocused();
+  if (process.env.GEA_LAYOUT_EVIDENCE)
+    await page.screenshot({
+      path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-narrow.png'),
+    });
 });
