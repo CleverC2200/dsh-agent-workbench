@@ -15,19 +15,19 @@
   overscroll-behavior-y: auto;
   overscroll-behavior-x: contain;
 }
-.table {
+.viewport > .table {
   width: 100%;
-  min-width: 760px;
+  min-width: 0;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 12px;
   line-height: 1.5;
 }
 .skuColumn {
-  width: 36%;
+  width: 320px;
 }
 .metricColumn {
-  width: 16%;
+  width: 192px;
 }
 .table th,
 .table td {
@@ -133,9 +133,7 @@
   color: var(--text-secondary);
   font-size: 12px;
 }
-.combinedTable .skuColumn {
-  width: 32%;
-}
-.combinedTable .metricColumn {
-  width: auto;
+.viewport:focus-visible {
+  outline: 2px solid rgb(var(--primary-6));
+  outline-offset: 2px;
 }
