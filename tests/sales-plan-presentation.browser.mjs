@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 
@@ -147,7 +148,7 @@ createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value=
 
 async function openWorkbench(t, grouped = false, comparison) {
   const assets = new Map(
-    bundle.outputFiles.map((asset) => [asset.path.split('/').at(-1), asset.text]),
+    bundle.outputFiles.map((asset) => [asset.path.split(/[\\/]/).at(-1), asset.text]),
   );
   const server = createServer((req, res) => {
     const name = req.url.slice(1);
@@ -188,6 +189,193 @@ async function openWorkbench(t, grouped = false, comparison) {
   if (grouped) await expect(groupBox).toBeVisible();
   return { frame: page, page, groupBox };
 }
+
+async function visibleBlueAccents(page) {
+  return page.getByTestId('regional-approval-workbench').evaluate((root) =>
+    [...root.querySelectorAll('*')]
+      .filter((node) => node.getBoundingClientRect().width > 0)
+      .map((node) => ({
+        label: (node.textContent ?? '').trim().slice(0, 24),
+        className: typeof node.className === 'string' ? node.className : '',
+        color: getComputedStyle(node).color,
+        background: getComputedStyle(node).backgroundColor,
+        border: getComputedStyle(node).borderTopColor,
+      }))
+      .filter((item) =>
+        [item.color, item.background, item.border].some((value) => {
+          const match = /rgba?\((\d+), (\d+), (\d+)/.exec(value);
+          return (
+            match &&
+            Number(match[3]) > Number(match[1]) + 40 &&
+            Number(match[3]) > Number(match[2]) + 20
+          );
+        }),
+      ),
+  );
+}
+
+test(
+  'sales plan actions follow brand, secondary and disabled button states',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t);
+    const state = (locator) =>
+      locator.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return {
+          background: style.backgroundColor,
+          color: style.color,
+          border: style.borderTopColor,
+          radius: style.borderRadius,
+          height: style.height,
+        };
+      });
+    const version = page.getByTestId('regional-approval-version-compare');
+    await expect.poll(async () => (await state(version)).background).toBe('rgb(255, 255, 255)');
+    assert.deepEqual(await state(version), {
+      background: 'rgb(255, 255, 255)',
+      color: 'rgb(85, 93, 104)',
+      border: 'rgb(217, 221, 227)',
+      radius: '6px',
+      height: '36px',
+    });
+    const toolbar = page.getByTestId('regional-approval-toolbar-actions');
+    const filter = toolbar.getByRole('button', { name: '筛选条件' });
+    assert.deepEqual(await state(filter), {
+      background: 'rgb(255, 255, 255)',
+      color: 'rgb(85, 93, 104)',
+      border: 'rgb(217, 221, 227)',
+      radius: '6px',
+      height: '32px',
+    });
+    await filter.hover();
+    await expect.poll(async () => (await state(filter)).background).toBe('rgb(255, 250, 251)');
+    assert.equal((await state(filter)).color, 'rgb(223, 23, 50)');
+    const approve = toolbar.getByRole('button', { name: '通过' });
+    assert.equal(await approve.isDisabled(), true);
+    assert.deepEqual(await state(approve), {
+      background: 'rgb(245, 246, 248)',
+      color: 'rgb(160, 164, 172)',
+      border: 'rgb(227, 230, 234)',
+      radius: '6px',
+      height: '32px',
+    });
+    const activeTab = page.getByRole('tab', { name: '按区域' });
+    assert.equal((await state(activeTab)).color, 'rgb(223, 23, 50)');
+  },
+);
+
+test(
+  'dimension tab hover, underline and month value align with their controls',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t);
+    const tab = page.getByRole('tab', { name: '按区域' });
+    await tab.click();
+    await tab.hover();
+    const tabState = await tab.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      const header = node.closest('[class*="queueHeader"]').getBoundingClientRect();
+      const style = getComputedStyle(node);
+      return {
+        underlineGap: header.bottom - rect.bottom,
+        color: style.color,
+        background: style.backgroundColor,
+        border: style.borderBottomColor,
+      };
+    });
+    assert.deepEqual(tabState, {
+      underlineGap: 1,
+      color: 'rgb(223, 23, 50)',
+      background: 'rgb(255, 240, 242)',
+      border: 'rgb(223, 23, 50)',
+    });
+    const month = page.getByRole('combobox', { name: '销售计划周期' });
+    const monthState = await month.evaluate((node) => {
+      const view = node.querySelector('.arco-select-view');
+      const value = node.querySelector('.arco-select-view-value');
+      const range = document.createRange();
+      range.selectNodeContents(value);
+      const viewRect = view.getBoundingClientRect();
+      const textRect = range.getBoundingClientRect();
+      return {
+        alignment: getComputedStyle(value).alignItems,
+        centerGap: Math.abs((viewRect.top + viewRect.bottom - textRect.top - textRect.bottom) / 2),
+      };
+    });
+    assert.equal(monthState.alignment, 'center');
+    assert.ok(monthState.centerGap <= 1, `month text center gap: ${monthState.centerGap}px`);
+  },
+);
+
+test(
+  'sales plan controls and month menu use the shared brand palette',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t);
+    await expect(page.getByRole('button', { name: /宝阳销售组/ }).first()).toBeVisible();
+    assert.deepEqual(await visibleBlueAccents(page), [], 'default toolbar, row and pagination');
+    const status = await page.getByTestId('regional-approval-status-p1').evaluate((node) => ({
+      color: getComputedStyle(node).color,
+      background: getComputedStyle(node).backgroundColor,
+    }));
+    assert.deepEqual(status, { color: 'rgb(102, 112, 133)', background: 'rgb(238, 241, 245)' });
+    const month = page.getByRole('combobox', { name: '销售计划周期' });
+    const trigger = await month.evaluate((node) => {
+      const view = node.querySelector('.arco-select-view');
+      const value = node.querySelector('.arco-select-view-value');
+      return {
+        height: getComputedStyle(view).height,
+        radius: getComputedStyle(view).borderRadius,
+        color: getComputedStyle(value).color,
+        weight: getComputedStyle(value).fontWeight,
+      };
+    });
+    assert.deepEqual(trigger, {
+      height: '36px',
+      radius: '8px',
+      color: 'rgb(52, 59, 70)',
+      weight: '700',
+    });
+    await month.click();
+    const menu = page.locator('.arco-select-popup-inner').filter({ hasText: '2026年10月' });
+    await expect(menu).toBeVisible();
+    const option = await menu.locator('.arco-select-option-selected').evaluate((node) => ({
+      color: getComputedStyle(node).color,
+      background: getComputedStyle(node).backgroundColor,
+      height: getComputedStyle(node).height,
+      check: getComputedStyle(node, '::after').content,
+    }));
+    assert.deepEqual(option, {
+      color: 'rgb(52, 59, 70)',
+      background: 'rgb(255, 245, 246)',
+      height: '34px',
+      check: '"✓"',
+    });
+    if (process.env.SALES_PLAN_VISUAL_DIR) {
+      await page.screenshot({
+        path: resolve(process.env.SALES_PLAN_VISUAL_DIR, 'sales-plan-date.png'),
+      });
+    }
+    await page.keyboard.press('Escape');
+    await page.locator('.arco-switch').first().click();
+    await page
+      .getByRole('button', { name: /宝阳销售组/ })
+      .first()
+      .click();
+    await expect(
+      page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }),
+    ).toBeVisible();
+    assert.deepEqual(await visibleBlueAccents(page), [], 'checked switch and expanded SKU rows');
+    await page.getByTestId('regional-approval-flow-toggle').click();
+    assert.deepEqual(await visibleBlueAccents(page), [], 'expanded workflow stages');
+    if (process.env.SALES_PLAN_VISUAL_DIR) {
+      await page.screenshot({
+        path: resolve(process.env.SALES_PLAN_VISUAL_DIR, 'sales-plan-brand.png'),
+      });
+    }
+  },
+);
 
 test('组织分组行的勾选可以取消，不会勾上就取消不掉', { timeout: 30000 }, async (t) => {
   const { groupBox } = await openWorkbench(t, true);
@@ -248,7 +436,7 @@ test('editable quantity inputs are white, outlined and rounded', { timeout: 3000
 });
 
 test(
-  'top toolbar labels are bold while their values stay normal',
+  'top toolbar month label and date value follow the shared control typography',
   { timeout: 30000 },
   async (t) => {
     const { frame } = await openWorkbench(t);
@@ -275,7 +463,7 @@ test(
       assert.ok(label.weight >= 600, `${label.text} 要加粗，实际 ${label.weight}`);
     assert.ok(measured.values.length > 0, '顶部要能读到取值');
     for (const value of measured.values)
-      assert.equal(value.weight, 400, `取值「${value.text}」保持常规字重`);
+      assert.equal(value.weight, 700, `月份取值「${value.text}」使用统一日期控件字重`);
   },
 );
 
@@ -313,7 +501,11 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
     for (const cell of table.head) {
       if (!cell.text) continue;
       assert.ok(cell.weight >= 600, `表头「${cell.text}」要加粗，实际 ${cell.weight}`);
-      assert.equal(cell.bg, 'rgb(242, 243, 245)', `表头「${cell.text}」底色不能被加深`);
+      assert.equal(
+        cell.bg,
+        table === queue ? 'rgb(245, 246, 248)' : 'rgb(242, 243, 245)',
+        `表头「${cell.text}」使用对应的浅灰底色`,
+      );
     }
   }
 });
@@ -622,4 +814,32 @@ test('退回计划可继续修改本地草稿，组织汇总分摊不触发重�
   await expect(page.getByRole('spinbutton', { name: '确认计划量 1001', exact: true })).toHaveValue(
     '40',
   );
+});
+
+test('split sales plan keeps actions on one row and separates the table header', async (t) => {
+  const { page } = await openWorkbench(t);
+  for (const width of [907, 760, 620]) {
+    await page.setViewportSize({ width, height: 920 });
+    const actions = page.getByTestId('regional-approval-toolbar-actions');
+    const geometry = await actions.evaluate((node) => {
+      const actions = node.getBoundingClientRect();
+      const toolbar = node.parentElement.getBoundingClientRect();
+      const root = node.closest('[data-testid="regional-approval-workbench"]');
+      const header = node.closest('[class*="queueHeader"]').getBoundingClientRect();
+      const table = root.querySelector('[class*="tableViewport"]').getBoundingClientRect();
+      return {
+        centerGap: Math.abs(actions.top + actions.height / 2 - toolbar.top - toolbar.height / 2),
+        toolbarHeight: toolbar.height,
+        tableGap: table.top - header.bottom,
+        rightOverflow: actions.right - root.getBoundingClientRect().right,
+      };
+    });
+    assert.ok(geometry.centerGap <= 1, `actions centered at ${width}px`);
+    assert.ok(geometry.toolbarHeight <= 60, `single-row toolbar at ${width}px`);
+    assert.ok(geometry.tableGap >= 12, `table separated at ${width}px`);
+    assert.ok(geometry.rightOverflow <= 0, `actions fit at ${width}px`);
+    const customerTab = page.getByRole('tab', { name: '按客户' });
+    await customerTab.scrollIntoViewIfNeeded();
+    await expect(customerTab).toBeInViewport();
+  }
 });

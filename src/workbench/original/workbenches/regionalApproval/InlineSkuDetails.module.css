@@ -72,7 +72,7 @@
   margin-top: 2px;
 }
 .changed {
-  background: var(--color-primary-light-1);
+  background: #fff5f6;
 }
 .quantityInput {
   width: 96px;

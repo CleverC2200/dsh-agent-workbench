@@ -291,6 +291,7 @@
       "rolesUnavailable": "审批权限尚未取得，当前仅可只读浏览。",
       "skuCoverageIncomplete": "月计划明细未完整读取，缺失值保持未知，品类汇总暂不可用。",
       "scopeTotals": {
+        "overview": "计划概览",
         "pageTitle": "当前页明细汇总",
         "historicalUnavailable": "历史版本汇总暂不可用",
         "title": "当前筛选范围统计",
