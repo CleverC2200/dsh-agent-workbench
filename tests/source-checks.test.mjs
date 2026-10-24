@@ -411,6 +411,31 @@ test('joint Workbench checks receive only arguments supported by its quality CLI
   assert.equal(readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'), 'workbench');
 });
 
+test('source Window fixture checks enter the existing frozen-input runner without a browser', (t) => {
+  const f = fixture(
+    t,
+    {
+      'scripts/tool.mjs': 'export const value = 2;',
+      'tests/fixtures/source-window-inputs.mjs': 'export const inputs = true;',
+      'tests/tool.test.mjs':
+        'import "../scripts/tool.mjs"; import "./fixtures/source-window-inputs.mjs";',
+    },
+    { repo: 'dsh-gea-plugin', sdk: true, jointAdmission: true },
+  );
+  const planned = f.run('affected-plan');
+  assert.equal(planned.status, 0, planned.stdout + planned.stderr);
+  const plan = JSON.parse(planned.stdout);
+  assert.equal(plan.joint, true);
+  assert.equal(plan.sdk, true);
+  assert.equal(plan.browser, false);
+  const checked = f.run('affected-check');
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+  assert.equal(
+    readFileSync(join(f.root, '.runtime/joint-admitted'), 'utf8'),
+    realpathSync(f.repositories.find((entry) => entry.repo === 'dsh-agent-workbench').path),
+  );
+});
+
 test('affected behavior failure blocks source checks without preparing unrelated inputs', (t) => {
   const f = fixture(t, { 'scripts/tool.mjs': 'export const value = 3;' });
   const executed = f.run('affected-check');

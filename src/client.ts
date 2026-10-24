@@ -260,3 +260,11 @@ export type { BusinessAccount } from './company/account.ts';
 
 export type { NavigationView } from './client/desktop-navigation.tsx';
 export { pluginPackageVersion } from './plugin-package-version.ts';
+
+export type {
+  BusinessNavigation,
+  BusinessNavigationAgent,
+  BusinessNavigationDomain,
+  BusinessNavigationDomains,
+  BusinessNavigationCatalog,
+} from './company/business-navigation.ts';

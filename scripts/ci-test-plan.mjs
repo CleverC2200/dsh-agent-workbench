@@ -614,6 +614,18 @@ export function selectCiTests({
         )
       : [];
   const runtime = runtimeFiles.length > 0;
+  const sourceWindowFiles =
+    repo === 'dsh-gea-plugin'
+      ? files.filter((file) =>
+          reaches(
+            resolve(root, file),
+            resolve(profileEntry.path, 'tests/fixtures/source-window-inputs.mjs'),
+            new Set(),
+            true,
+          ),
+        )
+      : [];
+  const sourceWindow = sourceWindowFiles.length > 0;
   for (const file of browserFixtures)
     if (
       runtimeFiles.includes(file) ||
@@ -629,6 +641,7 @@ export function selectCiTests({
       (!preparation.dependencies &&
         dependencies(resolve(root, file), true).has(packageDependency)) ||
       runtimeFiles.includes(file) ||
+      sourceWindowFiles.includes(file) ||
       dependencies(resolve(root, file), true).has(browserDependency) ||
       dependencies(resolve(root, file), true).has(sdkDependency) ||
       dependencies(resolve(root, file), false).has(upstreamDependency) ||
@@ -664,15 +677,20 @@ export function selectCiTests({
     executedBy,
     reasons,
     runtimeFiles,
+    sourceWindowFiles,
     browserFiles,
     browserFixtures: browserFixtures.filter((file) => selected.has(file)),
     runtime,
+    sourceWindow,
     browser,
     build: preparedFiles.some((file) => reaches(resolve(root, file), workbenchBuildDependency)),
     dependencies:
       preparedFiles.some((file) => reaches(resolve(root, file), packageDependency)) ||
       files.some((file) => sourceFixtures[file]?.dependencies),
-    sdk: runtime || preparedFiles.some((file) => reaches(resolve(root, file), sdkDependency)),
+    sdk:
+      runtime ||
+      sourceWindow ||
+      preparedFiles.some((file) => reaches(resolve(root, file), sdkDependency)),
     upstreams: !sourceOnly || runtime || preparedFiles.length ? 'artifacts' : 'source-links',
     fullSuite: 'not-run',
   };
