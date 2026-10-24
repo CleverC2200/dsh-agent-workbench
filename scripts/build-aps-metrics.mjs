@@ -1,6 +1,6 @@
 import { syncAgentResources } from './build-output.mjs';
 import { build } from 'esbuild';
-import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, cp, readdir } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { sqlConfigPlugin } from './sql-config-build.mjs';
@@ -119,7 +119,23 @@ for (const path of Object.keys(result.metafile.inputs)) {
 }
 for (const file of ['plugin.json', 'page.json', 'sql.config.json'])
   inputs[file] = hash(await readFile(join(resource, file)));
-for (const file of ['capability.json', 'prompt.json', 'mcp.json', 'skills/aps/SKILL.md'])
+// Track every copied Skill asset so helpers/templates cannot silently reuse stale output.
+async function resourceFiles(directory, prefix = '') {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const name = prefix + entry.name;
+    if (entry.isDirectory())
+      files.push(...(await resourceFiles(join(directory, entry.name), name + '/')));
+    else files.push(name);
+  }
+  return files.sort();
+}
+for (const file of [
+  'capability.json',
+  'prompt.json',
+  'mcp.json',
+  ...(await resourceFiles(join(agent, 'skills'), 'skills/')),
+])
   inputs['manage/business-resources/inventory-apsplan/' + file] = hash(
     await readFile(join(agent, file)),
   );
