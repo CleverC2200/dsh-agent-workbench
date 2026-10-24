@@ -51,18 +51,15 @@ let pendingWorkbenchUnmetDelete = null;
 const persistenceStatus = document.createElement('span');
 persistenceStatus.id = 'reportPersistenceStatus';
 persistenceStatus.setAttribute('role', 'status');
-const persistenceRetry = document.createElement('button');
-persistenceRetry.type = 'button'; persistenceRetry.textContent = '重试保存'; persistenceRetry.hidden = true;
-document.getElementById('periodMeta').after(persistenceStatus, persistenceRetry);
+persistenceStatus.hidden = true;
+document.getElementById('periodMeta').after(persistenceStatus);
 const persistence = createReportPersistence(
   async (request, signal) => { const encoded = await encodeReportRequest(request); signal.throwIfAborted(); return call('workspace', encoded, { signal }); },
   (state, message) => {
     persistenceStatus.textContent = ' · ' + message;
     persistenceStatus.dataset.state = state;
-    persistenceRetry.hidden = state !== 'error';
   },
 );
-persistenceRetry.addEventListener('click', () => { if (reportLoaded && liveFacts?.complete) persistence.retry(); else { liveReadKey=''; renderSelectedPeriod(); } });
 function reportEdits() {
   return { summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
     overrides: [...workbenchUnmetOverrides], deleted: [...deletedWorkbenchUnmetKeys],
