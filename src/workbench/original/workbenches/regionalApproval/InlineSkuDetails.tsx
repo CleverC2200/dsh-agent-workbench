@@ -437,6 +437,7 @@ export function InlineSkuDetails({
               {columns.map((key) => (
                 <col className={styles.metricColumn} key={key} />
               ))}
+              <col />
             </colgroup>
             <thead>
               <tr>
@@ -446,12 +447,13 @@ export function InlineSkuDetails({
                     {comparisonText(key)}
                   </th>
                 ))}
+                <th aria-hidden="true" />
               </tr>
             </thead>
             {[...groups].map(([category, items]) => (
               <tbody key={category}>
                 <tr className={styles.group}>
-                  <th colSpan={columns.length + 1} scope="rowgroup">
+                  <th colSpan={columns.length + 2} scope="rowgroup">
                     {category} · {items.length} SKU
                   </th>
                 </tr>
@@ -576,6 +578,7 @@ export function InlineSkuDetails({
                           </td>
                         </>
                       )}
+                      <td aria-hidden="true" />
                     </tr>
                   );
                 })}

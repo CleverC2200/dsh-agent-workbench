@@ -191,6 +191,40 @@ async function openWorkbench(t, grouped = false, comparison) {
   return { frame: page, page, groupBox };
 }
 
+async function assertExpandedSkuLayout(region) {
+  const layout = await region.getByRole('table').evaluate((table) => {
+    const viewport = table.parentElement;
+    const row = [...table.querySelectorAll('tbody tr')].find((node) => node.querySelector('td'));
+    const rowRect = row.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    return {
+      rowCoversRightEdge: row.contains(
+        document.elementFromPoint(viewportRect.right - 4, rowRect.top + rowRect.height / 2),
+      ),
+      tableWidth: table.getBoundingClientRect().width,
+      viewportWidth: viewport.clientWidth,
+      columns: [...table.querySelectorAll('thead th')]
+        .filter((node) => node.getAttribute('aria-hidden') !== 'true')
+        .map((node) => node.getBoundingClientRect().width),
+    };
+  });
+  assert.ok(
+    layout.tableWidth >= layout.viewportWidth,
+    `row background must span viewport: ${JSON.stringify(layout)}`,
+  );
+  assert.equal(
+    layout.rowCoversRightEdge,
+    true,
+    'SKU row background must continue to the right edge',
+  );
+  assert.ok(layout.columns[0] <= 360, `SKU column too wide: ${layout.columns[0]}`);
+  assert.ok(
+    layout.columns.slice(1).every((width) => width <= 220),
+    `metric columns too wide: ${layout.columns}`,
+  );
+  return layout;
+}
+
 async function visibleBlueAccents(page) {
   return page.getByTestId('regional-approval-workbench').evaluate((root) =>
     [...root.querySelectorAll('*')]
@@ -709,11 +743,7 @@ test(
       '差异（① − ②）',
     ]);
     const row = region.getByRole('row').filter({ hasText: '1001' });
-    assert.ok(
-      await region
-        .getByRole('table')
-        .evaluate((node) => node.getBoundingClientRect().width <= 1120),
-    );
+    await assertExpandedSkuLayout(region);
     assert.equal(
       await row
         .getByRole('cell')
@@ -743,11 +773,7 @@ test(
     const summary = page.getByTestId('regional-approval-group-sku-summary').first();
     const input = summary.getByRole('spinbutton', { name: '确认计划量 1001', exact: true });
     await expect(input).toBeVisible();
-    assert.ok(
-      await summary
-        .getByRole('table')
-        .evaluate((node) => node.getBoundingClientRect().width <= 760),
-    );
+    await assertExpandedSkuLayout(summary.getByRole('region'));
     const old = Number(await input.inputValue());
     await input.fill(String(old * 2));
     await expect.poll(() => page.evaluate(() => window.savedDrafts.length)).toBeGreaterThan(1);
@@ -773,11 +799,7 @@ test(
       summary.getByRole('spinbutton', { name: '确认计划量① 1001', exact: true }),
     ).toHaveValue('100');
     const skuRow = summary.getByRole('row').filter({ hasText: '1001' });
-    assert.ok(
-      await summary
-        .getByRole('table')
-        .evaluate((node) => node.getBoundingClientRect().width <= 1120),
-    );
+    await assertExpandedSkuLayout(summary.getByRole('region'));
     assert.equal(
       await skuRow
         .getByRole('cell')
@@ -901,15 +923,9 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
   await expect(input).toHaveValue('20');
   if (process.env.GEA_LAYOUT_EVIDENCE)
     await page.screenshot({ path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-wide.png') });
-  const geometry = await region
-    .getByRole('columnheader')
-    .evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect().width));
+  const { columns: geometry } = await assertExpandedSkuLayout(region);
   t.diagnostic(`wide SKU/metric column widths: ${geometry.join(', ')}`);
-  assert.ok(geometry[0] <= 360, `SKU column too wide: ${geometry[0]}`);
-  assert.ok(
-    geometry.slice(1).every((width) => width <= 220),
-    `metric columns too wide: ${geometry}`,
-  );
+
   const description = row.getByRole('cell').first();
   assert.equal(await description.evaluate((node) => node.scrollWidth <= node.clientWidth), true);
   await input.fill('30');

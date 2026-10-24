@@ -16,7 +16,7 @@
   overscroll-behavior-x: contain;
 }
 .viewport > .table {
-  width: 0;
+  width: 100%;
   min-width: 0;
   table-layout: fixed;
   border-collapse: collapse;

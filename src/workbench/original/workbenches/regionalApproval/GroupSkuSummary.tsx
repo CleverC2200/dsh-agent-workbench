@@ -299,6 +299,7 @@ export function GroupSkuSummary(props: {
               {columns.map((key) => (
                 <col className={styles.metricColumn} key={key} />
               ))}
+              <col />
             </colgroup>
             <thead>
               <tr>
@@ -310,12 +311,13 @@ export function GroupSkuSummary(props: {
                     {text(key)}
                   </th>
                 ))}
+                <th aria-hidden="true" />
               </tr>
             </thead>
             {[...categories].map(([category, items]) => (
               <tbody key={category}>
                 <tr className={styles.group}>
-                  <th colSpan={columns.length + 1} scope="rowgroup">
+                  <th colSpan={columns.length + 2} scope="rowgroup">
                     {category} · {items.length} SKU
                   </th>
                 </tr>
@@ -399,6 +401,7 @@ export function GroupSkuSummary(props: {
                           </td>
                         </>
                       )}
+                      <td aria-hidden="true" />
                     </tr>
                   );
                 })}
