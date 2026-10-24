@@ -35,3 +35,7 @@ html body {
 .content {
   background: var(--surface);
 }
+.wb-kpi .wb-kpi-state.warn {
+  background: #fff4df;
+  color: #9a5a00;
+}

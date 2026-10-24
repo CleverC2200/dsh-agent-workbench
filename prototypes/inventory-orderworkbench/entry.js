@@ -1,5 +1,7 @@
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { draft } from '../../business/shared/channel.js';
+import { draft, ready } from '../../business/shared/channel.js';
+import { loadWorkbenchFacts } from './live-source.js';
+import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
 import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
@@ -8,8 +10,10 @@ const pageTimeouts = new Set(),
 const workbenchView = document.getElementById('workbenchView');
 const activePage = 'workbench';
 let periodMode = 'month';
-let selectedMonth = '2026-09';
-let selectedWeek = '2026-08-31';
+let selectedMonth = new Date(Date.now()+8*3600000).toISOString().slice(0,7);
+let selectedWeek = selectedMonth+'-01';
+let liveFacts = null, liveReadKey = '', liveController, liveConnected = false;
+let liveSkuDetails = {};
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -24,11 +28,9 @@ let pendingWorkbenchUnmet = null;
 const workbenchLocalStateKey = 'order-workbench-improvements-v1';
 const workbenchSummaryStorageKey = 'order-workbench-summary-v1';
 const defaultWorkbenchSummary = {
-  positive:
-    '满足率 95.27%（目标>95%）本期达成，环比 +0.97pct、同比 +7.97pct；准交率 99.15% 持续高位（环比 +2.23pct），各基地准交率全面达标；60天+货龄占比 2.21% 较上期 -1.45pct 持续压降，汤圆环比 -3.87pct 改善明显。',
-  risk: '改单率 2.60% 未达目标（缺口 0.60pct），华东经销 3.41%、华南事业部 3.78%、餐饮雪套 5.25%、高势能渠道 21.4% 为拐点；可发货天数 14.5 天大幅超标（环比 +3.96 天、同比 +5.50 天），郑州 15.28、华南 13.20、西南 16.32、遂平 13.73 均超 11 天阈值，库存沉淀明显；面点 91.56%、预制食材 88.76% 为品项最弱两环。',
-  rhythm:
-    '本周满足率 96.17%（周环比 +1.63pct），较上期改善，这达标口径进一步扩大；西南本周 94.93%（周环比 +6.31pct）修复显著；华东本周 95.01%（周环比 +1.15pct）已步入目标线上方。',
+  positive: '暂无人工填写的正向结论。',
+  risk: '暂无人工填写的风险结论。',
+  rhythm: '暂无人工填写的节奏分析。',
 };
 let workbenchSummaryContent = { ...defaultWorkbenchSummary };
 let pendingWorkbenchSummaryTrigger = null;
@@ -1156,7 +1158,7 @@ const workbenchPerformance = {
         { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
         { label: '准交率 >98.5%', columns: ['本期', '环比'] },
         { label: '60天+占比', columns: ['本期', '环比'] },
-        { label: '可发货天数 <（全国+郑州12.5天，基地11天）', columns: ['本期', '环比', '同比'] },
+        { label: '可发货天数 8至12天（不含边界）', columns: ['本期', '环比', '同比'] },
       ],
       rows: [
         [
@@ -1998,23 +2000,7 @@ const workbenchSkuExamples = {
   ],
 };
 function activeReport() {
-  if (periodMode === 'month' && selectedMonth === '2026-09')
-    return {
-      kind: 'month',
-      metrics: metricDefinitions,
-      events: reportEvents,
-      actions: reportActions,
-      tasks: reportTasks,
-    };
-  if (periodMode === 'week' && selectedWeek === '2026-08-31')
-    return {
-      kind: 'week',
-      metrics: weeklyMetricDefinitions,
-      events: weeklyReportEvents,
-      actions: weeklyReportActions,
-      tasks: weeklyReportTasks,
-    };
-  return null;
+  return {kind:periodMode,metrics:metricDefinitions,events:[],actions:[],tasks:[]};
 }
 function workbenchTaskKey(id) {
   return `${periodMode}:${periodMode === 'week' ? selectedWeek : selectedMonth}:${id}`;
@@ -2121,12 +2107,15 @@ function selectedPeriodLabel() {
     const [year, month] = selectedMonth.split('-');
     return `${year} 年 ${Number(month)} 月`;
   }
-  return `${selectedWeek} 至 ${addDays(selectedWeek, 6)}`;
+  const first = selectedMonth + '-01';
+  const last = toIsoDate(new Date(Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5)), 0));
+  return `${selectedWeek < first ? first : selectedWeek} 至 ${addDays(selectedWeek, 6) > last ? last : addDays(selectedWeek, 6)}`;
 }
 function hasWorkbenchReport() {
   return activeReport() !== null;
 }
 function renderSelectedPeriod() {
+  void readCurrentPeriod();
   renderPeriodPicker();
   const reportAvailable = hasWorkbenchReport();
   workbenchView
@@ -2141,11 +2130,7 @@ function renderSelectedPeriod() {
       ? `${selectedPeriodLabel()} 暂无对应周报数据。目前已收录截至 2026-09-06 的周报，不能将其他周次或月度报告数值移用至本周。`
       : `${selectedPeriodLabel()} 暂无月度报告数据；目前仅收录截至 2026-09-13 的 9 月报告。`;
   if (reportAvailable && activePage === 'workbench') renderWorkbench();
-  document.getElementById('periodMeta').textContent = reportAvailable
-    ? activeReport().kind === 'week'
-      ? '周报 · 截至 09-06'
-      : '月报 · 截至 09-13'
-    : '暂无对应报告';
+  document.getElementById('periodMeta').textContent = liveFacts ? 'GEA受控数据 · '+selectedPeriodLabel()+' · 订单截至 '+addDays(liveFacts.periods[liveFacts.selected].end,-1)+'；库存以来源快照日为准'+(liveFacts.complete===false?'；对比数据及明细加载中…':'') : '正在加载受控数据…';
 }
 const periodPicker = document.getElementById('periodPicker');
 const periodPickerTrigger = document.getElementById('periodPickerTrigger');
@@ -2198,7 +2183,8 @@ function escapeHtml(value) {
 }
 function renderWorkbenchSummary() {
   document.querySelectorAll('[data-wb-summary-content]').forEach((node) => {
-    node.textContent = workbenchSummaryContent[node.dataset.wbSummaryContent] || '';
+    const key = node.dataset.wbSummaryContent;
+    node.textContent = workbenchSummaryContent[key] ?? '暂无人工填写的分析。';
   });
 }
 function renderWorkbenchReferenceLinks() {
@@ -2281,6 +2267,86 @@ const topMetricCards = [
     footer: '本周可发货天数 14.5天',
   },
 ];
+function clearLiveMetrics() {
+  liveSkuDetails = {};
+  workbenchDimensions['region-change'].customerDetails = [];
+  for (const metric of topMetricCards) Object.assign(metric,{value:'—',status:'数据不足',footer:'按文档口径；缺失依据不估算',comparison:['—','—','—','—']});
+  for (const metric of metricDefinitions) Object.assign(metric,{value:'—',display:'—',previous:'上期 —',same:'同期 —',change:'—',sameChange:'—',gap:'—',trend:'—',status:'数据不足',note:'当前缺少完整口径或同范围证据，不使用演示结果。'});
+  for (const dimension of Object.values(workbenchDimensions)) Object.assign(dimension,{rows:[],risks:{},summary:'缺少同范围可核验数据',note:'缺失值保持未知'});
+  for (const dimension of Object.values(workbenchPerformance)) {
+    dimension.summary='当前授权查询结果；未接入指标保持未知';
+    dimension.monthly.rows=[];
+    dimension.weekly.rows=[];
+    dimension.monthly.loading=false;
+    dimension.weekly.loading=false;
+  }
+  for (const metric of topMetricCards) {
+    if (metric.label==='可发货天数') metric.target='8至12天（不含边界）';
+    if (metric.key==='作废率') metric.target='<6%';
+    if (metric.key==='改单率') metric.target='<2%';
+    if (metric.key==='订单满足率') metric.target='>95%';
+    if (metric.key==='准交率') metric.target='>98.5%';
+  }
+}
+async function readCurrentPeriod() {
+  if (!liveConnected) return;
+  const key=periodMode+':'+selectedMonth+':'+selectedWeek;
+  if (key===liveReadKey) return;
+  liveReadKey=key;
+  liveController?.abort();
+  const controller=liveController=new AbortController();
+  liveFacts=null;
+  clearLiveMetrics();
+  for (const metric of topMetricCards) Object.assign(metric, { status: '加载中', footer: '正在读取所选周期数据…' });
+  for (const dimension of Object.values(workbenchPerformance)) {
+    dimension.monthly.loading=true;
+    dimension.weekly.loading=true;
+  }
+  const monthStart=selectedMonth+'-01';
+  const monthEnd=toIsoDate(new Date(Number(selectedMonth.slice(0,4)),Number(selectedMonth.slice(5)),1));
+  const start=periodMode==='month'?monthStart:(selectedWeek<monthStart?monthStart:selectedWeek);
+  const weekEnd=addDays(selectedWeek,7);
+  const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
+  const applyFacts = facts => {
+    if (controller.signal.aborted || liveReadKey!==key) return;
+    liveFacts=facts;
+    const presentation=workbenchPresentation(facts);
+    for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
+    for(const metric of metricDefinitions) {
+      const card=topMetricCards.find(item=>item.key===metric.key);
+      if(card) Object.assign(metric,{value:card.value+card.unit,display:card.value,status:card.status,note:card.formula,
+        formula:card.formula,change:card.comparison[0],sameChange:card.comparison[1]});
+    }
+    for(const [name,tables] of Object.entries(presentation.performance)) {
+      workbenchPerformance[name].monthly.rows=tables.month;
+      workbenchPerformance[name].weekly.rows=tables.week;
+      workbenchPerformance[name].monthly.loading=facts.complete===false&&(!facts.periods.month||(name==='director-performance'&&facts.directors?.status==='loading'));
+      workbenchPerformance[name].weekly.loading=facts.complete===false&&(!facts.periods.week||(name==='director-performance'&&facts.directors?.status==='loading'));
+    }
+    for(const [name,dimension] of Object.entries(presentation.dimensions)) Object.assign(workbenchDimensions[name],dimension);
+    liveSkuDetails=presentation.skus;
+    renderSelectedPeriod();
+    updateReport();
+  };
+  try {
+    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:applyFacts});
+    applyFacts(facts);
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      clearLiveMetrics();
+      document.getElementById('periodMeta').textContent='数据读取失败或未获授权';
+      renderWorkbench();
+      updateReport();
+    }
+  }
+}
+clearLiveMetrics();
+void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
+  liveConnected=false;liveController?.abort();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+});
+window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
+
 function renderWorkbench() {
   renderWorkbenchSummary();
   const report = activeReport();
@@ -2288,13 +2354,14 @@ function renderWorkbench() {
 
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
-      const statusClass = metric.status === '未达' ? 'bad' : '';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b>−1.9pct</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b>1.9pct</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b>−1.9pct</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b>1.9pct</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b>${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b>${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b>${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b>${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   renderWorkbenchTasks();
   renderWorkbenchDimensions();
   renderWorkbenchReferenceLinks();
+
 }
 function renderWorkbenchEvents() {
   const events = activeReport()?.events || [];
@@ -2331,40 +2398,18 @@ function renderWorkbenchTasks() {
     : `<tr><td colspan="5">${tasks.length ? '当前筛选下没有任务。' : '尚未建立任务；可在上方行动建议中点击“采纳并建任务”。'}</td></tr>`;
 }
 function workbenchDimensionCellClass(key, rowIndex, columnIndex, value) {
-  if (key === 'category-fill') {
-    if (columnIndex === 1) return parseFloat(value) < 95 ? 'risk-value' : 'good-value';
-    if (columnIndex === 6) return value.startsWith('达标') ? 'status-ok' : 'status-bad';
-  }
-  if (key === 'category-days') {
-    if ((columnIndex === 4 || columnIndex === 5) && rowIndex < 2)
-      return rowIndex === 0 ? 'status-warn' : 'risk-value';
-    if (columnIndex === 6)
-      return rowIndex === 0
-        ? 'status-warn'
-        : rowIndex === 1
-          ? 'status-bad'
-          : rowIndex === 7
-            ? 'status-muted'
-            : 'status-ok';
-  }
-  if (key === 'region-change' && (columnIndex === 1 || columnIndex === 4)) return 'status-bad';
-  if (key === 'base-category' && columnIndex > 0 && parseFloat(value) < 90) return 'risk-value';
-  if (key === 'base-category-days' && columnIndex > 0 && parseFloat(value) > 12)
-    return 'risk-value';
+  if(value==='健康')return 'status-ok';
+  if(value==='预警')return 'status-warn';
+  if(value==='严重')return 'status-bad';
+  if(value==='数据不足'||value==='—')return 'status-muted';
+  if(key==='base-category'&&columnIndex>0&&parseFloat(value)<90)return 'risk-value';
+  if(key==='base-category-days'&&columnIndex>0&&parseFloat(value)>15)return 'risk-value';
   return '';
 }
 function workbenchDimensionCellText(key, rowIndex, columnIndex, value) {
-  if (key === 'category-fill' && columnIndex === 6)
-    return `${value.startsWith('达标') ? '✓' : '✕'} ${value}`;
-  if (key === 'category-days' && columnIndex === 6)
-    return rowIndex === 0
-      ? `▲ ${value}`
-      : rowIndex === 1
-        ? `✕ ${value}`
-        : rowIndex === 7
-          ? value
-          : `✓ ${value}`;
-  if (key === 'region-change' && columnIndex === 4) return `✕ ${value}`;
+  if(value==='健康')return '✓ '+value;
+  if(value==='预警')return '▲ '+value;
+  if(value==='严重')return '✕ '+value;
   return value;
 }
 function dimensionIssueStateKey(dimensionKey, rowIndex, entryIndex) {
@@ -2404,29 +2449,21 @@ function renderWorkbenchDimensionIssues(risk, base, dimensionKey, rowIndex) {
     .join('');
 }
 function renderWorkbenchSkuDetail(category) {
-  const samples = workbenchSkuExamples[category] || [];
+  const samples = liveSkuDetails[category] || [];
   if (!samples.length)
-    return `<div class="wb-sku-detail"><p>${escapeHtml(category)}暂无订单样例 SKU；请接入商品主数据及订单明细。</p></div>`;
+    return `<div class="wb-sku-detail"><p>${escapeHtml(category)}当前范围暂无已授权 SKU 数据。</p></div>`;
   const rows = samples
     .map(
       (sku) =>
         `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
     )
     .join('');
-  return `<div class="wb-sku-detail"><p>SKU 库存、销售计划及可发货天数为原型演示样例，实际数据需接入商品主数据及订单明细。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为可用库存，计划为滚动销售计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
-  const dimension = workbenchDimensions['region-change'];
-  const customers = dimension.customerDetails?.[regionIndex] || [];
-  const rows = customers.length
-    ? customers
-        .map(
-          (customer, customerIndex) =>
-            `<tr><td>${escapeHtml(customer.name)}（<span class="customer-code">${escapeHtml(customer.code)}</span>）</td><td>${escapeHtml(customer.manager)}</td><td><button type="button" class="wb-region-order-count" data-wb-customer-orders="${regionIndex}:${customerIndex}" aria-label="查看${escapeHtml(customer.name)}的${escapeHtml(String(customer.changedOrders))}张改单订单">${escapeHtml(String(customer.changedOrders))} 张</button></td><td>${escapeHtml(String(customer.totalOrders))} 张</td></tr>`,
-        )
-        .join('')
-    : '<tr><td class="wb-region-customer-empty" colspan="4">暂无客户明细</td></tr>';
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>客户经理</th><th>改单订单数</th><th>订单总数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
+  const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${escapeHtml(String(customer.changedQuantity))} 件</td><td>${escapeHtml(String(customer.orderedQuantity))} 件</td></tr>`).join('');
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>改单数量</th><th>下单数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户数量明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const firstHeader = table.groups
@@ -2463,7 +2500,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
     .join('');
   const empty = rows.length
     ? ''
-    : `<tr><td class="wb-performance-empty" colspan="${table.rows[0]?.length || 1}">当前基地筛选下暂无数据</td></tr>`;
+    : `<tr><td class="wb-performance-empty" colspan="${table.rows[0]?.length || 1}">${table.loading ? '加载中…' : '当前基地筛选下暂无数据'}</td></tr>`;
   const tableClass = `wb-performance-table ${table.groups.length > 5 ? 'wide' : ''}`;
   return `<div class="wb-performance-table-wrap" role="region" aria-label="${escapeHtml(table.title)}表格，可横向滚动" tabindex="0"><table class="${tableClass}"><thead><tr>${firstHeader}</tr><tr>${secondHeader}</tr></thead><tbody>${body || empty}</tbody></table></div>`;
 }
@@ -2544,6 +2581,7 @@ function getWorkbenchUnmetItems(kind, selectedBase = '') {
     });
   return [...staticItems, ...addedItems].filter(
     (item) =>
+      (!item.key.includes(':static:') || workbenchUnmetOverrides.has(item.key)) &&
       !deletedWorkbenchUnmetKeys.has(item.key) &&
       (kind !== 'base' || !selectedBase || item.entity === selectedBase),
   );
@@ -2581,7 +2619,7 @@ function renderWorkbenchPerformance(dimension) {
         : dimensionTab === 'director-performance'
           ? renderWorkbenchDirectorNotes()
           : '';
-  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">数据按截图报告展示；“—”表示未提供数据，粽子为季节性品项。</p>`;
+  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。“—”表示该范围数据不足。共同责任分别展示，不相加。</p>`;
 }
 function renderWorkbenchDimensions() {
   const panel = document.getElementById('wbDimensionPanel');
@@ -2600,16 +2638,11 @@ function renderWorkbenchDimensions() {
   const headingMeta = workbenchView.querySelector('.wb-dimension-head > span');
   const performanceDimension = workbenchPerformance[dimensionTab];
   if (performanceDimension) {
-    headingMeta.textContent = '月度与周度报告 · 截至 2026-09-13';
+    headingMeta.textContent = '当前授权范围 · '+selectedPeriodLabel();
     renderWorkbenchPerformance(performanceDimension);
     return;
   }
-  if (activeReport()?.kind !== 'month') {
-    headingMeta.textContent = '周度报告 · 暂无对应维度数据';
-    panel.innerHTML = `<div class="wb-dimension-empty">当前分析页签仅有截至 2026-09-13 的月度报告数据。<br>请切换到“月度”查看，不能将月度维度值移作周度值。</div>${dimensionTab === 'director-performance' ? renderWorkbenchDirectorNotes() : ''}`;
-    return;
-  }
-  headingMeta.textContent = '月度报告 · 截至 2026-09-13';
+  headingMeta.textContent = '当前授权范围 · '+selectedPeriodLabel();
   const dimension = workbenchDimensions[dimensionTab];
   const visibleRows = dimension.rows;
   const header = `${dimension.columns.map((column) => `<th scope="col">${escapeHtml(column)}</th>`).join('')}<th class="issue-col" scope="col">问题及改进</th>`;
@@ -3025,6 +3058,7 @@ function appendImprovementActions(row) {
   row.append(cell);
 }
 workbenchView.querySelectorAll('.wb-improvement-table').forEach((table) => {
+  table.tBodies[0]?.replaceChildren();
   const header = table.tHead?.rows[0];
   if (header && !header.querySelector('.actions')) {
     const cell = document.createElement('th');
@@ -3682,7 +3716,8 @@ function openMetricDetail(key) {
   const metric = activeReport()?.metrics.find((item) => item.key === key);
   if (!metric) return;
   document.getElementById('wbDetailTitle').textContent = key + '口径';
-  document.getElementById('wbDetailBody').textContent = metric.formula + '；' + metric.note;
+  document.getElementById('wbDetailBody').textContent = workbenchMetricDetail(liveFacts, key);
+  document.getElementById('wbDetailBody').style.whiteSpace = 'pre-line';
   wbDetailOverlay.hidden = false;
   document.getElementById('wbDetailClose').focus();
 }
@@ -3720,8 +3755,9 @@ const updateReport = publishReport(
         task: taskFilter,
       });
     return {
-      source: '订单工作台报告摘录与本地模拟',
-      mock: true,
+      source: 'gea-governed-sql',
+      mock: false,
+      evidence: workbenchEvidence(liveFacts),
       pageId: 'inventory-orderworkbench',
       instance: 'default',
       period: {
@@ -3731,7 +3767,7 @@ const updateReport = publishReport(
         label: selectedPeriodLabel(),
         available: Boolean(report),
       },
-      reportDate: report ? (report.kind === 'week' ? '2026-09-06' : '2026-09-13') : null,
+      reportDate: liveFacts?.readAt ?? null,
       filters: {
         event: eventFilter,
         task: taskFilter,
@@ -3743,21 +3779,21 @@ const updateReport = publishReport(
         ? topMetricCards.map((metric) => ({
             ...metric,
             value: metric.value + metric.unit,
-            note: metric.footer,
-            mock: true,
+            note: metric.formula,
+            mock: false,
             comparison: {
-              periodChange: '−1.9pct',
-              yearChange: '1.9pct',
-              weekChange: '−1.9pct',
-              weekYearChange: '1.9pct',
+              periodChange: metric.comparison?.[0]??null,
+              yearChange: metric.comparison?.[1]??null,
+              weekChange: metric.comparison?.[2]??null,
+              weekYearChange: metric.comparison?.[3]??null,
             },
           }))
         : [],
-      summary: report ? { ...workbenchSummaryContent } : null,
+      summary: report ? { ...workbenchSummaryContent, source: '用户本地填写，非查询自动结论' } : null,
       dimension: report
         ? {
             key: dimensionTab,
-            report: workbenchPerformance[dimensionTab] ?? null,
+            report: workbenchPerformance[dimensionTab] ?? workbenchDimensions[dimensionTab] ?? null,
             unmet:
               dimensionTab === 'base-performance'
                 ? getWorkbenchUnmetItems('base')
@@ -3784,7 +3820,7 @@ const updateReport = publishReport(
           (taskFilter === 'done' ? task.status === '已完成' : task.status !== '已完成'),
       ),
       coverage:
-        '演示报告摘录，非实时业务数据；顶部卡片、结论摘要与维度表可能存在口径或演示值差异，必须分别引用，不替换或推算。仅本地编辑，不代表数据库保存、真实任务派发或业务写入。',
+        '指标来自当前用户的GEA受控查询；订单累计至T-1，库存按筛选内最新实际快照，日期见evidence。缺失数据保持未知。人工结论、改进与任务为本地填写。',
     };
   },
   () => {
