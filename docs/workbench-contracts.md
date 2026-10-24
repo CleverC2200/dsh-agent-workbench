@@ -6,9 +6,9 @@ Workbench 在本仓固定的官方 DSH 输入上提供公司品牌、账户投�
 
 原生页面注册官方 `main` keyed slot，再登记标题元数据。注册事实决定页面是否可打开；业务菜单从 GEA 提供的 `businessNavigation.read(signal)` 读取当前身份的 market 清单。`register` 只补充标题，不建立第二份安装或授权清单。
 
-目录合同在 [business-navigation.ts](../src/company/business-navigation.ts)，由 `client` 和 `workbench` 导出。GEA 负责请求、解码和当前身份校验；Workbench 按 Agent 编码使用 [现有页面绑定](../src/company/navigation.ts)，再沿原受控打开路径进入页面。字典可用时仅补充分组和图标，未知业务域进入其他业务；字典不可用时按 market 原顺序平铺。空结果不能确定原因，目录显示不授予业务执行权限。
+目录合同在 [business-navigation.ts](../src/company/business-navigation.ts)，由 `client` 和 `workbench` 导出。GEA 负责请求、解码和当前身份校验；Workbench 按 Agent 编码使用 [现有页面绑定与桌面展示配置](../src/company/navigation.ts)，再沿原受控打开路径进入页面。已知应用沿用桌面端原分组、图标、短名称和顺序，market 清单决定业务入口是否出现。`workbench` 编码不生成业务菜单，AI工作台统一使用顶部原有入口，空分组不显示。新增应用保留字典分组与图标，未知业务域进入其他业务；字典不可用时，未配置的应用按 market 原顺序平铺。页面绑定必须与现有 Consumer 编码一致，不能按名称把尚未接入的 Agent 指向另一个 Consumer 或本地模拟页面。空结果不能确定原因，目录显示不授予业务执行权限。
 
-未登录、provider 缺失或读取失败不补回静态业务清单。身份变化撤销旧目录并取消读取，目录刷新不删除 Core 会话、草稿或页面关联。Core 的新会话、工作区、历史、设置和通用插件入口常驻；明确声明为 mock 的品类、区域、订单工作台及已装载的 DMS 演示保留在本地原型区。产能评估仍是待设计禁用项，隐藏页面继续服从原发现过滤。
+未登录、provider 缺失或读取失败不补回静态业务清单。正常目录不显示常驻刷新按钮，仅读取失败或空目录时提供重试。身份变化撤销旧目录并取消读取，目录重试不删除 Core 会话、草稿或页面关联。Core 的新会话、工作区、历史、设置和通用插件入口常驻。GEA 身份投影确认当前为测试环境且无观测错误时，才显示本地原型区，包含明确声明为 mock 的品类、区域及已装载的 DMS 演示；产能评估保留待设计禁用占位。生产环境或环境尚未确认时隐藏本地原型区，market 中尚未接入正式页面的菜单继续置灰，不转到原型。订单工作台沿已声明的 `order` Consumer 进入业务菜单，不作为本地模拟入口。隐藏页面继续服从原发现过滤。
 
 `agentWorkbench.openAgentSession({sessionId,preset,cwd,draft})` 打开由资源 owner 已创建的原生 Session。Workbench 核实际预设与工作目录，再通过官方草稿入口插入目标说明并导航；已有草稿冲突时拒绝替换。Manage 的 Skill 编辑使用此入口。Session 创建、文件权限和应用目标由 Manage/官方 Host 负责，设置 modal 由其 section 的官方 close 动作关闭。
 
