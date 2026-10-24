@@ -1502,28 +1502,28 @@
   }
 }
 
-/*
- * 可编辑表单控件统一外观：白底 + 浅灰描边 + 圆角，聚焦转品牌色。
- * 只读 / 禁用控件保持原灰底无描边，让「能改的格子」一眼能认出来（V1.8 #02）。
- * 只作用于工作台文档，宿主壳里的登录页与日志中心不受影响。
- */
+/* Editable inputs share the search field's white surface and single brand focus ring. */
 .gea-original-workbench .arco-input:not([disabled]),
 .gea-original-workbench .arco-textarea:not([disabled]) {
-  background-color: #fff;
-  border: 1px solid var(--bg-4);
-  border-radius: 4px;
+  background-color: var(--workbench-surface, #fff);
+  border: 1px solid var(--workbench-control-border, #d9dde3);
+  border-radius: var(--workbench-control-radius, 8px);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .gea-original-workbench .arco-input:not([disabled]):hover,
 .gea-original-workbench .arco-textarea:not([disabled]):hover {
-  border-color: rgb(var(--primary-6));
+  border-color: var(--workbench-control-hover-border, #efabb4);
 }
 
 .gea-original-workbench .arco-input:not([disabled]):focus,
 .gea-original-workbench .arco-textarea:not([disabled]):focus {
-  background-color: #fff;
-  border-color: rgb(var(--primary-6));
-  box-shadow: 0 0 0 2px rgb(var(--primary-1));
+  background-color: var(--workbench-surface, #fff);
+  border-color: var(--workbench-brand, #df1732);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--workbench-control-focus-ring, #df173226);
 }
 
 /*
