@@ -1,5 +1,7 @@
+import { encodeReportRequest } from './report-transfer.mjs';
+import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
-import { draft, ready } from '../../business/shared/channel.js';
+import { draft, ready, call } from '../../business/shared/channel.js';
 import { loadWorkbenchFacts } from './live-source.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
 import { publishReport } from './publication.js';
@@ -14,6 +16,7 @@ let selectedMonth = new Date(Date.now()+8*3600000).toISOString().slice(0,7);
 let selectedWeek = selectedMonth+'-01';
 let liveFacts = null, liveReadKey = '', liveController, liveConnected = false;
 let liveSkuDetails = {};
+let reportLoaded = false, savedPresentation = null;
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -45,109 +48,70 @@ let addedWorkbenchUnmetEntries = [];
 const workbenchUnmetOverrides = new Map();
 const deletedWorkbenchUnmetKeys = new Set();
 let pendingWorkbenchUnmetDelete = null;
-try {
-  const savedSummary = JSON.parse(localStorage.getItem(workbenchSummaryStorageKey) || 'null');
-  if (savedSummary && typeof savedSummary === 'object')
-    workbenchSummaryContent = Object.fromEntries(
-      Object.keys(defaultWorkbenchSummary).map((key) => [
-        key,
-        typeof savedSummary[key] === 'string' ? savedSummary[key] : defaultWorkbenchSummary[key],
-      ]),
-    );
-} catch {}
-function saveWorkbenchSummary() {
-  try {
-    localStorage.setItem(workbenchSummaryStorageKey, JSON.stringify(workbenchSummaryContent));
-    return true;
-  } catch {
+const persistenceStatus = document.createElement('span');
+persistenceStatus.id = 'reportPersistenceStatus';
+persistenceStatus.setAttribute('role', 'status');
+const persistenceRetry = document.createElement('button');
+persistenceRetry.type = 'button'; persistenceRetry.textContent = '重试保存'; persistenceRetry.hidden = true;
+document.getElementById('periodMeta').after(persistenceStatus, persistenceRetry);
+const persistence = createReportPersistence(
+  async (request, signal) => { const encoded = await encodeReportRequest(request); signal.throwIfAborted(); return call('workspace', encoded, { signal }); },
+  (state, message) => {
+    persistenceStatus.textContent = ' · ' + message;
+    persistenceStatus.dataset.state = state;
+    persistenceRetry.hidden = state !== 'error';
+  },
+);
+persistenceRetry.addEventListener('click', () => { if (reportLoaded && liveFacts?.complete) persistence.retry(); else { liveReadKey=''; renderSelectedPeriod(); } });
+function reportEdits() {
+  return { summary: workbenchSummaryContent, unmet: addedWorkbenchUnmetEntries,
+    overrides: [...workbenchUnmetOverrides], deleted: [...deletedWorkbenchUnmetKeys],
+    directors: workbenchDirectorNotes, references: workbenchReferenceLinks,
+    improvements: [...workbenchView.querySelectorAll('.wb-improvement-table')].map(table => [...table.tBodies[0].rows].map(row => [...row.querySelectorAll('td:not(.actions)')].map(cell => ({text: cell.textContent, className: cell.className.replace('is-editing', '').trim()})))),
+    tasks: [...improvementTasks], issues: [...dimensionIssueEdits], createdTasks: [...createdWorkbenchTasks] };
+}
+function restoreReportEdits(edits = {}) {
+  workbenchSummaryContent = { ...defaultWorkbenchSummary, ...edits.summary };
+  addedWorkbenchUnmetEntries = edits.unmet ?? [];
+  workbenchDirectorNotes = edits.directors ?? [];
+  workbenchReferenceLinks = edits.references ?? [];
+  for (const [map, entries] of [[workbenchUnmetOverrides, edits.overrides], [improvementTasks, edits.tasks], [dimensionIssueEdits, edits.issues], [createdWorkbenchTasks, edits.createdTasks]]) {
+    map.clear(); for (const [key, value] of entries ?? []) map.set(key, value);
+  }
+  [...workbenchView.querySelectorAll('.wb-improvement-table')].forEach((table, index) => {
+    table.tBodies[0].replaceChildren();
+    for (const cells of edits.improvements?.[index] ?? []) {
+      const row = document.createElement('tr');
+      for (const value of cells) { const cell = document.createElement('td'); cell.textContent = value.text; cell.className = value.className; row.append(cell); }
+      appendImprovementActions(row); table.tBodies[0].append(row);
+    }
+  });
+  deletedWorkbenchUnmetKeys.clear(); for (const key of edits.deleted ?? []) deletedWorkbenchUnmetKeys.add(key);
+}
+function saveDatabaseReport() {
+  if (!liveFacts || liveFacts.complete !== true) {
+    persistenceStatus.textContent = ' · 数据未加载完整，暂不能保存';
     return false;
   }
+  return persistence.save({ schemaVersion: 1, facts: liveFacts, presentation: savedPresentation ?? workbenchPresentation(liveFacts), edits: reportEdits() });
 }
-try {
-  const savedUnmetEntries = JSON.parse(localStorage.getItem(workbenchUnmetEntriesKey) || '[]');
-  if (Array.isArray(savedUnmetEntries)) addedWorkbenchUnmetEntries = savedUnmetEntries;
-  else if (savedUnmetEntries && typeof savedUnmetEntries === 'object') {
-    addedWorkbenchUnmetEntries = Array.isArray(savedUnmetEntries.entries)
-      ? savedUnmetEntries.entries
-      : [];
-    (savedUnmetEntries.overrides || []).forEach(([key, value]) =>
-      workbenchUnmetOverrides.set(key, value),
-    );
-    (savedUnmetEntries.deleted || []).forEach((key) => deletedWorkbenchUnmetKeys.add(key));
+function saveWorkbenchSummary() { return saveDatabaseReport(); }
+function saveWorkbenchDirectorNotes() { return saveDatabaseReport(); }
+function saveWorkbenchReferenceLinks() { return saveDatabaseReport(); }
+function saveWorkbenchUnmetState() { return saveDatabaseReport(); }
+function saveWorkbenchLocalState() { return saveDatabaseReport(); }
+window.addEventListener('beforeunload', event => { if (persistence.pending()) { event.preventDefault(); event.returnValue = ''; } });
+document.addEventListener('click', event => {
+  const button = event.target.closest('button');
+  if ((!reportLoaded || liveFacts?.complete !== true) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
   }
-} catch {}
-try {
-  const savedDirectorNotes = JSON.parse(localStorage.getItem(workbenchDirectorNotesKey) || '[]');
-  if (Array.isArray(savedDirectorNotes))
-    workbenchDirectorNotes = savedDirectorNotes.filter(
-      (note) =>
-        note &&
-        typeof note.id === 'string' &&
-        typeof note.director === 'string' &&
-        typeof note.title === 'string' &&
-        typeof note.content === 'string',
-    );
-} catch {}
-function saveWorkbenchDirectorNotes() {
-  try {
-    localStorage.setItem(workbenchDirectorNotesKey, JSON.stringify(workbenchDirectorNotes));
-    return true;
-  } catch {
-    return false;
+  if (persistence.pending() && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
+    event.preventDefault(); event.stopImmediatePropagation();
+    showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
   }
-}
-try {
-  const savedReferenceLinks = JSON.parse(localStorage.getItem(workbenchReferenceLinksKey) || '[]');
-  if (Array.isArray(savedReferenceLinks))
-    workbenchReferenceLinks = savedReferenceLinks.filter(
-      (link) =>
-        link &&
-        typeof link.id === 'string' &&
-        typeof link.name === 'string' &&
-        typeof link.url === 'string',
-    );
-} catch {}
-function saveWorkbenchReferenceLinks() {
-  try {
-    localStorage.setItem(workbenchReferenceLinksKey, JSON.stringify(workbenchReferenceLinks));
-    return true;
-  } catch {
-    return false;
-  }
-}
-function saveWorkbenchUnmetState() {
-  try {
-    localStorage.setItem(
-      workbenchUnmetEntriesKey,
-      JSON.stringify({
-        entries: addedWorkbenchUnmetEntries,
-        overrides: [...workbenchUnmetOverrides.entries()],
-        deleted: [...deletedWorkbenchUnmetKeys],
-      }),
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-try {
-  const savedWorkbenchState = JSON.parse(localStorage.getItem(workbenchLocalStateKey) || '{}');
-  (savedWorkbenchState.tasks || []).forEach((task) => improvementTasks.set(task.key, task.value));
-  (savedWorkbenchState.edits || []).forEach((edit) =>
-    dimensionIssueEdits.set(edit.key, edit.value),
-  );
-} catch {}
-function saveWorkbenchLocalState() {
-  try {
-    localStorage.setItem(
-      workbenchLocalStateKey,
-      JSON.stringify({
-        tasks: [...improvementTasks.entries()].map(([key, value]) => ({ key, value })),
-        edits: [...dimensionIssueEdits.entries()].map(([key, value]) => ({ key, value })),
-      }),
-    );
-  } catch {}
-}
+}, true);
 let pendingAdoption = null;
 let adoptReturnFocus = null;
 const metricDefinitions = [
@@ -2296,6 +2260,8 @@ async function readCurrentPeriod() {
   liveController?.abort();
   const controller=liveController=new AbortController();
   liveFacts=null;
+  reportLoaded=false; savedPresentation=null;
+  restoreReportEdits();
   clearLiveMetrics();
   for (const metric of topMetricCards) Object.assign(metric, { status: '加载中', footer: '正在读取所选周期数据…' });
   for (const dimension of Object.values(workbenchPerformance)) {
@@ -2307,10 +2273,11 @@ async function readCurrentPeriod() {
   const start=periodMode==='month'?monthStart:(selectedWeek<monthStart?monthStart:selectedWeek);
   const weekEnd=addDays(selectedWeek,7);
   const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
-  const applyFacts = facts => {
+  const applyFacts = (facts, storedPresentation) => {
     if (controller.signal.aborted || liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=workbenchPresentation(facts);
+    const presentation=storedPresentation??workbenchPresentation(facts);
+    savedPresentation=presentation;
     for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     for(const metric of metricDefinitions) {
       const card=topMetricCards.find(item=>item.key===metric.key);
@@ -2329,8 +2296,21 @@ async function readCurrentPeriod() {
     updateReport();
   };
   try {
-    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:applyFacts});
+    let saved;
+    try {
+      saved = await persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      reportLoaded = true;
+    } catch (error) { controller.signal.throwIfAborted(); }
+
+    if (controller.signal.aborted || liveReadKey !== key) return;
+    restoreReportEdits(saved?.edits);
+    if (saved && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
+      applyFacts(saved.facts, saved.presentation);
+      return;
+    }
+    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:applyFacts,base:persistence.scope()?.base});
     applyFacts(facts);
+    if (reportLoaded) saveDatabaseReport();
   } catch (error) {
     if (!controller.signal.aborted) {
       clearLiveMetrics();
@@ -2343,7 +2323,7 @@ async function readCurrentPeriod() {
 clearLiveMetrics();
 void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
-  liveConnected=false;liveController?.abort();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+  liveConnected=false;liveController?.abort();persistence.cancel();reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
 });
 window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 
@@ -2796,7 +2776,7 @@ function saveIssueEditor(generateTask) {
   }
   closeIssueEditor();
   renderWorkbenchDimensions();
-  showWorkbenchToast('问题及改进已保存。');
+  showWorkbenchToast('正在保存问题及改进…');
 }
 function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
   const isBase = kind === 'base';
@@ -2877,9 +2857,9 @@ document.getElementById('wbUnmetAddForm').addEventListener('submit', (event) => 
   showWorkbenchToast(
     persisted
       ? focusKey
-        ? '未达成项已修改并保存在本机。'
-        : '未达成项已添加并保存在本机。'
-      : '内容已更新；浏览器存储不可用，刷新后不会保留。',
+        ? '未达成项已修改，正在保存到数据库…'
+        : '未达成项已添加，正在保存到数据库…'
+      : '内容已更新；数据库未保存，请查看页面保存状态。',
   );
 });
 document.getElementById('wbUnmetAddClose').addEventListener('click', closeWorkbenchUnmetAdd);
@@ -2957,9 +2937,9 @@ directorNoteForm.addEventListener('submit', (event) => {
   showWorkbenchToast(
     persisted
       ? id
-        ? '应责总监备注已修改并保存在本机。'
-        : '应责总监备注已添加并保存在本机。'
-      : '备注已更新；浏览器存储不可用，刷新后不会保留。',
+        ? '应责总监备注已修改，正在保存到数据库…'
+        : '应责总监备注已添加，正在保存到数据库…'
+      : '备注已更新；数据库未保存，请查看页面保存状态。',
   );
 });
 document
@@ -3000,7 +2980,7 @@ function confirmWorkbenchUnmetDelete() {
   renderWorkbenchDimensions();
   workbenchView.querySelector(`[data-wb-add-unmet="${kind}"]`)?.focus();
   showWorkbenchToast(
-    persisted ? '未达成项已删除。' : '未达成项已从当前列表移除；浏览器存储不可用，刷新后会恢复。',
+    persisted ? '未达成项已删除。' : '未达成项已从当前列表移除；数据库未保存，请查看页面保存状态。',
   );
 }
 document.getElementById('wbUnmetDeleteClose').addEventListener('click', closeWorkbenchUnmetDelete);
@@ -3141,7 +3121,7 @@ improvementAddForm.addEventListener('submit', (event) => {
   table?.tBodies[0]?.append(row);
   closeImprovementAdd();
   if (!table) trigger?.focus();
-  showWorkbenchToast('改善措施已添加到当前页面。');
+  saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…');
 });
 document.getElementById('wbImprovementAddClose').addEventListener('click', closeImprovementAdd);
 document.getElementById('wbImprovementAddCancel').addEventListener('click', closeImprovementAdd);
@@ -3210,7 +3190,7 @@ referenceForm.addEventListener('submit', (event) => {
       ? id
         ? '参考链接已更新。'
         : '参考链接已添加。'
-      : '参考链接已更新，但浏览器存储不可用；刷新后不会保留。',
+      : '参考链接已更新，但数据库未保存，请查看页面保存状态。',
   );
 });
 document.getElementById('wbReferenceClose').addEventListener('click', closeWorkbenchReference);
@@ -3258,8 +3238,8 @@ summaryEditForm.addEventListener('submit', (event) => {
   closeWorkbenchSummaryEdit();
   showWorkbenchToast(
     persisted
-      ? '本期结论摘要已更新并保存在本机。'
-      : '摘要已更新；浏览器存储不可用，刷新后不会保留。',
+      ? '本期结论摘要已更新，正在保存到数据库…'
+      : '摘要已更新；数据库未保存，请查看页面保存状态。',
   );
 });
 document.getElementById('wbSummaryEditClose').addEventListener('click', closeWorkbenchSummaryEdit);
@@ -3304,7 +3284,7 @@ workbenchView.addEventListener('click', (event) => {
     renderWorkbenchReferenceLinks();
     document.querySelector('[data-wb-reference-add]')?.focus();
     showWorkbenchToast(
-      saved ? '参考链接已删除。' : '参考链接已从当前页面移除，但浏览器存储不可用；刷新后可能恢复。',
+      saved ? '参考链接已删除。' : '参考链接已从当前页面移除，但数据库未保存，请查看页面保存状态。',
     );
     return;
   }
@@ -3334,14 +3314,14 @@ workbenchView.addEventListener('click', (event) => {
     improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
     improvementEdit.title = isEditing ? '编辑' : '保存';
     if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
-    else showWorkbenchToast('改善措施已在当前页面更新。');
+    else { saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…'); }
     return;
   }
   const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
   if (improvementDelete) {
-    if (!window.confirm('确认删除这条改善措施吗？删除后仅从当前页面移除。')) return;
+    if (!window.confirm('确认删除这条改善措施吗？删除将保存到当前周期报告。')) return;
     improvementDelete.closest('tr')?.remove();
-    showWorkbenchToast('改善措施已从当前页面移除。');
+    saveDatabaseReport(); showWorkbenchToast('正在保存删除结果…');
     return;
   }
   const editUnmet = event.target.closest('[data-wb-edit-unmet]');
@@ -3410,7 +3390,7 @@ workbenchView.addEventListener('click', (event) => {
     showWorkbenchToast(
       persisted
         ? '应责总监备注已删除。'
-        : '备注已从当前页面移除；浏览器存储不可用，刷新后可能恢复。',
+        : '备注已从当前页面移除；数据库未保存，请查看页面保存状态。',
     );
     return;
   }
@@ -3526,6 +3506,7 @@ workbenchView.addEventListener('submit', (event) => {
     saveWorkbenchLocalState();
   } else {
     createdWorkbenchTasks.set(workbenchTaskKey(taskId), updated);
+    saveDatabaseReport();
   }
   editingWorkbenchTaskId = '';
   renderWorkbenchTasks();
@@ -3617,6 +3598,7 @@ wbAdoptForm.addEventListener('submit', (event) => {
     status: '待跟进',
   });
   closeAdoptDialog();
+  saveDatabaseReport();
   renderWorkbench();
   focusCreatedTask(template.id);
   const toast = document.getElementById('toast');
@@ -3789,7 +3771,7 @@ const updateReport = publishReport(
             },
           }))
         : [],
-      summary: report ? { ...workbenchSummaryContent, source: '用户本地填写，非查询自动结论' } : null,
+      summary: report ? { ...workbenchSummaryContent, source: '人工编辑内容，保存状态见页面提示' } : null,
       dimension: report
         ? {
             key: dimensionTab,
@@ -3820,7 +3802,7 @@ const updateReport = publishReport(
           (taskFilter === 'done' ? task.status === '已完成' : task.status !== '已完成'),
       ),
       coverage:
-        '指标来自当前用户的GEA受控查询；订单累计至T-1，库存按筛选内最新实际快照，日期见evidence。缺失数据保持未知。人工结论、改进与任务为本地填写。',
+        '指标来自当前用户的GEA受控查询；订单累计至T-1，库存按筛选内最新实际快照，日期见evidence。缺失数据保持未知。人工结论、改进与任务随报告保存；保存状态见页面提示。',
     };
   },
   () => {

@@ -35,7 +35,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     const result = definition.keys
       ? await client.readAll(
           id,
-          { ...values, page_size: 200, offset: 0 },
+          { ...values, report_base: options.base ?? '', page_size: 200, offset: 0 },
           {
             signal,
             keyFields: definition.keys,
@@ -43,7 +43,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             singlePageFirst: true,
           },
         )
-      : await client.read(id, values, { signal, requiredColumns: definition.columns });
+      : await client.read(id, {...values, report_base: options.base ?? ''}, { signal, requiredColumns: definition.columns });
     return result.rows.map((row) =>
       Object.fromEntries(
         Object.entries(row).map(([key, value]) => [
