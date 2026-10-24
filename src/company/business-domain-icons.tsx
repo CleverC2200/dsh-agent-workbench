@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavIcon } from './formal-components.tsx';
 import {
   CalendarCheck,
   Warehouse,
@@ -22,6 +23,14 @@ const icons = new Map<string, typeof LayoutGrid>([
 ]);
 
 export function BusinessDomainIcon({ name }: { name: string }) {
+  if (
+    name === 'synergy' ||
+    name === 'calendar' ||
+    name === 'warehouse' ||
+    name === 'users' ||
+    name === 'orders'
+  )
+    return <NavIcon kind={name} />;
   const Icon = icons.get(name) ?? LayoutGrid;
   return <Icon className="gea-shell-nav-icon" aria-hidden="true" size={18} />;
 }

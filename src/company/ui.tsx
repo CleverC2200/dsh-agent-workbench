@@ -641,7 +641,13 @@ export function mountCompanyUI(
         ),
       ...documentState.pages.map((page) => [page.id, workbench.label(page.id)] as const),
     ]);
-    const menu = [...resolveBusinessMenu(catalog, available, t), localPrototypeMenu(available, t)];
+    const menu = resolveBusinessMenu(catalog, available, t);
+    if (
+      identity.state === 'confirmed' &&
+      !identity.error &&
+      identity.status?.environment === 'test'
+    )
+      menu.push(localPrototypeMenu(available, t));
     const expandSidebar = () => {
       if (collapsed) ctx.layout.toggleSidebar();
     };
@@ -809,19 +815,21 @@ export function mountCompanyUI(
                   {catalogNotice && (
                     <p role={catalogFailure !== null ? 'alert' : 'status'}>{catalogNotice}</p>
                   )}
-                  {provider && scope && (
-                    <button
-                      type="button"
-                      className="gea-shell-nav-child"
-                      aria-label={t('businessCatalogRefresh')}
-                      onClick={() => {
-                        setCatalogState({ kind: 'loading' });
-                        setRefresh((value) => value + 1);
-                      }}
-                    >
-                      {t('businessCatalogRefresh')}
-                    </button>
-                  )}
+                  {provider &&
+                    scope &&
+                    (catalogFailure !== null || catalog?.agents.length === 0) && (
+                      <button
+                        type="button"
+                        className="gea-shell-nav-child"
+                        aria-label={t('businessCatalogRefresh')}
+                        onClick={() => {
+                          setCatalogState({ kind: 'loading' });
+                          setRefresh((value) => value + 1);
+                        }}
+                      >
+                        {t('businessCatalogRefresh')}
+                      </button>
+                    )}
                   {catalog?.domains.kind === 'unavailable' && (
                     <p role="status">{t('businessClassificationUnavailable')}</p>
                   )}
