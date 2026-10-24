@@ -309,8 +309,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(compressed.evidence.periods.month.sourceDates.stock, '2026-10-23');
 });
 test('configured sources keep formal field rules and safe pagination', () => {
-  for (const id of Object.keys(config.queries))
-    assert.match(id, /^[a-z][a-z0-9_.-]{0,119}$/);
+  for (const id of Object.keys(config.queries)) assert.match(id, /^[a-z][a-z0-9_.-]{0,119}$/);
   assert.ok(config.queries['workbench.agedate']);
   assert.ok(config.queries['workbench.customermanagers']);
   assert.match(config.queries['workbench.changes'].request.sql, /SUM\(COALESCE\(cancel_qty,0\)\)/);
