@@ -1655,10 +1655,10 @@
 .referenceFilters input {
   min-width: 100px;
   max-width: 190px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid var(--ui-border);
-  border-radius: 6px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
   background: var(--ui-surface);
   color: var(--ui-ink);
   font: inherit;
@@ -1730,7 +1730,6 @@
   margin: 0;
   font-weight: 600;
 }
-.referenceFilters :is(select, input):focus-visible,
 .statusFilters button:focus-visible,
 .treeName:focus-visible {
   outline: 2px solid var(--ui-accent);
