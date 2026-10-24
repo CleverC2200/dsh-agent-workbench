@@ -21,7 +21,7 @@
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "order",
-    "readonly": true,
+    "readonly": false,
     "contract": "gea-html-v2"
   },
   "status": "integration-preview",
@@ -32,5 +32,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "reportStore": "order"
 }

@@ -1,3 +1,4 @@
+import { createReportPersistence } from '../prototypes/inventory-orderworkbench/report-persistence.mjs';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -11,10 +12,26 @@ test('order workbench reference interactions', async () => {
     runScripts: 'outside-only',
   });
   const { window } = dom;
+  window.structuredClone = structuredClone;
+  window.createReportPersistence = createReportPersistence;
+  window.encodeReportRequest = async (request) => request;
+  window.savedReports = new Map();
+  window.call = async (method, request) => {
+    assert.equal(method, 'workspace');
+    const key = JSON.stringify(request.period);
+    if (request.operation === 'load')
+      return window.savedReports.get(key) ?? { version: 0, report: null };
+    window.savedReports.set(key, {
+      version: request.expectedVersion + 1,
+      report: structuredClone(request.report),
+    });
+    return { saved: true, version: request.expectedVersion + 1, requestId: request.requestId };
+  };
   const period = fixturePeriod();
   period.sections[0].rows = [];
   period.metrics = model.computeWorkbenchMetrics(period);
   window.liveFixture = {
+    complete: true,
     selected: 'month',
     periods: Object.fromEntries(
       ['month', 'week', 'previousMonth', 'yearMonth', 'previousWeek', 'yearWeek'].map((key) => [
@@ -76,9 +93,10 @@ test('order workbench reference interactions', async () => {
     assert.equal(document.getElementById('periodPickerMenu').hidden, false);
     click('[data-period-week="2026-08-31"]');
     assert.equal(window.savedView.mode, 'week');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(window.requestedPeriod.start, '2026-09-01');
     assert.equal(window.requestedPeriod.end, '2026-09-07');
-    assert.equal(document.querySelector('.wb-kpi-state').textContent, '加载中');
+    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'saved');
     assert.equal(
       validHtmlViewState('inventory-orderworkbench', { ...window.savedView, version: 1 }),
       true,
@@ -93,7 +111,12 @@ test('order workbench reference interactions', async () => {
       document.querySelector('[data-wb-summary-content="positive"]').textContent,
       '测试正向结论',
     );
-    assert.match(window.localStorage.getItem('order-workbench-summary-v1'), /测试正向结论/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(
+      [...window.savedReports.values()].some(
+        (value) => value.report.edits.summary.positive === '测试正向结论',
+      ),
+    );
     assert.equal(window.pageSnapshot.summary.positive, '测试正向结论');
     click('[data-wb-add-unmet="base"]');
     const entity = document.getElementById('wbUnmetEntity');
@@ -116,6 +139,28 @@ test('order workbench reference interactions', async () => {
       field.value = '测试改善';
     submit('wbImprovementAddForm');
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.ok(
+      [...window.savedReports.values()].some((value) =>
+        value.report.edits.improvements.flat(2).some((cell) => cell.text === '测试改善'),
+      ),
+    );
+    click('#periodPickerTrigger');
+    click('[data-period-week="2026-08-31"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.notEqual(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '测试正向结论',
+    );
+    click('#periodPickerTrigger');
+    click('[data-period-all]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '测试正向结论',
+    );
+    assert.equal(document.querySelector('#wbReferenceList a').href, 'https://example.com/report');
+    assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     window.deferLoad = true;
     window.pendingReads = [];
     click('#periodPickerTrigger');
@@ -126,6 +171,7 @@ test('order workbench reference interactions', async () => {
       periods: { month: period },
       directors: { status: 'loading', rows: [] },
     };
+    await new Promise((resolve) => setTimeout(resolve, 0));
     window.pendingReads[0].progress(partial);
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '10.00');
     assert.match(document.querySelector('.wb-kpi-compare').textContent, /加载中/);
@@ -133,6 +179,7 @@ test('order workbench reference interactions', async () => {
     click('[data-period-month="2026-07"]');
     window.pendingReads[0].progress(window.liveFixture);
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '—');
+    await new Promise((resolve) => setTimeout(resolve, 0));
     window.dispatchEvent(new window.Event('gea-identity-changed'));
     window.pendingReads[1].progress(partial);
     for (const read of window.pendingReads) read.resolve(window.liveFixture);
