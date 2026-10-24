@@ -14,14 +14,18 @@ test('order workbench reference interactions', async () => {
   const { window } = dom;
   window.structuredClone = structuredClone;
   window.createReportPersistence = createReportPersistence;
-  window.encodeReportRequest = async request => request;
+  window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
   window.call = async (method, request) => {
     assert.equal(method, 'workspace');
     const key = JSON.stringify(request.period);
-    if (request.operation === 'load') return window.savedReports.get(key) ?? {version:0,report:null};
-    window.savedReports.set(key, {version:request.expectedVersion+1,report:structuredClone(request.report)});
-    return {saved:true,version:request.expectedVersion+1,requestId:request.requestId};
+    if (request.operation === 'load')
+      return window.savedReports.get(key) ?? { version: 0, report: null };
+    window.savedReports.set(key, {
+      version: request.expectedVersion + 1,
+      report: structuredClone(request.report),
+    });
+    return { saved: true, version: request.expectedVersion + 1, requestId: request.requestId };
   };
   const period = fixturePeriod();
   period.sections[0].rows = [];
@@ -108,7 +112,11 @@ test('order workbench reference interactions', async () => {
       '测试正向结论',
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.ok([...window.savedReports.values()].some(value => value.report.edits.summary.positive === '测试正向结论'));
+    assert.ok(
+      [...window.savedReports.values()].some(
+        (value) => value.report.edits.summary.positive === '测试正向结论',
+      ),
+    );
     assert.equal(window.pageSnapshot.summary.positive, '测试正向结论');
     click('[data-wb-add-unmet="base"]');
     const entity = document.getElementById('wbUnmetEntity');
@@ -132,15 +140,25 @@ test('order workbench reference interactions', async () => {
     submit('wbImprovementAddForm');
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.ok([...window.savedReports.values()].some(value => value.report.edits.improvements.flat(2).some(cell => cell.text === '测试改善')));
+    assert.ok(
+      [...window.savedReports.values()].some((value) =>
+        value.report.edits.improvements.flat(2).some((cell) => cell.text === '测试改善'),
+      ),
+    );
     click('#periodPickerTrigger');
     click('[data-period-week="2026-08-31"]');
-    await new Promise(resolve => setTimeout(resolve, 0));
-    assert.notEqual(document.querySelector('[data-wb-summary-content="positive"]').textContent, '测试正向结论');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.notEqual(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '测试正向结论',
+    );
     click('#periodPickerTrigger');
     click('[data-period-all]');
-    await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(document.querySelector('[data-wb-summary-content="positive"]').textContent, '测试正向结论');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '测试正向结论',
+    );
     assert.equal(document.querySelector('#wbReferenceList a').href, 'https://example.com/report');
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     window.deferLoad = true;

@@ -128,9 +128,12 @@ export const workbenchQueries = {
 
 export function addWorkbenchQueries(config) {
   for (const [name, original] of Object.entries(workbenchQueries)) {
-    const definition = {...original};
+    const definition = { ...original };
     const alias = name === 'stock' ? 's.' : name === 'ages' ? 'b.' : '';
-    definition.sql = definition.sql.replace('WHERE ', 'WHERE (:gea_p900 = \'\' OR '+alias+'belong_base = :gea_p900) AND ');
+    definition.sql = definition.sql.replace(
+      'WHERE ',
+      "WHERE (:gea_p900 = '' OR " + alias + 'belong_base = :gea_p900) AND ',
+    );
     const id = 'workbench.' + name.toLowerCase();
     const parameterSpec = {
       gea_p900: { name: 'report_base', type: 'string', required: false },
