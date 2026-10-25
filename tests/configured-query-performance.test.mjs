@@ -69,11 +69,39 @@ test('large workspace source does not serialize every 200-row gateway page', asy
   console.log(
     JSON.stringify({ source: name, rows: rows.length, calls, gatewayRoundtripWaves: wave, peak }),
   );
-  assert.ok(wave <= 14, `5881 rows waited for ${wave} sequential roundtrips`);
-  assert.ok(peak <= 3, 'collection concurrency must remain bounded');
+  assert.ok(wave <= 18, `5881 rows waited for ${wave} sequential roundtrips`);
+  assert.ok(peak <= 2, 'inventory collections must share the two transport slots');
 });
 
-const { createQueryClient } = await import('../business/shared/configured-query-client.mjs');
+const { createQueryClient, immutableQueryConfig } =
+  await import('../business/shared/configured-query-client.mjs');
+test('shared immutable registry isolates author mutations and retains each request contract', async () => {
+  const original = {
+    queries: {
+      fact: {
+        parameterSpec: { gea_p1: { name: 'value', type: 'integer' } },
+        request: { sql: 'SELECT :gea_p1 AS value', parameters: { gea_p1: 1 } },
+      },
+    },
+  };
+  const snapshot = immutableQueryConfig(original);
+  original.queries.fact.request.sql = 'changed';
+  assert.equal(immutableQueryConfig(snapshot), snapshot);
+  assert.throws(() => {
+    snapshot.queries.fact.parameterSpec.gea_p1.type = 'string';
+  }, TypeError);
+  const requests = [];
+  const execute = async (request) => {
+    requests.push(request);
+    return { rows: [{ value: request.parameters.gea_p1 }] };
+  };
+  const first = createQueryClient(snapshot, execute),
+    second = createQueryClient(snapshot, execute);
+  assert.equal((await first.read('fact', { value: 3 })).rows[0].value, 3);
+  assert.equal((await second.read('fact', { value: 7 })).rows[0].value, 7);
+  assert.ok(requests.every((r) => r.sql === 'SELECT :gea_p1 AS value'));
+  await assert.rejects(second.read('fact', { value: '7' }), { code: 'PARAMETER_TYPE_MISMATCH' });
+});
 const registry = {
   queries: {
     list: {
@@ -316,4 +344,116 @@ test('base order helpers return complete base groups in one query without extra 
   );
   assert.equal(rows.length, 5);
   assert.deepEqual(calls, [b.queryId]);
+});
+
+for (const agentId of ['inventory-apsplan', 'inventory-aqkc', 'inventory-fc', 'inventory-qll'])
+  test(`${agentId}: cards and lists share two query slots and cancelled queued work is never sent`, async () => {
+    const active = new Map(),
+      sent = [];
+    const client = createQueryClient({ ...registry, agentId }, async (_, o) => {
+      sent.push(o.values.offset);
+      return new Promise((resolve) =>
+        active.set(o.values.offset, () => {
+          active.delete(o.values.offset);
+          resolve({ rows: [] });
+        }),
+      );
+    });
+    const jobs = Array.from({ length: 4 }, (_, i) =>
+      client.read('list', { page_size: 10, offset: i }),
+    );
+    await new Promise(setImmediate);
+    const initial = active.size;
+    const stop = new AbortController();
+    const reject = assert.rejects(
+      client.read('list', { page_size: 10, offset: 4 }, { signal: stop.signal }),
+      { name: 'AbortError' },
+    );
+    stop.abort();
+    await reject;
+    while (sent.length < 4 || active.size) {
+      for (const done of active.values()) done();
+      await new Promise(setImmediate);
+    }
+    await Promise.all(jobs);
+    assert.equal(initial, 2);
+    assert.deepEqual(sent, [0, 1, 2, 3]);
+  });
+
+test('complete stock never waits for slow optional inventory and late partials cannot replace it', async () => {
+  const calls = [],
+    progress = [];
+  let finishQuick, complete;
+  const execute = async (_, o) => {
+    calls.push(o.queryId);
+    if (o.queryId === 'source.stock-date')
+      return { configVersion: 'v1', rows: [{ day: '2026-10-22' }] };
+    const q = config.queries[o.queryId];
+    const row = {
+      ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
+      base: '郑州',
+      category: '汤圆',
+      inventory: 100,
+    };
+    if (o.queryId === 'overview.inventory')
+      return new Promise((resolve) => {
+        finishQuick = () => resolve({ configVersion: 'v1', rows: [{ ...row, inventory: 999 }] });
+      });
+    return { configVersion: 'v1', rows: [row] };
+  };
+  const job = readWorkspaceQuery(
+    config,
+    'stock',
+    { start: '2026-10-01', end: '2026-10-23', version: '滚动', order_type: 'M', summary: true },
+    { execute, onInventory: (rows) => progress.push(rows) },
+  ).then((rows) => {
+    complete = rows;
+    return rows;
+  });
+  await new Promise(setImmediate);
+  const ready = complete?.[0].inventory;
+  finishQuick();
+  await job;
+  await new Promise(setImmediate);
+  assert.equal(ready, 100);
+  assert.equal(progress.length, 0);
+  assert.equal(calls.filter((id) => id === 'source.stock-date').length, 1);
+});
+
+test('optional inventory rejection cannot fail the independently authorized full stock result', async () => {
+  const progress = [];
+  const calls = [];
+  const execute = async (_, o) => {
+    calls.push(o.queryId);
+    if (o.queryId === 'source.stock-date')
+      return { configVersion: 'v1', rows: [{ day: '2026-10-22' }] };
+    if (o.queryId === 'overview.inventory')
+      throw Object.assign(Error('unavailable field'), { code: 'FIELD_NOT_PUBLISHED' });
+    await new Promise(setImmediate);
+    const q = config.queries[o.queryId];
+    return {
+      configVersion: 'v1',
+      rows: [
+        {
+          ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
+          base: '郑州',
+          category: '汤圆',
+          inventory: 100,
+        },
+      ],
+    };
+  };
+  const rows = await readWorkspaceQuery(
+    config,
+    'stock',
+    { start: '2026-10-01', end: '2026-10-23', version: '滚动', order_type: 'M', summary: true },
+    { execute, onInventory: (rows) => progress.push(rows) },
+  );
+  assert.equal(rows[0].inventory, 100);
+  assert.equal(progress.length, 0);
+  assert.equal(
+    calls.filter((id) => id === 'overview.inventory').length,
+    1,
+    'denied optional reads must not retry',
+  );
 });

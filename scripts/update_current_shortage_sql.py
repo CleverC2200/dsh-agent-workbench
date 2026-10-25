@@ -37,7 +37,7 @@ def definition(dimensions,location_type,detail=False,sku_page=False):
  ORDER BY p.location_type, p.location_code, p.sku'''
   allfields+=['page_scope_total','page_row_present']
  else:
-  sql=ctes+'\nSELECT '+', '.join('f.'+k+' AS '+k for k in fields)+', '+', '.join('CASE WHEN SUM(f.invalid)>0 THEN NULL ELSE SUM(f.'+v+') END AS '+v for v in MEASURES.values())+', SUM(f.invalid) AS invalid FROM filtered AS f GROUP BY '+', '.join('f.'+k for k in fields)+' ORDER BY '+', '.join('f.'+k for k in fields)
+  sql=ctes+'\nSELECT '+', '.join('f.'+k+' AS '+k for k in fields)+', '+', '.join('SUM(f.'+v+') AS '+v if v in ['demand','allocated','remaining'] else 'CASE WHEN SUM(f.invalid)>0 THEN NULL ELSE SUM(f.'+v+') END AS '+v for v in MEASURES.values())+', SUM(f.invalid) AS invalid FROM filtered AS f GROUP BY '+', '.join('f.'+k for k in fields)+' ORDER BY '+', '.join('f.'+k for k in fields)
  return {'title':'当前未备单订单三层缺货','parameterSpec':params,'request':{'parameters':{k:({'gea_p4':10,'gea_p5':0,'gea_p7':['']}.get(k)) for k in params},'sql':sql,'includeTotal':False},'resultColumns':allfields,'notes':'仅统一GEA受控SQL；复用已验证三层逻辑和11种状态含创建，短拨调账同步层已排除；无日期截断；当前状态不可重建历史；可用库存只扣一次；跨SKU不抵消。'}
 
 for agent in ['aqkc','fc','qll','apsplan']:

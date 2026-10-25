@@ -15,8 +15,8 @@ class BatchAgeLists(unittest.TestCase):
   self.db.execute('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',(kind,warehouse,sku,'20261022',warehouse,base,sku,qty,qty,0,0,prod))
  def sales(self,qty,sku='S',warehouse='W',day='20261022'):
   self.db.execute('INSERT INTO agents_scm_cust_deliv_daily_di VALUES (?,?,?,?)',(warehouse,sku,day,qty))
- def read(self,agent='aqkc',**overrides):
-  q=json.loads((ROOT/f'business/inventory-{agent}/sql.config.json').read_text())['queries']['batch-age.atomic']
+ def read(self,agent='aqkc',query_id='batch-age.atomic',**overrides):
+  q=json.loads((ROOT/f'business/inventory-{agent}/sql.config.json').read_text())['queries'][query_id]
   vals=q['request']['parameters'].copy();names={v['name']:k for k,v in q['parameterSpec'].items()}
   vals.update({names[k]:v for k,v in overrides.items()})
   tree=sqlglot.parse_one(q['request']['sql'],read='postgres')
@@ -33,6 +33,14 @@ class BatchAgeLists(unittest.TestCase):
   self.batch(None,7);self.batch(-1,8);self.batch(100,-4)
   r=self.read()[0]
   self.assertEqual((r['age0_30'],r['age31_40'],r['age41_60'],r['age60_plus']),(20,20,30,40));self.assertEqual(r['age_weight_qty'],110);self.assertEqual(r['unknown_age_qty'],15);self.assertEqual(r['total_qty'],121);self.assertAlmostEqual(r['average_age'],sum(ages)/len(ages));self.assertEqual(r['max_age'],91)
+ def test_landing_age_groups_match_full_batch_statistics_without_shipment_projection(self):
+  self.batch(20,10);self.batch(80,30);self.batch(None,7);self.sales(400)
+  full=self.read()[0];card=self.read(query_id='page.health-groups')[0]
+  self.assertEqual(card['max_age'],full['max_age']);self.assertAlmostEqual(card['average_age'],full['average_age']);self.assertEqual(card['row_count'],full['row_count'])
+ def test_malformed_production_date_keeps_inventory_without_poisoning_valid_ages(self):
+  self.batch(20,10);self.batch(30,7,sku='BAD')
+  self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET prod_date='20xx-01-01' WHERE material_code='BAD'")
+  r=self.read()[0];self.assertEqual(r['total_qty'],17);self.assertEqual(r['unknown_age_qty'],7);self.assertEqual(r['age_weight_qty'],10);self.assertEqual(r['max_age'],20)
  def test_nonexistent_calendar_dates_do_not_enter_the_weighted_age(self):
   self.batch(20,10);self.batch(30,7,sku='BAD')
   self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET prod_date='2026-02-30' WHERE material_code='BAD'")
@@ -45,9 +53,9 @@ class BatchAgeLists(unittest.TestCase):
  def test_return_and_out_of_window_shipments_do_not_inflate_daily_movement(self):
   self.batch(55,20);self.sales(30);self.sales(-300);self.sales(300,day='20260922');self.sales(300,day='20261023')
   r=self.read()[0];self.assertEqual(r['daily_movement'],1);self.assertEqual(r['future7'],13)
- def test_company_expiry_preserves_base_and_branch_thresholds_without_filtering_inventory(self):
+ def test_company_expiry_preserves_pool_thresholds_and_excludes_other_warehouses(self):
   self.batch(61,11,sku='B',kind='01');self.batch(89,13,sku='C');self.batch(90,17,sku='D');self.batch(300,19,sku='E',kind='04')
-  r=self.read(agent='qll')[0];self.assertEqual(r['risk_current'],28);self.assertEqual(r['total_qty'],60)
+  r=self.read(agent='qll')[0];self.assertEqual(r['risk_current'],28);self.assertEqual(r['total_qty'],41)
  def test_dimension_join_is_unique_and_atomic_page_count_remains_full_scope(self):
   for i in range(13):self.batch(40,10,sku=f'S{i:02d}')
   self.db.executemany('INSERT INTO agents_scm_material_in_out_summary_d VALUES (?,?,?,?)',[('W','S00','水饺','G')]*3)

@@ -20,11 +20,12 @@
 
 ## 质量规则与执行
 
-| 规则 | 执行机制 |
-| --- | --- |
-| 普通开发检查实际知识引用、变更文件的固定 lint/format 与官方声明 | `quality:fast`，范围与定向反例见[当前 CI 规则](docs/ci-required-and-affected.md) |
-| 冻结候选核实际包名、HEAD、锁、事件 SHA 与登记 Core | `candidate:verify`、`quality:ci`，Core 清单读取相邻 GEA |
-| 原迁移语义输入在冷 runner 保持固定来源 | `migration-history-input.test.mjs`，原 Git blob 与原始字节摘要 |
-| 汇总仅在 rc.2 的所有适用门禁成功时通过；alpha 的兼容结果单独保留 | workflow matrix 与 `run-quality-ci.mjs --phase final` |
+| 规则                                                             | 执行机制                                                                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 普通开发检查实际知识引用、变更文件的固定 lint/format 与官方声明  | `quality:fast`，范围与定向反例见[当前 CI 规则](docs/ci-required-and-affected.md)                                    |
+| 冻结候选核实际包名、HEAD、锁、事件 SHA 与登记 Core               | `candidate:verify`、`quality:ci`，Core 清单读取相邻 GEA                                                             |
+| 原迁移语义输入在冷 runner 保持固定来源                           | `migration-history-input.test.mjs`，原 Git blob 与原始字节摘要                                                      |
+| 汇总仅在 rc.2 的所有适用门禁成功时通过；alpha 的兼容结果单独保留 | workflow matrix 与 `run-quality-ci.mjs --phase final`                                                               |
+| 修复 PR 统一以 main 为目标，冻结交付使用固定提交                 | `source-quality.mjs --phase plan` 拒绝非 main 的 PR；工作流覆盖目标分支变更，`source-quality.test.mjs` 验证错误目标 |
 
 检查范围、旧债和验证阶段见 [质量门禁](QUALITY.md)。已有只读 SDK 使用 verify，独立冷 runner 才准备自己的 SDK。

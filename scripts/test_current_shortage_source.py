@@ -1,8 +1,8 @@
 """Execute the shipped source SQL on isolated fixtures; adapted from the verified three-stage model tests."""
-import sqlite3,pathlib,unittest
+import sqlite3,pathlib,unittest,json
 SQL=(pathlib.Path(__file__).resolve().parents[1]/'business/shared/current-shortage-source.sql').read_text()
 class SourceFormula(unittest.TestCase):
- def run_case(self,orders,stock,mapping):
+ def run_case(self,orders,stock,mapping,statement=SQL):
   c=sqlite3.connect(':memory:');c.row_factory=sqlite3.Row;None
   c.create_function('CONCAT',-1,lambda *x:''.join(str(a) for a in x));c.create_function('SUBSTRING',3,lambda x,a,b: None if x is None else x[a-1:a-1+b])
   c.execute('CREATE TABLE agents_scm_execute_detail_d (cust_order_no TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,pickup_point_name TEXT,belong_base TEXT,bizflowstatus TEXT,adjust_order_qty NUMERIC,qtyallocated NUMERIC)')
@@ -15,7 +15,7 @@ class SourceFormula(unittest.TestCase):
    cl=opt[0] if opt else '01';batch=opt[1] if len(opt)>1 else 'a';date=opt[2] if len(opt)>2 else '20261021'
    c.execute('INSERT INTO agents_scm_inventory_sku_data_d VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',(date,w,w,'B',sku,sku,'20260101','sap','plant',batch,'1',cl,qty))
   c.executemany('INSERT INTO agents_scm_material_in_out_summary_d (warehouseid,pickup_point) VALUES (?,?)',mapping)
-  return [dict(r) for r in c.execute(SQL)]
+  return [dict(r) for r in c.execute(statement,{'gea_p1':None,'gea_p2':None,'gea_p3':None,'gea_p6':None})]
  def total(self,rows):return sum(r['shortage_qty'] for r in rows if r['shortage_qty'] is not None)
  def test_order_rows_accumulate_before_clip(self):
   self.assertEqual(self.total(self.run_case([('o','s','p',3,5),('o','s','p',5,0)],[('w','s',1)],[('w','p')])),2)
@@ -44,4 +44,9 @@ class SourceFormula(unittest.TestCase):
   r=self.run_case([],[('w','s',3,'20')],[('w','p')]);self.assertEqual(r[0]['shortage_qty'],0);self.assertEqual(r[0]['absent_inventory_sku'],0)
  def test_missing_inventory_snapshot_blocks(self):
   r=self.run_case([('o','s','p',10,0)],[],[('w','p')]);self.assertIsNone(r[0]['shortage_qty']);self.assertEqual(r[0]['invalid_sku'],1)
+ def test_full_chain_summary_keeps_known_demand_for_unmapped_points(self):
+  config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-qll/sql.config.json').read_text())
+  rows=self.run_case([('a','s','p',10,0),('b','s','new',8,0)],[('w','s',3)],[('w','p')],config['queries']['current-shortage.summary']['request']['sql'])
+  mapped=next(r for r in rows if r['location_type']=='基地');unknown=next(r for r in rows if r['location_type']=='待映射')
+  self.assertEqual(mapped['shortage'],7);self.assertEqual(unknown['demand'],8);self.assertEqual(unknown['remaining'],8);self.assertEqual(unknown['invalid'],1);self.assertIsNone(unknown['shortage'])
 if __name__=='__main__':unittest.main()

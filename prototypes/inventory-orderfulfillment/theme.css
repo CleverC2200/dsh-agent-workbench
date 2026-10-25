@@ -74,3 +74,14 @@ body {
 .delivery-order-searches input::placeholder {
   color: #667085;
 }
+.delivery-order-main-row .customer-type-cell {
+  min-width: 80px;
+  max-width: 104px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#itemInventoryPanel { overflow: visible; min-width: 0; }
+.item-inventory-table-scroll { overflow-x: auto; width: 100%; }
+#itemInventoryPanel > .order-pagination { width: 100%; box-sizing: border-box; }

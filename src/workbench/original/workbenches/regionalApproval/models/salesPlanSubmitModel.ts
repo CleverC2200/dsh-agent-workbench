@@ -118,8 +118,13 @@ const validateOptionalText = (
   return value;
 };
 
-const validatePositiveLong = (value: string): string => {
-  if (!POSITIVE_LONG_PATTERN.test(value) || BigInt(value) > MAX_SIGNED_LONG) return fail();
+const validatePositiveLong = (value: string | null | undefined): string => {
+  if (
+    typeof value !== 'string' ||
+    !POSITIVE_LONG_PATTERN.test(value) ||
+    BigInt(value) > MAX_SIGNED_LONG
+  )
+    return fail();
   return value;
 };
 
@@ -215,7 +220,7 @@ export const prepareSalesPlanResubmit = (
   }
   const channelCode = suppliedChannelCode ?? derivedChannelCode;
   validatePositiveLong(source.period.periodId);
-  validatePositiveLong(version.dealerCode);
+  const dealerCode = validatePositiveLong(version.dealerCode);
   const planTypeCode = validateText(source.period.planTypeCode, 32);
   const submitterCode = validateText(source.currentUser.id, 64);
   const submitterName = validateOptionalText(source.currentUser.username, 128);
@@ -253,7 +258,7 @@ export const prepareSalesPlanResubmit = (
       periodMonth: source.period.periodMonth,
       planTypeCode,
       channelCode,
-      dealerCode: version.dealerCode,
+      dealerCode,
       orgCode: validateOptionalText(version.orgCode, 64),
       provinceCode: validateOptionalText(version.provinceCode, 64),
       areaCode: validateOptionalText(version.areaCode, 64),

@@ -4,6 +4,7 @@
   "name": "订单工作台",
   "version": "0.1.0-preview.2-split.21",
   "html": "index.html",
+  "sqlConfig": "sql.config.json",
   "skills": [
     "skills/orderworkbench/SKILL.md",
     "skills/fulfillment-query-orchestrator/SKILL.md",
@@ -18,10 +19,9 @@
     "skills/improvement-action-closure/SKILL.md"
   ],
   "mcp": "mcp.json",
-  "mode": "mock",
   "gea": {
     "consumerCode": "order",
-    "readonly": true,
+    "readonly": false,
     "contract": "gea-html-v2"
   },
   "status": "integration-preview",
@@ -32,5 +32,6 @@
   "agentResources": {
     "provider": "dsh-agent-manage",
     "prompt": "prompt.json"
-  }
+  },
+  "reportStore": "order"
 }

@@ -438,3 +438,11 @@ export class WorkbenchController implements AgentWorkbench {
     this.changed();
   }
 }
+
+export type {
+  BusinessNavigation,
+  BusinessNavigationAgent,
+  BusinessNavigationDomain,
+  BusinessNavigationDomains,
+  BusinessNavigationCatalog,
+} from './company/business-navigation.ts';

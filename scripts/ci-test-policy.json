@@ -42,6 +42,12 @@
   "rules": [
     {
       "repo": "dsh-agent-workbench",
+      "pattern": "^tests/dealer-menu\\.test\\.mjs$",
+      "tests": ["tests/company-ui.test.mjs"],
+      "sourceTests": ["tests/company-ui.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
       "pattern": "^(?:static/mps/|scripts/(?:mps-compute-build|build-static-authors|static-author-provenance)\\.mjs$)",
       "tests": [
         "tests/mps-*.browser.mjs",
@@ -201,7 +207,7 @@
     },
     {
       "repo": "dsh-agent-workbench",
-      "pattern": "^scripts/(?:agent_sql\\.py|test_agent_sql\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py|update-inventory-batch-source\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
+      "pattern": "^scripts/(?:agent_sql\\.py|test_[a-z_]+\\.py|requirements-sql\\.txt|build_deep_query_configs\\.py|(?:build-base-production-source|build-branch-turnover-cards|build-inventory-card-queries|build-inventory-quick-stock|build-landing-inventory-queries|compact-landing-source-queries|compact-landing-stock-queries|optimize-branch-landing-pages|optimize-inventory-reads|update-full-chain-inventory-scope|update-inventory-schema-fields|update_current_shortage_sql|update-inventory-batch-source)\\.py)$|^business/inventory-(?:aqkc|fc|qll|apsplan|dealer)/sql\\.config\\.json$",
       "tests": ["tests/agent-sql-direct.test.mjs", "tests/agent-sql-config.test.mjs"]
     },
     {

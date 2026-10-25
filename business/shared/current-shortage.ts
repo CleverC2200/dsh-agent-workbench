@@ -64,16 +64,20 @@ export async function readCurrentShortage(
     result.total < result.rows.length ||
     result.rows.some(
       (r: Record<string, unknown>) =>
-        knownNumber(r.invalid) !== 0 ||
-        ['demand', 'allocated', 'remaining', 'available', 'shortage'].some(
-          (field) => knownNumber(r[field]) === null,
-        ),
+        ['demand', 'allocated', 'remaining'].some((field) => knownNumber(r[field]) === null) ||
+        (knownNumber(r.invalid)! > 0
+          ? r.available !== null || r.shortage !== null
+          : knownNumber(r.invalid) !== 0 ||
+            ['available', 'shortage'].some((field) => knownNumber(r[field]) === null)),
     )
   )
     throw Object.assign(Error('当前缺货模型返回不完整范围'), {
       code: 'CURRENT_SHORTAGE_INCOMPLETE',
     });
-  return result;
+  return {
+    ...result,
+    partial: result.rows.some((r: Record<string, unknown>) => knownNumber(r.invalid)! > 0),
+  };
 }
 
 export function currentShortageSum(

@@ -17,10 +17,43 @@ export async function readWorkspaceQuery(
   fallback: AgentSqlConfig,
   name: string,
   input: Record<string, any>,
-  options: { signal?: AbortSignal; execute?: any } = {},
+  options: {
+    signal?: AbortSignal;
+    execute?: any;
+    onInventory?: (rows: Record<string, unknown>[]) => void;
+    stockSnapshot?: Promise<{ rows: Record<string, unknown>[]; configVersion: unknown }>;
+  } = {},
 ) {
   const config = agentSqlConfig(fallback);
+  if (options.onInventory && input.summary && config.workspaceQuickBindings?.[name]) {
+    let fullReady = false;
+    const stockSnapshot = createAgentQueries(config, options.execute).read(
+      'source.stock-date',
+      { month: input.end.slice(0, 7) + '-01', as_of: input.end },
+      { signal: options.signal, requiredColumns: ['day'] },
+    );
+    const readOptions = { signal: options.signal, execute: options.execute, stockSnapshot };
+    const quick = readWorkspaceQuery(fallback, name, { ...input, inventoryOnly: true }, readOptions)
+      .then((rows) => {
+        options.signal?.throwIfAborted();
+        if (!fullReady) options.onInventory?.(rows);
+      })
+      .catch(() => undefined);
+    const full = readWorkspaceQuery(fallback, name, input, readOptions).then((rows) => {
+      fullReady = true;
+      return rows;
+    });
+    // A successful full result never waits for optional inventory work. On a
+    // data failure, finish the already-requested quantity projection first.
+    return full.catch(async (error) => {
+      options.signal?.throwIfAborted();
+      await quick;
+      throw error;
+    });
+  }
+
   const binding =
+    (input.inventoryOnly ? config.workspaceQuickBindings?.[name] : undefined) ??
     (input.summary
       ? config.workspaceSummaryBindings?.[name]
       : config.workspaceDrillBindings?.[input.detailMode]?.[name]) ??
@@ -84,11 +117,12 @@ export async function readWorkspaceQuery(
   if ('stock_date' in values) {
     // Stock is a snapshot at the period end, including annual views.
     values.month = end.slice(0, 7) + '-01';
-    const result = await client.read(
-      'source.stock-date',
-      { month: values.stock_month ?? values.month, as_of: end },
-      { signal: options.signal, requiredColumns: ['day'] },
-    );
+    const result = await (options.stockSnapshot ??
+      client.read(
+        'source.stock-date',
+        { month: values.stock_month ?? values.month, as_of: end },
+        { signal: options.signal, requiredColumns: ['day'] },
+      ));
     const day = result.rows[0]?.day;
     dateConfigVersion = result.configVersion;
     hasSnapshotDate = true;

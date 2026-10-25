@@ -1,3 +1,4 @@
+import { refreshConfiguredQueries } from './query-cache';
 import { QueryErrors } from './query-errors';
 import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
@@ -207,6 +208,7 @@ export function ConfiguredFactsPage({
           event.preventDefault();
           setFilters({ ...draft });
           setPage(1);
+          refreshConfiguredQueries();
           refresh((n) => n + 1);
         }}
         reset={() => {
@@ -261,6 +263,7 @@ export function ConfiguredFactsPage({
               event.preventDefault();
               setAsOf(dateDraft);
               setPage(1);
+              refreshConfiguredQueries();
               refresh((n) => n + 1);
             }}
           >
@@ -286,6 +289,7 @@ export function ConfiguredFactsPage({
             event.preventDefault();
             setCustomer(customerDraft.trim());
             setPage(1);
+            refreshConfiguredQueries();
             refresh((n) => n + 1);
           }}
         >
@@ -397,6 +401,7 @@ export function ConfiguredFactsPage({
               event.preventDefault();
               setFilters({ ...draft });
               setPage(1);
+              refreshConfiguredQueries();
               refresh((n) => n + 1);
             }}
           >

@@ -1,3 +1,4 @@
+import { refreshConfiguredQueries } from '../../../../shared/query-cache';
 import { call, draft, publish, action, ready } from '../../../../shared/channel.js';
 import { pageAnalysisPolicy } from 'dsh-agent-manage/aps-compute/page-analysis';
 let query: Record<string, any> = {
@@ -119,6 +120,7 @@ export function onRefresh(callback: (signal?: AbortSignal) => Promise<unknown>) 
 }
 async function refresh(_input: unknown = {}, options: { signal?: AbortSignal } = {}) {
   if (!refresher) throw Error('当前经营页面未就绪');
+  refreshConfiguredQueries();
   options.signal?.throwIfAborted();
   ++revision;
   query = {

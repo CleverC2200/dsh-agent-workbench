@@ -162,5 +162,36 @@ test('full-chain company view skips customer facts and coalesces identical healt
   });
   assert.ok(!calls.includes('dealer.stock.summary'));
   assert.ok(!calls.includes('base_shipments.summary'));
-  assert.equal(calls.filter((id) => id === 'health.summary').length, 1);
+  assert.equal(calls.filter((id) => id === 'health.cards').length, 1);
+});
+
+test('quantity cards publish before aging and survive an aging failure', async () => {
+  const c = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  let failAge;
+  const progress = [];
+  const promise = readConfiguredOverview(c, '2026-10-23', '', {
+    viewIds: ['health'],
+    onProgress: (p) => progress.push(p),
+    execute: async (_, o) => {
+      if (o.queryId === 'health.cards') return new Promise((_, reject) => (failAge = reject));
+      return {
+        configVersion: 'v1',
+        rows: [
+          Object.fromEntries(
+            c.queries[o.queryId].resultColumns.map((k) => [
+              k,
+              k === 'day' ? '2026-10-23' : k === 'invalid' ? 0 : 1,
+            ]),
+          ),
+        ],
+      };
+    },
+  });
+  await new Promise(setImmediate);
+  assert.ok(progress.some((p) => p.health?.summary?.total_qty === 1));
+  failAge(Error('AGE_FAILED'));
+  const result = await promise;
+  assert.equal(result.health.summary.total_qty, 1);
+  assert.equal(result.health.error, 'AGE_FAILED');
+  assert.equal(result.health.summary.max_age, undefined);
 });
