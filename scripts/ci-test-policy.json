@@ -37,9 +37,17 @@
     },
     "tests/source-result.test.mjs": {
       "dependencies": false
+    },
+    "tests/aps-default-package.test.mjs": {
+      "dependencies": false
     }
   },
   "rules": [
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:business/inventory-apsplan/plugin\\.json|scripts/build-(?:aps-metrics|output)\\.mjs)$",
+      "tests": ["tests/aps-default-package.test.mjs"]
+    },
     {
       "repo": "dsh-agent-workbench",
       "pattern": "^tests/dealer-menu\\.test\\.mjs$",
