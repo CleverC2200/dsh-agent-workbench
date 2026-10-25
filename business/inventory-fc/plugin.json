@@ -4,7 +4,21 @@
   "name": "分仓库存",
   "version": "0.2.6-preview.9-split.6",
   "html": "index.html",
-  "skills": ["skills/fc/SKILL.md"],
+  "skills": [
+    "skills/fc/SKILL.md",
+    "skills/branch-aging-stagnation-monitoring/SKILL.md",
+    "skills/branch-customer-inventory-signal/SKILL.md",
+    "skills/branch-future-aging-projection/SKILL.md",
+    "skills/branch-inventory-water-level-deviation/SKILL.md",
+    "skills/branch-metric-explanation/SKILL.md",
+    "skills/branch-plan-version-explain/SKILL.md",
+    "skills/branch-policy/SKILL.md",
+    "skills/branch-replenishment-confirmation-dms/SKILL.md",
+    "skills/branch-replenishment-demand/SKILL.md",
+    "skills/branch-report-templates/SKILL.md",
+    "skills/branch-shortage-monitoring/SKILL.md",
+    "skills/branch-upstream-base-availability/SKILL.md"
+  ],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "branch-inventory",
