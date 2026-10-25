@@ -3,7 +3,7 @@ import sqlConfiguration from '../../../sql.config.json';
 import { createAgentQueries } from '../../../../shared/agent-query';
 import { agentSqlConfig } from '../../../../shared/sql-config';
 import { readWorkspaceQuery } from '../../../../shared/workspace-query';
-import { readBatchAge } from '../../../../shared/batch-age';
+import { knownNumber } from '../../../../shared/configured-overview';
 import {
   resolveInitialSafetyStockScope,
   type SafetyStockScope,
@@ -408,24 +408,53 @@ export async function readConfiguredHealthSummary(
   bases: string[] | undefined,
   signal?: AbortSignal,
 ) {
-  const result = await readBatchAge(
-    sqlConfiguration,
-    {
-      asOf: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()),
-      bases,
-      groupBy: 'base',
-    },
-    { signal },
+  const config = agentSqlConfig(sqlConfiguration);
+  const client = createAgentQueries(config);
+  const asOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  const latest = await client.read(
+    'source.health-date',
+    { as_of: asOf },
+    { signal, requiredColumns: ['day'] },
   );
-  if (result.total > result.rows.length) throw Error('基地货龄分组超过当前范围');
-  const ages = result.rows.flatMap((row) => (row.max_age === null ? [] : [row.max_age]));
+  const snapshotDate = latest.rows[0]?.day;
+  if (snapshotDate == null) return { rows: [], summary: null, snapshotDate: null };
+  if (
+    typeof snapshotDate !== 'string' ||
+    !/^20\d{2}-\d{2}-\d{2}$/.test(snapshotDate) ||
+    snapshotDate > asOf
+  )
+    throw Object.assign(Error('无有效库存快照'), { code: 'INVALID_SOURCE_DATE' });
+  const query = config.queries['page.health-groups'];
+  const result = await client.read(
+    'page.health-groups',
+    {
+      stat_date: snapshotDate,
+      bases_enabled: Boolean(bases?.length),
+      bases: bases?.length ? bases : [''],
+      warehouse_code: null,
+      material_code: null,
+    },
+    { signal, requiredColumns: query.resultColumns },
+  );
+  if (result.configVersion !== latest.configVersion)
+    throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+  const rows = result.rows.map((row: any) => ({
+    level: row.level,
+    average_age: knownNumber(row.average_age),
+    max_age: knownNumber(row.max_age),
+    row_count: knownNumber(row.row_count) ?? 0,
+    age_valid_count: knownNumber(row.age_valid_count) ?? 0,
+  }));
+  const ages = rows.flatMap((row: any) => (row.max_age === null ? [] : [row.max_age]));
   return {
     ...result,
-    summary: result.rows.length
+    rows,
+    snapshotDate,
+    summary: rows.length
       ? {
           max_age: ages.length ? Math.max(...ages) : null,
-          row_count: result.rows.reduce((n, row) => n + row.row_count, 0),
-          age_valid_count: result.rows.reduce((n, row) => n + row.age_valid_count, 0),
+          row_count: rows.reduce((n: number, row: any) => n + row.row_count, 0),
+          age_valid_count: rows.reduce((n: number, row: any) => n + row.age_valid_count, 0),
         }
       : null,
   };
@@ -438,6 +467,11 @@ export async function readConfiguredStockSummary(
     signal?: AbortSignal;
     execute?: any;
     now?: Date;
+    onInventory?: (value: {
+      groups: Record<string, unknown>[];
+      scope: Awaited<ReturnType<typeof resolveStockContext>>['scope'];
+      day: string;
+    }) => void;
     structure?: { groupBy: 'base' | 'category'; category?: string; stockOnly?: boolean };
   } = {},
 ) {
@@ -471,12 +505,45 @@ export async function readConfiguredStockSummary(
       structure_category: options.structure.category || null,
       stock_only: !!options.structure.stockOnly,
     });
-  const result = await client.readAll(id, values, {
-    signal: options.signal,
-    keyFields: options.structure ? ['level'] : ['base', 'category'],
-    requiredColumns: q.resultColumns,
-    maxRows: 10000,
-    singlePageFirst: true,
+  let fullReady = false;
+  const inventory = (async () => {
+    if (!options.onInventory || options.structure || !config.queries['page.inventory-groups'])
+      return;
+    const quickQuery = config.queries['page.inventory-groups'];
+    const quickValues = Object.fromEntries(
+      Object.values(quickQuery.parameterSpec).map((spec: any) => [spec.name, values[spec.name]]),
+    );
+    const quick = await client.readAll('page.inventory-groups', quickValues, {
+      signal: options.signal,
+      keyFields: ['base', 'category'],
+      requiredColumns: quickQuery.resultColumns,
+      maxRows: 10000,
+      singlePageFirst: true,
+    });
+    if (quick.configVersion !== context.configVersion)
+      throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+    options.signal?.throwIfAborted();
+    if (!fullReady) options.onInventory({ groups: quick.rows, scope, day });
+  })();
+  const inventorySettled = inventory.catch(() => undefined);
+  const complete = client
+    .readAll(id, values, {
+      signal: options.signal,
+      keyFields: options.structure ? ['level'] : ['base', 'category'],
+      requiredColumns: q.resultColumns,
+      maxRows: 10000,
+      singlePageFirst: true,
+    })
+    .then((result) => {
+      if (result.configVersion !== context.configVersion)
+        throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
+      fullReady = true;
+      return result;
+    });
+  const result = await complete.catch(async (error) => {
+    options.signal?.throwIfAborted();
+    await inventorySettled;
+    throw error;
   });
   if (result.configVersion !== context.configVersion)
     throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });

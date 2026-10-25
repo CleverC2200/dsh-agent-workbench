@@ -300,3 +300,72 @@ test('base SKU rows publish the actual rolling shipment total and keep a real ze
   assert.equal(result.rows[0]['safety_stock.last_30d_shipment_quantity'], 75);
   assert.equal(result.rows[1]['safety_stock.last_30d_shipment_quantity'], 0);
 });
+
+test('landing inventory is published while target analysis waits; a failed analysis cannot retract it', async () => {
+  const io = source(),
+    progress = [];
+  let rejectFull;
+  const execute = async (request, call) => {
+    if (call.queryId === 'page.inventory-groups')
+      return {
+        configVersion: 'v1',
+        rows: [
+          { base: '郑州', category: '汤圆', row_count: 1, inventory: 100, inventory_count: 1 },
+        ],
+      };
+    if (call.queryId === 'page.dashboard-groups')
+      return new Promise((_, reject) => {
+        rejectFull = reject;
+      });
+    return io.execute(request, call);
+  };
+  const job = readConfiguredStockSummary(undefined, {
+    execute,
+    now,
+    onInventory: (value) => progress.push(value),
+  });
+  await new Promise(setImmediate);
+  const early = progress[0];
+  rejectFull(Object.assign(Error('analysis failed'), { code: 'GEA_QUERY_FAILED' }));
+  await assert.rejects(job, { code: 'GEA_QUERY_FAILED' });
+  assert.equal(early?.groups[0].inventory, 100);
+  assert.equal(early.day, '2026-10-14');
+});
+
+test('a slow optional inventory query cannot hold a successful full dashboard or replace it later', async () => {
+  const io = source(),
+    progress = [];
+  let finish, complete;
+  const execute = async (request, call) => {
+    if (call.queryId === 'page.inventory-groups')
+      return new Promise((resolve) => {
+        finish = () =>
+          resolve({
+            configVersion: 'v1',
+            rows: [
+              { base: '郑州', category: '汤圆', row_count: 1, inventory: 999, inventory_count: 1 },
+            ],
+          });
+      });
+    const result = await io.execute(request, call);
+    if (call.queryId === 'page.dashboard-groups')
+      Object.assign(result.rows[0], { inventory: 100, target: 80 });
+    return result;
+  };
+  const job = readConfiguredStockSummary(undefined, {
+    execute,
+    now,
+    onInventory: (value) => progress.push(value),
+  }).then((value) => {
+    complete = value;
+    return value;
+  });
+  await new Promise(setImmediate);
+  const early = complete;
+  finish();
+  await job;
+  await new Promise(setImmediate);
+  assert.equal(early?.groups[0].inventory, 100);
+  assert.equal(early.groups[0].target, 80);
+  assert.equal(progress.length, 0);
+});

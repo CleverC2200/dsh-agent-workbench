@@ -134,7 +134,7 @@ export type RegionalApprovalContextEntity = {
   seq?: number;
   status?: number;
   planTypeCode?: string;
-  dealerCode?: string;
+  dealerCode?: string | null;
   orgCode?: string;
   provinceCode?: string;
   areaCode?: string;
@@ -237,7 +237,10 @@ const projectLiveContextEntity = (
   source: 'gea',
   id: row.planId,
   organizationKey:
-    projectRegionalApprovalLiveDimension(row, dimension).name ?? row.orgCode ?? row.dealerCode,
+    projectRegionalApprovalLiveDimension(row, dimension).name ??
+    row.orgCode ??
+    row.dealerCode ??
+    row.planId,
   approvalState: row.approvalState,
   health: 'unknown',
   versionId: row.versionId,

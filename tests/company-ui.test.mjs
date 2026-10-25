@@ -50,10 +50,24 @@ const { mountCompanyUI, WorkbenchController, ConversationContent } = module.expo
 function fixture(
   account,
   panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
-  { memory, restorePageSession, slotCore, navigation } = {},
+  { memory, restorePageSession, slotCore, navigation, businessNavigation } = {},
 ) {
   const entries = [],
     calls = [];
+  let navigationConsumer, disposeNavigation;
+  const attachNavigation = () => {
+    if (!businessNavigation || !navigationConsumer) return;
+    const cleanups = [];
+    navigationConsumer({
+      ...ctx,
+      businessNavigation,
+      effect: (setup) => {
+        const cleanup = setup();
+        if (typeof cleanup === 'function') cleanups.push(cleanup);
+      },
+    });
+    disposeNavigation = () => cleanups.forEach((cleanup) => cleanup());
+  };
   const panelEntries = () =>
     Array.isArray(panels) ? panels : panels.entriesOfSlot('sidebar.panellist');
   const ctx = {
@@ -91,6 +105,10 @@ function fixture(
     },
     inject: (names, fn) => {
       if (account && names.includes('businessAccount')) fn({ ...ctx, businessAccount: account });
+      if (names.includes('businessNavigation')) {
+        navigationConsumer = fn;
+        attachNavigation();
+      }
     },
     effect: () => {},
     ...navigation,
@@ -127,7 +145,18 @@ function fixture(
       entry ? React.createElement(entry.component, props) : name,
     );
   };
-  return { ctx, entries, calls, workbench, renderSlot };
+  return {
+    ctx,
+    entries,
+    calls,
+    workbench,
+    renderSlot,
+    replaceBusinessNavigation: (next) => {
+      disposeNavigation?.();
+      businessNavigation = next;
+      attachNavigation();
+    },
+  };
 }
 
 test('company new-conversation buttons create through Core without adopting a stale blank Session', async (t) => {
@@ -240,7 +269,7 @@ test('company new-conversation buttons create through Core without adopting a st
   assert.equal(calls.length, 4, 'failure must not replace the current Session');
 });
 test('formal sidebar renders original button/icon hierarchy and the actual workspace/settings seats without details redesign', () => {
-  const { entries, renderSlot } = fixture();
+  const { entries, renderSlot } = fixture(navigationAccount);
   const entry = entries.find((e) => e.options.name === 'sidebar');
   const markup = renderToStaticMarkup(
     React.createElement(entry.component, {
@@ -255,11 +284,9 @@ test('formal sidebar renders original button/icon hierarchy and the actual works
     '智能体工作台',
     '业务工作台',
     '历史会话',
-    '产销协同',
-    '计划管理',
-    '库存管理',
-    '订单管理',
-    '分仓库存',
+    '本地原型',
+    '品类计划（模拟）',
+    '区域计划（模拟）',
     '产能评估(待设计)',
   ])
     assert.ok(markup.includes(text), text);
@@ -1968,5 +1995,642 @@ test('account distinguishes pending identity, service failure and authenticated 
     );
     assert.ok(html.includes(expected), html);
     assert.equal(html.includes('尚未登录 GEA'), false);
+  }
+});
+
+const navigationAccount = {
+  getSnapshot: () => navigationIdentity,
+  subscribe: () => () => {},
+};
+const navigationIdentity = {
+  state: 'confirmed',
+  scope: 'tenant:test:user',
+  subject: 'user',
+  status: { environment: 'test', environments: ['test'], authenticated: true, user: null },
+};
+const marketAgents = [
+  {
+    id: '1970123456789012345',
+    agentCode: 'base-safety-stock',
+    agentName: '基地库存',
+    businessDomain: 'inventory',
+    appSource: 'EXTERNAL',
+    externalOpenMode: 'IFRAME',
+    launchUrl: 'https://must-not-open.invalid',
+    enterpriseManaged: false,
+  },
+  {
+    id: '1970123456789012346',
+    agentCode: 'sales_forecast',
+    agentName: '销售计划',
+    businessDomain: 'planning',
+    enterpriseManaged: false,
+  },
+  {
+    id: '1970123456789012347',
+    agentCode: 'branch-inventory',
+    agentName: '分仓库存',
+    businessDomain: 'inventory',
+    enterpriseManaged: false,
+  },
+  {
+    id: '1970123456789012348',
+    agentCode: 'full-chain-inventory',
+    agentName: '全链库存',
+    businessDomain: 'inventory',
+    enterpriseManaged: false,
+  },
+];
+async function mountNavigation(t, options = {}) {
+  const mounted = await mountedDom(t);
+  const result = fixture(options.account ?? navigationAccount, undefined, options);
+  const Sidebar = result.entries.find((entry) => entry.options.name === 'sidebar').component;
+  await React.act(async () => {
+    for (const id of options.pages ?? ['inventory-aqkc', 'inventory-qll'])
+      result.workbench.register({ id, label: id });
+    mounted.root.render(
+      React.createElement(Sidebar, {
+        collapsed: false,
+        width: 280,
+        usePanelInfo: (select) => select({ activePanelId: 'gea-proof' }),
+        renderSlot: result.renderSlot,
+      }),
+    );
+  });
+  return { ...mounted, ...result };
+}
+const businessButtons = () => [...document.querySelectorAll('[data-gea-business-entry]')];
+
+test('desktop groups, original icons and short titles retain all confirmed page mappings without aliasing Consumers', async (t) => {
+  const bindings = [
+    ['aps', 'inventory-apsplan', '产销协同工作台', 'business/inventory-apsplan/page.json'],
+    ['sales_forecast', 'gea-proof', '销售计划'],
+    ['mps', 'plan-category-production', '主生产计划(MPS)(开发中)', 'static/mps/page.json'],
+    ['full-chain-inventory', 'inventory-qll', '全链库存工作台'],
+    ['base-safety-stock', 'inventory-aqkc', '基地库存'],
+    ['branch-inventory', 'inventory-fc', '分仓库存'],
+    [
+      'customer_inventory',
+      'inventory-customer',
+      '客户库存(开发中)',
+      'prototypes/inventory-customer/page.json',
+    ],
+    [
+      'dealer-inventory-replenishment',
+      'inventory-dealer',
+      '经销商补货',
+      'business/inventory-dealer/page.json',
+    ],
+    [
+      'order',
+      'inventory-orderworkbench',
+      '订单工作台(开发中)',
+      'prototypes/inventory-orderworkbench/page.json',
+    ],
+    [
+      'order01',
+      'inventory-orderfulfillment',
+      '订单履约(开发中)',
+      'prototypes/inventory-orderfulfillment/page.json',
+    ],
+  ];
+  for (const [code, page, , manifest] of bindings) {
+    if (!manifest) continue;
+    const declaration = JSON.parse(readFileSync(manifest, 'utf8'));
+    assert.equal(declaration.consumerCode, code);
+    assert.ok(declaration.pageIds.includes(page));
+  }
+  const { calls } = await mountNavigation(t, {
+    pages: bindings.map(([, page]) => page),
+    businessNavigation: {
+      read: async () => ({
+        agents: [
+          ...bindings
+            .slice()
+            .reverse()
+            .map(([agentCode]) => ({
+              id: agentCode,
+              agentCode,
+              agentName: '后台长名称Agent',
+              businessDomain: 'market',
+            })),
+          {
+            id: 'stock-only',
+            agentCode: 'dealer-inventory-replenishment-stock',
+            agentName: '经销商库存',
+            businessDomain: 'market',
+          },
+          {
+            id: 'numeric-only',
+            agentCode: '04',
+            agentName: '区域及品类计划Agent(开发中)',
+            businessDomain: 'finance',
+          },
+        ],
+        domains: {
+          kind: 'available',
+          items: [{ value: 'market', text: '后台客户分类', description: null }],
+        },
+      }),
+    },
+  });
+  const groups = [
+    ...document.querySelectorAll(
+      '.gea-shell-nav-section:not([data-gea-menu-group="local-prototypes"])',
+    ),
+  ];
+  assert.deepEqual(
+    groups.map((group) => group.querySelector('.gea-shell-nav-heading').textContent),
+    ['产销协同', '计划管理', '库存管理', '客户管理', '订单管理'],
+  );
+  assert.ok(groups[0].querySelector('svg[viewBox="0 0 1024 1024"]'));
+  assert.ok(groups[1].querySelector('svg path[d="M8 3v4M16 3v4M4 10h16M8 14h2M14 14h2M8 17h2"]'));
+  assert.ok(groups[2].querySelector('svg path[d="m3 10 9-6 9 6v10H3z"]'));
+  assert.equal(document.querySelector('[aria-label="刷新业务应用"]'), null);
+  for (const [, page, title] of bindings) {
+    const button = document.querySelector(`[data-gea-business-entry="${page}"]`);
+    assert.equal(button.textContent, title);
+    assert.equal(button.disabled, false);
+    await React.act(async () => button.click());
+  }
+  assert.deepEqual(
+    calls,
+    bindings.map(([, page]) => ['page', page]),
+  );
+  const stock = document.querySelector('[data-gea-business-entry="stock-only"]');
+  assert.equal(stock.disabled, true);
+  assert.equal(stock.closest('[data-gea-menu-group]').dataset.geaMenuGroup, 'inventory');
+  assert.equal(document.querySelector('[data-gea-business-entry="numeric-only"]').disabled, true);
+  assert.doesNotMatch(document.body.textContent, /后台长名称|后台客户分类/);
+});
+
+test('market workbench never duplicates the existing AI workbench entry or leaves an empty group', async (t) => {
+  for (const kind of ['available', 'unavailable'])
+    await t.test(kind, async (t) => {
+      const identity = {
+        ...navigationIdentity,
+        status: { ...navigationIdentity.status, environment: 'production' },
+      };
+      await mountNavigation(t, {
+        account: {
+          getSnapshot: () => identity,
+          subscribe: () => () => {},
+        },
+        businessNavigation: {
+          read: async () => ({
+            agents: [
+              {
+                id: 'duplicate-workbench',
+                agentCode: 'workbench',
+                agentName: '后台改名的工作台',
+                businessDomain: 'market',
+              },
+              marketAgents[1],
+            ],
+            domains:
+              kind === 'available'
+                ? { kind, items: [{ value: 'market', text: '其他业务', description: null }] }
+                : { kind, message: 'dictionary offline' },
+          }),
+        },
+      });
+      assert.equal(document.querySelector('[data-gea-business-entry="duplicate-workbench"]'), null);
+      assert.equal(document.querySelector('[data-gea-menu-group="other"]'), null);
+      assert.equal(document.querySelector('[data-gea-menu-group="domain:market"]'), null);
+      assert.doesNotMatch(document.body.textContent, /后台改名的工作台|其他业务/);
+      assert.equal(document.querySelectorAll('.gea-ai-workbench-entry').length, 1);
+      assert.match(document.querySelector('.gea-ai-workbench-entry').textContent, /AI工作台/);
+      assert.equal(document.querySelector('[data-gea-business-entry="gea-proof"]').disabled, false);
+    });
+});
+
+test('a returned mapped Agent without an installed page remains unavailable', async (t) => {
+  await mountNavigation(t, {
+    pages: [],
+    businessNavigation: {
+      read: async () => ({
+        agents: [
+          {
+            id: 'customer',
+            agentCode: 'customer_inventory',
+            agentName: '客户库存Agent',
+            businessDomain: null,
+          },
+        ],
+        domains: { kind: 'unavailable', message: 'dictionary offline' },
+      }),
+    },
+  });
+  const customer = document.querySelector('[data-gea-business-entry="inventory-customer"]');
+  assert.equal(customer.disabled, true);
+  assert.equal(customer.title, '页面尚未安装或启用');
+  assert.equal(customer.closest('[data-gea-menu-group]').dataset.geaMenuGroup, 'inventory');
+});
+
+test('market catalog keeps controlled pages in desktop order, including an EXTERNAL base-stock Agent', async (t) => {
+  const signals = [];
+  const { calls } = await mountNavigation(t, {
+    businessNavigation: {
+      read: async (signal) => {
+        signals.push(signal);
+        return { agents: marketAgents, domains: { kind: 'unavailable', message: 'offline' } };
+      },
+    },
+  });
+  const buttons = businessButtons().filter((button) => !button.disabled);
+  assert.deepEqual(
+    buttons.map((button) => button.dataset.geaBusinessEntry),
+    ['gea-proof', 'inventory-qll', 'inventory-aqkc', 'inventory-fc'],
+  );
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0].aborted, false);
+  for (const button of buttons) await React.act(async () => button.click());
+  assert.deepEqual(calls, [
+    ['page', 'gea-proof'],
+    ['page', 'inventory-qll'],
+    ['page', 'inventory-aqkc'],
+    ['page', 'inventory-fc'],
+  ]);
+  assert.equal(document.querySelector('[aria-label="刷新业务应用"]'), null);
+  assert.match(document.body.textContent, /业务分类暂不可用/);
+});
+
+test('unmapped applications retain dictionary order and unknown domains remain visible', async (t) => {
+  await mountNavigation(t, {
+    businessNavigation: {
+      read: async () => ({
+        agents: [
+          { ...marketAgents[0], agentCode: 'future-base' },
+          { ...marketAgents[1], agentCode: 'future-plan' },
+          { ...marketAgents[2], agentCode: 'future-branch' },
+          {
+            id: 'unknown-domain',
+            agentCode: 'new-agent',
+            agentName: '未来业务',
+            businessDomain: 'future',
+          },
+          { id: 'empty-domain', agentCode: null, agentName: null, businessDomain: null },
+        ],
+        domains: {
+          kind: 'available',
+          items: [
+            { value: 'planning', text: '计划分类', description: 'lucide:calendar-check' },
+            { value: 'inventory', text: '库存分类', description: 'lucide:warehouse' },
+            { value: 'unused', text: '不显示空分类', description: 'ordinary text' },
+          ],
+        },
+      }),
+    },
+  });
+  const groups = [
+    ...document.querySelectorAll(
+      '.gea-shell-nav-section:not([data-gea-menu-group="local-prototypes"])',
+    ),
+  ];
+  assert.deepEqual(
+    groups.map((group) => group.querySelector('.gea-shell-nav-heading')?.textContent),
+    ['计划分类', '库存分类', '其他业务'],
+  );
+  assert.deepEqual(
+    groups.flatMap((group) =>
+      [...group.querySelectorAll('[data-gea-business-entry]')].map((button) => button.textContent),
+    ),
+    ['销售计划', '基地库存', '分仓库存', '未来业务', '未命名应用'],
+  );
+  assert.equal(document.querySelector('[data-gea-business-entry="unknown-domain"]').disabled, true);
+  assert.match(
+    document.querySelector('[data-gea-business-entry="unknown-domain"]').title,
+    /当前客户端暂未接入/,
+  );
+  assert.match(
+    document.querySelector('[data-gea-business-entry="empty-domain"]').title,
+    /应用配置未完整/,
+  );
+  assert.ok(groups[0].querySelector('svg.lucide-calendar-check'));
+  assert.ok(groups[1].querySelector('svg.lucide-warehouse'));
+  assert.ok(groups[2].querySelector('svg.lucide-layout-grid'));
+  assert.doesNotMatch(document.body.textContent, /业务分类暂不可用/);
+});
+
+test('only declared mock prototypes remain local while unreturned business pages and personal inventory stay out of the menu', async (t) => {
+  const { calls } = await mountNavigation(t, {
+    pages: [
+      'plan-region-category',
+      'gea-regional-plan',
+      'inventory-orderworkbench',
+      'inventory-dms',
+      'inventory-personal',
+      'inventory-dealer',
+      'inventory-customer',
+      'inventory-orderfulfillment',
+      'inventory-apsplan',
+      'plan-category-production',
+    ],
+  });
+  assert.match(document.body.textContent, /本地原型/);
+  const buttons = businessButtons();
+  assert.deepEqual(
+    buttons.map((button) => button.dataset.geaBusinessEntry),
+    ['plan-region-category', 'gea-regional-plan', 'inventory-dms', 'plan-capacity-assessment'],
+  );
+  for (const button of buttons.slice(0, 3)) {
+    assert.match(button.textContent, /模拟/);
+    await React.act(async () => button.click());
+  }
+  assert.equal(buttons[3].disabled, true);
+  assert.match(buttons[3].textContent, /待设计/);
+  assert.deepEqual(calls, [
+    ['page', 'plan-region-category'],
+    ['page', 'gea-regional-plan'],
+    ['page', 'inventory-dms'],
+  ]);
+  assert.ok(document.querySelector('[aria-label="新会话"]'));
+  assert.ok(document.querySelector('[aria-label="插件管理"]'));
+  assert.ok(document.querySelector('[data-slot="sidebar.workspaces"]'));
+  assert.ok(document.querySelector('[data-slot="sidebar.settings"]'));
+});
+
+test('local prototypes appear only in a confirmed test environment; production keeps unmapped business entries disabled', async (t) => {
+  const cases = [
+    ['test', navigationIdentity, true],
+    [
+      'production',
+      {
+        ...navigationIdentity,
+        status: { ...navigationIdentity.status, environment: 'production' },
+      },
+      false,
+    ],
+    [
+      'pending',
+      {
+        state: 'pending',
+        scope: null,
+        status: { ...navigationIdentity.status, environment: 'test' },
+      },
+      false,
+    ],
+    ['observation-error', { ...navigationIdentity, error: 'identity unavailable' }, false],
+    [
+      'unknown-environment',
+      { ...navigationIdentity, status: { ...navigationIdentity.status, environment: undefined } },
+      false,
+    ],
+  ];
+  for (const [name, identity, visible] of cases)
+    await t.test(name, async (t) => {
+      await mountNavigation(t, {
+        pages: [
+          'plan-region-category',
+          'gea-regional-plan',
+          'inventory-dms',
+          'inventory-orderworkbench',
+        ],
+        account: { getSnapshot: () => identity, subscribe: () => () => {} },
+        businessNavigation: {
+          read: async () => ({
+            agents: [
+              { id: 'category', agentCode: '04', agentName: '品类计划Agent', businessDomain: null },
+              {
+                id: 'regional',
+                agentCode: 'area_plan',
+                agentName: '区域计划Agent',
+                businessDomain: null,
+              },
+              { id: 'order', agentCode: 'order', agentName: '订单管理Agent', businessDomain: null },
+            ],
+            domains: { kind: 'available', items: [] },
+          }),
+        },
+      });
+      assert.equal(
+        Boolean(document.querySelector('[data-gea-menu-group="local-prototypes"]')),
+        visible,
+      );
+      for (const page of ['plan-region-category', 'gea-regional-plan', 'inventory-dms'])
+        assert.equal(
+          Boolean(document.querySelector(`[data-gea-business-entry="${page}"]`)),
+          visible,
+        );
+      if (name === 'production') {
+        assert.equal(document.querySelector('[data-gea-business-entry="category"]').disabled, true);
+        assert.equal(document.querySelector('[data-gea-business-entry="regional"]').disabled, true);
+        const order = document.querySelector(
+          '[data-gea-business-entry="inventory-orderworkbench"]',
+        );
+        assert.equal(order.disabled, false);
+        assert.equal(order.closest('[data-gea-menu-group]').dataset.geaMenuGroup, 'orders');
+      }
+    });
+});
+
+test('empty and failed catalogs offer retry, successful catalogs have no permanent refresh button', async (t) => {
+  let response = { agents: [], domains: { kind: 'available', items: [] } };
+  let reads = 0;
+  await mountNavigation(t, {
+    businessNavigation: {
+      read: async () => {
+        reads++;
+        return response;
+      },
+    },
+  });
+  assert.match(document.body.textContent, /暂未获取到可用应用，可刷新或联系管理员/);
+  assert.match(document.body.textContent, /原因暂无法确定/);
+  assert.doesNotMatch(document.body.textContent, /无权限/);
+  const refresh = () => document.querySelector('[aria-label="刷新业务应用"]');
+  response = { agents: marketAgents, domains: { kind: 'available', items: [] } };
+  await React.act(async () => refresh().click());
+  assert.ok(document.querySelector('[data-gea-business-entry="gea-proof"]'));
+  assert.equal(refresh(), null);
+  assert.equal(reads, 2);
+});
+
+test('failed catalog retry never restores an unauthorized static business menu', async (t) => {
+  let reads = 0;
+  await mountNavigation(t, {
+    businessNavigation: {
+      read: async () => {
+        reads++;
+        throw Error('HTTP 403: permission denied');
+      },
+    },
+  });
+  await React.act(async () => document.querySelector('[aria-label="刷新业务应用"]').click());
+  assert.match(document.body.textContent, /业务应用读取失败.*HTTP 403/);
+  assert.equal(document.querySelector('[data-gea-business-entry="gea-proof"]'), null);
+  assert.equal(document.querySelector('[data-gea-business-entry="inventory-dealer"]'), null);
+  assert.ok(document.querySelector('[aria-label="插件管理"]'));
+  assert.ok(document.querySelector('[data-slot="sidebar.workspaces"]'));
+  assert.equal(reads, 2);
+});
+
+test('identity transitions abort prior catalog reads, ignore late results, and preserve saved Sessions and drafts', async (t) => {
+  let identity = navigationIdentity;
+  const listeners = new Set();
+  const requests = [];
+  const session = Object.freeze({ id: 'session-kept', cwd: '/kept', draft: 'Core draft stays' });
+  const saved = { version: 2, page: 'gea-proof', selections: [], views: [] };
+  const { dom, root } = await mountNavigation(t, {
+    pages: [],
+    account: {
+      getSnapshot: () => identity,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+    businessNavigation: {
+      read: (signal) => {
+        const result = Promise.withResolvers();
+        requests.push({ signal, result });
+        return result.promise;
+      },
+    },
+    memory: {
+      getSnapshot: () => saved,
+      set: () => assert.fail('catalog must not rewrite page associations'),
+    },
+    navigation: {
+      sessions: {
+        list: {
+          getSnapshot: () => ({
+            phase: 'ready',
+            ids: [session.id],
+            byId: { [session.id]: session },
+          }),
+        },
+      },
+    },
+  });
+  dom.window.localStorage.setItem('sales-plan-draft', 'saved local adjustments');
+  const publish = async (next) =>
+    React.act(async () => {
+      identity = next;
+      for (const listener of listeners) listener();
+    });
+  await React.act(async () =>
+    requests[0].result.resolve({
+      agents: marketAgents,
+      domains: {
+        kind: 'available',
+        items: [{ value: 'inventory', text: '旧身份分类', description: null }],
+      },
+    }),
+  );
+  assert.ok(document.querySelector('[data-gea-business-entry="inventory-aqkc"]'));
+  assert.equal(document.querySelector('[aria-label="刷新业务应用"]'), null);
+  await publish({ ...identity, scope: 'intermediate-tenant:environment:user' });
+  assert.equal(requests[0].signal.aborted, true);
+  await publish({
+    ...identity,
+    scope: 'new-tenant:new-environment:new-user',
+    subject: 'new-user',
+    status: { ...identity.status, environment: 'production' },
+  });
+  assert.equal(requests[1].signal.aborted, true);
+  assert.equal(document.querySelector('[data-gea-business-entry="gea-proof"]'), null);
+  await React.act(async () =>
+    requests[1].result.resolve({
+      agents: [{ ...marketAgents[0], agentCode: 'late-unknown', agentName: '迟到旧应用' }],
+      domains: {
+        kind: 'available',
+        items: [{ value: 'inventory', text: '迟到旧分类', description: null }],
+      },
+    }),
+  );
+  assert.doesNotMatch(document.body.textContent, /迟到旧分类|迟到旧应用/);
+  await React.act(async () =>
+    requests[2].result.resolve({
+      agents: [marketAgents[2]],
+      domains: { kind: 'unavailable', message: 'dictionary offline' },
+    }),
+  );
+  assert.ok(document.querySelector('[data-gea-business-entry="inventory-fc"]'));
+  assert.equal(document.querySelector('[data-gea-business-entry="gea-proof"]'), null);
+  await publish({
+    state: 'confirmed',
+    scope: null,
+    status: { ...identity.status, authenticated: false, user: null },
+  });
+  assert.equal(requests[2].signal.aborted, true);
+  assert.equal(document.querySelector('[data-gea-business-entry="inventory-fc"]'), null);
+  assert.match(document.body.textContent, /请先登录 GEA/);
+  assert.doesNotMatch(document.body.textContent, /本地原型/);
+  assert.equal(dom.window.localStorage.getItem('sales-plan-draft'), 'saved local adjustments');
+  assert.deepEqual(session, { id: 'session-kept', cwd: '/kept', draft: 'Core draft stays' });
+  assert.deepEqual(saved, { version: 2, page: 'gea-proof', selections: [], views: [] });
+  await publish(navigationIdentity);
+  assert.equal(requests.length, 4);
+  await React.act(async () => root.unmount());
+  assert.equal(requests[3].signal.aborted, true);
+});
+
+test('removing the directory provider cancels its read and a replacement cannot receive late previous results', async (t) => {
+  const delayed = Promise.withResolvers();
+  let signal;
+  const { replaceBusinessNavigation } = await mountNavigation(t, {
+    businessNavigation: {
+      read: (pending) => {
+        signal = pending;
+        return delayed.promise;
+      },
+    },
+  });
+  await React.act(async () => replaceBusinessNavigation(undefined));
+  assert.equal(signal.aborted, true);
+  assert.match(document.body.textContent, /业务应用服务暂不可用/);
+  await React.act(async () =>
+    delayed.resolve({ agents: marketAgents, domains: { kind: 'available', items: [] } }),
+  );
+  assert.equal(document.querySelector('[data-gea-business-entry="gea-proof"]'), null);
+  await React.act(async () =>
+    replaceBusinessNavigation({
+      read: async () => ({
+        agents: [marketAgents[1]],
+        domains: { kind: 'available', items: [] },
+      }),
+    }),
+  );
+  assert.ok(document.querySelector('[data-gea-business-entry="gea-proof"]'));
+  assert.equal(document.querySelector('[data-gea-business-entry="inventory-fc"]'), null);
+});
+
+test('missing, invalid and unsupported dictionary icons fall back without losing market entries', async (t) => {
+  const descriptions = [
+    null,
+    '',
+    'ordinary text',
+    'not-an-icon',
+    'mdi:unknown',
+    'lucide:unsupported',
+    '__proto__',
+    'toString',
+  ];
+  await mountNavigation(t, {
+    businessNavigation: {
+      read: async () => ({
+        agents: descriptions.map((_, index) => ({
+          id: 'icon-agent-' + index,
+          agentCode: 'future-' + index,
+          agentName: '图标应用' + index,
+          businessDomain: 'icon-' + index,
+        })),
+        domains: {
+          kind: 'available',
+          items: descriptions.map((description, index) => ({
+            value: 'icon-' + index,
+            text: '图标分类' + index,
+            description,
+          })),
+        },
+      }),
+    },
+  });
+  const groups = [...document.querySelectorAll('[data-gea-menu-group^="domain:"]')];
+  assert.equal(groups.length, descriptions.length);
+  for (const group of groups) {
+    assert.ok(group.querySelector('svg.lucide-layout-grid'));
+    assert.equal(group.querySelector('[data-gea-business-entry]').disabled, true);
   }
 });

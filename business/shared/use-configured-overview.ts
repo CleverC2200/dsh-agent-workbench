@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { refreshConfiguredQueries } from './query-cache';
+import { useEffect, useState, useRef } from 'react';
 import { readConfiguredOverview } from './configured-overview';
 import type { AgentSqlConfig } from './sql-config';
 export function useConfiguredOverview(
@@ -10,23 +11,35 @@ export function useConfiguredOverview(
   cycleDays?: number,
   viewIds?: readonly string[],
 ) {
-  const [state, setState] = useState<any>({ parts: {}, busy: true, errors: [] });
+  const previousRevision = useRef(revision);
+  if (previousRevision.current !== revision) {
+    refreshConfiguredQueries();
+    previousRevision.current = revision;
+  }
+  const scopeKey = JSON.stringify([config.agentId, viewIds, date, customer, cycleDays]);
+  const [state, setState] = useState<any>({ key: scopeKey, parts: {}, busy: true, errors: [] });
   useEffect(() => {
     const controller = new AbortController();
-    setState({ parts: {}, busy: true, errors: [] });
+    setState((old: any) => ({
+      key: scopeKey,
+      parts: old.key === scopeKey ? old.parts : {},
+      busy: true,
+      errors: [],
+    }));
     void readConfiguredOverview(config, date, customer, {
       signal: controller.signal,
       cycleDays,
       viewIds,
       onProgress: (parts) => {
         if (!controller.signal.aborted)
-          setState({
-            parts,
+          setState((old: any) => ({
+            key: scopeKey,
+            parts: { ...(old.key === scopeKey ? old.parts : {}), ...parts },
             busy: true,
             errors: Object.values(parts)
               .map((p: any) => p.error)
               .filter(Boolean),
-          });
+          }));
       },
     })
       .then((parts) => {
@@ -34,9 +47,12 @@ export function useConfiguredOverview(
         const errors = Object.values(parts)
           .map((p: any) => p.error)
           .filter(Boolean);
-        setState({ parts, busy: false, errors });
+        setState({ key: scopeKey, parts, busy: false, errors });
         onRead?.({
-          status: errors.length ? 'partial' : 'available',
+          status:
+            errors.length || Object.values(parts).some((part: any) => part.partial)
+              ? 'partial'
+              : 'available',
           date,
           customer,
           overview: parts,
@@ -46,11 +62,16 @@ export function useConfiguredOverview(
       })
       .catch((e) => {
         if (!controller.signal.aborted) {
-          setState({ parts: {}, busy: false, errors: [e.message] });
+          setState((old: any) => ({
+            key: scopeKey,
+            parts: e.code === 'QUERY_CONFIG_CHANGED' || old.key !== scopeKey ? {} : old.parts,
+            busy: false,
+            errors: [e.message],
+          }));
           onRead?.({ status: 'failed', date, customer, error: e.message });
         }
       });
     return () => controller.abort();
   }, [config.agentId, JSON.stringify(viewIds), date, customer, revision, cycleDays]);
-  return state;
+  return state.key === scopeKey ? state : { parts: {}, busy: true, errors: [] };
 }

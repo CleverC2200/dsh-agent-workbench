@@ -26,7 +26,9 @@ import type { BusinessAccount } from './account.ts';
 import { LoginDialog } from './login-dialog.tsx';
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots';
 import { zh, en, type CopyKey } from './locales.ts';
-import { BUSINESS_MENU_PRESET, resolveBusinessMenu } from './navigation.ts';
+import { resolveBusinessMenu, localPrototypeMenu } from './navigation.ts';
+import { BusinessDomainIcon } from './business-domain-icons.tsx';
+import type { BusinessNavigation, BusinessNavigationCatalog } from './business-navigation.ts';
 import { AgentWelcome, GeaHomeHero, NavIcon, Chevron } from './formal-components.tsx';
 import * as prompts from './conversation-prompts.ts';
 import brandLogo from './brand-logo.png';
@@ -154,6 +156,23 @@ export function mountCompanyUI(
   });
   let account: BusinessAccount | undefined;
   let desktopLoginPresented = false;
+  let businessNavigation: BusinessNavigation | undefined;
+  const navigationListeners = new Set<() => void>();
+  const subscribeNavigation = (listener: () => void) => {
+    navigationListeners.add(listener);
+    return () => {
+      navigationListeners.delete(listener);
+    };
+  };
+  ctx.inject(['businessNavigation'], (scope) => {
+    businessNavigation = scope.businessNavigation;
+    for (const listener of navigationListeners) listener();
+    scope.effect(() => () => {
+      if (businessNavigation !== scope.businessNavigation) return;
+      businessNavigation = undefined;
+      for (const listener of navigationListeners) listener();
+    });
+  });
   const pageSessions = createPageSessionNavigation({
     workbench,
     restore: restorePageSession,
@@ -564,8 +583,6 @@ export function mountCompanyUI(
     const activePanel = layoutPanel ?? documentState.selectedDocument?.id;
     const business = Boolean(activePanel && activePanel !== 'gea-api-log');
     const [drawer, setDrawer] = useState<'function' | 'workspace' | 'none'>('function');
-    const sidebarRegionRef = useRef<HTMLDivElement>(null);
-    const workspacePanelRef = useRef<HTMLDivElement>(null);
     const creation = useSyncExternalStore(
       conversationStarter.state.subscribe,
       conversationStarter.state.getSnapshot,
@@ -577,67 +594,79 @@ export function mountCompanyUI(
       if (business && !previousBusiness.current) setDrawer('function');
       previousBusiness.current = business;
     }, [business]);
+    const [sections, setSections] = useState<Record<string, boolean>>({});
+    const authority = useSyncExternalStore(
+      subscribeAccount,
+      () => account,
+      () => account,
+    );
+    const identity = useSyncExternalStore(
+      authority?.subscribe ?? noSubscribe,
+      authority?.getSnapshot ?? (() => unavailableAccount),
+      authority?.getSnapshot ?? (() => unavailableAccount),
+    );
+    const provider = useSyncExternalStore(
+      subscribeNavigation,
+      () => businessNavigation,
+      () => businessNavigation,
+    );
+    const scope =
+      identity.state === 'confirmed' && !identity.error && identity.status?.authenticated
+        ? identity.scope
+        : null;
+    const [catalogState, setCatalogState] = useState<
+      | { kind: 'loading' }
+      | {
+          kind: 'ready';
+          provider: BusinessNavigation;
+          scope: string;
+          catalog: BusinessNavigationCatalog;
+        }
+      | { kind: 'failed'; provider: BusinessNavigation; scope: string; message: string }
+    >({ kind: 'loading' });
+    const [refresh, setRefresh] = useState(0);
     useEffect(() => {
-      if (drawer !== 'workspace' || typeof IntersectionObserver === 'undefined') return;
-      const region = sidebarRegionRef.current;
-      const panel = workspacePanelRef.current;
-      if (!region || !panel) return;
-
-      const manuallyCollapsed = new Set<string>();
-      const onOverflowClick = (event: MouseEvent) => {
-        if (!event.isTrusted || !(event.target instanceof Element)) return;
-        const button = event.target.closest<HTMLButtonElement>('button[data-row-key^="overflow:"]');
-        const key = button?.dataset.rowKey;
-        if (!key) return;
-        if (button.getAttribute('aria-expanded') === 'true') manuallyCollapsed.add(key);
-        else manuallyCollapsed.delete(key);
-      };
-      panel.addEventListener('click', onOverflowClick, true);
-      const observer = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (!entry.isIntersecting) continue;
-            const button = entry.target;
-            observer.unobserve(button);
-            if (
-              button instanceof HTMLButtonElement &&
-              !manuallyCollapsed.has(button.dataset.rowKey ?? '') &&
-              button.getAttribute('aria-expanded') === 'false'
-            ) {
-              button.click();
-            }
-          }
-        },
-        { root: region, rootMargin: '0px 0px 80px 0px' },
-      );
-      const observeOverflow = () => {
-        panel
-          .querySelectorAll<HTMLButtonElement>(
-            'button[data-row-key^="overflow:"][aria-expanded="false"]',
-          )
-          .forEach((button) => observer.observe(button));
-      };
-      const mutations = new MutationObserver(observeOverflow);
-      mutations.observe(panel, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['aria-expanded'],
-      });
-      observeOverflow();
-      return () => {
-        panel.removeEventListener('click', onOverflowClick, true);
-        mutations.disconnect();
-        observer.disconnect();
-      };
-    }, [drawer]);
-    const [sections, setSections] = useState({
-      supply: true,
-      plan: true,
-      inventory: true,
-      orders: true,
-      prototypes: true,
-    });
+      setCatalogState({ kind: 'loading' });
+      if (!provider || !scope) return;
+      const controller = new AbortController();
+      void provider
+        .read(controller.signal)
+        .then((catalog) => {
+          if (!controller.signal.aborted)
+            setCatalogState({ kind: 'ready', provider, scope, catalog });
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted)
+            setCatalogState({
+              kind: 'failed',
+              provider,
+              scope,
+              message: error instanceof Error ? error.message : String(error),
+            });
+        });
+      return () => controller.abort();
+    }, [provider, scope, refresh]);
+    const catalog =
+      catalogState.kind === 'ready' &&
+      catalogState.provider === provider &&
+      catalogState.scope === scope
+        ? catalogState.catalog
+        : undefined;
+    const catalogFailure =
+      catalogState.kind === 'failed' &&
+      catalogState.provider === provider &&
+      catalogState.scope === scope
+        ? catalogState.message
+        : null;
+    let catalogNotice = '';
+    if (identity.error) catalogNotice = t('identityObservationFailed');
+    else if (identity.state !== 'confirmed') catalogNotice = t('identityPending');
+    else if (!identity.status?.authenticated) catalogNotice = t('businessLoginRequired');
+    else if (!provider) catalogNotice = t('businessCatalogUnavailable');
+    else if (catalogFailure !== null)
+      catalogNotice = `${t('businessCatalogFailed')} ${catalogFailure}`;
+    else if (!catalog) catalogNotice = t('businessCatalogLoading');
+    else if (catalog.agents.length === 0) catalogNotice = t('businessCatalogEmpty');
     const [entries, setEntries] = useState(() => ctx.slots.entries('main'));
     useEffect(() => {
       const refresh = () => setEntries([...ctx.slots.entries('main')]);
@@ -657,7 +686,13 @@ export function mountCompanyUI(
         ),
       ...documentState.pages.map((page) => [page.id, workbench.label(page.id)] as const),
     ]);
-    const menu = resolveBusinessMenu(BUSINESS_MENU_PRESET, available);
+    const menu = resolveBusinessMenu(catalog, available, t);
+    if (
+      identity.state === 'confirmed' &&
+      !identity.error &&
+      identity.status?.environment === 'test'
+    )
+      menu.push(localPrototypeMenu(available, t));
     const expandSidebar = () => {
       if (collapsed) ctx.layout.toggleSidebar();
     };
@@ -781,7 +816,7 @@ export function mountCompanyUI(
             </button>
           );
         })}
-        <div ref={sidebarRegionRef} className="gea-sidebar-region" data-gea-drawer={drawer}>
+        <div className="gea-sidebar-region" data-gea-drawer={drawer}>
           <div className="gea-sidebar-rail" data-gea-sidebar-rail>
             {(
               [
@@ -834,38 +869,66 @@ export function mountCompanyUI(
             <div className="gea-sidebar-panel gea-panel-function" id="gea-panel-function">
               <nav className="gea-shell-navigation" aria-label={t('businessNavigation')}>
                 <div className="gea-shell-navigation-content">
+                  {catalogNotice && (
+                    <p role={catalogFailure !== null ? 'alert' : 'status'}>{catalogNotice}</p>
+                  )}
+                  {provider &&
+                    scope &&
+                    (catalogFailure !== null || catalog?.agents.length === 0) && (
+                      <button
+                        type="button"
+                        className="gea-shell-nav-child"
+                        aria-label={t('businessCatalogRefresh')}
+                        onClick={() => {
+                          setCatalogState({ kind: 'loading' });
+                          setRefresh((value) => value + 1);
+                        }}
+                      >
+                        {t('businessCatalogRefresh')}
+                      </button>
+                    )}
+                  {catalog?.domains.kind === 'unavailable' && (
+                    <p role="status">{t('businessClassificationUnavailable')}</p>
+                  )}
                   {menu.map((group) => (
                     <div
                       className={'gea-shell-nav-section' + (group.flat ? ' is-flat' : '')}
                       key={group.key}
+                      data-gea-menu-group={group.key}
                     >
                       {!group.flat && (
                         <button
                           type="button"
                           className="gea-shell-nav-heading"
-                          aria-expanded={sections[group.key]}
+                          aria-expanded={sections[group.key] !== false}
                           onClick={() =>
-                            setSections((value) => ({ ...value, [group.key]: !value[group.key] }))
+                            setSections((value) => ({
+                              ...value,
+                              [group.key]: value[group.key] === false,
+                            }))
                           }
                         >
-                          <NavIcon kind={group.icon as Parameters<typeof NavIcon>[0]['kind']} />
+                          <BusinessDomainIcon name={group.icon} />
                           <span>{group.title}</span>
-                          <Chevron open={sections[group.key]} />
+                          <Chevron open={sections[group.key] !== false} />
                         </button>
                       )}
-                      {(group.flat || sections[group.key]) && (
+                      {(group.flat || sections[group.key] !== false) && (
                         <div className="gea-shell-nav-children">
-                          {group.entries.map(({ id, title, disabled }) => (
+                          {group.entries.map(({ id, pageId, title, disabled, reason }) => (
                             <button
                               key={id}
                               type="button"
                               disabled={disabled}
-                              data-gea-business-entry={id}
-                              aria-current={activePanel === id ? 'page' : undefined}
+                              title={reason}
+                              data-gea-business-entry={pageId ?? id}
+                              aria-current={activePanel === pageId ? 'page' : undefined}
                               className={
-                                'gea-shell-nav-child' + (activePanel === id ? ' is-active' : '')
+                                'gea-shell-nav-child' + (activePanel === pageId ? ' is-active' : '')
                               }
-                              onClick={() => void workbench.open(id as MainPanelId)}
+                              onClick={() => {
+                                if (pageId) void workbench.open(pageId as MainPanelId);
+                              }}
                             >
                               <span className="gea-shell-label">{title}</span>
                             </button>
@@ -879,7 +942,6 @@ export function mountCompanyUI(
             </div>
           )}
           <div
-            ref={workspacePanelRef}
             className="gea-workspace-owned"
             id="gea-panel-workspace"
             data-gea-expanded={drawer === 'workspace'}

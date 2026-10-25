@@ -46,8 +46,37 @@ for (const agent of ['fc', 'qll', 'dealer'])
       assert.equal(result.total, 42);
       assert.deepEqual(
         calls.filter((q) => q !== view.snapshotQuery && !q.startsWith('source.')),
-        [view.summaryId],
+        [view.overviewSummaryId ?? view.summaryId],
       );
       assert.equal(result.consistency, 'single_statement_aggregate');
     }
   });
+
+test('filtered inventory summaries keep their full filter contract instead of using landing totals', async () => {
+  const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const calls = [];
+  await readConfiguredFacts(
+    config,
+    'branch-stock',
+    { asOf: '2026-10-23', filters: { warehouse_code: 'W1' } },
+    {
+      summaryOnly: true,
+      execute: async (_, o) => {
+        calls.push(o.queryId);
+        return {
+          configVersion: 'v1',
+          rows: [
+            Object.fromEntries(
+              config.queries[o.queryId].resultColumns.map((k) => [
+                k,
+                k === 'day' ? '2026-10-23' : 1,
+              ]),
+            ),
+          ],
+        };
+      },
+    },
+  );
+  assert.ok(calls.includes('health.summary'));
+  assert.ok(!calls.includes('health.cards'));
+});

@@ -247,7 +247,9 @@ export const projectRegionalApprovalLiveDimension = (
   return {
     name,
     context,
-    ...(dimension === 'customer' ? { customerCode: row.dealerCode.trim() } : {}),
+    ...(dimension === 'customer' && row.dealerCode?.trim()
+      ? { customerCode: row.dealerCode.trim() }
+      : {}),
   };
 };
 
@@ -287,7 +289,11 @@ export const groupRegionalApprovalLiveRows = (
             : dimension === 'area'
               ? row.areaCode
               : row.baseName;
-    const key = JSON.stringify([dimension, code || projection.name || row.planId]);
+    const key = JSON.stringify(
+      dimension === 'customer' && !code
+        ? [dimension, null, row.planId]
+        : [dimension, code || projection.name || row.planId],
+    );
     const members = groups.get(key) ?? [];
     members.push(row);
     groups.set(key, members);
@@ -300,7 +306,8 @@ export const groupRegionalApprovalLiveRows = (
       ...new Map(
         members.map((row) => [
           JSON.stringify([
-            row.dealerCode,
+            row.dealerCode || null,
+            ...(row.dealerCode ? [] : [row.planId]),
             salesPlanPeriodMonthForPlanId(row.planId) ?? row.periodId,
           ]),
           row,

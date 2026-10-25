@@ -4,7 +4,11 @@
   "name": "产销协同工作台",
   "version": "0.2.0-preview.9-split.17",
   "html": "index.html",
-  "skills": ["skills/aps/SKILL.md"],
+  "skills": [
+    "skills/plan-operations-weekly-report/SKILL.md",
+    "skills/answer-visualization/SKILL.md",
+    "skills/order-satisfaction-analysis/SKILL.md"
+  ],
   "mcp": "mcp.json",
   "gea": {
     "consumerCode": "aps",

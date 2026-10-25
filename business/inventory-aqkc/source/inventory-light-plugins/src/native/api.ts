@@ -32,6 +32,15 @@ async function dispatch(url: URL, method: string, body: any, signal?: AbortSigna
           undefined,
           signal,
           base ? base.split(',') : undefined,
+          false,
+          base
+            ? undefined
+            : (workspace: unknown) => {
+                signal?.throwIfAborted();
+                window.dispatchEvent(
+                  new CustomEvent('aqkc-dashboard-progress', { detail: { workspace } }),
+                );
+              },
         ),
       };
     }

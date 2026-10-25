@@ -22,9 +22,17 @@ const config = async (id) =>
 test('FC replenishment keeps every original business column in its original order', async () => {
   const c = await config('fc');
   assert.deepEqual(
-    views.originalFcView(c, 'replenishment').columns.map((c) => c.label),
+    views
+      .originalFcView(c, 'replenishment')
+      .columns.map((c) => c.label)
+      .filter((label) => !['上月实际出库量', '本月日均出库量'].includes(label)),
     Object.values(views.REPLENISHMENT_COLUMNS),
   );
+  const labels = views.originalFcView(c, 'replenishment').columns.map((column) => column.label);
+  assert.deepEqual(labels.slice(labels.indexOf('30日日均') + 1, labels.indexOf('30日日均') + 3), [
+    '上月实际出库量',
+    '本月日均出库量',
+  ]);
 });
 test('QLL organization uses the original structure columns, with boxes as the confirmed physical unit', async () => {
   const c = await config('qll');

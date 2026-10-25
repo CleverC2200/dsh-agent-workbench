@@ -62,6 +62,12 @@ const config = JSON.parse(
     'utf8',
   ),
 );
+test('batch detail and count include the latest snapshot on the selected date', () => {
+  for (const id of ['sku.age', 'sku.age.count']) {
+    assert.match(config.queries[id].request.sql, /month_date <= REPLACE\(:gea_p1/);
+    assert.match(config.queries[id].request.sql, /warehouse_classify='01'/);
+  }
+});
 const filters = {
   start: '2026-10-20',
   end_exclusive: '2026-10-21',

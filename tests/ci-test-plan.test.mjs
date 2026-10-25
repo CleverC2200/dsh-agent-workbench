@@ -774,6 +774,27 @@ test('an empty required policy cannot invoke a runner with no file arguments', (
   assert.throws(f.plan, /CI_TEST_POLICY_REQUIRED/);
 });
 
+test('source Window input consumers require their frozen preparation without a browser', (t) => {
+  const f = fixture(t, 'dsh-gea-plugin');
+  const own = f.repositories.find((entry) => entry.repo === 'dsh-gea-plugin');
+  f.put(f.root, 'tests/fixtures/source-window-inputs.mjs', 'export const inputs = true;');
+  f.put(f.root, 'tests/window-helper.mjs', "import './fixtures/source-window-inputs.mjs';");
+  f.put(f.root, 'tests/required.test.mjs', "export const path = 'tests/window-helper.mjs';");
+  f.checkpoint();
+  assert.equal(f.plan(undefined, { sourceOnly: true }).sourceWindow, false);
+  f.put(f.root, 'tests/required.test.mjs', "import './window-helper.mjs';");
+  own.head = f.commit(f.root);
+  const plan = f.plan(undefined, { sourceOnly: true });
+  assert.equal(plan.sourceWindow, true);
+  assert.deepEqual(plan.sourceWindowFiles, ['tests/required.test.mjs']);
+  assert.equal(plan.sdk, true);
+  assert.equal(plan.runtime, false);
+  assert.equal(plan.browser, false);
+  f.policy.sourceFixtures = { 'tests/required.test.mjs': { dependencies: true } };
+  f.put(f.root, 'scripts/ci-test-policy.json', JSON.stringify(f.policy));
+  assert.throws(() => f.plan(undefined, { sourceOnly: true }), /CI_TEST_SOURCE_FIXTURE_REJECTED/);
+});
+
 test('an affected public contract file remains selectable alongside ordinary tests', (t) => {
   const f = fixture(t);
   f.policy.tests.push('tests/*.contract.mjs');
@@ -1827,4 +1848,23 @@ test('personal inventory stylesheet changes select the personal layout regressio
     ),
   );
   assert.equal(plan.fullSuite, 'not-run');
+});
+
+test('retired static-menu test deletion selects the current company UI coverage in local and frozen source plans', (t) => {
+  const f = productionFixture(t);
+  const retired = 'tests/dealer-menu.test.mjs';
+  const consumer = 'tests/company-ui.test.mjs';
+  f.put(f.root, retired, 'export const previousMenu = true;');
+  f.put(f.root, consumer, 'export const currentMenu = true;');
+  f.checkpoint();
+  unlinkSync(join(f.root, retired));
+  const check = (plan) => {
+    assert.deepEqual(plan.reasons['dsh-agent-workbench/' + retired], [consumer]);
+    assert.ok(plan.files.includes(consumer));
+    assert.ok(!plan.files.includes(retired));
+  };
+  check(f.plan(undefined, { sourceOnly: true, workingTree: true }));
+  f.repositories[0].head = f.commit(f.root);
+  check(f.plan(undefined, { sourceOnly: true }));
+  check(f.plan());
 });
