@@ -113,6 +113,7 @@ export function SessionSearchDialog({
     openSession(id);
   };
   const onKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       onClose();

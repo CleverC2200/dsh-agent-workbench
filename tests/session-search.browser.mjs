@@ -72,6 +72,27 @@ test('search button opens a centered dialog, searches titles and content, and op
   await trigger.focus();
   await expect(input).toBeFocused();
   await expect(dialog.getByRole('button', { name: '销售计划沟通' })).toBeVisible();
+  for (const key of ['Enter', 'ArrowDown', 'ArrowUp', 'Escape']) {
+    for (const legacy of [false, true]) {
+      const prevented = await input.evaluate(
+        (element, { key, legacy }) =>
+          !element.dispatchEvent(
+            new KeyboardEvent('keydown', {
+              key,
+              bubbles: true,
+              cancelable: true,
+              isComposing: !legacy,
+              keyCode: legacy ? 229 : 0,
+            }),
+          ),
+        { key, legacy },
+      );
+      assert.equal(prevented, false, `${key} must stay with the input method`);
+      await expect(dialog).toBeVisible();
+      await expect(input).toBeFocused();
+      assert.equal(await page.evaluate(() => window.openedSession), undefined);
+    }
+  }
   await input.fill('订单');
   await expect(dialog.getByRole('button', { name: /订单满足率分析/ })).toBeVisible();
   await expect(dialog.getByRole('button', { name: /库存复盘.*上次讨论过订单缺口/ })).toBeVisible();
