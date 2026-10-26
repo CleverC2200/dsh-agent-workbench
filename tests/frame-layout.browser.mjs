@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import { readFile } from './helpers/prepared-assets.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
@@ -193,3 +194,38 @@ for (const id of [
       assert.equal(await toolbar.count(), 1);
     }
   });
+
+test('Document overlay preserves both Core resize hit strips and the native leading band', async (t) => {
+  const core = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
+  const css = (
+    await Promise.all([
+      readFile(resolve(core, 'packages/client/ui-layout/src/client/AppFrame.module.css'), 'utf8'),
+      readFile('src/company/layout.css', 'utf8'),
+    ])
+  ).join('\n');
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1536, height: 920 } });
+  await page.setContent(`<style>${css} html,body{margin:0;height:100%}</style>
+    <div class="frame" style="grid-template-columns:280px minmax(0,1fr) 360px;--dsh-frame-leading-clearance:160px">
+      <aside class="sidebarCol"></aside><main class="centerCol"><div class="gea-workbench-document-viewport"></div></main><aside class="rightbarCol"></aside>
+      <div class="overlayLayer"><div class="gea-workbench-documents"><iframe style="width:100%;height:100%;border:0;display:block"></iframe></div></div>
+      <div class="handle" data-side="sidebar" style="left:280px"></div><div class="handle" data-side="rightbar" style="left:1176px"></div>
+    </div>`);
+  const documents = page.locator('.gea-workbench-documents');
+  await expect(documents).toHaveCSS('height', '920px');
+  assert.deepEqual(await documents.boundingBox(), { x: 280, y: 0, width: 896, height: 920 });
+  for (const [x, side] of [
+    [280, 'sidebar'],
+    [283, 'sidebar'],
+    [1176, 'rightbar'],
+    [1173, 'rightbar'],
+  ])
+    assert.equal(
+      await page.evaluate((x) => document.elementFromPoint(x, 460)?.getAttribute('data-side'), x),
+      side,
+    );
+  assert.notEqual(await page.evaluate(() => document.elementFromPoint(320, 24)?.tagName), 'IFRAME');
+  assert.equal(await page.evaluate(() => document.elementFromPoint(450, 24)?.tagName), 'IFRAME');
+  assert.equal(await page.evaluate(() => document.elementFromPoint(320, 100)?.tagName), 'IFRAME');
+});
