@@ -21,6 +21,7 @@ test('order workbench reference interactions', async () => {
     const key = JSON.stringify(request.period);
     if (request.operation === 'load')
       return window.savedReports.get(key) ?? { version: 0, report: null };
+    if (window.rejectReportSaves) throw Error('WRITE_CONFIRMATION');
     window.savedReports.set(key, {
       version: request.expectedVersion + 1,
       report: structuredClone(request.report),
@@ -161,10 +162,26 @@ test('order workbench reference interactions', async () => {
     );
     assert.equal(document.querySelector('#wbReferenceList a').href, 'https://example.com/report');
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
+    window.rejectReportSaves = true;
+    click('[data-period-month="2026-08"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'error');
+    click('[data-period-month="2026-09"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.match(document.getElementById('periodPickerValue').textContent, /2026年9月/);
+    window.rejectReportSaves = false;
     window.deferLoad = true;
     window.pendingReads = [];
     click('#periodPickerTrigger');
     click('[data-period-month="2026-08"]');
+    assert.deepEqual(
+      [...document.querySelectorAll('[data-period-month]')].map((node) => node.dataset.periodMonth),
+      ['2026-09', '2026-08', '2026-07'],
+    );
+    assert.equal(
+      document.querySelector('[data-period-month="2026-08"]').getAttribute('aria-pressed'),
+      'true',
+    );
     const partial = {
       ...window.liveFixture,
       complete: false,
@@ -177,6 +194,10 @@ test('order workbench reference interactions', async () => {
     assert.match(document.querySelector('.wb-kpi-compare').textContent, /加载中/);
     assert.equal(window.pageSnapshot.evidence.complete, false);
     click('[data-period-month="2026-07"]');
+    assert.ok(
+      document.querySelector('[data-period-month="2026-09"]'),
+      'the current month remains available after selecting older months',
+    );
     window.pendingReads[0].progress(window.liveFixture);
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '—');
     await new Promise((resolve) => setTimeout(resolve, 0));
