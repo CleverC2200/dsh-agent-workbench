@@ -939,7 +939,6 @@
     grid-column: 1 / -1;
     justify-content: flex-end;
   }
-
 }
 
 @container (max-width: 620px) {
@@ -2221,8 +2220,12 @@
   transition: background 180ms ease;
 }
 .root .organizationTable :global(.arco-table-tr:hover > .arco-table-td),
-.root .organizationTable :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-left::before),
-.root .organizationTable :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-right::before) {
+.root
+  .organizationTable
+  :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-left::before),
+.root
+  .organizationTable
+  :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-right::before) {
   background: var(--workbench-muted-surface, #f5f6f8);
 }
 .organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td) {

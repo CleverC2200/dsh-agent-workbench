@@ -968,8 +968,14 @@ test('pagination footer keeps counts and controls on one line', { timeout: 30000
       Math.max(...centers) - Math.min(...centers) <= 3,
       `分页元素应在同一水平中心线：${JSON.stringify(centers)}`,
     );
-    assert.ok(Math.abs(boxes[1].height - 36) <= 1, `页容量选择框高度应为 36px，实际 ${boxes[1].height}`);
-    assert.ok(Math.abs(boxes[2].height - 36) <= 1, `页码按钮高度应为 36px，实际 ${boxes[2].height}`);
+    assert.ok(
+      Math.abs(boxes[1].height - 36) <= 1,
+      `页容量选择框高度应为 36px，实际 ${boxes[1].height}`,
+    );
+    assert.ok(
+      Math.abs(boxes[2].height - 36) <= 1,
+      `页码按钮高度应为 36px，实际 ${boxes[2].height}`,
+    );
     if (viewportWidth === 1536) {
       const overflow = await footer.evaluate((node) => node.scrollWidth - node.clientWidth);
       assert.ok(overflow <= 1, `桌面宽度不应横向溢出：${overflow}`);
