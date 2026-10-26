@@ -48779,15 +48779,8 @@
       "id": "branch_plan_versions",
       "plugins": ["fc", "qll", "aps"],
       "pages": ["同步本月/下月计划", "跨插件共享人工计划"],
-      "requires": [
-        "warehouse_code",
-        "sku",
-        "target_month",
-        "outbound_qty",
-        "transfer_qty",
-        "source/version provenance"
-      ],
-      "reason": "计划月份、快照、版本、月调拨计划和单位列已存在；2026-10-16复核2410行仍无有效月份/快照/单位/月调拨计划。不能拿未来30日或调拨中量顶替。",
+      "requires": ["分仓×SKU×计划月份的独立月调拨计划数量"],
+      "reason": "出货计划按真实stat_month读取，单位件，不依赖预留快照、版本、单位字段。独立月调拨计划尚无真实来源，保留缺口；不影响已有出货计划、库存或补货测算。",
       "sourceKind": "mixed_plan_input",
       "alternatives": ["fc local monthly import (page lifetime only)"],
       "notRequiredPhysicalFields": [
@@ -48797,19 +48790,19 @@
         "expected_month_end_inventory",
         "recommended_qty"
       ],
-      "remainingDependencies": ["current_orders"],
+      "remainingDependencies": ["独立月调拨计划来源"],
       "rootCause": {
-        "causeTypes": ["new_scope_gap", "source_quality", "rule_alignment", "manual_input"],
-        "summary": "当前新库2410行；日期/单位/月调拨计划缺值，库存快照已独立接入。",
+        "causeTypes": ["new_scope_gap", "manual_input"],
+        "summary": "真实缺口为独立月调拨计划；空预留元数据不构成业务数据缺失。",
         "oldTables": ["agents_scm_branch_plan", "agent_branch_plan_import"],
-        "action": "保留有效版本/状态和人工整包优先规则；补缺预算/历史出库；区分全月计划、剩余计划和未完成调拨，统一月末公式。",
+        "action": "接入真实独立月调拨计划前，数量与依赖它的月末库存保持未知；页面人工导入仅供本地试算。",
         "evidenceRefs": [
           "evidence/old-chain-live-inspection.json",
           "evidence/old-chain-detail-inspection.json",
           "evidence/live-gap-source-inspection.json"
         ]
       },
-      "observedAt": "2026-10-16"
+      "observedAt": "2026-10-26"
     },
     {
       "id": "warehouse_mapping",
