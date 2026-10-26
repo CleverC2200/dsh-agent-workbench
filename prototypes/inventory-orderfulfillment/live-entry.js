@@ -1,3 +1,4 @@
+import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
@@ -91,6 +92,9 @@ function setMetric(node, text) {
   const unit = node.querySelector('.metric-unit');
   node.replaceChildren(document.createTextNode(text), ...(unit ? [unit] : []));
 }
+const organizationPicker = mountOrganizationFilter($('deliveryOrgFilter'));
+const filterCatalog = new Map();
+let filterCatalogLoaded = false;
 const key = (row) => JSON.stringify([row.order_no, row.customer_code, row.sku, row.base]);
 const filtersIds = [
   'fulfillmentBaseFilter',
@@ -105,7 +109,7 @@ const filtersIds = [
 ];
 function selectedFilters() {
   const today = shanghaiToday(),
-    org = $('deliveryOrgFilter').value;
+    org = $('deliveryOrgFilter').value, organization = organizationSelection(org);
   return {
     start: today,
     end_exclusive: nextDay(today),
@@ -113,8 +117,8 @@ function selectedFilters() {
     region:org.startsWith('area:')?org.slice(5): org.startsWith('region:') && org.includes('大区') ? org.slice(7) : null,
     province:
       $('deliveryRegionQuery').value ||
-      (org.startsWith('province:')?org.slice(9):org.startsWith('region:') && !org.includes('大区') ? org.slice(7) : null),
-    sales_group: org.startsWith('org:') ? org.slice(4) : null,
+      (organization.province || (org.startsWith('region:') && !org.includes('大区') ? org.slice(7) : null)),
+    sales_group: organization.sales_group || null,
     channel: $('deliveryChannelFilter').value || null,
     customer: $('deliveryCustomerQuery').value.trim() || null,
     order: $('deliveryOrderNumberQuery').value.trim() || null,
@@ -282,6 +286,9 @@ function replaceOptions(select,choices,emptyLabel) {
   select.value=current;
 }
 function updateSourceFilters(rows) {
+  for(const row of rows){const item=Object.fromEntries(['belong_base','logistics_provider','province_region_name','sales_group_name','region_name'].map(k=>[k,row[k]]));filterCatalog.set(JSON.stringify(item),item);}
+  rows=[...filterCatalog.values()];
+  organizationPicker.update(rows);
   const values=field=>[...new Set(rows.map(row=>row[field]).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'));
   for(const id of ['fulfillmentBaseFilter','deliveryBaseQuery'])replaceOptions($(id),values('belong_base').map(value=>[value,value]),'全部基地');
   replaceOptions($('warehouseProviderFilter'),values('logistics_provider').map(value=>[value,value]),'全部承运商');
@@ -832,6 +839,10 @@ async function load() {
     'sku.age',
     'sku.owners',
   ];
+  const optionFilters = {...selected,base:null,region:null,province:null,sales_group:null,channel:null,customer:null,order:null,sku:null,carrier:null};
+  if(!filterCatalogLoaded && JSON.stringify(optionFilters)!==JSON.stringify(selected)) {
+    void reader.all('orders.facts',optionFilters,{signal:task.signal}).then(result=>{if(task.current()){updateSourceFilters(result.rows);filterCatalogLoaded=true;}}).catch(()=>{});
+  } else if(JSON.stringify(optionFilters)===JSON.stringify(selected)) filterCatalogLoaded=true;
   const progressive = {};
   const settled = await Promise.allSettled(
     ids.map(async (id) => {
@@ -989,6 +1000,7 @@ view.subscribe((state, event) => {
     if(node.tagName==='SELECT'&&state[id]&&![...node.options].some(option=>option.value===state[id]))node.append(new Option(state[id],state[id]));
     node.value=state[id];
   }
+  organizationPicker.sync();
   const tab = document.querySelector(`[data-fulfillment-dimension="${state.dimension}"]`);
   if (tab) activateTab(tab);
   if (previous !== JSON.stringify(selectedFilters())) {
@@ -1027,6 +1039,7 @@ action('context', '读取当前授权订单履约数据', () => {
 });
 keepPageObservation(() => connected && snapshot, (value) => publish(value));
 function invalidate(event) {
+  filterCatalog.clear();filterCatalogLoaded=false;organizationPicker.reset();
   owner.invalidate();
   clearTimeout(timer);
   clear('身份或会话已变化，旧数据已清除');
