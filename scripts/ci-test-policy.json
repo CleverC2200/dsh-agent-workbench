@@ -61,6 +61,7 @@
         "tests/mps-*.browser.mjs",
         "tests/mps-relations.test.mjs",
         "tests/mps-workflow-inputs.test.mjs",
+        "tests/mps-source-tables.test.mjs",
         "tests/static-author-provenance.test.mjs",
         "tests/static-author-source.test.mjs"
       ]
