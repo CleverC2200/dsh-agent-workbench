@@ -313,6 +313,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? [
                   '数量',
                   '预测批次',
+                  '源批次月份',
                   '源当月预测数量',
                   '源下一月预测数量',
                   '源记录数',
@@ -1159,9 +1160,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? type === 'forecast'
                   ? 'governed-sql'
                   : 'cube'
-                : type === 'forecast'
-                  ? 'table-not-built'
-                  : 'not-read',
+                : 'not-read',
             localFile: draft.files[type] ?? null,
             rowCount: rows.length,
             quantity:

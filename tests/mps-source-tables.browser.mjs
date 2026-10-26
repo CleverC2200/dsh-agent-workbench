@@ -23,7 +23,10 @@ function fixture(records, options = {}) {
       };
     if (options.deny?.(kind)) throw Error('AGENT_ACCESS_DENIED');
     const period = kind === 'forecast' ? parameters.month : parameters.months[0];
-    const values = records(kind, period);
+    const values = records(kind, period).map((row) => ({
+      ...row,
+      stat_month: kind === 'forecast' ? parameters.source_month : period.replace('-', ''),
+    }));
     return {
       rows: queryId.endsWith('.count')
         ? [{ total: values.length }]
@@ -79,7 +82,10 @@ const source = (kind, month) =>
 test('one forecast batch drives two selectable target months and delivery source ratios remain separate', async (t) => {
   const { page, frame, calls } = await mpsPage(t, config, fixture(source));
   await december(frame);
-  const forecast = frame.getByRole('region', { name: '模型双期预测', exact: true });
+  const forecast = frame.getByRole('region', {
+    name: '模型双期预测',
+    exact: true,
+  });
   await expect(forecast.getByText('业务来源', { exact: true })).toBeVisible();
   await forecast.getByText('口径与统计说明', { exact: true }).click();
   await expect(forecast).toContainText('数量合计0（单位待确认）');
@@ -89,10 +95,16 @@ test('one forecast batch drives two selectable target months and delivery source
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细' }).click();
   const csv = await readFile(await (await download).path(), 'utf8');
-  assert.match(csv, /预测批次,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/);
-  assert.match(csv, /2026-12,0,12.5,1,,ready/);
-  assert.match(csv, /2027-01,基地甲,001,产品甲,,,,12.5,2026-12,0,12.5,1,/);
-  const delivery = frame.getByRole('region', { name: '基地多维发货指标', exact: true });
+  assert.match(
+    csv,
+    /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
+  );
+  assert(csv.includes('2026-12,2026/12/1,0,12.5,1,,ready'));
+  assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12/1,0,12.5,1,'));
+  const delivery = frame.getByRole('region', {
+    name: '基地多维发货指标',
+    exact: true,
+  });
   await expect(delivery.getByText('业务来源', { exact: true })).toBeVisible();
   await expect(delivery).toContainText('0.012000000000');
   await expect(delivery).toContainText('-0.125000000000');
@@ -104,6 +116,10 @@ test('one forecast batch drives two selectable target months and delivery source
     (c) => c.queryId === 'forecast.detail' && c.parameters.month === '2026-12',
   );
   assert.equal(checked.length, 1);
+  assert.equal(checked[0].parameters.source_month, '2026/12/1');
+  assert(
+    calls.some((c) => c.queryId === 'delivery.detail' && c.parameters.months.includes('202612')),
+  );
   assert(!calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.month === '2027-01'));
   await page.locator('iframe').evaluate((el) => {
     el.style.width = '600px';
@@ -145,7 +161,10 @@ test('all forecast pages are loaded, duplicates do not inflate totals, and a ref
       { deny: (kind) => deny && kind === 'forecast' },
     ),
   );
-  const forecast = frame.getByRole('region', { name: '模型双期预测', exact: true });
+  const forecast = frame.getByRole('region', {
+    name: '模型双期预测',
+    exact: true,
+  });
   await expect(forecast.getByText('业务来源', { exact: true })).toBeVisible();
   await forecast.getByText('口径与统计说明', { exact: true }).click();
   await expect(forecast).toContainText('当前期间201条，数量合计未提供，缺失数量1条');
@@ -171,7 +190,10 @@ test('a late delivery period cannot overwrite the newly selected month', async (
     return execute(q);
   });
   t.after(() => release());
-  const delivery = frame.getByRole('region', { name: '基地多维发货指标', exact: true });
+  const delivery = frame.getByRole('region', {
+    name: '基地多维发货指标',
+    exact: true,
+  });
   await expect(delivery.getByText('业务来源', { exact: true })).toBeVisible();
   await delivery.getByLabel('发货指标月份').fill('2026-08');
   await expect.poll(() => blocked).toBe(true);
@@ -181,4 +203,39 @@ test('a late delivery period cannot overwrite the newly selected month', async (
   await expect(delivery.getByLabel('发货指标月份')).toHaveValue('2026-09');
   await expect(delivery.locator('tbody')).toContainText('2026-09');
   await expect(delivery.locator('tbody')).not.toContainText('2026-08');
+});
+
+test('forecast context reports unread business data and preserves a local file without claiming a missing table', async (t) => {
+  const { frame, contexts } = await mpsPage(
+    t,
+    config,
+    fixture(source, { deny: (kind) => kind === 'forecast' }),
+  );
+  await december(frame);
+  const forecast = frame.getByRole('region', {
+    name: '模型双期预测',
+    exact: true,
+  });
+  await expect(forecast.getByRole('alert')).toContainText('当前账号暂无数据权限');
+  await expect
+    .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.businessSource)
+    .toBe('not-read');
+  await frame.getByLabel('选择模型预测CSV', { exact: true }).setInputFiles({
+    name: '预测核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2026-12,基地甲,001,产品甲,汤圆,系列甲,组甲,7',
+    ),
+  });
+  await expect(forecast.getByText('本地文件', { exact: true })).toBeVisible();
+  await expect
+    .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.localFile)
+    .toBe('预测核对.csv');
+  assert.equal(contexts.at(-1).parts.check.sourceSummaries.forecast.businessSource, 'not-read');
+  assert(
+    !contexts.some(
+      (context) =>
+        context.parts?.check?.sourceSummaries?.forecast?.businessSource === 'table-not-built',
+    ),
+  );
 });

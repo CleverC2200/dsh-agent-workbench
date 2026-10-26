@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createQueryClient, makeRequest } from '../business/shared/configured-query-client.mjs';
 const savedWindow = globalThis.window;
 globalThis.window = { addEventListener() {}, parent: { postMessage() {} } };
-const { forecastRows, forecastDimensions, deliveryRows, deliveryColumns } =
+const { forecastRows, forecastDimensions, deliveryRows, deliveryColumns, sourceTableParameters } =
   await import('../static/mps/source/source-tables.js');
 if (savedWindow === undefined) delete globalThis.window;
 else globalThis.window = savedWindow;
@@ -101,10 +101,17 @@ test('new table queries bind month parameters and read all pages with required c
       configVersion: 'one',
     };
   });
-  const options = { keyFields: config.queries['forecast.detail'].grain, requiredColumns: columns };
+  const options = {
+    keyFields: config.queries['forecast.detail'].grain,
+    requiredColumns: columns,
+  };
   const result = await client.readAll(
     'forecast.detail',
-    { month: '2026-12', page_size: 200, offset: 0 },
+    {
+      ...sourceTableParameters('forecast', '2026-12'),
+      page_size: 200,
+      offset: 0,
+    },
     options,
   );
   assert.equal(forecastRows(result.rows, '2026-12').length, 402);
@@ -114,15 +121,49 @@ test('new table queries bind month parameters and read all pages with required c
   );
   truncate = true;
   await assert.rejects(
-    client.readAll('forecast.detail', { month: '2026-12', page_size: 200, offset: 0 }, options),
+    client.readAll(
+      'forecast.detail',
+      {
+        ...sourceTableParameters('forecast', '2026-12'),
+        page_size: 200,
+        offset: 0,
+      },
+      options,
+    ),
     /分页与计数/,
   );
   const request = makeRequest(config, 'delivery.detail', {
-    months: ['2026-12'],
+    ...sourceTableParameters('delivery', '2026-12'),
     page_size: 200,
     offset: 0,
   });
-  assert.deepEqual(request.parameters.gea_p1, ['2026-12']);
+  assert.deepEqual(request.parameters.gea_p1, ['2026-12', 'Dec-26', '2026年12月', '202612']);
+  const forecastRequest = makeRequest(config, 'forecast.detail', {
+    ...sourceTableParameters('forecast', '2026-12'),
+    page_size: 200,
+    offset: 0,
+  });
+  assert.equal(forecastRequest.parameters.gea_p1, '2026-12');
+  assert.equal(forecastRequest.parameters.gea_p2, '2026/12/1');
+  assert.match(forecastRequest.sql, /stat_month IN \(:gea_p1, :gea_p2\)/);
   assert.match(request.sql, /FROM agents_scm_base_dimension_delivery_mi/);
   assert(!request.sql.includes('2026-12'));
+});
+
+test('published slash and compact source months normalize without merging duplicate forecast business keys', () => {
+  const rows = forecastRows([forecast({ stat_month: '2026/12/1' })], '2026-12');
+  assert.equal(rows[0]['月份'], '2026-12');
+  assert.equal(rows[0]['源批次月份'], '2026/12/1');
+  const duplicate = forecastRows([forecast(), forecast({ stat_month: '2026/12/1' })], '2026-12');
+  assert(duplicate.every((row) => row['数量'] === '' && row['缺项原因'].includes('重复')));
+  const raw = Object.fromEntries(Object.keys(deliveryColumns).map((k) => [k, null]));
+  Object.assign(raw, {
+    stat_month: '202612',
+    dimension_type: '基地+产品',
+    belong_base: '甲',
+    dimension_value: '001',
+    source_rows: 1,
+  });
+  assert.equal(deliveryRows([raw], '2026-12')[0]['月份'], '2026-12');
+  assert.throws(() => forecastRows([forecast({ stat_month: '2026/12/2' })], '2026-12'), /批次/);
 });

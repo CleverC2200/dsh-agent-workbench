@@ -47,12 +47,33 @@ const countsBy = (rows, key) => {
   for (const row of rows) counts.set(key(row), (counts.get(key(row)) ?? 0) + sourceCount(row));
   return counts;
 };
+const tableMonth = (value) => {
+  const source = text(value);
+  const compact = /^(\d{4})(0[1-9]|1[0-2])$/.exec(source);
+  const slash = /^(\d{4})\/(0?[1-9]|1[0-2])\/0?1$/.exec(source);
+  return (
+    normalizedMonth(source) ??
+    (compact
+      ? `${compact[1]}-${compact[2]}`
+      : slash
+        ? `${slash[1]}-${slash[2].padStart(2, '0')}`
+        : null)
+  );
+};
+export function sourceTableParameters(kind, month) {
+  const months = sourceMonthValues(month);
+  if (kind === 'forecast')
+    return { month, source_month: `${month.slice(0, 4)}/${Number(month.slice(5))}/1` };
+  if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
+  throw Error('未知月主计划来源');
+}
 export function forecastRows(rows, month) {
   sourceMonthValues(month);
-  const key = (row) => JSON.stringify([row.stat_month, row.belong_base, row.material_code]);
+  const key = (row) =>
+    JSON.stringify([tableMonth(row.stat_month), row.belong_base, row.material_code]);
   const counts = countsBy(rows, key);
   return rows.flatMap((row) => {
-    if (row.stat_month !== month) throw Error('预测来源批次与请求月份不一致');
+    if (tableMonth(row.stat_month) !== month) throw Error('预测来源批次与请求月份不一致');
     const base = text(row.belong_base),
       code = text(row.material_code);
     const count = counts.get(key(row));
@@ -74,6 +95,7 @@ export function forecastRows(rows, month) {
       物料组: '',
       数量: issue ? '' : value,
       预测批次: month,
+      源批次月份: text(row.stat_month),
       源当月预测数量: decimal(row.current_month_forecast_qty),
       源下一月预测数量: decimal(row.next_month_forecast_qty),
       源记录数: sourceCount(row),
@@ -130,13 +152,13 @@ export function deliveryRows(rows, month) {
   const key = (row) =>
     JSON.stringify([
       row.dimension_type,
-      normalizedMonth(row.stat_month),
+      tableMonth(row.stat_month),
       row.belong_base,
       row.dimension_value,
     ]);
   const counts = countsBy(rows, key);
   return rows.map((row) => {
-    if (normalizedMonth(row.stat_month) !== month) throw Error('发货指标来源月份与请求不一致');
+    if (tableMonth(row.stat_month) !== month) throw Error('发货指标来源月份与请求不一致');
     const complete = [row.dimension_type, row.belong_base, row.dimension_value].every(
       (value) => typeof value === 'string' && value.trim(),
     );
@@ -158,8 +180,7 @@ export function deliveryRows(rows, month) {
   });
 }
 export async function readSourceTable(kind, month, signal) {
-  if (!['forecast', 'delivery'].includes(kind)) throw Error('未知月主计划来源');
-  sourceMonthValues(month);
+  const parameters = sourceTableParameters(kind, month);
   const element = document.getElementById('agent-sql-config');
   if (!element) throw Error('月主计划数据源尚未装载');
   const config = JSON.parse(element.textContent);
@@ -174,7 +195,7 @@ export async function readSourceTable(kind, month, signal) {
   const result = await client.readAll(
     kind + '.detail',
     {
-      ...(kind === 'forecast' ? { month } : { months: sourceMonthValues(month) }),
+      ...parameters,
       page_size: 200,
       offset: 0,
     },
