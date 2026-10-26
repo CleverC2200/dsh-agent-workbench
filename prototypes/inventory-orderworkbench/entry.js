@@ -12,11 +12,12 @@ const pageTimeouts = new Set(),
 const workbenchView = document.getElementById('workbenchView');
 const activePage = 'workbench';
 let periodMode = 'month';
-let selectedMonth = new Date(Date.now()+8*3600000).toISOString().slice(0,7);
+const currentMonth = new Date(Date.now()+8*3600000).toISOString().slice(0,7);
+let selectedMonth = currentMonth;
 let selectedWeek = selectedMonth+'-01';
 let liveFacts = null, liveReadKey = '', liveController, liveConnected = false;
 let liveSkuDetails = {};
-let reportLoaded = false, savedPresentation = null;
+let reportLoaded = false, savedPresentation = null, reportEdited = false;
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -58,6 +59,7 @@ const persistence = createReportPersistence(
   (state, message) => {
     persistenceStatus.textContent = ' · ' + message;
     persistenceStatus.dataset.state = state;
+    if (state === 'saved') reportEdited = false;
   },
 );
 function reportEdits() {
@@ -92,19 +94,20 @@ function saveDatabaseReport() {
   }
   return persistence.save({ schemaVersion: 1, facts: liveFacts, presentation: savedPresentation ?? workbenchPresentation(liveFacts), edits: reportEdits() });
 }
-function saveWorkbenchSummary() { return saveDatabaseReport(); }
-function saveWorkbenchDirectorNotes() { return saveDatabaseReport(); }
-function saveWorkbenchReferenceLinks() { return saveDatabaseReport(); }
-function saveWorkbenchUnmetState() { return saveDatabaseReport(); }
-function saveWorkbenchLocalState() { return saveDatabaseReport(); }
-window.addEventListener('beforeunload', event => { if (persistence.pending()) { event.preventDefault(); event.returnValue = ''; } });
+function saveEditedReport() { reportEdited = true; return saveDatabaseReport(); }
+function saveWorkbenchSummary() { return saveEditedReport(); }
+function saveWorkbenchDirectorNotes() { return saveEditedReport(); }
+function saveWorkbenchReferenceLinks() { return saveEditedReport(); }
+function saveWorkbenchUnmetState() { return saveEditedReport(); }
+function saveWorkbenchLocalState() { return saveEditedReport(); }
+window.addEventListener('beforeunload', event => { if (reportEdited && persistence.pending()) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
   if ((!reportLoaded || liveFacts?.complete !== true) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
   }
-  if (persistence.pending() && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
+  if (reportEdited && persistence.pending() && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
   }
@@ -2012,7 +2015,7 @@ function formatMonthDay(iso) {
 function renderPeriodPicker() {
   const monthList = document.getElementById('periodPickerMonths');
   const weekList = document.getElementById('periodPickerWeeks');
-  const monthDate = parseIsoDate(`${selectedMonth}-01`);
+  const monthDate = parseIsoDate(`${currentMonth}-01`);
   const months = Array.from({ length: 3 }, (_, index) => {
     const date = new Date(monthDate.getFullYear(), monthDate.getMonth() - index, 1);
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -2257,7 +2260,7 @@ async function readCurrentPeriod() {
   liveController?.abort();
   const controller=liveController=new AbortController();
   liveFacts=null;
-  reportLoaded=false; savedPresentation=null;
+  reportLoaded=false; savedPresentation=null; reportEdited=false;
   restoreReportEdits();
   clearLiveMetrics();
   for (const metric of topMetricCards) Object.assign(metric, { status: '加载中', footer: '正在读取所选周期数据…' });
@@ -2320,7 +2323,7 @@ async function readCurrentPeriod() {
 clearLiveMetrics();
 void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
-  liveConnected=false;liveController?.abort();persistence.cancel();reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
+  liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
 });
 window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 
