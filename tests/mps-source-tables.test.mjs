@@ -167,3 +167,46 @@ test('published slash and compact source months normalize without merging duplic
   assert.equal(deliveryRows([raw], '2026-12')[0]['月份'], '2026-12');
   assert.throws(() => forecastRows([forecast({ stat_month: '2026/12/2' })], '2026-12'), /批次/);
 });
+
+test('delivery accepts finite small numeric ratios while preserving precise decimal strings', () => {
+  const raw = Object.fromEntries(Object.keys(deliveryColumns).map((k) => [k, null]));
+  Object.assign(raw, {
+    stat_month: '202612',
+    dimension_type: '基地+产品',
+    belong_base: '甲',
+    dimension_value: '001',
+    source_rows: 1,
+    dimension_act_dl_qty_rate: 1e-7,
+    year_on_year_rate: -1e-7,
+    month_on_month_rate: '0.000000000001',
+  });
+  const [row] = deliveryRows([raw], '2026-12');
+  assert.equal(row['月发货占财年比例'], 1e-7);
+  assert.equal(row['同比增长率'], -1e-7);
+  assert.equal(row['环比增长率'], '0.000000000001');
+  for (const value of [Infinity, NaN, Number.MAX_SAFE_INTEGER + 1, '1e-7'])
+    assert.throws(
+      () => deliveryRows([{ ...raw, dimension_act_dl_qty_rate: value }], '2026-12'),
+      /数值/,
+    );
+});
+
+test('forecast classification explains missing and ambiguous exact product matches without erasing quantities', () => {
+  const rows = forecastRows(
+    [forecast({ current_month_forecast_qty: 8, next_month_forecast_qty: null })],
+    '2026-12',
+  );
+  const [missing, missingQuantity] = forecastDimensions(rows, [{ 产品编码: '1' }]);
+  assert.equal(missing['数量'], 8);
+  assert.equal(missing['大类'], '');
+  assert.match(missing['缺项原因'], /未匹配主数据/);
+  assert.equal(missingQuantity['数量'], '');
+  assert.match(missingQuantity['缺项原因'], /预测数量缺失.*未匹配主数据/);
+  const [ambiguous] = forecastDimensions(rows, [
+    { 产品编码: '001', 大类: '汤圆' },
+    { 产品编码: '001', 大类: '饺子' },
+  ]);
+  assert.equal(ambiguous['数量'], 8);
+  assert.equal(ambiguous['大类'], '');
+  assert.match(ambiguous['缺项原因'], /多条主数据/);
+});

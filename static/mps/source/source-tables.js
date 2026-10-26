@@ -11,7 +11,7 @@ const decimal = (value) => {
   if (value === null) return '';
   if (
     !['string', 'number'].includes(typeof value) ||
-    !/^-?\d+(\.\d+)?$/.test(String(value)) ||
+    (typeof value === 'string' && !/^-?\d+(\.\d+)?$/.test(value)) ||
     !Number.isFinite(Number(value)) ||
     (typeof value === 'number' && Math.abs(value) > Number.MAX_SAFE_INTEGER)
   )
@@ -111,7 +111,16 @@ export function forecastDimensions(rows, products) {
         p['产品编码'] === row['产品编码'] &&
         (!p['基地'] || p['基地'] === row['基地']),
     );
-    if (matches.length !== 1) return row;
+    if (matches.length !== 1)
+      return {
+        ...row,
+        缺项原因: [
+          row['缺项原因'],
+          matches.length ? '产品编码对应多条主数据，分类留空' : '产品编码未匹配主数据，分类留空',
+        ]
+          .filter(Boolean)
+          .join('；'),
+      };
     return {
       ...row,
       ...Object.fromEntries(['大类', '系列', '物料组'].map((name) => [name, matches[0][name]])),

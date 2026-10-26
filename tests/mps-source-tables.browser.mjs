@@ -80,7 +80,7 @@ const source = (kind, month) =>
         }),
       ];
 test('one forecast batch drives two selectable target months and delivery source ratios remain separate', async (t) => {
-  const { page, frame, calls } = await mpsPage(t, config, fixture(source));
+  const { page, frame, calls, contexts } = await mpsPage(t, config, fixture(source));
   await december(frame);
   const forecast = frame.getByRole('region', {
     name: '模型双期预测',
@@ -99,8 +99,17 @@ test('one forecast batch drives two selectable target months and delivery source
     csv,
     /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
   );
-  assert(csv.includes('2026-12,2026/12/1,0,12.5,1,,ready'));
+  assert(csv.includes('2026-12,2026/12/1,0,12.5,1,产品编码未匹配主数据，分类留空,ready'));
+  await expect
+    .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)
+    .toContain('产品编码未匹配主数据，分类留空');
   assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12/1,0,12.5,1,'));
+  const allDownload = page.waitForEvent('download');
+  await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
+  const allCsv = await readFile(await (await allDownload).path(), 'utf8');
+  assert(allCsv.includes('产品编码未匹配主数据，分类留空'));
+  assert(allCsv.includes('2026-12,基地甲,001'));
+  assert(allCsv.includes('2027-01,基地甲,001'));
   const delivery = frame.getByRole('region', {
     name: '基地多维发货指标',
     exact: true,

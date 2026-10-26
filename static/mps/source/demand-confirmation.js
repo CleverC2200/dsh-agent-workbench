@@ -181,6 +181,14 @@ function annualSelection(draft) {
         : draft.annual,
   };
 }
+function forecastSourceRows(draft) {
+  const productsReady = !['loading', 'failed'].includes(draft.productsRead?.status);
+  return (
+    draft.forecastSource === 'business' && productsReady
+      ? forecastDimensions(draft.forecast, draft.products)
+      : draft.forecast
+  ).map((row) => ({ ...row, 读取状态: draft.forecastRead?.status ?? 'unread' }));
+}
 function sourceSelection(draft, type) {
   const period =
     type === 'report'
@@ -189,21 +197,12 @@ function sourceSelection(draft, type) {
         ? monthOffset(draft.month, draft.forecastOffset - 1)
         : monthOffset(draft.month, -12 * draft.historyYears);
   const column = type === 'report' ? (draft.pull === 'monthly' ? '月初数量' : '纠偏数量') : '数量';
-  const rows = draft[type].filter((row) => row['月份'] === period);
-  const productsReady = !['loading', 'failed'].includes(draft.productsRead?.status);
   return {
     period,
     column,
-    rows:
-      type === 'forecast'
-        ? (draft.forecastSource === 'business' && productsReady
-            ? forecastDimensions(rows, draft.products)
-            : rows
-          ).map((row) => ({
-            ...row,
-            读取状态: draft.forecastRead?.status ?? 'unread',
-          }))
-        : rows,
+    rows: (type === 'forecast' ? forecastSourceRows(draft) : draft[type]).filter(
+      (row) => row['月份'] === period,
+    ),
   };
 }
 function downloadFile(name, mime, text) {
@@ -536,12 +535,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 downloadCsv(
                   `${definition.short}-全部已读.csv`,
                   business ? detailColumns : definition.columns,
-                  type === 'forecast'
-                    ? draft[type].map((row) => ({
-                        ...row,
-                        读取状态: draft.forecastRead?.status ?? 'unread',
-                      }))
-                    : draft[type],
+                  type === 'forecast' ? forecastSourceRows(draft) : draft[type],
                 ),
             },
             '导出全部已读明细',
@@ -1179,6 +1173,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? ['数量', '含赠品数量', '不含税收入']
                 : undefined,
             missingQuantity: rows.filter((row) => row[column] === '').length,
+            missingReasons:
+              type === 'forecast'
+                ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
+                : undefined,
             dimensions: Object.fromEntries(
               dimensions.map((dimension) => [
                 dimension,
