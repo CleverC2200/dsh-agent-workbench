@@ -37,7 +37,7 @@ export function originalFcView(config: any, tab: string) {
         'material_name',
         'inventory_qty',
         'available_qty',
-        'missing_preparingQty',
+        ['missing_preparingQty', '当前未备单需求'],
         'missing_shortageQty',
         'historical_turnover_days',
         'target_inventory_qty',
@@ -59,14 +59,14 @@ export function originalFcView(config: any, tab: string) {
         ['warehouse_month_transfer_plan', '本月调拨计划'],
         'missing_transferredQty',
         'missing_transferReceivedQty',
-        ['preparing', '本月调拨未发'],
-        ['in_transit', '本月调拨在途'],
+        ['preparing', '当前调拨备单'],
+        ['in_transit', '当前调拨在途'],
         'missing_nextOutboundQty',
         'missing_nextDailyOutboundQty',
         'missing_nextTransferQty',
-        'daily_plan',
+        ['daily_plan', '展望30日日均出货'],
         'cycle_days',
-        'safety_days',
+        ['safety_days', '目标覆盖天数'],
         ['target_gap_qty', '安全库存差异量'],
         'urgent',
         'missing_reason',
@@ -134,7 +134,7 @@ export function originalFcView(config: any, tab: string) {
     [
       'base',
       'missing_transit',
-      ['known_available', '可用库存（箱）'],
+      ['known_available', '可用库存（件）'],
       ...Array.from({ length: 7 }, (_, i) => `missing_production_${i}`),
       'missing_production_total',
     ],
@@ -370,14 +370,14 @@ export function originalQllLayerView(
           ? missing('missing_business_status', '经营状态')
           : col('missing_business_status', 'warning', '经营状态'),
       dealer
-        ? zero('company_inventory', '公司实物库存（箱）')
-        : col('company_inventory', inventory, '公司实物库存（箱）'),
+        ? zero('company_inventory', '公司实物库存（件）')
+        : col('company_inventory', inventory, '公司实物库存（件）'),
       base
-        ? col('base_inventory', inventory, '基地库存（箱）')
-        : zero('base_inventory', '基地库存（箱）'),
+        ? col('base_inventory', inventory, '基地库存（件）')
+        : zero('base_inventory', '基地库存（件）'),
       !base && !dealer
-        ? col('branch_inventory', inventory, '分仓库存（箱）')
-        : zero('branch_inventory', '分仓库存（箱）'),
+        ? col('branch_inventory', inventory, '分仓库存（件）')
+        : zero('branch_inventory', '分仓库存（件）'),
       ...(channel
         ? [
             dealer
@@ -386,8 +386,8 @@ export function originalQllLayerView(
           ]
         : []),
       base
-        ? col('company_gap', 'matched_target_gap', '公司目标差额（箱）')
-        : missing('company_gap', '公司目标差额（箱）'),
+        ? col('company_gap', 'matched_target_gap', '公司目标差额（件）')
+        : missing('company_gap', '公司目标差额（件）'),
       base
         ? col('turnover', 'matched_stock_days', '周转（天）')
         : dealer
@@ -397,10 +397,10 @@ export function originalQllLayerView(
         ? col('average_age', 'analysis_avg_stock_age', '平均货龄（天）')
         : col('average_age', 'average_age', '平均货龄（天）'),
       base
-        ? col('big_date', 'known_over60', '大日期库存（箱）')
+        ? col('big_date', 'known_over60', '大日期库存（件）')
         : !dealer
-          ? col('big_date', 'overaged_qty', '大日期库存（箱）')
-          : missing('big_date', '大日期库存（箱）'),
+          ? col('big_date', 'overaged_qty', '大日期库存（件）')
+          : missing('big_date', dealer ? '大日期库存（箱）' : '大日期库存（件）'),
       base
         ? col('target_turnover', 'matched_target_days', '目标周转（天）')
         : missing('target_turnover', '目标周转（天）'),

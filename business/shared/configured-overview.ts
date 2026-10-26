@@ -1,4 +1,5 @@
 import { createAgentQueries } from './agent-query';
+import type { FcCycleRule } from './fc-cycle-rules';
 import { readConfiguredFacts } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
@@ -37,6 +38,7 @@ export async function readConfiguredOverview(
     signal?: AbortSignal;
     viewIds?: readonly string[];
     cycleDays?: number;
+    fcCycleRules?: FcCycleRule[];
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
   } = {},
@@ -160,6 +162,7 @@ export async function readConfiguredOverview(
             asOf,
             customer,
             cycleDays: options.cycleDays,
+            fcCycleRules: options.fcCycleRules,
             filters: id === 'customer' && customer ? { customer } : {},
           };
           const readOptions = { ...options, snapshotReads, scopeReads, summaryOnly: true };

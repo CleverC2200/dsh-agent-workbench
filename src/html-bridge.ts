@@ -174,7 +174,7 @@ export function connectHtmlFrame(
             AbortSignal.any([signal, lifetime.signal, task.signal]),
           );
           result = { sent: true };
-        } else if (['sql', 'workspace', 'access', 'context'].includes(message.method))
+        } else if (['sql', 'workspace', 'access', 'context', 'branch-dms'].includes(message.method))
           result = await call(message.method, message.parameters, task.signal);
         else throw Error('HTML_METHOD_NOT_ALLOWED');
         if (alive() && !task.signal.aborted)

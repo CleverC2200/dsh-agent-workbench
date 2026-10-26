@@ -377,6 +377,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         empty = self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual((empty[0]['page_scope_total'],empty[0]['page_row_present']),(1,0))
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
+        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='S2',stat_month='202610',warehouse_month_out_plan=62,warehouse_future30_qty=60,warehouse_transfer_qty=0)
         page1=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=0)
         page2=self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=1)
         self.assertEqual([page1[0]['sku'],page2[0]['sku']],['S1','S2'])
@@ -388,12 +389,15 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.config = config_for('fc')
         self.db = sqlite3.connect(':memory:')
         self.db.row_factory = sqlite3.Row
+        import math
         self.db.create_function('CONCAT', -1, lambda *values: ''.join(str(v) for v in values if v is not None))
+        self.db.create_function('CEIL', 1, lambda value: None if value is None else math.ceil(value))
+        self.db.create_function('FLOOR', 1, lambda value: None if value is None else math.floor(value))
         tables = {
             'agents_dim_product_list_mi': 'material_code material_name product_item_name',
             'agents_scm_inventory_sku_data_d': 'warehouseid material_code prod_date sap_warehouseid plant quality_batch is_good_prod live_qty available_qty pack_unit_qty freeze_qty warehouse_classify unrestricted_qty month_date warehouse_name belong_base material_name',
             'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
-            'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty plan_month snapshot_date plan_version plan_source warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan plan_qty_unit manual_out_source_record_id manual_transfer_source_record_id manual_plan_version manual_plan_source manual_tenant_code manual_confirmed_at last_month_actual_qty current_day_avg_qty',
+            'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty last_month_actual_qty current_day_avg_qty stat_month',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
             'agents_scm_execute_detail_d': 'cust_order_no material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyallocated',
             'agents_scm_material_in_out_summary_d': 'warehouseid pickup_point material_code material_name material_group_name warehouse_name product_categ_name',
@@ -402,12 +406,13 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
-        self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouse_code='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=20, transfer_prepare_qty=20, plan_month='2026-10-01', snapshot_date='2026-10-19', plan_version='v1', plan_qty_unit='箱')
+        self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouse_code='WH1', material_code='S1', warehouse_name='分仓1', material_name='商品1', future30_avg_plan=10, warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=40, transfer_onway_qty=20, transfer_prepare_qty=20, stat_month='202610')
         for sku, stock, available in [('S1',50,25),('S2',80,60)]:
             self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',warehouse_name='分仓1',belong_base='基地1',material_code=sku,prod_date='2026-09-30',warehouse_classify='20',live_qty=stock,available_qty=available,pack_unit_qty=0,freeze_qty=0)
         for sku, amount in [('S1',30),('S2',60)]:
             self.insert('agents_scm_cust_deliv_daily_di',warehouse='WH1',material_code=sku,material_name='商品'+sku,warehouse_classify='20',act_ship_date='20261010',act_dl_qty=amount)
 
+        self.insert('agents_scm_execute_detail_d',cust_order_no='COMPLETED',material_code='SENT',bizflowstatus='已发货',adjust_order_qty=1,qtyallocated=1)
     def insert(self, table, **values):
         self.db.execute('INSERT INTO '+table+' ('+', '.join(values)+') VALUES ('+', '.join('?' for _ in values)+')',list(values.values()))
 
@@ -418,6 +423,8 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         values.update(overrides)
         values = {s['name']:values[s['name']] for s in query['parameterSpec'].values()}
         params = validate_parameters(query,values,name)
+        schema={r[0]: {c[1] for c in self.db.execute('PRAGMA table_info('+r[0]+')')} for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        inspect(query['request']['sql'],params,schema)
         tree = sqlglot.parse_one(query['request']['sql'],read='postgres')
         for cast in list(tree.find_all(sqlglot.exp.Cast)):
             if cast.args['to'].this == sqlglot.exp.DataType.Type.DATE:
@@ -457,18 +464,64 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(next(r for r in rows if r['sku']=='S2')['current_order_shortage'],0)
         self.insert('agents_scm_execute_detail_d',cust_order_no='NO-STOCK',material_code='S3',pickup_point='P1',belong_base='基地1',bizflowstatus='创建',adjust_order_qty=12,qtyallocated=2)
         row=next(r for r in self.read('replenishment.detail.atomic') if r['sku']=='S3')
-        self.assertEqual((row['available_qty'],row['current_order_shortage']),(0,10))
+        self.assertEqual((row['available_qty'],row['current_order_shortage']),(None,10))
         self.assertEqual(self.read('replenishment.count')[0]['total'],3)
 
 
-    def test_period_plan_columns_use_exact_months_and_absence_is_numeric_zero(self):
-        row=self.read('transfer_plan.detail')[0]
-        self.assertEqual((row['period_current_out'],row['period_next_out'],row['period_next_transfer']),(310,0,0))
-        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='S1',plan_month='2026-11-01',warehouse_month_out_plan=600,warehouse_month_transfer_plan=700,plan_source='月计划')
-        row=self.read('transfer_plan.detail.atomic')[0]
-        self.assertEqual((row['period_current_out'],row['period_next_out'],row['period_next_transfer']),(310,600,700))
+    def test_period_plans_use_stat_month_and_published_next_month_quantity(self):
+        self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='S1',stat_month='202611',warehouse_month_out_plan=600,warehouse_future30_qty=620)
+        for query in ['transfer_plan.detail','transfer_plan.detail.atomic']:
+            row=self.read(query)[0]
+            self.assertEqual((row['stat_month'],row['period_current_out'],row['period_next_out']),('202610',310,300))
+            self.assertIsNone(row['period_current_transfer'])
+            self.assertIsNone(row['period_next_transfer'])
+            november=self.read(query,month='2026-11-01')[0]
+            self.assertEqual((november['period_current_out'],november['period_next_out']),(600,620))
         row=next(r for r in self.read('replenishment.detail.atomic') if r['sku']=='S1')
-        self.assertEqual((row['period_current_daily'],row['period_next_daily']),(10,20))
+        self.assertEqual((row['period_current_daily'],row['period_next_daily']),(10,10))
+        self.assertIsNone(row['expected_month_end_qty'])
+        self.assertEqual(self.read('replenishment.summary')[0]['inventory_qty'],130)
+        for agent in ['fc','qll']:
+            self.config=config_for(agent)
+            self.assertEqual(self.read('transfer_plan.count')[0]['total'],1)
+            self.assertEqual(self.read('transfer_plan.summary')[0]['month_out_plan'],310)
+            self.assertEqual(self.read('transfer_plan.summary',month='2026-11-01')[0]['month_out_plan'],600)
+
+    def test_branch_and_chain_plans_preserve_published_actual_metrics(self):
+        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET last_month_actual_qty=123,current_day_avg_qty=7')
+        for agent in ['fc', 'qll']:
+            self.config=config_for(agent)
+            for query in ['transfer_plan.detail', 'transfer_plan.detail.atomic', 'replenishment.detail', 'replenishment.detail.atomic']:
+                with self.subTest(agent=agent, query=query):
+                    row=next(r for r in self.read(query) if r['sku']=='S1')
+                    self.assertEqual((row['last_month_actual_qty'],row['current_day_avg_qty']),(123,7))
+
+    def test_calendar_rollover_keeps_current_and_next_plan_months_separate(self):
+        for month,current_days,next_days in [('2026-12-01',31,31),('2027-01-01',31,28),('2028-01-01',31,29)]:
+            with self.subTest(month=month):
+                self.db.execute('DELETE FROM agents_scm_warehouse_transfer_plan_data_d')
+                self.insert('agents_scm_warehouse_transfer_plan_data_d',warehouse_code='WH1',material_code='S1',stat_month=month.replace('-','')[:6],warehouse_month_out_plan=current_days*10,warehouse_future30_qty=next_days*20)
+                row=next(r for r in self.read('replenishment.detail.atomic',month=month,days_in_month=current_days,next_days_in_month=next_days) if r['sku']=='S1')
+                self.assertEqual((row['period_current_daily'],row['period_next_daily']),(10,20))
+                self.assertIsNone(row['period_current_transfer'])
+                self.assertIsNone(row['expected_month_end_qty'])
+
+    def test_null_outbound_plan_keeps_replenishment_unknown(self):
+        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=NULL,warehouse_future30_qty=NULL')
+        row=next(r for r in self.read('replenishment.detail.atomic') if r['sku']=='S1')
+        for field in ['period_current_out','period_next_out','period_current_daily','period_next_daily','period_remaining_out','expected_month_end_qty']:
+            self.assertIsNone(row[field],field)
+        self.assertEqual(row['calculation_status'],'本月计划待核实')
+        self.assertEqual(row['inventory_qty'],50)
+
+    def test_all_branch_plan_queries_execute_without_reserved_columns(self):
+        for agent in ['fc','qll']:
+            self.config=config_for(agent)
+            for name,query in self.config['queries'].items():
+                if not name.startswith(('transfer_plan.','replenishment.','replenishment-suggestions.')):
+                    continue
+                with self.subTest(agent=agent,query=name):
+                    self.read(name)
 
     def test_branch_stock_does_not_sum_base_or_unrelated_warehouse_classes(self):
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='WH1',material_code='S1',prod_date='2026-08-30',warehouse_classify='20',live_qty=10,available_qty=5,pack_unit_qty=5,freeze_qty=0)
@@ -538,6 +591,31 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         rows=self.read('replenishment.detail',warehouse_code_mode='equal',warehouse_code='WH1')
         self.assertEqual(sum(r['inventory_qty'] for r in rows),130)
 
+    def test_net_demand_subtracts_order_unallocated_and_transfer_exactly_once(self):
+        self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',pickup_point='P1',material_code='S1')
+        self.insert('agents_scm_execute_detail_d',cust_order_no='NET',material_code='S1',pickup_point='P1',bizflowstatus='创建',adjust_order_qty=100,qtyallocated=20)
+        row=self.read('replenishment.detail')[0]
+        self.assertEqual(row['current_order_remaining'],80)
+        self.assertEqual(row['recommended_qty'],115)
+        self.assertEqual(row['target_inventory_qty'],100)
+
+    def test_cycle_override_and_expired_rule(self):
+        params=dict(fc_cycle_0_level='sku',fc_cycle_0_object='S1',fc_cycle_0_days=14,fc_cycle_0_from='2026-10-01',fc_cycle_0_to='2026-10-31')
+        row=self.read('replenishment.detail',**params)[0]
+        self.assertEqual((row['cycle_days'],row['recommended_qty']),(14,105))
+        params['fc_cycle_0_to']='2026-10-19'
+        self.assertEqual(self.read('replenishment.detail',**params)[0]['recommended_qty'],35)
+
+    def test_forecast_ceil_and_month_end_without_current_plan(self):
+        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=32')
+        row=self.read('replenishment.detail',days_remaining_in_month=5)[0]
+        self.assertEqual(row['period_current_daily'],2)
+        self.assertEqual(row['daily_plan'],9)
+        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=NULL')
+        row=self.read('replenishment.detail',days_remaining_in_month=0)[0]
+        self.assertEqual(row['daily_plan'],10)
+        self.assertIsNone(row['recommended_qty'])
+
     def test_stock_only_sku_and_its_names_are_not_lost_to_plan_scope(self):
         self.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',material_code='S2',material_name='商品S2',material_group_name='物料组')
         rows = self.read('replenishment.detail')
@@ -549,40 +627,37 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(self.read('replenishment.count'),[{'total':2}])
         total = self.read('replenishment.summary')[0]
         self.assertEqual((total['row_count'],total['stock_only_count'],total['inventory_qty']),(2,1,130))
-        self.assertEqual(total['recommended_qty'],35)
+        self.assertIsNone(total['recommended_qty'])
+        self.assertEqual(total['missing_calculation_count'],1)
         self.assertEqual(total['plan_calculable_count'],1)
 
-    def test_current_plan_missing_units_does_not_erase_stock_and_shipment_metrics(self):
-        self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET plan_qty_unit=NULL')
+    def test_valid_plan_does_not_require_reserved_unit_version_or_snapshot(self):
         total = self.read('replenishment.summary')[0]
         self.assertEqual((total['inventory_qty'],total['available_qty'],total['rolling_ship_daily']),(130,85,3))
-        self.assertEqual((total['plan_calculable_count'],total['recommended_qty'],total['replenishment_sku_count']),(0,0,0))
-        self.assertTrue(all(row['recommended_qty'] == 0 for row in self.read('replenishment.detail')))
-        self.assertTrue(all(row['calculation_status'] == '近30日发货测算' for row in self.read('replenishment.detail')))
+        self.assertEqual((total['plan_calculable_count'],total['recommended_qty'],total['replenishment_sku_count']),(1,None,1))
 
-    def test_stock_only_sku_can_replenish_from_historical_shipments_with_explicit_basis(self):
+    def test_stock_only_sku_does_not_use_historical_shipments_as_plan(self):
         self.db.execute("UPDATE agents_scm_inventory_sku_data_d SET available_qty=0,live_qty=0 WHERE material_code='S2'")
         row = next(row for row in self.read('replenishment.detail') if row['sku']=='S2')
-        self.assertEqual((row['target_inventory_qty'],row['recommended_qty'],row['urgent']),(20,20,1))
-        self.assertEqual(row['calculation_status'],'近30日发货测算')
+        self.assertEqual((row['target_inventory_qty'],row['recommended_qty'],row['urgent']),(None,None,0))
+        self.assertEqual(row['calculation_status'],'本月计划待核实')
         total = self.read('replenishment.summary')[0]
-        self.assertEqual((total['recommended_qty'],total['replenishment_sku_count']),(55,2))
+        self.assertEqual((total['recommended_qty'],total['replenishment_sku_count']),(None,1))
         self.assertEqual(total['historical_basis_count'],1)
 
-    def test_plan_cutoff_uses_read_date_even_when_inventory_snapshot_is_previous_day(self):
-        self.db.execute("UPDATE agents_scm_warehouse_transfer_plan_data_d SET snapshot_date='2026-10-20'")
-        row = self.read('replenishment.detail')[0]
-        self.assertEqual((row['plan_calculable'],row['recommended_qty']),(1,35))
-        self.db.execute("UPDATE agents_scm_warehouse_transfer_plan_data_d SET snapshot_date='2026-10-21'")
+    def test_plan_selects_stat_month_independently_of_stock_snapshot(self):
+        self.db.execute("UPDATE agents_scm_warehouse_transfer_plan_data_d SET stat_month='202611'")
         row = self.read('replenishment.detail')[0]
         self.assertEqual(row['plan_calculable'],0)
-        self.assertEqual(row['calculation_status'],'近30日发货测算')
+        self.assertEqual(row['calculation_status'],'本月计划待核实')
+        row = self.read('replenishment.detail',month='2026-11-01',days_in_month=30)[0]
+        self.assertEqual(row['plan_calculable'],1)
 
     def test_valid_zero_plan_is_not_replaced_by_historical_demand(self):
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=0')
         row = self.read('replenishment.detail')[0]
         self.assertEqual((row['plan_calculable'],row['target_inventory_qty'],row['recommended_qty']),(1,0,0))
-        self.assertEqual(row['calculation_status'],'当前有效计划')
+        self.assertEqual(row['calculation_status'],'原版净需求补货')
 
     def test_duplicate_plan_never_multiplies_stock_and_ambiguous_plan_is_not_used(self):
         self.db.execute('INSERT INTO agents_scm_warehouse_transfer_plan_data_d SELECT * FROM agents_scm_warehouse_transfer_plan_data_d')
@@ -606,7 +681,7 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(self.read('replenishment.count',sku_mode='equal',sku='S2'),[{'total':1}])
 
     def test_null_warehouse_plan_is_preserved_and_is_not_an_empty_page_marker(self):
-        self.insert('agents_scm_warehouse_transfer_plan_data_d', material_code='UNMAPPED', transfer_prepare_qty=7)
+        self.insert('agents_scm_warehouse_transfer_plan_data_d', material_code='UNMAPPED', stat_month='202610', transfer_prepare_qty=7)
         rows = self.read('replenishment.detail.atomic')
         row = next(row for row in rows if row['sku'] == 'UNMAPPED')
         self.assertIsNone(row['warehouse_code'])
