@@ -3,6 +3,44 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
+
+test('QLL 列表查询按钮与筛选输入框等高', async (t) => {
+  const { frame } = await mount(t, 'qll', 1280);
+  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
+  const input = frame.getByRole('textbox', { name: '品类', exact: true }).first();
+  const form = input.locator('xpath=ancestor::form[1]');
+  const heights = await Promise.all(
+    [
+      input,
+      form.getByRole('button', { name: '查询', exact: true }),
+      form.getByRole('button', { name: '清空筛选' }),
+    ].map(async (locator) => (await locator.boundingBox())?.height),
+  );
+  assert.ok(heights.every(Number.isFinite), `筛选控件应可见：${heights}`);
+  assert.ok(Math.max(...heights) - Math.min(...heights) <= 1, `按钮与输入框高度应一致：${heights}`);
+});
+
+test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) => {
+  const { frame } = await mount(t, 'qll', 1280);
+  const trigger = frame.getByRole('button', { name: '趋势指标' });
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '趋势指标' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: '库存趋势' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(menu.getByRole('option', { name: '订单缺口趋势' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await expect(menu.getByRole('option', { name: '货龄趋势' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await trigger.press('Escape');
+  await expect(menu).toHaveCount(0);
+});
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');

@@ -9,8 +9,19 @@ import styles from './qll/components/full-chain-workbench.module.css';
 export function ConfiguredTrends({ date }: { date: string }) {
   const [data, setData] = useState<any[] | null>(null),
     [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [menuOpen, setMenuOpen] = useState(false);
   const request = useRef<AbortController>();
+  const menu = useRef<HTMLDivElement>(null);
+  const menuTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!menu.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [menuOpen]);
   useEffect(() => {
     request.current?.abort();
     setData(null);
@@ -49,18 +60,48 @@ export function ConfiguredTrends({ date }: { date: string }) {
     <section className={styles.chartBlock} aria-label="全链库存趋势与缺口">
       <div className={styles.chartHeader}>
         <strong>趋势与缺口</strong>
-        <label>
-          指标{' '}
-          <select aria-label="趋势指标">
-            <option value="inventory">库存趋势</option>
-            <option value="orders" disabled>
-              订单缺口趋势
-            </option>
-            <option value="aging" disabled>
-              货龄趋势
-            </option>
-          </select>
-        </label>
+        <div className={styles.trendMetric} ref={menu}>
+          <span>指标</span>
+          <button
+            ref={menuTrigger}
+            type="button"
+            className={styles.trendMetricTrigger}
+            aria-label="趋势指标"
+            aria-haspopup="listbox"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setMenuOpen(false);
+              if (event.key === 'ArrowDown' && !menuOpen) {
+                event.preventDefault();
+                setMenuOpen(true);
+              }
+            }}
+          >
+            库存趋势
+          </button>
+          {menuOpen && (
+            <div className={styles.trendMetricMenu} role="listbox" aria-label="趋势指标">
+              <button
+                type="button"
+                role="option"
+                aria-selected="true"
+                onClick={() => {
+                  setMenuOpen(false);
+                  menuTrigger.current?.focus();
+                }}
+              >
+                库存趋势
+              </button>
+              <div role="option" aria-selected="false" aria-disabled="true">
+                订单缺口趋势
+              </div>
+              <div role="option" aria-selected="false" aria-disabled="true">
+                货龄趋势
+              </div>
+            </div>
+          )}
+        </div>
         <Button disabled={busy} onClick={() => void load()}>
           查询趋势
         </Button>
