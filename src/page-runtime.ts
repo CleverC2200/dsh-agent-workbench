@@ -98,6 +98,8 @@ export interface PageBusinessGrant {
   /** Stable environment/tenant/user ownership from the installed authority; never a grant. */
   readonly referenceScope: string;
   readonly access: unknown;
+  /** Optional dedicated DMS grant, provided only by the authorized branch adapter. */
+  branchDms?(input: any, signal: AbortSignal): Promise<unknown>;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
   workspace?(input: any, signal: AbortSignal): Promise<unknown>;
   observe?(context: Record<string, unknown>): void;
@@ -381,6 +383,10 @@ export class PageRuntime {
         case 'sql':
           if (!owner.grant.readSql) throw Error('METHOD_NOT_ALLOWED');
           value = await owner.grant.readSql(input.parameters, signal);
+          break;
+        case 'branch-dms':
+          if (!owner.grant.branchDms) throw Error('METHOD_NOT_ALLOWED');
+          value = await owner.grant.branchDms(input.parameters, signal);
           break;
         case 'workspace':
           if (!owner.grant.workspace) throw Error('METHOD_NOT_ALLOWED');

@@ -1,4 +1,5 @@
 import { refreshConfiguredQueries } from './query-cache';
+import type { FcCycleRule } from './fc-cycle-rules';
 import { QueryErrors } from './query-errors';
 import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
@@ -44,6 +45,7 @@ export function ConfiguredFactsPage({
   initialFilters = {},
   date,
   cycleDays,
+  fcCycleRules,
   customerCode,
   onChooseCustomer,
   currentPage,
@@ -62,6 +64,7 @@ export function ConfiguredFactsPage({
   initialFilters?: Record<string, string>;
   date?: string;
   cycleDays?: number;
+  fcCycleRules?: FcCycleRule[];
   customerCode?: string;
   onChooseCustomer?: (code: string) => void;
   currentPage?: number;
@@ -127,6 +130,7 @@ export function ConfiguredFactsPage({
     asOf,
     customer,
     cycleDays,
+    fcCycleRules,
     filters,
     revision,
   ]);
@@ -141,7 +145,7 @@ export function ConfiguredFactsPage({
     void readConfiguredFacts(
       config,
       viewId,
-      { asOf, page, pageSize, filters, customer, cycleDays, readContext },
+      { asOf, page, pageSize, filters, customer, cycleDays, fcCycleRules, readContext },
       // Business lists display rows; their independent overview owns card totals.
       { signal: controller.signal, detailsOnly: Boolean(presentation) },
     )
@@ -196,7 +200,7 @@ export function ConfiguredFactsPage({
   if (presentation)
     return (
       <BusinessList
-        actionScope={{ config, viewId, input: { asOf, filters, cycleDays } }}
+        actionScope={{ config, viewId, input: { asOf, filters, cycleDays, fcCycleRules } }}
         agentId={config.agentId}
         view={view}
         columns={columns}

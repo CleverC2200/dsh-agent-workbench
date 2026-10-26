@@ -1,3 +1,4 @@
+import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
@@ -6,6 +7,7 @@ export type FactReadContext = { key: string; snapshotDate: string; configVersion
 export type FactInput = {
   asOf: string;
   cycleDays?: number;
+  fcCycleRules?: FcCycleRule[];
   page?: number;
   pageSize?: number;
   filters?: Record<string, string>;
@@ -147,6 +149,7 @@ export async function readConfiguredFacts(
     input.asOf,
     input.customer?.trim() ?? '',
     input.cycleDays,
+    input.fcCycleRules,
     Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
   ]);
   let snapshotDate: string | null = null;
@@ -198,9 +201,11 @@ export async function readConfiguredFacts(
   const rollingStart = rollingDate.toISOString().slice(0, 10);
   const filters = input.filters ?? {};
   const values: Record<string, any> = {};
+  const cycleParameters = fcCycleParameters(input.fcCycleRules);
   for (const [key, spec] of Object.entries(q.parameterSpec) as Array<[string, any]>) {
     const name = spec.name;
     let value = structuredClone(q.request.parameters[key]);
+    if (name.startsWith('fc_cycle_')) value = cycleParameters[name];
     if (name === 'start') value = month;
     if (name === 'as_of') value = input.asOf;
     if (name === 'shipment_start') value = month < rollingStart ? month : rollingStart;

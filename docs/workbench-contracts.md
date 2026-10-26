@@ -70,3 +70,7 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 配置化 HTML 在注入大体积 SQL JSON 前声明 UTF-8，确保无显式响应字符集的加载方式也能完整保留中文 SQL 文本、筛选值及枚举。配置仍在作者脚本前装载，保留 JSON 的 HTML 转义与原权限校验。
 
 公司欢迎区通过 Core 的 `conversation.hero.content` 插槽贡献，文案与样式由 Workbench 维护。侧栏复用原生 `sidebar.workspaces`，通过 `heading` 和 `expanded` 显示单一“工作台”入口；收起列表不卸载浏览器。该组合需要提供上述 UI 接口的公司 Core，确切输入由同组 GEA 的 Core 清单与 CI 策略登记。
+
+## 分仓 DMS 提交
+
+分仓补货确认框支持客户、收货地址与提货点编码输入，暂存成功后展示 DMS 回执；原 Excel 导出保留。`PageBusinessGrant.branchDms` 是 Host 按部署用户映射显式提供的可选专用操作，页面 owner 失效即取消，不扩大通用 HTML action 权限。其他页面缺少 grant 时拒绝 `branch-dms`。登录凭据和提交持久回执归 GEA Host；页面只接收订单号或经 Host 校验的短时免登跳转地址。完整配置与联调缺口见 [GEA 分仓 DMS 对接 PR](https://github.com/CleverC2200/dsh-gea-plugin/pull/214)。

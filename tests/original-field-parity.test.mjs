@@ -20,10 +20,14 @@ test('the 37 replenishment business columns retain their order with explicit new
       ([field, label]) =>
         ({
           forecastTurnoverDays: '测算可供天数',
+          preparingQty: '当前未备单需求',
+          safetyDays: '目标覆盖天数',
+          forecastDailyShipment: '次月日均出货计划（件）',
+          planSourceLabel: '取数来源',
           currentOutboundQty: '源月出货计划',
           currentTransferQty: '源月调拨计划',
-          transferPendingQty: '调拨备单（源量）',
-          transferShippedQty: '调拨在途（源量）',
+          transferPendingQty: '当前调拨备单',
+          transferShippedQty: '当前调拨在途',
           safetyStockGapQty: '目标库存差异量',
         })[field] ?? label,
     ),

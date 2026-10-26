@@ -95,6 +95,7 @@ export type FcViewState = {
   preferences: Entry<FcPreferences>[];
   cycleEdits?: Entry<FcCycleEdit>[];
   replenishmentCycleDays?: number;
+  fcCycleRules?: Array<{ level: string; object: string; days: number; from: string; to: string }>;
 };
 export type AqkcViewState = {
   version: 1;
@@ -756,6 +757,23 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
           cycles: entries('cycle-preview', cycle),
           preferences: entries('preferences', preferences),
           cycleEdits: entries('cycle-edit', cycleEdit),
+          fcCycleRules: (v) =>
+            Array.isArray(v) &&
+            v.length <= 12 &&
+            v.every((rule) =>
+              shape(
+                rule,
+                {
+                  level: (x) =>
+                    ['sku', 'material-group', 'category', 'warehouse'].includes(String(x)),
+                  object: (x) => typeof x === 'string' && x.trim().length > 0 && x.length <= 100,
+                  days: (x) => typeof x === 'number' && Number.isInteger(x) && x >= 1 && x <= 365,
+                  from: text,
+                  to: text,
+                },
+                ['level', 'object', 'days', 'from', 'to'],
+              ),
+            ),
           replenishmentCycleDays: (v) =>
             typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 365,
         },
