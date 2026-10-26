@@ -577,30 +577,161 @@ export function DataPagination({
   ariaLabel = '数据分页',
 }: any) {
   const max = Math.max(1, Math.ceil(totalCount / pageSize));
+  const currentPage = totalCount === 0 ? 0 : Math.min(Math.max(1, pageNumber), max);
+  const [sizeOpen, setSizeOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
+  const sizeControl = useRef<HTMLDivElement>(null);
+  const sizeTrigger = useRef<HTMLButtonElement>(null);
+  const sizeMenu = useRef<HTMLDivElement>(null);
+  const sizeMenuId = useId();
+  const openSizeMenu = () => {
+    const bounds = sizeTrigger.current?.getBoundingClientRect();
+    if (!bounds) return;
+    const menuHeight = Math.min(pageSizeOptions.length * 34 + 12, window.innerHeight - 24);
+    const below = window.innerHeight - bounds.bottom;
+    const above = bounds.top;
+    const top =
+      above > below && above >= menuHeight + 7
+        ? bounds.top - menuHeight - 7
+        : Math.min(bounds.bottom + 7, window.innerHeight - menuHeight - 12);
+    setMenuPosition({
+      top: Math.max(12, top),
+      left: Math.max(12, Math.min(bounds.right - 120, window.innerWidth - 132)),
+    });
+    setSizeOpen(true);
+  };
+  useEffect(() => {
+    if (!sizeOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (
+        !sizeControl.current?.contains(event.target as Node) &&
+        !sizeMenu.current?.contains(event.target as Node)
+      )
+        setSizeOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setSizeOpen(false);
+        sizeTrigger.current?.focus();
+      }
+    };
+    const onScroll = (event: Event) => {
+      if (!sizeMenu.current?.contains(event.target as Node)) setSizeOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [sizeOpen]);
+  useEffect(() => {
+    if (disabled) setSizeOpen(false);
+  }, [disabled]);
+  useEffect(() => {
+    if (sizeOpen) {
+      sizeMenu.current
+        ?.querySelector<HTMLButtonElement>('[role="option"][aria-selected="true"]')
+        ?.focus();
+    }
+  }, [sizeOpen]);
   return (
     <nav className={css.pagination} aria-label={ariaLabel}>
-      <span>共 {totalCount} 条</span>
-      <select
-        aria-label="每页条数"
-        disabled={disabled}
-        value={pageSize}
-        onChange={(e) => onPageSizeChange?.(+e.target.value)}
-      >
-        {pageSizeOptions.map((n: number) => (
-          <option key={n} value={n}>
-            {n} 条/页
-          </option>
-        ))}
-      </select>
-      <Button disabled={disabled || pageNumber <= 1} onClick={() => onPageChange(pageNumber - 1)}>
-        上一页
-      </Button>
-      <span>
-        {pageNumber} / {max}
-      </span>
-      <Button disabled={disabled || pageNumber >= max} onClick={() => onPageChange(pageNumber + 1)}>
-        下一页
-      </Button>
+      <span className={css.paginationTotal}>共 {totalCount.toLocaleString('zh-CN')} 条</span>
+      <div className={css.paginationControls}>
+        <div className={css.paginationSize} ref={sizeControl}>
+          <button
+            ref={sizeTrigger}
+            type="button"
+            className={css.paginationSizeTrigger}
+            aria-label="每页条数"
+            aria-haspopup="listbox"
+            aria-expanded={sizeOpen}
+            aria-controls={sizeOpen ? sizeMenuId : undefined}
+            disabled={disabled || !onPageSizeChange}
+            onClick={() => (sizeOpen ? setSizeOpen(false) : openSizeMenu())}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                openSizeMenu();
+              }
+            }}
+          >
+            <span>{pageSize} 条/页</span>
+            <span className={css.paginationChevron} aria-hidden="true" />
+          </button>
+          {sizeOpen &&
+            createPortal(
+              <div
+                ref={sizeMenu}
+                id={sizeMenuId}
+                className={css.paginationSizeMenu}
+                role="listbox"
+                aria-label="每页条数"
+                style={menuPosition}
+                onKeyDown={(event) => {
+                  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const options = Array.from(
+                    event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+                  );
+                  const current = options.indexOf(document.activeElement as HTMLButtonElement);
+                  const next =
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? options.length - 1
+                        : (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) %
+                          options.length;
+                  options[next]?.focus();
+                }}
+              >
+                {pageSizeOptions.map((n: number) => (
+                  <button
+                    key={n}
+                    type="button"
+                    role="option"
+                    aria-selected={n === pageSize}
+                    className={css.paginationSizeOption}
+                    onClick={() => {
+                      setSizeOpen(false);
+                      sizeTrigger.current?.focus();
+                      if (n !== pageSize) onPageSizeChange?.(n);
+                    }}
+                  >
+                    {n} 条/页
+                  </button>
+                ))}
+              </div>,
+              document.body,
+            )}
+        </div>
+        <div className={css.paginationNavigation}>
+          <button
+            type="button"
+            className={css.paginationButton}
+            disabled={disabled || currentPage <= 1}
+            onClick={() => onPageChange?.(currentPage - 1)}
+          >
+            上一页
+          </button>
+          <span className={css.paginationPageCount}>
+            {currentPage} / {totalCount === 0 ? 0 : max}
+          </span>
+          <button
+            type="button"
+            className={css.paginationButton}
+            disabled={disabled || currentPage === 0 || currentPage >= max}
+            onClick={() => onPageChange?.(currentPage + 1)}
+          >
+            下一页
+          </button>
+        </div>
+      </div>
     </nav>
   );
 }

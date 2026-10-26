@@ -147,8 +147,141 @@
 }
 .pagination {
   justify-content: flex-end;
-  padding: 12px 0;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 68px;
+  padding: 16px;
+  border-top: 1px solid var(--workbench-border, #e3e6ea);
+  background: var(--workbench-surface, #fff);
   flex-wrap: wrap;
+}
+.paginationTotal,
+.paginationPageCount {
+  color: var(--workbench-muted, #858c96);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.paginationTotal {
+  margin-right: auto;
+}
+.paginationControls,
+.paginationNavigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.paginationControls {
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.paginationNavigation {
+  padding-left: 16px;
+  border-left: 1px solid var(--workbench-border, #e3e6ea);
+}
+.paginationSize {
+  position: relative;
+  flex: 0 0 auto;
+}
+.paginationSizeTrigger,
+.paginationButton {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--workbench-border, #e3e6ea);
+  border-radius: 8px;
+  background: var(--workbench-surface, #fff);
+  color: var(--workbench-body, #555d68);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.paginationSizeTrigger {
+  width: 120px;
+  justify-content: space-between;
+  padding: 0 11px;
+  border-color: var(--workbench-control-border, #d9dde3);
+  color: var(--workbench-text, #20232a);
+}
+.paginationButton {
+  min-width: 70px;
+  padding: 0 12px;
+}
+.paginationSizeTrigger:hover:not(:disabled),
+.paginationButton:hover:not(:disabled) {
+  border-color: var(--ui-accent-line, #efabb4);
+  background: var(--workbench-hover, #fffafb);
+  color: var(--workbench-brand, #df1732);
+}
+.paginationSizeTrigger:focus-visible,
+.paginationButton:focus-visible,
+.paginationSizeOption:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px #df173226;
+}
+.paginationSizeTrigger:disabled,
+.paginationButton:disabled {
+  border-color: var(--workbench-border, #e3e6ea);
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-muted, #858c96);
+  cursor: not-allowed;
+}
+.paginationChevron {
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.paginationSizeTrigger[aria-expanded='true'] .paginationChevron {
+  transform: translateY(2px) rotate(225deg);
+}
+.paginationSizeMenu {
+  position: fixed;
+  z-index: 80;
+  width: 120px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid #e7e9ee;
+  border-radius: 12px;
+  background: var(--workbench-surface, #fff);
+  box-shadow:
+    0 14px 38px #18223024,
+    0 2px 8px #1822300a;
+}
+.paginationSizeOption {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--workbench-text, #343b46);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.paginationSizeOption:hover,
+.paginationSizeOption:focus-visible {
+  background: var(--workbench-brand-soft, #ffedf0);
+}
+.paginationSizeOption[aria-selected='true'] {
+  background: var(--workbench-brand-soft, #fff5f6);
+  color: var(--workbench-brand, #df1732);
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .paginationControls {
+    margin-left: auto;
+  }
 }
 
 .input {
