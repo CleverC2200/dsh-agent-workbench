@@ -20,7 +20,9 @@ for id,q in c['queries'].items():
  for table in ctes['source_keys'].this.find_all(exp.Table):
   if table.name in ['fc_current_orders','eligible_order_sku']:table.set('this',exp.to_identifier('fc_order_keys'))
   if table.name=='branch_stock':table.set('this',exp.to_identifier('branch_stock_keys'))
- if id.endswith('.atomic') and 'page_rows' in ctes:
+ # Net demand participates in recommendation before pagination; scoping it to
+ # page_rows would create a recursive CTE dependency.
+ if id.endswith('.atomic') and 'page_rows' in ctes and 'fc_net_input' not in ctes:
   for name,alias in [('inventory_batch','inventory_rows'),('material_attributes','agents_scm_material_in_out_summary_d'),('fc_current_orders','d')]:
    predicate=f'{alias}.material_code IN (SELECT visible.sku AS sku FROM page_rows AS visible)'
    # Idempotent when rebuilding a locally prepared configuration.

@@ -1,5 +1,6 @@
 import { refreshConfiguredQueries } from './query-cache';
 import { useEffect, useState, useRef } from 'react';
+import type { FcCycleRule } from './fc-cycle-rules';
 import { readConfiguredOverview } from './configured-overview';
 import type { AgentSqlConfig } from './sql-config';
 export function useConfiguredOverview(
@@ -10,13 +11,21 @@ export function useConfiguredOverview(
   onRead?: (data: any) => void,
   cycleDays?: number,
   viewIds?: readonly string[],
+  fcCycleRules?: FcCycleRule[],
 ) {
   const previousRevision = useRef(revision);
   if (previousRevision.current !== revision) {
     refreshConfiguredQueries();
     previousRevision.current = revision;
   }
-  const scopeKey = JSON.stringify([config.agentId, viewIds, date, customer, cycleDays]);
+  const scopeKey = JSON.stringify([
+    config.agentId,
+    viewIds,
+    date,
+    customer,
+    cycleDays,
+    fcCycleRules,
+  ]);
   const [state, setState] = useState<any>({ key: scopeKey, parts: {}, busy: true, errors: [] });
   useEffect(() => {
     const controller = new AbortController();
@@ -29,6 +38,7 @@ export function useConfiguredOverview(
     void readConfiguredOverview(config, date, customer, {
       signal: controller.signal,
       cycleDays,
+      fcCycleRules,
       viewIds,
       onProgress: (parts) => {
         if (!controller.signal.aborted)
@@ -72,6 +82,14 @@ export function useConfiguredOverview(
         }
       });
     return () => controller.abort();
-  }, [config.agentId, JSON.stringify(viewIds), date, customer, revision, cycleDays]);
+  }, [
+    config.agentId,
+    JSON.stringify(viewIds),
+    date,
+    customer,
+    revision,
+    cycleDays,
+    JSON.stringify(fcCycleRules),
+  ]);
   return state.key === scopeKey ? state : { parts: {}, busy: true, errors: [] };
 }

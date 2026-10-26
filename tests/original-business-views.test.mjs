@@ -26,7 +26,16 @@ test('FC replenishment keeps every original business column in its original orde
       .originalFcView(c, 'replenishment')
       .columns.map((c) => c.label)
       .filter((label) => !['上月实际出库量', '本月日均出库量'].includes(label)),
-    Object.values(views.REPLENISHMENT_COLUMNS),
+    Object.values(views.REPLENISHMENT_COLUMNS).map(
+      (label) =>
+        ({
+          备单中量: '当前未备单需求',
+          本月调拨未发: '当前调拨备单',
+          本月调拨在途: '当前调拨在途',
+          安全库存天数: '目标覆盖天数',
+          计划来源: '取数来源',
+        })[label] ?? label,
+    ),
   );
   const labels = views.originalFcView(c, 'replenishment').columns.map((column) => column.label);
   assert.deepEqual(labels.slice(labels.indexOf('30日日均') + 1, labels.indexOf('30日日均') + 3), [
@@ -34,7 +43,7 @@ test('FC replenishment keeps every original business column in its original orde
     '本月日均出库量',
   ]);
 });
-test('QLL organization uses the original structure columns, with boxes as the confirmed physical unit', async () => {
+test('QLL organization uses the original structure columns, with pieces for company stock and boxes for dealer stock', async () => {
   const c = await config('qll');
   assert.equal(views.originalQllView(c, 'category').columns[0].valueField, 'category');
   assert.equal(views.originalQllView(c, 'structure').columns[0].valueField, 'base');
@@ -43,8 +52,8 @@ test('QLL organization uses the original structure columns, with boxes as the co
     'utf8',
   );
   const labels = [...original.matchAll(/title: '([^']+)'/g)]
-    .map((m) => m[1].replaceAll('件', '箱'))
-    .filter((v) => v !== '渠道日快照库存（箱）');
+    .map((m) => m[1])
+    .filter((v) => !v.startsWith('渠道日快照库存'));
   assert.deepEqual(
     views.originalQllView(c, 'structure').columns.map((c) => c.label),
     ['组织 / 品类 / SKU', ...labels],

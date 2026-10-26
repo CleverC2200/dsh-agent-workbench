@@ -1,3 +1,4 @@
+import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import { createPageViewState } from '../../../../../shared/view-state.js';
 // The current BrowserRepository remains the typed owner; Workbench retains only its declared UI records.
 const values = new Map<string, string>();
@@ -63,15 +64,22 @@ window.addEventListener('gea-identity-changed', () => values.clear());
 
 /** Workbench persists only the current page's calculation setting, within its identity/session scope. */
 export const configuredCycleState = {
+  rules(): FcCycleRule[] {
+    try {
+      return validateFcCycleRules(view.get().fcCycleRules ?? []);
+    } catch {
+      return [];
+    }
+  },
   read() {
     const value: unknown = view.get().replenishmentCycleDays;
     return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 365
       ? value
       : undefined;
   },
-  save(days: number) {
+  save(days: number, rules: FcCycleRule[] = this.rules()) {
     publish();
-    view.update({ replenishmentCycleDays: days });
+    view.update({ replenishmentCycleDays: days, fcCycleRules: validateFcCycleRules(rules) });
   },
   subscribe(listener: () => void) {
     const stop = view.subscribe(listener);

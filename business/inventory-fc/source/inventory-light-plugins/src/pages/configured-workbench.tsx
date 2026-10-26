@@ -1,3 +1,4 @@
+import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
   FcWorkflowProvider,
@@ -62,13 +63,20 @@ function WorkbenchBody() {
       () => configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays,
     ),
     [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
-    [cycleOpen, setCycleOpen] = useState(false);
-  useEffect(() => setTrial(null), [date, cycleDays, revision, setTrial]);
+    [cycleOpen, setCycleOpen] = useState(false),
+    [cycleRules, setCycleRules] = useState<FcCycleRule[]>(() => configuredCycleState.rules()),
+    [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
+    [cycleError, setCycleError] = useState('');
+  useEffect(
+    () => setTrial(null),
+    [date, cycleDays, JSON.stringify(cycleRules), revision, setTrial],
+  );
   useEffect(
     () =>
-      configuredCycleState.subscribe(() =>
-        setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays),
-      ),
+      configuredCycleState.subscribe(() => {
+        setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays);
+        setCycleRules(configuredCycleState.rules());
+      }),
     [],
   );
   const { parts, errors, busy } = useConfiguredOverview(
@@ -79,6 +87,7 @@ function WorkbenchBody() {
     (value) => updateContext('overview', value),
     cycleDays,
     config.overviewViewIds.filter((id) => id !== 'shipments'),
+    cycleRules,
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
@@ -87,7 +96,7 @@ function WorkbenchBody() {
     {
       title: '当前库存',
       value: knownNumber(branchStock?.total_qty),
-      unit: '箱',
+      unit: '件',
       color: 'blue',
       details: [
         ['回顾周转', knownNumber(plan?.historical_turnover_days), '天'],
@@ -95,10 +104,7 @@ function WorkbenchBody() {
           '展望周转',
           trial?.scope === fcTrialScope(date, cycleDays)
             ? trial.forwardTurnover
-            : knownNumber(plan?.calculation_daily) && Number(plan?.calculation_daily) > 0
-              ? (Number(plan.available_qty ?? 0) + Number(plan.open_transfer_reported_qty ?? 0)) /
-                Number(plan.calculation_daily)
-              : null,
+            : knownNumber(plan?.forecast_turnover_days),
           '天',
         ],
       ],
@@ -109,8 +115,8 @@ function WorkbenchBody() {
       unit: '天',
       color: 'purple',
       details: [
-        ['超龄库存量', knownNumber(branchStock?.overaged_qty), '箱'],
-        ['滞库风险量', knownNumber(branchStock?.stagnant_qty), '箱'],
+        ['超龄库存量', knownNumber(branchStock?.overaged_qty), '件'],
+        ['滞库风险量', knownNumber(branchStock?.stagnant_qty), '件'],
       ],
     },
     {
@@ -119,8 +125,8 @@ function WorkbenchBody() {
       unit: '%',
       color: 'green',
       details: [
-        ['已发订单量', completeValue(order, 'shipped_order_quantity'), '箱'],
-        ['实际发货量', completeValue(order, 'shipped'), '箱'],
+        ['已发订单量', completeValue(order, 'shipped_order_quantity'), '件'],
+        ['实际发货量', completeValue(order, 'shipped'), '件'],
       ],
     },
     {
@@ -129,23 +135,23 @@ function WorkbenchBody() {
         trial?.scope === fcTrialScope(date, cycleDays)
           ? trial.recommended
           : knownNumber(plan?.recommended_qty),
-      unit: '箱',
+      unit: '件',
       color: 'red',
       details: [
-        ['调拨备单量', knownNumber(plan?.known_preparing), '箱'],
-        ['调拨在途量', knownNumber(plan?.known_in_transit), '箱'],
+        ['调拨备单量', knownNumber(plan?.known_preparing), '件'],
+        ['调拨在途量', knownNumber(plan?.known_in_transit), '件'],
       ],
     },
     {
       title: '当前订单',
       value: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
-      unit: '箱',
+      unit: '件',
       color: 'amber',
       description:
         '当前未备单订单需求；缺货由三层模型按分仓与SKU扣可用库存后汇总，不是月累计履约缺货。',
       details: [
-        ['缺货量', currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '箱'],
-        ['未备单订单占用', currentShortageSum(parts['current-shortage']?.rows, 'allocated'), '箱'],
+        ['缺货量', currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件'],
+        ['未备单订单占用', currentShortageSum(parts['current-shortage']?.rows, 'allocated'), '件'],
       ],
     },
   ];
@@ -163,6 +169,8 @@ function WorkbenchBody() {
                 aria-haspopup="dialog"
                 onClick={() => {
                   setCycleDraft(String(cycleDays));
+                  setRuleDraft(cycleRules);
+                  setCycleError('');
                   setCycleOpen(true);
                 }}
               >
@@ -254,8 +262,18 @@ function WorkbenchBody() {
                 <small>经营洞察</small>
               </h3>
               <p>
-                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '箱')}
-                ，建议补货 {show(knownNumber(plan?.recommended_qty), '箱')}。
+                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '件')}
+                ，建议补货{' '}
+                {show(
+                  trial?.scope === fcTrialScope(date, cycleDays)
+                    ? trial.recommended
+                    : knownNumber(plan?.recommended_qty),
+                  '件',
+                )}
+                。
+                {(trial?.missingCount ?? knownNumber(plan?.missing_calculation_count) ?? 0) > 0 && (
+                  <span>部分SKU计算要素待核实，请打开补货明细核对，未将缺失按0汇总。</span>
+                )}
               </p>
             </section>
             <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
@@ -278,10 +296,19 @@ function WorkbenchBody() {
                   onRead={(value) => updateContext('data', value)}
                 />
               ) : tab === 'operations' ? (
-                <OriginalOperations config={config} date={date} revision={revision} />
+                <OriginalOperations
+                  config={config}
+                  date={date}
+                  revision={revision}
+                  observations={[
+                    `当前未备单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}；优先核对订单剩余需求及可用库存。`,
+                    `60天及以上库存 ${show(knownNumber(branchStock?.overaged_qty), '件')}，90天及以上 ${show(knownNumber(branchStock?.stagnant_qty), '件')}；结合SKU批次和订单判断是否先消化库存。`,
+                    `待核实补货SKU ${show(trial?.missingCount ?? knownNumber(plan?.missing_calculation_count))}；没有计划或可靠库存时不生成确定建议。`,
+                  ]}
+                />
               ) : (
                 <ConfiguredFactsPage
-                  key={[tab, date, revision, cycleDays].join(':')}
+                  key={[tab, date, revision, cycleDays, JSON.stringify(cycleRules)].join(':')}
                   config={config}
                   embedded
                   presentation={originalFcView(config, tab)}
@@ -289,6 +316,7 @@ function WorkbenchBody() {
                   viewIds={views[tab]}
                   date={date}
                   cycleDays={cycleDays}
+                  fcCycleRules={cycleRules}
                   onRead={(v) => updateContext('data', v)}
                 />
               )}
@@ -301,7 +329,7 @@ function WorkbenchBody() {
         title="补货周期配置"
         footer={null}
         onCancel={() => setCycleOpen(false)}
-        style={{ width: 'min(420px, calc(100vw - 32px))' }}
+        style={{ width: 'min(850px, calc(100vw - 32px))' }}
       >
         <LocalQueryForm
           className={`${common.controls} ${common.cycleForm}`}
@@ -309,7 +337,14 @@ function WorkbenchBody() {
             event.preventDefault();
             const days = Number(cycleDraft);
             if (!Number.isInteger(days) || days < 1 || days > 365) return;
-            configuredCycleState.save(days);
+            try {
+              const rules = validateFcCycleRules(ruleDraft);
+              configuredCycleState.save(days, rules);
+              setCycleRules(rules);
+            } catch (error) {
+              setCycleError((error as Error).message);
+              return;
+            }
             setCycleDays(days);
             setCycleOpen(false);
           }}
@@ -328,10 +363,110 @@ function WorkbenchBody() {
             />
           </label>
           <p>备货天数 {config.replenishmentPolicy.preparationDays} 天</p>
+          <p>
+            优先级：SKU → 物料组 → 品类 → 分仓 →
+            默认。规则仅在当前页面会话生效；对象填写实际编码或分类名称。
+          </p>
+          {ruleDraft.map((rule, index) => (
+            <fieldset key={index}>
+              <legend>周期规则 {index + 1}</legend>
+              <select
+                aria-label={`规则${index + 1}层级`}
+                value={rule.level}
+                onChange={(event) =>
+                  setRuleDraft(
+                    ruleDraft.map((r, i) =>
+                      i === index ? { ...r, level: event.target.value as FcCycleRule['level'] } : r,
+                    ),
+                  )
+                }
+              >
+                <option value="sku">SKU</option>
+                <option value="material-group">物料组</option>
+                <option value="category">品类</option>
+                <option value="warehouse">分仓</option>
+              </select>
+              <input
+                aria-label={`规则${index + 1}对象`}
+                placeholder="对象编码/分类名称"
+                required
+                maxLength={100}
+                value={rule.object}
+                onChange={(event) =>
+                  setRuleDraft(
+                    ruleDraft.map((r, i) =>
+                      i === index ? { ...r, object: event.target.value } : r,
+                    ),
+                  )
+                }
+              />
+              <input
+                aria-label={`规则${index + 1}天数`}
+                type="number"
+                min={1}
+                max={365}
+                required
+                value={rule.days}
+                onChange={(event) =>
+                  setRuleDraft(
+                    ruleDraft.map((r, i) =>
+                      i === index ? { ...r, days: Number(event.target.value) } : r,
+                    ),
+                  )
+                }
+              />
+              <label>
+                生效日
+                <input
+                  type="date"
+                  value={rule.from}
+                  onChange={(event) =>
+                    setRuleDraft(
+                      ruleDraft.map((r, i) =>
+                        i === index ? { ...r, from: event.target.value } : r,
+                      ),
+                    )
+                  }
+                />
+              </label>
+              <label>
+                失效日
+                <input
+                  type="date"
+                  value={rule.to}
+                  onChange={(event) =>
+                    setRuleDraft(
+                      ruleDraft.map((r, i) => (i === index ? { ...r, to: event.target.value } : r)),
+                    )
+                  }
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setRuleDraft(ruleDraft.filter((_, i) => i !== index))}
+              >
+                删除规则
+              </button>
+            </fieldset>
+          ))}
+          <button
+            type="button"
+            disabled={ruleDraft.length >= 12}
+            onClick={() =>
+              setRuleDraft([...ruleDraft, { level: 'sku', object: '', days: 7, from: '', to: '' }])
+            }
+          >
+            添加周期规则
+          </button>
+          {cycleError && <p role="alert">{cycleError}</p>}
+
           <div className={common.cycleActions}>
             <button
               type="button"
-              onClick={() => setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays))}
+              onClick={() => {
+                setCycleDraft(String(config.replenishmentPolicy.defaultCycleDays));
+                setRuleDraft([]);
+              }}
             >
               恢复默认
             </button>
@@ -346,7 +481,7 @@ function WorkbenchBody() {
   );
 }
 
-function OriginalOperations({ config, date, revision }: any) {
+function OriginalOperations({ config, date, revision, observations }: any) {
   const [{ parts, errors }, setState] = useState<any>({ parts: {}, errors: [] });
   useEffect(() => {
     const task = new AbortController();
@@ -378,12 +513,12 @@ function OriginalOperations({ config, date, revision }: any) {
       <QueryErrors errors={errors} scope="inventory-fc-resources" />
       <div className="resource-grid">
         {[
-          ['本月入库', null, '箱'],
-          ['本月出库', knownNumber(parts.shipments?.summary?.month_ship_positive), '箱'],
+          ['本月入库', null, '件'],
+          ['本月出库', knownNumber(parts.shipments?.summary?.month_ship_positive), '件'],
           ['本月仓储费', knownNumber(cost?.ccfje), '元'],
           ['本月运输费', knownNumber(cost?.ysfje), '元'],
-          ['分仓过仓量', knownNumber(cost?.fc_act_dl_qty), '箱'],
-          ['省区整体出货', null, '箱'],
+          ['分仓过仓量', knownNumber(cost?.fc_act_dl_qty), '件'],
+          ['省区整体出货', null, '件'],
         ].map(([label, value, unit]) => (
           <article className="resource-card" key={String(label)}>
             <div>
@@ -394,7 +529,9 @@ function OriginalOperations({ config, date, revision }: any) {
         ))}
       </div>
       <div className="observation-list">
-        <p className="empty-state">暂无运营观察。</p>
+        {observations?.map((observation: string) => (
+          <p key={observation}>{observation}</p>
+        ))}
       </div>
     </>
   );

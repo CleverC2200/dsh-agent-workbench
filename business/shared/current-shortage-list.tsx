@@ -18,13 +18,20 @@ const columns = [
 export function CurrentShortageList({
   config,
   revision = 0,
+  initialFilters = {},
   onRead,
 }: {
   config: AgentSqlConfig;
   revision?: number;
+  initialFilters?: Partial<{ base: string; warehouse_code: string; sku: string }>;
   onRead?: (value: unknown) => void;
 }) {
-  const [filters, setFilters] = useState({ base: '', warehouse_code: '', sku: '' });
+  const [filters, setFilters] = useState({
+    base: '',
+    warehouse_code: '',
+    sku: '',
+    ...initialFilters,
+  });
   const [draft, setDraft] = useState(filters),
     [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(10),
@@ -78,7 +85,10 @@ export function CurrentShortageList({
   }, [config, filters, page, pageSize, revision]);
   const allColumns = columns
     .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
-    .map(([field, label]) => ({ field, label }));
+    .map(([field, label]) => ({
+      field,
+      label: config.agentId === 'inventory-fc' ? label.replace('（箱）', '（件）') : label,
+    }));
   const [chosenColumns, setChosenColumns] = useState(() => columns.map(([key]) => key));
   return (
     <OriginalBusinessList

@@ -947,3 +947,38 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
       path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-narrow.png'),
     });
 });
+
+test('pagination footer keeps counts and controls on one line', { timeout: 30000 }, async (t) => {
+  const { frame, page } = await openWorkbench(t);
+  const footer = frame.getByTestId('regional-approval-queue-footer');
+  const total = footer.getByText(/^共 [\d,]+ 条$/);
+  const pageSize = footer.locator('.arco-select-view');
+  const currentPage = footer.locator('.arco-pagination-item-active');
+  const pageCount = footer.getByText(/^共 \d+ 页$/);
+  for (const viewportWidth of [1536, 420]) {
+    await page.setViewportSize({ width: viewportWidth, height: 920 });
+    await expect(total).toBeVisible();
+    await expect(pageCount).toBeVisible();
+    const boxes = await Promise.all(
+      [total, pageSize, currentPage, pageCount].map((locator) => locator.boundingBox()),
+    );
+    assert.ok(boxes.every(Boolean), '分页元素均应有可测量的布局框');
+    const centers = boxes.map((box) => box.y + box.height / 2);
+    assert.ok(
+      Math.max(...centers) - Math.min(...centers) <= 3,
+      `分页元素应在同一水平中心线：${JSON.stringify(centers)}`,
+    );
+    assert.ok(
+      Math.abs(boxes[1].height - 36) <= 1,
+      `页容量选择框高度应为 36px，实际 ${boxes[1].height}`,
+    );
+    assert.ok(
+      Math.abs(boxes[2].height - 36) <= 1,
+      `页码按钮高度应为 36px，实际 ${boxes[2].height}`,
+    );
+    if (viewportWidth === 1536) {
+      const overflow = await footer.evaluate((node) => node.scrollWidth - node.clientWidth);
+      assert.ok(overflow <= 1, `桌面宽度不应横向溢出：${overflow}`);
+    }
+  }
+});

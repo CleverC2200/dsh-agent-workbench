@@ -610,9 +610,7 @@
 }
 
 .filterActions :global(.arco-btn),
-.toolbarActions :global(.arco-btn),
-.footerControls :global(.arco-btn),
-.footerControls :global(.arco-select) {
+.toolbarActions :global(.arco-btn) {
   min-height: 32px;
 }
 
@@ -673,35 +671,106 @@
 
 .queueFooter {
   display: flex;
-  min-height: 44px;
+  min-height: 68px;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: flex-end;
-  padding: 5px 10px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
   overflow-x: auto;
   border-top: 1px solid var(--bg-3);
   background: var(--bg-1);
 }
 
-.footerControls > span {
-  color: var(--text-secondary);
+.footerTotal,
+.footerPageCount {
+  flex: 0 0 auto;
+  color: var(--workbench-muted, #858c96);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .footerControls {
-  min-width: 360px;
+  min-width: max-content;
   flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 .pageSizeControl :global(.arco-select) {
-  width: 105px;
+  width: 120px;
 }
 
 .pageSizeControl {
   flex-direction: row;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.pageSizeControl > span {
+  color: var(--workbench-body, #555d68);
+  font-size: 12px;
+}
+
+.pageSizeControl :global(.arco-select-size-small.arco-select-single .arco-select-view) {
+  height: 36px;
+  line-height: 34px;
+  border: 1px solid var(--workbench-control-border, #d9dde3);
+  border-radius: 8px;
+  background: var(--workbench-surface, #fff);
+  color: var(--workbench-text, #20232a);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.footerControls :global(.arco-pagination) {
+  align-items: center;
+  padding-left: 16px;
+  border-left: 1px solid var(--workbench-border, #e3e6ea);
+}
+
+.footerControls :global(.arco-pagination-list) {
+  display: inline-flex;
+  align-items: center;
+}
+
+.footerControls :global(.arco-pagination-item) {
+  min-width: 36px;
+  height: 36px;
+  line-height: 34px;
+  border: 1px solid var(--workbench-border, #e3e6ea);
+  border-radius: 8px;
+  background: var(--workbench-surface, #fff);
+  color: var(--workbench-body, #555d68);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.footerControls :global(.arco-pagination-item:not(:last-child)) {
+  margin-right: 8px;
+}
+
+.footerControls :global(.arco-pagination-item-active) {
+  border-color: #f4d2d8;
+  background: var(--workbench-brand-soft, #fff0f2);
+  color: var(--workbench-brand, #df1732);
+}
+
+.footerControls :global(.arco-pagination .arco-pagination-item-disabled) {
+  border-color: var(--workbench-border, #e3e6ea);
+  background: var(--workbench-muted-surface, #f5f6f8);
+  color: var(--workbench-muted, #858c96);
+}
+
+.footerControls :global(.arco-pagination-item:focus-visible),
+.pageSizeControl :global(.arco-select:focus-within .arco-select-view) {
+  box-shadow: 0 0 0 3px #df173226;
 }
 
 .progressList {
@@ -853,15 +922,12 @@
   .controlToolbar,
   .advancedControls,
   .filterRow,
-  .exportFeedback,
-  .footerControls {
+  .exportFeedback {
     min-width: 0;
   }
 
   .controlToolbar,
-  .toolbarActions,
-  .queueFooter,
-  .footerControls {
+  .toolbarActions {
     flex-wrap: wrap;
   }
 
@@ -872,14 +938,6 @@
   .filterActions {
     grid-column: 1 / -1;
     justify-content: flex-end;
-  }
-
-  .queueFooter {
-    overflow-x: hidden;
-  }
-
-  .footerControls {
-    flex: 1 1 100%;
   }
 }
 
@@ -930,8 +988,7 @@
     justify-content: flex-start;
   }
 
-  .toolbarActions,
-  .footerControls {
+  .toolbarActions {
     width: 100%;
     justify-content: flex-start;
   }
@@ -2141,7 +2198,7 @@
   overflow: hidden;
 }
 .tableViewport > .queueFooter {
-  min-height: 52px;
+  min-height: 68px;
   border-top: 1px solid #eceef1;
 }
 .organizationTable :global(.arco-table-th),
@@ -2162,8 +2219,14 @@
   border-bottom-color: #eceef1;
   transition: background 180ms ease;
 }
-.root .organizationTable :global(.arco-table-tr:hover > .arco-table-td) {
-  background: #fff0f2;
+.root .organizationTable :global(.arco-table-tr:hover > .arco-table-td),
+.root
+  .organizationTable
+  :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-left::before),
+.root
+  .organizationTable
+  :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-right::before) {
+  background: var(--workbench-muted-surface, #f5f6f8);
 }
 .organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td) {
   background: #fff2f4;
