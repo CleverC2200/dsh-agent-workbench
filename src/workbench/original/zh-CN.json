@@ -512,7 +512,8 @@
       "pagination": {
         "pageSize": "每页条数",
         "pageSizeValue": "{{count}} 条/页",
-        "total": "共 {{count}} 条"
+        "total": "共 {{formattedCount}} 条",
+        "pages": "共 {{count}} 页"
       },
       "footer": {
         "title": "队列操作区",

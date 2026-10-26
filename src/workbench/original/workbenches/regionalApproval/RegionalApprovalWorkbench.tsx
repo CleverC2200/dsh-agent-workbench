@@ -3866,6 +3866,12 @@ const RegionalApprovalWorkbench: React.FC<{
               </Spin>
             }
             <footer className={styles.queueFooter} data-testid="regional-approval-queue-footer">
+              <span className={styles.footerTotal}>
+                {t('common.assistantSurface.regionalApproval.pagination.total', {
+                  count: liveOuterRows.length,
+                  formattedCount: liveOuterRows.length.toLocaleString('zh-CN'),
+                })}
+              </span>
               <div className={styles.footerControls}>
                 <div className={styles.pageSizeControl}>
                   <span>{t('common.assistantSurface.regionalApproval.pagination.pageSize')}</span>
@@ -3888,11 +3894,6 @@ const RegionalApprovalWorkbench: React.FC<{
                     ))}
                   </Select>
                 </div>
-                <span>
-                  {t('common.assistantSurface.regionalApproval.pagination.total', {
-                    count: liveOuterRows.length,
-                  })}
-                </span>
                 <Pagination
                   size="small"
                   current={liveCurrentPage}
@@ -3900,6 +3901,11 @@ const RegionalApprovalWorkbench: React.FC<{
                   total={liveOuterRows.length}
                   onChange={(next) => setPage(Math.min(Math.max(1, next), livePageCount))}
                 />
+                <span className={styles.footerPageCount}>
+                  {t('common.assistantSurface.regionalApproval.pagination.pages', {
+                    count: liveOuterRows.length === 0 ? 0 : livePageCount,
+                  })}
+                </span>
               </div>
             </footer>
           </div>

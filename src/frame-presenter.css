@@ -77,7 +77,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  border-left: 1px solid #adb9c8;
+  border-left: 1px solid var(--workbench-border);
   overflow: hidden;
   box-sizing: border-box;
 }
