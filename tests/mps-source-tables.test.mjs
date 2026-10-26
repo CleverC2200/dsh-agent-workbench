@@ -1,0 +1,128 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { createQueryClient, makeRequest } from '../business/shared/configured-query-client.mjs';
+const savedWindow = globalThis.window;
+globalThis.window = { addEventListener() {}, parent: { postMessage() {} } };
+const { forecastRows, forecastDimensions, deliveryRows, deliveryColumns } =
+  await import('../static/mps/source/source-tables.js');
+if (savedWindow === undefined) delete globalThis.window;
+else globalThis.window = savedWindow;
+const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
+const forecast = (extra = {}) => ({
+  stat_month: '2026-12',
+  belong_base: '基地甲',
+  material_code: '001',
+  material_name: '产品甲',
+  current_month_forecast_qty: '0.000',
+  next_month_forecast_qty: null,
+  source_rows: 1,
+  ...extra,
+});
+
+test('forecast fixes one source batch across a year boundary, preserves zero and missing, and never sums horizons', () => {
+  const rows = forecastRows([forecast()], '2026-12');
+  assert.deepEqual(
+    rows.map((r) => [r['月份'], r['数量'], r['预测批次']]),
+    [
+      ['2026-12', 0, '2026-12'],
+      ['2027-01', '', '2026-12'],
+    ],
+  );
+  assert.equal(rows[1]['缺项原因'], '预测数量缺失');
+  assert.equal(rows[0]['源当月预测数量'], '0.000');
+  assert.throws(() => forecastRows([forecast({ stat_month: '2026-11' })], '2026-12'), /批次/);
+  assert.throws(
+    () => forecastRows([forecast({ current_month_forecast_qty: 'NaN' })], '2026-12'),
+    /数值/,
+  );
+  assert.throws(
+    () =>
+      forecastRows([forecast({ current_month_forecast_qty: '999999999999999.999' })], '2026-12'),
+    /精度/,
+  );
+});
+test('both identical duplicate rows and conflicting business keys leave usable forecast quantities empty', () => {
+  const same = forecastRows([forecast({ source_rows: 2 })], '2026-12');
+  assert(same.every((r) => r['数量'] === '' && r['缺项原因'].includes('重复')));
+  const conflicting = forecastRows(
+    [forecast(), forecast({ material_name: '另一名称', current_month_forecast_qty: 8 })],
+    '2026-12',
+  );
+  assert(conflicting.every((r) => r['数量'] === ''));
+  assert.equal(conflicting[2]['源当月预测数量'], 8);
+  assert(forecastRows([forecast({ belong_base: null })], '2026-12').every((r) => r['数量'] === ''));
+  assert(
+    forecastRows([forecast({ belong_base: '   ' })], '2026-12').every((r) => r['数量'] === ''),
+  );
+  const products = [{ 基地: '', 产品编码: '001', 大类: '汤圆', 系列: '系列甲', 物料组: '组甲' }];
+  assert.equal(forecastDimensions(same, products)[0]['大类'], '汤圆');
+  assert.equal(forecastDimensions(same, [{ ...products[0], 产品编码: '1' }])[0]['大类'], '');
+  assert.equal(
+    forecastDimensions(same, [...products, { ...products[0], 大类: '饺子' }])[0]['大类'],
+    '',
+  );
+});
+test('delivery keeps separate source ratios, precise decimals, nulls and duplicate evidence without recalculation', () => {
+  const raw = Object.fromEntries(Object.keys(deliveryColumns).map((k) => [k, null]));
+  Object.assign(raw, {
+    dimension_type: '业务原值',
+    stat_month: 'Dec-26',
+    belong_base: '基地甲',
+    dimension_value: '001',
+    dimension_act_dl_qty: '0.000000',
+    national_dimension_fiscal_act_dl_qty: '123456789012345678901.123456',
+    dimension_act_dl_qty_rate: '0.000000000001',
+    year_on_year_rate: '-0.125000000000',
+    source_rows: 2,
+  });
+  const [row] = deliveryRows([raw], '2026-12');
+  assert.equal(row['月发货数量'], '0.000000');
+  assert.equal(row['全国维度财年发货数量'], raw.national_dimension_fiscal_act_dl_qty);
+  assert.equal(row['同比增长率'], '-0.125000000000');
+  assert.equal(row['环比增长率'], '');
+  assert.equal(row['粒度状态'], '业务键重复，仅保留源值');
+  assert.throws(() => deliveryRows([raw], '2027-01'), /月份/);
+});
+test('new table queries bind month parameters and read all pages with required columns and unchanged counts', async () => {
+  const columns = config.queries['forecast.detail'].columns;
+  const records = Array.from({ length: 201 }, (_, i) =>
+    forecast({ material_code: String(i).padStart(3, '0') }),
+  );
+  const calls = [];
+  let truncate = false;
+  const client = createQueryClient(config, async (_request, { queryId, values }) => {
+    calls.push([queryId, values]);
+    return {
+      rows: queryId.endsWith('.count')
+        ? [{ total: records.length }]
+        : records.slice(values.offset, values.offset + (truncate ? 1 : values.page_size)),
+      returnedColumns: queryId.endsWith('.count') ? ['total'] : columns,
+      configVersion: 'one',
+    };
+  });
+  const options = { keyFields: config.queries['forecast.detail'].grain, requiredColumns: columns };
+  const result = await client.readAll(
+    'forecast.detail',
+    { month: '2026-12', page_size: 200, offset: 0 },
+    options,
+  );
+  assert.equal(forecastRows(result.rows, '2026-12').length, 402);
+  assert.deepEqual(
+    calls.filter(([id]) => id.endsWith('.detail')).map(([, values]) => values.offset),
+    [0, 200],
+  );
+  truncate = true;
+  await assert.rejects(
+    client.readAll('forecast.detail', { month: '2026-12', page_size: 200, offset: 0 }, options),
+    /分页与计数/,
+  );
+  const request = makeRequest(config, 'delivery.detail', {
+    months: ['2026-12'],
+    page_size: 200,
+    offset: 0,
+  });
+  assert.deepEqual(request.parameters.gea_p1, ['2026-12']);
+  assert.match(request.sql, /FROM agents_scm_base_dimension_delivery_mi/);
+  assert(!request.sql.includes('2026-12'));
+});
