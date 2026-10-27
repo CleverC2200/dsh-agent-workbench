@@ -150,7 +150,12 @@ test('complete read starts first page before count returns and still checks the 
 
 test('order01 queries bind business filters only and expose no transport credentials', () => {
   for (const [id, query] of Object.entries(config.queries)) {
-    const values = { ...filters, ...(query.pagination ? { page_size: 20, offset: 0 } : {}) };
+    const values = Object.fromEntries(
+      Object.values(query.parameterSpec).map(({ name }) => [
+        name,
+        name === 'page_size' ? 20 : name === 'offset' ? 0 : (filters[name] ?? null),
+      ]),
+    );
     const request = makeRequest(config, id, values);
     assert.ok(request.sql.startsWith('SELECT'));
     assert.doesNotMatch(request.sql, /EXISTS\s*\(|\bSUBSTR\s*\(/i);
