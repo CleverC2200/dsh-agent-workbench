@@ -1,8 +1,5 @@
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
-import healthSqlConfig from '../../../../sql.config.json';
-import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
-import { originalAqkcAgeView } from '../../../../../shared/original-business-views';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
 import { stockPageSortFields } from '../configured-stock';
 import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-current-order.ts';
@@ -416,12 +413,7 @@ export function InventoryOperationsWorkbench() {
     [paths],
   );
   useEffect(() => {
-    if (
-      activeBoardTab === '基地结构' ||
-      (usesConfiguredSql() && activeBoardTab === '货龄结构') ||
-      dashboardTabs?.[activeBoardTab]
-    )
-      return;
+    if (activeBoardTab === '基地结构' || dashboardTabs?.[activeBoardTab]) return;
     void loadDashboardTab(activeBoardTab, true);
   }, [activeBoardTab, dashboardTabs, loadDashboardTab]);
   useEffect(
@@ -1057,12 +1049,10 @@ export function InventoryOperationsWorkbench() {
                   aria-controls="inventory-table-content"
                   aria-busy={tab !== '基地结构' && dashboardTabsLoading === tab}
                   onPointerEnter={() => {
-                    if (tab !== '基地结构' && !(usesConfiguredSql() && tab === '货龄结构'))
-                      void loadDashboardTab(tab, false);
+                    if (tab !== '基地结构') void loadDashboardTab(tab, false);
                   }}
                   onFocus={() => {
-                    if (tab !== '基地结构' && !(usesConfiguredSql() && tab === '货龄结构'))
-                      void loadDashboardTab(tab, false);
+                    if (tab !== '基地结构') void loadDashboardTab(tab, false);
                   }}
                   onKeyDown={(event) =>
                     moveTabFocus(event, boardTabs, activeBoardTab, (nextTab) => {
@@ -1100,24 +1090,7 @@ export function InventoryOperationsWorkbench() {
               aria-labelledby={`inventory-tab-${activeBoardTab}`}
               aria-busy={activeTabLoading}
             >
-              {usesConfiguredSql() && activeBoardTab === '货龄结构' ? (
-                paths.length === 0 ? (
-                  <p>请选择基地后查看仓库货龄。</p>
-                ) : (
-                  <ConfiguredFactsPage
-                    key={paths.join(',')}
-                    config={healthSqlConfig}
-                    embedded
-                    viewIds={['age-structure']}
-                    presentation={originalAqkcAgeView(healthSqlConfig)}
-                    initialFilters={
-                      paths.length
-                        ? { base: paths.map((path) => path.replace(/基地$/u, '')).join(',') }
-                        : {}
-                    }
-                  />
-                )
-              ) : activeTable && (activeBoardTab === '基地结构' || activeTable.rows.length > 0) ? (
+              {activeTable && (activeBoardTab === '基地结构' || activeTable.rows.length > 0) ? (
                 <div className={styles.tableCard}>
                   <table>
                     <thead>
@@ -1398,6 +1371,25 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     setRisks(values);
     setPage(1);
   };
+  const riskMenu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (riskMenu.current?.open && !riskMenu.current.contains(event.target as Node))
+        riskMenu.current.open = false;
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape' && riskMenu.current?.open) {
+        riskMenu.current.open = false;
+        riskMenu.current.querySelector('summary')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
   const remote = usesConfiguredSql();
   const [remotePage, setRemotePage] = useState<any>(null);
   const remoteContext = useRef<any>(undefined);
@@ -1554,7 +1546,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
       </tr>
     );
   }
-  const columns = table?.columns.filter((column) => column.key !== 'skuCount') ?? [];
+  const columns = table?.columns.filter((column) => age || column.key !== 'skuCount') ?? [];
   return (
     <tr className={styles.skuExpandedRow}>
       <td colSpan={colSpan}>
@@ -1563,13 +1555,11 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
           aria-label={`${detail.base}${detail.category} SKU 明细`}
         >
           <div className={styles.skuFilters} aria-label="SKU 明细筛选">
-            {age ? (
+            {age && !remote ? (
               <label>
                 风险
                 <select
                   aria-label="货龄风险"
-                  disabled={remote}
-                  title={remote ? '缺少批次生产日期和货龄，暂不能判断预警或正常' : undefined}
                   value={risks[0] ?? '全部'}
                   onChange={(event) =>
                     changeRisks(event.target.value === '全部' ? [] : [event.target.value])
@@ -1580,8 +1570,8 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
                   <option>正常</option>
                 </select>
               </label>
-            ) : (
-              <details className={styles.skuRiskMenu}>
+            ) : !age ? (
+              <details ref={riskMenu} className={styles.skuRiskMenu}>
                 <summary>风险：{risks.length ? risks.join('、') : '全部'}</summary>
                 <fieldset aria-label="库存风险多选">
                   <label>
@@ -1592,7 +1582,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
                     />
                     全部
                   </label>
-                  {['缺货', '库存偏低', '库存偏高', '缺失目标', '正常'].map((risk) => (
+                  {['缺货', '库存偏低', '库存偏高', '无目标', '正常'].map((risk) => (
                     <label key={risk}>
                       <input
                         type="checkbox"
@@ -1610,7 +1600,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
                   ))}
                 </fieldset>
               </details>
-            )}
+            ) : null}
             <label>
               SKU
               <input
@@ -1636,11 +1626,6 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
               {detail.base} / {detail.category} · SKU 明细
             </span>
           </div>
-          {remote && age && (
-            <p className={styles.skuNotice}>
-              批次货龄缺失，暂不能按预警或正常筛选；可查看实存与超60天库存。
-            </p>
-          )}
           {result.rows.length ? (
             <div className={`${styles.inlineDetailTable} ${styles.skuPagedTable}`}>
               <table>

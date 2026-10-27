@@ -159,7 +159,7 @@ const cube = await load('business/inventory-aqkc/source/aqkc/web/src/lib/cube-da
       );
       api.onLoad({ filter: /.*/, namespace: 'summary-fixture' }, () => ({
         contents:
-          'export const readConfiguredStockSummary=(...args)=>globalThis.__stockSummary(...args); export const readConfiguredHealthSummary=(...args)=>globalThis.__healthSummary?.(...args)??Promise.resolve({rows:[],summary:null}); export const readConfiguredStockPage=()=>{throw Error("not used")};',
+          'export const readConfiguredStockSummary=(...args)=>globalThis.__stockSummary(...args); export const readConfiguredHealthSummary=(...args)=>globalThis.__healthSummary?.(...args)??Promise.resolve({rows:[],summary:null}); export const readConfiguredStockPage=(...args)=>globalThis.__stockPage(...args);',
         loader: 'js',
       }));
       api.onResolve({ filter: /shared\/batch-age$/ }, (args) =>
@@ -185,9 +185,14 @@ const cube = await load('business/inventory-aqkc/source/aqkc/web/src/lib/cube-da
 ]);
 function install(t) {
   const before = new Map(
-    ['document', '__stockAdaptationRead', '__stockSummary', '__batchAge', '__healthSummary'].map(
-      (k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)],
-    ),
+    [
+      'document',
+      '__stockAdaptationRead',
+      '__stockSummary',
+      '__batchAge',
+      '__healthSummary',
+      '__stockPage',
+    ].map((k) => [k, Object.getOwnPropertyDescriptor(globalThis, k)]),
   );
   globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
   globalThis.__stockAdaptationRead = async (query) => {
@@ -428,6 +433,35 @@ test('original age tab uses batch-weighted ages and complete buckets instead of 
   assert.equal(row.age60Plus, '10 / 6.7%');
   assert.equal(row.future7, '5');
   assert.equal(row.future14, '15');
+  const columns = tabs.货龄结构.columns;
+  assert.ok(!columns.some((c) => ['unknownAgeQty', 'negativeQty'].includes(c.key)));
+  const calls = [];
+  const source = globalThis.__batchAge;
+  globalThis.__batchAge = (...args) => {
+    calls.push(args[1]);
+    return source(...args);
+  };
+  const categories = await cube.loadInventoryDashboardTabs(
+    undefined,
+    '郑州',
+    undefined,
+    '货龄结构',
+  );
+  const skus = await cube.loadInventorySkuPage({
+    base: '郑州',
+    category: '汤圆',
+    tab: '货龄结构',
+    page: 2,
+    pageSize: 10,
+  });
+  assert.deepEqual(categories.货龄结构.columns, columns);
+  assert.deepEqual(skus.table.columns, columns);
+  assert.equal(calls[0].groupBy, 'category');
+  assert.deepEqual(calls[0].bases, ['郑州']);
+  assert.equal(calls[1].groupBy, 'sku');
+  assert.deepEqual(calls[1].bases, ['郑州']);
+  assert.equal(calls[1].category, '汤圆');
+  assert.equal(calls[1].page, 2);
 });
 
 const production = (rows) =>
@@ -709,4 +743,78 @@ test('a failed stock source still leaves verified fulfillment available', async 
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[0].value, '-');
   assert.equal(w.workbench.cards[3].value, '80.0%');
+});
+
+test('base/category warnings use the highest child risk instead of offsetting inventory gaps', () => {
+  const normal = {
+    row_count: 1,
+    inventory_count: 1,
+    target_count: 1,
+    low_stock_count: 0,
+    high_stock_count: 0,
+    missing_target_count: 0,
+  };
+  assert.equal(cube.stockGroupRisk([{ ...normal, high_stock_count: 1 }], 3), '缺货');
+  assert.equal(
+    cube.stockGroupRisk(
+      [
+        { ...normal, low_stock_count: 1 },
+        { ...normal, high_stock_count: 1 },
+      ],
+      0,
+    ),
+    '库存偏低',
+  );
+  assert.equal(
+    cube.stockGroupRisk([{ ...normal, high_stock_count: 1, missing_target_count: 1 }], 0),
+    '库存偏高',
+  );
+  assert.equal(
+    cube.stockGroupRisk([{ ...normal, target_count: 0, missing_target_count: 1 }], 0),
+    '无目标',
+  );
+  assert.equal(cube.stockGroupRisk([normal], 0), '正常');
+  assert.equal(cube.stockGroupRisk([normal], null), '-');
+  assert.equal(cube.stockGroupRisk([{ ...normal, inventory_count: 0 }], 0), '-');
+});
+
+test('SKU detail keeps classified current shortage and batch weighted age from the paginated facts', async (t) => {
+  install(t);
+  globalThis.__stockPage = async () => ({
+    rows: [
+      {
+        'safety_stock.base_name': '郑州',
+        'safety_stock.material_code': 'S1',
+        'safety_stock.material_name': '测试商品',
+        'safety_stock.product_categ_name': '水饺',
+        'safety_stock.current_inventory': 100,
+        'safety_stock.final_target_inventory': 10,
+        'safety_stock.planned_daily_demand': 5,
+        'safety_stock.source': 'ai-db-daily-stock',
+      },
+    ],
+    facts: [
+      {
+        sku: 'S1',
+        inventory: 100,
+        target: 10,
+        risk: '缺货',
+        current_demand: 300,
+        current_allocated: 10,
+        current_shortage: 190,
+        age_weighted_sum: 2600,
+        age_qty: 40,
+      },
+    ],
+    total: 1,
+    page: 1,
+    pageSize: 10,
+  });
+  const result = await cube.loadInventorySkuPage({ base: '郑州', category: '水饺' });
+  assert.equal(result.table.rows.length, 1);
+  const row = result.table.rows[0];
+  assert.equal(row.warning, '缺货');
+  assert.equal(row.risk, '缺货');
+  assert.equal(row.shortageQuantity, '190');
+  assert.equal(row.age, '65.0天');
 });
