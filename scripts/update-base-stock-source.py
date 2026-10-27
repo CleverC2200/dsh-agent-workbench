@@ -88,13 +88,13 @@ def update(config):
         for select in list(tree.find_all(exp.Select)):
             if select in list(ctes.values()):
                 continue
-            source = select.args.get('from_')
+            source = select.args.get('from') or select.args.get('from_')
             if source and isinstance(source.this, exp.Table) and source.this.name == 'batch_groups':
                 age.project(select, [f'{source.this.alias_or_name}.negative_qty AS negative_qty'])
         if key.endswith('.atomic'):
             for name, select in ctes.items():
                 if name not in ['batch_skus','batch_facts','batch_groups'] and any(e.alias=='total_qty' for e in select.expressions):
-                    source=select.args['from_'].this
+                    source=(select.args.get('from') or select.args.get('from_')).this
                     age.project(select,[f'{source.alias_or_name}.negative_qty AS negative_qty'])
             alias = next(j.this.alias_or_name for j in tree.args['joins'] if j.this.name == 'batch_page')
             age.project(tree,[f'{alias}.negative_qty AS negative_qty'])

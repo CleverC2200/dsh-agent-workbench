@@ -141,7 +141,7 @@ class BatchAgeLists(unittest.TestCase):
     for _ in range(2):
      self.db.execute("INSERT INTO agents_scm_stock_detail_d (the_date,belong_base,material_code) VALUES ('2026-10-21','郑州','S')")
     query=sqlglot.parse_one('SELECT s.belong_base AS base,s.material_code AS sku,s.current_stock AS inventory FROM stock_source AS s',read='postgres')
-    query.set('with_',sqlglot.exp.With(expressions=ctes))
+    query.set(source.parent.arg_key,sqlglot.exp.With(expressions=ctes))
     for cast in list(query.find_all(sqlglot.exp.Cast)):
      if cast.args['to'].this==sqlglot.exp.DataType.Type.DATE:cast.replace(cast.this.copy())
     parameters={key:('2026-10-22' if spec['name']=='stock_date' else q['request']['parameters'][key]) for key,spec in q['parameterSpec'].items()}
