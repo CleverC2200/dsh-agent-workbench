@@ -1,5 +1,5 @@
 :root {
-  --bg: var(--ui-canvas);
+  --bg: #fff;
   --surface: #ffffff;
   --line: var(--ui-border);
   --text: var(--ui-ink);
@@ -2558,7 +2558,7 @@ body.is-layout-resizing {
 
 /* Safety-stock visual tokens + demand-forecast workflow nodes. */
 :root {
-  --bg: var(--ui-canvas);
+  --bg: #fff;
   --surface: #ffffff;
   --soft: var(--ui-soft);
   --line: var(--ui-border);
@@ -4212,6 +4212,26 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
 }
 .agent-root .tabs.dealer-style-tabs {
   overflow-y: hidden;
+}
+.agent-root .fc-list-panel {
+  min-width: 0;
+  background: #fff;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  box-shadow: var(--ui-shadow);
+}
+.agent-root .fc-list-panel > .tabs.dealer-style-tabs {
+  margin: 0;
+  padding: 0;
+  border-radius: 10px 10px 0 0;
+  border-bottom: 0;
+  background: linear-gradient(to top, var(--ui-border) 1px, #fff 1px);
+}
+.agent-root .fc-list-panel > .business-panel {
+  margin: 0;
+  border: 0;
+  border-radius: 0 0 10px 10px;
+  background: #fff;
 }
 .agent-root .search-box:focus-within {
   border-color: var(--ui-accent);

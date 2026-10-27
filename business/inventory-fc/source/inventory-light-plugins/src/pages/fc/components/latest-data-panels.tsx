@@ -76,7 +76,11 @@ export function EffectivePlansTable({
           ))}
           {!rows.length && (
             <tr>
-              <td colSpan={9}>当前范围暂无计划数据</td>
+              <td colSpan={9}>
+                <div className="inventory-empty-state" role="status">
+                  当前范围暂无计划数据
+                </div>
+              </td>
             </tr>
           )}
         </tbody>
@@ -149,7 +153,11 @@ export function MonthlyBudgetPanel({ rows, month }: { rows: MonthlyBudget[]; mon
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={11}>当前分仓暂无预算数据</td>
+                  <td colSpan={11}>
+                    <div className="inventory-empty-state" role="status">
+                      当前分仓暂无预算数据
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>

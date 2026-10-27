@@ -4,6 +4,80 @@ import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 
+test('QLL 主列表分页使用计划管理样式并支持输入页码跳转', async (t) => {
+  let sampleGroup;
+  const { frame, page, calls } = await mount(t, 'qll', 1280, (query, result) => {
+    if (query.queryId !== 'inventory.groups.atomic') return result;
+    sampleGroup ||= result.rows[0];
+    const offset = query.parameters.offset ?? 0;
+    result.rows = Array.from(
+      { length: Math.max(0, Math.min(query.parameters.page_size, 42 - offset)) },
+      (_, index) => ({
+        ...sampleGroup,
+        category: `测试品类${offset + index + 1}`,
+        page_scope_total: 42,
+      }),
+    );
+    return result;
+  });
+  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
+  const pager = frame.getByRole('navigation', { name: '全链库存列表分页' });
+  const trigger = pager.getByRole('button', { name: '每页条数' });
+  await expect(trigger).toBeVisible();
+  await expect(pager.locator('select')).toHaveCount(0);
+  const [footerBox, totalBox, pagesBox] = await Promise.all([
+    pager.boundingBox(),
+    pager.getByText('共 42 条').boundingBox(),
+    pager.getByText('共 5 页').boundingBox(),
+  ]);
+  assert.ok(footerBox && totalBox && pagesBox);
+  assert.ok(Math.abs(totalBox.x - footerBox.x - 16) <= 1, '总条数应距左框 16px');
+  assert.ok(
+    Math.abs(footerBox.x + footerBox.width - pagesBox.x - pagesBox.width - 16) <= 1,
+    '总页数应距右框 16px',
+  );
+  const heights = await Promise.all(
+    [
+      trigger,
+      pager.getByRole('button', { name: '上一页' }),
+      pager.getByRole('button', { name: '下一页' }),
+      pager.getByRole('button', { name: /当前第 1 页/ }),
+    ].map(async (control) => (await control.boundingBox())?.height),
+  );
+  assert.deepEqual(heights, [36, 36, 36, 36]);
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '每页条数' });
+  await expect(menu).toBeVisible();
+  if (process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE)
+    await page.screenshot({ path: process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE });
+  await menu.getByRole('option', { name: '20 条/页' }).click();
+  await expect(trigger).toContainText('20 条/页');
+  await pager.getByRole('button', { name: /当前第 1 页/ }).click();
+  const pageInput = pager.getByRole('textbox', { name: '输入页码' });
+  await expect(pageInput).toHaveValue('1');
+  await pageInput.fill('999');
+  await pageInput.press('Enter');
+  await expect(pager.getByRole('alert')).toContainText('请输入 1–');
+  await expect(pageInput).toBeVisible();
+  await pageInput.fill('3');
+  await pageInput.press('Enter');
+  await expect(pager.getByRole('button', { name: /当前第 3 页/ })).toBeVisible();
+  await expect
+    .poll(() =>
+      calls.some(
+        (query) =>
+          query.queryId === 'inventory.groups.atomic' &&
+          query.parameters.offset === 40 &&
+          query.parameters.page_size === 20,
+      ),
+    )
+    .toBe(true);
+  await expect(pager.getByRole('button', { name: '下一页' })).toBeDisabled();
+  await expect(pager.getByRole('button', { name: '上一页' })).toBeEnabled();
+  await pager.getByRole('button', { name: '上一页' }).click();
+  await expect(pager.getByRole('button', { name: /当前第 2 页/ })).toBeVisible();
+});
+
 test('QLL 列表查询按钮与筛选输入框等高', async (t) => {
   const { frame } = await mount(t, 'qll', 1280);
   await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
@@ -504,7 +578,7 @@ test('dealer reuses original tabs, table and pagination while ten-row paging sta
     await frame.locator('thead tr').evaluate((el) => Math.round(el.getBoundingClientRect().height)),
     38,
   );
-  await expect(frame.getByRole('combobox', { name: '每页条数' })).toHaveValue('10');
+  await expect(frame.getByRole('button', { name: '每页条数' })).toContainText('10 条/页');
   await frame.getByRole('button', { name: '下一页', exact: true }).click();
   await expect.poll(offset).toBe(10);
   assert.equal(
@@ -1478,8 +1552,8 @@ test('FC list filters align compact white controls, retain actions and adapt to 
       );
       if (width >= 768)
         assert.ok(
-          layout.fields.every((control) => control.right - control.left <= 136),
-          'desktop fields remain compact',
+          layout.fields.every((control) => Math.abs(control.right - control.left - 170) <= 1),
+          'desktop fields use the reviewed 170px width',
         );
       const columns = toolbar.locator('summary[aria-label="列设置"]');
       await columns.click();

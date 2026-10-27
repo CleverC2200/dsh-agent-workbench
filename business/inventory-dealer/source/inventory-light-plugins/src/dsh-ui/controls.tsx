@@ -11,6 +11,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Button as DshButton } from './DshButton';
+import { DashboardTableSkeleton } from './workbench-loading';
 import css from './controls.module.css';
 // Business controls use the same React + native HTML + CSS Modules boundary as DSH.
 export function Button({
@@ -504,45 +505,48 @@ export function Table<_T = any>({
   };
   return (
     <div aria-busy={loading}>
-      <div className={css.tableRegion}>
-        {loading && (
-          <div className={css.tableLoading} role="status">
-            正在读取…
+      {loading ? (
+        <DashboardTableSkeleton label="表格加载中" />
+      ) : (
+        <div className={css.tableRegion}>
+          <div className={`${css.tableScroll} dsh-table-body`} style={{ maxHeight: scroll?.y }}>
+            <table className={css.table} style={{ minWidth: scroll?.x }}>
+              <thead>
+                <tr>
+                  {columns.map((c, i) => (
+                    <th
+                      key={c.key ?? c.dataIndex ?? i}
+                      style={{ textAlign: c.align, width: c.width }}
+                    >
+                      {typeof c.sorter === 'function' ? (
+                        <button
+                          onClick={() =>
+                            setSort({
+                              index: i,
+                              desc: sort?.index === i ? !sort.desc : false,
+                            })
+                          }
+                        >
+                          {c.title} ↕
+                        </button>
+                      ) : (
+                        c.title
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>{rows.map((r: any, i: number) => render(r, i))}</tbody>
+            </table>
           </div>
-        )}
-        <div className={`${css.tableScroll} dsh-table-body`} style={{ maxHeight: scroll?.y }}>
-          <table className={css.table} style={{ minWidth: scroll?.x }}>
-            <thead>
-              <tr>
-                {columns.map((c, i) => (
-                  <th
-                    key={c.key ?? c.dataIndex ?? i}
-                    style={{ textAlign: c.align, width: c.width }}
-                  >
-                    {typeof c.sorter === 'function' ? (
-                      <button
-                        onClick={() =>
-                          setSort({
-                            index: i,
-                            desc: sort?.index === i ? !sort.desc : false,
-                          })
-                        }
-                      >
-                        {c.title} ↕
-                      </button>
-                    ) : (
-                      c.title
-                    )}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>{rows.map((r: any, i: number) => render(r, i))}</tbody>
-          </table>
-          {!rows.length && !loading && <p>{emptyText}</p>}
+          {!rows.length && !loading && (
+            <div className="inventory-empty-state inventory-empty-state--inset" role="status">
+              {emptyText}
+            </div>
+          )}
         </div>
-      </div>
-      {pagination && (
+      )}
+      {pagination && !loading && (
         <DataPagination
           pageNumber={current}
           pageSize={count}

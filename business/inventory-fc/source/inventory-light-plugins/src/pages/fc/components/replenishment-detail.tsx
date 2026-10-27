@@ -165,7 +165,9 @@ export function ReplenishmentDetailContent(input: Input) {
         </table>
       </div>
       {!(input.kind === 'transfers' ? detail.transfers?.length : detail.batches?.length) && (
-        <p>当前范围暂无明细记录。</p>
+        <div className="inventory-empty-state" role="status">
+          当前范围暂无明细记录。
+        </div>
       )}
     </>
   );

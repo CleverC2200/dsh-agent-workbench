@@ -2245,3 +2245,158 @@
 .progressTree :global(.arco-tree-node:hover) {
   background: #fffafb;
 }
+
+/* Keep the dimension toolbar and its expanded filters usable at the pane width. */
+.root .queueHeader {
+  min-height: 56px;
+  padding: 0 12px;
+  gap: 8px;
+}
+.root .controlToolbar {
+  min-width: 0;
+  min-height: 56px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.root .dimensionControls {
+  flex: 1 1 480px;
+  align-items: center;
+  gap: 12px;
+}
+.root .categorySwitch {
+  flex: 0 0 auto;
+  padding-right: 12px;
+  border-right: 1px solid #e3e6ea;
+  color: #555d68;
+  font-size: 12px;
+}
+.root .dimensionTabs {
+  align-items: center;
+  gap: 0;
+  scrollbar-width: none;
+}
+.root .dimensionTabs::-webkit-scrollbar {
+  display: none;
+}
+.root .dimensionTabs :global(.arco-btn[role='tab']) {
+  height: 56px;
+  min-height: 56px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.root .toolbarActions,
+.root .approvalToolbarActions {
+  gap: 8px;
+}
+.root .toolbarActions > :global(.arco-btn),
+.root .approvalToolbarActions :global(.arco-btn),
+.root .filterActions :global(.arco-btn) {
+  box-sizing: border-box;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.root .toolbarActions > :global(.arco-btn) {
+  width: 36px;
+  min-width: 36px;
+}
+.root .toolbarActions > :global(.arco-btn-icon-only) > :global(.i-icon) {
+  transform: none;
+}
+.root .controls {
+  padding: 12px;
+  overflow: visible;
+  background: #fff;
+}
+.root .advancedControls {
+  min-width: 0;
+  padding: 0;
+}
+.root .liveFilterRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(116px, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+.root .liveFilterRow .fieldControl {
+  min-width: 0;
+  gap: 6px;
+}
+.root .liveFilterRow .fieldControl > span {
+  display: block;
+  color: #667085;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+.root .liveFilterRow :global(.arco-select) {
+  min-height: 36px;
+}
+.root .liveFilterRow :global(.arco-select-view) {
+  box-sizing: border-box;
+  display: flex;
+  height: 36px;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #c9ced7;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px #1822300a;
+}
+.root .liveFilterRow :global(.arco-select-view-value),
+.root .liveFilterRow :global(.arco-select-view-input) {
+  display: flex;
+  align-items: center;
+  color: #343b46;
+  font-size: 12px;
+  line-height: 18px;
+}
+.root .liveFilterRow :global(.arco-select:hover .arco-select-view) {
+  border-color: #e8a4ae;
+  background: #fff7f8;
+}
+.root .liveFilterRow :global(.arco-select:focus-within .arco-select-view) {
+  border-color: #e59ca8;
+  box-shadow: 0 0 0 3px #df17321a;
+}
+.root .liveFilterRow :global(.arco-select-popup-visible .arco-select-view) {
+  border-color: #ce7280;
+  background: #fff;
+  box-shadow: 0 0 0 3px #df173212;
+}
+.root .liveFilterRow .filterActions {
+  grid-column: auto;
+  padding: 0;
+  gap: 8px;
+}
+@container (max-width: 960px) {
+  .root .liveFilterRow {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .root .toolbarActions {
+    padding: 8px 0;
+  }
+}
+@container (max-width: 620px) {
+  .root .dimensionControls {
+    flex-basis: 100%;
+  }
+  .root .dimensionTabs {
+    flex: 1;
+  }
+  .root .dimensionTabs :global(.arco-btn[role='tab']) {
+    padding-inline: 10px;
+  }
+  .root .toolbarActions {
+    width: 100%;
+  }
+  .root .liveFilterRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .root .liveFilterRow .filterActions {
+    flex-wrap: wrap;
+  }
+}

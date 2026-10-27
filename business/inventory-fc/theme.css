@@ -48,9 +48,9 @@ body {
   --muted: var(--ui-muted);
   --line: var(--ui-border);
   --soft: var(--ui-soft);
-  --bg: var(--ui-canvas);
-  --dealer-page-bg: var(--ui-canvas);
-  --dealer-workspace-bg: var(--ui-canvas);
+  --bg: #fff;
+  --dealer-page-bg: #fff;
+  --dealer-workspace-bg: #fff;
   --dealer-chat-bg: var(--ui-surface);
   --dealer-divider: var(--ui-border);
   --dsw-alias-button-primary-fill: var(--ui-accent);
@@ -59,7 +59,7 @@ body {
   --dsw-alias-button-tool-bar-hover: var(--ui-hover);
 }
 .agent-root {
-  background: var(--ui-canvas);
+  background: #fff;
 }
 .agent-root .kpi-card .kpi-value {
   color: var(--ui-ink);

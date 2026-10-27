@@ -58,7 +58,7 @@ createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value=
 
 async function openWorkbench(t, scenario = 'default', date = '2026-10-19T04:00:00Z') {
   const assets = new Map(
-    bundle.outputFiles.map((asset) => [asset.path.split('/').at(-1), asset.text]),
+    bundle.outputFiles.map((asset) => [asset.path.split(/[\\/]/).at(-1), asset.text]),
   );
   const server = createServer((req, res) => {
     const name = req.url.slice(1);
