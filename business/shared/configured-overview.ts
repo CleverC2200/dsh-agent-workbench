@@ -39,6 +39,7 @@ export async function readConfiguredOverview(
     viewIds?: readonly string[];
     cycleDays?: number;
     fcCycleRules?: FcCycleRule[];
+    warehouseCode?: string;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
   } = {},
@@ -149,7 +150,12 @@ export async function readConfiguredOverview(
       if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
       try {
         if (id === 'current-shortage') {
-          const result = await readCurrentShortage(config, id + '.summary', {}, options);
+          const result = await readCurrentShortage(
+            config,
+            id + '.summary',
+            options.warehouseCode ? { warehouse_code: options.warehouseCode } : {},
+            options,
+          );
           part = {
             rows: result.rows,
             partial: result.partial,
@@ -163,7 +169,12 @@ export async function readConfiguredOverview(
             customer,
             cycleDays: options.cycleDays,
             fcCycleRules: options.fcCycleRules,
-            filters: id === 'customer' && customer ? { customer } : {},
+            filters:
+              options.warehouseCode && config.agentId === 'inventory-fc'
+                ? { warehouse_code: options.warehouseCode }
+                : id === 'customer' && customer
+                  ? { customer }
+                  : {},
           };
           const readOptions = { ...options, snapshotReads, scopeReads, summaryOnly: true };
           // Quantities can be shown before batch-age calculation completes. A late

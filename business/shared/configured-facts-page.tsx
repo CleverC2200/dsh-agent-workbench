@@ -43,6 +43,7 @@ export function ConfiguredFactsPage({
   embedded,
   viewIds,
   initialFilters = {},
+  scopeFilters = {},
   date,
   cycleDays,
   fcCycleRules,
@@ -62,6 +63,7 @@ export function ConfiguredFactsPage({
   embedded?: boolean;
   viewIds?: string[];
   initialFilters?: Record<string, string>;
+  scopeFilters?: Record<string, string>;
   date?: string;
   cycleDays?: number;
   fcCycleRules?: FcCycleRule[];
@@ -115,7 +117,9 @@ export function ConfiguredFactsPage({
         columns: presentation.columns,
         defaultColumns: presentation.columns.map((c: any) => c.field),
         filters: sourceView.filters.filter(
-          (f: any) => !presentation.filters || presentation.filters.includes(f.name),
+          (f: any) =>
+            !scopeFilters[f.name] &&
+            (!presentation.filters || presentation.filters.includes(f.name)),
         ),
         metrics: [],
       }
@@ -132,6 +136,7 @@ export function ConfiguredFactsPage({
     cycleDays,
     fcCycleRules,
     filters,
+    scopeFilters,
     revision,
   ]);
   useEffect(() => {
@@ -145,7 +150,16 @@ export function ConfiguredFactsPage({
     void readConfiguredFacts(
       config,
       viewId,
-      { asOf, page, pageSize, filters, customer, cycleDays, fcCycleRules, readContext },
+      {
+        asOf,
+        page,
+        pageSize,
+        filters: { ...filters, ...scopeFilters },
+        customer,
+        cycleDays,
+        fcCycleRules,
+        readContext,
+      },
       // Business lists display rows; their independent overview owns card totals.
       { signal: controller.signal, detailsOnly: Boolean(presentation) },
     )
@@ -200,7 +214,11 @@ export function ConfiguredFactsPage({
   if (presentation)
     return (
       <BusinessList
-        actionScope={{ config, viewId, input: { asOf, filters, cycleDays, fcCycleRules } }}
+        actionScope={{
+          config,
+          viewId,
+          input: { asOf, filters: { ...filters, ...scopeFilters }, cycleDays, fcCycleRules },
+        }}
         agentId={config.agentId}
         view={view}
         columns={columns}

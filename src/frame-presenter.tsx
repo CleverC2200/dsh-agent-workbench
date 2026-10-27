@@ -543,7 +543,7 @@ export function mountFramePresentation(
           onCloseTools={closeTools}
           toolsExpanded={toolsExpanded}
         >
-          {identityReady && interpreters.length > 1 && (
+          {page.id !== 'inventory-fc' && identityReady && interpreters.length > 1 && (
             <select
               className="gea-conversation-toolbar-tool"
               aria-label={t('pageInterpreter')}
