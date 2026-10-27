@@ -400,7 +400,10 @@ test('original age tab uses batch-weighted ages and complete buckets instead of 
         material_name: null,
         total_qty: 150,
         age_weight_qty: 150,
+        unknown_age_qty: 7,
+        negative_qty: -7,
         average_age: 25.5,
+        max_age: 1033,
         age0_30: 100,
         age31_40: 20,
         age41_60: 20,
@@ -418,6 +421,9 @@ test('original age tab uses batch-weighted ages and complete buckets instead of 
   const row = tabs.货龄结构.rows[0];
   assert.equal(row.current, '150');
   assert.equal(row.averageAge, '25.5天');
+  assert.equal(row.maxAge, '1033.0天');
+  assert.equal(row.unknownAgeQty, '7');
+  assert.equal(row.negativeQty, '-7');
   assert.equal(row.age0To30, '100 / 66.7%');
   assert.equal(row.age60Plus, '10 / 6.7%');
   assert.equal(row.future7, '5');

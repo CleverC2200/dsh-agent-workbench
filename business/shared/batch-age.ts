@@ -14,6 +14,7 @@ const rowSchema = z.object({
   total_qty: quantity,
   age_weight_qty: quantity,
   unknown_age_qty: quantity,
+  negative_qty: quantity.optional(),
   average_age: quantity.nullable(),
   max_age: quantity.nullable(),
   row_count: quantity,

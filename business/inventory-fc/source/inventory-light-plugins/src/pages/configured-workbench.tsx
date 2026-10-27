@@ -1,3 +1,4 @@
+import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
@@ -110,8 +111,8 @@ function WorkbenchBody() {
       ],
     },
     {
-      title: '当前货龄',
-      value: knownNumber(branchStock?.max_age),
+      title: '平均货龄',
+      value: inventoryAverageAge(branchStock),
       unit: '天',
       color: 'purple',
       details: [
@@ -233,8 +234,8 @@ function WorkbenchBody() {
                   key={c.title}
                   className={`kpi-card ${c.color}`}
                   title={
-                    c.title === '当前货龄'
-                      ? '当前货龄取分仓库存最大库龄；平均货龄未提供。'
+                    c.title === '平均货龄'
+                      ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
                       : c.description
                   }
                 >

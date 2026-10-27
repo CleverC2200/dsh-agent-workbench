@@ -66,7 +66,7 @@ const KPI_COPY: Record<KpiKey, { title: string; eyebrow: string; target: string 
     target: '目标库存',
   },
   turnover: { title: '库存周转', eyebrow: '去除内部流转', target: '参考口径' },
-  aging: { title: '当前货龄', eyebrow: '公司体系平均货龄', target: '分层规则' },
+  aging: { title: '平均货龄', eyebrow: '公司体系平均货龄', target: '分层规则' },
   fulfillment: {
     title: '订单满足率',
     eyebrow: '本自然月',
@@ -89,7 +89,6 @@ export function KpiCard({
   metric,
   workspace,
   onOpen,
-  maximumAges,
   periodShortages,
   channelSnapshot,
 }: {
@@ -97,7 +96,6 @@ export function KpiCard({
   metric: MetricValue;
   workspace: FullChainWorkspace;
   onOpen: () => void;
-  maximumAges?: { base: number | null; branch: number | null };
   periodShortages?: { base: number | null; branch: number | null };
   channelSnapshot?: {
     inventory: number | null;
@@ -219,9 +217,7 @@ export function KpiCard({
               )
             : null;
         const order = workspace.fulfillment[layer === 'base' ? 'factory' : 'branch'];
-        const age = maximumAges
-          ? maximumAges[layer]
-          : (workspace.layerMetrics?.[layer].averageAgeDays ?? null);
+        const age = workspace.layerMetrics?.[layer].averageAgeDays ?? null;
         const value =
           metricKey === 'inventoryLevel'
             ? `${total != null && primaryValue ? ((total / primaryValue) * 100).toFixed(1) + '%' : '—'} / ${formatMetric(total, '件', true)}`
@@ -244,7 +240,7 @@ export function KpiCard({
             : metricKey === 'turnover'
               ? '基地按计划日均需求；分仓按可用库存及实际出库'
               : metricKey === 'aging'
-                ? `${maximumAges ? '最大库龄' : '平均货龄'} / >30天库存量；分层展示`
+                ? '平均货龄 / >30天库存量；分层展示'
                 : metricKey === 'fulfillment'
                   ? '基地按需求减缺口；分仓按运营事实发货÷订单'
                   : '最新备单快照的当前订单量';
@@ -343,25 +339,11 @@ export function KpiCard({
               <>
                 <div>
                   <dt>{'基地货龄'}</dt>
-                  <dd>
-                    {cardValue(
-                      maximumAges
-                        ? maximumAges.base
-                        : (workspace.layerMetrics?.base.averageAgeDays ?? null),
-                      '天',
-                    )}
-                  </dd>
+                  <dd>{cardValue(workspace.layerMetrics?.base.averageAgeDays ?? null, '天')}</dd>
                 </div>
                 <div>
                   <dt>{'分仓货龄'}</dt>
-                  <dd>
-                    {cardValue(
-                      maximumAges
-                        ? maximumAges.branch
-                        : (workspace.layerMetrics?.branch.averageAgeDays ?? null),
-                      '天',
-                    )}
-                  </dd>
+                  <dd>{cardValue(workspace.layerMetrics?.branch.averageAgeDays ?? null, '天')}</dd>
                 </div>
               </>
             ) : metricKey === 'turnover' ? (
