@@ -20,6 +20,7 @@ const numbers = new Set([
   'aged',
   'sales_plan',
   'transfer_plan',
+  'daily_demand',
   'stock_qty',
   'aged_qty',
   'excluded',
