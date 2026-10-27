@@ -13,23 +13,24 @@ export const dayOffset = (day, amount) =>
 const finite = (value) =>
   value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const sum = (rows, key) =>
-  rows.length && rows.every((row) => finite(row[key]))
-    ? rows.reduce((total, row) => total + Number(row[key]), 0)
+  rows.length && rows.every((row) => row[key] == null || finite(row[key]))
+    ? rows.reduce((total, row) => total + Number(row[key] ?? 0), 0)
     : null;
 const invalid = (rows, key = 'invalid') =>
   rows.some((row) => !finite(row[key]) || Number(row[key]) !== 0);
 export const metricValue = (metrics, name) => metrics?.[name]?.value ?? null;
 export function stockDaily(row) {
+  if (Object.hasOwn(row, 'daily_demand')) return row.daily_demand == null ? 0 : finite(row.daily_demand) ? Number(row.daily_demand) : null;
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(row.stock_date) ||
-    !finite(row.sales_plan) ||
-    !finite(row.transfer_plan)
+    (row.sales_plan != null && !finite(row.sales_plan)) ||
+    (row.transfer_plan != null && !finite(row.transfer_plan))
   )
     return null;
   const days = new Date(
     Date.UTC(Number(row.stock_date.slice(0, 4)), Number(row.stock_date.slice(5, 7)), 0),
   ).getUTCDate();
-  return (Number(row.sales_plan) + 0.5 * Number(row.transfer_plan)) / days;
+  return (Number(row.sales_plan ?? 0) + 0.5 * Number(row.transfer_plan ?? 0)) / days;
 }
 export function computeWorkbenchMetrics(period, filter = () => true) {
   const section = (name) => period.sections.find((section) => section.id === name);
@@ -48,6 +49,7 @@ export function computeWorkbenchMetrics(period, filter = () => true) {
     start: period.start,
     end: dayOffset(period.end, -1),
     granularity: period.kind,
+    missingValuePolicy: 'zero',
     sections: [
       { id: 'orders', status: section('orders')?.status ?? 'error', rows: orders },
       { id: 'shippable', status: section('stock')?.status ?? 'error', rows: supply },
@@ -91,8 +93,8 @@ export function computeWorkbenchMetrics(period, filter = () => true) {
   );
   put(
     '周转天数',
-    derived['可发货天数'].value,
-    '可用库存 ÷（滚动销售计划＋0.5×滚动调出计划）×快照月自然天数' +
+    stock.some((row) => Number(row.source_rows) !== 1) ? null : derived['可发货天数'].value,
+    '可用库存 ÷ 同范围滚动版本计划日均需求' +
       (supply.some((row) => row.invalid) ? '；存在缺值、负值或重复库存记录' : ''),
     '天',
   );
