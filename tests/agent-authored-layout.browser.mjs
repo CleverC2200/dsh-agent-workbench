@@ -1789,8 +1789,8 @@ test('base card weights base groups by inventory instead of averaging their ages
   assert.deepEqual(errors, []);
 });
 
-test('base batch-only inventory reconciles cards, base structure and age bands with negative adjustments', async (t) => {
-  const { frame, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+test('base batch-only inventory reconciles and age drill keeps the same fields across base, category and SKU', async (t) => {
+  const { frame, page, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
@@ -1822,10 +1822,10 @@ test('base batch-only inventory reconciles cards, base structure and age bands w
       Object.assign(result.rows[0], { base: '濮阳', demand: 25765, allocated: 0, shortage: 24734 });
     if (['batch-age.groups', 'batch-age.atomic'].includes(query.queryId))
       Object.assign(result.rows[0], {
-        level: '濮阳',
+        level: query.parameters.group_level === 'category' ? '调理肉制品' : '濮阳',
         belong_base: '濮阳',
-        material_code: null,
-        material_name: null,
+        material_code: query.parameters.group_level === 'sku' ? '100001' : null,
+        material_name: query.parameters.group_level === 'sku' ? '测试商品' : null,
         total_qty: 4277,
         average_age: 1658912 / 9974,
         max_age: 290,
@@ -1856,10 +1856,149 @@ test('base batch-only inventory reconciles cards, base structure and age bands w
   await expect(base).toContainText('4,277');
   await expect(base).toContainText('166.3天');
   await frame.getByRole('tab', { name: '货龄结构', exact: true }).click();
-  await expect(frame.getByRole('columnheader', { name: '负库存调整', exact: true })).toBeVisible();
+  await expect(frame.getByRole('columnheader', { name: '负库存调整', exact: true })).toHaveCount(0);
+  await expect(frame.getByRole('columnheader', { name: '未计龄库存', exact: true })).toHaveCount(0);
   const age = frame.getByRole('row').filter({ has: frame.getByText('濮阳', { exact: true }) });
   await expect(age).toContainText('4,277 / 42.9%');
   await expect(age).toContainText('5,697 / 57.1%');
-  await expect(age).toContainText('-5,697');
+  await expect(age).not.toContainText('-5,697');
+  const panel = frame.getByRole('tabpanel');
+  const rootHeaders = await panel.locator('table').first().locator('thead th').allTextContents();
+  await panel.getByRole('button', { name: '濮阳，查看详情', exact: true }).click();
+  const categoryButton = panel.getByRole('button', {
+    name: '调理肉制品，查看 SKU 详情',
+    exact: true,
+  });
+  await expect(categoryButton).toBeVisible();
+  const categoryTable = categoryButton.locator('xpath=ancestor::table[1]');
+  assert.deepEqual(
+    (await categoryTable.locator('thead th').allTextContents()).slice(1),
+    rootHeaders.slice(1),
+  );
+  await categoryButton.click();
+  const sku = panel.getByRole('region', { name: '濮阳调理肉制品 SKU 明细', exact: true });
+  await expect(sku.getByText('100001 测试商品', { exact: true })).toBeVisible();
+  const skuHeaders = await sku.locator('thead th').allTextContents();
+  assert.deepEqual(
+    skuHeaders.slice(1).map((s) => s.replace(/[↕↑↓]/g, '').trim()),
+    rootHeaders.slice(1),
+  );
+  await expect(panel.getByRole('columnheader', { name: '负库存调整', exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('columnheader', { name: '未计龄库存', exact: true })).toHaveCount(0);
+  const reads = calls.filter((c) => c.queryId === 'batch-age.atomic');
+  assert.ok(reads.some((c) => c.parameters.group_level === 'base'));
+  assert.ok(
+    reads.some(
+      (c) => c.parameters.group_level === 'category' && c.parameters.bases.join(',') === '濮阳',
+    ),
+  );
+  assert.ok(
+    reads.some(
+      (c) =>
+        c.parameters.group_level === 'sku' &&
+        c.parameters.bases.join(',') === '濮阳' &&
+        c.parameters.category === '调理肉制品',
+    ),
+  );
+  await mkdir('.scratch', { recursive: true });
+  await page.screenshot({ path: '.scratch/base-age-drilldown.png', fullPage: true });
+  await categoryButton.click();
+  await expect(sku).toHaveCount(0);
+  await panel.getByRole('button', { name: '濮阳，查看详情', exact: true }).click();
+  await expect(categoryButton).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('base and category warnings lead with shortage; SKU risk menu closes outside without losing selections', async (t) => {
+  const { frame, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+    if (query.queryId === 'calendar.target_versions')
+      result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
+    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (
+      ['page.dashboard-groups', 'page.inventory-groups', 'page.structure-groups'].includes(
+        query.queryId,
+      )
+    )
+      Object.assign(result.rows[0], {
+        base: '郑州',
+        category: '水饺',
+        level: '水饺',
+        row_count: 1,
+        sku_count: 1,
+        inventory: 100,
+        inventory_count: 1,
+        inventory_complete: 100,
+        target: 10,
+        target_count: 1,
+        target_complete: 10,
+        gap_count: 1,
+        gap: 90,
+        age_weighted_sum: 2600,
+        age_qty: 40,
+        low_stock_count: 0,
+        high_stock_count: 1,
+        missing_target_count: 0,
+      });
+    if (query.queryId.startsWith('current-shortage.'))
+      Object.assign(result.rows[0], {
+        base: '郑州',
+        category: '水饺',
+        demand: 300,
+        allocated: 10,
+        remaining: 290,
+        available: 100,
+        shortage: 190,
+        invalid: 0,
+      });
+    if (query.queryId === 'page.sku-detail.atomic')
+      Object.assign(result.rows[0], {
+        base: '郑州',
+        sku: '100001',
+        material_name: '测试商品',
+        category: '水饺',
+        inventory: 100,
+        target: 10,
+        final_target: 10,
+        daily_demand: 5,
+        target_source_rows: 1,
+        stock_source_rows: 1,
+        risk: '缺货',
+        current_demand: 300,
+        current_allocated: 10,
+        current_shortage: 190,
+        age_weighted_sum: 2600,
+        age_qty: 40,
+      });
+    return result;
+  });
+  const base = frame.getByRole('button', { name: '郑州，查看详情', exact: true });
+  await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
+  await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
+  await base.click();
+  const category = frame.getByRole('button', { name: '水饺，查看 SKU 详情', exact: true });
+  await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
+  await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
+  await category.click();
+  const sku = frame.getByRole('region', { name: '郑州水饺 SKU 明细', exact: true });
+  const row = sku.getByRole('row').filter({ hasText: '100001 测试商品' });
+  await expect(row).toContainText('缺货');
+  await expect(row).toContainText('65.0天');
+  const menu = sku.locator('details');
+  await menu.locator('summary').click();
+  await menu.getByRole('checkbox', { name: '无目标', exact: true }).check();
+  await expect(menu).toHaveAttribute('open', '');
+  await sku.getByPlaceholder('编码或名称').click();
+  await expect(menu).not.toHaveAttribute('open', '');
+  await menu.locator('summary').click();
+  await expect(menu.getByRole('checkbox', { name: '无目标', exact: true })).toBeChecked();
+  await menu.locator('summary').press('Escape');
+  await expect(menu).not.toHaveAttribute('open', '');
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.queryId === 'page.sku-detail.atomic' && call.parameters.risks.includes('无目标'),
+    ),
+  );
+  assert.ok(!calls.some((call) => call.queryId === 'current-shortage.skus'));
   assert.deepEqual(errors, []);
 });

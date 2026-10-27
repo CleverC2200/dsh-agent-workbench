@@ -158,8 +158,6 @@ export function originalAqkcAgeView(config: any) {
       ['missing_age31_40', '31-40天量/占比'],
       ['missing_age41_60', '41-60天量/占比'],
       ['missing_age60', '60+天量/占比'],
-      ['unknown_age_qty', '未计龄库存'],
-      ['negative_qty', '负库存调整'],
       ['missing_future7', '未来7日预计超龄'],
       ['missing_future14', '未来14日预计超龄'],
       ['missing_movement', '日均动销'],
