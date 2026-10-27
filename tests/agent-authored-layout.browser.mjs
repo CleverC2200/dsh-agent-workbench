@@ -378,11 +378,19 @@ test('QLL branch turnover reads its summary and its date control has a stable Ch
   await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
-test('QLL cards retain maximum ages and independent current gaps, including zero', async (t) => {
+test('QLL cards show batch-weighted average ages and independent current gaps, including zero', async (t) => {
   const { frame, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'health.cards')
-      Object.assign(result.rows[0], { base_max_age: 405, max_age: 405 });
-    if (query.queryId === 'branch-health.cards') Object.assign(result.rows[0], { max_age: 381 });
+      Object.assign(result.rows[0], {
+        base_max_age: 405,
+        max_age: 405,
+        weighted_age_sum: 10000,
+        age_weight_qty: 1000,
+      });
+    if (query.queryId === 'branch-health.cards')
+      Object.assign(result.rows[0], { max_age: 381, weighted_age_sum: 5000, age_weight_qty: 100 });
+    if (query.queryId.startsWith('batch-age.'))
+      Object.assign(result.rows[0], { average_age: 13.636, max_age: 1033 });
     if (query.queryId === 'current-shortage.summary')
       result.rows.forEach((row) =>
         Object.assign(row, { shortage: row.location_type === '分仓' ? 0 : 12345 }),
@@ -391,14 +399,21 @@ test('QLL cards retain maximum ages and independent current gaps, including zero
   });
   const age = frame
     .getByRole('button')
-    .filter({ has: frame.getByText('当前货龄', { exact: true }) });
-  await expect(age).toContainText('基地货龄405.0天');
-  await expect(age).toContainText('分仓货龄381.0天');
+    .filter({ has: frame.getByText('平均货龄', { exact: true }) });
+  await expect(age.locator('strong').first()).toHaveText('13.6天');
+  await expect(age).not.toContainText('405');
+  await expect(age).toContainText('基地货龄10.0天');
+  await expect(age).toContainText('分仓货龄50.0天');
   const orders = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(orders).toContainText('基地缺货量1.23万箱');
   await expect(orders).toContainText('分仓缺货量0箱');
+  await frame.getByRole('tab', { name: '库存库龄', exact: true }).click();
+  await expect(
+    frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
+  ).toBeVisible();
+  await expect(frame.getByRole('cell', { name: '1,033', exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
 test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
@@ -436,7 +451,7 @@ test('FC uses the same Chinese date display and retains explicit refresh', async
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
-  [1234, 190, '1,234箱'],
+  [1033547, 190, '1,033,547箱'],
   [0, 201, '0箱'],
   [null, 0, '-'],
 ])
@@ -1627,5 +1642,150 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   await expect(input).toHaveValue('');
   await input.blur();
   await expect(input).toHaveValue('0');
+  assert.deepEqual(errors, []);
+});
+
+test('FC weighted age stays compact and maximum age is available in details', async (t) => {
+  const { frame, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'health.cards')
+      Object.assign(result.rows[0], {
+        weighted_age_sum: 11023,
+        age_weight_qty: 1000,
+        average_age: 11.023,
+        max_age: 1033,
+      });
+    if (query.queryId.startsWith('batch-age.'))
+      Object.assign(result.rows[0], {
+        average_age: 11.023,
+        max_age: 1033,
+      });
+    return result;
+  });
+  const card = frame
+    .locator('[data-overview-cards="fc"]')
+    .locator('article')
+    .filter({
+      has: frame.getByText('平均货龄', { exact: true }),
+    });
+  await expect(card).toContainText('11.02');
+  await expect(card).not.toContainText('1,033');
+  await frame.getByRole('button', { name: '货龄结构', exact: true }).click();
+  await expect(
+    frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
+  ).toBeVisible();
+  await expect(frame.getByRole('cell', { name: '1,033', exact: true })).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
+test('base card weights base groups by inventory instead of averaging their ages', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+    if (query.queryId === 'page.health-groups')
+      result.rows = [
+        {
+          level: '郑州',
+          average_age: 10,
+          weighted_age_sum: 9000,
+          age_weight_qty: 900,
+          unknown_age_qty: 0,
+          max_age: 1033,
+          row_count: 2,
+          age_valid_count: 2,
+        },
+        {
+          level: '遂平',
+          average_age: 50,
+          weighted_age_sum: 5000,
+          age_weight_qty: 100,
+          unknown_age_qty: 0,
+          max_age: 365,
+          row_count: 2,
+          age_valid_count: 2,
+        },
+      ];
+    return result;
+  });
+  const card = frame
+    .locator('[data-overview-cards="aqkc"]')
+    .locator('article')
+    .filter({
+      has: frame.getByText('平均货龄', { exact: true }),
+    });
+  await expect(card).toContainText('14.0天');
+  await expect(card).not.toContainText('1033');
+  assert.deepEqual(errors, []);
+});
+
+test('base batch-only inventory reconciles cards, base structure and age bands with negative adjustments', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+    if (query.queryId === 'calendar.target_versions')
+      result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
+    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['page.dashboard-groups', 'page.inventory-groups'].includes(query.queryId))
+      Object.assign(result.rows[0], {
+        base: '濮阳',
+        category: '调理肉制品',
+        inventory: 4277,
+        inventory_count: 14,
+        inventory_complete: 4277,
+        row_count: 14,
+        target: null,
+        target_count: 0,
+        target_complete: null,
+        gap: null,
+        gap_count: 0,
+      });
+    if (query.queryId === 'page.health-groups')
+      Object.assign(result.rows[0], {
+        level: '濮阳',
+        weighted_age_sum: 1658912,
+        age_weight_qty: 9974,
+        average_age: 1658912 / 9974,
+        max_age: 290,
+        row_count: 14,
+        age_valid_count: 14,
+      });
+    if (query.queryId === 'current-shortage.locations')
+      Object.assign(result.rows[0], { base: '濮阳', demand: 25765, allocated: 0, shortage: 24734 });
+    if (['batch-age.groups', 'batch-age.atomic'].includes(query.queryId))
+      Object.assign(result.rows[0], {
+        level: '濮阳',
+        belong_base: '濮阳',
+        material_code: null,
+        material_name: null,
+        total_qty: 4277,
+        average_age: 1658912 / 9974,
+        max_age: 290,
+        age_weight_qty: 9974,
+        age_valid_count: 14,
+        unknown_age_qty: 0,
+        negative_qty: -5697,
+        age0_30: 4277,
+        age31_40: 0,
+        age41_60: 0,
+        age60_plus: 5697,
+        future7: 0,
+        future14: 0,
+        daily_movement: 0,
+        sku_count: 14,
+      });
+    return result;
+  });
+  const card = frame.locator('[data-overview-cards="aqkc"] article');
+  await expect(
+    card.filter({ has: frame.getByText('当前库存', { exact: true }) }).locator('strong'),
+  ).toHaveText('4,277');
+  await expect(
+    card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
+  ).toHaveText('25,765箱');
+  await expect(frame.getByText(/库存覆盖14\/14、目标覆盖0\/14个基地SKU/)).toBeVisible();
+  const base = frame.getByRole('row').filter({ has: frame.getByText('濮阳', { exact: true }) });
+  await expect(base).toContainText('4,277');
+  await expect(base).toContainText('166.3天');
+  await frame.getByRole('tab', { name: '货龄结构', exact: true }).click();
+  await expect(frame.getByRole('columnheader', { name: '负库存调整', exact: true })).toBeVisible();
+  const age = frame.getByRole('row').filter({ has: frame.getByText('濮阳', { exact: true }) });
+  await expect(age).toContainText('4,277 / 42.9%');
+  await expect(age).toContainText('5,697 / 57.1%');
+  await expect(age).toContainText('-5,697');
   assert.deepEqual(errors, []);
 });
