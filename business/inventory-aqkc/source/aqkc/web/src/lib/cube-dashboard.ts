@@ -466,7 +466,6 @@ async function loadWorkbenchSqlQuery(
   // pagination, including national queries that carry no user base filter.
   return rows
     .filter((row) => {
-      if (String(row['safety_stock.product_categ_name'] ?? '').trim() === '饺鲜说') return false;
       if (row['workbench.domain'] === 'order_total') return true;
       const baseKey = ['safety_stock.base_name', 'inventory_age.base_name', 'workbench.base'].find(
         (key) => key in row,
@@ -748,10 +747,13 @@ const AGE_COLUMNS = [
   { key: 'warning', label: '预警标志' },
   { key: 'current', label: '当前库存' },
   { key: 'averageAge', label: '平均货龄' },
+  { key: 'maxAge', label: '最大货龄' },
   { key: 'age0To30', label: '0-30天量/占比' },
   { key: 'age31To40', label: '31-40天量/占比' },
   { key: 'age41To60', label: '41-60天量/占比' },
   { key: 'age60Plus', label: '60+天量/占比' },
+  { key: 'unknownAgeQty', label: '未计龄库存' },
+  { key: 'negativeQty', label: '负库存调整' },
   { key: 'future7', label: '未来7日预计超龄' },
   { key: 'future14', label: '未来14日预计超龄' },
   { key: 'last30d', label: '日均动销' },
@@ -1199,10 +1201,13 @@ function batchAgeDisplay(row: BatchAgeRow): Record<string, string | number> {
     warning: row.warning ?? '-',
     current: displayNumber(row.total_qty),
     averageAge: row.average_age === null ? '-' : `${row.average_age.toFixed(1)}天`,
+    maxAge: row.max_age === null ? '-' : `${row.max_age.toFixed(1)}天`,
     age0To30: batchAgeShare(row.age0_30, row.age_weight_qty),
     age31To40: batchAgeShare(row.age31_40, row.age_weight_qty),
     age41To60: batchAgeShare(row.age41_60, row.age_weight_qty),
     age60Plus: batchAgeShare(row.age60_plus, row.age_weight_qty),
+    unknownAgeQty: displayNumber(row.unknown_age_qty),
+    negativeQty: row.negative_qty === undefined ? '-' : displayNumber(row.negative_qty),
     future7: displayNumber(row.future7),
     future14: displayNumber(row.future14),
     last30d: displayDailyMovement(row.daily_movement),
@@ -1795,11 +1800,11 @@ export async function loadInitialDashboard(
   const direct = usesConfiguredSql();
   const healthSummary = sourceHealth?.summary;
   const healthAge =
-    Number(healthSummary?.age_valid_count) > 0 ? numeric(healthSummary?.max_age) : null;
+    Number(healthSummary?.age_valid_count) > 0 ? numeric(healthSummary?.average_age) : null;
   const healthScope = sourceHealth?.error
     ? `仓库货龄读取失败：${sourceHealth.error}`
     : healthSummary
-      ? `健康表 ${sourceHealth?.snapshotDate} · ${healthSummary.age_valid_count}/${healthSummary.row_count} 条记录，展示仓库最大库龄，平均货龄按批次数量加权`
+      ? `健康表 ${sourceHealth?.snapshotDate} · ${healthSummary.age_valid_count}/${healthSummary.row_count} 条记录，平均货龄按有效批次库存数量加权`
       : '当前无仓库货龄快照';
   const currentPresent = skuRows.filter(
     (row) => numeric(row['safety_stock.current_inventory']) !== null,
@@ -2079,7 +2084,7 @@ export async function loadInitialDashboard(
         tone: 'neutral',
       },
       {
-        label: '当前货龄',
+        label: '平均货龄',
         value: direct
           ? healthAge === null
             ? '-'
@@ -2268,7 +2273,7 @@ export async function loadInitialDashboard(
           tone: 'neutral',
         },
         {
-          title: '当前货龄',
+          title: '平均货龄',
           coverage: direct ? `${healthScope}；下列超60天数量仍取日库存快照` : undefined,
           value: direct
             ? healthAge === null
@@ -2599,9 +2604,9 @@ function configuredSummaryWorkspace(
   const currentRows = current.rows?.filter(
     (r: any) => !selectedBases?.length || selectedBases.includes(r.base),
   );
-  // Keep the legacy business scope after SQL aggregation as well.
+  // Cards and drill-downs retain every category in the same base batch scope.
   const groups = sourceGroups
-    .filter((r: any) => KNOWN_BASES.has(String(r.base)) && categoryName(r.category) !== '饺鲜说')
+    .filter((r: any) => KNOWN_BASES.has(String(r.base)))
     .map((r: any) => ({ ...r, category: categoryName(r.category) }));
   const stats = (rs: any[]) => {
     const sum = (key: string) => rs.reduce((n, r) => n + (numeric(r[key]) ?? 0), 0);
@@ -2639,11 +2644,11 @@ function configuredSummaryWorkspace(
       : '-';
   const days = (v: number | null) => (v === null ? '-' : `${v.toFixed(1)}天`);
   const healthAge =
-    Number(health.summary?.age_valid_count) > 0 ? numeric(health.summary?.max_age) : null;
+    Number(health.summary?.age_valid_count) > 0 ? numeric(health.summary?.average_age) : null;
   const healthScope = health.error
     ? `仓库货龄读取失败：${health.error}`
     : health.summary
-      ? `健康表 ${health.snapshotDate} · ${health.summary.age_valid_count}/${health.summary.row_count} 条记录，展示仓库最大库龄`
+      ? `健康表 ${health.snapshotDate} · ${health.summary.age_valid_count}/${health.summary.row_count} 条记录，平均货龄按有效批次库存数量加权`
       : '当前无仓库货龄快照';
   const baseRows = bases.map((base) => {
     const s = stats(groups.filter((r: any) => r.base === base)),
@@ -2691,6 +2696,13 @@ function configuredSummaryWorkspace(
   // Insight ranking only uses base/category totals when pending and batch facts
   // are unavailable. Strict sums preserve the same null propagation as SKU rows.
   const insight = buildInventoryInsight({
+    coverage: {
+      total: all.n,
+      inventory: all.sum('inventory_count'),
+      target: all.sum('target_count'),
+      matched: all.gapCount,
+      gap: all.gap,
+    },
     skus: groups.map((r: any) => ({
       base: r.base,
       category: r.category ?? '未分类',
@@ -2754,7 +2766,7 @@ function configuredSummaryWorkspace(
       tone: 'neutral',
     },
     {
-      title: '当前货龄',
+      title: '平均货龄',
       value: days(healthAge),
       coverage: `${healthScope}；下列超60天数量仍取日库存快照`,
       helpers: [

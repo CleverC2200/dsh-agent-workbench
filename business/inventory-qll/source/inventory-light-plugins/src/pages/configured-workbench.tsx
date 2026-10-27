@@ -1,3 +1,4 @@
+import { inventoryAverageAge, companyAverageAge } from '../../../../../shared/inventory-age';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
@@ -91,10 +92,13 @@ export default function ConfiguredWorkbench() {
     aging: { over30ByLayer: {} },
     agingDetails: [],
     layerMetrics: {
-      base: { turnoverDays: knownNumber(stock?.matched_stock_days), averageAgeDays: null },
+      base: {
+        turnoverDays: knownNumber(stock?.matched_stock_days),
+        averageAgeDays: inventoryAverageAge(parts.health?.summary),
+      },
       branch: {
         turnoverDays: knownNumber(parts['branch-replenishment']?.summary?.historical_turnover_days),
-        averageAgeDays: null,
+        averageAgeDays: inventoryAverageAge(branch),
       },
     },
     fulfillment: {
@@ -124,9 +128,10 @@ export default function ConfiguredWorkbench() {
       },
       turnover: { current: knownNumber(stock?.matched_stock_days), unit: '天' },
       aging: {
-        current: knownNumber(parts.health?.summary?.max_age),
+        current: companyAverageAge(parts.health, parts['branch-stock']),
         unit: '天',
-        explanation: '当前货龄及基地、分仓货龄分别取对应库存健康快照的最大库龄，不作为平均货龄。',
+        explanation:
+          '同一快照日的基地、分仓批次按库存数量加权；批次货龄为快照日减生产日。最大货龄见库存库龄明细。',
       },
       fulfillment: { current: fulfillmentPercent(orders), unit: '%' },
       orderGap: {
@@ -196,10 +201,6 @@ export default function ConfiguredWorkbench() {
                       inTransit: knownNumber(customer?.in_transit),
                       stockDays: knownNumber(customer?.cover_days),
                       date: parts['channel-overview']?.snapshotDate,
-                    }}
-                    maximumAges={{
-                      base: knownNumber(parts.health?.summary?.base_max_age),
-                      branch: knownNumber(branch?.max_age),
                     }}
                     onOpen={() =>
                       setTab(

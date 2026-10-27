@@ -75,17 +75,17 @@ test('known inputs are accessible without labeling unknown decisions as zero', a
   assert.ok(branchHealth.filters.some((filter) => filter.name === 'base'));
 });
 
-test('base overview uses maximum age and cannot present the source maximum as an average', async () => {
+test('base overview uses the weighted average while keeping maximum age in details', async () => {
   const source = await readFile(
     'business/inventory-aqkc/source/aqkc/web/src/lib/cube-dashboard.ts',
     'utf8',
   );
-  assert.match(source, /numeric\(healthSummary\?\.max_age\)/);
+  assert.match(source, /numeric\(healthSummary\?\.average_age\)/);
   assert.match(source, /const rowAge = direct \? undefined : businessSummary.ageByBase/);
   assert.doesNotMatch(
     source,
     /healthSummary\?\.weighted_age|warehouseAge\?\.weighted_age|按仓库源库存加权/,
   );
   assert.doesNotMatch(source, /label: '最大库龄\/天'/);
-  assert.match(source, /title: '当前货龄'/);
+  assert.match(source, /title: '平均货龄'/);
 });
