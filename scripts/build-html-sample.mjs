@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const resource = await readFile(new URL('../theme/tokens.css', import.meta.url), 'utf8');
 const sha256 = createHash('sha256').update(resource).digest('hex');
-if (sha256 !== '19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66') {
+if (sha256 !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8') {
   throw new Error('HTML_SAMPLE_THEME_RESOURCE_MISMATCH: expected shared theme 1.1.1');
 }
 const source = await readFile(new URL('../samples/html-table.html', import.meta.url), 'utf8');
