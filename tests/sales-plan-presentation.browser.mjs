@@ -882,6 +882,35 @@ test('退回计划可继续修改本地草稿，组织汇总分摊不触发重�
   );
 });
 
+test(
+  'returned group submission carries each customer allocation from inline edits',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, 'returned');
+    await groupBox.locator('xpath=ancestor::tr').getByRole('button').first().click();
+    const group = page.getByTestId('regional-approval-group-sku-summary').first();
+    await group.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('80');
+    await groupBox.click();
+    await page.getByRole('button', { name: '提交所选', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.approvalItems?.length)).toBe(2);
+    const items = await page.evaluate(() => window.approvalItems);
+    assert.deepEqual(
+      items
+        .map((item) => ({
+          kind: item.kind,
+          customer: item.row.dealerName,
+          role: item.approvalRole,
+          value: item.pendingValues['1001'],
+        }))
+        .sort((left, right) => left.customer.localeCompare(right.customer)),
+      [
+        { kind: 'resubmit', customer: '客户1', role: 'region', value: '40' },
+        { kind: 'resubmit', customer: '客户2', role: 'region', value: '40' },
+      ],
+    );
+  },
+);
+
 test('split sales plan keeps actions on one row and separates the table header', async (t) => {
   const { page } = await openWorkbench(t);
   for (const width of [907, 760, 620]) {

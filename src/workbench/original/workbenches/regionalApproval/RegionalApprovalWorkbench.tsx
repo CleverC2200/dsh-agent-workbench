@@ -5,7 +5,7 @@ import type {
 import { salesPlanCanResubmit } from './models/salesPlanSubmitModel.ts';
 import { InlineSkuDetails } from './InlineSkuDetails.tsx';
 import { GroupSkuSummary } from './GroupSkuSummary.tsx';
-import type { GeaSalesPlanPeriod, GeaSalesPlanListItem } from '../../contracts.ts';
+import type { GeaSalesPlanListItem } from '../../contracts.ts';
 /** 改编自 AionUi（Apache-2.0）：已替换为本地导入并使用显式 DSH Host 适配器，见 SOURCE.md。 */
 import { salesPlanQueueStatusText, salesPlanStatusText } from './regionalApprovalQueryModel.ts';
 import { SALES_PLAN_RETURN_CODES } from '../../salesPlanWorkflow.ts';
@@ -365,12 +365,6 @@ const RegionalApprovalWorkbench: React.FC<{
   liveActionsEnabled?: boolean;
   automaticAnalysisEnabled?: boolean;
   currentUserId?: string;
-  onResubmit?: (
-    planId: string,
-    versionId: string,
-    period: GeaSalesPlanPeriod,
-    label?: string,
-  ) => void;
   onSubmitBatch?: (items: readonly SalesPlanSubmissionItem[]) => void;
   submissionOutcomes?: readonly SalesPlanSubmissionOutcome[];
   /** 当前账号可审批的节点：由账号角色映射得出（Host 经网关解析用户角色后传入）。 */
@@ -388,7 +382,6 @@ const RegionalApprovalWorkbench: React.FC<{
   onContextChange,
   liveActionsEnabled = false,
   automaticAnalysisEnabled = false,
-  onResubmit,
   onSubmitBatch,
   submissionOutcomes,
   currentUserId,
@@ -1296,7 +1289,7 @@ const RegionalApprovalWorkbench: React.FC<{
   const resubmitAllowed = (row: RegionalApprovalLiveRow) => {
     const detail = liveAccess.entries[row.versionId];
     return Boolean(
-      onResubmit &&
+      onSubmitBatch &&
       liveQuery.queueState.status === 'success' &&
       detail &&
       detail.currentVersion.id === row.versionId &&
@@ -2729,7 +2722,18 @@ const RegionalApprovalWorkbench: React.FC<{
       if (!period) return [];
       if (row.status >= 6 && row.status <= 9) {
         return resubmitAllowed(row)
-          ? [{ kind: 'resubmit', planId: row.planId, versionId: row.versionId, label, period }]
+          ? [
+              {
+                kind: 'resubmit',
+                planId: row.planId,
+                versionId: row.versionId,
+                label,
+                period,
+                row,
+                approvalRole: liveStageFilter,
+                pendingValues: livePendingValues[row.planId],
+              },
+            ]
           : [];
       }
       const access = liveActionAccessFor(row, 'APPROVE');
@@ -2750,8 +2754,7 @@ const RegionalApprovalWorkbench: React.FC<{
     });
   const selectedSubmissionItems = submissionItems();
   const resubmitDisabledReason =
-    selectedSubmissionItems.length !== selectedPendingActionRows.length ||
-    (!onSubmitBatch && selectedLiveRows.length !== 1)
+    selectedSubmissionItems.length !== selectedPendingActionRows.length
       ? t('common.assistantSurface.regionalApproval.liveSubmit.disabled.sourceAuthority')
       : undefined;
   const primaryActionDisabledReason =
@@ -2802,12 +2805,7 @@ const RegionalApprovalWorkbench: React.FC<{
           title={resubmitDisabledReason}
           onClick={() => {
             if (resubmitDisabledReason) return;
-            if (onSubmitBatch) onSubmitBatch(selectedSubmissionItems);
-            else {
-              const item = selectedSubmissionItems[0];
-              if (item?.kind === 'resubmit')
-                onResubmit?.(item.planId, item.versionId, item.period, item.label);
-            }
+            onSubmitBatch?.(selectedSubmissionItems);
           }}
         >
           {t(
