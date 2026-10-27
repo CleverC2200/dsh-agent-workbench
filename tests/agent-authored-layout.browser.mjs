@@ -3,6 +3,44 @@ import assert from 'node:assert/strict';
 import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
+
+test('QLL 列表查询按钮与筛选输入框等高', async (t) => {
+  const { frame } = await mount(t, 'qll', 1280);
+  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
+  const input = frame.getByRole('textbox', { name: '品类', exact: true }).first();
+  const form = input.locator('xpath=ancestor::form[1]');
+  const heights = await Promise.all(
+    [
+      input,
+      form.getByRole('button', { name: '查询', exact: true }),
+      form.getByRole('button', { name: '清空筛选' }),
+    ].map(async (locator) => (await locator.boundingBox())?.height),
+  );
+  assert.ok(heights.every(Number.isFinite), `筛选控件应可见：${heights}`);
+  assert.ok(Math.max(...heights) - Math.min(...heights) <= 1, `按钮与输入框高度应一致：${heights}`);
+});
+
+test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) => {
+  const { frame } = await mount(t, 'qll', 1280);
+  const trigger = frame.getByRole('button', { name: '趋势指标' });
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '趋势指标' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: '库存趋势' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await expect(menu.getByRole('option', { name: '订单缺口趋势' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await expect(menu.getByRole('option', { name: '货龄趋势' })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await trigger.press('Escape');
+  await expect(menu).toHaveCount(0);
+});
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');
@@ -238,9 +276,9 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
     return result;
   });
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
-  await expect(card.locator('.kpi-value')).toHaveText('450箱');
-  await expect(card.locator('dl')).toContainText('缺货量3箱');
-  await expect(card.locator('dl')).toContainText('未备单订单占用50箱');
+  await expect(card.locator('.kpi-value')).toHaveText('450件');
+  await expect(card.locator('dl')).toContainText('缺货量3件');
+  await expect(card.locator('dl')).toContainText('未备单订单占用50件');
   assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
@@ -626,9 +664,9 @@ test('FC current-order card preserves a verified zero independently of monthly q
   const card = frame
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('0箱');
+  await expect(card.locator('.kpi-value')).toHaveText('0件');
   await expect(card.locator('dt')).toHaveText(['缺货量', '未备单订单占用']);
-  await expect(card.locator('dd')).toHaveText(['0箱', '0箱']);
+  await expect(card.locator('dd')).toHaveText(['0件', '0件']);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
 });
@@ -866,7 +904,7 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
   });
   const trigger = frame.getByRole('button', { name: '补货周期配置', exact: true });
   const card = frame.locator('.kpi-card').filter({ hasText: '待补货量' });
-  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await expect(card.locator('.kpi-value')).toHaveText('80件');
   await expect(trigger).toContainText('7天（默认）');
   await trigger.click();
   const modal = frame.getByRole('dialog', { name: '补货周期配置', exact: true });
@@ -884,7 +922,7 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
   await modal.getByRole('button', { name: '应用', exact: true }).click();
   await expect(modal).toHaveCount(0);
   await expect(trigger).toContainText('14天');
-  await expect(card.locator('.kpi-value')).toHaveText('150箱');
+  await expect(card.locator('.kpi-value')).toHaveText('150件');
   await expect
     .poll(() =>
       calls
@@ -902,7 +940,7 @@ test('FC cycle dialog applies one setting to its card and fresh ten-row pages', 
   await modal.getByRole('button', { name: '恢复默认', exact: true }).click();
   await expect(input).toHaveValue('7');
   await modal.getByRole('button', { name: '应用', exact: true }).click();
-  await expect(card.locator('.kpi-value')).toHaveText('80箱');
+  await expect(card.locator('.kpi-value')).toHaveText('80件');
   await page.setViewportSize({ width: 320, height: 900 });
   await trigger.click();
   const box = await modal.boundingBox();
@@ -1101,6 +1139,10 @@ function fcWorkflowRows(query, result) {
     open_transfer_reported_qty: 0,
     recommended_qty: query.queryId.endsWith('.summary') ? 105 : 5,
     month_out_plan: 31,
+    period_current_out: 31,
+    period_next_out: 31,
+    current_order_remaining: 0,
+    calculation_order_remaining: 0,
     warehouse_month_transfer_plan: 62,
     plan_month: '2026-10-01',
     month_ship_positive: 10,
@@ -1163,10 +1205,10 @@ test('FC restored quantity draft survives server paging and submits a real workb
   await expect(draft.getByRole('spinbutton')).toHaveValue('13');
   await draft.getByRole('button', { name: '取消', exact: true }).click();
   await list.getByRole('button', { name: '提交', exact: true }).click();
-  const confirmation = frame.getByRole('dialog', { name: '确认导出补货清单', exact: true });
+  const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
   await expect(confirmation).toContainText('21个SKU');
   const downloaded = page.waitForEvent('download');
-  await confirmation.getByRole('button', { name: '确认导出', exact: true }).click();
+  await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
   const file = await downloaded;
   assert.match(file.suggestedFilename(), /DMS补货.*\.xlsx$/);
   const { unzipWorkbook } =
@@ -1242,11 +1284,14 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   const card = frame
     .locator('[data-overview-cards="fc"] article')
     .filter({ has: frame.getByText('待补货量', { exact: true }) });
-  await expect(card.locator('.kpi-value')).toHaveText('180箱');
+  await expect(card.locator('.kpi-value')).toHaveText('-'); // Unlisted SKUs in the replaced month remain unknown.
   await frame.getByRole('button', { name: '补货确认', exact: true }).click();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
   ).toHaveValue('80');
+  await expect(
+    frame.getByRole('spinbutton', { name: 'sku-A-001实际补货量', exact: true }),
+  ).toBeDisabled();
   assert.deepEqual(errors, []);
 });
 
@@ -1349,14 +1394,16 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }).fill('17');
   await list.getByRole('button', { name: '提交', exact: true }).click();
-  const confirmation = frame.getByRole('dialog', { name: '确认导出补货清单', exact: true });
-  await expect(confirmation.getByRole('button', { name: '确认导出', exact: true })).toBeDisabled();
+  const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
+  await expect(
+    confirmation.getByRole('button', { name: '仅导出Excel', exact: true }),
+  ).toBeDisabled();
   await confirmation
     .getByRole('combobox', { name: '导出补货分仓', exact: true })
     .selectOption('001');
   await expect(confirmation).toContainText('10个SKU');
   const downloaded = page.waitForEvent('download');
-  await confirmation.getByRole('button', { name: '确认导出', exact: true }).click();
+  await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
   const file = await downloaded;
   assert.match(file.suggestedFilename(), /DMS补货-上海分仓/);
   const { unzipWorkbook } =

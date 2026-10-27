@@ -1,3 +1,7 @@
+import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
+import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
+import { knownNumber } from '../../../../../shared/configured-overview';
+import { call } from '../channel.js';
 import { dmsWorkbookRows } from '../fc-feedback';
 import { updateContext } from '../native/context';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
@@ -15,6 +19,8 @@ import {
 } from '../../../fc/src/lib/planning';
 import {
   applyFcPlan,
+  summarizeFcRows,
+  validateFcSubmission,
   planKey,
   quantity,
   readFcActionRows,
@@ -55,7 +61,8 @@ const keyFor = (kind: string, month: string) => `branch-inventory:v1:${kind}:con
 type Trial = {
   scope: string;
   plans: ImportedPlan[];
-  recommended: number;
+  recommended: number | null;
+  missingCount: number;
   forwardTurnover: number | null;
 };
 const WorkflowContext = createContext<{
@@ -106,6 +113,7 @@ export function FcConfiguredList(
   const [quantityInputs, setQuantityInputs] = useState<Record<string, string>>({});
   useEffect(() => setQuantityInputs({}), [draftKey]);
   const [planDraft, setPlanDraft] = useState(() => loadPlan(planDraftKey));
+  const [detailRow, setDetailRow] = useState<FcRow | null>(null);
   const [dialog, setDialog] = useState<'template' | 'import' | 'draft' | 'export' | null>(null);
   const [templateMonth, setTemplateMonth] = useState(defaultPlanTemplateMonth);
   const [importErrors, setImportErrors] = useState<
@@ -114,6 +122,16 @@ export function FcConfiguredList(
   const [importPlans, setImportPlans] = useState<ImportedPlan[]>([]);
   const [exportRows, setExportRows] = useState<FcRow[]>([]);
   const [exportWarehouse, setExportWarehouse] = useState('');
+  const [dmsFields, setDmsFields] = useState({
+    customerCode: '',
+    addressCode: '',
+    pupCode: '',
+  });
+  const [dmsReceipt, setDmsReceipt] = useState<{
+    orderCode: string;
+    aiPreOrderCode: string;
+  } | null>(null);
+  const [dmsRedirect, setDmsRedirect] = useState('');
   const [dialogPage, setDialogPage] = useState(1);
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
@@ -123,16 +141,24 @@ export function FcConfiguredList(
     active.current?.abort();
     setBusy(false);
     setDialog(null);
+    setDetailRow(null);
     setNotice('');
+    setDmsReceipt(null);
+    setDmsRedirect('');
     return () => active.current?.abort();
   }, [scopeId]);
   useEffect(() => {
     const restore = () => {
       active.current?.abort();
+      setDmsReceipt(null);
+      setDmsRedirect('');
+      setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
+      setBusy(false);
       setDraft(loadDraft(draftKey));
       setQuantityInputs({});
       setPlanDraft(loadPlan(planDraftKey));
       setDialog(null);
+      setDetailRow(null);
     };
     window.addEventListener('workbench-fc-view-restored', restore);
     window.addEventListener('gea-identity-changed', restore);
@@ -189,6 +215,12 @@ export function FcConfiguredList(
       if (value !== null) return value;
     }
     if (scope.viewId === 'replenishment') {
+      if (column.field === 'sku')
+        return (
+          <button type="button" className="secondary-button" onClick={() => setDetailRow(row)}>
+            {text(row.sku)}
+          </button>
+        );
       const key = rowKey(row);
       if (column.field === 'missing_actualQty')
         return (
@@ -196,6 +228,7 @@ export function FcConfiguredList(
             className="fc-quantity-input"
             type="number"
             aria-label={`${text(row.sku)}实际补货量`}
+            disabled={knownNumber(row.recommended_qty) === null}
             min={0}
             max={1e9}
             step="any"
@@ -257,7 +290,9 @@ export function FcConfiguredList(
         mode === 'draft'
           ? Object.hasOwn(draft.quantities, rowKey(row)) ||
             Object.hasOwn(draft.reasons, rowKey(row))
-          : (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
+          : Object.hasOwn(draft.quantities, rowKey(row)) ||
+            knownNumber(row.recommended_qty) === null ||
+            quantity(row.recommended_qty) > 0,
       );
       if (
         selected.some(
@@ -267,6 +302,8 @@ export function FcConfiguredList(
         throw Error('补货清单缺少分仓或商品编码，未导出');
       const warehouses = [...new Set(selected.map((row) => String(row.warehouse_code)))];
       setExportWarehouse(warehouses.length === 1 ? warehouses[0] : '');
+      setDmsReceipt(null);
+      setDmsRedirect('');
       setExportRows(selected);
       setDialogPage(1);
       setDialog(mode);
@@ -278,14 +315,23 @@ export function FcConfiguredList(
         const local = plans.find(
           (item) => planKey(item) === rowKey(row) && item.month === templateMonth,
         );
-        const sameMonth = String(row.plan_month ?? '').slice(0, 7) === templateMonth;
+        const sameMonth = String(row.stat_month ?? '') === templateMonth.replace('-', '');
+        const planMonth = String(row.stat_month ?? '');
+        const nextPeriod =
+          /^\d{6}$/.test(planMonth) &&
+          templateMonth === nextMonth(planMonth.slice(0, 4) + '-' + planMonth.slice(4));
         return [
           text(row.warehouse_code),
           text(row.warehouse_name),
           templateMonth,
           text(row.sku),
           text(row.material_name),
-          local?.outboundQty ?? (sameMonth ? (row.month_out_plan ?? '') : ''),
+          local?.outboundQty ??
+            (sameMonth
+              ? (row.month_out_plan ?? '')
+              : nextPeriod
+                ? (row.period_next_out ?? row.future30_qty ?? '')
+                : ''),
           local?.transferQty ?? (sameMonth ? (row.warehouse_month_transfer_plan ?? '') : ''),
         ];
       });
@@ -311,23 +357,9 @@ export function FcConfiguredList(
         signal,
       );
       const calculated = rows.map((row) => applyFcPlan(row, parsed.plans, scope.input.asOf, days));
-      const recommended = calculated.reduce(
-        (total, row) => total + quantity(row.recommended_qty),
-        0,
-      );
-      const demand = calculated.reduce((total, row) => total + quantity(row.calculation_daily), 0);
-      const stock = calculated.reduce(
-        (total, row) =>
-          total + quantity(row.available_qty) + quantity(row.open_transfer_reported_qty),
-        0,
-      );
+      const summary = summarizeFcRows(calculated);
       signal.throwIfAborted();
-      setTrial({
-        scope: fcTrialScope(scope.input.asOf, days),
-        plans: parsed.plans,
-        recommended,
-        forwardTurnover: demand > 0 ? stock / demand : null,
-      });
+      setTrial({ scope: fcTrialScope(scope.input.asOf, days), plans: parsed.plans, ...summary });
       setDialog(null);
       setNotice('计划已导入并完成试算');
     });
@@ -377,6 +409,12 @@ export function FcConfiguredList(
       ? exportRows.filter((row) => String(row.warehouse_code) === exportWarehouse)
       : exportRows;
   const confirmExport = () => {
+    try {
+      validateFcSubmission(previewRows, draft.quantities, draft.reasons);
+    } catch (error) {
+      setNotice((error as Error).message);
+      return;
+    }
     const selected = previewRows.filter(
       (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
     );
@@ -407,6 +445,67 @@ export function FcConfiguredList(
     setDialog(null);
     setNotice('补货清单已导出');
   };
+  const submitDms = () =>
+    run(async (signal) => {
+      if (!exportWarehouse) throw Error('请选择分仓');
+      const selected = previewRows.filter(
+        (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
+      );
+      validateFcSubmission(previewRows, draft.quantities, draft.reasons);
+      if (!selected.length) throw Error('请填写大于0的补货量');
+      const remarks = previewRows
+        .filter((row) => draft.reasons[rowKey(row)]?.trim())
+        .map(
+          (row) =>
+            `${row.sku}: ${draft.quantities[rowKey(row)] ?? row.recommended_qty}；${draft.reasons[rowKey(row)].trim()}`,
+        )
+        .join('\n');
+      if (remarks.length > 500)
+        throw Error('调整说明超过DMS备注500字限制，请精简后提交；草稿已保留');
+      const fields = Object.fromEntries(
+        Object.entries(dmsFields).map(([key, value]) => [key, value.trim()]),
+      );
+      if (Object.values(fields).some((value) => !value))
+        throw Error('请填写客户、收货地址和提货点编码');
+      const order = {
+        ...fields,
+        ...(remarks ? { remarks } : {}),
+        itemList: selected
+          .map((row) => ({
+            productCode: String(row.sku),
+            quantity: draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty),
+          }))
+          .sort((a, b) => a.productCode.localeCompare(b.productCode)),
+      };
+      // Stable intent survives page reloads; DMS has no documented idempotency guarantee.
+      const digest = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(JSON.stringify([month, exportWarehouse, order])),
+      );
+      const aiPreOrderCode =
+        'AI' +
+        Array.from(new Uint8Array(digest))
+          .map((value) => value.toString(16).padStart(2, '0'))
+          .join('')
+          .slice(0, 30);
+      signal.throwIfAborted();
+      const receipt = (await call(
+        'branch-dms',
+        { operation: 'submit', order: { aiPreOrderCode, ...order } },
+        { signal },
+      )) as { orderCode: string; aiPreOrderCode: string };
+      signal.throwIfAborted();
+      setDmsReceipt(receipt);
+      setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
+    });
+  const loginDms = () =>
+    run(async (signal) => {
+      const result = (await call('branch-dms', { operation: 'login' }, { signal })) as {
+        redirect: string;
+      };
+      signal.throwIfAborted();
+      setDmsRedirect(result.redirect);
+    });
   const count = new Set([...Object.keys(draft.quantities), ...Object.keys(draft.reasons)]).size;
   const toolbar = (
     <>
@@ -512,6 +611,60 @@ export function FcConfiguredList(
         </p>
       )}
       <Modal
+        visible={detailRow !== null}
+        title="SKU补货依据"
+        footer={null}
+        onCancel={() => setDetailRow(null)}
+        style={{ width: 'min(1100px, calc(100vw - 32px))' }}
+      >
+        {detailRow && (
+          <>
+            <p>
+              {text(detailRow.warehouse_name)} · {text(detailRow.sku)} ·{' '}
+              {text(detailRow.material_name)}
+            </p>
+            <p>
+              建议补货 {text(detailRow.recommended_qty)} 件；目标库存{' '}
+              {text(detailRow.target_inventory_qty)} 件；订单剩余需求{' '}
+              {text(detailRow.current_order_remaining)} 件；调拨中{' '}
+              {text(detailRow.open_transfer_reported_qty)} 件。
+            </p>
+            <p>
+              {text(detailRow.calculation_status)}
+              。目标按本月计划日均向上取整×（周期+3天），先扣订单尚未占用的需求，再扣调拨中量；缺项待核实。
+            </p>
+            <CurrentShortageList
+              key={rowKey(detailRow)}
+              config={scope.config}
+              initialFilters={{
+                warehouse_code: String(detailRow.warehouse_code),
+                sku: String(detailRow.sku),
+              }}
+            />
+            <ConfiguredFactsPage
+              key={'age' + rowKey(detailRow)}
+              config={scope.config}
+              embedded
+              date={scope.input.asOf}
+              viewIds={['inventory']}
+              initialFilters={{
+                warehouse_code: String(detailRow.warehouse_code),
+                material_code: String(detailRow.sku),
+              }}
+            />
+            <ConfiguredFactsPage
+              key={'base' + rowKey(detailRow)}
+              config={scope.config}
+              embedded
+              date={scope.input.asOf}
+              viewIds={['base-resources']}
+              initialFilters={{ sku: String(detailRow.sku) }}
+            />
+            <p>基地可用库存仅供参考；供货关系、在途和未来排产未齐时不作供货承诺。</p>
+          </>
+        )}
+      </Modal>
+      <Modal
         visible={dialog !== null}
         title={
           dialog === 'template'
@@ -520,7 +673,7 @@ export function FcConfiguredList(
               ? 'Excel 导入校验与预览'
               : dialog === 'draft'
                 ? '补货草稿'
-                : '确认导出补货清单'
+                : '确认补货订单'
         }
         footer={null}
         onCancel={() => {
@@ -598,6 +751,7 @@ export function FcConfiguredList(
                     aria-label="导出补货分仓"
                     value={exportWarehouse}
                     onChange={(event) => {
+                      setDmsReceipt(null);
                       setExportWarehouse(event.target.value);
                       setDialogPage(1);
                     }}
@@ -618,9 +772,51 @@ export function FcConfiguredList(
                   </select>
                 </label>
               )}
+              {dialog === 'export' && (
+                <fieldset disabled={busy || Boolean(dmsReceipt)}>
+                  <legend>DMS 暂存信息</legend>
+                  {(
+                    [
+                      ['customerCode', '客户编码'],
+                      ['addressCode', '收货地址编码'],
+                      ['pupCode', '提货点编码'],
+                    ] as const
+                  ).map(([field, label]) => (
+                    <label key={field}>
+                      {label}{' '}
+                      <input
+                        aria-label={label}
+                        value={dmsFields[field]}
+                        maxLength={500}
+                        onChange={(event) =>
+                          setDmsFields((current) => ({
+                            ...current,
+                            [field]: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                  <p>
+                    数量单位：件；默认速冻、配送、不拼车、同意缺货分批到货。请核对提货点与所选分仓。
+                  </p>
+                </fieldset>
+              )}
+              {dmsReceipt && dialog === 'export' && (
+                <p>
+                  预订单号：{dmsReceipt.aiPreOrderCode}；DMS订单号：{dmsReceipt.orderCode}
+                </p>
+              )}
+              {dmsRedirect && dialog === 'export' && (
+                <a href={dmsRedirect} target="_blank" rel="noopener noreferrer">
+                  进入DMS继续处理（短时免登链接）
+                </a>
+              )}
               <p>
                 {previewRows.length}个SKU
-                {dialog === 'export' ? '，确认后导出Excel并清除对应草稿；未向业务系统下单。' : ''}
+                {dialog === 'export'
+                  ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
+                  : ''}
               </p>
               <div className="table-scroll">
                 <table className="data-table">
@@ -712,14 +908,32 @@ export function FcConfiguredList(
               </button>
             )}
             {dialog === 'export' && (
-              <button
-                type="button"
-                className="primary-button"
-                disabled={busy || !previewRows.length}
-                onClick={confirmExport}
-              >
-                确认导出
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={busy || !previewRows.length || Boolean(dmsReceipt)}
+                  onClick={() => void submitDms()}
+                >
+                  确认暂存至DMS
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => void loginDms()}
+                >
+                  获取DMS免登链接
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={busy || !previewRows.length}
+                  onClick={confirmExport}
+                >
+                  仅导出Excel
+                </button>
+              </>
             )}
           </div>
         </div>

@@ -512,7 +512,8 @@
       "pagination": {
         "pageSize": "Rows per page",
         "pageSizeValue": "{{count}} / page",
-        "total": "{{count}} total"
+        "total": "{{formattedCount}} total",
+        "pages": "{{count}} pages"
       },
       "footer": {
         "title": "Queue action bar",

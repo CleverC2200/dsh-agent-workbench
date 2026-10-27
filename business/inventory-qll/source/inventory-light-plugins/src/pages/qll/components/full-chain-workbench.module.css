@@ -842,7 +842,7 @@
 .chartHeader {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   padding: 0 2px 18px;
   flex-wrap: wrap;
@@ -854,6 +854,78 @@
 .chartHeader span {
   color: var(--ui-secondary);
   font-size: 12px;
+}
+.trendMetric {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ui-secondary);
+  font-size: 12px;
+}
+.trendMetricTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 156px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dsw-alias-border-l3);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.trendMetricTrigger::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+.chartHeader .trendMetricTrigger:focus-visible {
+  outline: none;
+  border-color: var(--ui-accent);
+  box-shadow: var(--ui-focus);
+}
+.trendMetricMenu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 156px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-floating);
+}
+.trendMetricMenu [role='option'] {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ui-secondary);
+  font: inherit;
+  text-align: left;
+}
+.trendMetricMenu [role='option'][aria-selected='true'] {
+  background: var(--ui-accent-soft);
+  color: var(--ui-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+.trendMetricMenu [role='option'][aria-disabled='true'] {
+  color: var(--ui-faint);
+  cursor: not-allowed;
 }
 .assistant {
   display: flex;
@@ -1655,16 +1727,21 @@
 .referenceFilters input {
   min-width: 100px;
   max-width: 190px;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--dsw-alias-border-l3);
-  border-radius: 8px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border);
+  border-radius: 6px;
   background: var(--ui-surface);
   color: var(--ui-ink);
   font: inherit;
 }
 .referenceFilters input {
   width: 145px;
+}
+.referenceFilters button {
+  height: 36px;
+  min-height: 36px;
+  padding-block: 0;
 }
 .filteredCount {
   margin-left: auto;
@@ -1730,6 +1807,7 @@
   margin: 0;
   font-weight: 600;
 }
+.referenceFilters :is(select, input):focus-visible,
 .statusFilters button:focus-visible,
 .treeName:focus-visible {
   outline: 2px solid var(--ui-accent);

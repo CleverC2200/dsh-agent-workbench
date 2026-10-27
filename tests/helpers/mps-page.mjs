@@ -4,7 +4,9 @@ import { authorPage } from './author-page.mjs';
 export async function mpsPage(t, config, execute) {
   const page = await authorPage(t, { mpsConfig: config });
   const calls = [];
+  const contexts = [];
   await page.exposeFunction('mpsQuery', async (message) => {
+    if (message.method === 'context') contexts.push(message.parameters);
     if (message.method !== 'sql') return {};
     assert.deepEqual(Object.keys(message.parameters).sort(), ['parameters', 'queryId']);
     calls.push(message.parameters);
@@ -41,5 +43,5 @@ export async function mpsPage(t, config, execute) {
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   await expect(frame.getByRole('heading', { name: '需求确认', exact: true })).toBeVisible();
-  return { page, frame, calls };
+  return { page, frame, calls, contexts };
 }

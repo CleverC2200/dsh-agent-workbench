@@ -49,7 +49,7 @@ function fixture({ queryId, parameters }, records) {
     warnings: report ? [] : [{ code: 'METRIC_VALUE_UNAVAILABLE' }],
   };
 }
-test('confirmed monthly versions and shipment measures populate independently while forecast stays empty', async (t) => {
+test('confirmed monthly versions and shipment measures populate independently while forecast source reads an empty published collection', async (t) => {
   const { page, frame, calls } = await mpsPage(t, config, fixture);
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
@@ -88,8 +88,8 @@ test('confirmed monthly versions and shipment measures populate independently wh
     frame
       .getByRole('region', { name: '模型双期预测' })
       .getByRole('button', { name: '同步', exact: true }),
-  ).toBeDisabled();
-  assert(!calls.some((call) => /forecast|stock|inventory/.test(call.queryId)));
+  ).toBeEnabled();
+  assert(!calls.some((call) => /stock|inventory/.test(call.queryId)));
 });
 test('full fact paging keeps zero and missing base distinct, without a failed shipment blocking plans', async (t) => {
   const records = Array.from({ length: 201 }, (_, index) => ({

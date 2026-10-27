@@ -18,7 +18,7 @@ async function createVersion(frame, month) {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
-test('MPS keeps confirmed sources awaiting a Host, forecast pending and formal save disabled', async (t) => {
+test('MPS keeps confirmed sources awaiting a Host, including forecast awaiting a Host and formal save disabled', async (t) => {
   const { page, frame } = await confirmation(t);
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
@@ -29,9 +29,7 @@ test('MPS keeps confirmed sources awaiting a Host, forecast pending and formal s
   await expect(frame.locator('.ap-page-tab')).toHaveCount(7);
   for (const name of ['计划提报数据', '模型双期预测', '历史同期发货']) {
     const source = frame.getByRole('region', { name, exact: true });
-    await expect(
-      source.getByText(name === '模型双期预测' ? '待建表' : '待同步', { exact: true }),
-    ).toBeVisible();
+    await expect(source.getByText('待同步', { exact: true })).toBeVisible();
     await expect(source.getByRole('button', { name: '同步', exact: true })).toBeDisabled();
   }
   await expect(frame.getByRole('region', { name: '系统派生口径参数' })).toBeVisible();
