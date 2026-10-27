@@ -133,6 +133,10 @@ function downloadCsv(name, columns, rows) {
       .join('\r\n');
   downloadFile(name, 'text/csv;charset=utf-8', csv);
 }
+const integer = new Intl.NumberFormat('zh-CN', {
+  useGrouping: false,
+  maximumFractionDigits: 0,
+}).format;
 const quantity = (rows, column) =>
   rows.reduce((sum, row) => (row[column] === '' ? sum : sum + Number(row[column])), 0);
 const currentMonth = () => {
@@ -289,7 +293,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 h(
                   'td',
                   { key: column },
-                  row[column] === '' || row[column] == null ? '未提供' : row[column],
+                  row[column] === '' || row[column] == null
+                    ? '-'
+                    : /数量|收入|金额|合计/.test(column) && Number.isFinite(Number(row[column]))
+                      ? integer(row[column])
+                      : row[column],
                 ),
               ),
             ),
@@ -347,13 +355,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? quantity(records, column)
                 : '',
             缺失数量条数: records.filter((row) => row[column] === '').length,
-            代入: records.map((row) => (row[column] === '' ? '缺失' : row[column])).join(' + '),
           };
         })
       : [];
     const displayed = preview === '明细' ? rows : grouped;
-    const columns =
-      preview === '明细' ? detailColumns : ['名称', '数量合计', '缺失数量条数', '代入'];
+    const columns = preview === '明细' ? detailColumns : ['名称', '数量合计', '缺失数量条数'];
     return h(
       'section',
       { 'aria-label': definition.title, className: 'dc-card dc-source' },
@@ -451,7 +457,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ['数量', '含赠品数量', '不含税收入']
               .map((field) => {
                 const known = rows.length && rows.every((row) => row[field] !== '');
-                return `${field === '数量' ? '发货数量' : field}：${known ? quantity(rows, field) + (field === '不含税收入' ? '元' : '件') : '未提供'}`;
+                return `${field === '数量' ? '发货数量' : field}：${known ? integer(quantity(rows, field)) + (field === '不含税收入' ? '元' : '件') : '未提供'}`;
               })
               .join('；'),
           ),
@@ -487,7 +493,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            `当前期间${rows.length}条，数量合计${total === null ? '未提供' : total + unit}，缺失数量${missing}条`,
+            `当前期间${rows.length}条，数量合计${total === null ? '未提供' : integer(total) + unit}，缺失数量${missing}条`,
           ),
           h(
             'p',
@@ -510,21 +516,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            `公式：当前期间有效数量相加；代入：${rows
-              .slice(0, 25)
-              .map((row) => (row[column] === '' ? '缺失' : row[column]))
-              .join(
-                ' + ',
-              )}${rows.length > 25 ? '…完整输入见当前明细导出' : ''}；结果：${total === null ? '未提供' : total + unit}。缺失不补零，真实0参与统计。`,
-          ),
-          h('p', {}, '四维条目数按当前期间对应字段去重，无总量分母。系列与物料组独立展示。'),
-          h(
-            'button',
-            {
-              className: 'dc-link',
-              onClick: () => downloadCsv(`${definition.short}-模板.csv`, definition.columns, []),
-            },
-            '下载CSV模板',
+            '缺失不补零，真实0参与统计。四维条目数按当前期间对应字段去重，无总量分母。系列与物料组独立展示。',
           ),
           h(
             'button',
@@ -606,8 +598,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               preview === '明细' ? '下载明细' : '导出维度汇总',
             ),
           },
-          preview !== '明细' &&
-            h('p', {}, `公式：同一${preview}的有效数量相加。结果与缺失条数见下表。`),
           table(columns, displayed.slice(page * 25, (page + 1) * 25)),
           h(
             'div',
@@ -624,6 +614,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     );
   }
   function Annual({ draft, read, sync, update, error, busy }) {
+    const [expanded, setExpanded] = react.useState(false);
     const live = draft.annualSource === 'business';
     const unit = live ? '源数量' : '件';
     const { bases, base, rows: annual } = annualSelection(draft);
@@ -633,7 +624,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       annual.filter((row) => row['大类'] === category && row['月份'] === month);
     const absolute = (category, month) => {
       const records = recordsFor(category, month);
-      if (!records.length) return '未提供';
+      if (!records.length) return '-';
       const missing = records.filter((row) => row['数量'] === '').length;
       const total = quantity(records, '数量');
       return h(
@@ -642,12 +633,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'summary',
           {},
-          `${missing === records.length ? '未提供' : total}${missing ? `（缺${missing}条）` : ''}`,
+          `${missing === records.length ? '-' : integer(total)}${missing ? `（缺${missing}条）` : ''}`,
         ),
         h(
           'p',
           {},
-          `公式：同月同大类有效数量相加；代入：${records.map((row) => (row['数量'] === '' ? (row['重复记录数'] ? '源粒度重复' : '数量缺失') : row['数量'])).join(' + ')}；结果：${missing === records.length ? '未提供' : total + unit}。`,
+          `公式：同月同大类有效数量相加；代入：${records.map((row) => (row['数量'] === '' ? (row['重复记录数'] ? '源粒度重复' : '数量缺失') : integer(row['数量']))).join(' + ')}；结果：${missing === records.length ? '-' : integer(total) + unit}。`,
         ),
       );
     };
@@ -659,7 +650,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         !previous.length ||
         [...current, ...previous].some((row) => row['数量'] === '')
       )
-        return h('span', { title: '缺少完整相邻月数据' }, '—');
+        return h('span', { title: '缺少完整相邻月数据' }, '-');
       const before = quantity(previous, '数量'),
         after = quantity(current, '数量');
       if (!before) return '分母为0';
@@ -681,12 +672,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const records = annual.filter(
         (row) => row['大类'] === category && months.includes(row['月份']),
       );
-      if (!records.some((row) => row['数量'] !== '')) return '未提供';
+      if (!records.some((row) => row['数量'] !== '')) return '-';
       const total = quantity(records, '数量');
       return h(
         'details',
         {},
-        h('summary', {}, `${total}（已读）`),
+        h('summary', {}, `${integer(total)}（已读）`),
         h(
           'p',
           {},
@@ -695,13 +686,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             .map((row) => (row['数量'] === '' ? '缺失' : row['数量']))
             .join(
               ' + ',
-            )}${records.length > 25 ? '…完整输入见年度明细导出' : ''}；结果：${total}${unit}。未覆盖月份不补零，完整年度仍需核齐。`,
+            )}${records.length > 25 ? '…完整输入见年度明细导出' : ''}；结果：${integer(total)}${unit}。未覆盖月份不补零，完整年度仍需核齐。`,
         ),
       );
     };
     const displayedCategories = live ? [...new Set(annual.map((row) => row['大类']))] : categories;
     const rows = displayedCategories.map((category) => ({
-      大类: category || '未提供',
+      大类: category || '-',
       ...Object.fromEntries(
         months.map((month) => [
           month,
@@ -723,11 +714,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         { className: 'dc-section-title' },
         h('h2', {}, '年度销售计划（分月）'),
         h('span', {}, `${start}年7月 → ${start + 1}年6月 · 绝对值＋环比增幅`),
-        h(
-          'button',
-          { disabled: !hasMpsSource() || busy, onClick: () => sync('annual') },
-          busy ? '同步中…' : '同步数据源',
-        ),
       ),
       h(
         'section',
@@ -736,6 +722,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           'div',
           { className: 'dc-card-head' },
           h('h3', {}, '年度销售计划 · 分月明细'),
+          h(
+            'button',
+            { disabled: !hasMpsSource() || busy, onClick: () => sync('annual') },
+            busy ? '同步中…' : '同步数据源',
+          ),
+          h(
+            'button',
+            {
+              'aria-label': `${expanded ? '收起' : '展开'}年度销售计划`,
+              'aria-expanded': expanded,
+              onClick: () => setExpanded(!expanded),
+            },
+            expanded ? '收起' : '展开',
+          ),
           live &&
             h(
               'select',
@@ -763,11 +763,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(Upload, { label: '选择年度计划CSV', read: (file) => read('annual', file) }),
           h(
             'button',
-            { onClick: () => downloadCsv('年度计划-模板.csv', annualColumns, []) },
-            'CSV模板',
-          ),
-          h(
-            'button',
             {
               disabled: !draft.annual.length,
               onClick: () =>
@@ -784,7 +779,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
         busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
-        table(['大类', ...months, '全年合计'], rows),
+        h('div', { hidden: !expanded }, table(['大类', ...months, '全年合计'], rows)),
       ),
     );
   }
@@ -823,6 +818,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [productPage, setProductPage] = react.useState(0);
+    const [productPageSize, setProductPageSize] = react.useState(10);
+    const [productsExpanded, setProductsExpanded] = react.useState(true);
     const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
@@ -1110,6 +1107,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const filteredProducts = draft.products
       .map((row, index) => ({ row, index }))
       .filter(({ row }) => Object.values(row).some((value) => value.includes(search)));
+    react.useEffect(() => setProductPage(0), [draft.id, draft.products, productPageSize]);
     const saveProduct = (event) => {
       event.preventDefault();
       const normalized = Object.fromEntries(
@@ -1205,7 +1203,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           truncated: annualContext.rows.length > 120,
         },
         visibleProducts: filteredProducts
-          .slice(productPage * 25, (productPage + 1) * 25)
+          .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
           .map(({ row }) => row),
         draft: { id: draft.id, name: draft.name, month: draft.month },
         productCount: draft.products.length,
@@ -1564,32 +1562,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 `${filteredProducts.length === draft.products.length ? draft.products.length : filteredProducts.length + ' / ' + draft.products.length} 个产品`,
               ),
             ),
-            hasMpsSource() &&
-              h(
-                'select',
-                {
-                  'aria-label': '产品数据来源',
-                  value: draft.productSource.startsWith('demo')
-                    ? 'demo'
-                    : draft.productSource.startsWith('local')
-                      ? 'local'
-                      : 'business',
-                  onChange: (event) => {
-                    clearFiles();
-                    resetEditor();
-                    if (event.target.value === 'demo') {
-                      const demo = makeDraft(draft.id, draft.month, true);
-                      update({ products: demo.products, productSource: 'demo' });
-                    } else {
-                      update({ products: [], productSource: 'business-unread' });
-                    }
-                  },
-                },
-                h('option', { value: 'business' }, '业务数据'),
-                h('option', { value: 'demo' }, '演示数据'),
-                draft.productSource.startsWith('local') &&
-                  h('option', { value: 'local' }, '本地输入'),
-              ),
+            h(
+              'button',
+              {
+                'aria-label': `${productsExpanded ? '收起' : '展开'}产品明细`,
+                'aria-expanded': productsExpanded,
+                onClick: () => setProductsExpanded(!productsExpanded),
+              },
+              productsExpanded ? '收起' : '展开',
+            ),
             hasMpsSource() &&
               h(
                 'button',
@@ -1639,7 +1620,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           errors.products && h('p', { role: 'alert' }, errors.products),
           h(
             'div',
-            { className: 'dc-table-scroll' },
+            { className: 'dc-table-scroll', hidden: !productsExpanded },
             h(
               'table',
               { className: 'dc-product-table' },
@@ -1673,13 +1654,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 'tbody',
                 {},
                 filteredProducts
-                  .slice(productPage * 25, (productPage + 1) * 25)
+                  .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
                   .map(({ row, index }) =>
                     h(
                       'tr',
                       { key: index },
                       productColumns.map((column) =>
-                        h('td', { key: column, title: row[column] || '' }, row[column] || '—'),
+                        h(
+                          'td',
+                          { key: column, title: row[column] || '' },
+                          row[column] === '' || row[column] == null ? '-' : row[column],
+                        ),
                       ),
                       h(
                         'td',
@@ -1718,7 +1703,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ),
             ),
           ),
-          !filteredProducts.length &&
+          productsExpanded &&
+            !filteredProducts.length &&
             h(
               'p',
               { className: 'dc-empty' },
@@ -1726,7 +1712,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             ),
           h(
             'div',
-            { className: 'dc-card-foot' },
+            { className: 'dc-card-foot', hidden: !productsExpanded },
             h(
               'span',
               {},
@@ -1735,18 +1721,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 : `${draft.files.products ?? '本地维护'} · 当前隔离版本的产品关系`,
             ),
             h(
-              'button',
+              'select',
               {
-                className: 'dc-link',
-                onClick: () => downloadCsv('产品关系-模板.csv', productColumns, []),
+                'aria-label': '每页产品条数',
+                value: productPageSize,
+                onChange: (event) => setProductPageSize(Number(event.target.value)),
               },
-              'CSV模板',
+              [10, 25, 50].map((size) => h('option', { key: size, value: size }, `每页${size}条`)),
             ),
-            filteredProducts.length > 25 &&
+            filteredProducts.length > productPageSize &&
               h(
                 react.Fragment,
                 {},
-                h('span', {}, `共${filteredProducts.length}条，每页25条，第${productPage + 1}页`),
+                h(
+                  'span',
+                  {},
+                  `共${filteredProducts.length}条，每页${productPageSize}条，第${productPage + 1}页`,
+                ),
                 h(
                   'button',
                   { disabled: !productPage, onClick: () => setProductPage(productPage - 1) },
@@ -1755,7 +1746,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 h(
                   'button',
                   {
-                    disabled: (productPage + 1) * 25 >= filteredProducts.length,
+                    disabled: (productPage + 1) * productPageSize >= filteredProducts.length,
                     onClick: () => setProductPage(productPage + 1),
                   },
                   '下一页',
