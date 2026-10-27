@@ -102,6 +102,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
@@ -217,9 +218,9 @@ async function assertExpandedSkuLayout(region) {
     true,
     'SKU row background must continue to the right edge',
   );
-  assert.ok(layout.columns[0] <= 360, `SKU column too wide: ${layout.columns[0]}`);
+  assert.ok(layout.columns[0] <= 240, `SKU column too wide: ${layout.columns[0]}`);
   assert.ok(
-    layout.columns.slice(1).every((width) => width <= 220),
+    layout.columns.slice(1).every((width) => width <= 160),
     `metric columns too wide: ${layout.columns}`,
   );
   return layout;
@@ -946,6 +947,13 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
     await page.screenshot({
       path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-narrow.png'),
     });
+});
+
+test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'shipment-missing');
+  const status = page.getByText('发货实绩未取得', { exact: true });
+  await expect(status).toBeVisible();
+  await expect(status).toHaveAttribute('title', '未取得该客户 2026-10 的发货数据');
 });
 
 test('pagination footer keeps counts and controls on one line', { timeout: 30000 }, async (t) => {

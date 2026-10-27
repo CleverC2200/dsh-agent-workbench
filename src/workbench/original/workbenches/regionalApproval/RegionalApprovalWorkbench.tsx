@@ -2526,6 +2526,11 @@ const RegionalApprovalWorkbench: React.FC<{
                   </span>
                 )}
               </small>
+              {tableRow.plan.shipmentError && (
+                <small title={tableRow.plan.shipmentError}>
+                  {t('common.correction.shipmentUnavailable')}
+                </small>
+              )}
             </div>
           );
         }

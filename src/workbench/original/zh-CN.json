@@ -1291,6 +1291,7 @@
     "target": "月度目标",
     "plan": "月计划",
     "progress": "月达成进度",
+    "shipmentUnavailable": "发货实绩未取得",
     "noTarget": "未设置有效目标",
     "adjustmentAmount": "纠偏金额",
     "adjustment": "追加/追减",

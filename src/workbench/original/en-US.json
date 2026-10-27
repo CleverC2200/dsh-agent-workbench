@@ -1293,6 +1293,7 @@
     "target": "Monthly target",
     "plan": "Monthly plan",
     "progress": "Shipment progress",
+    "shipmentUnavailable": "Shipment facts unavailable",
     "correctedProgress": "Corrected target coverage",
     "status": "Approval status",
     "actions": "Actions",
