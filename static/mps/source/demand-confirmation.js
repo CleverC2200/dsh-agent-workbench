@@ -1,6 +1,5 @@
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
-import { prototypeProducts } from './prototype-products.js';
 import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
@@ -8,6 +7,8 @@ import { readSourceTable, forecastDimensions } from './source-tables.js';
 import { createDeliveryMetrics } from './delivery-metrics.js';
 import { createWorkflow } from './workflow-view.js';
 import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
+import { productProjections } from './source-projections.js';
+import { createSourceInputs } from './source-input-view.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -144,23 +145,13 @@ const currentMonth = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 };
 const blankProduct = () => Object.fromEntries(productColumns.map((column) => [column, '']));
-const makeDraft = (id, month, demo = !hasMpsSource()) => ({
+const makeDraft = (id, month) => ({
   id,
   name: `${Number(month.slice(5))}月滚动评估 · 第${id.split('-')[1]}版`,
   month,
-  products: demo
-    ? prototypeProducts.map((row) => ({
-        基地: row.base,
-        产品编码: row.code,
-        产品名称: row.name,
-        大类: row.cat,
-        系列: row.series,
-        物料组: row.group,
-        老品编码: row.oldCode ?? '',
-        老品名称: row.oldName ?? '',
-      }))
-    : [],
-  productSource: demo ? 'demo' : 'business-unread',
+  products: [],
+  productRaw: [],
+  productSource: 'business-unread',
   annual: [],
   report: [],
   forecast: [],
@@ -790,6 +781,13 @@ export function createDemandConfirmation(react, useMpsPart, view) {
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
   const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv });
+  const SourceInputs = createSourceInputs(react, {
+    Dialog,
+    table,
+    downloadCsv,
+    useMpsPart,
+    categories,
+  });
   const Shipment = createShipment(react, useMpsPart, {
     Dialog,
     Upload,
@@ -818,12 +816,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [compareOpen, setCompareOpen] = react.useState(false);
     const [compareId, setCompareId] = react.useState('local-1');
     const [helpOpen, setHelpOpen] = react.useState(false);
-    const [parameter, setParameter] = react.useState(null);
     const [error, setError] = react.useState('');
     const [search, setSearch] = react.useState('');
     const [productPage, setProductPage] = react.useState(0);
     const [productPageSize, setProductPageSize] = react.useState(10);
     const [productsExpanded, setProductsExpanded] = react.useState(true);
+    const [productDetails, setProductDetails] = react.useState(null);
     const [masterOpen, setMasterOpen] = react.useState(false);
     const [errors, setErrors] = react.useState({});
     const [busy, setBusy] = react.useState({});
@@ -912,7 +910,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     ? { [type + 'Source']: 'business', [type + 'Metadata']: result.metadata }
                     : {}),
                   ...(type === 'products'
-                    ? { productSource: 'business' }
+                    ? { productSource: 'business', productRaw: result.raw }
                     : type === 'annual'
                       ? { annualSource: 'business' }
                       : {}),
@@ -966,7 +964,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   ...entry,
                   [type]: rows,
                   ...(type === 'products'
-                    ? { productSource: 'local-file' }
+                    ? { productSource: 'local-file', productRaw: [] }
                     : type === 'annual'
                       ? { annualSource: 'local-file' }
                       : { [type + 'Source']: 'local-file', [type + 'Metadata']: null }),
@@ -1003,6 +1001,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       });
     }, [draft.id, draft.month, draft.name, scopeGeneration, onScopeChange]);
     const resetEditor = () => {
+      setProductDetails(null);
       setProduct(blankProduct());
       setEditing(null);
       setEditorOpen(false);
@@ -1017,7 +1016,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setDrafts([makeDraft('local-1', currentMonth())]);
         setSelected('local-1');
         resetEditor();
-        setParameter(null);
         setVersionOpen(false);
         setCompareOpen(false);
         setHelpOpen(false);
@@ -1108,9 +1106,36 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         products,
         productSource: draft.productSource.startsWith('demo') ? 'demo-edited' : 'local-edited',
       });
-    const filteredProducts = draft.products
-      .map((row, index) => ({ row, index }))
-      .filter(({ row }) => Object.values(row).some((value) => value.includes(search)));
+    const productViews = react.useMemo(
+      () =>
+        productProjections(
+          draft.products,
+          ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.productRaw,
+          ['report', 'history'].flatMap((source) =>
+            sourceSelection(draft, source).rows.filter(
+              (row) => draft[source + 'Read']?.periods?.[row['月份']]?.status === 'ready',
+            ),
+          ),
+        ),
+      [
+        draft.products,
+        draft.productRaw,
+        draft.productsRead,
+        draft.report,
+        draft.history,
+        draft.reportRead,
+        draft.historyRead,
+        draft.pull,
+        draft.historyYears,
+        draft.month,
+      ],
+    );
+    const filteredProducts = productViews.filter(({ display, labels, replacementCodes }) =>
+      [...Object.values(display), ...labels, ...replacementCodes].some((value) =>
+        value.includes(search),
+      ),
+    );
+    const selectedProduct = productDetails === null ? null : productViews[productDetails];
     react.useEffect(() => setProductPage(0), [draft.id, draft.products, productPageSize]);
     const saveProduct = (event) => {
       event.preventDefault();
@@ -1208,7 +1233,23 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         },
         visibleProducts: filteredProducts
           .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-          .map(({ row }) => row),
+          .map(
+            ({
+              display,
+              children,
+              labels,
+              replacementCodes,
+              replacementNames,
+              candidateBases,
+            }) => ({
+              ...display,
+              记录层级: children.length ? '物料组' : 'SKU或本地记录',
+              源产品标签: labels.join(' / '),
+              源替换物料编码: replacementCodes.join(' / '),
+              源替换品名称: replacementNames.join(' / '),
+              事实候选基地: candidateBases.join(' / '),
+            }),
+          ),
         draft: { id: draft.id, name: draft.name, month: draft.month },
         productCount: draft.products.length,
         productSource: draft.productSource,
@@ -1363,7 +1404,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                     clearFiles();
                     setSelected(id);
                     resetEditor();
-                    setParameter(null);
                     setVersionOpen(false);
                   },
                 },
@@ -1659,15 +1699,53 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 {},
                 filteredProducts
                   .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-                  .map(({ row, index }) =>
+                  .map(({ row, index, display, children, inherited, labels, candidateBases }) =>
                     h(
                       'tr',
                       { key: index },
                       productColumns.map((column) =>
                         h(
                           'td',
-                          { key: column, title: row[column] || '' },
-                          row[column] === '' || row[column] == null ? '-' : row[column],
+                          {
+                            key: column,
+                            'aria-label':
+                              column === '产品名称' ? display[column] || '-' : undefined,
+                            title: inherited.includes(column)
+                              ? '同物料组SKU的唯一源值，仅用于展示'
+                              : row[column] || '',
+                          },
+                          column === '产品编码' && children.length
+                            ? h(
+                                'button',
+                                {
+                                  className: 'dc-link',
+                                  onClick: () => setProductDetails(index),
+                                  'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
+                                },
+                                `物料组 · ${children.length} SKU`,
+                              )
+                            : column === '基地' && !row[column] && candidateBases.length
+                              ? h(
+                                  'span',
+                                  { title: '来自已读取事实的候选基地，不代表产品唯一所属基地' },
+                                  candidateBases.join(' / ') + '（候选）',
+                                )
+                              : display[column] || '-',
+                          column === '产品名称' &&
+                            h(
+                              'div',
+                              { className: 'dc-product-source' },
+                              labels.length > 0 && h('span', {}, '源标签：' + labels.join(' / ')),
+                              h(
+                                'button',
+                                {
+                                  className: 'dc-link',
+                                  onClick: () => setProductDetails(index),
+                                  'aria-label': `查看源字段 ${row['产品编码'] || row['物料组'] || index}`,
+                                },
+                                '源字段',
+                              ),
+                            ),
                         ),
                       ),
                       h(
@@ -1712,7 +1790,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-empty' },
-              search ? `没有匹配“${search}”的产品` : '未提供产品关系。',
+              search
+                ? `没有匹配“${search}”的产品`
+                : !hasMpsSource() && draft.productSource === 'business-unread'
+                  ? '月主计划数据源尚未装载，产品列表为空。可重新打开页面，或上传本地核对文件。'
+                  : '未提供产品关系。',
             ),
           h(
             'div',
@@ -1807,6 +1889,63 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ),
             ),
         ),
+        selectedProduct &&
+          h(
+            Dialog,
+            {
+              title: '产品源字段与物料组SKU',
+              close: () => setProductDetails(null),
+              footer: h('button', { onClick: () => setProductDetails(null) }, '关闭'),
+            },
+            h(
+              'p',
+              {},
+              `${selectedProduct.row['产品名称']} · 物料组 ${selectedProduct.row['物料组'] || '-'}`,
+            ),
+            h(
+              'p',
+              { className: 'dc-muted' },
+              '产品标签、替换品按源字段展示。替换方向尚未确认，不作为老品继承关系。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
+            ),
+            table(
+              ['字段', '源值'],
+              [
+                { 字段: '源产品标签', 源值: selectedProduct.labels.join(' / ') || '-' },
+                {
+                  字段: '源替换物料编码',
+                  源值: selectedProduct.replacementCodes.join(' / ') || '-',
+                },
+                { 字段: '源替换品名称', 源值: selectedProduct.replacementNames.join(' / ') || '-' },
+                { 字段: '子SKU源分类', 源值: selectedProduct.categoryValues.join(' / ') || '-' },
+                { 字段: '子SKU源系列', 源值: selectedProduct.seriesValues.join(' / ') || '-' },
+                { 字段: '事实候选基地', 源值: selectedProduct.candidateBases.join(' / ') || '-' },
+              ],
+            ),
+            selectedProduct.children.length > 0 &&
+              table(
+                [
+                  '产品编码',
+                  '产品名称',
+                  '源分类',
+                  '源系列',
+                  '源产品标签',
+                  '源替换物料编码',
+                  '源替换品名称',
+                ],
+                selectedProduct.children.map((index) => {
+                  const child = productViews[index];
+                  return {
+                    产品编码: child.row['产品编码'],
+                    产品名称: child.row['产品名称'],
+                    源分类: child.row['大类'],
+                    源系列: child.row['系列'],
+                    源产品标签: child.labels.join(' / '),
+                    源替换物料编码: child.replacementCodes.join(' / '),
+                    源替换品名称: child.replacementNames.join(' / '),
+                  };
+                }),
+              ),
+          ),
         h(Annual, { draft, read, sync, update, error: errors.annual, busy: busy.annual }),
         h(
           'div',
@@ -1834,93 +1973,34 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             error: errors.delivery,
             active: active && step === 'check',
           }),
-        h(
-          'div',
-          { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
-          ...['三年同比', '三年环比', '三年该月占比', '去年发运占比', '销售提报占比'].map((name) =>
-            h(
-              'section',
-              { className: 'dc-card dc-parameter', key: name },
-              h(
-                'div',
-                { className: 'dc-card-head' },
-                h('h3', {}, name),
-                h('span', { className: 'dc-status' }, '待定'),
-              ),
-              h(
-                'div',
-                { className: 'dc-source-body' },
-                h('p', {}, '分子分母、历史窗口与粒度待确认。'),
-                h('p', { className: 'dc-muted' }, '计算期间与口径待确认，结果为空。'),
-              ),
-              h(
-                'div',
-                { className: 'dc-source-actions' },
-                h('button', { disabled: true }, '同步 / 重新计算'),
-                h('button', { onClick: () => setParameter(name) }, '预览'),
-              ),
-            ),
-          ),
-        ),
-        parameter &&
-          h(
-            Dialog,
-            {
-              title: parameter,
-              close: () => setParameter(null),
-              footer: h('button', { onClick: () => setParameter(null) }, '知道了'),
-            },
-            h(
-              'p',
-              {},
-              '分子分母、适用月份、粒度与缺年规则待确认。公式和代入输入尚未固定，结果保持待定。',
-            ),
-          ),
+        h(SourceInputs, {
+          key: draft.id + '-' + scopeGeneration + '-parameters',
+          kind: 'parameters',
+          draft,
+          update,
+          relations:
+            relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+              ? relations
+              : null,
+          active: active && step === 'check',
+        }),
         h(
           'div',
           { className: 'dc-section-title' },
           h('h2', {}, '大类预估需求数量 · 测算参考'),
           h('span', {}, '（环比法＋占比法）÷2÷计划达成率，业务冲突保留待定'),
         ),
-        h(
-          'section',
-          { 'aria-label': '大类基础指标', className: 'dc-card dc-results' },
-          h(
-            'div',
-            { className: 'dc-card-head' },
-            h('h3', {}, '大类基础指标'),
-            h('span', { className: 'dc-count' }, '8 大类 · 口径待确认'),
-            h(
-              'span',
-              { className: 'dc-card-note' },
-              '基期、历史窗口与达成率分母未确认，不计算业务指标',
-            ),
-          ),
-          table(
-            [
-              '大类',
-              '基期（上月实绩）',
-              '近三月实绩',
-              '近三月计划',
-              '达成率',
-              '近三月占比合计（历史同期）',
-              '全年预估',
-            ],
-            categories.map((category) =>
-              Object.fromEntries(
-                [
-                  '大类',
-                  '基期（上月实绩）',
-                  '近三月实绩',
-                  '近三月计划',
-                  '达成率',
-                  '近三月占比合计（历史同期）',
-                  '全年预估',
-                ].map((column) => [column, column === '大类' ? category : '待定']),
-              ),
-            ),
-          ),
-        ),
+        h(SourceInputs, {
+          key: draft.id + '-' + scopeGeneration + '-basic',
+          kind: 'basic',
+          draft,
+          update,
+          relations:
+            relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
+              ? relations
+              : null,
+          active: active && step === 'check',
+        }),
         h(
           'section',
           { 'aria-label': '逐月测算', className: 'dc-card dc-results' },

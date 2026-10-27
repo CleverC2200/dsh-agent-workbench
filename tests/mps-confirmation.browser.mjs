@@ -254,17 +254,16 @@ test('MPS preserves missing dimensions and signed local quantities instead of in
   await expect(source).toContainText('当前期间1条，数量合计未提供，缺失数量1条');
 });
 
-test('MPS opens the prototype product card with its fifteen labeled samples and edits products in a dialog', async (t) => {
+test('MPS starts without sample products when no source is configured and still supports explicit local editing', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   const products = frame.getByRole('region', { name: '产品明细' });
-  await expect(products.getByRole('row')).toHaveCount(11);
+  await expect(products.getByRole('row')).toHaveCount(1);
   await products.getByLabel('每页产品条数').selectOption('25');
-  await expect(products.getByRole('row')).toHaveCount(16);
-  await expect(products.getByText('演示数据', { exact: true })).toBeVisible();
-  await expect(products.getByRole('cell', { name: '10002791', exact: true }).first()).toBeVisible();
-  await expect(products.getByRole('cell', { name: '10009002', exact: true })).toBeVisible();
+  await expect(products.getByRole('row')).toHaveCount(1);
+  await expect(products.getByText('演示数据', { exact: true })).toHaveCount(0);
+  await expect(products).toContainText('月主计划数据源尚未装载，产品列表为空');
   await expect(products.getByRole('columnheader', { name: '基地名称', exact: true })).toBeVisible();
   await expect(
     products.getByRole('columnheader', { name: '对应老品编码', exact: true }),
@@ -284,7 +283,7 @@ test('MPS opens the prototype product card with its fifteen labeled samples and 
     await editor.getByLabel(label, { exact: true }).fill(value);
   await editor.getByRole('button', { name: '新增', exact: true }).click();
   await expect(editor).toHaveCount(0);
-  await expect(products.getByRole('row')).toHaveCount(17);
+  await expect(products.getByRole('row')).toHaveCount(2);
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
   const editing = frame.getByRole('dialog', { name: '修改产品', exact: true });
   await editing.getByLabel('产品名称', { exact: true }).fill('编辑后产品');
@@ -292,7 +291,7 @@ test('MPS opens the prototype product card with its fifteen labeled samples and 
   await expect(products.getByRole('cell', { name: '编辑后产品', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await products.getByRole('button', { name: '下载', exact: true }).click();
-  assert.equal((await download).suggestedFilename(), '产品关系-演示数据.csv');
+  assert.equal((await download).suggestedFilename(), '产品关系.csv');
 });
 
 test('MPS creates and compares local evaluation versions in dialogs without occupying the product first card', async (t) => {
@@ -320,7 +319,9 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   const compare = frame.getByRole('dialog', { name: '版本对比', exact: true });
   await expect(compare).toContainText('仅对比本地内存输入');
   await expect(compare).toContainText('十二月核对');
-  await expect(compare).toContainText('15');
+  const count = compare.getByRole('row').filter({ hasText: '产品关系数量' });
+  await expect(count.locator('td').nth(1)).toHaveText('0');
+  await expect(count.locator('td').nth(2)).toHaveText('0');
   await compare.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
