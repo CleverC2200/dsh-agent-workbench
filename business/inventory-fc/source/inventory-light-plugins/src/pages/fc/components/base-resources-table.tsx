@@ -91,7 +91,7 @@ export function BaseResourcesTable({
           </tbody>
         </table>
         {!rows.length && (
-          <div className="empty-state">
+          <div className="inventory-empty-state inventory-empty-state--inset" role="status">
             {sku ? '该SKU暂无匹配的基地资源' : '当前暂无基地资源数据'}
           </div>
         )}

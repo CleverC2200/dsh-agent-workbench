@@ -14,7 +14,7 @@ const apsConfig = JSON.parse(
   await readFile(resolve(root, 'business/inventory-apsplan/sql.config.json'), 'utf8'),
 );
 const sqlConfig = orderWorkbenchSourceConfig(apsConfig);
-if (digest(theme) !== '19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66')
+if (digest(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
   throw Error('ORDER_THEME_RESOURCE_MISMATCH');
 const bundled = await build({
   entryPoints: [resolve(source, 'entry.js')],

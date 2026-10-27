@@ -102,9 +102,7 @@ def update(config):
         query['resultColumns'] = tree.named_selects
 
     view = next(v for v in config['sourceViews']['views'] if v['id'] == 'age-structure')
-    for field, label in [('unknown_age_qty', '未计龄库存'), ('negative_qty', '负库存调整')]:
-        if not any(c['field'] == field for c in view['columns']):
-            view['columns'].append({'field': field, 'label': label, 'format': 'decimal2'})
+    view['columns'] = [c for c in view['columns'] if c['field'] not in ('unknown_age_qty', 'negative_qty')]
 
 
 if __name__ == '__main__':

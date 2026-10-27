@@ -59,6 +59,7 @@ const noSubscribe = () => () => {};
 const emptyGuide: readonly import('@deepseek-ai/dsh-client-ui-sidebar-right/client').SidebarRightGuideBox[] =
   [];
 const inventoryAgentPages = new Set([
+  'gea-proof',
   'inventory-qll',
   'inventory-fc',
   'inventory-aqkc',
@@ -542,7 +543,7 @@ export function mountFramePresentation(
           onCloseTools={closeTools}
           toolsExpanded={toolsExpanded}
         >
-          {identityReady && interpreters.length > 1 && (
+          {page.id !== 'inventory-fc' && identityReady && interpreters.length > 1 && (
             <select
               className="gea-conversation-toolbar-tool"
               aria-label={t('pageInterpreter')}

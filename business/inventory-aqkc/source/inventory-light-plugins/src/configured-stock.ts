@@ -274,16 +274,14 @@ export async function readConfiguredStockPage(
     size = input.pageSize ?? 10;
   if (!Number.isSafeInteger(page) || page < 1 || ![10, 20, 50, 100].includes(size))
     throw Object.assign(Error('分页参数无效'), { code: 'INVALID_PAGE' });
-  const risks = input.risks ?? [];
+  const risks = (input.risks ?? []).map((risk) => (risk === '缺失目标' ? '无目标' : risk));
   if (input.tab === '货龄结构' && risks.length)
     throw Object.assign(
       Error('缺少批次生产日期和货龄，暂不能按货龄风险筛选；可查看实存及超60天库存'),
       { code: 'FILTER_SOURCE_UNAVAILABLE' },
     );
   if (
-    risks.some(
-      (r) => !['缺货', '库存偏低', '库存偏高', '缺失目标', '正常', '预警', '-'].includes(r),
-    )
+    risks.some((r) => !['缺货', '库存偏低', '库存偏高', '无目标', '正常', '预警', '-'].includes(r))
   )
     throw Object.assign(Error('风险筛选无效'), { code: 'INVALID_FILTER' });
   if (input.sort && !stockPageSortFields[input.sort.key])

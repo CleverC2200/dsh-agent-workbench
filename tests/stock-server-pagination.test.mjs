@@ -93,7 +93,7 @@ test('search, risk and sort are sent to SQL before paging; literal wildcard inpu
   assert.equal(values.category_mode, 'missing');
   assert.equal(values.sort_field, 'inventory');
   assert.equal(values.sort_direction, 'desc');
-  assert.deepEqual(values.risks, ['缺失目标']);
+  assert.deepEqual(values.risks, ['无目标']);
 });
 test('changed configuration between page turns cannot mix snapshot and page data', async () => {
   const io = source();

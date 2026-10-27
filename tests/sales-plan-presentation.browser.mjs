@@ -280,8 +280,8 @@ test(
       background: 'rgb(255, 255, 255)',
       color: 'rgb(85, 93, 104)',
       border: 'rgb(217, 221, 227)',
-      radius: '6px',
-      height: '32px',
+      radius: '8px',
+      height: '36px',
     });
     await filter.hover();
     await expect.poll(async () => (await state(filter)).background).toBe('rgb(255, 250, 251)');
@@ -292,8 +292,8 @@ test(
       background: 'rgb(245, 246, 248)',
       color: 'rgb(160, 164, 172)',
       border: 'rgb(227, 230, 234)',
-      radius: '6px',
-      height: '32px',
+      radius: '8px',
+      height: '36px',
     });
     const activeTab = page.getByRole('tab', { name: '按区域' });
     assert.equal((await state(activeTab)).color, 'rgb(223, 23, 50)');
@@ -881,7 +881,7 @@ test('退回计划可继续修改本地草稿，组织汇总分摊不触发重�
   );
 });
 
-test('split sales plan keeps actions on one row and separates the table header', async (t) => {
+test('split sales plan wraps control groups without clipping actions or the table header', async (t) => {
   const { page } = await openWorkbench(t);
   for (const width of [907, 760, 620]) {
     await page.setViewportSize({ width, height: 920 });
@@ -893,15 +893,26 @@ test('split sales plan keeps actions on one row and separates the table header',
       const header = node.closest('[class*="queueHeader"]').getBoundingClientRect();
       const table = root.querySelector('[class*="tableViewport"]').getBoundingClientRect();
       return {
-        centerGap: Math.abs(actions.top + actions.height / 2 - toolbar.top - toolbar.height / 2),
+        actionTops: [...node.querySelectorAll('button')].map(
+          (button) => button.getBoundingClientRect().top,
+        ),
+        topOverflow: toolbar.top - actions.top,
+        bottomOverflow: actions.bottom - toolbar.bottom,
         toolbarHeight: toolbar.height,
         tableGap: table.top - header.bottom,
         rightOverflow: actions.right - root.getBoundingClientRect().right,
       };
     });
-    assert.ok(geometry.centerGap <= 1, `actions centered at ${width}px`);
-    assert.ok(geometry.toolbarHeight <= 60, `single-row toolbar at ${width}px`);
-    assert.ok(geometry.tableGap >= 12, `table separated at ${width}px`);
+    assert.ok(
+      Math.max(...geometry.actionTops) - Math.min(...geometry.actionTops) <= 1,
+      `actions aligned at ${width}px`,
+    );
+    assert.ok(
+      geometry.topOverflow <= 0 && geometry.bottomOverflow <= 0,
+      `actions remain inside toolbar at ${width}px`,
+    );
+    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar at ${width}px`);
+    assert.ok(geometry.tableGap >= 8, `table separated at ${width}px`);
     assert.ok(geometry.rightOverflow <= 0, `actions fit at ${width}px`);
     const customerTab = page.getByRole('tab', { name: '按客户' });
     await customerTab.scrollIntoViewIfNeeded();
