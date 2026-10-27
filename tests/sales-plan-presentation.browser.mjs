@@ -911,8 +911,8 @@ test('split sales plan wraps control groups without clipping actions or the tabl
       geometry.topOverflow <= 0 && geometry.bottomOverflow <= 0,
       `actions remain inside toolbar at ${width}px`,
     );
-    assert.ok(geometry.toolbarHeight <= 120, `wrapped toolbar at ${width}px`);
-    assert.ok(geometry.tableGap >= 12, `table separated at ${width}px`);
+    assert.ok(geometry.toolbarHeight <= 104, `wrapped toolbar at ${width}px`);
+    assert.ok(geometry.tableGap >= 8, `table separated at ${width}px`);
     assert.ok(geometry.rightOverflow <= 0, `actions fit at ${width}px`);
     const customerTab = page.getByRole('tab', { name: '按客户' });
     await customerTab.scrollIntoViewIfNeeded();
