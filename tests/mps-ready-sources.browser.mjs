@@ -260,6 +260,56 @@ test('identity reset cancels pending source checks even when the replacement dra
   await expect(section).not.toContainText('100%');
 });
 
+test('identity and page lifecycle resets reload first-page sources when the draft keeps the same id and month', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, fixture);
+  const productsSection = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(productsSection).toContainText('3 个产品');
+  const sources = [
+    'products.detail',
+    'annual.summary.count',
+    'facts.report',
+    'facts.history',
+    'forecast.count',
+    'delivery.detail',
+  ];
+  for (const event of ['gea-identity-changed', 'gea-session-changing', 'pagehide']) {
+    await expect
+      .poll(() => sources.filter((queryId) => !calls.some((call) => call.queryId === queryId)))
+      .toEqual([]);
+    const before = new Map(
+      sources.map((queryId) => [queryId, calls.filter((call) => call.queryId === queryId).length]),
+    );
+    await frame
+      .locator('body')
+      .evaluate((_element, name) => window.dispatchEvent(new Event(name)), event);
+    await expect(productsSection).toContainText('3 个产品', { timeout: 1500 });
+    await expect
+      .poll(() => ({
+        event,
+        missing: sources.filter(
+          (queryId) =>
+            calls.filter((call) => call.queryId === queryId).length <= before.get(queryId),
+        ),
+      }))
+      .toEqual({ event, missing: [] });
+  }
+});
+
+test('first-page sources resume when the business channel reconnects after an identity change', async (t) => {
+  const { page, frame } = await mpsPage(t, config, fixture);
+  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(section).toContainText('3 个产品');
+  await page.evaluate(() => window.mpsPort.postMessage({ type: 'identity-changed' }));
+  await expect(section).toContainText('0 个产品');
+  await page.evaluate(() =>
+    window.mpsPort.postMessage({
+      type: 'context',
+      context: { session: 'fixture-restored-session', plugin: 'inventory-mps' },
+    }),
+  );
+  await expect(section).toContainText('3 个产品', { timeout: 1500 });
+});
+
 test('source-check displays round quantities but its download keeps monthly decimal values and version context', async (t) => {
   const { page, frame } = await mpsPage(t, config, (query) => {
     const result = fixture(query);

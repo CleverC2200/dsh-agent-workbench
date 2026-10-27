@@ -1026,13 +1026,16 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const stop = view.subscribe((_snapshot, event) => {
         if (event === 'released') reset();
       });
+      const reconnect = () => setScopeGeneration((value) => value + 1);
       window.addEventListener('gea-session-changing', reset);
+      window.addEventListener('gea-session-changed', reconnect);
       window.addEventListener('gea-identity-changed', reset);
       window.addEventListener('pagehide', reset);
       return () => {
         clearFiles();
         stop();
         window.removeEventListener('gea-session-changing', reset);
+        window.removeEventListener('gea-session-changed', reconnect);
         window.removeEventListener('gea-identity-changed', reset);
         window.removeEventListener('pagehide', reset);
       };
@@ -1056,7 +1059,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active]);
+    }, [draft.id, draft.month, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())
@@ -1066,7 +1069,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active]);
+    }, [draft.id, draft.month, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())
@@ -1076,7 +1079,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, draft.historyYears, active]);
+    }, [draft.id, draft.month, draft.historyYears, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())
@@ -1086,7 +1089,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, active]);
+    }, [draft.id, draft.month, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())
@@ -1096,7 +1099,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       return () => {
         current = false;
       };
-    }, [draft.id, draft.month, draft.deliveryMonth, active]);
+    }, [draft.id, draft.month, draft.deliveryMonth, active, scopeGeneration]);
     const update = (changes) =>
       setDrafts((entries) =>
         entries.map((entry) => (entry.id === draft.id ? { ...entry, ...changes } : entry)),
