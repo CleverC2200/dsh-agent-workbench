@@ -698,7 +698,7 @@ function renderSummary(results, selected) {
       setMetric(shortMetric,noPending?'0':complete?value(shortage,'after_inventory_short_qty',get(results,'shortage.summary')):'—');
       shortMetric.title=`待备订单减库存后源缺货；覆盖${shortage?.matched_orders??'—'}张订单、${shortage?.after_inventory_coverage??'—'}/${shortage?.matched_sku_rows??'—'}项；尚未扣减排产调拨，不等于终缺，不代表全部未开订单；重复键保持未知`;
       const label=metrics[3].querySelector('.metric-head > span');
-      if(label) { label.textContent='未开订单缺货量（已关联）';label.title=shortMetric.title; }
+      if(label) { label.textContent='未开订单缺货量';label.title=shortMetric.title; }
     }
     const allocation=metrics[4]?.querySelector('.metric-head strong');
     if(allocation&&computed) {
