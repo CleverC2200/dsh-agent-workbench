@@ -1796,14 +1796,14 @@
 
 /* Sales plan shares the production-sales dashboard's white, connected KPI surface. */
 .dashboardHeader {
-  padding: 18px 20px 20px;
+  padding: 10px 20px 12px;
   background: var(--bg-2);
 }
 .dashboardSectionTitle {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   color: var(--text-primary);
   font-size: 14px;
   font-weight: 700;
@@ -1824,8 +1824,8 @@
   background: var(--bg-1);
 }
 .queueMetrics > span {
-  min-height: 94px;
-  padding: 16px 18px;
+  min-height: 72px;
+  padding: 10px 18px;
   border-radius: 0;
   border-right: 1px solid var(--bg-3);
   background: var(--bg-1);
@@ -1834,7 +1834,7 @@
   border-right: 0;
 }
 .queueMetrics small {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -2187,7 +2187,7 @@
   gap: 7px;
 }
 .tableViewport {
-  margin: 16px 12px 12px;
+  margin: 8px 12px 12px;
   border: 1px solid #e3e6ea;
   border-radius: 10px;
 }
@@ -2248,13 +2248,13 @@
 
 /* Keep the dimension toolbar and its expanded filters usable at the pane width. */
 .root .queueHeader {
-  min-height: 56px;
+  min-height: 44px;
   padding: 0 12px;
   gap: 8px;
 }
 .root .controlToolbar {
   min-width: 0;
-  min-height: 56px;
+  min-height: 44px;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 16px;
@@ -2280,8 +2280,8 @@
   display: none;
 }
 .root .dimensionTabs :global(.arco-btn[role='tab']) {
-  height: 56px;
-  min-height: 56px;
+  height: 44px;
+  min-height: 44px;
   padding: 0 12px;
   font-size: 12px;
 }
@@ -2377,7 +2377,7 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .root .toolbarActions {
-    padding: 8px 0;
+    padding: 4px 0;
   }
 }
 @container (max-width: 620px) {
