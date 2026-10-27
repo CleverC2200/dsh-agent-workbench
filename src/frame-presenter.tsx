@@ -59,6 +59,7 @@ const noSubscribe = () => () => {};
 const emptyGuide: readonly import('@deepseek-ai/dsh-client-ui-sidebar-right/client').SidebarRightGuideBox[] =
   [];
 const inventoryAgentPages = new Set([
+  'gea-proof',
   'inventory-qll',
   'inventory-fc',
   'inventory-aqkc',

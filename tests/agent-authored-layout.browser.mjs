@@ -504,7 +504,7 @@ test('dealer reuses original tabs, table and pagination while ten-row paging sta
     await frame.locator('thead tr').evaluate((el) => Math.round(el.getBoundingClientRect().height)),
     38,
   );
-  await expect(frame.getByRole('combobox', { name: '每页条数' })).toHaveValue('10');
+  await expect(frame.getByRole('button', { name: '每页条数' })).toContainText('10 条/页');
   await frame.getByRole('button', { name: '下一页', exact: true }).click();
   await expect.poll(offset).toBe(10);
   assert.equal(
@@ -1478,8 +1478,8 @@ test('FC list filters align compact white controls, retain actions and adapt to 
       );
       if (width >= 768)
         assert.ok(
-          layout.fields.every((control) => control.right - control.left <= 136),
-          'desktop fields remain compact',
+          layout.fields.every((control) => Math.abs(control.right - control.left - 170) <= 1),
+          'desktop fields use the reviewed 170px width',
         );
       const columns = toolbar.locator('summary[aria-label="列设置"]');
       await columns.click();

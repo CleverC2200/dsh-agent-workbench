@@ -277,51 +277,53 @@ function WorkbenchBody() {
                 )}
               </p>
             </section>
-            <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
-              {tabs.map(([id, label]) => (
-                <button
-                  key={id}
-                  className={tab === id ? 'active' : ''}
-                  aria-current={tab === id ? 'page' : undefined}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-            <div className="business-panel">
-              {tab === 'orders' ? (
-                <CurrentShortageList
-                  config={config}
-                  revision={revision}
-                  onRead={(value) => updateContext('data', value)}
-                />
-              ) : tab === 'operations' ? (
-                <OriginalOperations
-                  config={config}
-                  date={date}
-                  revision={revision}
-                  observations={[
-                    `当前未备单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}；优先核对订单剩余需求及可用库存。`,
-                    `60天及以上库存 ${show(knownNumber(branchStock?.overaged_qty), '件')}，90天及以上 ${show(knownNumber(branchStock?.stagnant_qty), '件')}；结合SKU批次和订单判断是否先消化库存。`,
-                    `待核实补货SKU ${show(trial?.missingCount ?? knownNumber(plan?.missing_calculation_count))}；没有计划或可靠库存时不生成确定建议。`,
-                  ]}
-                />
-              ) : (
-                <ConfiguredFactsPage
-                  key={[tab, date, revision, cycleDays, JSON.stringify(cycleRules)].join(':')}
-                  config={config}
-                  embedded
-                  presentation={originalFcView(config, tab)}
-                  businessList={FcConfiguredList}
-                  viewIds={views[tab]}
-                  date={date}
-                  cycleDays={cycleDays}
-                  fcCycleRules={cycleRules}
-                  onRead={(v) => updateContext('data', v)}
-                />
-              )}
-            </div>
+            <section className="fc-list-panel" aria-label="库存业务列表">
+              <nav className="tabs dealer-style-tabs" aria-label="库存业务页签">
+                {tabs.map(([id, label]) => (
+                  <button
+                    key={id}
+                    className={tab === id ? 'active' : ''}
+                    aria-current={tab === id ? 'page' : undefined}
+                    onClick={() => setTab(id)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
+              <div className="business-panel">
+                {tab === 'orders' ? (
+                  <CurrentShortageList
+                    config={config}
+                    revision={revision}
+                    onRead={(value) => updateContext('data', value)}
+                  />
+                ) : tab === 'operations' ? (
+                  <OriginalOperations
+                    config={config}
+                    date={date}
+                    revision={revision}
+                    observations={[
+                      `当前未备单缺货 ${show(currentShortageSum(parts['current-shortage']?.rows, 'shortage'), '件')}；优先核对订单剩余需求及可用库存。`,
+                      `60天及以上库存 ${show(knownNumber(branchStock?.overaged_qty), '件')}，90天及以上 ${show(knownNumber(branchStock?.stagnant_qty), '件')}；结合SKU批次和订单判断是否先消化库存。`,
+                      `待核实补货SKU ${show(trial?.missingCount ?? knownNumber(plan?.missing_calculation_count))}；没有计划或可靠库存时不生成确定建议。`,
+                    ]}
+                  />
+                ) : (
+                  <ConfiguredFactsPage
+                    key={[tab, date, revision, cycleDays, JSON.stringify(cycleRules)].join(':')}
+                    config={config}
+                    embedded
+                    presentation={originalFcView(config, tab)}
+                    businessList={FcConfiguredList}
+                    viewIds={views[tab]}
+                    date={date}
+                    cycleDays={cycleDays}
+                    fcCycleRules={cycleRules}
+                    onRead={(v) => updateContext('data', v)}
+                  />
+                )}
+              </div>
+            </section>
           </section>
         </div>
       </div>
@@ -330,7 +332,7 @@ function WorkbenchBody() {
         title="补货周期配置"
         footer={null}
         onCancel={() => setCycleOpen(false)}
-        style={{ width: 'min(850px, calc(100vw - 32px))' }}
+        style={{ width: 'min(850px, calc(100vw - 32px))', background: '#fff' }}
       >
         <LocalQueryForm
           className={`${common.controls} ${common.cycleForm}`}
@@ -371,83 +373,89 @@ function WorkbenchBody() {
           {ruleDraft.map((rule, index) => (
             <fieldset key={index}>
               <legend>周期规则 {index + 1}</legend>
-              <select
-                aria-label={`规则${index + 1}层级`}
-                value={rule.level}
-                onChange={(event) =>
-                  setRuleDraft(
-                    ruleDraft.map((r, i) =>
-                      i === index ? { ...r, level: event.target.value as FcCycleRule['level'] } : r,
-                    ),
-                  )
-                }
-              >
-                <option value="sku">SKU</option>
-                <option value="material-group">物料组</option>
-                <option value="category">品类</option>
-                <option value="warehouse">分仓</option>
-              </select>
-              <input
-                aria-label={`规则${index + 1}对象`}
-                placeholder="对象编码/分类名称"
-                required
-                maxLength={100}
-                value={rule.object}
-                onChange={(event) =>
-                  setRuleDraft(
-                    ruleDraft.map((r, i) =>
-                      i === index ? { ...r, object: event.target.value } : r,
-                    ),
-                  )
-                }
-              />
-              <input
-                aria-label={`规则${index + 1}天数`}
-                type="number"
-                min={1}
-                max={365}
-                required
-                value={rule.days}
-                onChange={(event) =>
-                  setRuleDraft(
-                    ruleDraft.map((r, i) =>
-                      i === index ? { ...r, days: Number(event.target.value) } : r,
-                    ),
-                  )
-                }
-              />
-              <label>
-                生效日
-                <input
-                  type="date"
-                  value={rule.from}
+              <div className={common.cycleRuleFields}>
+                <select
+                  aria-label={`规则${index + 1}层级`}
+                  value={rule.level}
                   onChange={(event) =>
                     setRuleDraft(
                       ruleDraft.map((r, i) =>
-                        i === index ? { ...r, from: event.target.value } : r,
+                        i === index
+                          ? { ...r, level: event.target.value as FcCycleRule['level'] }
+                          : r,
+                      ),
+                    )
+                  }
+                >
+                  <option value="sku">SKU</option>
+                  <option value="material-group">物料组</option>
+                  <option value="category">品类</option>
+                  <option value="warehouse">分仓</option>
+                </select>
+                <input
+                  aria-label={`规则${index + 1}对象`}
+                  placeholder="对象编码/分类名称"
+                  required
+                  maxLength={100}
+                  value={rule.object}
+                  onChange={(event) =>
+                    setRuleDraft(
+                      ruleDraft.map((r, i) =>
+                        i === index ? { ...r, object: event.target.value } : r,
                       ),
                     )
                   }
                 />
-              </label>
-              <label>
-                失效日
                 <input
-                  type="date"
-                  value={rule.to}
+                  aria-label={`规则${index + 1}天数`}
+                  type="number"
+                  min={1}
+                  max={365}
+                  required
+                  value={rule.days}
                   onChange={(event) =>
                     setRuleDraft(
-                      ruleDraft.map((r, i) => (i === index ? { ...r, to: event.target.value } : r)),
+                      ruleDraft.map((r, i) =>
+                        i === index ? { ...r, days: Number(event.target.value) } : r,
+                      ),
                     )
                   }
                 />
-              </label>
-              <button
-                type="button"
-                onClick={() => setRuleDraft(ruleDraft.filter((_, i) => i !== index))}
-              >
-                删除规则
-              </button>
+                <label>
+                  生效日
+                  <input
+                    type="date"
+                    value={rule.from}
+                    onChange={(event) =>
+                      setRuleDraft(
+                        ruleDraft.map((r, i) =>
+                          i === index ? { ...r, from: event.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <label>
+                  失效日
+                  <input
+                    type="date"
+                    value={rule.to}
+                    onChange={(event) =>
+                      setRuleDraft(
+                        ruleDraft.map((r, i) =>
+                          i === index ? { ...r, to: event.target.value } : r,
+                        ),
+                      )
+                    }
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setRuleDraft(ruleDraft.filter((_, i) => i !== index))}
+                >
+                  删除规则
+                </button>
+              </div>
             </fieldset>
           ))}
           <button

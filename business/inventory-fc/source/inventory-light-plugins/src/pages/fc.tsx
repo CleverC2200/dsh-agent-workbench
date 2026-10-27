@@ -1666,7 +1666,10 @@ export function BranchInventoryAgent() {
             </nav>
             <div className="business-panel" aria-busy={snapshotLoading}>
               {awaitingData || snapshotEmpty ? (
-                <div className="empty-state" role="status">
+                <div
+                  className={snapshotEmpty ? 'inventory-empty-state' : 'empty-state'}
+                  role="status"
+                >
                   <QueryErrors errors={blockingError ? [blockingError] : []} scope="inventory-fc" />
                   <strong>
                     {snapshotEmpty
@@ -1997,7 +2000,12 @@ export function BranchInventoryAgent() {
                               </tbody>
                             </table>
                             {!replenishments.length && (
-                              <div className="empty-state">{'没有符合当前筛选条件的 SKU'}</div>
+                              <div
+                                className="inventory-empty-state inventory-empty-state--inset"
+                                role="status"
+                              >
+                                {'没有符合当前筛选条件的 SKU'}
+                              </div>
                             )}
                           </div>
                           <DataPagination
@@ -2176,7 +2184,12 @@ export function BranchInventoryAgent() {
                             </tbody>
                           </table>
                           {!inventoryPagination.rows.length && (
-                            <div className="empty-state">{'没有符合当前筛选条件的 SKU'}</div>
+                            <div
+                              className="inventory-empty-state inventory-empty-state--inset"
+                              role="status"
+                            >
+                              {'没有符合当前筛选条件的 SKU'}
+                            </div>
                           )}
                         </div>
                       )}
@@ -2889,7 +2902,11 @@ function KpiDetail({ kind, snapshot }: { kind: string; snapshot: WarehouseSnapsh
             </div>
           ))}
         </div>
-        {!aging.rows.length && <p>{'当前没有符合该货龄范围的库存。'}</p>}
+        {!aging.rows.length && (
+          <div className="inventory-empty-state inventory-empty-state--inset" role="status">
+            {'当前没有符合该货龄范围的库存。'}
+          </div>
+        )}
         <DataPagination ariaLabel="货龄指标明细分页" itemLabel="SKU" {...aging.props} />
       </div>
     );

@@ -1,6 +1,7 @@
 import { QueryErrors } from './query-errors';
 import React from 'react';
 import { LocalQueryForm } from './local-query-form';
+import { PlanPagination } from './plan-pagination';
 import { DashboardTableSkeleton } from '../inventory-aqkc/source/inventory-light-plugins/src/dsh-ui/workbench-loading';
 import {
   Table,
@@ -148,10 +149,15 @@ export function OriginalBusinessList({
           ))}
           {view.filters.length > 0 && (
             <>
-              <Button htmlType="submit" size="small" variant={fc ? 'primary' : undefined}>
+              <Button
+                htmlType="submit"
+                size="small"
+                className={css.filterQuery}
+                variant={fc ? 'primary' : undefined}
+              >
                 查询
               </Button>
-              <Button size="small" className={fc ? css.filterReset : undefined} onClick={reset}>
+              <Button size="small" className={css.filterReset} onClick={reset}>
                 清空筛选
               </Button>
             </>
@@ -198,30 +204,40 @@ export function OriginalBusinessList({
       />
       {result?.status === 'select_customer' ? (
         <p className={css.empty}>请选择客户。</p>
-      ) : loading && aqkc ? (
+      ) : loading && (aqkc || fc) ? (
         <DashboardTableSkeleton label={`${view.title}加载中`} />
       ) : (
         renderTable
       )}
-      {loading && fc && (
-        <p role="status" className={css.empty}>
-          正在读取…
-        </p>
-      )}
-      {result?.total != null && (
-        <DataPagination
-          ariaLabel={view.title + '分页'}
-          pageNumber={page}
-          pageSize={pageSize}
-          totalCount={result.total}
-          disabled={loading}
-          onPageChange={onPage}
-          onPageSizeChange={(size: number) => {
-            onPageSize(size);
-            onPage(1);
-          }}
-        />
-      )}
+      {result?.total != null &&
+        !(loading && (fc || agentId === 'inventory-dealer')) &&
+        (qll || aqkc || fc || agentId === 'inventory-dealer' ? (
+          <PlanPagination
+            ariaLabel={qll ? undefined : `${view.title}分页`}
+            totalCount={result.total}
+            page={page}
+            pageSize={pageSize}
+            loading={loading}
+            onPageChange={onPage}
+            onPageSizeChange={(size) => {
+              onPageSize(size);
+              onPage(1);
+            }}
+          />
+        ) : (
+          <DataPagination
+            ariaLabel={view.title + '分页'}
+            pageNumber={page}
+            pageSize={pageSize}
+            totalCount={result.total}
+            disabled={loading}
+            onPageChange={onPage}
+            onPageSizeChange={(size: number) => {
+              onPageSize(size);
+              onPage(1);
+            }}
+          />
+        ))}
     </section>
   );
 }

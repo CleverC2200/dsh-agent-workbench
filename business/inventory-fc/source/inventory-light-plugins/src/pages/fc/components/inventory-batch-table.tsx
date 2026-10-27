@@ -9,7 +9,9 @@ export function InventoryBatchTable({ rows, error }: { rows?: InventoryBatch[]; 
     return (
       <div className="inventory-batch-panel">
         <QueryErrors errors={[error]} scope="inventory-fc-batches" />
-        <p>暂无数据。</p>
+        <div className="inventory-empty-state" role="status">
+          暂无数据。
+        </div>
       </div>
     );
   if (!rows)
@@ -59,7 +61,11 @@ export function InventoryBatchTable({ rows, error }: { rows?: InventoryBatch[]; 
           </tbody>
         </table>
       </div>
-      {!visible.length && <p>当前商品暂无库存批次。</p>}
+      {!visible.length && (
+        <div className="inventory-empty-state" role="status">
+          当前商品暂无库存批次。
+        </div>
+      )}
     </div>
   );
 }
