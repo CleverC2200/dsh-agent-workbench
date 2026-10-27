@@ -83,7 +83,12 @@ GROUP BY stat_date, inventory.cust_code
 ORDER BY stock_amt DESC, inventory.cust_code
 `;
 
-export const CUSTOMER_ADDRESS_SQL = `SELECT cust_code, MAX(dealer_receive_addr) AS dealer_receive_addr FROM agents_dim_dealer_data_d GROUP BY cust_code ORDER BY cust_code`;
+export const CUSTOMER_ADDRESS_SQL = `SELECT d.cust_code, MAX(d.dealer_receive_addr) AS dealer_receive_addr
+FROM agents_dim_dealer_data_d d INNER JOIN (
+  SELECT DISTINCT cust_code FROM agents_scm_cust_jxc_ai_daliy_d
+  WHERE stat_date=(SELECT MAX(stat_date) FROM agents_scm_cust_jxc_ai_daliy_d)
+) inventory_scope ON inventory_scope.cust_code=d.cust_code
+GROUP BY d.cust_code ORDER BY d.cust_code`;
 
 export async function loadCustomerInventory(options = {}) {
   const input = bindGovernedSql(CUSTOMER_INVENTORY_SQL);
@@ -112,5 +117,23 @@ export async function loadCustomerInventory(options = {}) {
   options.signal?.throwIfAborted();
   const addressByCustomer = new Map(addresses.rows.map(row => [String(row.cust_code), row.dealer_receive_addr]));
   const joinedRows = rows.map(row => ({...row, dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null}));
-  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state };
+  const pageCache = new Map();
+  const readDetails = async (codes, {signal} = {}) => {
+    const lifetime=options.pageSignal??options.signal;
+    lifetime?.throwIfAborted();signal?.throwIfAborted();
+    const allowed = new Set(rows.map(row=>String(row.cust_code)));
+    if(!Array.isArray(codes)||codes.length>20||codes.some(code=>!allowed.has(code)))throw Error('CUSTOMER_PAGE_SCOPE_INVALID');
+    if(!codes.length)return [];
+    const key=JSON.stringify(codes);
+    if(pageCache.has(key))return structuredClone(pageCache.get(key));
+    const scope = bindGovernedSql(CUSTOMER_INVENTORY_SQL.replace('WHERE stat_date =', 'WHERE cust_code IN (:list_1) AND stat_date ='),[codes]);
+    const page = await executeAllGeaSqlPages(scope.sql,{parameters:scope.parameters,signal:lifetime&&signal?AbortSignal.any([lifetime,signal]):signal??lifetime});
+    if(page.length!==codes.length||page.some(row=>!codes.includes(String(row.cust_code)))||new Set(page.map(row=>String(row.cust_code))).size!==codes.length)
+      throw Error('CUSTOMER_PAGE_INCOMPLETE');
+    const signature=row=>JSON.stringify(Object.entries(row).sort(([a],[b])=>a.localeCompare(b)));
+    for(const row of page){const original=rows.find(item=>String(item.cust_code)===String(row.cust_code));if(signature(row)!==signature(original))throw Error('CUSTOMER_SNAPSHOT_CHANGED');}
+    const mapped=mapCustomerInventoryRows(mergeCustomerPlanRows(page.map(row=>({...row,dealer_receive_addr:addressByCustomer.get(String(row.cust_code))??null})),plans)).rows;
+    pageCache.set(key,mapped);return structuredClone(mapped);
+  };
+  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state, readDetails };
 }

@@ -2871,6 +2871,1733 @@
         "includeTotal": false
       },
       "resultColumns": ["total"]
+    },
+    "sku.page": {
+      "title": "当前品项分页",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p50": {
+          "name": "list_base",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p51": {
+          "name": "list_search",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT page_data.base,page_data.sku,page_data.material_name,page_data.stock_date,page_data.source_rows,page_data.stock_qty,page_data.available_qty,page_data.over60_source_qty,page_data.production_plan,page_data.production_in_qty,page_data.product_item,page_data.series,page_data.main_plan_initial,page_data.bp_plan_initial,page_data.main_plan_adjusted,page_data.bp_plan_adjusted,page_data.transfer_plan_initial,page_data.transfer_plan_adjusted,page_data.next_month_sales_plan,page_data.next_month_out_plan,page_data.month_days,page_data.product_tag,page_data.transfer_tag FROM (SELECT s.belong_base AS base,s.material_code AS sku,MAX(s.material_name) AS material_name,s.the_date AS stock_date,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock) END AS stock_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.available_stock) END AS available_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock_60) END AS over60_source_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_plan) END AS production_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_in_qty) END AS production_in_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.product_item) END AS product_item,CASE WHEN COUNT(*)=1 THEN MAX(s.series) END AS series,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_v1) END AS main_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_v1) END AS bp_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_adj) END AS main_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_adj) END AS bp_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_v1) END AS transfer_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_adj) END AS transfer_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_sales_plan) END AS next_month_sales_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_out_plan) END AS next_month_out_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.day_count_of_month) END AS month_days,MAX(d.product_tag) AS product_tag,MAX(g.transfer_tag) AS transfer_tag FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT NULLIF(responsible_item,''))=1 THEN MAX(NULLIF(responsible_item,'')) END AS product_tag FROM agents_dim_product_list_mi GROUP BY material_code) d ON d.material_code=s.material_code LEFT JOIN (SELECT stat_period,target_base,material_code,CASE WHEN COUNT(DISTINCT NULLIF(transfer_tag,''))=1 THEN MAX(NULLIF(transfer_tag,'')) END AS transfer_tag FROM agents_dim_transfer_direction_mi GROUP BY stat_period,target_base,material_code) g ON g.material_code=s.material_code AND g.target_base=s.belong_base AND g.stat_period=SUBSTRING(s.the_date,1,7) WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date) page_data WHERE (:gea_p50 IS NULL OR page_data.base=:gea_p50) AND (:gea_p51 IS NULL OR LOWER(COALESCE(page_data.sku,'')) LIKE :gea_p51 OR LOWER(COALESCE(page_data.material_name,'')) LIKE :gea_p51 OR LOWER(COALESCE(page_data.product_item,'')) LIKE :gea_p51) ORDER BY page_data.base,page_data.sku,page_data.stock_date LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "base",
+        "sku",
+        "material_name",
+        "stock_date",
+        "source_rows",
+        "stock_qty",
+        "available_qty",
+        "over60_source_qty",
+        "production_plan",
+        "production_in_qty",
+        "product_item",
+        "series",
+        "main_plan_initial",
+        "bp_plan_initial",
+        "main_plan_adjusted",
+        "bp_plan_adjusted",
+        "transfer_plan_initial",
+        "transfer_plan_adjusted",
+        "next_month_sales_plan",
+        "next_month_out_plan",
+        "month_days",
+        "product_tag",
+        "transfer_tag"
+      ],
+      "pagination": {
+        "countQuery": "sku.page.count"
+      }
+    },
+    "sku.page.count": {
+      "title": "当前品项分页计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p50": {
+          "name": "list_base",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p51": {
+          "name": "list_search",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT page_data.base,page_data.sku,page_data.material_name,page_data.stock_date,page_data.source_rows,page_data.stock_qty,page_data.available_qty,page_data.over60_source_qty,page_data.production_plan,page_data.production_in_qty,page_data.product_item,page_data.series,page_data.main_plan_initial,page_data.bp_plan_initial,page_data.main_plan_adjusted,page_data.bp_plan_adjusted,page_data.transfer_plan_initial,page_data.transfer_plan_adjusted,page_data.next_month_sales_plan,page_data.next_month_out_plan,page_data.month_days,page_data.product_tag,page_data.transfer_tag FROM (SELECT s.belong_base AS base,s.material_code AS sku,MAX(s.material_name) AS material_name,s.the_date AS stock_date,COUNT(*) AS source_rows,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock) END AS stock_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.available_stock) END AS available_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.current_stock_60) END AS over60_source_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_plan) END AS production_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.produce_in_qty) END AS production_in_qty,CASE WHEN COUNT(*)=1 THEN MAX(s.product_item) END AS product_item,CASE WHEN COUNT(*)=1 THEN MAX(s.series) END AS series,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_v1) END AS main_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_v1) END AS bp_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.main_sales_plan_adj) END AS main_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.bp_sales_plan_adj) END AS bp_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_v1) END AS transfer_plan_initial,CASE WHEN COUNT(*)=1 THEN MAX(s.transfer_out_plan_adj) END AS transfer_plan_adjusted,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_sales_plan) END AS next_month_sales_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.next_month_out_plan) END AS next_month_out_plan,CASE WHEN COUNT(*)=1 THEN MAX(s.day_count_of_month) END AS month_days,MAX(d.product_tag) AS product_tag,MAX(g.transfer_tag) AS transfer_tag FROM agents_scm_stock_detail_d s INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=s.belong_base AND scope.material_code=s.material_code LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT NULLIF(responsible_item,''))=1 THEN MAX(NULLIF(responsible_item,'')) END AS product_tag FROM agents_dim_product_list_mi GROUP BY material_code) d ON d.material_code=s.material_code LEFT JOIN (SELECT stat_period,target_base,material_code,CASE WHEN COUNT(DISTINCT NULLIF(transfer_tag,''))=1 THEN MAX(NULLIF(transfer_tag,'')) END AS transfer_tag FROM agents_dim_transfer_direction_mi GROUP BY stat_period,target_base,material_code) g ON g.material_code=s.material_code AND g.target_base=s.belong_base AND g.stat_period=SUBSTRING(s.the_date,1,7) WHERE s.the_date=(SELECT MAX(s2.the_date) FROM agents_scm_stock_detail_d s2 WHERE s2.the_date<:gea_p2) GROUP BY s.belong_base,s.material_code,s.the_date) page_data WHERE (:gea_p50 IS NULL OR page_data.base=:gea_p50) AND (:gea_p51 IS NULL OR LOWER(COALESCE(page_data.sku,'')) LIKE :gea_p51 OR LOWER(COALESCE(page_data.material_name,'')) LIKE :gea_p51 OR LOWER(COALESCE(page_data.product_item,'')) LIKE :gea_p51)) counted",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "sku.age.page": {
+      "title": "基地SKU批次货龄",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p100": {
+          "name": "page_base_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p101": {
+          "name": "page_sku_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p102": {
+          "name": "page_base_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p103": {
+          "name": "page_sku_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p104": {
+          "name": "page_base_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p105": {
+          "name": "page_sku_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p106": {
+          "name": "page_base_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p107": {
+          "name": "page_sku_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p108": {
+          "name": "page_base_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p109": {
+          "name": "page_sku_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p110": {
+          "name": "page_base_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p111": {
+          "name": "page_sku_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p112": {
+          "name": "page_base_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p113": {
+          "name": "page_sku_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p114": {
+          "name": "page_base_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p115": {
+          "name": "page_sku_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p116": {
+          "name": "page_base_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p117": {
+          "name": "page_sku_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p118": {
+          "name": "page_base_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p119": {
+          "name": "page_sku_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p120": {
+          "name": "page_base_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p121": {
+          "name": "page_sku_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p122": {
+          "name": "page_base_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p123": {
+          "name": "page_sku_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p124": {
+          "name": "page_base_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p125": {
+          "name": "page_sku_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p126": {
+          "name": "page_base_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p127": {
+          "name": "page_sku_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p128": {
+          "name": "page_base_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p129": {
+          "name": "page_sku_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p130": {
+          "name": "page_base_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p131": {
+          "name": "page_sku_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p132": {
+          "name": "page_base_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p133": {
+          "name": "page_sku_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p134": {
+          "name": "page_base_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p135": {
+          "name": "page_sku_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p136": {
+          "name": "page_base_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p137": {
+          "name": "page_sku_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p138": {
+          "name": "page_base_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p139": {
+          "name": "page_sku_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT b.belong_base AS base,b.material_code AS sku,b.month_date AS batch_date,b.prod_date AS production_date,SUM(b.live_qty) AS quantity,COUNT(*) AS batch_rows,COUNT(b.live_qty) AS known_quantities,MIN(b.live_qty) AS minimum_quantity FROM agents_scm_inventory_sku_data_d b INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=b.belong_base AND scope.material_code=b.material_code WHERE ((b.belong_base=:gea_p100 AND b.material_code=:gea_p101) OR (b.belong_base=:gea_p102 AND b.material_code=:gea_p103) OR (b.belong_base=:gea_p104 AND b.material_code=:gea_p105) OR (b.belong_base=:gea_p106 AND b.material_code=:gea_p107) OR (b.belong_base=:gea_p108 AND b.material_code=:gea_p109) OR (b.belong_base=:gea_p110 AND b.material_code=:gea_p111) OR (b.belong_base=:gea_p112 AND b.material_code=:gea_p113) OR (b.belong_base=:gea_p114 AND b.material_code=:gea_p115) OR (b.belong_base=:gea_p116 AND b.material_code=:gea_p117) OR (b.belong_base=:gea_p118 AND b.material_code=:gea_p119) OR (b.belong_base=:gea_p120 AND b.material_code=:gea_p121) OR (b.belong_base=:gea_p122 AND b.material_code=:gea_p123) OR (b.belong_base=:gea_p124 AND b.material_code=:gea_p125) OR (b.belong_base=:gea_p126 AND b.material_code=:gea_p127) OR (b.belong_base=:gea_p128 AND b.material_code=:gea_p129) OR (b.belong_base=:gea_p130 AND b.material_code=:gea_p131) OR (b.belong_base=:gea_p132 AND b.material_code=:gea_p133) OR (b.belong_base=:gea_p134 AND b.material_code=:gea_p135) OR (b.belong_base=:gea_p136 AND b.material_code=:gea_p137) OR (b.belong_base=:gea_p138 AND b.material_code=:gea_p139)) AND b.month_date=(SELECT MAX(month_date) FROM agents_scm_inventory_sku_data_d WHERE month_date <= REPLACE(:gea_p1,'-','')) AND b.warehouse_classify='01' GROUP BY b.belong_base,b.material_code,b.month_date,b.prod_date ORDER BY b.belong_base,b.material_code,b.month_date,b.prod_date LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "base",
+        "sku",
+        "batch_date",
+        "batch_rows",
+        "production_date",
+        "quantity",
+        "known_quantities",
+        "minimum_quantity"
+      ],
+      "pagination": {
+        "countQuery": "sku.age.page.count"
+      }
+    },
+    "sku.age.page.count": {
+      "title": "当前页补充数据完整计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p100": {
+          "name": "page_base_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p101": {
+          "name": "page_sku_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p102": {
+          "name": "page_base_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p103": {
+          "name": "page_sku_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p104": {
+          "name": "page_base_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p105": {
+          "name": "page_sku_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p106": {
+          "name": "page_base_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p107": {
+          "name": "page_sku_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p108": {
+          "name": "page_base_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p109": {
+          "name": "page_sku_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p110": {
+          "name": "page_base_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p111": {
+          "name": "page_sku_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p112": {
+          "name": "page_base_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p113": {
+          "name": "page_sku_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p114": {
+          "name": "page_base_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p115": {
+          "name": "page_sku_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p116": {
+          "name": "page_base_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p117": {
+          "name": "page_sku_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p118": {
+          "name": "page_base_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p119": {
+          "name": "page_sku_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p120": {
+          "name": "page_base_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p121": {
+          "name": "page_sku_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p122": {
+          "name": "page_base_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p123": {
+          "name": "page_sku_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p124": {
+          "name": "page_base_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p125": {
+          "name": "page_sku_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p126": {
+          "name": "page_base_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p127": {
+          "name": "page_sku_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p128": {
+          "name": "page_base_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p129": {
+          "name": "page_sku_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p130": {
+          "name": "page_base_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p131": {
+          "name": "page_sku_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p132": {
+          "name": "page_base_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p133": {
+          "name": "page_sku_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p134": {
+          "name": "page_base_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p135": {
+          "name": "page_sku_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p136": {
+          "name": "page_base_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p137": {
+          "name": "page_sku_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p138": {
+          "name": "page_base_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p139": {
+          "name": "page_sku_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT b.belong_base AS base,b.material_code AS sku,b.month_date AS batch_date,b.prod_date AS production_date,SUM(b.live_qty) AS quantity,COUNT(*) AS batch_rows,COUNT(b.live_qty) AS known_quantities,MIN(b.live_qty) AS minimum_quantity FROM agents_scm_inventory_sku_data_d b INNER JOIN (SELECT DISTINCT e.belong_base,e.material_code FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) scope ON scope.belong_base=b.belong_base AND scope.material_code=b.material_code WHERE ((b.belong_base=:gea_p100 AND b.material_code=:gea_p101) OR (b.belong_base=:gea_p102 AND b.material_code=:gea_p103) OR (b.belong_base=:gea_p104 AND b.material_code=:gea_p105) OR (b.belong_base=:gea_p106 AND b.material_code=:gea_p107) OR (b.belong_base=:gea_p108 AND b.material_code=:gea_p109) OR (b.belong_base=:gea_p110 AND b.material_code=:gea_p111) OR (b.belong_base=:gea_p112 AND b.material_code=:gea_p113) OR (b.belong_base=:gea_p114 AND b.material_code=:gea_p115) OR (b.belong_base=:gea_p116 AND b.material_code=:gea_p117) OR (b.belong_base=:gea_p118 AND b.material_code=:gea_p119) OR (b.belong_base=:gea_p120 AND b.material_code=:gea_p121) OR (b.belong_base=:gea_p122 AND b.material_code=:gea_p123) OR (b.belong_base=:gea_p124 AND b.material_code=:gea_p125) OR (b.belong_base=:gea_p126 AND b.material_code=:gea_p127) OR (b.belong_base=:gea_p128 AND b.material_code=:gea_p129) OR (b.belong_base=:gea_p130 AND b.material_code=:gea_p131) OR (b.belong_base=:gea_p132 AND b.material_code=:gea_p133) OR (b.belong_base=:gea_p134 AND b.material_code=:gea_p135) OR (b.belong_base=:gea_p136 AND b.material_code=:gea_p137) OR (b.belong_base=:gea_p138 AND b.material_code=:gea_p139)) AND b.month_date=(SELECT MAX(month_date) FROM agents_scm_inventory_sku_data_d WHERE month_date <= REPLACE(:gea_p1,'-','')) AND b.warehouse_classify='01' GROUP BY b.belong_base,b.material_code,b.month_date,b.prod_date) counted",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "sku.owners.page": {
+      "title": "品项责任与生产分类（独立授权）",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p100": {
+          "name": "page_base_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p101": {
+          "name": "page_sku_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p102": {
+          "name": "page_base_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p103": {
+          "name": "page_sku_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p104": {
+          "name": "page_base_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p105": {
+          "name": "page_sku_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p106": {
+          "name": "page_base_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p107": {
+          "name": "page_sku_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p108": {
+          "name": "page_base_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p109": {
+          "name": "page_sku_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p110": {
+          "name": "page_base_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p111": {
+          "name": "page_sku_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p112": {
+          "name": "page_base_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p113": {
+          "name": "page_sku_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p114": {
+          "name": "page_base_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p115": {
+          "name": "page_sku_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p116": {
+          "name": "page_base_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p117": {
+          "name": "page_sku_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p118": {
+          "name": "page_base_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p119": {
+          "name": "page_sku_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p120": {
+          "name": "page_base_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p121": {
+          "name": "page_sku_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p122": {
+          "name": "page_base_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p123": {
+          "name": "page_sku_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p124": {
+          "name": "page_base_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p125": {
+          "name": "page_sku_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p126": {
+          "name": "page_base_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p127": {
+          "name": "page_sku_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p128": {
+          "name": "page_base_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p129": {
+          "name": "page_sku_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p130": {
+          "name": "page_base_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p131": {
+          "name": "page_sku_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p132": {
+          "name": "page_base_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p133": {
+          "name": "page_sku_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p134": {
+          "name": "page_base_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p135": {
+          "name": "page_sku_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p136": {
+          "name": "page_base_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p137": {
+          "name": "page_sku_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p138": {
+          "name": "page_base_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p139": {
+          "name": "page_sku_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT e.belong_base AS base,e.material_code AS sku,e.director,e.product_item,e.series FROM agents_scm_execute_detail_hourly_d e WHERE ((e.belong_base=:gea_p100 AND e.material_code=:gea_p101) OR (e.belong_base=:gea_p102 AND e.material_code=:gea_p103) OR (e.belong_base=:gea_p104 AND e.material_code=:gea_p105) OR (e.belong_base=:gea_p106 AND e.material_code=:gea_p107) OR (e.belong_base=:gea_p108 AND e.material_code=:gea_p109) OR (e.belong_base=:gea_p110 AND e.material_code=:gea_p111) OR (e.belong_base=:gea_p112 AND e.material_code=:gea_p113) OR (e.belong_base=:gea_p114 AND e.material_code=:gea_p115) OR (e.belong_base=:gea_p116 AND e.material_code=:gea_p117) OR (e.belong_base=:gea_p118 AND e.material_code=:gea_p119) OR (e.belong_base=:gea_p120 AND e.material_code=:gea_p121) OR (e.belong_base=:gea_p122 AND e.material_code=:gea_p123) OR (e.belong_base=:gea_p124 AND e.material_code=:gea_p125) OR (e.belong_base=:gea_p126 AND e.material_code=:gea_p127) OR (e.belong_base=:gea_p128 AND e.material_code=:gea_p129) OR (e.belong_base=:gea_p130 AND e.material_code=:gea_p131) OR (e.belong_base=:gea_p132 AND e.material_code=:gea_p133) OR (e.belong_base=:gea_p134 AND e.material_code=:gea_p135) OR (e.belong_base=:gea_p136 AND e.material_code=:gea_p137) OR (e.belong_base=:gea_p138 AND e.material_code=:gea_p139)) AND e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) ORDER BY e.executeorderno,e.executeorderlineno LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["base", "sku", "director", "product_item", "series"],
+      "pagination": {
+        "countQuery": "sku.owners.page.count"
+      }
+    },
+    "sku.owners.page.count": {
+      "title": "当前页补充数据完整计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p100": {
+          "name": "page_base_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p101": {
+          "name": "page_sku_0",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p102": {
+          "name": "page_base_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p103": {
+          "name": "page_sku_1",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p104": {
+          "name": "page_base_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p105": {
+          "name": "page_sku_2",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p106": {
+          "name": "page_base_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p107": {
+          "name": "page_sku_3",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p108": {
+          "name": "page_base_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p109": {
+          "name": "page_sku_4",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p110": {
+          "name": "page_base_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p111": {
+          "name": "page_sku_5",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p112": {
+          "name": "page_base_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p113": {
+          "name": "page_sku_6",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p114": {
+          "name": "page_base_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p115": {
+          "name": "page_sku_7",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p116": {
+          "name": "page_base_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p117": {
+          "name": "page_sku_8",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p118": {
+          "name": "page_base_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p119": {
+          "name": "page_sku_9",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p120": {
+          "name": "page_base_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p121": {
+          "name": "page_sku_10",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p122": {
+          "name": "page_base_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p123": {
+          "name": "page_sku_11",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p124": {
+          "name": "page_base_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p125": {
+          "name": "page_sku_12",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p126": {
+          "name": "page_base_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p127": {
+          "name": "page_sku_13",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p128": {
+          "name": "page_base_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p129": {
+          "name": "page_sku_14",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p130": {
+          "name": "page_base_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p131": {
+          "name": "page_sku_15",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p132": {
+          "name": "page_base_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p133": {
+          "name": "page_sku_16",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p134": {
+          "name": "page_base_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p135": {
+          "name": "page_sku_17",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p136": {
+          "name": "page_base_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p137": {
+          "name": "page_sku_18",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p138": {
+          "name": "page_base_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        },
+        "gea_p139": {
+          "name": "page_sku_19",
+          "type": "string",
+          "required": true,
+          "nullable": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT e.belong_base AS base,e.material_code AS sku,e.director,e.product_item,e.series FROM agents_scm_execute_detail_hourly_d e WHERE ((e.belong_base=:gea_p100 AND e.material_code=:gea_p101) OR (e.belong_base=:gea_p102 AND e.material_code=:gea_p103) OR (e.belong_base=:gea_p104 AND e.material_code=:gea_p105) OR (e.belong_base=:gea_p106 AND e.material_code=:gea_p107) OR (e.belong_base=:gea_p108 AND e.material_code=:gea_p109) OR (e.belong_base=:gea_p110 AND e.material_code=:gea_p111) OR (e.belong_base=:gea_p112 AND e.material_code=:gea_p113) OR (e.belong_base=:gea_p114 AND e.material_code=:gea_p115) OR (e.belong_base=:gea_p116 AND e.material_code=:gea_p117) OR (e.belong_base=:gea_p118 AND e.material_code=:gea_p119) OR (e.belong_base=:gea_p120 AND e.material_code=:gea_p121) OR (e.belong_base=:gea_p122 AND e.material_code=:gea_p123) OR (e.belong_base=:gea_p124 AND e.material_code=:gea_p125) OR (e.belong_base=:gea_p126 AND e.material_code=:gea_p127) OR (e.belong_base=:gea_p128 AND e.material_code=:gea_p129) OR (e.belong_base=:gea_p130 AND e.material_code=:gea_p131) OR (e.belong_base=:gea_p132 AND e.material_code=:gea_p133) OR (e.belong_base=:gea_p134 AND e.material_code=:gea_p135) OR (e.belong_base=:gea_p136 AND e.material_code=:gea_p137) OR (e.belong_base=:gea_p138 AND e.material_code=:gea_p139)) AND e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) counted",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
+    },
+    "orders.filters": {
+      "title": "授权筛选目录",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p12": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p13": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        }
+      },
+      "request": {
+        "sql": "SELECT DISTINCT e.belong_base,e.logistics_provider,e.province_region_name,e.sales_group_name,e.region_name FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11) ORDER BY e.belong_base,e.logistics_provider,e.province_region_name,e.sales_group_name,e.region_name LIMIT :gea_p12 OFFSET :gea_p13",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": [
+        "belong_base",
+        "logistics_provider",
+        "province_region_name",
+        "sales_group_name",
+        "region_name"
+      ],
+      "pagination": {
+        "countQuery": "orders.filters.count"
+      }
+    },
+    "orders.filters.count": {
+      "title": "订单指标输入计数",
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "start",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p2": {
+          "name": "end_exclusive",
+          "type": "string",
+          "nullable": false,
+          "required": true,
+          "format": "YYYY-MM-DD"
+        },
+        "gea_p3": {
+          "name": "base",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p4": {
+          "name": "region",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p5": {
+          "name": "province",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p6": {
+          "name": "sales_group",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p7": {
+          "name": "channel",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p8": {
+          "name": "customer",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p9": {
+          "name": "order",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p10": {
+          "name": "sku",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        },
+        "gea_p11": {
+          "name": "carrier",
+          "type": "string",
+          "nullable": true,
+          "required": true
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT e.belong_base,e.logistics_provider,e.province_region_name,e.sales_group_name,e.region_name FROM agents_scm_execute_detail_hourly_d e WHERE e.header_addtime >= :gea_p1 AND e.header_addtime < :gea_p2 AND (:gea_p3 IS NULL OR e.belong_base = :gea_p3) AND (:gea_p4 IS NULL OR e.region_name = :gea_p4) AND (:gea_p5 IS NULL OR e.province_region_name = :gea_p5) AND (:gea_p6 IS NULL OR e.sales_group_name = :gea_p6) AND (:gea_p7 IS NULL OR e.cust_type = :gea_p7) AND (:gea_p8 IS NULL OR (e.cust_code = :gea_p8 OR e.cust_name LIKE CONCAT('%',:gea_p8,'%'))) AND (:gea_p9 IS NULL OR e.cust_order_no = :gea_p9) AND (:gea_p10 IS NULL OR e.material_code = :gea_p10) AND (:gea_p11 IS NULL OR e.logistics_provider = :gea_p11)) counted",
+        "parameters": {},
+        "includeTotal": false
+      },
+      "resultColumns": ["total"]
     }
   },
   "sourceGaps": [

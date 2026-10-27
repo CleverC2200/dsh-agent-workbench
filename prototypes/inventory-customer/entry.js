@@ -135,6 +135,7 @@ async function reloadCustomerInventory() {
     });
     const inventory = await loadCustomerInventory({
       signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]),
+      pageSignal: controller.signal,
       onInventory(inventory) {
         if (!attached || generation !== loadGeneration) return;
         inventorySnapshot = inventory.snapshot;

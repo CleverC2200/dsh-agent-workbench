@@ -46,6 +46,7 @@ async function fixture(
         const pair = new MessageChannel();
         window.receivedContexts = [];
         window.pendingSql = [];
+        window.deferSql = deferSql;
         pair.port1.onmessage = ({ data }) => {
           if (data.type !== 'request') return;
           if (data.method === 'context') window.receivedContexts.push(data.parameters);
@@ -67,7 +68,7 @@ async function fixture(
                         : { ok: true },
                   }),
             });
-          if (deferSql && data.method === 'sql') window.pendingSql.push(respond);
+          if (window.deferSql && data.method === 'sql') window.pendingSql.push(respond);
           else respond();
         };
         target.contentWindow.postMessage(
@@ -257,7 +258,10 @@ test('region, province and city choices rebuild after rows arrive, including a r
   };
   await selectRole('大区角色');
   await expect.poll(() => page.evaluate(() => window.pendingSql.length)).toBeGreaterThan(0);
-  await page.evaluate(() => window.pendingSql.splice(0).forEach((respond) => respond()));
+  await page.evaluate(() => {
+    window.deferSql = false;
+    window.pendingSql.splice(0).forEach((respond) => respond());
+  });
   await expect(frame.locator('.dealer-table-card')).toContainText('区域测试客户');
   for (const role of ['省区角色', '城市经理角色', '总部角色', '大区角色']) {
     await selectRole(role);

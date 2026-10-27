@@ -39,6 +39,60 @@ const source = await readFile(
   'utf8',
 );
 
+test('customer detail pages stay within the validated index and reject changed snapshots or identities', async () => {
+  const moduleSource = source
+    .replace(
+      "import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';",
+      'let executeAllGeaSqlPages; export const setReader=read=>{executeAllGeaSqlPages=read;};',
+    )
+    .replace(
+      /from '([^']+)'/g,
+      (_match, path) =>
+        `from '${new URL(path, new URL('../prototypes/inventory-customer/data-source.js', import.meta.url)).href}'`,
+    );
+  const loader = await import(
+    'data:text/javascript;base64,' +
+      Buffer.from(moduleSource + '\n// paged fixture').toString('base64')
+  );
+  const raw = {
+    snapshot_date: '2026-10-25',
+    cust_code: 'A',
+    cust_name: '客户A',
+    sku_rows: 1,
+    stock_coverage: 1,
+    stock_qty: 20,
+  };
+  const calls = [];
+  let changed = false;
+  loader.setReader(async (sql, options) => {
+    calls.push({ sql, options });
+    if (sql.includes('cust_code IN')) return [{ ...raw, stock_qty: changed ? 30 : 20 }];
+    if (sql.includes('/*customer-inventory:latest*/')) return [raw];
+    return [];
+  });
+  const load = new AbortController(),
+    pageLifetime = new AbortController();
+  const inventory = await loader.loadCustomerInventory({
+    signal: load.signal,
+    pageSignal: pageLifetime.signal,
+  });
+  load.abort();
+  assert.deepEqual(await inventory.readDetails(['A']), inventory.rows);
+  const pageCalls = calls.filter((call) => call.sql.includes('cust_code IN'));
+  assert.equal(pageCalls.length, 1);
+  assert.equal(pageCalls[0].options.parameters.list_1_0, 'A');
+  assert.ok(
+    !pageCalls[0].options.signal.aborted,
+    'finished initial-load timeout does not expire later page reads',
+  );
+  await assert.rejects(inventory.readDetails(['outside']), /SCOPE_INVALID/);
+  const next = await loader.loadCustomerInventory({ pageSignal: pageLifetime.signal });
+  changed = true;
+  await assert.rejects(next.readDetails(['A']), /SNAPSHOT_CHANGED/);
+  pageLifetime.abort(Error('identity changed'));
+  await assert.rejects(inventory.readDetails(['A']), /identity changed/);
+});
+
 test('inventory and optional plans start together without weakening failures or cancellation', async () => {
   const moduleSource = source
     .replace(
