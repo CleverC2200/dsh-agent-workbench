@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, mkdir } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
@@ -15,6 +16,7 @@ const bundle = await build({
   outfile: 'selector.js',
   format: 'iife',
   platform: 'browser',
+  alias: { react: resolve('node_modules/react'), 'react-dom': resolve('node_modules/react-dom') },
   define: { PLUGIN_ID: '"fc"', 'process.env.NODE_ENV': '"test"' },
   loader: { '.css': 'css', '.module.css': 'local-css' },
 });
@@ -26,6 +28,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const calls = [],
     errors = [];
+  t.after(() => assert.deepEqual(errors, []));
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('http://127.0.0.1:19486/**', async (route) => {
     if (route.request().method() !== 'POST')
