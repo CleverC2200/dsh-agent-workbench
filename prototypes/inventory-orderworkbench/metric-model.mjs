@@ -105,7 +105,10 @@ export function computeWorkbenchMetrics(period, filter = () => true) {
     ['ages', ['货龄（>60天库存占比）']],
   ]) {
     const part = section(id);
-    if (part?.status === 'error')
+    if (part?.status === 'loading')
+      for (const name of names)
+        Object.assign(result[name], { value: null, note: '正在读取所选周期数据', loading: true });
+    else if (part?.status === 'error')
       for (const name of names)
         Object.assign(result[name], { value: null, note: '查询未完成：' + part.code });
     else if (!rows(id).length)

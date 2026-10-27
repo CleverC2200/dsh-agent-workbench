@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summaryDetails } from '../prototypes/inventory-orderfulfillment/summary-details.mjs';
+import { summaryDetails, partialShortage } from '../prototypes/inventory-orderfulfillment/summary-details.mjs';
 const row=(order,qty,short,stage)=>({order_no:order,customer_code:'C',sku:'S',base:'B',valid_rows:1,original_qty:qty,source_short_qty:short,business_stage:stage});
 const facts=rows=>rows.map((row,index)=>({cust_order_no:row.order_no,cust_code:'C',material_code:'S',belong_base:'B',executeorderno:'E'+index,executeorderlineno:1,adjust_order_qty:row.original_qty,detailstatus:10,is_stat:'1',packingunitconvertrate:12}));
 test('summary quantities convert units and rates weight demand across opened and pending orders',()=>{
@@ -11,7 +11,7 @@ test('summary preserves missing quantity conversion, duplicate and missing deman
  const rows=[row('A',null,null,'备单中')],computed={quantities:rows,duplicateExecutionKeys:0,nodes:{states:[]}};
  assert.equal(summaryDetails(computed,facts(rows)).total,null);assert.equal(summaryDetails(computed,facts(rows)).totalRate,null);
  const complete=[row('A',10,1,'备单中')];assert.equal(summaryDetails({...computed,quantities:complete},[]).total,null);
- assert.equal(summaryDetails({...computed,quantities:complete,duplicateExecutionKeys:1},facts(complete)).total,null);
+ assert.equal(summaryDetails({...computed,quantities:complete,duplicateExecutionKeys:1},facts(complete)).total,120);
 });
 
 test('current quantities remain available when original demand is absent',()=>{
@@ -26,4 +26,15 @@ test('partial satisfaction uses covered demand only and reports separate coverag
  assert.deepEqual(result.rateCoverage.pending,{value:80,covered:1,total:2});
  assert.equal(result.rateCoverage.opened.covered,1);assert.equal(result.rateCoverage.opened.total,2);
  assert.equal(result.rateCoverage.total.covered,2);assert.equal(result.rateCoverage.total.total,4);
+});
+
+test('known quantity survives missing and duplicated execution lines',()=>{
+ const rows=[row('A',10,2,'备单中'),row('B',20,3,'备单中')],lines=facts(rows);lines[1].adjust_order_qty=null;
+ const computed={quantities:rows,duplicateExecutionKeys:0,nodes:{states:[]}};assert.equal(summaryDetails(computed,lines).pending,120);
+ lines[1].adjust_order_qty=20;lines.push({...lines[1]});assert.equal(summaryDetails(computed,lines).pending,120);
+});
+test('shortage excludes duplicate and missing facts without losing covered zero or known values',()=>{
+ const input=[{executeorderno:'E',material_code:'S',cust_code:'C',detailstatus:10,is_stat:'1',prapare_order_status:'备单中'}];
+ const source={rows:[{execution_order:'E',sku:'S',customer_code:'C',source_rows:1,after_inventory_short_qty:8},{execution_order:'E',sku:'X',customer_code:'C',source_rows:2,after_inventory_short_qty:50}]};input.push({...input[0],material_code:'X'});
+ assert.deepEqual(partialShortage(input,source,'pending'),{value:8,covered:1,total:2});source.rows[0].after_inventory_short_qty=0;assert.equal(partialShortage(input,source,'pending').value,0);source.rows[0].after_inventory_short_qty=null;assert.equal(partialShortage(input,source,'pending').value,null);
 });

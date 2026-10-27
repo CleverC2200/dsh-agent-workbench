@@ -1,4 +1,5 @@
 import { renderSummaryDetails } from './summary-details.mjs';
+import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
 import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
@@ -61,6 +62,7 @@ let connected = false,
   publication = Promise.resolve(),
   revision = 0;
 let currentDetailData=null;
+let currentResults=null;
 let dimension = 'deliveryDimensionPanel';
 const $ = (id) => document.getElementById(id);
 const value = (row, key, result) => {
@@ -218,7 +220,8 @@ for (const button of document.querySelectorAll('[role="tab"][aria-controls]'))
   button.addEventListener('click', () => {
     activateTab(button);
     saveView();
-    if (button.dataset.fulfillmentDimension && connected) void load();
+    if (connected && (button.dataset.fulfillmentDimension || button.dataset.itemProgressTab)) void load();
+    else if(connected&&activeRead?.complete&&currentResults)renderGrantedDetails(currentResults);
   });
 function saveView() {
   view.update({
@@ -320,7 +323,7 @@ function orderPage(body,context,reset,render=renderOrders) {
     }
     table.parentElement.after(nav);
     state={nav,count,size,previous,info,next,page:0,limit:20,context:null};orderPagination.set(body,state);
-    const update=()=>{if(state.context)state.render(body,...state.context,false);};
+    const update=()=>{if(state.loadPage)void state.loadPage(state.page+1,state.limit);else if(state.context)state.render(body,...state.context,false);};
     previous.addEventListener('click',()=>{state.page--;update();});
     next.addEventListener('click',()=>{state.page++;update();});
     size.addEventListener('change',()=>{state.limit=Number(size.value);state.page=0;update();});
@@ -330,6 +333,13 @@ function orderPage(body,context,reset,render=renderOrders) {
   return state;
 }
 function pageRows(state,rows) {
+  if(state.remote) {
+    const {page,size,total}=state.remote,pages=Math.max(1,Math.ceil(total/size));
+    state.page=page-1;state.limit=size;state.size.value=String(size);
+    state.count.textContent=`共 ${total} 条`;state.info.textContent=`第 ${page} / ${pages} 页`;
+    state.previous.disabled=page<=1;state.next.disabled=page>=pages;
+    return rows;
+  }
   const pages=Math.max(1,Math.ceil(rows.length/state.limit));
   state.page=Math.min(Math.max(0,state.page),pages-1);
   state.count.textContent=`共 ${rows.length} 条`;
@@ -503,6 +513,8 @@ function renderInventory(result, ages, owners=null, resetPage=true) {
   body.replaceChildren();
   const calculatedAges=ages?batchAges(ages.rows,selectedFilters().start):[];
   const pagination=orderPage(body,[result,ages,owners],resetPage,(_body,...args)=>renderInventory(...args));
+  pagination.remote=result.serverPage?result:null;
+  pagination.loadPage=result.serverPage?(page,size)=>loadItemPage('inventory',{page,size}):null;
   for (const row of pageRows(pagination,result.rows)) {
     const matching=(owners?.rows??[]).filter(owner=>owner.base===row.base&&owner.sku===row.sku);
     const ownerNames=[...new Set(matching.map(owner=>owner.director).filter(Boolean))];
@@ -632,31 +644,28 @@ function renderGrantedDetails(results) {
     trace = get(results, 'trace.detail'),
     warehouse = get(results, 'warehouse.detail');
   if(currentDetailData?.factSource!==sourceFacts||!currentDetailData) {
-    renderOrders($('deliveryOrderDetailRows'), orders, quantities, trace, warehouse);
-    renderOrders($('warehouseOrderDetailRows'), orders, quantities, trace, warehouse);
+    if(dimension==='deliveryDimensionPanel')renderOrders($('deliveryOrderDetailRows'), orders, quantities, trace, warehouse);
+    if(dimension==='warehouseDimensionPanel')renderOrders($('warehouseOrderDetailRows'), orders, quantities, trace, warehouse);
     currentDetailData={orders,quantities,trace,warehouse,factSource:sourceFacts};
   }
-  if(results['sku.detail'])renderInventory(get(results, 'sku.detail'), get(results, 'sku.age'),get(results,'sku.owners'));
   const facts=sourceFacts;
   const shortage=pendingShortage(results);
   const comparison=(dimension)=>facts?comparisonMetrics(facts.rows,dimension,shortage?.rows??null):null;
-  if(facts){
+  if(facts&&dimension==='deliveryDimensionPanel'){
     const total=comparisonMetrics(facts.rows.map(row=>({...row,all_scope:'当前范围'})),'all_scope',shortage?.rows??null)[0];
     renderCharts(calculatedMetrics(results),total,ids=>drillOrders($('deliveryBaseCompareRows'),{group_name:null},ids));
     updateSourceFilters(get(results,'orders.facts').rows);
   }
-  if(results['sku.detail']&&currentDetailData.inventorySource!==get(results,'sku.detail')) {
-    renderCoordination(get(results,'sku.detail'));currentDetailData.inventorySource=get(results,'sku.detail');
-  }
-  renderComparison($('deliveryBaseCompareRows'), facts?{rows:[]}:get(results, 'orders.by_base'),false,comparison('belong_base'));
-  renderComparison($('deliveryRegionCompareRows'), facts?{rows:[]}:get(results, 'orders.by_province'),false,comparison('province_region_name'));
+  if(dimension==='deliveryDimensionPanel'&&!$('deliveryBaseComparePanel').hidden)renderComparison($('deliveryBaseCompareRows'), facts?{rows:[]}:get(results, 'orders.by_base'),false,comparison('belong_base'));
+  if(dimension==='deliveryDimensionPanel'&&!$('deliveryRegionComparePanel').hidden)renderComparison($('deliveryRegionCompareRows'), facts?{rows:[]}:get(results, 'orders.by_province'),false,comparison('province_region_name'));
+  if(dimension==='warehouseDimensionPanel'&&!$('warehouseBaseDetailPanel').hidden)
   renderComparison(
     $('warehouseBaseDetailPanel').querySelector('tbody'),
     facts?{rows:[]}:get(results, 'orders.by_base'),
     true,
     comparison('belong_base'),
   );
-  renderComparison(
+  if(dimension==='warehouseDimensionPanel'&&!$('warehouseLogisticsDetailPanel').hidden)renderComparison(
     $('warehouseLogisticsDetailPanel').querySelector('tbody'),
     facts?{rows:[]}:get(results, 'orders.by_carrier'),
     true,
@@ -822,31 +831,59 @@ function renderSummary(results, selected) {
     '来源订单 '+value(summary,'source_orders',get(results,'orders.summary'))+' 张；明细按完整授权输入归并有效订单';
 }
 let activeRead;
+let itemController;
+const itemPages={inventory:{page:1,size:20},coordination:{page:1,size:20,base:null,search:null}};
+let itemPageKey='';
+async function loadItemPage(kind, patch={}) {
+  if(!activeRead?.complete||!activeRead.current())return;
+  Object.assign(itemPages[kind],patch);
+  const selected=selectedFilters(), options=itemPages[kind];
+  const key=JSON.stringify([selected,kind,options]);
+  if(itemPageKey===key)return;
+  itemPageKey=key;
+  itemController?.abort();
+  const controller=itemController=new AbortController();
+  const signal=AbortSignal.any([controller.signal,activeRead.signal]);
+  const body=kind==='inventory'?$('itemInventoryPanel').querySelector('tbody'):$('itemCoordinationTable').tBodies[0];
+  placeholder(body,'正在读取当前页…');
+  try {
+    const paint=(result,ages=null,owners=null)=>{
+      if(signal.aborted||!activeRead.current())return;
+      if(result.configVersion!==activeRead.version)throw Error('QUERY_CONFIG_CHANGED');
+      if(kind==='inventory')renderInventory(result,ages,owners);
+      else renderCoordination({...result,baseOptions:[...new Set([...filterCatalog.values()].map(row=>row.belong_base).filter(Boolean))]});
+      const analysis=document.querySelector('.item-analysis');
+      analysis.querySelector('h3').textContent='当前授权范围的品项库存情况';
+      analysis.querySelector(':scope > p').textContent=`当前筛选共 ${result.total} 条基地与SKU库存记录，当前页 ${result.rows.length} 条；卡片按完整授权输入计算，不以当前页替代全量。`;
+      analysis.querySelector('.fulfillment-analysis-foot > span').textContent='依据当前受控查询；缺失字段保持未知。';
+    };
+    const page=await readItemPage(reader,selected,{...options,signal,inventory:kind==='inventory',onPage:result=>paint(result)});
+    if(signal.aborted||!activeRead.current())return;
+    paint(page.result,page.ages?.status==='fulfilled'?page.ages.value:null,page.owners?.status==='fulfilled'?page.owners.value:null);
+    if(snapshot){snapshot={...snapshot,dimension,detailPage:{kind,page:page.result.page,size:page.result.size,total:page.result.total,rows:page.result.rows,scope:'当前授权与筛选范围的一页；不用于全量卡片计算'}};void publish(snapshot,{signal}).catch(()=>{});}
+  } catch(error) {
+    if(!signal.aborted){itemPageKey='';placeholder(body,issue(error));}
+  }
+}
+function ensureItemPage(){if(dimension==='itemDimensionPanel')return loadItemPage($('itemCoordinationPanel').hidden?'inventory':'coordination');}
 async function load() {
   const selected = selectedFilters();
   const key = JSON.stringify(selected);
-  if (activeRead?.key === key && activeRead.current()) return;
+  if (activeRead?.key === key && activeRead.current()) {if(activeRead.complete&&currentResults){currentDetailData=null;renderGrantedDetails(currentResults);}return ensureItemPage();}
   const task = owner.begin();
-  activeRead = { key, current: task.current };
+  itemController?.abort();itemPageKey='';currentResults=null;
+  for(const value of Object.values(itemPages))value.page=1;
+  activeRead = { key, current: task.current, signal:task.signal, complete:false };
   clear();
   if (!connected || !reader) {
     status.textContent = reader ? '等待工作台连接' : '缺少受控查询配置';
     return;
   }
   saveView();
-  const ids = [
-    'orders.summary',
-    'orders.facts',
-    'execution.trace',
-    'trace.detail',
-    'shortage.detail',
-    'sku.detail',
-    'sku.age',
-    'sku.owners',
-  ];
+  const ids = fulfillmentCardQueries;
   const optionFilters = {...selected,base:null,region:null,province:null,sales_group:null,channel:null,customer:null,order:null,sku:null,carrier:null};
   if(!filterCatalogLoaded && JSON.stringify(optionFilters)!==JSON.stringify(selected)) {
-    void reader.all('orders.facts',optionFilters,{signal:task.signal}).then(result=>{if(task.current()){updateSourceFilters(result.rows);filterCatalogLoaded=true;}}).catch(()=>{});
+    void reader.all('orders.filters',optionFilters,{signal:task.signal}).then(result=>{if(task.current()){updateSourceFilters(result.rows);filterCatalogLoaded=true;}}).catch(()=>{});
   } else if(JSON.stringify(optionFilters)===JSON.stringify(selected)) filterCatalogLoaded=true;
   const progressive = {};
   const settled = await Promise.allSettled(
@@ -877,7 +914,6 @@ async function load() {
         }
         if (progressive['orders.summary'])
           renderSummary(progressive, selected);
-        if(get(progressive,'orders.facts')&&['orders.facts','execution.trace','trace.detail','shortage.detail','sku.detail','sku.age','sku.owners'].includes(id))renderGrantedDetails(progressive);
         return value;
       } catch (reason) {
         if (task.current()) progressive[id] = { status: 'rejected', reason };
@@ -897,8 +933,11 @@ async function load() {
     clear('配置已变化，请重新查询');
     return;
   }
+  currentResults=results;
   renderSummary(results, selected);
   const {facts,comparison}=renderGrantedDetails(results);
+  activeRead.complete=true;activeRead.version=versions[0];
+  void ensureItemPage();
   snapshot = {
     source: localPreview ? 'direct-doris' : 'gea-governed-sql',
     authorization: localPreview ? 'database-account-only' : 'current-gea-identity',
@@ -1063,7 +1102,7 @@ void ready.then(() => {
 });
 const submitConfirmation=$('salesConfirmForm').querySelector('button[type="submit"]');
 updateSourceFilters([]);
-bindPanelControls();
+bindPanelControls(options=>loadItemPage('coordination',options));
 for(const list of document.querySelectorAll('[role="tablist"]'))list.addEventListener('keydown',event=>{
   if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
   const tabs=[...list.querySelectorAll('[role="tab"]')];

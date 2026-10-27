@@ -140,7 +140,7 @@ function progressiveSource({ brokenCount = false } = {}) {
   return { execute, calls };
 }
 
-test('progress publishes complete periods and reuses validated batches without sharing mutable rows or loads', async () => {
+test('progress publishes validated cards before slower sections and reuses complete batch inputs', async () => {
   const { execute, calls } = progressiveSource(),
     progress = [];
   const run = () =>
@@ -152,7 +152,10 @@ test('progress publishes complete periods and reuses validated batches without s
   const result = await run();
   assert.equal(progress[0].complete, false);
   assert.deepEqual(Object.keys(progress[0].periods), ['month']);
-  assert.equal(progress[0].periods.month.sections.find((s) => s.id === 'ages').rows.length, 201);
+  assert.ok(progress[0].periods.month.sections.some(s => s.status === 'ready'));
+  assert.ok(progress[0].periods.month.sections.some(s => s.status === 'loading'));
+  const monthReady=progress.find(facts=>facts.periods.month.sections.every(s=>s.status==='ready'));
+  assert.equal(monthReady.periods.month.sections.find((s) => s.id === 'ages').rows.length, 201);
   const firstView = model.workbenchPresentation(progress[0]);
   assert.ok(firstView.cards.every((card) => card.comparison.every((value) => value === '加载中')));
   assert.equal(firstView.performance['director-performance'].month.length, 0);
@@ -166,6 +169,19 @@ test('progress publishes complete periods and reuses validated batches without s
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages.count').length, 2);
   await run();
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages').length, 6);
+});
+
+test('lazy table presentation preserves card and selected-dimension results without building hidden SKU details',()=>{
+  const period=fixturePeriod();period.metrics=model.computeWorkbenchMetrics(period);
+  const facts={periods:{month:period,week:period},selected:'month',directors:{status:'ready',rows:[]}};
+  const full=model.workbenchPresentation(facts);
+  const light=model.workbenchPresentation(facts,{dimension:'base-performance'});
+  assert.deepEqual(light.cards,full.cards);
+  assert.deepEqual(light.performance['base-performance'],full.performance['base-performance']);
+  assert.deepEqual(light.skus,{});
+  const items=model.workbenchPresentation(facts,{dimension:'category-fill',skuCategories:['水饺']});
+  assert.deepEqual(items.dimensions['category-fill'],full.dimensions['category-fill']);
+  assert.deepEqual(items.skus['水饺'],full.skus['水饺']);
 });
 
 test('failed completeness checks are not cached as good data; cancellation stops progress', async () => {

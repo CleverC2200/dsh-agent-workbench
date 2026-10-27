@@ -84,10 +84,15 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     signal?.throwIfAborted();
     return structuredClone(rows);
   };
-  const load = async (spec) => {
+  const load = async (spec, name) => {
     const values = { start: spec.start, end_exclusive: spec.end };
     if (spec.start >= spec.end)
       return { ...spec, sections: [], metrics: computeWorkbenchMetrics({ ...spec, sections: [] }) };
+    const pending = ['orders', 'changes', 'stock', 'ages'].map(id => ({id, status: 'loading', rows: []}));
+    const update = () => {
+      periods[name] = {...spec, sections: [...pending], metrics: computeWorkbenchMetrics({...spec, sections: pending})};
+      progress();
+    };
     const sections = await Promise.all(
       ['orders', 'changes', 'stock', 'ages'].map((id) =>
         section(id, async () => {
@@ -102,7 +107,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             throw Object.assign(Error('快照日期无效'), { code: 'INVALID_SNAPSHOT' });
           const snapshot = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
           return readBatchSnapshot({ start: raw, age_cutoff: dayOffset(snapshot, -60), snapshot });
-        }),
+        }).then(part => { pending[pending.findIndex(item => item.id === id)] = part; update(); return part; }),
       ),
     );
     // Batch material groups are not business product items. Map only a unique
@@ -147,7 +152,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     signal?.throwIfAborted();
     options.onProgress?.(snapshot());
   };
-  periods[selected] = await load(specs[selected]);
+  periods[selected] = await load(specs[selected], selected);
   progress();
   const entries = Object.entries(specs).filter(
     ([name]) => name !== 'selected' && name !== selected,
@@ -157,7 +162,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     Array.from({ length: 2 }, async () => {
       while (next < entries.length) {
         const [name, spec] = entries[next++];
-        periods[name] = await load(spec);
+        periods[name] = await load(spec, name);
         progress();
       }
     }),
