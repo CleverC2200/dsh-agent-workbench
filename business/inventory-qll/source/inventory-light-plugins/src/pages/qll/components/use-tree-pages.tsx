@@ -1,6 +1,7 @@
 import { ownContextPart } from '../../../native/context';
 import { useEffect, useRef, useState } from 'react';
 import { Alert, Button, DataPagination } from '../../../dsh-ui/controls';
+import { DashboardTableSkeleton } from '../../../dsh-ui/workbench-loading';
 import { appPath } from '../../../../../qll/src/lib/app-path';
 import { workspaceViewKey } from '../../../../../qll/src/lib/workspace-stream';
 export function useTreePages(workspace: any, kind: 'structure' | 'aging' | 'orders') {
@@ -142,7 +143,7 @@ export function useTreePages(workspace: any, kind: 'structure' | 'aging' | 'orde
     if (!page) return null;
     return (
       <div aria-busy={!!page.loading} onClick={(event) => event.stopPropagation()}>
-        {page.loading && <p role="status">正在读取明细…</p>}
+        {page.loading && <DashboardTableSkeleton label="明细加载中" />}
         {page.error && (
           <Alert
             type="error"

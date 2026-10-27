@@ -1,6 +1,7 @@
 import { QueryErrors } from './query-errors';
 import React from 'react';
 import { LocalQueryForm } from './local-query-form';
+import { DashboardTableSkeleton } from '../inventory-aqkc/source/inventory-light-plugins/src/dsh-ui/workbench-loading';
 import {
   Table,
   DataPagination,
@@ -197,10 +198,12 @@ export function OriginalBusinessList({
       />
       {result?.status === 'select_customer' ? (
         <p className={css.empty}>请选择客户。</p>
+      ) : loading && aqkc ? (
+        <DashboardTableSkeleton label={`${view.title}加载中`} />
       ) : (
         renderTable
       )}
-      {loading && (fc || aqkc) && (
+      {loading && fc && (
         <p role="status" className={css.empty}>
           正在读取…
         </p>
