@@ -213,3 +213,49 @@ test('annual plan starts collapsed and keeps sync beside its detail title withou
   await expect(section.locator('table')).toBeVisible();
   await expect(section.getByRole('button', { name: '下载', exact: true })).toBeVisible();
 });
+
+test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {
+  const { page, frame, contexts } = await livePage(t, fixture);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const version = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await version.getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await version.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择年度计划CSV', { exact: true }).setInputFiles({
+    name: '年度小数核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,大类,数量\n2026-07,汤圆,12.5\n2026-07,汤圆,12.5\n2026-08,汤圆,12.5\n2026-09,汤圆,',
+    ),
+  });
+  const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await section.getByRole('button', { name: '展开年度销售计划' }).click();
+  const category = section
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  const july = category.locator('td').nth(1);
+  const august = category.locator('td').nth(2);
+  const september = category.locator('td').nth(3);
+  const total = category.locator('td').last();
+  await expect(july.locator('summary').first()).toHaveText('25');
+  await expect(august.locator('summary').first()).toHaveText('13');
+  await expect(total.locator('summary')).toHaveText('38（已读）');
+  await july.locator('summary').first().click();
+  await august.locator('summary').last().click();
+  await september.locator('summary').first().click();
+  await total.locator('summary').click();
+  await expect(august).toContainText('结果：-50%');
+  await expect(september).toContainText('数量缺失');
+  await expect(category).not.toContainText('代入：');
+  await expect(category).not.toContainText('12.5');
+  await expect
+    .poll(
+      () =>
+        contexts.at(-1)?.parts?.check?.annualSelection?.rows.filter((row) => row['数量'] === '12.5')
+          .length,
+    )
+    .toBe(3);
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: '下载', exact: true }).click();
+  const csv = await readFile(await (await download).path(), 'utf8');
+  assert.equal(csv.match(/12\.5/g)?.length, 3);
+});

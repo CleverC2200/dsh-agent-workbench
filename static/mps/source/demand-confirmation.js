@@ -622,6 +622,14 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const months = Array.from({ length: 12 }, (_value, index) => monthOffset(`${start}-07`, index));
     const recordsFor = (category, month) =>
       annual.filter((row) => row['大类'] === category && row['月份'] === month);
+    const missingReasons = (records) =>
+      [
+        ...new Set(
+          records
+            .filter((row) => row['数量'] === '')
+            .map((row) => (row['重复记录数'] ? '源粒度重复' : '数量缺失')),
+        ),
+      ].join('、');
     const absolute = (category, month) => {
       const records = recordsFor(category, month);
       if (!records.length) return '-';
@@ -638,7 +646,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：同月同大类有效数量相加；代入：${records.map((row) => (row['数量'] === '' ? (row['重复记录数'] ? '源粒度重复' : '数量缺失') : integer(row['数量']))).join(' + ')}；结果：${missing === records.length ? '-' : integer(total) + unit}。`,
+          `公式：同月同大类有效数量相加；结果：${missing === records.length ? '-' : integer(total) + unit}。${missing ? `缺项：${missingReasons(records)}。` : ''}`,
         ),
       );
     };
@@ -664,7 +672,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：（本月数量÷上月数量－1）×100%；代入：（${after}÷${before}－1）×100%；结果：${result}%。仅用于文件环比核对，显示最多六位小数。`,
+          `公式：（本月数量÷上月数量－1）×100%；结果：${result}%。仅用于文件环比核对，显示最多六位小数。`,
         ),
       );
     };
@@ -674,6 +682,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       );
       if (!records.some((row) => row['数量'] !== '')) return '-';
       const total = quantity(records, '数量');
+      const missing = missingReasons(records);
       return h(
         'details',
         {},
@@ -681,12 +690,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：7月至次年6月同大类已读有效数量相加；代入：${records
-            .slice(0, 25)
-            .map((row) => (row['数量'] === '' ? '缺失' : row['数量']))
-            .join(
-              ' + ',
-            )}${records.length > 25 ? '…完整输入见年度明细导出' : ''}；结果：${integer(total)}${unit}。未覆盖月份不补零，完整年度仍需核齐。`,
+          `公式：7月至次年6月同大类已读有效数量相加；结果：${integer(total)}${unit}。${missing ? `缺项：${missing}。` : ''}未覆盖月份不补零，完整年度仍需核齐。`,
         ),
       );
     };
