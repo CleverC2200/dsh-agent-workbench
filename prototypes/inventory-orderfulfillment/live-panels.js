@@ -60,6 +60,8 @@ const columns=[
 export function renderCoordination(result,{reset=true}={}) {
   if(reset){coordinationRows=result?.rows??[];coordinationPage=0;}
   const table=document.getElementById('itemCoordinationTable');
+  table.parentElement.classList.add('fulfillment-table-scroll');
+  if(!table.querySelector('colgroup')) { const widths=document.createElement('colgroup'); for(let i=0;i<columns.length;i++){const col=document.createElement('col');col.style.width=(i===0?80:i===1?130:i===2?260:145)+'px';widths.append(col);} table.prepend(widths); }
   const headers=table.tHead;headers.replaceChildren();
   const groups=headers.insertRow(),labels=headers.insertRow();
   for(const [index,name] of ['基本信息','销售信息','生产信息','库存信息'].entries()) {

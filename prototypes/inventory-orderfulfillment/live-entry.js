@@ -309,9 +309,10 @@ function orderPage(body,context,reset,render=renderOrders) {
     previous.type=next.type='button';previous.textContent='上一页';next.textContent='下一页';info.setAttribute('aria-live','polite');
     nav.append(count,size,previous,info,next);
     const table=body.closest('table');
-    if(table.parentElement.id==='itemInventoryPanel') {
+    if(!table.parentElement.classList.contains('fulfillment-table-scroll')) {
       const scroll=document.createElement('div');
-      scroll.className='item-inventory-table-scroll';
+      scroll.className='fulfillment-table-scroll';
+      scroll.tabIndex=0;scroll.setAttribute('aria-label','表格滚动区域');
       table.before(scroll);scroll.append(table);
     }
     table.parentElement.after(nav);
@@ -596,7 +597,7 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
       const header=table.createTHead().insertRow();
       for(const title of ['状态','订单总数','超时订单','预警订单','未开订单数']){const th=document.createElement('th');th.textContent=title;header.append(th);}
       const inner=table.createTBody();
-      for(const stage of row.stages) {
+      for(const stage of row.stages.filter(item=>!['已完成','状态未确认'].includes(item.name))) {
         const line=inner.insertRow();
         for(const text of [stage.name,...[stage.total,stage.overdue,stage.warning,stage.preparing].map(n=>n+' 张')])line.append(cell(text));
         for(const [i,ids] of [stage.orders,stage.orders,stage.overdueOrders,stage.warningOrders,stage.preparingOrders].entries()) {
