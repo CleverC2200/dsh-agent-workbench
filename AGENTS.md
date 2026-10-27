@@ -1,5 +1,7 @@
 # Workbench 实现入口
 
+在插件拆分项目内修改功能、调试界面或本地启动时，先读取项目根 `docs/agents/dependency-preparation.md` 的“源码调试与安装验收”，按当前任务选择源码反馈或安装验收，再执行构建。
+
 先从项目根的 `docs/agents/current-development.md` 与本票冻结输入确认自己的 checkout；根同名历史克隆不是默认实现目标。先读本票范围，再读此目录的指引。
 
 ## 归属与当前接口
