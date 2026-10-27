@@ -1,3 +1,4 @@
+import { inventoryAverageAge } from '../../../../shared/inventory-age';
 import { unpackAtomicPage } from '../../../../shared/atomic-page';
 import sqlConfiguration from '../../../sql.config.json';
 import { createAgentQueries } from '../../../../shared/agent-query';
@@ -403,7 +404,7 @@ export async function readConfiguredStockPage(
   };
 }
 
-/** Batch aggregates supply base list ages and the existing maximum-age card in two reads. */
+/** Batch aggregates supply base list ages and the quantity-weighted average-age card in two reads. */
 export async function readConfiguredHealthSummary(
   bases: string[] | undefined,
   signal?: AbortSignal,
@@ -441,6 +442,9 @@ export async function readConfiguredHealthSummary(
   const rows = result.rows.map((row: any) => ({
     level: row.level,
     average_age: knownNumber(row.average_age),
+    weighted_age_sum: knownNumber(row.weighted_age_sum),
+    age_weight_qty: knownNumber(row.age_weight_qty),
+    unknown_age_qty: knownNumber(row.unknown_age_qty),
     max_age: knownNumber(row.max_age),
     row_count: knownNumber(row.row_count) ?? 0,
     age_valid_count: knownNumber(row.age_valid_count) ?? 0,
@@ -452,6 +456,7 @@ export async function readConfiguredHealthSummary(
     snapshotDate,
     summary: rows.length
       ? {
+          average_age: inventoryAverageAge(...rows),
           max_age: ages.length ? Math.max(...ages) : null,
           row_count: rows.reduce((n: number, row: any) => n + row.row_count, 0),
           age_valid_count: rows.reduce((n: number, row: any) => n + row.age_valid_count, 0),
@@ -500,7 +505,9 @@ export async function readConfiguredStockSummary(
   if (options.structure)
     Object.assign(values, {
       bases_enabled: true,
-      bases: selectedBases?.length ? selectedBases : ['华东', '华南', '西南', '遂平', '郑州'],
+      bases: selectedBases?.length
+        ? selectedBases
+        : ['华东', '华南', '西南', '遂平', '郑州', '濮阳'],
       group_level: options.structure.groupBy,
       structure_category: options.structure.category || null,
       stock_only: !!options.structure.stockOnly,

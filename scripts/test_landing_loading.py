@@ -34,8 +34,9 @@ class LandingInventoryTests(unittest.TestCase):
  def test_inventory_only_projection_matches_full_summary_with_bad_and_target_only_skus(self):
   for sku,qty,category in [('A',100,'汤圆'),('B',30,None),('C',80,None),('D',7,'汤圆')]:
    self.insert('agents_scm_stock_detail_d',data_month='2026-10-01',the_date='2026-10-22',belong_base='郑州',material_code=sku,current_stock=qty)
+   self.insert('agents_scm_inventory_sku_data_d',month_date='20261022',warehouse_classify='01',belong_base='郑州',material_code=sku,live_qty=None if sku=='D' else qty)
    if category:self.insert('agents_scm_goods_inventory_turnover_data_m',year_month='2026-10-01',inventory_version='滚动',belong_base='郑州',material_code=sku,product_categ_name=category)
-  # Duplicate stock is unknown, not doubled or substituted with a target.
+  # APS rejects duplicate daily stock; base stock keeps its independent batch unknown.
   self.insert('agents_scm_stock_detail_d',data_month='2026-10-01',the_date='2026-10-22',belong_base='郑州',material_code='D',current_stock=9)
   self.insert('agents_order_execute_isontime_mi',new_material_code='B',product_categ_name='饺鲜说')
   self.insert('agents_scm_material_in_out_summary_d',material_code='C',product_categ_name='馄饨')

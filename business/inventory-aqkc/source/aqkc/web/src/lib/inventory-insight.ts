@@ -47,6 +47,13 @@ export function buildInventoryInsight(input: {
   shortage: number | null;
   fulfillment: number | null;
   stale?: boolean;
+  coverage?: {
+    total: number;
+    inventory: number;
+    target: number;
+    matched: number;
+    gap: number | null;
+  };
 }) {
   const skus = input.skus.filter((row) => input.bases.includes(row.base));
   const pending =
@@ -157,9 +164,14 @@ export function buildInventoryInsight(input: {
   const completeRanking =
     classified.length === records.length &&
     (deficit ? reconciled && !unmapped : records.every((row) => score(row) !== null));
+  const coverage = input.coverage;
+  const incomplete =
+    coverage && coverage.total > 0
+      ? `库存覆盖${coverage.inventory}/${coverage.total}、目标覆盖${coverage.target}/${coverage.total}个基地SKU；${coverage.matched > 0 && coverage.gap !== null ? `同口径可比${coverage.matched}个基地SKU，库存${coverage.gap === 0 ? '与目标持平' : `${coverage.gap > 0 ? '高于' : '低于'}目标${qty(Math.abs(coverage.gap))}`}` : '暂无同口径可比库存'}，未覆盖部分不计入高低库存判断`
+      : `${current === null && target === null ? '库存和目标' : current === null ? '库存' : '目标'}数据未覆盖全部SKU，不能判断整体高低库存`;
   const core =
     gap === null
-      ? `目标数据不完整，不能判断整体高低库存${shortage === null ? '' : `；当前订单缺口${qty(shortage)}`}`
+      ? `${incomplete}${shortage === null ? '' : `；当前订单缺口${qty(shortage)}`}`
       : `库存${current === null ? '未知' : qty(current)}${gap === 0 ? '与目标持平' : `${gap > 0 ? '高于' : '低于'}目标${qty(Math.abs(gap))}`}，${shortage === null ? '当前缺口未核实' : `订单缺口${qty(shortage)}`}，${deficit ? (gap >= 0 ? '总量与交付需求存在结构性矛盾' : '低库存已伴随订单交付压力') : shortage === 0 ? (gap < 0 ? '属于潜在缺货而非已发生缺货' : '当前未见已发生缺货') : '不能确认交付影响'}`;
   const lines = [
     `核心判断：${core}。${names ? `${completeRanking ? '主要对象' : '已核实对象'}：${names}。` : ''}`,
@@ -236,7 +248,15 @@ export function buildInventoryInsight(input: {
     `库存结构：${stockJudgment}${ageTotal !== null && ageTotal > 0 ? `；60天以上${qty(ageTotal)}` : ''}${future !== null && future > 0 ? `，未来${futureDays}日新增超龄${qty(future)}，两者不相加` : ''}。`,
   );
   const missing: string[] = [];
-  if (gap === null) missing.push('目标不全');
+  if (gap === null) {
+    if (coverage) {
+      if (coverage.inventory < coverage.total) missing.push('部分SKU无库存记录');
+      if (coverage.target < coverage.total) missing.push('部分SKU无目标记录');
+    } else {
+      if (current === null) missing.push('库存不全');
+      if (target === null) missing.push('目标不全');
+    }
+  }
   if (shortage === null) missing.push('当前缺口未核实');
   if (!completeRanking || !names || top.length < 3) missing.push('不足以确认完整前三对象');
   if (!completeAge) missing.push('货龄明细不全');

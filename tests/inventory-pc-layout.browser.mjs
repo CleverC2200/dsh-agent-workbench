@@ -731,13 +731,11 @@ test('PC trend chart labels keep real glyph size and complete dates inside narro
       ),
     )
     .toBe('ready');
-  assert.equal(
-    await next
-      .getByLabel('趋势指标')
-      .locator('option[value=orders]')
-      .evaluate((option) => option.disabled),
-    true,
-  );
+  await next.getByRole('button', { name: '趋势指标' }).click();
+  await expect(
+    next.getByRole('listbox', { name: '趋势指标' }).getByRole('option', { name: '订单缺口趋势' }),
+  ).toHaveAttribute('aria-disabled', 'true');
+  await next.getByRole('button', { name: '趋势指标' }).press('Escape');
   await expect(next).not.toContainText('订单与平均货龄历史来源未接入');
   if (evidence) await page.screenshot({ path: evidence + '/chart-keyboard-100-12.png' });
 });

@@ -105,7 +105,7 @@ test('missing targets/orders/age remain unknown and do not become healthy or a f
     assert.equal(insight.metrics[field], null, field);
   assert.equal(insight.completeRanking, false);
   assert.equal(insight.completeAge, false);
-  assert.match(insight.text, /目标数据不完整/);
+  assert.match(insight.text, /目标数据未覆盖全部SKU/);
   assert.match(insight.text, /当前缺口缺少证据/);
   assert.ok(insight.missing.includes('货龄明细不全'));
 });
@@ -173,4 +173,26 @@ test('workspace normalization preserves exact risk evidence and business snapsho
     },
   });
   assert.equal(bad.workbench.inventoryInsight, undefined);
+});
+
+test('partial coverage reports matched stock gap and separates inventory coverage from target coverage', () => {
+  const input = {
+    bases: ['郑州'],
+    skus: [sku('郑州', 'A', null, 100)],
+    pending: null,
+    age: null,
+    shortage: 12,
+    fulfillment: null,
+  };
+  const missingStock = buildInventoryInsight(input);
+  assert.match(missingStock.text, /库存数据未覆盖全部SKU/);
+  assert.doesNotMatch(missingStock.text, /目标数据不完整/);
+  const covered = buildInventoryInsight({
+    ...input,
+    coverage: { total: 100, inventory: 90, target: 80, matched: 70, gap: -50 },
+  });
+  assert.match(covered.text, /库存覆盖90\/100、目标覆盖80\/100个基地SKU/);
+  assert.match(covered.text, /同口径可比70个基地SKU，库存低于目标50件/);
+  assert.match(covered.text, /未覆盖部分不计入高低库存判断/);
+  assert.match(covered.text, /当前订单缺口12件/);
 });
