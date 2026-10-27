@@ -1,5 +1,6 @@
 import { call } from './channel.js';
 import { sqlQueryError } from './query-error.js';
+import { configuredQueryFreshAfter } from './query-cache';
 
 export type GeaSqlRow = Record<string, string | number | null | undefined>;
 export type GeaSqlParameters = Record<string, unknown>;
@@ -41,7 +42,11 @@ async function read(
   const key = JSON.stringify(parameters);
   let request = options.signal ? undefined : pending.get(key);
   if (!request) {
-    request = call('sql', parameters, { signal });
+    request = call(
+      'sql',
+      { ...parameters, cacheFreshAfter: configuredQueryFreshAfter() },
+      { signal },
+    );
     if (!options.signal) pending.set(key, request);
   }
   try {

@@ -1,4 +1,6 @@
+import { renderSummaryDetails } from './summary-details.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
+import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
 import { ready, call, publish, reportElements, action } from '../../business/shared/channel.js';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { quotePage } from '../../src/page-interaction/quote.ts';
@@ -47,7 +49,7 @@ const reader =
         }
         return call(
           'sql',
-          { queryId: options.queryId, parameters: options.values },
+          { queryId: options.queryId, parameters: options.values, freshAfter: configuredQueryFreshAfter() },
           { signal: options.signal },
         );
       })
@@ -139,6 +141,7 @@ function placeholder(body, message = '待数据接入') {
   target.textContent = message;
 }
 function clear(message = '正在读取当前授权数据…') {
+  document.querySelectorAll('.metric-extra,.metric-period,.metric-coverage').forEach(node=>node.remove());
   for(const state of orderPagination.values()){state.context=null;state.page=0;state.nav.hidden=true;}
   clearPanels();
   currentDetailData=null;
@@ -756,6 +759,7 @@ function renderSummary(results, selected) {
       if(unopened) unopened.textContent=value(open,'preparing_orders',get(results,'orders.open.summary'))+' 张';
     }
   }
+  renderSummaryDetails(document,computed,enrichedFacts(results)?.rows??[],selected,get(results,'shortage.detail'));
   const h3 = document.querySelector('#fulfillmentView > .fulfillment-analysis h3');
   if (h3)
     h3.textContent = Number(summary?.source_orders)===0?'当前授权与日期范围暂无订单':localPreview
@@ -831,10 +835,10 @@ async function load() {
   }
   saveView();
   const ids = [
+    'orders.summary',
     'orders.facts',
     'execution.trace',
     'trace.detail',
-    'orders.summary',
     'shortage.detail',
     'sku.detail',
     'sku.age',

@@ -5,5 +5,7 @@ export const configuredQueryFreshAfter = () => freshAfter;
 export function refreshConfiguredQueries() {
   freshAfter = Date.now();
 }
-if (typeof window !== 'undefined')
+if (typeof window !== 'undefined') {
   window.addEventListener('gea-page-refresh', refreshConfiguredQueries);
+  window.addEventListener('light-refresh', refreshConfiguredQueries);
+}
