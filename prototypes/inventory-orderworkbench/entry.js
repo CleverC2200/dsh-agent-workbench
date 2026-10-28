@@ -115,6 +115,21 @@ document.addEventListener('click', event => {
     showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
   }
 }, true);
+// Hosted pages keep native form navigation disabled; submit only the page-owned action.
+document.addEventListener('click', event => {
+  const button = event.target.closest('button[type="submit"]');
+  const form = button?.form;
+  if (!form?.matches('.wb-adopt-form, .wb-task-edit-form')) return;
+  event.preventDefault();
+  if (form.reportValidity()) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.target.tagName !== 'INPUT') return;
+  const form = event.target.form;
+  if (!form?.matches('.wb-adopt-form, .wb-task-edit-form')) return;
+  event.preventDefault();
+  form.querySelector('button[type="submit"]')?.click();
+});
 let pendingAdoption = null;
 let adoptReturnFocus = null;
 const metricDefinitions = [
