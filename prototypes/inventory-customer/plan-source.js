@@ -1,6 +1,6 @@
 export const CUSTOMER_PLAN_SQL = `
 WITH snapshot AS (
-  SELECT MAX(stat_date) AS inventory_date FROM agents_scm_cust_jxc_ai_daliy_d
+  SELECT MAX(create_date) AS inventory_date FROM agents_scm_cust_plan_order_analysis_d
 ), plan_date AS (
   SELECT MAX(create_date) AS plan_date FROM agents_scm_cust_plan_order_analysis_d
   WHERE create_date <= (SELECT inventory_date FROM snapshot)
@@ -21,8 +21,8 @@ WITH snapshot AS (
   WHERE create_date = (SELECT plan_date FROM plan_date)
   GROUP BY cust_code, material_code
 ), inventory_keys AS (
-  SELECT DISTINCT cust_code, material_code FROM agents_scm_cust_jxc_ai_daliy_d
-  WHERE stat_date = (SELECT inventory_date FROM snapshot)
+  SELECT DISTINCT cust_code, material_code FROM agents_scm_cust_plan_order_analysis_d
+  WHERE create_date = (SELECT inventory_date FROM snapshot)
 )
 SELECT k.cust_code, MAX(p.plan_date) AS plan_snapshot_date,
   COUNT(p.monthly_plan_qty) AS monthly_plan_qty_coverage, SUM(p.monthly_plan_qty) AS monthly_plan_qty,
@@ -49,5 +49,10 @@ GROUP BY k.cust_code ORDER BY k.cust_code
 
 export function mergeCustomerPlanRows(rows, plans) {
   const byCustomer = new Map(plans.map(row => [String(row.cust_code), row]));
-  return rows.map(row => ({ ...row, ...(byCustomer.get(String(row.cust_code)) ?? {}) }));
+  return rows.map(row => {
+    const plan = byCustomer.get(String(row.cust_code));
+    if (!plan?.plan_snapshot_date) return { ...row };
+    if (plan && plan.plan_snapshot_date !== row.snapshot_date) throw Error('CUSTOMER_PLAN_SNAPSHOT_CHANGED');
+    return { ...row, ...plan };
+  });
 }
