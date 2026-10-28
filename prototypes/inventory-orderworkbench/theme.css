@@ -39,3 +39,6 @@ html body {
   background: #fff4df;
   color: #9a5a00;
 }
+
+table[class^='wb-'] :is(th, td) { text-align: center !important; vertical-align: middle; }
+table[class^='wb-'] :is(.wb-region-order-count, .category-toggle, .region-change-toggle) { text-align: center; }
