@@ -1,5 +1,6 @@
 import type { PageExecutionConnection, WorkbenchPageExecution } from './frame.ts';
 import { startPageBridgeClient } from './page-interaction/page-bridge/client.ts';
+import { fulfillmentSimulationRequest } from './fulfillment-simulation-transport.ts';
 
 /** One owned HTML port/lease. Switching identity or reference destroys this exact connection. */
 export function connectHtmlFrame(
@@ -174,6 +175,12 @@ export function connectHtmlFrame(
             AbortSignal.any([signal, lifetime.signal, task.signal]),
           );
           result = { sent: true };
+        } else if (message.method === 'fulfillment-simulation') {
+          result = await fulfillmentSimulationRequest(
+            connection.page.id,
+            message.parameters,
+            AbortSignal.any([signal, lifetime.signal, task.signal]),
+          );
         } else if (
           ['sql', 'workspace', 'access', 'context', 'branch-dms', 'insight'].includes(
             message.method,

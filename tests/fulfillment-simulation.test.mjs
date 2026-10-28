@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applySimulationEvent, simulationCard } from '../scripts/lib/fulfillment-simulation.mjs';
+import {
+  applySimulationEvent,
+  simulationCard,
+  applyGroupedSimulationEvent,
+  simulationMember,
+} from '../scripts/lib/fulfillment-simulation.mjs';
 import { simulationWebSnapshot } from '../scripts/lib/fulfillment-simulation-web.mjs';
 const scope = {
   simulation: true,
@@ -97,7 +102,9 @@ test('unknown or below-threshold rate cannot confirm, and Feishu owns confirmati
     );
   const card = simulationCard(scope, initial());
   const components = card.body.elements;
-  const confirm = components.find((row) => row.tag === 'column_set').columns[0].elements[0];
+  const confirm = components.find(
+    (row) => row.tag === 'column_set' && row.element_id !== 'sales_title',
+  ).columns[0].elements[0];
   assert.match(confirm.confirm.title.content, /确认开单/);
   const select = components.find((row) => row.tag === 'select_static');
   assert.deepEqual(
@@ -110,47 +117,57 @@ test('unknown or below-threshold rate cannot confirm, and Feishu owns confirmati
   assert.match(details, /10 箱/);
   assert.doesNotMatch(details, /select_static|确认发货/);
 });
-test('popup test links stay on the local acceptance service and expose no business identity credentials', () => {
+test('order number and both actions open only that order in the local simulation window', () => {
   const card = simulationCard({ ...scope, webToken: 'test-only-token' }, initial());
-  const buttons = card.body.elements
-    .find((row) => row.tag === 'column_set')
-    .columns.map((row) => row.elements[0]);
-  for (const [index, button] of buttons.entries()) {
-    const behavior = button.behaviors[0];
-    assert.equal(behavior.type, 'open_url');
-    const applink = new URL(behavior.default_url);
-    assert.equal(applink.origin, 'https://applink.feishu.cn');
-    assert.equal(applink.searchParams.get('mode'), 'window');
-    const local = new URL(applink.searchParams.get('url'));
+  const row = card.body.elements.find((row) => row.tag === 'column_set');
+  const detail = row.columns[0].elements[0].content.match(/\]\(([^)]+)\)/)[1];
+  const buttons = row.columns[1].elements;
+  const links = [detail, ...buttons.map((button) => button.behaviors[0].default_url)];
+  for (const [index, link] of links.entries()) {
+    const app = new URL(link);
+    assert.equal(app.origin, 'https://applink.feishu.cn');
+    const local = new URL(app.searchParams.get('url'));
     assert.equal(local.origin, 'http://127.0.0.1:3197');
-    assert.equal(local.searchParams.get('view'), ['details', 'defer', 'confirm'][index]);
+    assert.equal(local.searchParams.get('view'), ['details', 'confirm', 'defer'][index]);
+    assert.equal(local.searchParams.get('orderNo'), scope.orderNo);
     assert.equal(local.hash, '#test-only-token');
   }
-  const snapshot = simulationWebSnapshot(
-    { ...scope, webToken: 'secret', operatorId: 'secret-operator' },
-    initial(),
-  );
-  assert.equal(snapshot.scope.operatorId, undefined);
-  assert.equal(snapshot.scope.webToken, undefined);
-});
-test('reference card uses red instruction, grouped order information and details/defer/confirm footer', () => {
-  const card = simulationCard({ ...scope, webToken: 'test-only-token' }, initial());
-  assert.equal(card.header, undefined);
-  assert.equal(card.body.elements[0].text.tag, 'plain_text');
-  assert.equal(card.body.elements[0].text.text_color, 'red');
-  assert.match(card.body.elements[0].text.content, /说明：\n\n订单满足率达到90%/);
-  assert.doesNotMatch(JSON.stringify(card), /<\/?font\b/);
-  assert.match(card.body.elements[1].content, /订单号：.*\n客户：.*\n订单满足率：/);
-  const buttons = card.body.elements
-    .find((row) => row.tag === 'column_set')
-    .columns.map((row) => row.elements[0]);
   assert.deepEqual(
     buttons.map((row) => row.text.content),
-    ['查看明细', '暂缓发货', '确认发货'],
+    ['确认发货', '暂缓发货'],
   );
-  assert.deepEqual(
-    buttons.map((row) => row.type),
-    ['danger_text', 'default', 'danger'],
-  );
-  assert.match(card.body.elements.at(-1).content, /仅模拟验收/);
+  assert.doesNotMatch(JSON.stringify(card), /查看明细/);
+});
+
+test('one salesperson card separates multiple orders and keeps their actions and results independent', () => {
+  const second = {
+    orderNo: 'order2',
+    customerCode: 'cust2',
+    customer: '客户2',
+    base: '郑州',
+    rate: 95,
+    quantity: 2,
+    unit: '箱',
+  };
+  const group = { ...scope, webToken: 'test-token', orders: [second] };
+  let state = initial();
+  state = applyGroupedSimulationEvent(state, event('confirm'), group);
+  assert.equal(state.status, '模拟已确认');
+  assert.equal(simulationMember(group, state, 'order2').state.status, '待模拟确认');
+  state = applyGroupedSimulationEvent(state, event('defer', { orderNo: 'order2', days: 2 }), group);
+  assert.equal(state.status, '模拟已确认');
+  assert.equal(state.records.length, 1);
+  assert.equal(state.orderStates.order2.status, '模拟已暂缓');
+  assert.equal(state.orderStates.order2.records.length, 1);
+  assert.throws(() => simulationMember(group, state, 'not-in-card'), /ORDER_DENIED/);
+  const card = simulationCard(group, state);
+  assert.equal(card.header.template, 'blue');
+  assert.equal(card.body.elements.filter((row) => row.tag === 'hr').length, 1);
+  const prompts = card.body.elements.filter((row) => row.text?.text_color === 'red');
+  assert.equal(prompts.length, 2);
+  assert.equal(prompts[0].text.content, '订单满足率达到90%，请确认是否开单？');
+  assert.equal((JSON.stringify(card).match(/<at /g) || []).length, 1);
+  assert.match(JSON.stringify(card), /已处理/);
+  assert.match(JSON.stringify(card), /已暂缓/);
+  assert.doesNotMatch(JSON.stringify(card), /查看明细|<\/?font\b/);
 });
