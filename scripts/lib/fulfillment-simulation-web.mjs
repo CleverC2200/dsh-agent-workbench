@@ -6,8 +6,8 @@ export const simulationWebHtml = `<!doctype html><html lang="zh-CN"><head><meta 
 <dialog id="modal" aria-labelledby="title"><div class="head"><h2 id="title"></h2></div><div class="body" id="content"></div><div class="foot actions"><button id="cancel">取消</button><button id="submit" class="primary">确认</button></div></dialog>
 <script>
 const token=decodeURIComponent(location.hash.slice(1));history.replaceState(null,'',location.pathname+location.search);
-const $=id=>document.getElementById(id);let snapshot,action,busy=false;
-async function api(method,body){const response=await fetch('/simulation/api',{method,headers:{'X-Simulation-Token':token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw Error(data.error||'模拟服务不可用');return data;}
+const $=id=>document.getElementById(id);const orderNo=new URLSearchParams(location.search).get('orderNo');let snapshot,action,busy=false;
+async function api(method,body){const response=await fetch('/simulation/api'+(orderNo?'?orderNo='+encodeURIComponent(orderNo):''),{method,headers:{'X-Simulation-Token':token,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=await response.json();if(!response.ok)throw Error(data.error||'模拟服务不可用');return data;}
 function render(){const s=snapshot.scope;$('order').textContent='订单号：'+s.orderNo+'\\n客户：'+s.customer+'\\n满足率：'+s.rate+'% · 总数量：'+s.quantity+' '+s.unit;$('status').textContent=snapshot.state.status+'\\n'+(snapshot.state.records.at(-1)?.summary||'尚未操作');$('confirm').disabled=!(s.rate>=90&&s.rate<=100);}
 function text(tag,value,parent=$('content')){const el=document.createElement(tag);el.textContent=value;parent.append(el);return el;}
 function open(kind){if(!snapshot||busy)return;action=kind;$('content').replaceChildren();$('submit').hidden=kind==='details';$('submit').disabled=false;$('cancel').textContent=kind==='details'?'返回':'取消';
@@ -17,7 +17,7 @@ if(kind==='details'){$('title').textContent='订单明细';for(const line of sna
 $('modal').showModal();}
 for(const kind of ['confirm','defer','details'])$(kind).onclick=()=>open(kind);
 $('cancel').onclick=()=>{if(!busy)$('modal').close()};$('modal').addEventListener('cancel',event=>{if(busy)event.preventDefault()});
-$('submit').onclick=async()=>{if(busy||!['confirm','defer'].includes(action))return;const days=action==='defer'?Number($('days').value):undefined;if(action==='defer'&&(!Number.isInteger(days)||days<1||days>7))return;busy=true;$('submit').disabled=true;$('cancel').disabled=true;$('error').textContent='';try{snapshot=await api('POST',{action,days,eventId:crypto.randomUUID()});render();$('modal').close();}catch(error){$('error').textContent=error.message;}finally{busy=false;$('submit').disabled=false;$('cancel').disabled=false;}};
+$('submit').onclick=async()=>{if(busy||!['confirm','defer'].includes(action))return;const days=action==='defer'?Number($('days').value):undefined;if(action==='defer'&&(!Number.isInteger(days)||days<1||days>7))return;busy=true;$('submit').disabled=true;$('cancel').disabled=true;$('error').textContent='';try{snapshot=await api('POST',{action,days,orderNo:orderNo||snapshot.scope.orderNo,eventId:crypto.randomUUID()});render();$('modal').close();}catch(error){$('error').textContent=error.message;}finally{busy=false;$('submit').disabled=false;$('cancel').disabled=false;}};
 api('GET').then(data=>{snapshot=data;render();const view=new URLSearchParams(location.search).get('view');if(['confirm','defer','details'].includes(view))open(view)}).catch(error=>{$('error').textContent=error.message;$('status').textContent='未读取到模拟订单';});
 </script></body></html>`;
 
