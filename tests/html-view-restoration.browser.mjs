@@ -664,7 +664,13 @@ test('received MPS context covers the seven current steps and preserves unassess
           Object.keys(window.mockContexts['plan-category-production']?.parts ?? {}).sort(),
         ),
       )
-      .toEqual(['navigation', key].sort());
+      .toEqual(
+        [
+          'navigation',
+          key,
+          ...(key === 'check' ? ['source-inputs-basic', 'source-inputs-parameters'] : []),
+        ].sort(),
+      );
     await expect
       .poll(() =>
         page.evaluate(() =>
@@ -673,15 +679,18 @@ test('received MPS context covers the seven current steps and preserves unassess
             .map((row) => row.id),
         ),
       )
-      .toEqual(['step:' + key]);
+      .toEqual([
+        ...(key === 'check' ? ['step:source-inputs-parameters', 'step:source-inputs-basic'] : []),
+        'step:' + key,
+      ]);
     const data = await page.evaluate(
       (step) => window.mockContexts['plan-category-production'].parts[step],
       key,
     );
     if (key === 'check') {
       assert.equal(data.scope, 'local-check-only');
-      assert.equal(data.productSource, 'demo');
-      assert.equal(data.productCount, 15);
+      assert.equal(data.productSource, 'business-unread');
+      assert.equal(data.productCount, 0);
       assert.equal(data.sourceSummaries.report.rowCount, 0);
       assert.equal(data.businessSave, 'not-connected');
     }
@@ -689,7 +698,7 @@ test('received MPS context covers the seven current steps and preserves unassess
       assert.equal(data.unit, '件');
       assert.equal(data.businessSave, 'not-connected');
       assert.equal(data.nextStage, 'shared-snapshot');
-      assert.equal(data.sourceKind, 'demo');
+      assert.equal(data.sourceKind, 'unread');
       assert.equal(data.bases.length, 5);
       assert.equal(
         data.bases.some((base) => base.who === '濮阳'),
@@ -1043,13 +1052,23 @@ test('MPS Host context keeps the latest edited shipment input when an earlier va
     readHost = await publicMpsContext(t, page);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   await expect.poll(async () => (await readHost())?.parts?.navigation?.tab).toBe('check');
-  await page.evaluate(() => window.holdHostContext('ship'));
   const frame = page.frameLocator('iframe');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({
+    name: 'editable-ship.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-09,西南,A,产品,汤圆,系列,组,220,10,10,10,100,200,80',
+    ),
+  });
+  await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(1);
+  await page.evaluate(() => window.holdHostContext('ship'));
+  const input = frame.getByLabel('西南 剩余天数入库', { exact: true });
+  await input.fill('1000000');
+  await input.blur();
   await expect
     .poll(() => page.evaluate(() => window.heldHostContext?.parts?.navigation?.tab))
     .toBe('ship');
-  const input = frame.getByLabel('西南 剩余天数入库', { exact: true });
   await input.fill('2100000');
   await input.blur();
   await expect(input).toHaveValue('2100000');
@@ -1224,7 +1243,7 @@ for (const boundary of ['Session', 'identity']) {
     await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
     const frame = page.frameLocator('iframe');
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('129 个单品'));
+    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('0 个单品'));
     await frame.locator('body').evaluate(() => {
       const original = File.prototype.text;
       File.prototype.text = function () {
@@ -1253,7 +1272,7 @@ for (const boundary of ['Session', 'identity']) {
     await frame.locator('body').evaluate(() => window.releaseShipmentFile());
     await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
     await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('129 个单品'));
+    await expect(frame.locator('.sp-count')).toHaveText(Array(5).fill('0 个单品'));
     await expect(frame.getByRole('region', { name: '发货本地核对' })).not.toContainText(
       'old-identity.csv',
     );
@@ -1267,7 +1286,7 @@ test('MPS S2 publishes actual local inputs and carry output within the Host cont
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
   await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
-  await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(645);
+  await expect.poll(async () => (await readHost())?.parts?.ship?.rowCount).toBe(0);
   const demo = await readHost();
   assert.ok(JSON.stringify(demo).length < 100000);
   await frame.getByLabel('选择发货输入CSV', { exact: true }).setInputFiles({

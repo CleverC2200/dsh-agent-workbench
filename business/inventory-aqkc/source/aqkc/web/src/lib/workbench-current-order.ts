@@ -1,8 +1,8 @@
 /** Field scope follows currentOrderCtes; interpretation must not narrow an allocation to one stage. */
 export const currentOrderMetricScopes = {
-  orderQuantity: '当前未备单完成订单需求量；不含已备单完成并下发WMS的订单',
-  preparingQuantity: '未备单订单逐订单与SKU截零后汇总的还需满足量',
-  allocatedQuantity: '同一未备单完成订单自身的实占数量；不使用库存总占用量',
+  orderQuantity: '当前有效且未发货完成订单的需求件数，包含未备单完成和备单完成未发货订单',
+  preparingQuantity: '当前未发货完成订单逐订单与SKU截零后汇总的还需满足件数',
+  allocatedQuantity: '同一批当前未发货完成订单自身的实占件数，不使用库存总占用量',
 } as const;
 
 export interface CurrentOrderBase {

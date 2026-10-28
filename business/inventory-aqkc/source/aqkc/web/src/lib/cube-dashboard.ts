@@ -2720,18 +2720,18 @@ function configuredSummaryWorkspace(
     '数据边界：',
     `数据边界：库存快照${day}，目标月份${scope.targetMonthLabel}、版本${scope.versionLabel}；差额覆盖${all.gapCount}/${all.n}个基地SKU，周转覆盖${all.turnCount}/${all.n}个基地SKU，均只比较同一匹配范围；`,
   );
-  // The daily fact provides an unprepared subset, not the full pending-order total.
+  // All three current metrics share the same effective, not fully shipped orders.
   const orderCard = {
     title: '当前订单',
     value: displayCurrentQuantity(currentRows, 'demand'),
     helpers: [
       {
-        label: '未备单订单占用',
-        value: displayCurrentQuantity(currentRows, 'allocated', '箱'),
+        label: '未发货订单占用',
+        value: displayCurrentQuantity(currentRows, 'allocated', '件'),
       },
       {
         label: '缺货量',
-        value: displayCurrentQuantity(currentRows, 'shortage', '箱'),
+        value: displayCurrentQuantity(currentRows, 'shortage', '件'),
       },
     ],
     tone: 'neutral' as const,
@@ -2784,7 +2784,8 @@ function configuredSummaryWorkspace(
     },
     {
       ...orderCard,
-      coverage: `快照 ${day} · 范围 ${all.sum('ordered_valid_count')}/${all.n} 个基地SKU；未备单与占用分别展示`,
+      coverage:
+        '当前有效未发货完成订单，包含未备单完成和备单完成未发货；需求、占用及缺货统一按件计算',
     },
   ];
   const workspace = unavailableWorkspace();

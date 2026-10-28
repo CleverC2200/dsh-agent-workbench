@@ -3,7 +3,7 @@ from pathlib import Path
 import json,re,copy
 ROOT=Path(__file__).resolve().parents[1]
 path=ROOT/'business/inventory-fc/sql.config.json';config=json.loads(path.read_text())
-source=(ROOT/'business/shared/current-shortage-source.sql').read_text().strip()
+source=(ROOT/'business/inventory-fc/current-shortage-source.sql').read_text().strip()
 canonical_ctes,canonical_select=source.rsplit('\nSELECT',1)
 canonical_ctes=canonical_ctes.removeprefix('WITH ')
 # Keep the same source/status/allocation/three-stage formula as the current-order card.

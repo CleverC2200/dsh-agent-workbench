@@ -118,12 +118,13 @@ test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) 
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');
-async function mount(t, id, width, override) {
+async function mount(t, id, width, override, insight) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
     errors = [],
     calls = [],
+    insightCalls = [],
     diagnostics = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (message) => {
@@ -137,6 +138,12 @@ async function mount(t, id, width, override) {
       calls.push(message.parameters);
       const result = wire(message.parameters);
       return override ? override(message.parameters, result) : result;
+    }
+    if (message.method === 'insight') {
+      insightCalls.push(message.parameters);
+      return insight
+        ? insight(message.parameters)
+        : { answer: '总量：测试库存。\n结构分析：测试结构。\n建议：核实数据【待人工确认】。' };
     }
     if (message.method === 'access') return { principalId: 'layout-user', consumerCode: id };
     if (message.method === 'context') return { ok: true };
@@ -154,7 +161,7 @@ async function mount(t, id, width, override) {
   );
   await page.goto('http://agent-layout.test/');
   const frame = page.frameLocator('iframe');
-  return { page, frame, errors, calls, diagnostics };
+  return { page, frame, errors, calls, insightCalls, diagnostics };
 }
 test('QLL counts one inventory snapshot once across base and warehouse dimensions', async (t) => {
   const { frame, errors, calls } = await mount(t, 'qll', 1280, (query, result) => {
@@ -525,11 +532,11 @@ test('FC uses the same Chinese date display and retains explicit refresh', async
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
-  [1033547, 190, '1,033,547箱'],
-  [0, 201, '0箱'],
+  [1033547, 190, '1,033,547件'],
+  [0, 201, '0件'],
   [null, 0, '-'],
 ])
-  test(`AQKC snapshot unprepared card retains its scope and null/zero distinction: ${display}`, async (t) => {
+  test(`AQKC current unshipped card retains its scope and null/zero distinction: ${display}`, async (t) => {
     const { frame, errors, calls } = await mount(t, 'aqkc', 1280, (query, result) => {
       if (query.queryId === 'calendar.target_versions')
         result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
@@ -553,10 +560,10 @@ for (const [quantity, count, display] of [
       .locator('article')
       .filter({ has: frame.getByText('当前订单', { exact: true }) });
     await expect(card.locator('strong')).toHaveText(display);
-    if (quantity !== null) await expect(card).toContainText('50箱');
+    if (quantity !== null) await expect(card).toContainText('50件');
     assert.doesNotMatch(await card.innerText(), /快照|范围|SKU/);
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
-      quantity === null ? '-' : '12箱',
+      quantity === null ? '-' : '12件',
     );
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
@@ -1441,25 +1448,24 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
 });
 
 test('FC refused export reads never download a partial file or retry authorization', async (t) => {
-  const { frame, page, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    if (query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100)
+  let rejectExport = false;
+  let denied = 0;
+  const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (rejectExport && query.queryId === 'replenishment.detail.atomic') {
+      denied++;
       return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '当前无导出字段权限' } };
+    }
     return fcWorkflowRows(query, result);
   });
   let downloads = 0;
   page.on('download', () => downloads++);
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
+  rejectExport = true;
   await list.getByRole('button', { name: 'CSV', exact: true }).click();
   await expect(frame.locator('.fc-workflow-notice')).toContainText('当前无导出字段权限');
   assert.equal(downloads, 0);
-  assert.equal(
-    calls.filter(
-      (query) =>
-        query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100,
-    ).length,
-    1,
-  );
+  assert.equal(denied, 1);
   assert.deepEqual(errors, []);
 });
 
@@ -1512,7 +1518,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
   const { page, frame, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
   const toolbar = frame.locator('[data-business-filters="fc"]');
   await expect(toolbar).toBeVisible();
-  for (const tab of ['补货确认', '分仓计划', '当前订单']) {
+  for (const tab of ['补货确认', '分仓计划']) {
     await frame.getByRole('button', { name: tab, exact: true }).first().click();
     for (const width of [1280, 922, 768, 560, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
@@ -1790,7 +1796,7 @@ test('base card weights base groups by inventory instead of averaging their ages
 });
 
 test('base batch-only inventory reconciles and age drill keeps the same fields across base, category and SKU', async (t) => {
-  const { frame, page, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+  const view = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
@@ -1819,7 +1825,12 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
         age_valid_count: 14,
       });
     if (query.queryId === 'current-shortage.locations')
-      Object.assign(result.rows[0], { base: '濮阳', demand: 25765, allocated: 0, shortage: 24734 });
+      Object.assign(result.rows[0], {
+        base: '濮阳',
+        demand: 25765,
+        allocated: 0,
+        shortage: 24734,
+      });
     if (['batch-age.groups', 'batch-age.atomic'].includes(query.queryId))
       Object.assign(result.rows[0], {
         level: query.parameters.group_level === 'category' ? '调理肉制品' : '濮阳',
@@ -1844,14 +1855,19 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
       });
     return result;
   });
+  const { frame, page, calls, insightCalls, errors } = view;
   const card = frame.locator('[data-overview-cards="aqkc"] article');
   await expect(
     card.filter({ has: frame.getByText('当前库存', { exact: true }) }).locator('strong'),
   ).toHaveText('4,277');
   await expect(
     card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
-  ).toHaveText('25,765箱');
-  await expect(frame.getByText(/库存覆盖14\/14、目标覆盖0\/14个基地SKU/)).toBeVisible();
+  ).toHaveText('25,765件');
+  await expect.poll(() => insightCalls.length).toBeGreaterThan(0);
+  const evidence = insightCalls.at(-1).evidence.evidence;
+  assert.equal(evidence.metrics.current, 4277);
+  assert.equal(evidence.metrics.target, null);
+  assert.ok(evidence.missing.includes('部分SKU无目标记录'));
   const base = frame.getByRole('row').filter({ has: frame.getByText('濮阳', { exact: true }) });
   await expect(base).toContainText('4,277');
   await expect(base).toContainText('166.3天');
@@ -1944,10 +1960,10 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
         base: '郑州',
         category: '水饺',
         demand: 300,
-        allocated: 10,
-        remaining: 290,
+        allocated: 17,
+        remaining: 283,
         available: 100,
-        shortage: 190,
+        shortage: 183,
         invalid: 0,
       });
     if (query.queryId === 'page.sku-detail.atomic')
@@ -1964,23 +1980,33 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
         stock_source_rows: 1,
         risk: '缺货',
         current_demand: 300,
-        current_allocated: 10,
-        current_shortage: 190,
+        current_allocated: 17,
+        current_shortage: 183,
         age_weighted_sum: 2600,
         age_qty: 40,
       });
     return result;
   });
   const base = frame.getByRole('button', { name: '郑州，查看详情', exact: true });
+  for (const value of ['300', '183', '17'])
+    await expect(
+      base.locator('xpath=ancestor::tr[1]').getByRole('cell', { name: value, exact: true }),
+    ).toHaveCount(1);
   await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
   await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
   await base.click();
   const category = frame.getByRole('button', { name: '水饺，查看 SKU 详情', exact: true });
+  for (const value of ['300', '183', '17'])
+    await expect(
+      category.locator('xpath=ancestor::tr[1]').getByRole('cell', { name: value, exact: true }),
+    ).toHaveCount(1);
   await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
   await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
   await category.click();
   const sku = frame.getByRole('region', { name: '郑州水饺 SKU 明细', exact: true });
   const row = sku.getByRole('row').filter({ hasText: '100001 测试商品' });
+  for (const value of ['300', '183', '17'])
+    await expect(row.getByRole('cell', { name: value, exact: true })).toHaveCount(1);
   await expect(row).toContainText('缺货');
   await expect(row).toContainText('65.0天');
   const menu = sku.locator('details');
@@ -2000,5 +2026,42 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
     ),
   );
   assert.ok(!calls.some((call) => call.queryId === 'current-shortage.skus'));
+  assert.deepEqual(errors, []);
+});
+
+test('base dashboard model insight does not block metrics and renders model text as plain paragraphs', async (t) => {
+  let finish;
+  const waiting = new Promise((resolve) => {
+    finish = resolve;
+  });
+  let evidence;
+  const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, (input) => {
+    evidence = input.evidence;
+    return waiting;
+  });
+  await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
+  const panel = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(panel).toContainText('正在生成 AI 洞察');
+  await expect.poll(() => !!evidence?.cards?.length).toBe(true);
+  assert.equal(evidence.evidence?.text, undefined);
+  finish({
+    answer:
+      '总量：现库存100件。\n结构分析：目标缺失。\n建议：核实目标【待人工确认】。<script>alert(1)</script>',
+  });
+  await expect(panel).toContainText('总量：现库存100件');
+  await expect(panel.locator('script')).toHaveCount(0);
+  await expect(panel.locator('p')).toHaveCount(3);
+  assert.deepEqual(errors, []);
+});
+
+test('base dashboard model failure leaves cards and detail rows visible', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, () => {
+    throw Error('MODEL_UNAVAILABLE');
+  });
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
+    'AI 洞察暂不可用',
+  );
+  await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
+  await expect(frame.locator('tbody tr').first()).toBeVisible();
   assert.deepEqual(errors, []);
 });

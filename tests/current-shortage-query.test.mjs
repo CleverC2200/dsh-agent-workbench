@@ -214,3 +214,62 @@ test('an invalid inventory pool does not erase another pool or known demand', as
   assert.equal(currentShortageSum(value.rows, 'shortage', '分仓'), 10);
   assert.equal(currentShortageSum(value.rows, 'shortage', '基地'), null);
 });
+
+test('missing order quantity marks only its own base unknown without hiding valid bases', async () => {
+  const active = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+  const result = await readCurrentShortage(
+    active,
+    'current-shortage.locations',
+    {},
+    {
+      execute: async () => ({
+        rows: [
+          {
+            snapshot_date: '2026-10-28',
+            location_type: '基地',
+            location_code: '郑州',
+            location_name: '郑州',
+            warehouse_code: null,
+            base: '郑州',
+            demand: 100,
+            allocated: null,
+            remaining: null,
+            available: null,
+            shortage: null,
+            invalid: 1,
+          },
+          {
+            snapshot_date: '2026-10-28',
+            location_type: '基地',
+            location_code: '遂平',
+            location_name: '遂平',
+            warehouse_code: null,
+            base: '遂平',
+            demand: 40,
+            allocated: 10,
+            remaining: 30,
+            available: 0,
+            shortage: 30,
+            invalid: 0,
+          },
+        ],
+      }),
+    },
+  );
+  assert.equal(result.partial, true);
+  assert.equal(
+    currentShortageSum(
+      result.rows.filter((r) => r.base === '郑州'),
+      'allocated',
+    ),
+    null,
+  );
+  assert.equal(
+    currentShortageSum(
+      result.rows.filter((r) => r.base === '遂平'),
+      'shortage',
+    ),
+    30,
+  );
+  assert.equal(currentShortageSum(result.rows, 'demand'), 140);
+});
