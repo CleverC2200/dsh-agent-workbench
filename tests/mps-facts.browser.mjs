@@ -210,7 +210,7 @@ test('history failures stay bound to the read period after switching historical 
   await expect(quantity).toHaveText('7');
 });
 
-test('source previews show final integer results and missing counts while downloads preserve decimals', async (t) => {
+test('source previews omit missing-count columns while downloads preserve decimals', async (t) => {
   const { page, frame } = await mpsPage(t, config, (query) => {
     const response = fixture(query);
     if (query.queryId === 'facts.report')
@@ -246,7 +246,7 @@ test('source previews show final integer results and missing counts while downlo
     const section = frame.getByRole('region', { name: title, exact: true });
     await section.getByRole('button', { name: '基地 1', exact: true }).click();
     const dialog = frame.getByRole('dialog');
-    await expect(dialog.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
+    await expect(dialog.locator('th')).toHaveText(['名称', '数量合计']);
     await expect(dialog.locator('tbody tr').first().locator('td').nth(1)).toHaveText(expected);
     await expect(dialog).not.toContainText('公式');
     await expect(dialog).not.toContainText('代入');
