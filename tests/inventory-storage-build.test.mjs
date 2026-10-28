@@ -4,6 +4,74 @@ import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
+test('personal inventory build routes Windows and POSIX imports to the same browser sources', async () => {
+  const { build } = await import('esbuild');
+  const { createRequire } = await import('node:module');
+  const { runInNewContext } = await import('node:vm');
+  const require = createRequire(resolve('package.json'));
+  const compiled = await build({
+    entryPoints: ['scripts/build-inventory.mjs'],
+    bundle: true,
+    write: false,
+    platform: 'node',
+    format: 'cjs',
+    packages: 'external',
+    define: { 'import.meta.dirname': JSON.stringify(resolve('scripts')) },
+  });
+  let options;
+  const module = { exports: {} };
+  runInNewContext(compiled.outputFiles[0].text, {
+    module,
+    exports: module.exports,
+    require: (name) =>
+      name === 'esbuild'
+        ? {
+            build: async (value) => {
+              options = value;
+              throw Error('CAPTURE_BROWSER_BUILD');
+            },
+          }
+        : require(name),
+    process,
+    console,
+  });
+  await assert.rejects(
+    module.exports.buildInventory('personal', 'fixture'),
+    /CAPTURE_BROWSER_BUILD/,
+  );
+  const routes = [];
+  options.plugins
+    .find((plugin) => plugin.name === 'inventory-browser')
+    .setup({
+      onResolve: (filter, callback) => routes.push({ ...filter, callback }),
+      onLoad: () => {},
+      resolve: (path) => ({ path }),
+    });
+  const data = routes.find((route) => route.filter.test('./data'));
+  const alias = routes.find((route) => route.filter.test('@/lib/catalog'));
+  const personal = resolve('business/inventory-personal/source/inventory-light-plugins');
+  for (const id of ['fc', 'aqkc']) {
+    const source = resolve(`business/inventory-${id}/source`);
+    for (const importer of [
+      `${source.replaceAll('\\', '/')}/module.ts`,
+      `${source.replaceAll('/', '\\')}\\module.ts`,
+    ]) {
+      assert.equal(
+        data.callback({ importer, path: './data' }).path,
+        resolve(personal, 'src/personal/sql-data.ts'),
+      );
+      assert.equal(
+        alias.callback({ importer, path: '@/lib/catalog', kind: 'import-statement' }).path,
+        resolve(source, id === 'fc' ? 'fc/src' : 'aqkc/web/src', 'lib/catalog'),
+      );
+    }
+  }
+  assert.equal(
+    data.callback({ importer: resolve(personal, 'src/page.ts'), path: './data' }),
+    undefined,
+  );
+});
+
 test('the opaque inventory build keeps memory storage after repository formatting changes', async (t) => {
   await mkdir('.runtime', { recursive: true });
   const fixture = await mkdtemp(resolve('.runtime/inventory-storage-'));

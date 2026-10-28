@@ -94,7 +94,7 @@ test('one forecast batch drives two selectable target months and delivery source
   await expect(forecast).toContainText('数量合计13（单位待确认）');
   await forecast.getByRole('button', { name: '基地 1', exact: true }).click();
   const preview = frame.getByRole('dialog');
-  await expect(preview.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
+  await expect(preview.locator('th')).toHaveText(['名称', '数量合计']);
   await expect(preview.locator('tbody tr').first().locator('td').nth(1)).toHaveText('13');
   await expect(preview).not.toContainText('公式');
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
