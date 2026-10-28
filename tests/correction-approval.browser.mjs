@@ -249,7 +249,8 @@ test('同月Y/DC不同周期的发货按客户月份去重，金额未确认保�
     .getByRole('row')
     .filter({ hasText: '宝阳销售组' })
     .first()
-    .locator('[title="发货金额来源待确认"]');
+    .getByText('— / 60 件', { exact: true });
+  await expect(shipment).toHaveAttribute('title', '发货金额来源待确认');
   await expect(shipment).toContainText('— / 60 件');
   await expect(shipment).not.toContainText('¥0');
 });
