@@ -6,7 +6,6 @@ import {
   applyGroupedSimulationEvent,
   simulationMember,
 } from '../scripts/lib/fulfillment-simulation.mjs';
-import { simulationWebSnapshot } from '../scripts/lib/fulfillment-simulation-web.mjs';
 const scope = {
   simulation: true,
   runId: 'run-test',
