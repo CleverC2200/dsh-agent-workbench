@@ -264,7 +264,9 @@ test('MPS starts without sample products when no source is configured and still 
   await expect(products.getByRole('row')).toHaveCount(1);
   await expect(products.getByText('演示数据', { exact: true })).toHaveCount(0);
   await expect(products).toContainText('月主计划数据源尚未装载，产品列表为空');
-  await expect(products.getByRole('columnheader', { name: '基地名称', exact: true })).toBeVisible();
+  await expect(products.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     products.getByRole('columnheader', { name: '对应老品编码', exact: true }),
   ).toBeVisible();
@@ -346,10 +348,40 @@ test('MPS keeps source review in cards and opens current-period final results af
   const review = frame.getByRole('dialog', { name: '计划提报 · 2026-12 · 基地核对', exact: true });
   await expect(review.getByRole('row').filter({ hasText: '郑州' })).toContainText('15');
   await expect(review).not.toContainText('公式：');
-  await expect(review.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
+  await expect(review.locator('th')).toHaveText(['名称', '数量合计']);
   await review.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(
     frame.getByRole('dialog', { name: '计划提报 · 2026-12 · 明细核对', exact: true }),
   ).toContainText('物料组');
+});
+
+test('MPS preview keeps its title and close button visible while long content scrolls', async (t) => {
+  const { page, frame } = await confirmation(t);
+  await createVersion(frame, '2026-12');
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    headers +
+      '\n' +
+      Array.from({ length: 30 }, (_, i) => `2026-12,郑州,P${i},产品${i},汤圆,系列,组,${i},0`).join(
+        '\n',
+      ),
+  );
+  await frame
+    .getByRole('region', { name: '计划提报数据' })
+    .getByRole('button', { name: '产品 30', exact: true })
+    .click();
+  const dialog = frame.getByRole('dialog');
+  const close = dialog.getByRole('button', { name: '关闭弹窗' });
+  const before = await close.boundingBox();
+  await dialog.locator('tbody tr').first().hover();
+  await page.mouse.wheel(0, 1500);
+  await expect
+    .poll(() => dialog.locator('.dc-dialog-body').evaluate((element) => element.scrollTop))
+    .toBeGreaterThan(0);
+  await expect(close).toBeInViewport();
+  assert(Math.abs((await close.boundingBox()).y - before.y) < 1);
+  await close.click();
+  await expect(dialog).toHaveCount(0);
 });

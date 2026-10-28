@@ -521,6 +521,15 @@
 .dc-dialog::backdrop {
   background: #11182766;
 }
+.dc-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dc-dialog-head,
+.dc-dialog-footer {
+  flex-shrink: 0;
+}
 .dc-dialog-head {
   display: flex;
   align-items: center;
@@ -534,6 +543,8 @@
   margin: 0;
 }
 .dc-dialog-body {
+  min-height: 0;
+  overflow: auto;
   padding: 20px;
 }
 .dc-dialog-footer {
@@ -862,18 +873,6 @@
   background: #f0f5ff;
 }
 
-.dc-master-dialog[open] {
-  display: flex;
-  flex-direction: column;
-}
-.dc-master-dialog .dc-dialog-head,
-.dc-master-dialog .dc-dialog-footer {
-  flex-shrink: 0;
-}
-.dc-master-dialog .dc-dialog-body {
-  min-height: 0;
-  overflow: auto;
-}
 .dc-master-dialog .dc-table-scroll {
   max-height: min(420px, calc(100vh - 340px));
   overflow: auto;
