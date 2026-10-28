@@ -1,3 +1,4 @@
+import { mountMenuAgentSelection } from './agent-menu-selection.tsx';
 import { PageUnsentHistory } from './unsent-history.tsx';
 import { createConversationStarter } from './new-conversation.ts';
 import {
@@ -170,6 +171,46 @@ export function mountCompanyUI(
       businessNavigation = undefined;
       for (const listener of navigationListeners) listener();
     });
+  });
+  let menuPresets: {
+    scope: string | null;
+    provider: BusinessNavigation | undefined;
+    ids: ReadonlySet<string>;
+  } = { scope: null, provider: undefined, ids: new Set() };
+  const menuListeners = new Set<() => void>();
+  mountMenuAgentSelection(ctx, () => {
+    const authority = useSyncExternalStore(
+      subscribeAccount,
+      () => account,
+      () => account,
+    );
+    const identity = useSyncExternalStore(
+      authority?.subscribe ?? noSubscribe,
+      authority?.getSnapshot ?? (() => unavailableAccount),
+      authority?.getSnapshot ?? (() => unavailableAccount),
+    );
+    const provider = useSyncExternalStore(
+      subscribeNavigation,
+      () => businessNavigation,
+      () => businessNavigation,
+    );
+    const menu = useSyncExternalStore(
+      (listener) => {
+        menuListeners.add(listener);
+        return () => {
+          menuListeners.delete(listener);
+        };
+      },
+      () => menuPresets,
+      () => menuPresets,
+    );
+    return identity.state === 'confirmed' &&
+      !identity.error &&
+      identity.status?.authenticated &&
+      identity.scope === menu.scope &&
+      provider === menu.provider
+      ? menu.ids
+      : new Set<string>();
   });
   const pageSessions = createPageSessionNavigation({
     workbench,
@@ -648,6 +689,33 @@ export function mountCompanyUI(
       identity.status?.environment === 'test'
     )
       menu.push(localPrototypeMenu(available, t));
+    const menuPresetIds = new Set<string>();
+    for (const group of menu)
+      for (const entry of group.entries) {
+        if (!entry.pageId) continue;
+        if (entry.pageId === 'gea-proof') menuPresetIds.add('gea-readonly');
+        const page = documentState.pages.find((page) => page.id === entry.pageId);
+        if (page && 'resourceId' in page && typeof page.resourceId === 'string')
+          menuPresetIds.add(page.resourceId);
+      }
+    useEffect(() => {
+      if (
+        menuPresets.scope === scope &&
+        menuPresets.provider === provider &&
+        menuPresets.ids.size === menuPresetIds.size &&
+        [...menuPresetIds].every((id) => menuPresets.ids.has(id))
+      )
+        return;
+      menuPresets = { scope, provider, ids: menuPresetIds };
+      for (const listener of menuListeners) listener();
+    });
+    useEffect(
+      () => () => {
+        menuPresets = { scope: null, provider: undefined, ids: new Set() };
+        for (const listener of menuListeners) listener();
+      },
+      [],
+    );
     const expandSidebar = () => {
       if (collapsed) ctx.layout.toggleSidebar();
     };

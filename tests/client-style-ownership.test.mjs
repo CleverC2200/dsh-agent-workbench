@@ -44,7 +44,12 @@ test('a later plugin replacement preserves the mounted company sidebar styleshee
     },
     locale: { register() {}, bind: () => (key) => key },
     inject() {},
-    slots: { inject: (_name, callback) => callback(), register: () => () => {} },
+    slots: {
+      inject: (_name, callback) => callback(),
+      register: () => () => {},
+      entries: () => [],
+      subscribe: () => () => {},
+    },
   };
   const sibling = '@cleverc2200/gea-dsh-prototype';
   const target = { mode: 'queue', pendingQueue: [] };
