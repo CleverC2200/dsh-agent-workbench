@@ -281,8 +281,8 @@ test(
       background: 'rgb(255, 255, 255)',
       color: 'rgb(85, 93, 104)',
       border: 'rgb(217, 221, 227)',
-      radius: '8px',
-      height: '36px',
+      radius: '6px',
+      height: '30px',
     });
     await filter.hover();
     await expect.poll(async () => (await state(filter)).background).toBe('rgb(255, 250, 251)');
@@ -293,11 +293,30 @@ test(
       background: 'rgb(245, 246, 248)',
       color: 'rgb(160, 164, 172)',
       border: 'rgb(227, 230, 234)',
-      radius: '8px',
-      height: '36px',
+      radius: '6px',
+      height: '30px',
     });
     const activeTab = page.getByRole('tab', { name: '按区域' });
     assert.equal((await state(activeTab)).color, 'rgb(223, 23, 50)');
+    const firstRow = page.locator('tbody .arco-table-tr').first();
+    await firstRow.hover();
+    await expect
+      .poll(() =>
+        firstRow
+          .locator('td')
+          .evaluateAll((cells) =>
+            cells.every((cell) => getComputedStyle(cell).backgroundColor === 'rgb(255, 250, 251)'),
+          ),
+      )
+      .toBe(true);
+    for (const name of ['查看提报进度', '刷新数据', '导出当前页']) {
+      const offset = await toolbar.getByRole('button', { name, exact: true }).evaluate((button) => {
+        const outer = button.getBoundingClientRect();
+        const icon = button.querySelector('svg').getBoundingClientRect();
+        return Math.abs(icon.top + icon.height / 2 - outer.top - outer.height / 2);
+      });
+      assert.ok(offset <= 0.5, `${name} icon must be vertically centered: ${offset}px`);
+    }
   },
 );
 
@@ -519,6 +538,9 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
           text: (node.textContent || '').trim(),
           weight: Number(getComputedStyle(node).fontWeight),
           bg: getComputedStyle(node).backgroundColor,
+          fontSize: getComputedStyle(node).fontSize,
+          lineHeight: getComputedStyle(node).lineHeight,
+          height: node.getBoundingClientRect().height,
         })),
       }))
       .filter((table) => table.head.length > 0),
@@ -536,7 +558,10 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
   for (const table of [queue, detail]) {
     for (const cell of table.head) {
       if (!cell.text) continue;
-      assert.ok(cell.weight >= 600, `表头「${cell.text}」要加粗，实际 ${cell.weight}`);
+      assert.equal(cell.weight, 800, `表头「${cell.text}」字重`);
+      assert.equal(cell.fontSize, '9px', `表头「${cell.text}」字号`);
+      assert.ok(Math.abs(parseFloat(cell.lineHeight) - 12.15) < 0.1, `表头「${cell.text}」行高`);
+      assert.equal(cell.height, 38, `表头「${cell.text}」高度`);
       assert.equal(
         cell.bg,
         table === queue ? 'rgb(245, 246, 248)' : 'rgb(242, 243, 245)',
