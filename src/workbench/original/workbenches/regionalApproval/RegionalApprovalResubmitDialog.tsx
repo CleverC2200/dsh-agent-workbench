@@ -35,7 +35,12 @@ import {
   salesPlanEditableQuantity,
   type SalesPlanAccess,
 } from './models/salesPlanAccessModel.ts';
-import { subtractExactDecimals } from './regionalApprovalQueryModel.ts';
+import { addExactDecimals } from './regionalApprovalQueryModel.ts';
+import {
+  salesPlanApprovalDraftValues,
+  salesPlanDraftMatches,
+} from './models/salesPlanLocalDraftModel.ts';
+import type { ApprovalStageId } from './salesPlanDomain.ts';
 import type { RegionalApprovalLiveRow } from './regionalApprovalQueryModel.ts';
 import styles from './RegionalApprovalActionDialog.module.css';
 
@@ -44,8 +49,9 @@ export type SalesPlanSubmissionItem = {
   versionId: string;
   label: string;
   period: GeaSalesPlanPeriod;
+  pendingValues?: Record<string, string>;
 } & (
-  | { kind: 'resubmit' }
+  | { kind: 'resubmit'; row: RegionalApprovalLiveRow; approvalRole?: ApprovalStageId }
   | {
       kind: 'approve';
       row: RegionalApprovalLiveRow;
@@ -67,7 +73,7 @@ type SubmissionRow = {
   item: SalesPlanSubmissionItem;
   source?: SalesPlanResubmitSource;
   skus: GeaSalesPlanSku[];
-  edits: Record<string, string>;
+  changes: { sku: GeaSalesPlanSku; before: string; after: string }[];
   actionInput?: SalesPlanActionInput;
   attempt?: SalesPlanSubmitAttempt | SalesPlanActionAttempt;
   receipt?: GeaSalesPlanSubmitReceipt | GeaSalesPlanActionReceipt;
@@ -78,16 +84,7 @@ type SubmissionRow = {
 
 const preparedSubmission = (row: SubmissionRow) => {
   if (!row.source || row.item.kind !== 'resubmit') return undefined;
-  const skus =
-    row.source.detail.currentVersion.orderType === 'Z'
-      ? row.skus.map((sku) => {
-          const edit = row.edits[sku.skuCode];
-          if (edit === undefined) return sku;
-          const line = correctionLine(sku, edit);
-          return { ...sku, adjAddQty: line.addQty, adjCutQty: line.cutQty };
-        })
-      : row.skus;
-  return prepareSalesPlanResubmit({ ...row.source, skus });
+  return prepareSalesPlanResubmit({ ...row.source, skus: row.skus });
 };
 
 export function RegionalApprovalResubmitDialog({
@@ -155,7 +152,11 @@ export function RegionalApprovalResubmitDialog({
               planId: item.planId,
               signal: controller.signal,
             });
-            if (detail.currentVersion.id !== item.versionId || !detail.currentVersion.effective)
+            if (
+              detail.currentVersion.id !== item.versionId ||
+              detail.currentVersion.status !== item.row.status ||
+              !detail.currentVersion.effective
+            )
               throw new Error('sourceMismatch');
             const skus = await client.versionSkus.invoke({
               versionId: item.versionId,
@@ -170,7 +171,47 @@ export function RegionalApprovalResubmitDialog({
               currentUser,
               skus,
             };
-            const state: SubmissionRow = { item, source, skus, edits: {}, status: 'ready' };
+            const role = item.kind === 'approve' ? item.access.approvalRole : item.approvalRole;
+            if (!client.draft) throw new Error('sourceLoad');
+            const draft = await client.draft.invoke({
+              planId: item.planId,
+              versionId: item.versionId,
+              approvalRole: role,
+              signal: controller.signal,
+            });
+            if (
+              draft?.stale ||
+              (draft?.draft && !salesPlanDraftMatches(draft.draft, item.row, detail, role))
+            )
+              throw new Error('sourceMismatch');
+            const adjustments = salesPlanApprovalDraftValues(
+              { ...detail, skus },
+              item.row,
+              role,
+              draft?.draft?.adjustments ?? [],
+              item.pendingValues,
+            );
+            const changes = Object.entries(adjustments).flatMap(([code, delta]) => {
+              if (correctionDecimal(delta).isZero()) return [];
+              const sku = skus.find((value) => String(value.skuCode) === code);
+              const before =
+                sku && salesPlanEditableQuantity(sku, item.row.status, item.row.planTypeCode, role);
+              if (!sku || before === undefined) throw new Error('validation');
+              return [{ sku, before, after: addExactDecimals([before, delta]) }];
+            });
+            const state: SubmissionRow = { item, source, skus, changes, status: 'ready' };
+            if (item.kind === 'resubmit') {
+              state.skus = skus.map((sku) => {
+                const change = changes.find((value) => value.sku.skuCode === sku.skuCode);
+                if (!change) return sku;
+                if (detail.currentVersion.orderType === 'M') return { ...sku, qty: change.after };
+                const line = correctionLine(
+                  sku,
+                  correctionDecimal(change.after).minus(correctionDecimal(sku.qty)).toFixed(),
+                );
+                return { ...sku, adjAddQty: line.addQty, adjCutQty: line.cutQty };
+              });
+            }
             if (item.kind === 'approve') {
               const access = salesPlanAccessForRow(
                 item.row,
@@ -179,33 +220,6 @@ export function RegionalApprovalResubmitDialog({
                 item.access.approvalRole,
               );
               if (!access?.allowedActions.includes('APPROVE')) throw new Error('sourceMismatch');
-              if (!client.draft) throw new Error('sourceLoad');
-              const draft = await client.draft.invoke({
-                planId: item.planId,
-                versionId: item.versionId,
-                approvalRole: access.approvalRole,
-                signal: controller.signal,
-              });
-              if (draft?.stale) throw new Error('sourceMismatch');
-              const adjustments = Object.fromEntries(
-                (draft?.draft?.adjustments ?? []).map((value) => [value.skuCode, value.adjustQty]),
-              );
-              for (const [skuCode, value] of Object.entries(item.pendingValues ?? {})) {
-                const sku = skus.find((sku) => sku.skuCode === skuCode);
-                const baseline =
-                  sku &&
-                  salesPlanEditableQuantity(
-                    sku,
-                    item.row.status,
-                    item.row.planTypeCode,
-                    access.approvalRole,
-                  );
-                if (!baseline || !value.trim()) throw new Error('validation');
-                const delta = subtractExactDecimals(value.trim(), baseline);
-                if (!/^[+-]?\d{1,15}(?:\.\d{1,3})?$/.test(delta) || correctionDecimal(value).lt(0))
-                  throw new Error('validation');
-                adjustments[skuCode] = delta;
-              }
               state.actionInput = {
                 planId: item.planId,
                 versionId: item.versionId,
@@ -234,7 +248,7 @@ export function RegionalApprovalResubmitDialog({
             return {
               item,
               skus: [],
-              edits: {},
+              changes: [],
               status: 'failed',
               error:
                 cause instanceof Error && ['sourceMismatch', 'validation'].includes(cause.message)
@@ -251,7 +265,7 @@ export function RegionalApprovalResubmitDialog({
           items.map((item) => ({
             item,
             skus: [],
-            edits: {},
+            changes: [],
             status: 'failed',
             error: 'sourceLoad',
           })),
@@ -282,21 +296,6 @@ export function RegionalApprovalResubmitDialog({
   const actionable = rows?.some(
     (row) => row.status === 'ready' || row.status === 'unknown' || row.status === 'readback',
   );
-  const edit = (index: number, skuIndex: number, value: string) =>
-    setRows((current) =>
-      current?.map((row, i) =>
-        i !== index
-          ? row
-          : {
-              ...row,
-              ...(row.source?.detail.currentVersion.orderType === 'Z'
-                ? { edits: { ...row.edits, [row.skus[skuIndex].skuCode]: value } }
-                : {
-                    skus: row.skus.map((sku, j) => (j !== skuIndex ? sku : { ...sku, qty: value })),
-                  }),
-            },
-      ),
-    );
   const submit = async () => {
     if (!rows || submitting.current || serviceBlocked || !actionable || (initial && !valid)) return;
     submitting.current = true;
@@ -468,13 +467,7 @@ export function RegionalApprovalResubmitDialog({
             );
         } else if (row.source.detail.currentVersion.orderType === 'Z') {
           quantity = correctionDecimal(
-            correctionLine(
-              sku,
-              !original
-                ? (row.edits[sku.skuCode] ??
-                    correctionDecision(sku, 0, row.source.period.planTypeCode))
-                : correctionDecision(sku, 0, row.source.period.planTypeCode),
-            ).qty,
+            correctionLine(sku, correctionDecision(sku, 0, row.source.period.planTypeCode)).qty,
           );
         }
         qty = qty.plus(quantity);
@@ -488,8 +481,8 @@ export function RegionalApprovalResubmitDialog({
   return (
     <Modal
       visible={visible}
-      className={styles.liveModal}
-      style={{ width: 'min(920px, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }}
+      className={styles.submissionModal}
+      style={{ width: 'min(760px, calc(100vw - 24px))', maxWidth: 'calc(100vw - 24px)' }}
       title={batch ? tr('batchTitle', { count: items.length }) : tr('title')}
       maskClosable={false}
       closable={!busy}
@@ -518,7 +511,7 @@ export function RegionalApprovalResubmitDialog({
         </div>
       }
     >
-      <div className={styles.body}>
+      <div className={styles.submissionBody}>
         {items.some((item) => item.kind === 'approve') && (
           <label className={styles.formControl}>
             <span>
@@ -554,10 +547,6 @@ export function RegionalApprovalResubmitDialog({
         )}
         {serviceBlocked && <Alert type="warning" content={tr('disabled.serviceBoundary')} />}
         {!rows ? <Spin /> : null}
-        {rows?.some(
-          (row) =>
-            row.source?.detail.currentVersion.orderType === 'M' && row.item.kind === 'resubmit',
-        ) && <Alert type="info" content={tr('inheritance')} />}
         {rows?.map((row, index) => (
           <section
             key={row.item.versionId}
@@ -565,7 +554,12 @@ export function RegionalApprovalResubmitDialog({
             aria-label={label(row)}
           >
             <div className={styles.adjustmentHeader}>
-              <strong>{label(row)}</strong>
+              <strong>
+                {row.item.row.dealerName || row.item.row.dealerCode || label(row)}
+                {row.item.row.dealerName && row.item.row.dealerName !== label(row)
+                  ? ` · ${label(row)}`
+                  : ''}
+              </strong>
               <span>{tr(row.item.kind === 'resubmit' ? 'resubmitTag' : 'approveTag')}</span>
             </div>
             {row.source && (
@@ -578,98 +572,40 @@ export function RegionalApprovalResubmitDialog({
                 </strong>
               </div>
             )}
-            {row.source && row.item.kind === 'resubmit' && (
-              <details open={items.length === 1}>
-                <summary>{tr('details', { count: row.skus.length })}</summary>
-                <div className={styles.submissionDetails}>
-                  {row.skus.map((sku, skuIndex) => (
-                    <label key={sku.skuCode} className={styles.submissionLine}>
+            {row.source &&
+              (row.changes.length ? (
+                <div className={styles.submissionDetails} aria-label={tr('changedDetails')}>
+                  <div className={styles.submissionChangeHeader}>
+                    <span>{tr('material')}</span>
+                    <span>{tr('before')}</span>
+                    <span>{tr('after')}</span>
+                  </div>
+                  {row.changes.map(({ sku, before, after }) => (
+                    <div key={sku.skuCode} className={styles.submissionChangeRow}>
                       <span>
-                        {sku.skuCode} · {sku.productCategName}
+                        {sku.skuCode}
                         <small>
-                          {tr('unitPrice')}: {sku.price} · {tr('before')}:{' '}
-                          {row.source?.skus[skuIndex].qty}
+                          {sku.materialDescription || sku.skuName || sku.productCategName}
                         </small>
-                        {row.source?.detail.currentVersion.orderType === 'M' &&
-                          row.source.detail.currentVersion.status >= 7 && (
-                            <small>
-                              {tr('inherited')}:{' '}
-                              {(() => {
-                                const original = row.source?.skus[skuIndex];
-                                const status = row.source?.detail.currentVersion.status;
-                                return status === 7
-                                  ? `${original?.regionConfirmedQty ?? '—'} / ${original?.regionConfirmedAmount ?? '—'}`
-                                  : status === 8
-                                    ? `${original?.provinceConfirmedQty ?? '—'} / ${original?.provinceConfirmedAmount ?? '—'}`
-                                    : `${original?.areaConfirmedQty ?? '—'} / ${original?.areaConfirmedAmount ?? '—'}`;
-                              })()}
-                            </small>
-                          )}
                       </span>
-                      <Input
-                        aria-label={`${row.source?.detail.currentVersion.orderType === 'Z' ? '纠偏调整量' : tr('quantity')} ${sku.skuCode}`}
-                        value={
-                          row.source?.detail.currentVersion.orderType === 'Z'
-                            ? (row.edits[sku.skuCode] ??
-                              correctionDecision(sku, 0, row.source.period.planTypeCode))
-                            : sku.qty
-                        }
-                        disabled={busy || Boolean(row.attempt)}
-                        onChange={(value) => edit(index, skuIndex, value)}
-                      />
-                    </label>
+                      <span>
+                        {correctionDecimal(before).toFixed(3)}
+                        <small>
+                          ¥{correctionDecimal(before).mul(correctionDecimal(sku.price)).toFixed(2)}
+                        </small>
+                      </span>
+                      <strong>
+                        {correctionDecimal(after).toFixed(3)}
+                        <small>
+                          ¥{correctionDecimal(after).mul(correctionDecimal(sku.price)).toFixed(2)}
+                        </small>
+                      </strong>
+                    </div>
                   ))}
                 </div>
-              </details>
-            )}
-            {row.source && row.item.kind === 'approve' && (
-              <details>
-                <summary>{tr('comparisonDetails', { count: row.skus.length })}</summary>
-                <div className={styles.submissionDetails}>
-                  {row.skus.map((sku) => {
-                    const item = row.item;
-                    if (item.kind !== 'approve') return null;
-                    try {
-                      const before =
-                        salesPlanEditableQuantity(
-                          sku,
-                          item.row.status,
-                          item.row.planTypeCode,
-                          item.access.approvalRole,
-                        ) ?? sku.qty;
-                      const delta =
-                        row.actionInput?.request.adjustments?.find(
-                          (value) => value.skuCode === sku.skuCode,
-                        )?.adjustQty ?? '0';
-                      const after = correctionDecimal(before).plus(correctionDecimal(delta));
-                      return (
-                        <div key={sku.skuCode} className={styles.submissionLine}>
-                          <span>
-                            {sku.skuCode} · {sku.productCategName}
-                          </span>
-                          <span>
-                            {before} → {after.toFixed(3)}
-                            <small>
-                              ¥
-                              {correctionDecimal(before)
-                                .mul(correctionDecimal(sku.price))
-                                .toFixed(2)}{' '}
-                              → ¥{after.mul(correctionDecimal(sku.price)).toFixed(2)}
-                            </small>
-                          </span>
-                        </div>
-                      );
-                    } catch {
-                      return (
-                        <span key={sku.skuCode}>
-                          {sku.skuCode} · {tr('errors.validation')}
-                        </span>
-                      );
-                    }
-                  })}
-                </div>
-              </details>
-            )}
+              ) : (
+                <span>{tr('noChanges')}</span>
+              ))}
             {row.source && row.item.kind === 'resubmit' && !inputs?.[index] && (
               <Alert type="error" content={tr('errors.validation')} />
             )}

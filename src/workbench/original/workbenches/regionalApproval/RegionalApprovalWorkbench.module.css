@@ -1794,6 +1794,34 @@
   justify-content: flex-start;
 }
 
+.header::-webkit-scrollbar {
+  height: 8px;
+}
+.header::-webkit-scrollbar-track,
+.header::-webkit-scrollbar-corner {
+  border-radius: 999px;
+  background: #f5f6f8;
+}
+.header::-webkit-scrollbar-thumb {
+  border: 2px solid #f5f6f8;
+  border-radius: 999px;
+  background: #b9bec7;
+}
+.header::-webkit-scrollbar-thumb:hover {
+  background: #a0a4ac;
+}
+.header::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .header {
+    scrollbar-width: thin;
+    scrollbar-color: #b9bec7 #f5f6f8;
+  }
+}
+
 /* Sales plan shares the production-sales dashboard's white, connected KPI surface. */
 .dashboardHeader {
   padding: 10px 20px 12px;
@@ -1887,9 +1915,27 @@
   gap: 6px;
   font-weight: 600;
 }
+.versionComparisonField > span {
+  color: #667085;
+  font:
+    600 12px/18px 'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    Arial,
+    sans-serif;
+}
 .versionComparisonBar :global(.arco-select) {
   width: 100px;
+  height: 36px;
   font-weight: 400;
+}
+.versionComparisonBar :global(.arco-select-view) {
+  box-sizing: border-box;
+  display: flex;
+  height: 36px !important;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #c9ced7;
 }
 .returnReasons {
   white-space: normal;
@@ -2056,14 +2102,14 @@
 .monthCalendarIcon {
   color: #697386;
 }
-.monthSelect :global(.arco-select-view) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view) {
   border-color: #c9ced7;
   border-radius: 8px;
   background: #fff;
   box-shadow: 0 1px 2px #1822300a;
 }
-.monthSelect :global(.arco-select-view-value),
-.monthSelect :global(.arco-select-view-input) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-value),
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-input) {
   color: #343b46;
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   font-size: 12px;
@@ -2071,28 +2117,30 @@
   line-height: 18px;
   letter-spacing: normal;
 }
-.monthSelect :global(.arco-select-view-value) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-value) {
   display: flex;
   align-items: center;
 }
-.monthSelect :global(.arco-select-suffix) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select-suffix) {
   color: #697386;
 }
-.monthSelect :global(.arco-select:hover .arco-select-view) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select:hover .arco-select-view) {
   border-color: #e8a4ae;
   background: #fff7f8;
   box-shadow: 0 2px 8px #df173214;
 }
-.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-view) {
+:is(.monthSelect, .versionComparisonBar)
+  :global(.arco-select[aria-expanded='true'] .arco-select-view) {
   border-color: #ce7280;
   background: #fff;
   box-shadow: 0 0 0 3px #df173212;
 }
-.monthSelect :global(.arco-select:focus-visible .arco-select-view) {
+:is(.monthSelect, .versionComparisonBar) :global(.arco-select:focus-visible .arco-select-view) {
   border-color: #e59ca8;
   box-shadow: 0 0 0 3px #df17321a;
 }
-.monthSelect :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
+:is(.monthSelect, .versionComparisonBar)
+  :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
   color: #c91029;
   transform: rotate(180deg);
 }
@@ -2212,7 +2260,9 @@
   background: #f5f6f8;
   color: #747b86;
   border-bottom: 1px solid #eceef1;
-  font-weight: 700;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.35;
 }
 .organizationTable :global(.arco-table-tr > .arco-table-td) {
   background: var(--bg-1);
@@ -2222,11 +2272,17 @@
 .root .organizationTable :global(.arco-table-tr:hover > .arco-table-td),
 .root
   .organizationTable
+  :global(
+    .arco-table-tr:not(.arco-table-empty-row):hover
+      > .arco-table-td:not(.arco-table-col-fixed-left):not(.arco-table-col-fixed-right)
+  ),
+.root
+  .organizationTable
   :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-left::before),
 .root
   .organizationTable
   :global(.arco-table-tr:hover > .arco-table-td.arco-table-col-fixed-right::before) {
-  background: var(--workbench-muted-surface, #f5f6f8);
+  background: var(--workbench-hover, #fffafb);
 }
 .organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td) {
   background: #fff2f4;
@@ -2290,17 +2346,28 @@
   gap: 8px;
 }
 .root .toolbarActions > :global(.arco-btn),
-.root .approvalToolbarActions :global(.arco-btn),
+.root .approvalToolbarActions :global(.arco-btn) {
+  box-sizing: border-box;
+  height: 30px;
+  min-height: 30px;
+  padding-block: 0;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.root .toolbarActions > :global(.arco-btn) {
+  display: inline-flex;
+  width: 30px;
+  min-width: 30px;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
 .root .filterActions :global(.arco-btn) {
   box-sizing: border-box;
   height: 36px;
   min-height: 36px;
   border-radius: 8px;
   font-size: 12px;
-}
-.root .toolbarActions > :global(.arco-btn) {
-  width: 36px;
-  min-width: 36px;
 }
 .root .toolbarActions > :global(.arco-btn-icon-only) > :global(.i-icon) {
   transform: none;

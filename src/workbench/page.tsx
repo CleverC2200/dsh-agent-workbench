@@ -536,17 +536,6 @@ export function WorkbenchPage({ t }: { t: Translate }) {
                 currentUserId={status.user?.id}
                 approvalStages={salesPlanStagesForRoles(status.roles)}
                 liveActionsEnabled={true}
-                onResubmit={(planId, versionId, period, label = '') =>
-                  setResubmit((current) =>
-                    current?.pending
-                      ? { ...current, visible: true }
-                      : {
-                          items: [{ kind: 'resubmit', planId, versionId, period, label }],
-                          visible: true,
-                          pending: false,
-                        },
-                  )
-                }
                 onSubmitBatch={(items) =>
                   setResubmit((current) =>
                     current?.pending

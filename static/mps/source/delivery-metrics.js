@@ -8,6 +8,8 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
     const [dimension, setDimension] = react.useState('');
     const [base, setBase] = react.useState('');
     const [page, setPage] = react.useState(0);
+    const [pageSize, setPageSize] = react.useState(10);
+    const [expanded, setExpanded] = react.useState(false);
     const records = (draft.delivery ?? []).filter((row) => row['月份'] === month);
     const types = [...new Set(records.map((row) => row['维度类型']).filter(Boolean))];
     const bases = [...new Set(records.map((row) => row['基地']).filter(Boolean))];
@@ -19,7 +21,7 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
         (!selectedBase || row['基地'] === selectedBase),
     );
     const read = draft.deliveryRead?.periods?.[month];
-    react.useEffect(() => setPage(0), [month, dimension, base, draft.delivery]);
+    react.useEffect(() => setPage(0), [month, dimension, base, draft.delivery, pageSize]);
     useMpsPart(
       react,
       'delivery',
@@ -30,9 +32,9 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
         read: read ?? null,
         source: 'agents_scm_base_dimension_delivery_mi',
         units: 'unconfirmed',
-        rows: rows.slice(page * 25, (page + 1) * 25),
+        rows: rows.slice(page * pageSize, (page + 1) * pageSize),
         rowCount: rows.length,
-        truncated: rows.length > 25,
+        truncated: rows.length > pageSize,
         aggregation: 'none',
         use: 'source-indicators-only; SKU mapping and historical calculation windows unconfirmed',
       },
@@ -47,6 +49,15 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
         { className: 'dc-card-head' },
         h('h3', {}, '基地多维发货指标'),
         h(
+          'button',
+          {
+            'aria-label': `${expanded ? '收起' : '展开'}基地多维发货指标`,
+            'aria-expanded': expanded,
+            onClick: () => setExpanded(!expanded),
+          },
+          expanded ? '收起' : '展开',
+        ),
+        h(
           'span',
           { className: 'dc-status' },
           read?.status === 'ready' ? '业务来源' : read?.status === 'failed' ? '读取失败' : '待同步',
@@ -59,7 +70,7 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
       ),
       h(
         'div',
-        { className: 'dc-source-body' },
+        { className: 'dc-source-body', hidden: !expanded },
         h(
           'div',
           { className: 'dc-toolbar' },
@@ -139,15 +150,24 @@ export function createDeliveryMetrics(react, { table, downloadCsv, useMpsPart })
           {},
           `当前筛选${rows.length}条，数量与比率不作跨行合计；重复键保留源记录数和粒度状态。`,
         ),
-        table(columns, rows.slice(page * 25, (page + 1) * 25)),
+        table(columns, rows.slice(page * pageSize, (page + 1) * pageSize)),
         h(
           'div',
           { className: 'dc-pagination' },
-          h('span', {}, `每页25条，第${page + 1}页`),
+          h(
+            'select',
+            {
+              'aria-label': '每页发货指标条数',
+              value: pageSize,
+              onChange: (event) => setPageSize(Number(event.target.value)),
+            },
+            [10, 25, 50].map((size) => h('option', { key: size, value: size }, `每页${size}条`)),
+          ),
+          h('span', {}, `共${rows.length}条，第${page + 1}页`),
           h('button', { disabled: !page, onClick: () => setPage(page - 1) }, '上一页'),
           h(
             'button',
-            { disabled: (page + 1) * 25 >= rows.length, onClick: () => setPage(page + 1) },
+            { disabled: (page + 1) * pageSize >= rows.length, onClick: () => setPage(page + 1) },
             '下一页',
           ),
         ),

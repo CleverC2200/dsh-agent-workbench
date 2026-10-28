@@ -108,3 +108,25 @@ test('MPS capacity and report keep unconfirmed formulas empty and export the cur
   assert.equal(reportCsv, capacityCsv);
   await expect(report.getByRole('button', { name: '保存正式报告', exact: true })).toBeDisabled();
 });
+
+test('MPS processing rounds source quantities for display and preserves raw values in its download', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await version(frame, '2026-10');
+  await upload(
+    frame,
+    '选择产品关系CSV',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,组甲,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,产品甲,汤圆,系列甲,组甲,12.5,0',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await expect(
+    view.getByRole('button', { name: '郑州 A 2026-10 提报数量 计算过程', exact: true }),
+  ).toHaveText('13');
+  const csv = await download(page, view, '下载需求拆分');
+  assert(csv.includes('12.5'));
+});

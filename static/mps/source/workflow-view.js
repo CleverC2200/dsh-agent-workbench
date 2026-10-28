@@ -55,7 +55,7 @@ const numberText = (value, percent = false) =>
   value == null
     ? '—'
     : new Intl.NumberFormat('zh-CN', {
-        maximumFractionDigits: percent ? 4 : 6,
+        maximumFractionDigits: percent ? 4 : 0,
       }).format(percent ? value * 100 : value) + (percent ? '%' : '');
 const reasons = (row, fields) => [...new Set(fields.flatMap((field) => row.missing[field] ?? []))];
 const status = (row, fields) => reasons(row, fields).join('、') || '已计算';

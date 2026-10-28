@@ -9065,24 +9065,40 @@ export default function Home({
                     </h2>
                   </div>
                   <div
-                    className={`issue-filters risk-dimension-filters ${analysisScope === 'overview' ? 'sliding-risk-switch' : ''}`}
+                    className="issue-filters risk-dimension-filters sliding-risk-switch"
                     style={
-                      analysisScope === 'overview'
-                        ? ({
-                            '--risk-tab-index': overviewRiskPerspective === 'production' ? 0 : 1,
-                          } as CSSProperties)
-                        : undefined
+                      {
+                        '--risk-tab-count': analysisScope === 'overview' ? 2 : 3,
+                        '--risk-tab-index':
+                          analysisScope === 'overview'
+                            ? overviewRiskPerspective === 'production'
+                              ? 0
+                              : 1
+                            : analysisScope === 'production'
+                              ? productionDimension === 'category'
+                                ? 0
+                                : productionDimension === 'base'
+                                  ? 1
+                                  : 2
+                              : salesRiskLevel === '大区'
+                                ? 0
+                                : salesRiskLevel === '省区'
+                                  ? 1
+                                  : 2,
+                      } as CSSProperties
                     }
                   >
                     {analysisScope === 'overview' ? (
                       <>
                         <button
+                          aria-pressed={overviewRiskPerspective === 'production'}
                           className={overviewRiskPerspective === 'production' ? 'selected' : ''}
                           onClick={() => setOverviewRiskPerspective('production')}
                         >
                           {'生产风险'}
                         </button>
                         <button
+                          aria-pressed={overviewRiskPerspective === 'sales'}
                           className={overviewRiskPerspective === 'sales' ? 'selected' : ''}
                           onClick={() => setOverviewRiskPerspective('sales')}
                         >
@@ -9093,6 +9109,7 @@ export default function Home({
                       (['大区', '省区', '销售组'] as const).map((level) => (
                         <button
                           key={level}
+                          aria-pressed={salesRiskLevel === level}
                           className={salesRiskLevel === level ? 'selected' : ''}
                           onClick={() => setSalesRiskLevel(level)}
                         >
@@ -9109,6 +9126,7 @@ export default function Home({
                       ).map(([dimension, label]) => (
                         <button
                           key={dimension}
+                          aria-pressed={productionDimension === dimension}
                           className={productionDimension === dimension ? 'selected' : ''}
                           onClick={() => setProductionDimension(dimension)}
                         >
