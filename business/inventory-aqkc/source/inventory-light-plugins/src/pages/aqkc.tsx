@@ -1,5 +1,6 @@
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
+import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
 import { stockPageSortFields } from '../configured-stock';
 import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-current-order.ts';
@@ -797,6 +798,34 @@ export function InventoryOperationsWorkbench() {
   const overviewError =
     !allBasesSelected && scopedOverview?.key === overviewKey ? scopedOverview.error : null;
   const overviewLoading = paths.length > 0 && !overviewWorkspace && !overviewError;
+  const modelInsight = useDashboardInsight(
+    {
+      scope: overviewKey,
+      // Pass facts, not the former deterministic narrative, to the model.
+      evidence: overviewWorkspace?.workbench?.inventoryInsight
+        ? { ...overviewWorkspace.workbench.inventoryInsight, text: undefined }
+        : null,
+      cards: overviewWorkspace?.workbench?.cards,
+      rows: overviewWorkspace?.table.rows,
+      currentOrders: overviewWorkspace?.workbench?.currentOrders,
+      orderMetricScopes: currentOrderMetricScopes,
+      version: overviewWorkspace?.versionSummary,
+    },
+    !!overviewWorkspace &&
+      paths.length > 0 &&
+      !dashboardLoading &&
+      !overviewLoading &&
+      !overviewError &&
+      !dashboardError,
+  );
+  useEffect(() => {
+    updateContext('dashboardAIInsight', {
+      scope: overviewKey,
+      status: modelInsight.status,
+      text: modelInsight.status === 'ready' ? modelInsight.answer : undefined,
+      source: 'model',
+    });
+  }, [overviewKey, modelInsight.status, modelInsight.answer]);
   useEffect(() => {
     const tabError = activeBoardTab !== '基地结构' && !activeTabTable ? dashboardTabsError : null;
     const tabPending =
@@ -1010,30 +1039,19 @@ export function InventoryOperationsWorkbench() {
                   </div>
                   <div
                     className={styles.insightSummary}
-                    title={overviewWorkspace.workbench?.overallAnalysis
-                      ?.split('\n')
-                      .find((line) => line.startsWith('数据边界：'))}
+                    aria-live="polite"
+                    aria-busy={modelInsight.status === 'loading'}
                   >
-                    {sanitizeUserVisibleCopy(
-                      overviewWorkspace.workbench?.overallAnalysis || '当前缺少经营分析所需数据。',
-                    )
-                      .split('\n')
-                      .filter((line) => line && !line.startsWith('数据边界：'))
-                      .map((line, index) => {
-                        const colon = line.indexOf('：');
-                        return (
-                          <p key={index}>
-                            {colon > 0 ? (
-                              <>
-                                <strong>{line.slice(0, colon)}：</strong>
-                                {line.slice(colon + 1)}
-                              </>
-                            ) : (
-                              line
-                            )}
-                          </p>
-                        );
-                      })}
+                    {modelInsight.status === 'loading' ? (
+                      <p>正在生成 AI 洞察…</p>
+                    ) : modelInsight.status === 'error' ? (
+                      <p>AI 洞察暂不可用，当前指标与明细可正常查看。</p>
+                    ) : (
+                      modelInsight.answer
+                        ?.split(/\n+/)
+                        .filter(Boolean)
+                        .map((line, index) => <p key={index}>{line}</p>)
+                    )}
                   </div>
                 </section>
               </>
@@ -1238,9 +1256,7 @@ function Kpi({
             : title === '平均货龄'
               ? '按有效批次库存数量加权；批次货龄为库存快照日减生产日。最大货龄见货龄结构明细。'
               : title === '当前订单'
-                ? usesConfiguredSql()
-                  ? '当前可取得的基地未备单量；不含已备单占用。'
-                  : currentOrderMetricScopes.orderQuantity
+                ? currentOrderMetricScopes.orderQuantity
                 : title === '订单满足率'
                   ? '当月履约满足率；已发订单量、发货量统计当月实际发货量大于0的订单行'
                   : undefined
@@ -1249,7 +1265,7 @@ function Kpi({
       >
         {value}
         {(title === '当前订单' || title === '基地未备单量') && value !== '-' ? (
-          <small className={styles.kpiUnit}>箱</small>
+          <small className={styles.kpiUnit}>{title === '当前订单' ? '件' : '箱'}</small>
         ) : null}
       </strong>
       <dl>
@@ -1258,23 +1274,17 @@ function Kpi({
             <dt>{item.label}</dt>
             <dd
               title={
-                usesConfiguredSql() && title === '当前订单'
-                  ? item.label === '已备单占用'
-                    ? '日库存快照已备单占用量，不与未备单量重复计算。'
-                    : '当前阶段缺货量尚无等价来源。'
+                title === '当前订单'
+                  ? item.label.includes('占用')
+                    ? currentOrderMetricScopes.allocatedQuantity
+                    : '同一批未发货完成订单逐订单SKU计算还需满足量，在基地SKU层减一次可用库存并截零，再汇总缺货件数'
                   : title === '基地未备单量'
                     ? item.label === '当前待发总量'
                       ? '当前待发全部阶段尚缺等价来源；不能由快照未备单和占用简单相加'
                       : '日库存快照已备单占用量，仅展示非负有值范围'
-                    : title === '当前订单'
-                      ? item.label.startsWith('快照')
-                        ? '日库存快照的源订单/占用字段；不是统一当前待发总量'
-                        : item.label === '备单量'
-                          ? currentOrderMetricScopes.preparingQuantity
-                          : '按基地和物料比对：可用库存 −（备单中订单量 − 占用量），负结余取绝对值汇总'
-                      : title === '订单满足率'
-                        ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
-                        : undefined
+                    : title === '订单满足率'
+                      ? '当月实际发货量大于0的订单行：已发订单量取原订单量，发货量取实际发货量'
+                      : undefined
               }
             >
               {item.value.endsWith('（部分）') ? (

@@ -9,6 +9,30 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.quickFilters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.quickFilters button {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-secondary);
+  font: 600 11px/1.4 var(--ui-font);
+  cursor: pointer;
+}
+.quickFilters button:hover {
+  border-color: var(--ui-accent-line);
+  background: var(--ui-hover);
+}
+.quickFilters button[aria-pressed='true'] {
+  color: var(--ui-accent);
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent);
+}
 .toolbar label {
   display: flex;
   min-width: 0;

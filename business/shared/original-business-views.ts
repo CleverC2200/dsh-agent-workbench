@@ -98,6 +98,7 @@ export function originalFcView(config: any, tab: string) {
       'inventory',
       '货龄结构',
       [
+        'missing_age_10',
         'material_code',
         'material_name',
         'product_categ_name',
@@ -105,9 +106,11 @@ export function originalFcView(config: any, tab: string) {
         'total_qty',
         'missing_age_5',
         ['max_age', '最大货龄（天）'],
-        ...Array.from({ length: 8 }, (_, i) => `missing_age_${i + 6}`),
+        ...Array.from({ length: 8 }, (_, i) => `missing_age_${i + 6}`).filter(
+          (field) => field !== 'missing_age_10',
+        ),
       ],
-      ['base', 'material_code'],
+      ['base', 'material_code', 'risk'],
     );
   if (tab === 'plan')
     return present(

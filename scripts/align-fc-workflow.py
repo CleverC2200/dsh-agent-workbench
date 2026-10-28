@@ -7,6 +7,16 @@ ROOT = Path(__file__).resolve().parents[1]
 path = ROOT / 'business/inventory-fc/sql.config.json'
 config = json.loads(path.read_text())
 
+def render(tree):
+    # GEA accepts positional SUBSTRING arguments, not SQLGlot's FROM/FOR attributes.
+    for node in list(tree.find_all(exp.Substring)):
+        args = [node.this.copy()]
+        for name in ('start', 'length'):
+            if node.args.get(name) is not None:
+                args.append(node.args[name].copy())
+        node.replace(exp.Anonymous(this='SUBSTRING', expressions=args))
+    return re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
+
 def expression(sql):
     return sqlglot.parse_one('SELECT ' + sql, read='postgres').expressions[0]
 
@@ -104,7 +114,7 @@ for key, query in config['queries'].items():
         tree.select(expression('COUNT(*)-COUNT(r.recommended_qty) AS missing_calculation_count'), append=True, copy=False)
         tree.select(expression('CASE WHEN COUNT(r.daily_plan)=COUNT(*) AND COUNT(r.inventory_qty)=COUNT(*) THEN SUM(r.inventory_qty)/NULLIF(SUM(r.daily_plan),0) ELSE NULL END AS forecast_turnover_days'), append=True, copy=False)
         query['resultColumns'] += ['missing_calculation_count','forecast_turnover_days']
-    query['request']['sql'] = re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
+    query['request']['sql'] = render(tree)
     query['notes'] = '原版order-net-gap-v3：自然月计划日均向上取整；有效订单需求减订单自身占用后的剩余量扣减一次可用库存；目标缺口减当前调拨中量后向上取整。无计划/未知输入不生成建议；未来30日从明日开始跨自然月，展望周转=现库存/展望日均。保留当前11状态及仓库映射；当前订单与历史库存快照不混算。'
 # Keep newly published source metrics across the added net-demand CTE.
 for key, query in config['queries'].items():
@@ -124,7 +134,11 @@ for key, query in config['queries'].items():
             value = (f'CASE WHEN COUNT(*)=1 THEN MAX(t.{field}) ELSE NULL END'
                      if cte.alias == 'source_records' else f'{aliases[cte.alias]}.{field}')
             select.select(expression(f'{value} AS {field}'), append=True, copy=False)
-    query['request']['sql'] = re.sub(r'%\((gea_p\d+)\)s', r':\1', tree.sql(dialect='postgres'))
+    query['request']['sql'] = render(tree)
+# Also repair already-aligned queries skipped by the net-demand migration above.
+for key, query in config['queries'].items():
+    if key.startswith(('replenishment', 'transfer_plan')) and ' FOR ' in query['request']['sql']:
+        query['request']['sql'] = render(sqlglot.parse_one(query['request']['sql'], read='postgres'))
 config['replenishmentPolicy']['fallbackDemandBasis'] = '历史动销仅用于回顾周转；本月计划未知时补货建议待核实'
 for view in config['sourceViews']['views']:
     if view['id']=='replenishment':

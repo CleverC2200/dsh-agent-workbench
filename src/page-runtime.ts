@@ -101,6 +101,8 @@ export interface PageBusinessGrant {
   /** Optional dedicated DMS grant, provided only by the authorized branch adapter. */
   branchDms?(input: any, signal: AbortSignal): Promise<unknown>;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
+  /** Read-only model interpretation, executed under this page's business identity. */
+  insight?(input: unknown, signal: AbortSignal): Promise<unknown>;
   workspace?(input: any, signal: AbortSignal): Promise<unknown>;
   observe?(context: Record<string, unknown>): void;
   snapshot?(): { sequence: number; state: unknown } | undefined;
@@ -383,6 +385,11 @@ export class PageRuntime {
         case 'sql':
           if (!owner.grant.readSql) throw Error('METHOD_NOT_ALLOWED');
           value = await owner.grant.readSql(input.parameters, signal);
+          break;
+        case 'insight':
+          if (!owner.grant.insight || !owner.grant.allowsEffect('view'))
+            throw Error('METHOD_NOT_ALLOWED');
+          value = await owner.grant.insight(input.parameters, signal);
           break;
         case 'branch-dms':
           if (!owner.grant.branchDms) throw Error('METHOD_NOT_ALLOWED');
