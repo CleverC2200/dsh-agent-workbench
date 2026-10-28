@@ -94,7 +94,9 @@ export function CurrentShortageList({
     .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
     .map(([field, label]) => ({
       field,
-      label: config.agentId === 'inventory-fc' ? label.replace('（箱）', '（件）') : label,
+      label: ['inventory-fc', 'inventory-qll'].includes(config.agentId)
+        ? label.replace('（箱）', '（件）')
+        : label,
     }));
   const [chosenColumns, setChosenColumns] = useState(() => columns.map(([key]) => key));
   return (

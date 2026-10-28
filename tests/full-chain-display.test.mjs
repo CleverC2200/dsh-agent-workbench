@@ -123,3 +123,17 @@ test('snapshot order zero is visible and incomplete quantity coverage is labelle
     null,
   );
 });
+
+test('quantity display scales in the original unit without abbreviating days, percentages or missing values', () => {
+  assert.equal(formatChainValue(9999, '件'), '9,999件');
+  assert.equal(formatChainValue(10000, '件'), '1万件');
+  assert.equal(formatChainValue(1234567.8, '件'), '123.46万件');
+  assert.equal(formatChainValue(-1234567.8, '件'), '-123.46万件');
+  assert.equal(formatChainValue(100000000, '件'), '1亿件');
+  assert.equal(formatChainValue(123456789, '箱/天'), '1.23亿箱/天');
+  assert.equal(formatChainValue(0, '件'), '0件');
+  assert.equal(formatChainValue(null, '件'), '-');
+  assert.equal(formatChainValue(NaN, '件'), '-');
+  assert.equal(formatChainValue(10000, '天'), '10,000天');
+  assert.equal(formatChainValue(95.81, '%'), '95.81%');
+});

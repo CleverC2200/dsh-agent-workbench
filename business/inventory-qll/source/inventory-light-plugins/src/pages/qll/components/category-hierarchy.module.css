@@ -1,0 +1,125 @@
+.root {
+  container-type: inline-size;
+  font-family: var(--ui-font, 'Microsoft YaHei UI', 'PingFang SC', Arial, sans-serif);
+  padding: 12px 0;
+  color: var(--ui-text, #555d68);
+}
+.scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+.scroll table {
+  width: 100%;
+  min-width: 1400px;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 12px;
+}
+.scroll th {
+  padding: 12px;
+  background: var(--ui-muted-surface, #f5f6f8);
+  color: #747b86;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+.scroll td {
+  padding: 12px;
+  border-bottom: 1px solid #eceef1;
+  text-align: right;
+}
+.scroll td:first-child {
+  min-width: 190px;
+  max-width: 300px;
+  text-align: left;
+}
+.scroll td:nth-child(2),
+.scroll td:last-child {
+  text-align: left;
+  white-space: nowrap;
+}
+.scroll tbody > tr:hover > td:not(.child) {
+  background: #fffafb;
+}
+.scroll .child {
+  padding: 16px;
+  background: #fff4d9;
+}
+.child > section,
+.child > .scroll {
+  width: calc(100cqw - 48px);
+  max-width: 100%;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.child .child > section,
+.child .child > .scroll {
+  width: calc(100cqw - 88px);
+}
+.child .child .child > section,
+.child .child .child > .scroll {
+  width: calc(100cqw - 128px);
+}
+.expand {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.expand:hover {
+  color: #df1732;
+}
+.filters,
+.pager {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+}
+.filters label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.filters input,
+.filters select,
+.filters button,
+.pager button {
+  height: 36px;
+  border: 1px solid #d9dde3;
+  border-radius: 8px;
+  background: #fff;
+  color: #555d68;
+  padding: 0 12px;
+  font: inherit;
+}
+.filters button:hover,
+.pager button:not(:disabled):hover {
+  background: #fffafb;
+  border-color: #efabb4;
+  color: #df1732;
+}
+.root :is(button, input, select):focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+.root button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pager {
+  justify-content: flex-end;
+  font-size: 12px;
+}
+.root p {
+  padding: 8px 16px;
+}

@@ -1,4 +1,4 @@
-import { FullChainTrends } from './qll/components/full-chain-trends';
+import { formatChainValue } from '../../../../../shared/full-chain-display';
 import { scopeDescription } from './qll/components/structure-evidence';
 import { ReferenceStructure, rowStatus } from './qll/components/reference-structure';
 import { customerMetrics } from 'dsh-agent-manage/inventory-compute/full-chain-customer-metrics';
@@ -75,13 +75,11 @@ const KPI_COPY: Record<KpiKey, { title: string; eyebrow: string; target: string 
   orderGap: { title: '当前订单', eyebrow: '当前备单量', target: '本月发货量' },
 };
 
-function formatMetric(value: number | null, unit: MetricValue['unit'], compact = false) {
+function formatMetric(value: number | null, unit: MetricValue['unit'], _compact = false) {
   if (value == null) return '-';
-  if (unit === '件' && compact && Math.abs(value) >= 10_000)
-    return `${(value / 10_000).toFixed(2)} 万箱`;
   if (unit === '%') return `${value.toFixed(2)}%`;
   if (unit === '天') return `${value.toFixed(1)} 天`;
-  return `${Math.round(value).toLocaleString('zh-CN')} ${unit === '件' ? '箱' : unit}`;
+  return formatChainValue(value, unit);
 }
 
 export function KpiCard({
@@ -788,7 +786,11 @@ export function FullChainWorkbench() {
   const loadController = useRef<AbortController | null>(null);
   useEffect(() => () => loadController.current?.abort(), []);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = usePageViewField(React, view, 'tab', 'category');
+  const [savedTab, setActiveTab] = usePageViewField(React, view, 'tab', 'category');
+  const activeTab = savedTab === 'structure' ? 'structure' : 'category';
+  useEffect(() => {
+    if (savedTab !== activeTab) setActiveTab(activeTab);
+  }, [savedTab, activeTab, setActiveTab]);
   const [skuFilter, setSkuFilter] = usePageViewField(React, view, 'sku', '');
   const [queryDraft, setQueryDraft] = useState(() => ({ asOf, month, sku: skuFilter }));
   useEffect(() => setQueryDraft({ asOf, month, sku: skuFilter }), [asOf, month, skuFilter]);
@@ -824,7 +826,7 @@ export function FullChainWorkbench() {
     return () => observer.disconnect();
   }, []);
   const showDetailTab = useCallback((tab: string) => {
-    setActiveTab(tab);
+    setActiveTab(tab === 'structure' ? 'structure' : 'category');
     requestAnimationFrame(() => {
       const board = boardScrollRef.current;
       const scroll = window.innerWidth <= 760 ? panelRef.current : board;
@@ -1070,29 +1072,6 @@ export function FullChainWorkbench() {
           },
     );
   }, [workspace?.structure, workspace?.filters, workspace?.layerMetrics]);
-  const agingRows = workspace
-    ? (
-        [
-          'base',
-          'branch',
-          ...(workspace.scope === 'all-channel' ? ['customer' as const] : []),
-        ] as const
-      ).map((layer) => ({
-        key: layer,
-        layer,
-        name:
-          layer === 'base'
-            ? '基地（>60天）'
-            : layer === 'branch'
-              ? '分仓（60–89天关注，≥90天超期）'
-              : '客户（60/90/120天分级）',
-        current: workspace.aging.byLayer[layer],
-        attention: workspace.aging.attentionByLayer[layer],
-        highRisk: workspace.aging.highRiskByLayer[layer],
-        day7: workspace.aging.projections.day7.byLayer[layer],
-        day14: workspace.aging.projections.day14.byLayer[layer],
-      }))
-    : [];
   const completeAvailable = (layer: StructureRow['layer']) => {
     const rows = workspace?.structure.filter((row) => row.layer === layer) ?? [];
     return rows.length > 0 && rows.every((row) => row.availableQty != null)
@@ -1201,7 +1180,7 @@ export function FullChainWorkbench() {
   usePageFilter(
     {
       allowedFields: ['tab', 'scope', 'asOf', 'month', 'search'],
-      tabs: ['category', 'structure', 'aging', 'shortage'],
+      tabs: ['category', 'structure'],
       tab: activeTab,
       scope,
       asOf,
@@ -1464,196 +1443,8 @@ export function FullChainWorkbench() {
                               onFilters={setStructureFilters}
                             />
                           </Tabs.TabPane>
-                          <Tabs.TabPane key="aging" title="库存库龄">
-                            {workspace.agingDetails ? (
-                              <WorkspaceDetailTree workspace={workspace} kind="aging" />
-                            ) : (
-                              <>
-                                <div className={styles.tabIntro}>
-                                  <div>
-                                    <strong>{'分层库龄判断'}</strong>
-                                    <span>
-                                      {'基地、分仓、客户阈值不同，不合并成一个全国“超期”定义。'}
-                                    </span>
-                                  </div>
-                                  <Tag
-                                    color={
-                                      workspace.aging.projections.day14.state === 'available'
-                                        ? 'green'
-                                        : 'orange'
-                                    }
-                                  >
-                                    {'FIFO 14天预测：'}
-                                    {workspace.aging.projections.day14.state === 'available'
-                                      ? '可用'
-                                      : '部分可用'}
-                                  </Tag>
-                                </div>
-                                <Table
-                                  rowKey="key"
-                                  data={agingRows}
-                                  scroll={{ x: 1100 }}
-                                  pagination={false}
-                                  columns={[
-                                    {
-                                      title: '层级口径',
-                                      dataIndex: 'name',
-                                      width: 300,
-                                    },
-                                    {
-                                      title: '超期/熔断（件）',
-                                      dataIndex: 'current',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null
-                                          ? '不适用/不可用'
-                                          : Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '60–89天关注带（件）',
-                                      dataIndex: 'attention',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null
-                                          ? '不适用/不可用'
-                                          : Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '客户90–119天高风险带',
-                                      dataIndex: 'highRisk',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null
-                                          ? '不适用/不可用'
-                                          : Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '7天后（件）',
-                                      dataIndex: 'day7',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null ? (
-                                          <Tag color="gray">{'缺少批次/速度'}</Tag>
-                                        ) : (
-                                          Math.round(v).toLocaleString('zh-CN')
-                                        ),
-                                    },
-                                    {
-                                      title: '14天后（件）',
-                                      dataIndex: 'day14',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null ? (
-                                          <Tag color="gray">{'缺少批次/速度'}</Tag>
-                                        ) : (
-                                          Math.round(v).toLocaleString('zh-CN')
-                                        ),
-                                    },
-                                  ]}
-                                />
-                              </>
-                            )}
-                          </Tabs.TabPane>
-                          <Tabs.TabPane key="shortage" title="订单缺口">
-                            {workspace.orderDetails ? (
-                              <WorkspaceDetailTree workspace={workspace} kind="orders" />
-                            ) : (
-                              <>
-                                <div className={styles.tabIntro}>
-                                  <div>
-                                    <strong>{'订单满足率与缺口'}</strong>
-                                    <span>{'当月履约和当前待分配是两个概念，分别展示。'}</span>
-                                  </div>
-                                  <Tag color="red">{'缺口目标 0 件'}</Tag>
-                                </div>
-                                <Table
-                                  rowKey="key"
-                                  data={shortageRows}
-                                  scroll={{ x: 1700 }}
-                                  pagination={false}
-                                  columns={[
-                                    {
-                                      title: '履约路径',
-                                      dataIndex: 'path',
-                                      width: 240,
-                                    },
-                                    {
-                                      title: '原始需求（件）',
-                                      dataIndex: 'demandQty',
-                                      align: 'right',
-                                      render: (v: number) => Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '发运后缺口（件）',
-                                      dataIndex: 'shortageQty',
-                                      align: 'right',
-                                      render: (v: number) => (
-                                        <span className={v > 0 ? styles.negative : ''}>
-                                          {Math.round(v).toLocaleString('zh-CN')}
-                                        </span>
-                                      ),
-                                    },
-                                    {
-                                      title: '满足率',
-                                      dataIndex: 'rate',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null ? '不可用' : `${v.toFixed(2)}%`,
-                                    },
-                                    {
-                                      title: '可用库存（件）',
-                                      dataIndex: 'available',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null
-                                          ? '不可用'
-                                          : Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '协同库存（件）',
-                                      dataIndex: 'collaborative',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null ? (
-                                          <Tag color="gray">{'待匹配'}</Tag>
-                                        ) : (
-                                          Math.round(v).toLocaleString('zh-CN')
-                                        ),
-                                    },
-                                    {
-                                      title: '受影响订单',
-                                      dataIndex: 'affectedOrders',
-                                      align: 'right',
-                                    },
-                                    {
-                                      title: '当前待分配（件）',
-                                      dataIndex: 'pending',
-                                      align: 'right',
-                                      render: (v: number | null) =>
-                                        v == null ? '—' : Math.round(v).toLocaleString('zh-CN'),
-                                    },
-                                    {
-                                      title: '建议动作',
-                                      dataIndex: 'action',
-                                      width: 220,
-                                    },
-                                    {
-                                      title: '负责人',
-                                      dataIndex: 'owner',
-                                      width: 130,
-                                    },
-                                  ]}
-                                />
-                              </>
-                            )}
-                          </Tabs.TabPane>
                         </Tabs>
                       </Card>
-                      <FullChainTrends
-                        key={JSON.stringify([viewKey, structureFilters])}
-                        workspace={workspace}
-                        filters={structureFilters}
-                      />
                     </>
                   )}
                 </>
