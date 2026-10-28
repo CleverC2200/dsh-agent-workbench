@@ -118,7 +118,7 @@ test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) 
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
 ).join('\n');
-async function mount(t, id, width, override) {
+async function mount(t, id, width, override, insight) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
@@ -138,6 +138,10 @@ async function mount(t, id, width, override) {
       const result = wire(message.parameters);
       return override ? override(message.parameters, result) : result;
     }
+    if (message.method === 'insight')
+      return insight
+        ? insight(message.parameters)
+        : { answer: '总量：测试库存。\n结构分析：测试结构。\n建议：核实数据【待人工确认】。' };
     if (message.method === 'access') return { principalId: 'layout-user', consumerCode: id };
     if (message.method === 'context') return { ok: true };
     throw Error('Unexpected layout request: ' + message.method);
@@ -2000,5 +2004,42 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
     ),
   );
   assert.ok(!calls.some((call) => call.queryId === 'current-shortage.skus'));
+  assert.deepEqual(errors, []);
+});
+
+test('base dashboard model insight does not block metrics and renders model text as plain paragraphs', async (t) => {
+  let finish;
+  const waiting = new Promise((resolve) => {
+    finish = resolve;
+  });
+  let evidence;
+  const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, (input) => {
+    evidence = input.evidence;
+    return waiting;
+  });
+  await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
+  const panel = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(panel).toContainText('正在生成 AI 洞察');
+  await expect.poll(() => !!evidence?.cards?.length).toBe(true);
+  assert.equal(evidence.evidence?.text, undefined);
+  finish({
+    answer:
+      '总量：现库存100件。\n结构分析：目标缺失。\n建议：核实目标【待人工确认】。<script>alert(1)</script>',
+  });
+  await expect(panel).toContainText('总量：现库存100件');
+  await expect(panel.locator('script')).toHaveCount(0);
+  await expect(panel.locator('p')).toHaveCount(3);
+  assert.deepEqual(errors, []);
+});
+
+test('base dashboard model failure leaves cards and detail rows visible', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280, undefined, () => {
+    throw Error('MODEL_UNAVAILABLE');
+  });
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
+    'AI 洞察暂不可用',
+  );
+  await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
+  await expect(frame.locator('tbody tr').first()).toBeVisible();
   assert.deepEqual(errors, []);
 });

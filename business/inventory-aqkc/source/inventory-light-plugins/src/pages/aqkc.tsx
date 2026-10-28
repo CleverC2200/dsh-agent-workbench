@@ -1,5 +1,6 @@
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
+import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
 import { usesConfiguredSql } from '../../../../../shared/sql-config';
 import { stockPageSortFields } from '../configured-stock';
 import { currentOrderMetricScopes } from '../../../aqkc/web/src/lib/workbench-current-order.ts';
@@ -797,6 +798,34 @@ export function InventoryOperationsWorkbench() {
   const overviewError =
     !allBasesSelected && scopedOverview?.key === overviewKey ? scopedOverview.error : null;
   const overviewLoading = paths.length > 0 && !overviewWorkspace && !overviewError;
+  const modelInsight = useDashboardInsight(
+    {
+      scope: overviewKey,
+      // Pass facts, not the former deterministic narrative, to the model.
+      evidence: overviewWorkspace?.workbench?.inventoryInsight
+        ? { ...overviewWorkspace.workbench.inventoryInsight, text: undefined }
+        : null,
+      cards: overviewWorkspace?.workbench?.cards,
+      rows: overviewWorkspace?.table.rows,
+      currentOrders: overviewWorkspace?.workbench?.currentOrders,
+      orderMetricScopes: currentOrderMetricScopes,
+      version: overviewWorkspace?.versionSummary,
+    },
+    !!overviewWorkspace &&
+      paths.length > 0 &&
+      !dashboardLoading &&
+      !overviewLoading &&
+      !overviewError &&
+      !dashboardError,
+  );
+  useEffect(() => {
+    updateContext('dashboardAIInsight', {
+      scope: overviewKey,
+      status: modelInsight.status,
+      text: modelInsight.status === 'ready' ? modelInsight.answer : undefined,
+      source: 'model',
+    });
+  }, [overviewKey, modelInsight.status, modelInsight.answer]);
   useEffect(() => {
     const tabError = activeBoardTab !== '基地结构' && !activeTabTable ? dashboardTabsError : null;
     const tabPending =
@@ -1010,30 +1039,19 @@ export function InventoryOperationsWorkbench() {
                   </div>
                   <div
                     className={styles.insightSummary}
-                    title={overviewWorkspace.workbench?.overallAnalysis
-                      ?.split('\n')
-                      .find((line) => line.startsWith('数据边界：'))}
+                    aria-live="polite"
+                    aria-busy={modelInsight.status === 'loading'}
                   >
-                    {sanitizeUserVisibleCopy(
-                      overviewWorkspace.workbench?.overallAnalysis || '当前缺少经营分析所需数据。',
-                    )
-                      .split('\n')
-                      .filter((line) => line && !line.startsWith('数据边界：'))
-                      .map((line, index) => {
-                        const colon = line.indexOf('：');
-                        return (
-                          <p key={index}>
-                            {colon > 0 ? (
-                              <>
-                                <strong>{line.slice(0, colon)}：</strong>
-                                {line.slice(colon + 1)}
-                              </>
-                            ) : (
-                              line
-                            )}
-                          </p>
-                        );
-                      })}
+                    {modelInsight.status === 'loading' ? (
+                      <p>正在生成 AI 洞察…</p>
+                    ) : modelInsight.status === 'error' ? (
+                      <p>AI 洞察暂不可用，当前指标与明细可正常查看。</p>
+                    ) : (
+                      modelInsight.answer
+                        ?.split(/\n+/)
+                        .filter(Boolean)
+                        .map((line, index) => <p key={index}>{line}</p>)
+                    )}
                   </div>
                 </section>
               </>
