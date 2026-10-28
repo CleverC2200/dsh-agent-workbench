@@ -33,6 +33,11 @@ const result = await build({
 });
 const state = await readFile(resolve(source, 'live-model.mjs'), 'utf8');
 const style = await readFile(resolve(source, 'theme.css'), 'utf8');
+if(process.env.FULFILLMENT_SIMULATION_CONFIG){
+  const simulation=JSON.parse(await readFile(process.env.FULFILLMENT_SIMULATION_CONFIG,'utf8'));
+  if(simulation.endpoint!=='http://127.0.0.1:3197/state'||typeof simulation.token!=='string'||!simulation.runId)throw Error('SIMULATION_CONFIG_INVALID');
+  html=html.replace('</head>',`<script type="application/json" id="fulfillment-simulation-config">${JSON.stringify(simulation).replaceAll('<','\\u003c')}</script></head>`);
+}
 html = html
   .replace('</head>', `<style>${theme}\n${style}</style></head>`)
   .replace(

@@ -1,4 +1,6 @@
 import { renderSummaryDetails } from './summary-details.mjs';
+import { mountSalesConfirmation } from './sales-confirmation.mjs';
+import { mountSalesSimulation } from './sales-simulation.mjs';
 import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
@@ -65,6 +67,8 @@ let currentDetailData=null;
 let currentResults=null;
 let dimension = 'deliveryDimensionPanel';
 const $ = (id) => document.getElementById(id);
+const salesConfirmation = mountSalesConfirmation(document);
+const salesSimulation = mountSalesSimulation(document);
 const value = (row, key, result) => {
   const denied = result?.rejectedColumns?.some(
     (column) =>
@@ -147,6 +151,8 @@ function clear(message = '正在读取当前授权数据…') {
   for(const state of orderPagination.values()){state.context=null;state.page=0;state.nav.hidden=true;}
   clearPanels();
   currentDetailData=null;
+  salesConfirmation.close();
+  salesSimulation.clear();
   $('salesConfirmOverlay').hidden=true;
   $('confirmationHistoryOverlay').hidden=true;
   for(const id of ['salesConfirmOrder','confirmationHistoryStatus','confirmationHistoryDetails'])$(id).textContent='';
@@ -453,17 +459,36 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
       const statusButton=document.createElement('button');statusButton.type='button';statusButton.className='confirmation-status';statusButton.textContent='未接入';
       statusButton.title='查看确认状态与操作记录';statusButton.addEventListener('click',()=>{
+        const simulation=salesSimulation.resultFor(row);
+        if(simulation){
+          $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；${simulation.status}（仅模拟）`;
+          $('confirmationHistoryDetails').textContent=simulation.records.length?simulation.records.map(record=>`${record.at} ${record.summary}`).join('\n'):'等待测试群中田庚操作卡片。模拟结果不代表正式确认状态，不触发发货或改单。';
+          $('confirmationHistoryOverlay').hidden=false;return;
+        }
         $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；确认状态未接入`;
         $('confirmationHistoryDetails').textContent='尚未接入真实确认状态和操作记录接口，无法查询历史记录。';
         $('confirmationHistoryOverlay').hidden=false;
       });confirmation.append(statusButton);
+      salesSimulation.watch(statusButton,row);
       const operation=cell('');operation.className='confirmation-operation-cell';
       const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.className='sales-confirm-trigger';
-      confirmButton.textContent='销售确认';confirmButton.title='查看销售确认信息';
+      confirmButton.textContent='销售确认';confirmButton.title='发起飞书群销售确认通知';
       confirmButton.addEventListener('click',()=>{
-        const seller=value(q,'sales_person',quantities);
-        $('salesConfirmOrder').textContent=`订单号：${row.order_no}\n经销商名称：${value(row,'customer_name',orders)}\n销售人员：${seller==='—'?'源数据未提供':seller}\n确认推送给销售？\n尚未接入真实推送接口，当前仅可查看，不能提交或修改确认状态。`;
-        $('salesConfirmOverlay').hidden=false;
+        const rate=value(q,'order_allocation_rate',quantities);
+        const filters=selectedFilters();
+        salesConfirmation.open({
+          orderNo:value(row,'order_no',orders), customer:value(row,'customer_name',orders),
+          customerCode:value(row,'customer_code',orders), base:value(row,'base',orders),
+          seller:value(q,'sales_person',quantities), rate:['—','无权限'].includes(rate)?null:rate,
+          quantity:quantityText(q,'original_qty',quantities),
+          period:`${filters.start} — ${filters.end_exclusive}（不含）`, readAt:new Date().toLocaleString('zh-CN'),
+          lines:lines.map(item=>{const quantity=quantityMap.get(key(item));const raw=value(quantity,'original_qty',quantities);const ratio=value(quantity,'sku_allocation_rate',quantities);return {
+            sku:value(item,'sku',orders),name:value(item,'material_name',orders),
+            quantity:quantityText(quantity,'original_qty',quantities),shortage:quantityText(quantity,'source_short_qty',quantities),
+            rate:['—','无权限'].includes(ratio)?ratio:Number(ratio).toFixed(1)+'%',
+            rawQuantity:['—','无权限'].includes(raw)?null:Number(raw),
+          };}),
+        },confirmButton);
       });
       operation.append(confirmButton);
       tr.append(confirmation, operation);
@@ -1100,7 +1125,6 @@ void ready.then(() => {
   connected = true;
   return load();
 });
-const submitConfirmation=$('salesConfirmForm').querySelector('button[type="submit"]');
 updateSourceFilters([]);
 bindPanelControls(options=>loadItemPage('coordination',options));
 for(const list of document.querySelectorAll('[role="tablist"]'))list.addEventListener('keydown',event=>{
@@ -1110,9 +1134,6 @@ for(const list of document.querySelectorAll('[role="tablist"]'))list.addEventLis
   const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowLeft'?-1:1)+tabs.length)%tabs.length;
   event.preventDefault();tabs[next].click();tabs[next].focus();
 });
-submitConfirmation.disabled=true;
-submitConfirmation.title='尚未接入真实销售确认接口，不能提交';
-$('salesConfirmForm').addEventListener('submit',event=>event.preventDefault());
 for(const button of document.querySelectorAll('[data-close-sales-confirm]'))button.addEventListener('click',()=>{$('salesConfirmOverlay').hidden=true;});
 for(const button of document.querySelectorAll('[data-close-confirmation-history]'))button.addEventListener('click',()=>{$('confirmationHistoryOverlay').hidden=true;});
 for(const id of ['salesConfirmOverlay','confirmationHistoryOverlay'])$(id).addEventListener('click',event=>{if(event.target===$(id))$(id).hidden=true;});
