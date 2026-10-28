@@ -28,12 +28,12 @@ const order = {
     },
   ],
 };
-function fixture() {
+function fixture(simulation) {
   const dom = new JSDOM(
     '<button id="open">销售确认</button><div id="salesConfirmOverlay" hidden><section class="confirmation-dialog" role="dialog" aria-modal="true"><header><h2 id="salesConfirmTitle"></h2><p id="salesConfirmOrder"></p><button data-close-sales-confirm>关闭</button></header><form id="salesConfirmForm"></form></section></div>',
   );
   const d = dom.window.document,
-    ui = mountSalesConfirmation(d);
+    ui = mountSalesConfirmation(d, simulation);
   const click = (label) => {
     const b = [...d.querySelectorAll('#salesConfirmOverlay button')].find(
       (b) => b.textContent === label,
@@ -43,6 +43,22 @@ function fixture() {
   };
   return { dom, d, ui, click };
 }
+test('client click automatically sends only the explicitly matched simulation order and reports the receipt', async () => {
+  let received;
+  const { ui, d } = fixture({
+    matches: (input) => input.orderNo === order.orderNo,
+    notify: async (input) => {
+      received = input;
+      return { state: { simulation: true } };
+    },
+  });
+  ui.open(order, d.getElementById('open'));
+  await new Promise((done) => setImmediate(done));
+  assert.equal(received.orderNo, order.orderNo);
+  assert.equal(received.consumerCode, 'order01');
+  assert.match(d.querySelector('[role="status"]').textContent, /已发送.*仅艾特田庚/);
+  assert.match(d.querySelector('#salesConfirmForm').textContent, /模拟卡片已发送/);
+});
 test('preview rules preserve unknown, exact threshold and current order scope', () => {
   assert.equal(confirmationDraft(order).consumerCode, 'order01');
   assert.equal(confirmationDraft({ ...order, rate: 90 }).scenario, 'ready');

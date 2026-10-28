@@ -67,8 +67,8 @@ let currentDetailData=null;
 let currentResults=null;
 let dimension = 'deliveryDimensionPanel';
 const $ = (id) => document.getElementById(id);
-const salesConfirmation = mountSalesConfirmation(document);
 const salesSimulation = mountSalesSimulation(document);
+const salesConfirmation = mountSalesConfirmation(document, salesSimulation);
 const value = (row, key, result) => {
   const denied = result?.rejectedColumns?.some(
     (column) =>

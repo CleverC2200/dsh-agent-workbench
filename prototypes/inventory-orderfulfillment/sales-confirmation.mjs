@@ -73,7 +73,7 @@ export function salesConfirmationCard(input) {
 }
 
 /** The client only initiates notification; sales actions live in the Feishu card. */
-export function mountSalesConfirmation(document) {
+export function mountSalesConfirmation(document, simulation) {
   const overlay = document.getElementById('salesConfirmOverlay');
   const dialog = overlay.querySelector('.confirmation-dialog');
   const form = document.getElementById('salesConfirmForm');
@@ -117,6 +117,7 @@ export function mountSalesConfirmation(document) {
   return {
     open(input, trigger) {
       const draft = confirmationDraft(input);
+      const simulated = simulation?.matches(draft) === true;
       opener = trigger;
       form.replaceChildren();
       heading.textContent = '发起飞书销售确认';
@@ -131,7 +132,7 @@ export function mountSalesConfirmation(document) {
       const fields = node('dl', null, 'sales-preview-fields');
       for (const [label, value] of [
         ['对应销售', draft.seller],
-        ['接收群', '待 GEA 解析'],
+        ['接收群', simulated ? '订单履约机器人测试群 · 仅艾特田庚' : '待 GEA 解析'],
         ['订单满足率', draft.rate === null ? '—' : draft.rate.toFixed(1) + '%'],
         ['订货数量', draft.quantity],
         ['统计周期', draft.period],
@@ -140,7 +141,9 @@ export function mountSalesConfirmation(document) {
       form.append(fields);
       const status = node(
         'p',
-        '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
+        simulated
+          ? '仅发送模拟卡片到测试群，不触发真实发货或改单。'
+          : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
         'sales-preview-notice',
       );
       status.role = 'status';
@@ -149,14 +152,35 @@ export function mountSalesConfirmation(document) {
       const cancel = node('button', '取消');
       cancel.type = 'button';
       cancel.addEventListener('click', close);
-      const send = node('button', '发送到飞书群（待接入）', 'primary');
+      const send = node(
+        'button',
+        simulated ? '发送到飞书测试群（仅模拟）' : '发送到飞书群（待接入）',
+        'primary',
+      );
       send.type = 'button';
-      send.disabled = true;
-      send.title = '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
+      send.disabled = !simulated;
+      if (simulated)
+        send.addEventListener('click', async () => {
+          send.disabled = true;
+          status.textContent = '正在发送模拟卡片…';
+          try {
+            await simulation.notify(draft);
+            status.textContent =
+              '模拟卡片已发送至订单履约机器人测试群，仅艾特田庚。请在飞书中操作；工作台会同步模拟结果。';
+            send.textContent = '模拟卡片已发送';
+          } catch (error) {
+            status.textContent = `发送失败：${error.message}`;
+            send.disabled = false;
+          }
+        });
+      send.title = simulated
+        ? '只向测试群发送模拟卡片并艾特田庚，不执行业务确认'
+        : '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
       footer.append(cancel, send);
       form.append(footer);
       overlay.hidden = false;
       cancel.focus();
+      if (simulated) send.click();
       return salesConfirmationCard(draft);
     },
     close,
