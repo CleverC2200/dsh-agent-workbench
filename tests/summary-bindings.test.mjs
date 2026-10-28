@@ -28,7 +28,8 @@ function executor(c, calls) {
     if (o.queryId.endsWith('.count')) rows = [{ total: 1 }];
     else if (o.queryId === 'calendar.target_versions')
       rows = [{ month: '2026-10-01', inventory_version: '纠偏' }];
-    else if (o.queryId === 'source.stock-date') rows = [{ day: '2026-10-18' }];
+    else if (['source.stock-date', 'source.health-date'].includes(o.queryId))
+      rows = [{ day: '2026-10-18' }];
     else
       rows = [
         Object.fromEntries(
@@ -48,6 +49,7 @@ test('base summary executes full real configured path without detailed SKU reads
     execute: executor(base, calls),
   });
   assert.equal(r.day, '2026-10-18');
+  assert.equal(calls.filter((id) => id === 'source.health-date').length, 1);
   assert.equal(r.groups.length, 1);
   assert.ok(calls.includes('page.dashboard-groups'));
   assert.ok(!calls.includes('page.base-stock'));
