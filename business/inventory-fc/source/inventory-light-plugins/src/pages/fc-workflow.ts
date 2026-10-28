@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { createAgentQueries } from '../../../../../shared/agent-query';
+import { agentSqlConfig } from '../../../../../shared/sql-config';
 import { readConfiguredFacts, type FactInput } from '../../../../../shared/configured-facts';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { knownNumber } from '../../../../../shared/configured-overview';
@@ -11,8 +13,51 @@ export const rowKey = (row: FcRow) => JSON.stringify([row.warehouse_code, row.sk
 export const planKey = (plan: ImportedPlan) => JSON.stringify([plan.warehouseCode, plan.sku]);
 export const quantity = (value: unknown) => knownNumber(value) ?? 0;
 
+async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal) {
+  const config = agentSqlConfig(scope.config);
+  const queryId = 'transfer_plan.template';
+  const query = config.queries[queryId];
+  const filters = scope.input.filters ?? {};
+  if (Object.keys(filters).some((key) => !['warehouse_code', 'sku'].includes(key)))
+    throw Error('模板筛选范围无效');
+  const month = scope.input.asOf.slice(0, 7) + '-01';
+  const values: Record<string, unknown> = Object.fromEntries(
+    Object.entries(query.parameterSpec).map(([key, raw]) => {
+      const spec = raw as { name: string };
+      const name = spec.name;
+      if (name === 'month') return [name, month];
+      if (name === 'page_size') return [name, 200];
+      if (name === 'offset') return [name, 0];
+      for (const field of ['warehouse_code', 'sku']) {
+        const value = filters[field]?.trim();
+        if (name === field) return [name, value || null];
+        if (name === field + '_mode') return [name, value ? 'equal' : 'all'];
+      }
+      return [name, query.request.parameters[key]];
+    }),
+  );
+  const read = (freshAfter?: number) =>
+    createAgentQueries(config, undefined, { freshAfter }).readAll(queryId, values, {
+      signal,
+      keyFields: ['warehouse_code', 'sku'],
+      requiredColumns: query.resultColumns,
+      maxRows: 10000,
+      atomicPages: true,
+    });
+  try {
+    return (await read()).rows;
+  } catch (error) {
+    signal.throwIfAborted();
+    // A cached prefix from an older source count cannot be mixed into an export.
+    // Restart once with a fresh cohort; permissions/config/columns/cancellation still fail closed.
+    if ((error as { code?: string }).code !== 'SOURCE_CHANGED') throw error;
+    return (await read(Date.now())).rows;
+  }
+}
+
 /** Only explicit download/import/submit actions enumerate their authorized filter scope. */
 export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) {
+  if (scope.viewId === 'plan') return readFcPlanRows(scope, signal);
   const pageSize = 50;
   const read = (page: number, readContext?: FactInput['readContext']) =>
     readConfiguredFacts(

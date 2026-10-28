@@ -1,4 +1,4 @@
-import { createAgentQueries } from '../../../../../shared/agent-query';
+import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
@@ -13,7 +13,7 @@ import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessDateInput } from '../../../../../shared/business-date-input';
-import { Fragment, useState, useEffect } from 'react';
+import { Fragment, useState, useEffect, useRef } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
 import { currentShortageSum } from '../../../../../shared/current-shortage';
@@ -58,9 +58,8 @@ export default function ConfiguredWorkbench() {
 function WorkbenchBody() {
   const { trial, setTrial } = useFcWorkflow();
   const [warehouse, setWarehouse] = useState('');
-  const [warehouses, setWarehouses] = useState<
-    Array<{ warehouse_code: string; warehouse_name: string | null; base: string | null }>
-  >([]);
+  const [warehouses, setWarehouses] = useState<FcWarehouse[]>([]);
+  const directoryCache = useRef<{ key: string; at: number; rows: FcWarehouse[] } | null>(null);
   const [warehouseLoading, setWarehouseLoading] = useState(true);
   const [warehouseRevision, reloadWarehouses] = useState(0);
   const [warehouseError, setWarehouseError] = useState('');
@@ -89,22 +88,24 @@ function WorkbenchBody() {
     [],
   );
   useEffect(() => {
+    const key = JSON.stringify([date, warehouseRevision]);
+    const cached = directoryCache.current;
+    if (cached?.key === key && Date.now() - cached.at < 20 * 60 * 1000) {
+      setWarehouses(cached.rows);
+      setWarehouseLoading(false);
+      setWarehouseError('');
+      return;
+    }
     const task = new AbortController();
     setWarehouseLoading(true);
     setWarehouseError('');
-    void createAgentQueries(config)
-      .readAll(
-        'branch-warehouse.directory',
-        { as_of: date, page_size: 200, offset: 0 },
-        {
-          signal: task.signal,
-          keyFields: ['warehouse_code'],
-          requiredColumns: ['warehouse_name', 'base'],
-          singlePageFirst: true,
-        },
-      )
-      .then((result) => {
-        if (!task.signal.aborted) setWarehouses(result.rows);
+    setWarehouses([]);
+    void readFcWarehouseDirectory(config, date, task.signal)
+      .then((rows) => {
+        if (!task.signal.aborted) {
+          directoryCache.current = { key, rows, at: Date.now() };
+          setWarehouses(rows);
+        }
       })
       .catch(() => {
         if (!task.signal.aborted) {
@@ -119,6 +120,7 @@ function WorkbenchBody() {
   }, [date, revision, warehouseRevision]);
   useEffect(() => {
     const clear = () => {
+      directoryCache.current = null;
       setWarehouse('');
       setWarehouses([]);
       reloadWarehouses((n) => n + 1);
