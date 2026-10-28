@@ -58,13 +58,13 @@ def age_statistics(tree):
 
 
 def update(config):
-    source = (ROOT / 'business/shared/current-shortage-source.sql').read_text().strip().rstrip(';')
+    source = (ROOT / 'business/inventory-aqkc/current-orders-source.sql').read_text().strip().rstrip(';')
     pending = parse(f"""WITH detail_shortage_source AS ({source}),
         detail_order_presence AS (SELECT COUNT(*) AS source_order_count FROM agents_scm_execute_detail_d),
         detail_pending AS (
           SELECT d.belong_base AS base, d.material_code AS sku,
-            CASE WHEN SUM(d.invalid_sku)=0 THEN SUM(d.demand_qty) END AS demand,
-            CASE WHEN SUM(d.invalid_sku)=0 THEN SUM(d.allocated_qty) END AS allocated,
+            CASE WHEN COUNT(d.demand_qty)=COUNT(*) THEN SUM(d.demand_qty) END AS demand,
+            CASE WHEN COUNT(d.allocated_qty)=COUNT(*) THEN SUM(d.allocated_qty) END AS allocated,
             CASE WHEN SUM(d.invalid_sku)=0 THEN SUM(d.shortage_qty) END AS shortage,
             SUM(d.invalid_sku) AS invalid
           FROM detail_shortage_source AS d WHERE d.location_type='基地'
@@ -81,6 +81,12 @@ def update(config):
         query = config['queries'][name]
         tree = parse(query['request']['sql'])
         age_statistics(tree)
+        # Existing queries already have the join; refresh their source as well.
+        for cte in tree.find_all(exp.CTE):
+            if cte.alias == 'detail_shortage_source':
+                cte.set('this', parse(source))
+            if cte.alias == 'detail_pending':
+                cte.set('this', pending[-1].this.copy())
         for cte in list(tree.find_all(exp.CTE)):
             if cte.alias != 'stock_rows' or 'current_shortage' in cte.this.named_selects:
                 continue
@@ -92,6 +98,18 @@ def update(config):
             wrapped = parse('SELECT '+', '.join(fields)+' FROM ('+render(original)+') AS s LEFT JOIN detail_pending AS o ON o.base=s.base AND o.sku=s.sku CROSS JOIN detail_order_presence AS p')
             wrapped.set('with_', exp.With(expressions=[c.copy() for c in pending]))
             cte.set('this', wrapped)
+        for cte in tree.find_all(exp.CTE):
+            if cte.alias == 'stock_rows':
+                for expression in list(cte.this.expressions):
+                    if expression.alias in ['current_demand', 'current_allocated']:
+                        field = expression.alias.removeprefix('current_')
+                        expression.replace(parse(f'CASE WHEN p.source_order_count > 0 THEN CASE WHEN o.sku IS NULL THEN 0 ELSE o.{field} END END AS current_{field}'))
+        # An open-order SKU can have neither stock nor a target. Keep it visible
+        # so parent order totals still reconcile with the SKU drill-down.
+        for cte in list(tree.find_all(exp.CTE)):
+            if cte.alias == 'inventory_keys' and 'detail_pending' not in render(cte.this):
+                original = cte.this.copy()
+                cte.set('this', parse('SELECT k.base AS base,k.sku AS sku FROM ('+render(original)+') AS k UNION ALL SELECT o.base AS base,o.sku AS sku FROM detail_pending AS o LEFT JOIN ('+render(original)+') AS k ON k.base=o.base AND k.sku=o.sku WHERE k.sku IS NULL AND o.sku IS NOT NULL'))
         for select in tree.find_all(exp.Select):
             source_from = select.args.get('from_')
             if not source_from or not isinstance(source_from.this, exp.Table):
@@ -122,6 +140,13 @@ def update(config):
     for name in ['page.dashboard-groups', 'page.structure-groups']:
         query = config['queries'][name]
         tree = parse(query['request']['sql'])
+        # The base total includes all categories; the drill must not silently
+        # remove a category with open orders from that same base.
+        where = tree.args.get('where')
+        if name == 'page.structure-groups' and where:
+            for comparison in list(where.find_all(exp.NEQ)):
+                if any(value.this == '饺鲜说' for value in comparison.find_all(exp.Literal)):
+                    comparison.replace(exp.true())
         age_statistics(tree)
         add(tree, 'SUM(g.age_weighted_sum) AS age_weighted_sum')
         add(tree, 'SUM(g.age_qty) AS age_qty')

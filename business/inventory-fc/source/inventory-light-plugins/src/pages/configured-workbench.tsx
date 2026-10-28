@@ -17,7 +17,7 @@ import { Fragment, useState, useEffect } from 'react';
 import config from '../../../../sql.config.json';
 import { readConfiguredFacts } from '../../../../../shared/configured-facts';
 import { currentShortageSum } from '../../../../../shared/current-shortage';
-import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
+import { FcCurrentOrders } from './fc-current-orders';
 import { originalFcView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
@@ -141,6 +141,13 @@ function WorkbenchBody() {
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
+  const trialActive = trial?.scope === fcTrialScope(date, cycleDays, warehouse);
+  const recommended = trialActive
+    ? trial.recommended
+    : (knownNumber(plan?.recommended_qty) ?? knownNumber(plan?.known_recommended_qty));
+  const missingRecommendations = trialActive
+    ? trial.missingCount
+    : (knownNumber(plan?.missing_calculation_count) ?? 0);
   const branchStock = parts['branch-stock']?.summary;
   const cards = [
     {
@@ -181,10 +188,7 @@ function WorkbenchBody() {
     },
     {
       title: '待补货量',
-      value:
-        trial?.scope === fcTrialScope(date, cycleDays, warehouse)
-          ? trial.recommended
-          : knownNumber(plan?.recommended_qty),
+      value: recommended,
       unit: '件',
       color: 'red',
       details: [
@@ -316,6 +320,12 @@ function WorkbenchBody() {
                     {show(c.value)}
                     {c.value != null && <small>{c.unit}</small>}
                   </div>
+                  {c.title === '待补货量' && missingRecommendations > 0 && (
+                    <small>
+                      {c.value !== null ? '已测算部分；' : ''}
+                      {missingRecommendations} 项待核实
+                    </small>
+                  )}
                   <dl>
                     {c.details.map(([label, value, unit]) => (
                       <div key={String(label)}>
@@ -334,16 +344,11 @@ function WorkbenchBody() {
               </h3>
               <p>
                 <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '件')}
-                ，建议补货{' '}
-                {show(
-                  trial?.scope === fcTrialScope(date, cycleDays, warehouse)
-                    ? trial.recommended
-                    : knownNumber(plan?.recommended_qty),
-                  '件',
-                )}
-                。
-                {(trial?.missingCount ?? knownNumber(plan?.missing_calculation_count) ?? 0) > 0 && (
-                  <span>部分SKU计算要素待核实，请打开补货明细核对，未将缺失按0汇总。</span>
+                ，建议补货 {show(recommended, '件')}。
+                {missingRecommendations > 0 && (
+                  <span>
+                    以上为可计算部分，另有 {missingRecommendations} 项要素待核实，未按0计入。
+                  </span>
                 )}
               </p>
             </section>
@@ -362,7 +367,7 @@ function WorkbenchBody() {
               </nav>
               <div className="business-panel">
                 {tab === 'orders' ? (
-                  <CurrentShortageList
+                  <FcCurrentOrders
                     key={warehouse}
                     warehouseCode={warehouse}
                     config={config}

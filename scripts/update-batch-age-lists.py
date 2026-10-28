@@ -92,11 +92,20 @@ for agent in ['aqkc','fc','qll']:
  for key,sql,sp,rc in [('batch-age.groups',cte+' SELECT '+', '.join('g.'+k+' AS '+k for k in cols)+' FROM batch_groups AS g ORDER BY '+order+' LIMIT :gea_p10 OFFSET :gea_p11',spec,cols),('batch-age.count',cte+' SELECT COUNT(*) AS total FROM batch_groups AS g',{k:v for k,v in spec.items() if k not in ['gea_p10','gea_p11','gea_p13','gea_p14']},['total']),('batch-age.atomic',cte+', batch_page AS (SELECT '+', '.join('g.'+k+' AS '+k for k in cols)+', 1 AS page_row_present FROM batch_groups AS g ORDER BY '+order+' LIMIT :gea_p10 OFFSET :gea_p11), batch_count AS (SELECT COUNT(*) AS page_scope_total FROM batch_groups AS g) SELECT '+', '.join('p.'+k+' AS '+k for k in cols)+', p.page_row_present AS page_row_present,c.page_scope_total AS page_scope_total FROM batch_count AS c LEFT JOIN batch_page AS p ON 1=1 ORDER BY '+order.replace('g.', 'p.'),spec,cols+['page_row_present','page_scope_total'])]:
   c['queries'][key]={'title':'批次货龄结构','grain':'snapshot + warehouse/SKU FIFO -> selected group','notes':notes,'request':{'sql':'WITH '+sql,'parameters':{k:requestparams[k] for k in sp},'includeTotal':False},'parameterSpec':sp,'resultColumns':rc}
  c['queries']['batch-age.groups']['pagination']={'mode':'sql_limit_offset','countQuery':'batch-age.count','atomicQuery':'batch-age.atomic'}
+ if agent == 'fc':
+  for query_id in ['batch-age.groups', 'batch-age.count', 'batch-age.atomic']:
+   query = c['queries'][query_id]
+   query['request']['sql'] = query['request']['sql'].replace('FROM batch_groups AS g', 'FROM batch_groups AS g WHERE (:gea_p15 IS NULL OR g.warning = :gea_p15)')
+   query['parameterSpec'] = {**query['parameterSpec'], 'gea_p15': {'name': 'risk', 'type': 'string', 'required': True, 'nullable': True, 'enum': ['预警', '滞库', '正常']}}
+   query['request']['parameters']['gea_p15'] = None
  mappings={'fc':{'inventory':{'missing_age_5':('average_age','decimal2'),'missing_age_6':('age0_30','quantity-share'),'missing_age_7':('age31_60','quantity-share'),'missing_age_8':('age61_90','quantity-share'),'missing_age_9':('age90_plus','quantity-share'),'missing_age_10':('warning',None),'missing_age_11':('daily_movement','decimal2'),'missing_age_12':('historical_turnover','decimal2')}},'qll':{'aging':{'warehouse_type':('warehouseid',None),'missing_expired':('risk_current','decimal2'),'missing_age60_89':('age60_89','decimal2'),'missing_future7':('projected_risk7','decimal2'),'missing_future14':('projected_risk14','decimal2')}},'aqkc':{'age-structure':{'missing_warning':('warning',None),'max_age':('average_age','decimal2'),'missing_age0_30':('age0_30','quantity-share'),'missing_age31_40':('age31_40','quantity-share'),'missing_age41_60':('age41_60','quantity-share'),'missing_age60':('age60_plus','quantity-share'),'missing_future7':('future7','decimal2'),'missing_future14':('future14','decimal2'),'missing_movement':('daily_movement','decimal2')}}}
  for view in c['sourceViews']['views']:
   if view['id'] not in mappings[agent]:continue
   view.update(queryId='batch-age.groups',description=notes,overrides={'group_level':'base' if agent=='aqkc' else 'detail'})
   view.pop('summaryId',None);view['metrics']=[];view['gapIds']=[]
+  if agent == 'fc':
+   view['pageReadSize'] = 50
+   view['filters'] = [f for f in view['filters'] if f['name'] != 'risk'] + [{'name': 'risk', 'label': '风险快捷查询', 'options': [{'label': label, 'value': label if label != '全部' else ''} for label in ['预警', '滞库', '正常', '全部']]}]
   for col in view['columns']:
    if col['field'] in mappings[agent][view['id']]:
     f,fmt=mappings[agent][view['id']][col['field']];col.update(valueField=f);col.pop('unavailable',None);col.pop('reason',None)

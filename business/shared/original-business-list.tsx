@@ -23,7 +23,9 @@ export function OriginalBusinessList({
   chosenColumns,
   onColumns,
   filters,
+  appliedFilters,
   onFilter,
+  onQuickFilter,
   submit,
   reset,
   result,
@@ -135,18 +137,36 @@ export function OriginalBusinessList({
           data-business-filters={fc ? 'fc' : undefined}
           onSubmit={submit}
         >
-          {view.filters.map((f: any) => (
-            <label key={f.name} className={fc ? css.filterField : undefined}>
-              <span>{f.label}</span>
-              <Input
-                aria-label={f.label}
-                placeholder={fc ? `请输入${f.label}` : undefined}
-                maxLength={100}
-                value={filters[f.name] ?? ''}
-                onChange={(value: string) => onFilter(f.name, value)}
-              />
-            </label>
-          ))}
+          {view.filters
+            .filter((f: any) => !f.options)
+            .map((f: any) => (
+              <label key={f.name} className={fc ? css.filterField : undefined}>
+                <span>{f.label}</span>
+                <Input
+                  aria-label={f.label}
+                  placeholder={fc ? `请输入${f.label}` : undefined}
+                  maxLength={100}
+                  value={filters[f.name] ?? ''}
+                  onChange={(value: string) => onFilter(f.name, value)}
+                />
+              </label>
+            ))}
+          {view.filters
+            .filter((f: any) => f.options)
+            .map((f: any) => (
+              <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
+                {f.options.map((option: any) => (
+                  <button
+                    type="button"
+                    key={option.value}
+                    aria-pressed={(appliedFilters?.[f.name] ?? '') === option.value}
+                    onClick={() => onQuickFilter(f.name, option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            ))}
           {view.filters.length > 0 && (
             <>
               <Button
@@ -214,6 +234,7 @@ export function OriginalBusinessList({
         (qll || aqkc || fc || agentId === 'inventory-dealer' ? (
           <PlanPagination
             ariaLabel={qll ? undefined : `${view.title}分页`}
+            maxPageSize={view.pageReadSize}
             totalCount={result.total}
             page={page}
             pageSize={pageSize}

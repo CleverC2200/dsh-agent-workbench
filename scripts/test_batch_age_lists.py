@@ -27,6 +27,23 @@ class BatchAgeLists(unittest.TestCase):
    if isinstance(v,list):
     keys=[k+'_'+str(i) for i in range(len(v))];sql=re.sub(':'+k+r'\b',', '.join(':'+x for x in keys),sql);vals.pop(k);vals.update(zip(keys,v))
   return [dict(r) for r in self.db.execute(sql,vals)]
+ def test_branch_risk_filter_precedes_paging_and_matches_count(self):
+  for age, sku in [(59, 'NORMAL'), (60, 'WARN60'), (89, 'WARN89'), (90, 'STAGNANT'), (None, 'UNKNOWN')]:
+   self.batch(age, 10, sku=sku, kind='20')
+  for risk, expected in [('预警', ['WARN60', 'WARN89']), ('滞库', ['STAGNANT']), ('正常', ['NORMAL'])]:
+   with self.subTest(risk=risk):
+    count = self.read(agent='fc', query_id='batch-age.count', group_level='detail', risk=risk)[0]['total']
+    rows = self.read(agent='fc', group_level='detail', risk=risk, page_size=1)
+    self.assertEqual(count, len(expected))
+    self.assertEqual(rows[0]['page_scope_total'], len(expected))
+    self.assertEqual(rows[0]['material_code'], expected[0])
+    self.assertEqual(rows[0]['warning'], risk)
+  all_rows = self.read(agent='fc', group_level='detail', risk=None)
+  self.assertEqual(all_rows[0]['page_scope_total'], 5)
+  self.assertIn('UNKNOWN', [r['material_code'] for r in all_rows])
+  empty = self.read(agent='fc', group_level='detail', risk='预警', material_code='NORMAL')
+  self.assertEqual(empty[0]['page_scope_total'], 0)
+  self.assertIsNone(empty[0]['page_row_present'])
  def test_disjoint_age_bands_and_weighted_mean_ignore_unknown_and_nonpositive_batches(self):
   ages=[0,30,31,40,41,53,60,61,89,90,91]
   for a in ages:self.batch(a,10)

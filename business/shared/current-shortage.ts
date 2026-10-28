@@ -64,7 +64,10 @@ export async function readCurrentShortage(
     result.total < result.rows.length ||
     result.rows.some(
       (r: Record<string, unknown>) =>
-        ['demand', 'allocated', 'remaining'].some((field) => knownNumber(r[field]) === null) ||
+        ['demand', 'allocated', 'remaining'].some(
+          (field) =>
+            knownNumber(r[field]) === null && !(knownNumber(r.invalid)! > 0 && r[field] === null),
+        ) ||
         (knownNumber(r.invalid)! > 0
           ? r.available !== null || r.shortage !== null
           : knownNumber(r.invalid) !== 0 ||

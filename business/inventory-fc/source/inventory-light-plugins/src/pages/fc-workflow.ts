@@ -13,11 +13,12 @@ export const quantity = (value: unknown) => knownNumber(value) ?? 0;
 
 /** Only explicit download/import/submit actions enumerate their authorized filter scope. */
 export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) {
+  const pageSize = 50;
   const read = (page: number, readContext?: FactInput['readContext']) =>
     readConfiguredFacts(
       scope.config,
       scope.viewId,
-      { ...scope.input, page, pageSize: 100, readContext },
+      { ...scope.input, page, pageSize, readContext },
       { signal, detailsOnly: true },
     );
   const first = await read(1);
@@ -32,7 +33,7 @@ export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) 
       result.configVersion !== first.configVersion ||
       result.snapshotDate !== first.snapshotDate ||
       result.total !== total ||
-      result.rows.length !== Math.min(100, total - (page - 1) * 100)
+      result.rows.length !== Math.min(pageSize, total - (page - 1) * pageSize)
     )
       throw Error('读取期间数据或配置已变化，请重新操作');
     rows.push(...result.rows.map((row: unknown) => rowSchema.parse(row)));
@@ -41,9 +42,9 @@ export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) 
   const stop = new AbortController();
   const combined = AbortSignal.any([signal, stop.signal]);
   try {
-    for (let page = 2; page <= Math.ceil(total / 100); page += 3) {
+    for (let page = 2; page <= Math.ceil(total / pageSize); page += 3) {
       const pages = Array.from(
-        { length: Math.min(3, Math.ceil(total / 100) - page + 1) },
+        { length: Math.min(3, Math.ceil(total / pageSize) - page + 1) },
         (_, index) => page + index,
       );
       const batch = await Promise.all(
@@ -51,7 +52,7 @@ export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) 
           readConfiguredFacts(
             scope.config,
             scope.viewId,
-            { ...scope.input, page: number, pageSize: 100, readContext: first.readContext },
+            { ...scope.input, page: number, pageSize, readContext: first.readContext },
             { signal: combined, detailsOnly: true },
           ),
         ),

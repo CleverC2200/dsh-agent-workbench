@@ -1,0 +1,46 @@
+.list {
+  background: #fff;
+  padding: 16px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #555d68;
+}
+.toolbar input {
+  min-width: 140px;
+  max-width: 220px;
+  height: 36px;
+  border: 1px solid #d9dde3;
+  border-radius: 8px;
+  padding: 0 10px;
+}
+.order {
+  border: 0;
+  background: transparent;
+  color: #df1732;
+  cursor: pointer;
+  padding: 4px;
+  text-align: left;
+}
+.order:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+.details {
+  padding: 12px;
+  background: #fafafa;
+  border: 1px solid #e3e6ea;
+  border-radius: 8px;
+}
+.error {
+  color: #c8112a;
+}

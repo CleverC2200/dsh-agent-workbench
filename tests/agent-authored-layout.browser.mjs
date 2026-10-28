@@ -1961,10 +1961,10 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
         base: '郑州',
         category: '水饺',
         demand: 300,
-        allocated: 10,
-        remaining: 290,
+        allocated: 17,
+        remaining: 283,
         available: 100,
-        shortage: 190,
+        shortage: 183,
         invalid: 0,
       });
     if (query.queryId === 'page.sku-detail.atomic')
@@ -1981,23 +1981,33 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
         stock_source_rows: 1,
         risk: '缺货',
         current_demand: 300,
-        current_allocated: 10,
-        current_shortage: 190,
+        current_allocated: 17,
+        current_shortage: 183,
         age_weighted_sum: 2600,
         age_qty: 40,
       });
     return result;
   });
   const base = frame.getByRole('button', { name: '郑州，查看详情', exact: true });
+  for (const value of ['300', '183', '17'])
+    await expect(
+      base.locator('xpath=ancestor::tr[1]').getByRole('cell', { name: value, exact: true }),
+    ).toHaveCount(1);
   await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
   await expect(base.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
   await base.click();
   const category = frame.getByRole('button', { name: '水饺，查看 SKU 详情', exact: true });
+  for (const value of ['300', '183', '17'])
+    await expect(
+      category.locator('xpath=ancestor::tr[1]').getByRole('cell', { name: value, exact: true }),
+    ).toHaveCount(1);
   await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('缺货');
   await expect(category.locator('xpath=ancestor::tr[1]')).toContainText('65.0天');
   await category.click();
   const sku = frame.getByRole('region', { name: '郑州水饺 SKU 明细', exact: true });
   const row = sku.getByRole('row').filter({ hasText: '100001 测试商品' });
+  for (const value of ['300', '183', '17'])
+    await expect(row.getByRole('cell', { name: value, exact: true })).toHaveCount(1);
   await expect(row).toContainText('缺货');
   await expect(row).toContainText('65.0天');
   const menu = sku.locator('details');
