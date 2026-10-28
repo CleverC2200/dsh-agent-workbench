@@ -108,7 +108,21 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
     assert.equal(message.session, 'layout-session');
     if (query && message.method === 'sql') return query(message.parameters);
     if (id === 'customer' && message.method === 'sql') {
-      assert.match(message.parameters.sql, /customer-inventory:latest/);
+      const sql = message.parameters.sql;
+      if (sql.includes('dealer_receive_addr'))
+        return {
+          rows: [],
+          returnedColumns: ['cust_code', 'dealer_receive_addr'],
+          rejectedColumns: [],
+        };
+      if (sql.includes('AS plan_snapshot_date'))
+        return {
+          rows: [],
+          returnedColumns: ['cust_code', 'plan_snapshot_date'],
+          rejectedColumns: [],
+        };
+      assert.match(sql, /agents_scm_cust_plan_order_analysis_d/);
+      assert.match(sql, /AS snapshot_date/);
       // This page now loads governed rows before mounting. Keep layout
       // fixtures synthetic and separate from production query acceptance.
       const rows = [
@@ -137,6 +151,7 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
         rejectedColumns: [],
       };
     }
+    if (message.method === 'access') return { principalId: 'layout-user', consumerCode: id };
     if (message.method === 'context') return { ok: true };
     if (id === 'personal' && message.method === 'draft') {
       assert.match(
@@ -252,10 +267,10 @@ for (const id of ['qll', 'dealer'])
     const targets =
       id === 'qll'
         ? [
-            frame.getByText(/^5,580箱$/).first(),
+            frame.getByText(/^5,580件$/).first(),
             frame.getByText(/核心判断/).first(),
             frame.getByText('含渠道', { exact: true }),
-            frame.getByRole('button', { name: '查询趋势', exact: true }),
+            frame.getByRole('button', { name: '汤圆', exact: true }),
           ]
         : [];
     if (id === 'dealer') {
@@ -570,15 +585,7 @@ for (const theme of ['light', 'dark'])
 test('full-chain content is readable and scrollable in the actual 559px PC panel', async (t) => {
   const { page, frame } = await fixture(t, 'qll');
   await expect(frame.locator('#app')).toContainText('5,580');
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          window.requests.filter((m) => m.method === 'context').at(-1)?.parameters.parts?.queryState
-            ?.state,
-      ),
-    )
-    .toBe('ready');
+  await expect(frame.getByRole('button', { name: '汤圆', exact: true })).toBeVisible();
   const geometry = await frame.locator('#app').evaluate((app) => {
     const main = app.querySelector('main'),
       s = getComputedStyle(main);
@@ -615,129 +622,33 @@ test('full-chain content is readable and scrollable in the actual 559px PC panel
     /^<(body|main id="app")/,
     'the middle of the panel contains business content',
   );
-  const trend = frame.getByRole('region', { name: '全链库存趋势与缺口' });
-  await trend.getByRole('button', { name: '查询趋势', exact: true }).scrollIntoViewIfNeeded();
-  await trend.getByRole('button', { name: '查询趋势', exact: true }).press('Enter');
-  await expect(trend).not.toContainText('缺失期间或层级以断线表示');
-  await expect(trend.locator('svg')).toBeVisible();
-  assert.ok(
-    await frame
-      .locator('#app')
-      .evaluate((app) => [...app.querySelectorAll('*')].some((el) => el.scrollTop > 0)),
-    'scrolling reaches the trend below the table',
-  );
-  if (evidence) await page.screenshot({ path: evidence + '/qll-trend-559.png' });
+  const leaf = await openCompanySku(frame);
+  await leaf.getByRole('button', { name: '下一页', exact: true }).scrollIntoViewIfNeeded();
+  await leaf.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(2);
+  await expect(leaf.getByRole('button', { name: '上一页', exact: true })).toBeInViewport();
+  if (evidence) await page.screenshot({ path: evidence + '/qll-sku-559.png' });
 });
-
-test('PC trend chart labels keep real glyph size and complete dates inside narrow opaque panels', async (t) => {
+async function openCompanySku(frame) {
+  await frame.getByRole('button', { name: '汤圆', exact: true }).click();
+  await frame.getByRole('button', { name: '基地', exact: true }).click();
+  await frame.getByRole('button', { name: '华东', exact: true }).click();
+  return frame.getByRole('region', { name: '汤圆 / 基地 / 华东 SKU 明细', exact: true });
+}
+test('PC 品类下钻明细在窄面板保留可读字号和可操作的十条分页', async (t) => {
   const { page, frame } = await fixture(t, 'qll', 400);
-  const trend = frame.getByRole('region', { name: '全链库存趋势与缺口' });
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          window.requests.filter((m) => m.method === 'context').at(-1)?.parameters.parts?.queryState
-            ?.state,
-      ),
-    )
-    .toBe('ready');
-  await trend.getByRole('button', { name: '查询趋势', exact: true }).press('Enter');
-  await expect(trend).not.toContainText('缺失期间或层级以断线表示');
-  const svg = trend.getByRole('img');
+  const leaf = await openCompanySku(frame);
+  await expect(leaf.locator('tbody tr')).toHaveCount(10);
   for (const width of [400, 559, 1199]) {
-    await page.setViewportSize({ width: width + 721, height: 780 });
-    await page.locator('iframe').evaluate((el, width) => {
-      el.style.width = width + 'px';
-      el.style.height = '780px';
-    }, width);
-    await page
-      .locator('#chat')
-      .evaluate((el, width) => (el.style.left = width + 280 + 'px'), width);
-    await svg.scrollIntoViewIfNeeded();
-    const geometry = await svg.evaluate((el) => {
-      const matrix = el.getScreenCTM(),
-        scale = Math.hypot(matrix.a, matrix.b);
-      const dates = [...el.querySelectorAll('text[font-size="10"]')],
-        last = dates.at(-1),
-        box = last.getBBox();
-      return {
-        svgWidth: el.getBoundingClientRect().width,
-        scale,
-        xGlyphSize: parseFloat(getComputedStyle(last).fontSize) * scale,
-        yGlyphSize:
-          parseFloat(getComputedStyle(el.querySelector('text[font-size="11"]')).fontSize) * scale,
-        lastDate: last.textContent,
-        lastRight: box.x + box.width,
-        viewWidth: el.viewBox.baseVal.width,
-        segmentCount: el.querySelectorAll('polyline').length,
-        circleTitles: [...el.querySelectorAll('circle title')].map((title) => title.textContent),
-      };
-    });
-    if (evidence) {
-      await mkdir(evidence, { recursive: true });
-      await writeFile(evidence + `/chart-${width}.json`, JSON.stringify(geometry, null, 2));
-      await page.screenshot({ path: evidence + `/chart-${width}.png` });
-    }
-    assert.ok(
-      geometry.xGlyphSize >= 9.99,
-      `x-axis glyphs must stay 10px, actually ${geometry.xGlyphSize}`,
-    );
-    assert.ok(
-      geometry.yGlyphSize >= 10.99,
-      `y-axis glyphs must stay 11px, actually ${geometry.yGlyphSize}`,
-    );
-    assert.ok(
-      geometry.lastRight <= geometry.viewWidth,
-      'the complete last date stays inside the SVG instead of clipped at its right edge',
-    );
-    const scroll = trend.getByRole('region', { name: '趋势图横向滚动' });
-    const metrics = await scroll.evaluate((el) => ({
-      client: el.clientWidth,
-      total: el.scrollWidth,
-    }));
-    if (metrics.client < 780) {
-      await scroll.focus();
-      await scroll.press('ArrowRight');
-      await expect.poll(() => scroll.evaluate((el) => el.scrollLeft)).toBeGreaterThan(0);
-      for (let i = 0; i < 20; i++) await scroll.press('ArrowRight');
-    }
-    const last = svg.locator('text[font-size="10"]').last();
-    await expect(last).toBeInViewport();
-    await expect(trend.getByRole('button', { name: '查询趋势', exact: true })).toBeVisible();
-    assert.equal(
-      geometry.segmentCount,
-      2,
-      'missing September 29 observation keeps the original separate segments',
-    );
-    assert.ok(
-      geometry.circleTitles.some((text) => text.endsWith('基地库存/箱 0')),
-      'a real zero is still a visible point',
-    );
+    await page.locator('iframe').evaluate((el, width) => (el.style.width = width + 'px'), width);
+    const text = leaf.locator('tbody tr').first().locator('td').first();
+    assert.ok((await text.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))) >= 12);
+    await leaf.getByRole('button', { name: '下一页', exact: true }).scrollIntoViewIfNeeded();
+    await expect(leaf.getByRole('button', { name: '下一页', exact: true })).toBeInViewport();
   }
-  const zero = svg.locator('circle').filter({ hasText: /基地库存\/箱 0$/ });
-  await zero.focus();
-  await expect(trend.locator('figcaption')).toContainText('基地库存/箱：0');
-  // A fresh author page checks the original order values independently of prior focus.
-  await page.goto('http://inventory-layout.test/');
-  await startCompanyQuery(page.frameLocator('iframe'));
-  await page.locator('iframe').evaluate((el) => (el.style.height = '780px'));
-  const next = page.frameLocator('iframe').getByRole('region', { name: '全链库存趋势与缺口' });
-  await expect
-    .poll(() =>
-      page.evaluate(
-        () =>
-          window.requests.filter((m) => m.method === 'context').at(-1)?.parameters.parts?.queryState
-            ?.state,
-      ),
-    )
-    .toBe('ready');
-  await next.getByRole('button', { name: '趋势指标' }).click();
-  await expect(
-    next.getByRole('listbox', { name: '趋势指标' }).getByRole('option', { name: '订单缺口趋势' }),
-  ).toHaveAttribute('aria-disabled', 'true');
-  await next.getByRole('button', { name: '趋势指标' }).press('Escape');
-  await expect(next).not.toContainText('订单与平均货龄历史来源未接入');
-  if (evidence) await page.screenshot({ path: evidence + '/chart-keyboard-100-12.png' });
+  await leaf.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(2);
+  await expect(frame.getByRole('region', { name: '全链库存趋势与缺口' })).toHaveCount(0);
 });
 
 for (const theme of ['light', 'dark'])

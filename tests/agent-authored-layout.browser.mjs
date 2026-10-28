@@ -4,116 +4,60 @@ import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 
-test('QLL 主列表分页使用计划管理样式并支持输入页码跳转', async (t) => {
-  let sampleGroup;
-  const { frame, page, calls } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId !== 'inventory.groups.atomic') return result;
-    sampleGroup ||= result.rows[0];
-    const offset = query.parameters.offset ?? 0;
-    result.rows = Array.from(
-      { length: Math.max(0, Math.min(query.parameters.page_size, 42 - offset)) },
-      (_, index) => ({
-        ...sampleGroup,
-        category: `测试品类${offset + index + 1}`,
-        page_scope_total: 42,
-      }),
-    );
-    return result;
+async function openCompanySku(frame, layer = '基地', organization = '华东') {
+  await frame.getByRole('button', { name: '汤圆', exact: true }).click();
+  await frame.getByRole('button', { name: layer, exact: true }).click();
+  await frame.getByRole('button', { name: organization, exact: true }).click();
+  return frame.getByRole('region', {
+    name: `汤圆 / ${layer} / ${organization} SKU 明细`,
+    exact: true,
   });
-  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
-  const pager = frame.getByRole('navigation', { name: '全链库存列表分页' });
-  const trigger = pager.getByRole('button', { name: '每页条数' });
-  await expect(trigger).toBeVisible();
-  await expect(pager.locator('select')).toHaveCount(0);
-  const [footerBox, totalBox, pagesBox] = await Promise.all([
-    pager.boundingBox(),
-    pager.getByText('共 42 条').boundingBox(),
-    pager.getByText('共 5 页').boundingBox(),
-  ]);
-  assert.ok(footerBox && totalBox && pagesBox);
-  assert.ok(Math.abs(totalBox.x - footerBox.x - 16) <= 1, '总条数应距左框 16px');
-  assert.ok(
-    Math.abs(footerBox.x + footerBox.width - pagesBox.x - pagesBox.width - 16) <= 1,
-    '总页数应距右框 16px',
+}
+test('QLL SKU 明细默认十条并按页读取，翻页不重复加载汇总', async (t) => {
+  const { frame, calls } = await mount(t, 'qll', 1280);
+  const leaf = await openCompanySku(frame);
+  await expect(leaf.locator('tbody tr')).toHaveCount(10);
+  const reads = () =>
+    calls.filter((q) => q.queryId === 'category-tree.base' && q.parameters.level === 'sku');
+  assert.equal(reads().length, 1);
+  assert.equal(reads()[0].parameters.page_size, 11);
+  await leaf.getByRole('button', { name: '下一页' }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(2);
+  assert.equal(reads().at(-1).parameters.offset, 10);
+  await expect(leaf.getByRole('button', { name: '下一页' })).toBeDisabled();
+  await leaf.getByRole('button', { name: '上一页' }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(10);
+  assert.equal(reads().length, 3);
+  assert.equal(reads().at(-1).parameters.offset, 0);
+  assert.equal(
+    calls.filter((q) => q.queryId === 'category-tree.base' && q.parameters.level === 'category')
+      .length,
+    1,
   );
-  const heights = await Promise.all(
-    [
-      trigger,
-      pager.getByRole('button', { name: '上一页' }),
-      pager.getByRole('button', { name: '下一页' }),
-      pager.getByRole('button', { name: /当前第 1 页/ }),
-    ].map(async (control) => (await control.boundingBox())?.height),
-  );
-  assert.deepEqual(heights, [36, 36, 36, 36]);
-  await trigger.click();
-  const menu = frame.getByRole('listbox', { name: '每页条数' });
-  await expect(menu).toBeVisible();
-  if (process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE)
-    await page.screenshot({ path: process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE });
-  await menu.getByRole('option', { name: '20 条/页' }).click();
-  await expect(trigger).toContainText('20 条/页');
-  await pager.getByRole('button', { name: /当前第 1 页/ }).click();
-  const pageInput = pager.getByRole('textbox', { name: '输入页码' });
-  await expect(pageInput).toHaveValue('1');
-  await pageInput.fill('999');
-  await pageInput.press('Enter');
-  await expect(pager.getByRole('alert')).toContainText('请输入 1–');
-  await expect(pageInput).toBeVisible();
-  await pageInput.fill('3');
-  await pageInput.press('Enter');
-  await expect(pager.getByRole('button', { name: /当前第 3 页/ })).toBeVisible();
-  await expect
-    .poll(() =>
-      calls.some(
-        (query) =>
-          query.queryId === 'inventory.groups.atomic' &&
-          query.parameters.offset === 40 &&
-          query.parameters.page_size === 20,
-      ),
-    )
-    .toBe(true);
-  await expect(pager.getByRole('button', { name: '下一页' })).toBeDisabled();
-  await expect(pager.getByRole('button', { name: '上一页' })).toBeEnabled();
-  await pager.getByRole('button', { name: '上一页' }).click();
-  await expect(pager.getByRole('button', { name: /当前第 2 页/ })).toBeVisible();
 });
-
-test('QLL 列表查询按钮与筛选输入框等高', async (t) => {
+test('QLL SKU 查询按钮与筛选输入框等高', async (t) => {
   const { frame } = await mount(t, 'qll', 1280);
-  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
-  const input = frame.getByRole('textbox', { name: '品类', exact: true }).first();
-  const form = input.locator('xpath=ancestor::form[1]');
+  await expect(frame.getByRole('textbox', { name: 'SKU 编码或名称' })).toHaveCount(0);
+  const leaf = await openCompanySku(frame);
   const heights = await Promise.all(
     [
-      input,
-      form.getByRole('button', { name: '查询', exact: true }),
-      form.getByRole('button', { name: '清空筛选' }),
+      leaf.getByRole('textbox', { name: 'SKU 编码或名称' }),
+      leaf.getByRole('button', { name: '查询', exact: true }),
+      leaf.getByRole('button', { name: '重置' }),
     ].map(async (locator) => (await locator.boundingBox())?.height),
   );
-  assert.ok(heights.every(Number.isFinite), `筛选控件应可见：${heights}`);
+  assert.ok(heights.every(Number.isFinite));
   assert.ok(Math.max(...heights) - Math.min(...heights) <= 1, `按钮与输入框高度应一致：${heights}`);
 });
-
-test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) => {
-  const { frame } = await mount(t, 'qll', 1280);
-  const trigger = frame.getByRole('button', { name: '趋势指标' });
-  await trigger.click();
-  const menu = frame.getByRole('listbox', { name: '趋势指标' });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('option', { name: '库存趋势' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+test('QLL 只保留品类与组织结构，不加载已移除的趋势与缺口', async (t) => {
+  const { frame, calls } = await mount(t, 'qll', 1280);
+  await expect(frame.getByRole('button', { name: '汤圆', exact: true })).toBeVisible();
+  await expect(frame.getByRole('tab')).toHaveText(['品类结构', '组织结构']);
+  await expect(frame.getByRole('region', { name: '全链库存趋势与缺口' })).toHaveCount(0);
+  assert.equal(
+    calls.some((q) => q.queryId.startsWith('stock_history.')),
+    false,
   );
-  await expect(menu.getByRole('option', { name: '订单缺口趋势' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await expect(menu.getByRole('option', { name: '货龄趋势' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await trigger.press('Escape');
-  await expect(menu).toHaveCount(0);
 });
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
@@ -181,7 +125,7 @@ test('QLL counts one inventory snapshot once across base and warehouse dimension
     return result;
   });
   const inventoryCard = frame.locator('[data-overview-cards="qll"]').locator('button').first();
-  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*箱/);
+  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*件/);
   for (const call of calls.filter((c) => c.queryId.startsWith('health.'))) {
     assert.equal('warehouse_type' in call.parameters, false);
   }
@@ -233,7 +177,8 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
       const summary = frame.locator('summary').filter({ hasText: '业务明细' });
       await expect(summary).toHaveCount(0);
     }
-    assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
+    if (id === 'qll') assert.doesNotMatch(await root.innerText(), /万箱|箱\/天/);
+    else assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
     for (const width of [1280, 560]) {
       await page.setViewportSize({ width, height: 900 });
       const sizes = await root.evaluate((el) => ({
@@ -416,7 +361,8 @@ test('dealer top date refresh preserves the selected customer scope', async (t) 
 });
 test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (query.queryId === 'current-shortage.summary')
       result.rows.forEach((row) =>
         Object.assign(row, { demand: row.location_type === '基地' ? 1049341 : 100000 }),
@@ -434,7 +380,7 @@ test('qll original current-order card retains new base snapshot quantities witho
   const card = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(card).toContainText('114.93万箱');
+  await expect(card).toContainText('114.93万件');
   await expect(card).toContainText('基地缺货量');
   await expect(card).toContainText('分仓缺货量');
   assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
@@ -488,13 +434,9 @@ test('QLL cards show batch-weighted average ages and independent current gaps, i
   const orders = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(orders).toContainText('基地缺货量1.23万箱');
-  await expect(orders).toContainText('分仓缺货量0箱');
-  await frame.getByRole('tab', { name: '库存库龄', exact: true }).click();
-  await expect(
-    frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
-  ).toBeVisible();
-  await expect(frame.getByRole('cell', { name: '1,033', exact: true })).toBeVisible();
+  await expect(orders).toContainText('基地缺货量1.23万件');
+  await expect(orders).toContainText('分仓缺货量0件');
+  await expect(frame.getByRole('tab', { name: '库存库龄', exact: true })).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
 test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
@@ -540,7 +482,8 @@ for (const [quantity, count, display] of [
     const { frame, errors, calls } = await mount(t, 'aqkc', 1280, (query, result) => {
       if (query.queryId === 'calendar.target_versions')
         result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-      if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+      if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+        result.rows[0].day = '2026-10-19';
       if (query.queryId === 'current-shortage.locations')
         Object.assign(result.rows[0], {
           demand: quantity,
@@ -565,6 +508,7 @@ for (const [quantity, count, display] of [
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
       quantity === null ? '-' : '12件',
     );
+    assert.equal(calls.filter((q) => q.queryId === 'page.inventory-groups').length, 1);
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
   });
@@ -894,14 +838,18 @@ test('dealer original customer menu applies the new query scope and closes after
   assert.deepEqual(errors, []);
 });
 
-test('QLL category cells bind category names while retaining organization as the secondary line', async (t) => {
-  const { frame, errors } = await mount(t, 'qll', 1280);
-  const cell = frame.locator('tbody tr').first().locator('td').first();
-  await expect(cell.locator('strong')).toHaveText('汤圆');
-  await expect(cell.locator('small')).toHaveText(['华东', 'sku-A-000']);
-  await expect(frame.getByRole('tab', { name: '品类结构', exact: true })).toHaveAttribute(
-    'aria-selected',
-    'true',
+test('QLL 品类逐层展开到基地和 SKU，初始不请求 SKU 明细', async (t) => {
+  const { frame, errors, calls } = await mount(t, 'qll', 1280);
+  await expect(frame.getByRole('button', { name: '汤圆', exact: true })).toBeVisible();
+  assert.equal(
+    calls.some((q) => q.parameters.level === 'sku'),
+    false,
+  );
+  const leaf = await openCompanySku(frame);
+  await expect(leaf.locator('tbody tr').first()).toContainText('sku-A-000 测试商品');
+  assert.equal(
+    calls.filter((q) => q.parameters.level === 'sku').at(-1).parameters.parent_organization,
+    '华东',
   );
   assert.deepEqual(errors, []);
 });
@@ -1645,23 +1593,17 @@ for (const [inventory, inTransit, stockDays] of [
         .filter({ has: frame.getByText(label, { exact: true }) })
         .locator('dd');
     await expect(value(stock, '客户在仓')).toHaveText(
-      inventory === null ? '-' : inventory === 0 ? '0箱' : '1.21万箱',
+      inventory === null ? '-' : inventory === 0 ? '0件' : '1.21万件',
     );
     await expect(value(stock, '客户在途')).toHaveText(
-      inTransit === null ? '-' : inTransit === 0 ? '0箱' : '2,412箱',
+      inTransit === null ? '-' : inTransit === 0 ? '0件' : '2,412件',
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
       stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
     );
-    const customerLayer = frame
-      .locator('section')
-      .filter({ has: frame.getByRole('button', { name: '渠道库存明细', exact: true }) })
-      .last();
-    await expect(
-      customerLayer.getByRole('button', { name: '渠道库存明细', exact: true }),
-    ).toHaveAttribute('aria-expanded', 'true');
+    const customerLayer = await openCompanySku(frame, '渠道', '河南省区');
     await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
-    await expect(customerLayer.locator('tbody tr').first()).toContainText('客户A');
+    await expect(customerLayer.locator('tbody tr').first()).toContainText('测试商品');
     const before = calls.length;
     await customerLayer.getByRole('button', { name: '下一页', exact: true }).click();
     await expect
@@ -1670,9 +1612,10 @@ for (const [inventory, inTransit, stockDays] of [
           .slice(before)
           .some(
             (q) =>
-              q.queryId.startsWith('dealer.stock.detail') &&
+              q.queryId === 'category-tree.customer' &&
+              q.parameters.level === 'sku' &&
               q.parameters.offset === 10 &&
-              q.parameters.page_size === 10,
+              q.parameters.page_size === 11,
           ),
       )
       .toBe(true);
@@ -1700,7 +1643,7 @@ for (const [inventory, inTransit, stockDays] of [
     }
     await frame.getByRole('checkbox', { name: '含渠道', exact: true }).uncheck();
     await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
-    await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
+    await expect(frame.getByRole('button', { name: '渠道', exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
 
@@ -1807,7 +1750,8 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   const view = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (['page.dashboard-groups', 'page.inventory-groups'].includes(query.queryId))
       Object.assign(result.rows[0], {
         base: '濮阳',
@@ -1937,7 +1881,8 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
   const { frame, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (
       ['page.dashboard-groups', 'page.inventory-groups', 'page.structure-groups'].includes(
         query.queryId,
