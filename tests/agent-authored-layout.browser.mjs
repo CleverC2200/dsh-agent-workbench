@@ -124,6 +124,7 @@ async function mount(t, id, width, override, insight) {
   const page = await browser.newPage({ viewport: { width, height: 900 } }),
     errors = [],
     calls = [],
+    insightCalls = [],
     diagnostics = [];
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('console', (message) => {
@@ -138,10 +139,12 @@ async function mount(t, id, width, override, insight) {
       const result = wire(message.parameters);
       return override ? override(message.parameters, result) : result;
     }
-    if (message.method === 'insight')
+    if (message.method === 'insight') {
+      insightCalls.push(message.parameters);
       return insight
         ? insight(message.parameters)
         : { answer: '总量：测试库存。\n结构分析：测试结构。\n建议：核实数据【待人工确认】。' };
+    }
     if (message.method === 'access') return { principalId: 'layout-user', consumerCode: id };
     if (message.method === 'context') return { ok: true };
     throw Error('Unexpected layout request: ' + message.method);
@@ -158,7 +161,7 @@ async function mount(t, id, width, override, insight) {
   );
   await page.goto('http://agent-layout.test/');
   const frame = page.frameLocator('iframe');
-  return { page, frame, errors, calls, diagnostics };
+  return { page, frame, errors, calls, insightCalls, diagnostics };
 }
 test('QLL counts one inventory snapshot once across base and warehouse dimensions', async (t) => {
   const { frame, errors, calls } = await mount(t, 'qll', 1280, (query, result) => {
@@ -1794,7 +1797,7 @@ test('base card weights base groups by inventory instead of averaging their ages
 });
 
 test('base batch-only inventory reconciles and age drill keeps the same fields across base, category and SKU', async (t) => {
-  const { frame, page, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
+  const view = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
     if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
@@ -1823,7 +1826,12 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
         age_valid_count: 14,
       });
     if (query.queryId === 'current-shortage.locations')
-      Object.assign(result.rows[0], { base: '濮阳', demand: 25765, allocated: 0, shortage: 24734 });
+      Object.assign(result.rows[0], {
+        base: '濮阳',
+        demand: 25765,
+        allocated: 0,
+        shortage: 24734,
+      });
     if (['batch-age.groups', 'batch-age.atomic'].includes(query.queryId))
       Object.assign(result.rows[0], {
         level: query.parameters.group_level === 'category' ? '调理肉制品' : '濮阳',
@@ -1848,6 +1856,7 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
       });
     return result;
   });
+  const { frame, page, calls, insightCalls, errors } = view;
   const card = frame.locator('[data-overview-cards="aqkc"] article');
   await expect(
     card.filter({ has: frame.getByText('当前库存', { exact: true }) }).locator('strong'),
@@ -1855,7 +1864,11 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   await expect(
     card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
   ).toHaveText('25,765箱');
-  await expect(frame.getByText(/库存覆盖14\/14、目标覆盖0\/14个基地SKU/)).toBeVisible();
+  await expect.poll(() => insightCalls.length).toBeGreaterThan(0);
+  const evidence = insightCalls.at(-1).evidence.evidence;
+  assert.equal(evidence.metrics.current, 4277);
+  assert.equal(evidence.metrics.target, null);
+  assert.ok(evidence.missing.includes('部分SKU无目标记录'));
   const base = frame.getByRole('row').filter({ has: frame.getByText('濮阳', { exact: true }) });
   await expect(base).toContainText('4,277');
   await expect(base).toContainText('166.3天');
