@@ -225,12 +225,19 @@ export function ConfiguredFactsPage({
         chosenColumns={chosenColumns}
         onColumns={(next: string[]) => setColumnChoices((old) => ({ ...old, [viewId]: next }))}
         filters={draft}
+        appliedFilters={filters}
         onFilter={(name: string, value: string) => setDraft((old) => ({ ...old, [name]: value }))}
+        onQuickFilter={(name: string, value: string) => {
+          setDraft((old) => ({ ...old, [name]: value }));
+          setFilters((old) => ({ ...old, [name]: value }));
+          setPage(1);
+        }}
         submit={(event: React.FormEvent) => {
           event.preventDefault();
           setFilters({ ...draft });
           setPage(1);
-          refreshConfiguredQueries();
+          if (!(config.agentId === 'inventory-fc' && viewId === 'inventory'))
+            refreshConfiguredQueries();
           refresh((n) => n + 1);
         }}
         reset={() => {

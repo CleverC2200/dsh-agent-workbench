@@ -399,10 +399,10 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
             'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
             'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty last_month_actual_qty current_day_avg_qty stat_month',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
-            'agents_scm_execute_detail_d': 'cust_order_no material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyallocated',
+            'agents_scm_execute_detail_d': 'cust_order_no cust_code material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyordered qtyallocated delivery_qty detailstatus order_close_time wms_close_time canceltime',
             'agents_scm_material_in_out_summary_d': 'warehouseid pickup_point material_code material_name material_group_name warehouse_name product_categ_name',
         }
-        numeric = set('adjust_order_qty qtyallocated live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
+        numeric = set('adjust_order_qty qtyordered qtyallocated delivery_qty detailstatus live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
@@ -414,6 +414,10 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
 
         self.insert('agents_scm_execute_detail_d',cust_order_no='COMPLETED',material_code='SENT',bizflowstatus='已发货',adjust_order_qty=1,qtyallocated=1)
     def insert(self, table, **values):
+        if table == 'agents_scm_execute_detail_d':
+            values.setdefault('qtyordered', values.get('adjust_order_qty'))
+            values.setdefault('delivery_qty', 0)
+            values.setdefault('detailstatus', 10)
         self.db.execute('INSERT INTO '+table+' ('+', '.join(values)+') VALUES ('+', '.join('?' for _ in values)+')',list(values.values()))
 
     def read(self, name, **overrides):
@@ -680,14 +684,11 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.assertEqual(empty[0]['page_row_present'],0)
         self.assertEqual(self.read('replenishment.count',sku_mode='equal',sku='S2'),[{'total':1}])
 
-    def test_null_warehouse_plan_is_preserved_and_is_not_an_empty_page_marker(self):
+    def test_unmapped_warehouse_plan_does_not_enter_verified_branch_cards(self):
         self.insert('agents_scm_warehouse_transfer_plan_data_d', material_code='UNMAPPED', stat_month='202610', transfer_prepare_qty=7)
         rows = self.read('replenishment.detail.atomic')
-        row = next(row for row in rows if row['sku'] == 'UNMAPPED')
-        self.assertIsNone(row['warehouse_code'])
-        self.assertEqual(row['page_row_present'],1)
-        self.assertEqual(row['plan_present'],1)
-        self.assertEqual(self.read('replenishment.summary')[0]['plan_count'],2)
+        self.assertNotIn('UNMAPPED', [row['sku'] for row in rows])
+        self.assertEqual(self.read('replenishment.summary')[0]['plan_count'],1)
 
     def test_product_names_fill_blanks_without_multiplying_stock_or_page_totals(self):
         self.db.execute("UPDATE agents_scm_cust_deliv_daily_di SET material_name=NULL WHERE material_code='S2'")

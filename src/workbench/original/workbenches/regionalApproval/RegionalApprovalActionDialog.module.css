@@ -339,3 +339,46 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.submissionModal {
+  width: min(760px, calc(100vw - 24px));
+}
+
+.submissionBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: min(480px, calc(100vh - 220px));
+  overflow: auto;
+}
+
+.submissionChangeHeader,
+.submissionChangeRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) minmax(90px, 0.6fr) minmax(90px, 0.6fr);
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.submissionChangeHeader {
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--bg-3);
+}
+
+.submissionChangeRow > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.submissionChangeRow small {
+  display: block;
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.submissionChangeRow > :not(:first-child),
+.submissionChangeHeader > :not(:first-child) {
+  text-align: right;
+}

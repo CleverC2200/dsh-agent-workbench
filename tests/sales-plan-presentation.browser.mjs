@@ -102,6 +102,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
@@ -217,9 +218,9 @@ async function assertExpandedSkuLayout(region) {
     true,
     'SKU row background must continue to the right edge',
   );
-  assert.ok(layout.columns[0] <= 360, `SKU column too wide: ${layout.columns[0]}`);
+  assert.ok(layout.columns[0] <= 240, `SKU column too wide: ${layout.columns[0]}`);
   assert.ok(
-    layout.columns.slice(1).every((width) => width <= 220),
+    layout.columns.slice(1).every((width) => width <= 160),
     `metric columns too wide: ${layout.columns}`,
   );
   return layout;
@@ -280,8 +281,8 @@ test(
       background: 'rgb(255, 255, 255)',
       color: 'rgb(85, 93, 104)',
       border: 'rgb(217, 221, 227)',
-      radius: '8px',
-      height: '36px',
+      radius: '6px',
+      height: '30px',
     });
     await filter.hover();
     await expect.poll(async () => (await state(filter)).background).toBe('rgb(255, 250, 251)');
@@ -292,11 +293,30 @@ test(
       background: 'rgb(245, 246, 248)',
       color: 'rgb(160, 164, 172)',
       border: 'rgb(227, 230, 234)',
-      radius: '8px',
-      height: '36px',
+      radius: '6px',
+      height: '30px',
     });
     const activeTab = page.getByRole('tab', { name: '按区域' });
     assert.equal((await state(activeTab)).color, 'rgb(223, 23, 50)');
+    const firstRow = page.locator('tbody .arco-table-tr').first();
+    await firstRow.hover();
+    await expect
+      .poll(() =>
+        firstRow
+          .locator('td')
+          .evaluateAll((cells) =>
+            cells.every((cell) => getComputedStyle(cell).backgroundColor === 'rgb(255, 250, 251)'),
+          ),
+      )
+      .toBe(true);
+    for (const name of ['查看提报进度', '刷新数据', '导出当前页']) {
+      const offset = await toolbar.getByRole('button', { name, exact: true }).evaluate((button) => {
+        const outer = button.getBoundingClientRect();
+        const icon = button.querySelector('svg').getBoundingClientRect();
+        return Math.abs(icon.top + icon.height / 2 - outer.top - outer.height / 2);
+      });
+      assert.ok(offset <= 0.5, `${name} icon must be vertically centered: ${offset}px`);
+    }
   },
 );
 
@@ -518,6 +538,9 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
           text: (node.textContent || '').trim(),
           weight: Number(getComputedStyle(node).fontWeight),
           bg: getComputedStyle(node).backgroundColor,
+          fontSize: getComputedStyle(node).fontSize,
+          lineHeight: getComputedStyle(node).lineHeight,
+          height: node.getBoundingClientRect().height,
         })),
       }))
       .filter((table) => table.head.length > 0),
@@ -535,7 +558,10 @@ test('table headers are bold without a darker background', { timeout: 30000 }, a
   for (const table of [queue, detail]) {
     for (const cell of table.head) {
       if (!cell.text) continue;
-      assert.ok(cell.weight >= 600, `表头「${cell.text}」要加粗，实际 ${cell.weight}`);
+      assert.equal(cell.weight, 800, `表头「${cell.text}」字重`);
+      assert.equal(cell.fontSize, '9px', `表头「${cell.text}」字号`);
+      assert.ok(Math.abs(parseFloat(cell.lineHeight) - 12.15) < 0.1, `表头「${cell.text}」行高`);
+      assert.equal(cell.height, 38, `表头「${cell.text}」高度`);
       assert.equal(
         cell.bg,
         table === queue ? 'rgb(245, 246, 248)' : 'rgb(242, 243, 245)',
@@ -881,6 +907,35 @@ test('退回计划可继续修改本地草稿，组织汇总分摊不触发重�
   );
 });
 
+test(
+  'returned group submission carries each customer allocation from inline edits',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, 'returned');
+    await groupBox.locator('xpath=ancestor::tr').getByRole('button').first().click();
+    const group = page.getByTestId('regional-approval-group-sku-summary').first();
+    await group.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('80');
+    await groupBox.click();
+    await page.getByRole('button', { name: '提交所选', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.approvalItems?.length)).toBe(2);
+    const items = await page.evaluate(() => window.approvalItems);
+    assert.deepEqual(
+      items
+        .map((item) => ({
+          kind: item.kind,
+          customer: item.row.dealerName,
+          role: item.approvalRole,
+          value: item.pendingValues['1001'],
+        }))
+        .sort((left, right) => left.customer.localeCompare(right.customer)),
+      [
+        { kind: 'resubmit', customer: '客户1', role: 'region', value: '40' },
+        { kind: 'resubmit', customer: '客户2', role: 'region', value: '40' },
+      ],
+    );
+  },
+);
+
 test('split sales plan wraps control groups without clipping actions or the table header', async (t) => {
   const { page } = await openWorkbench(t);
   for (const width of [907, 760, 620]) {
@@ -957,6 +1012,13 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
     await page.screenshot({
       path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-narrow.png'),
     });
+});
+
+test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'shipment-missing');
+  const status = page.getByText('发货实绩未取得', { exact: true });
+  await expect(status).toBeVisible();
+  await expect(status).toHaveAttribute('title', '未取得该客户 2026-10 的发货数据');
 });
 
 test('pagination footer keeps counts and controls on one line', { timeout: 30000 }, async (t) => {

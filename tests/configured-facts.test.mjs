@@ -548,3 +548,114 @@ for (const productionCase of ['ready', 'denied', 'changed'])
       );
     }
   });
+
+test('FC aging pages reuse bounded Host query blocks and keep risk scopes separate', async () => {
+  const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const calls = [],
+    cache = new Map();
+  let scans = 0;
+  const execute = async (_request, call) => {
+    calls.push(call);
+    const q = config.queries[call.queryId];
+    if (call.queryId.startsWith('source.'))
+      return { rows: [{ day: '2026-10-28' }], configVersion: 'one' };
+    assert.equal(call.queryId, 'batch-age.atomic');
+    const key = JSON.stringify(call.values);
+    if (cache.has(key)) return cache.get(key);
+    scans++;
+    const total = call.values.risk ? 13 : 235;
+    const n = Math.max(0, Math.min(50, call.values.page_size, total - call.values.offset));
+    const rows = Array.from({ length: n }, (_, i) => ({
+      ...Object.fromEntries(q.resultColumns.map((c) => [c, null])),
+      material_code: `S${call.values.offset + i}`,
+      warning: call.values.risk,
+      page_scope_total: total,
+      page_row_present: 1,
+    }));
+    if (!n) rows.push({ page_scope_total: total, page_row_present: null });
+    const value = {
+      rows,
+      configVersion: 'one',
+      returnedColumns: q.resultColumns,
+      rejectedColumns: [],
+    };
+    cache.set(key, value);
+    return value;
+  };
+  const read = (page, filters = {}, readContext) =>
+    readConfiguredFacts(
+      config,
+      'inventory',
+      {
+        asOf: '2026-10-28',
+        page,
+        pageSize: 10,
+        filters,
+        readContext,
+      },
+      { execute, detailsOnly: true },
+    );
+  const first = await read(1);
+  for (const [page, sku] of [
+    [2, 'S10'],
+    [5, 'S40'],
+    [1, 'S0'],
+  ]) {
+    const result = await read(page, {}, first.readContext);
+    assert.equal(result.rows[0].material_code, sku);
+    assert.equal(result.rows.length, 10);
+    assert.equal(result.total, 235);
+  }
+  assert.equal(scans, 1, 'five display pages share the same authorized Host cache key');
+  assert.equal(calls.filter((c) => c.queryId.startsWith('source.')).length, 1);
+  const last = await read(24, {}, first.readContext);
+  assert.equal(last.rows.length, 5);
+  assert.equal(last.rows[0].material_code, 'S230');
+  assert.equal(scans, 2);
+  const warning = await read(2, { risk: '预警' });
+  assert.equal(warning.rows.length, 3);
+  assert.equal(warning.total, 13);
+  assert.equal(warning.rows[0].warning, '预警');
+  await read(1, {}, first.readContext);
+  assert.equal(scans, 3, 'returning to all reuses its independent block');
+  assert.ok(
+    calls.filter((c) => c.queryId === 'batch-age.atomic').every((c) => c.values.page_size === 50),
+  );
+  const twenty = await readConfiguredFacts(
+    config,
+    'inventory',
+    { asOf: '2026-10-28', page: 2, pageSize: 20, filters: {}, readContext: first.readContext },
+    { execute, detailsOnly: true },
+  );
+  assert.equal(twenty.rows.length, 20);
+  assert.equal(twenty.rows[0].material_code, 'S20');
+  assert.equal(calls.at(-1).values.page_size, 40, 'read block fits the gateway 50-row response');
+  await assert.rejects(
+    readConfiguredFacts(
+      config,
+      'inventory',
+      {
+        asOf: '2026-10-28',
+        filters: { risk: 'unsupported' },
+      },
+      { execute, detailsOnly: true },
+    ),
+  );
+  await assert.rejects(
+    readConfiguredFacts(
+      config,
+      'inventory',
+      {
+        asOf: '2026-10-28',
+        readContext: first.readContext,
+      },
+      {
+        execute: async () => {
+          throw Object.assign(Error('denied'), { code: 'ROW_SCOPE_DENIED' });
+        },
+        detailsOnly: true,
+      },
+    ),
+    /denied/,
+  );
+});

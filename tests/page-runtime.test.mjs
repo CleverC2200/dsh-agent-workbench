@@ -189,6 +189,7 @@ async function mount(t, kind = 'html', viewOnly = false, enabled = true) {
   };
   return {
     call,
+    grant,
     open,
     identity,
     observations,
@@ -846,4 +847,18 @@ test('disabled capability keeps its static owner but rejects page actions and re
   const receipt = await h.reference({ owner, surface: 'gea-html-inventory-test' });
   assert.equal(receipt.status, 400);
   assert.match(receipt.value.error, /PAGE_REFERENCE_ACCESS_DENIED/);
+});
+
+test('page insight requires an owned view grant and rejects released owners', async (t) => {
+  const f = await mount(t);
+  const { value: opened } = await f.open();
+  const input = { owner: opened.owner, parameters: { evidence: { current: 100 } } };
+  assert.notEqual((await f.call('insight', input)).status, 200);
+  f.grant.insight = async (data, signal) => {
+    signal.throwIfAborted();
+    return { answer: String(data.evidence.current) };
+  };
+  assert.deepEqual((await f.call('insight', input)).value, { answer: '100' });
+  await f.call('close', { owner: opened.owner });
+  assert.notEqual((await f.call('insight', input)).status, 200);
 });

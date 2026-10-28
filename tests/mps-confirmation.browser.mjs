@@ -56,6 +56,7 @@ test('MPS product relationships stay in their local month draft and can be edite
   await createVersion(frame, '2026-12');
   await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText('2026-12');
   const products = frame.getByRole('region', { name: '产品明细' });
+  await products.getByLabel('每页产品条数').selectOption('25');
   await products.getByRole('button', { name: '新增产品', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增产品', exact: true });
   for (const [label, value] of Object.entries({
@@ -115,7 +116,7 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
   await expect(source).toContainText('当前期间3条，数量合计15件，缺失数量0条');
   await source.getByRole('button', { name: '基地 2', exact: true }).click();
   await expect(source.getByRole('row').filter({ hasText: '郑州' }).last()).toContainText('15');
-  await expect(source).toContainText('公式：同一基地的有效数量相加');
+  await expect(source).not.toContainText('公式：同一基地的有效数量相加');
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const download = page.waitForEvent('download');
   await source.getByRole('button', { name: '导出当前明细', exact: true }).click();
@@ -132,7 +133,7 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
   await expect(source).toContainText('当前期间3条，数量合计12件，缺失数量1条');
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(source.getByRole('cell', { name: '0', exact: true }).first()).toBeVisible();
-  await expect(source.getByRole('cell', { name: '未提供', exact: true })).toBeVisible();
+  await expect(source.getByRole('cell', { name: '-', exact: true })).toBeVisible();
 });
 
 test('MPS forecast crosses the year and historical periods do not borrow other rows; CSV export escapes spreadsheet formulas', async (t) => {
@@ -175,6 +176,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   const { frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
   const annual = frame.getByRole('region', { name: '年度销售计划' });
+  await annual.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(annual.getByRole('columnheader', { name: '2026-07', exact: true })).toBeVisible();
   await expect(annual.getByRole('columnheader', { name: '2027-06', exact: true })).toHaveCount(1);
   await upload(
@@ -203,6 +205,7 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
   );
   await upload(frame, '选择产品关系CSV', columns + '\n' + rows.join('\n'));
   await expect(products.getByText('演示数据', { exact: true })).toHaveCount(0);
+  await products.getByLabel('每页产品条数').selectOption('25');
   await expect(products.getByRole('row')).toHaveCount(26);
   await expect(products).toContainText('共26条，每页25条，第1页');
   await products.getByRole('button', { name: '下一页', exact: true }).click();
@@ -234,7 +237,7 @@ test('MPS preserves missing dimensions and signed local quantities instead of in
   await expect(source).toContainText('系列缺失1条');
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(source.getByRole('cell', { name: '-2', exact: true })).toBeVisible();
-  await expect(source.getByRole('cell', { name: '未提供', exact: true })).toHaveCount(3);
+  await expect(source.getByRole('cell', { name: '-', exact: true })).toHaveCount(3);
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.locator('summary').filter({ hasText: '口径与统计说明' }).click();
   const downloading = page.waitForEvent('download');
@@ -251,15 +254,16 @@ test('MPS preserves missing dimensions and signed local quantities instead of in
   await expect(source).toContainText('当前期间1条，数量合计未提供，缺失数量1条');
 });
 
-test('MPS opens the prototype product card with its fifteen labeled samples and edits products in a dialog', async (t) => {
+test('MPS starts without sample products when no source is configured and still supports explicit local editing', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
   const products = frame.getByRole('region', { name: '产品明细' });
-  await expect(products.getByRole('row')).toHaveCount(16);
-  await expect(products.getByText('演示数据', { exact: true })).toBeVisible();
-  await expect(products.getByRole('cell', { name: '10002791', exact: true }).first()).toBeVisible();
-  await expect(products.getByRole('cell', { name: '10009002', exact: true })).toBeVisible();
+  await expect(products.getByRole('row')).toHaveCount(1);
+  await products.getByLabel('每页产品条数').selectOption('25');
+  await expect(products.getByRole('row')).toHaveCount(1);
+  await expect(products.getByText('演示数据', { exact: true })).toHaveCount(0);
+  await expect(products).toContainText('月主计划数据源尚未装载，产品列表为空');
   await expect(products.getByRole('columnheader', { name: '基地名称', exact: true })).toBeVisible();
   await expect(
     products.getByRole('columnheader', { name: '对应老品编码', exact: true }),
@@ -279,7 +283,7 @@ test('MPS opens the prototype product card with its fifteen labeled samples and 
     await editor.getByLabel(label, { exact: true }).fill(value);
   await editor.getByRole('button', { name: '新增', exact: true }).click();
   await expect(editor).toHaveCount(0);
-  await expect(products.getByRole('row')).toHaveCount(17);
+  await expect(products.getByRole('row')).toHaveCount(2);
   await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
   const editing = frame.getByRole('dialog', { name: '修改产品', exact: true });
   await editing.getByLabel('产品名称', { exact: true }).fill('编辑后产品');
@@ -287,7 +291,7 @@ test('MPS opens the prototype product card with its fifteen labeled samples and 
   await expect(products.getByRole('cell', { name: '编辑后产品', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await products.getByRole('button', { name: '下载', exact: true }).click();
-  assert.equal((await download).suggestedFilename(), '产品关系-演示数据.csv');
+  assert.equal((await download).suggestedFilename(), '产品关系.csv');
 });
 
 test('MPS creates and compares local evaluation versions in dialogs without occupying the product first card', async (t) => {
@@ -315,7 +319,9 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   const compare = frame.getByRole('dialog', { name: '版本对比', exact: true });
   await expect(compare).toContainText('仅对比本地内存输入');
   await expect(compare).toContainText('十二月核对');
-  await expect(compare).toContainText('15');
+  const count = compare.getByRole('row').filter({ hasText: '产品关系数量' });
+  await expect(count.locator('td').nth(1)).toHaveText('0');
+  await expect(count.locator('td').nth(2)).toHaveText('0');
   await compare.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
@@ -323,7 +329,7 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   );
 });
 
-test('MPS keeps source review in cards and opens current-period detail with its formula after an upload', async (t) => {
+test('MPS keeps source review in cards and opens current-period final results after an upload', async (t) => {
   const page = await authorPage(t);
   await page.evaluate(() => window.openAuthor('mps', 1200));
   const frame = page.frameLocator('iframe');
@@ -339,7 +345,8 @@ test('MPS keeps source review in cards and opens current-period detail with its 
   await source.getByRole('button', { name: '基地 2', exact: true }).click();
   const review = frame.getByRole('dialog', { name: '计划提报 · 2026-12 · 基地核对', exact: true });
   await expect(review.getByRole('row').filter({ hasText: '郑州' })).toContainText('15');
-  await expect(review).toContainText('公式：同一基地的有效数量相加');
+  await expect(review).not.toContainText('公式：');
+  await expect(review.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
   await review.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await source.getByRole('button', { name: '预览当前明细', exact: true }).click();
   await expect(

@@ -74,3 +74,7 @@ Workbench 持有 Native 审批文档、Inbox、ApiLog、桌面导航、HTML 页�
 ## 分仓 DMS 提交
 
 分仓补货确认框支持客户、收货地址与提货点编码输入，暂存成功后展示 DMS 回执；原 Excel 导出保留。`PageBusinessGrant.branchDms` 是 Host 按部署用户映射显式提供的可选专用操作，页面 owner 失效即取消，不扩大通用 HTML action 权限。其他页面缺少 grant 时拒绝 `branch-dms`。登录凭据和提交持久回执归 GEA Host；页面只接收订单号或经 Host 校验的短时免登跳转地址。完整配置与联调缺口见 [GEA 分仓 DMS 对接 PR](https://github.com/CleverC2200/dsh-gea-plugin/pull/214)。
+
+### 看板模型洞察
+
+已授权页面可通过 `insight` 操作调用可选 `PageBusinessGrant.insight`。Workbench 核页面 owner 与 view 权限并传递页面、请求和身份的取消信号；GEA grant 决定可用页面、固定提示词、实际 Consumer 和模型路由。页面只提供当前证据与刷新时间，不指定模型、提示词、凭据或 Consumer。结果是只读展示文本，不发送对话消息，不创建任务，也不修改业务状态。

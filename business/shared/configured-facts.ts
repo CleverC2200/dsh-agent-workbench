@@ -119,6 +119,21 @@ export async function readConfiguredFacts(
       return fail('INVALID_FILTER', '筛选字段或值无效');
   const client = createAgentQueries(config, options.execute),
     q = config.queries[view.queryId];
+  // Adjacent display pages share one bounded Host-cached block. Every read still
+  // crosses the owned channel, preserving identity, refresh and permission checks.
+  const readSize =
+    options.detailsOnly && q.pagination?.atomicQuery
+      ? Math.floor((view.pageReadSize ?? pageSize) / pageSize) * pageSize
+      : pageSize;
+  if (
+    !Number.isSafeInteger(readSize) ||
+    readSize < pageSize ||
+    readSize > 200 ||
+    readSize % pageSize !== 0
+  )
+    return fail('INVALID_PAGE', '分页读取块配置无效');
+  const displayOffset = (page - 1) * pageSize;
+  const readOffset = Math.floor(displayOffset / readSize) * readSize;
   let version: any,
     versionSeen = false;
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
@@ -240,8 +255,8 @@ export async function readConfiguredFacts(
     }
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
-    if (name === 'page_size') value = pageSize;
-    if (name === 'offset') value = (page - 1) * pageSize;
+    if (name === 'page_size') value = readSize;
+    if (name === 'offset') value = readOffset;
     if (spec.format === 'YYYYMM' && typeof value === 'string')
       value = value.slice(0, 7).replace('-', '');
     if (spec.format === 'YYYYMMDD' && typeof value === 'string') value = value.replaceAll('-', '');
@@ -365,7 +380,12 @@ export async function readConfiguredFacts(
         Object.assign(Error('排程配置版本发生变化'), { code: 'QUERY_CONFIG_CHANGED' }),
       );
     }
-    const { rows, total } = unpackAtomicPage(result, page, pageSize);
+    const block = unpackAtomicPage(result, readOffset / readSize + 1, readSize);
+    const total = block.total;
+    const rows = block.rows.slice(
+      displayOffset - readOffset,
+      displayOffset - readOffset + pageSize,
+    );
     options.signal?.throwIfAborted();
     return {
       status: total ? 'available' : 'empty',

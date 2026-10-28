@@ -4,6 +4,7 @@ import css from './plan-pagination.module.css';
 
 type Props = {
   ariaLabel?: string;
+  maxPageSize?: number;
   totalCount: number;
   page: number;
   pageSize: number;
@@ -14,6 +15,7 @@ type Props = {
 
 export function PlanPagination({
   ariaLabel = '全链库存列表分页',
+  maxPageSize = 100,
   totalCount,
   page,
   pageSize,
@@ -30,7 +32,7 @@ export function PlanPagination({
   const menu = useRef<HTMLDivElement>(null);
   const pageInput = useRef<HTMLInputElement>(null);
   const menuId = useId();
-  const sizes = [10, 20, 50, 100];
+  const sizes = [10, 20, 50, 100].filter((size) => size <= maxPageSize);
   const pages = Math.max(1, Math.ceil(totalCount / pageSize));
   const current = totalCount === 0 ? 0 : Math.min(Math.max(1, page), pages);
   const startPageEdit = () => {

@@ -2411,7 +2411,7 @@ test('local prototypes appear only in a confirmed test environment; production k
         );
       if (name === 'production') {
         assert.equal(document.querySelector('[data-gea-business-entry="category"]').disabled, true);
-        assert.equal(document.querySelector('[data-gea-business-entry="regional"]').disabled, true);
+        assert.equal(document.querySelector('[data-gea-business-entry="regional"]'), null);
         const order = document.querySelector(
           '[data-gea-business-entry="inventory-orderworkbench"]',
         );

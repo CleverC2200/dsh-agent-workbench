@@ -48,8 +48,9 @@ test('MPS reads governed products and annual demand, preserves missing dimension
   const products = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(products).toContainText('源产品甲');
   await expect(products.locator('.dc-demo')).toHaveCount(0);
-  await expect(products.locator('tbody tr').first().locator('td').first()).toHaveText('—');
+  await expect(products.locator('tbody tr').first().locator('td').first()).toHaveText('-');
   const annualTable = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await annualTable.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(annualTable).toContainText('100');
   await expect(annualTable).toContainText('源数量');
   assert(calls.some((call) => call.queryId === 'annual.summary'));
@@ -67,20 +68,26 @@ test('MPS reads governed products and annual demand, preserves missing dimension
     await expect.poll(() => calls.some((call) => call.queryId === kind + '.detail')).toBe(true);
   }
   await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
-  await frame.getByLabel('产品数据来源', { exact: true }).selectOption('demo');
-  await expect(products).toContainText('演示数据');
-  await expect(products.locator('tbody tr')).toHaveCount(15);
+  await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
+  await expect(products).not.toContainText('演示数据');
 });
 test('MPS denies without falling back to samples and discards a late response after switching versions', async (t) => {
   let deny = true,
+    attempt = 0,
     release;
   const pending = new Promise((resolve) => {
     release = resolve;
   });
+  t.after(() => release());
   const { frame, calls } = await livePage(t, async (query) => {
     if (query.queryId === 'products.detail') {
       if (deny) throw Error('AGENT_ACCESS_DENIED');
-      await pending;
+      const current = ++attempt;
+      if (current === 1) await pending;
+      return {
+        ...fixture(query),
+        rows: [{ ...product, material_name: current === 1 ? '过期产品' : '新版产品' }],
+      };
     }
     return fixture(query);
   });
@@ -96,17 +103,18 @@ test('MPS denies without falling back to samples and discards a late response af
   const version = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
   await version.getByLabel('评估月份', { exact: true }).fill('2027-01');
   await version.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('产品数据来源', { exact: true }).selectOption('demo');
+  await expect(products).toContainText('新版产品');
   release();
-  await expect(products.locator('tbody tr')).toHaveCount(15);
+  await expect(products.locator('tbody tr')).toHaveCount(1);
   await expect(frame.getByLabel('评估版本选择').locator('option:checked')).toContainText('2027-01');
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame
     .getByRole('dialog', { name: '新建评估版本', exact: true })
     .getByRole('button', { name: '取消', exact: true })
     .click();
-  await expect(products.locator('tbody tr')).toHaveCount(15);
-  await expect(products).not.toContainText('源产品甲');
+  await expect(products.locator('tbody tr')).toHaveCount(1);
+  await expect(products).toContainText('新版产品');
+  await expect(products).not.toContainText('过期产品');
 });
 test('MPS keeps national and base annual quantities separate, preserves zero and blocks duplicate source quantities', async (t) => {
   const records = [
@@ -122,6 +130,7 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await section.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(section.getByLabel('年度需求基地')).toHaveValue('全国');
   await expect(
     section
@@ -149,4 +158,104 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
   await expect(section.locator('tbody tr')).toHaveCount(1);
   await expect(section).toContainText('200');
   await expect(section).not.toContainText('100');
+});
+
+test('MPS product details start with ten rows and keep pagination aligned with filters', async (t) => {
+  const records = Array.from({ length: 56 }, (_, index) => ({
+    ...product,
+    product_item: String(index).padStart(6, '0'),
+    material_code: String(index).padStart(6, '0'),
+    material_name: `产品${String(index).padStart(2, '0')}`,
+  }));
+  const { frame } = await livePage(t, (query) => {
+    if (query.queryId === 'products.count')
+      return { ...fixture(query), rows: [{ total: records.length }] };
+    if (query.queryId === 'products.detail') return { ...fixture(query), rows: records };
+    return fixture(query);
+  });
+  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(section.locator('tbody tr')).toHaveCount(10);
+  await expect(section.getByLabel('每页产品条数')).toHaveValue('10');
+  await section.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(section.locator('tbody tr').first()).toContainText('产品10');
+  await section.getByLabel('每页产品条数').selectOption('25');
+  await expect(section.locator('tbody tr')).toHaveCount(25);
+  await expect(section.locator('tbody tr').first()).toContainText('产品00');
+  await section.getByLabel('每页产品条数').selectOption('50');
+  await expect(section.locator('tbody tr')).toHaveCount(50);
+  await section.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(section.locator('tbody tr')).toHaveCount(6);
+  await section.getByLabel('搜索产品').fill('产品55');
+  await expect(section.locator('tbody tr')).toHaveCount(1);
+  await expect(section.locator('tbody tr')).toContainText('产品55');
+  const toggle = section.getByRole('button', { name: '收起产品明细', exact: true });
+  await toggle.click();
+  await expect(section.locator('table')).toBeHidden();
+  await section.getByRole('button', { name: '展开产品明细', exact: true }).click();
+  await expect(section.locator('tbody tr')).toBeVisible();
+  await expect(section.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
+  await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
+});
+
+test('annual plan starts collapsed and keeps sync beside its detail title without a template', async (t) => {
+  const { frame } = await livePage(t, fixture);
+  const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await expect(section.getByRole('button', { name: '展开年度销售计划' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(section.locator('table')).toBeHidden();
+  const sync = section.getByRole('button', { name: '同步数据源', exact: true });
+  await expect(sync).toBeVisible();
+  await expect(sync.locator('..')).toContainText('年度销售计划 · 分月明细');
+  await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
+  await section.getByRole('button', { name: '展开年度销售计划' }).click();
+  await expect(section.locator('table')).toBeVisible();
+  await expect(section.getByRole('button', { name: '下载', exact: true })).toBeVisible();
+});
+
+test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {
+  const { page, frame, contexts } = await livePage(t, fixture);
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  const version = frame.getByRole('dialog', { name: '新建评估版本', exact: true });
+  await version.getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await version.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择年度计划CSV', { exact: true }).setInputFiles({
+    name: '年度小数核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '月份,大类,数量\n2026-07,汤圆,12.5\n2026-07,汤圆,12.5\n2026-08,汤圆,12.5\n2026-09,汤圆,',
+    ),
+  });
+  const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
+  await section.getByRole('button', { name: '展开年度销售计划' }).click();
+  const category = section
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  const july = category.locator('td').nth(1);
+  const august = category.locator('td').nth(2);
+  const september = category.locator('td').nth(3);
+  const total = category.locator('td').last();
+  await expect(july.locator('summary').first()).toHaveText('25');
+  await expect(august.locator('summary').first()).toHaveText('13');
+  await expect(total.locator('summary')).toHaveText('38（已读）');
+  await july.locator('summary').first().click();
+  await august.locator('summary').last().click();
+  await september.locator('summary').first().click();
+  await total.locator('summary').click();
+  await expect(august).toContainText('结果：-50%');
+  await expect(september).toContainText('数量缺失');
+  await expect(category).not.toContainText('代入：');
+  await expect(category).not.toContainText('12.5');
+  await expect
+    .poll(
+      () =>
+        contexts.at(-1)?.parts?.check?.annualSelection?.rows.filter((row) => row['数量'] === '12.5')
+          .length,
+    )
+    .toBe(3);
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: '下载', exact: true }).click();
+  const csv = await readFile(await (await download).path(), 'utf8');
+  assert.equal(csv.match(/12\.5/g)?.length, 3);
 });
