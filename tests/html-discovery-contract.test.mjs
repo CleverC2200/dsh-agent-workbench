@@ -88,6 +88,7 @@ async function fixture(t, fetcher) {
     },
     slots: {
       entries: () => [],
+      subscribe: () => () => {},
       registerFactory: () => () => {},
       register: (options, component) => {
         const id = options.id ?? options.key ?? options.name;

@@ -15,7 +15,7 @@ const { SlotCore } = await import(resolve(corePath, 'packages/client/ui-slots/li
 const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {
-    contents: `export {ConversationContent} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx'))};export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';`,
+    contents: `export {mountMenuAgentSelection} from './src/company/agent-menu-selection.tsx';export {AgentPresetSeatController} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-agent-preset/src/client/seat-store.ts'))};export {AgentPresetSeat as OfficialAgentPresetSeat} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx'))};export {ConversationContent} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx'))};export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -43,13 +43,28 @@ new Function('module', 'exports', 'require', bundle.outputFiles[0].text)(
   module.exports,
   require,
 );
-const { mountCompanyUI, WorkbenchController, ConversationContent } = module.exports;
+const {
+  mountCompanyUI,
+  mountMenuAgentSelection,
+  WorkbenchController,
+  ConversationContent,
+  OfficialAgentPresetSeat,
+  AgentPresetSeatController,
+} = module.exports;
 function fixture(
   account,
   panels = [{ options: { id: 'plugins', label: () => '插件管理' } }],
-  { memory, restorePageSession, slotCore, navigation, businessNavigation } = {},
+  { memory, restorePageSession, slotCore, navigation, businessNavigation, presetSeat } = {},
 ) {
-  const entries = [],
+  const entries = presetSeat
+      ? [
+          {
+            options: { name: 'conversation.hero.agentPreset' },
+            component: presetSeat,
+            inject: () => ({}),
+          },
+        ]
+      : [],
     calls = [];
   let navigationConsumer, disposeNavigation;
   const attachNavigation = () => {
@@ -84,12 +99,14 @@ function fixture(
           ? panels.entries(name)
           : name === 'sidebar.panellist'
             ? panels
-            : [
-                { options: { key: 'gea-proof' } },
-                { options: { key: 'inventory-fc' } },
-                { options: { key: 'plugins' } },
-                ...entries.filter((entry) => entry.options.name === 'main'),
-              ],
+            : name !== 'main'
+              ? entries.filter((entry) => entry.options.name === name)
+              : [
+                  { options: { key: 'gea-proof' } },
+                  { options: { key: 'inventory-fc' } },
+                  { options: { key: 'plugins' } },
+                  ...entries.filter((entry) => entry.options.name === 'main'),
+                ],
       entriesOfSlot: (name) =>
         !Array.isArray(panels) ? panels.entriesOfSlot(name) : ctx.slots.entries(name),
       subscribe: (name, listener) =>
@@ -922,6 +939,10 @@ async function mountedDom(t) {
     window: dom.window,
     document: dom.window.document,
     Node: dom.window.Node,
+    Element: dom.window.Element,
+    HTMLElement: dom.window.HTMLElement,
+    requestAnimationFrame: dom.window.requestAnimationFrame.bind(dom.window),
+    cancelAnimationFrame: dom.window.cancelAnimationFrame.bind(dom.window),
     navigator: dom.window.navigator,
     IS_REACT_ACT_ENVIRONMENT: true,
     fetch: () => {
@@ -2630,4 +2651,311 @@ test('missing, invalid and unsupported dictionary icons fall back without losing
     assert.ok(group.querySelector('svg.lucide-layout-grid'));
     assert.equal(group.querySelector('[data-gea-business-entry]').disabled, true);
   }
+});
+
+test('native Agent picker follows the sidebar catalog through identity changes and failed reads', async (t) => {
+  const mounted = await mountedDom(t);
+  let identity = navigationIdentity;
+  const listeners = new Set();
+  const reads = [];
+  const selected = [];
+  const catalog = {
+    agents: marketAgents.slice(0, 2),
+    domains: { kind: 'available', items: [] },
+  };
+  const account = {
+    getSnapshot: () => identity,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  const result = fixture(account, undefined, {
+    presetSeat: OfficialAgentPresetSeat,
+    businessNavigation: {
+      read: (signal) => new Promise((resolve, reject) => reads.push({ signal, resolve, reject })),
+    },
+  });
+  result.workbench.registerFrame({
+    id: 'inventory-aqkc',
+    resourceId: 'gea-html-inventory-aqkc',
+    src: '/aqkc',
+    kind: 'html',
+    label: '基地库存',
+  });
+  result.workbench.registerFrame({
+    id: 'inventory-fc',
+    resourceId: 'gea-html-inventory-fc',
+    src: '/fc',
+    kind: 'html',
+    label: '分仓库存',
+  });
+  result.workbench.registerFrame({
+    id: 'plan-category-production',
+    resourceId: 'gea-html-inventory-mps',
+    src: '/mps',
+    kind: 'html',
+    label: 'MPS',
+  });
+  const Sidebar = result.entries.find((entry) => entry.options.name === 'sidebar').component;
+  const Picker = result.entries.find(
+    (entry) =>
+      entry.options.name === 'conversation.hero.agentPreset' && entry.options.priority === -20,
+  ).component;
+  const options = [
+    'standard',
+    'ptc',
+    'cordis',
+    'agent-resource-skill',
+    'user-custom',
+    'gea-readonly',
+    'gea-html-inventory-aqkc',
+    'gea-html-inventory-fc',
+    'gea-html-inventory-mps',
+    'gea-html-unmapped',
+  ];
+  const state = {
+    options: options.map((id) => ({ id, name: id })),
+    current: 'standard',
+    busy: false,
+    error: null,
+    introduce: false,
+  };
+  await React.act(async () =>
+    mounted.root.render(
+      React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(Sidebar, {
+          collapsed: false,
+          width: 280,
+          usePanelInfo: (select) => select({ activePanelId: null }),
+          renderSlot: result.renderSlot,
+        }),
+        React.createElement(Picker, {
+          useAgentPresetSeat: (select) => select(state),
+          useDeveloperTools: (select) => select(true),
+          useSessionRetainInfo: (select) => select(undefined),
+          load: async () => {},
+          select: async (id) => {
+            selected.push(id);
+          },
+          introduced: () => {},
+          t: (key) => key,
+        }),
+      ),
+    ),
+  );
+  const open = async () => {
+    const button = document.querySelector('button[title="seatHint"]');
+    if (button.getAttribute('aria-expanded') !== 'true')
+      await React.act(async () => button.click());
+  };
+  const shown = () =>
+    [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')].map((node) =>
+      node.textContent.replace('noDescription', ''),
+    );
+  await open();
+  assert.deepEqual(shown(), options.slice(0, 5), 'pending catalog hides all business Agents');
+  await React.act(async () => reads[0].resolve(catalog));
+  assert.deepEqual(shown(), [...options.slice(0, 5), 'gea-readonly', 'gea-html-inventory-aqkc']);
+  assert.ok(document.querySelector('[data-gea-business-entry="inventory-aqkc"]'));
+  assert.equal(document.querySelector('[data-gea-business-entry="inventory-fc"]'), null);
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')]
+      .find((node) => node.textContent.startsWith('gea-html-inventory-aqkc'))
+      .click(),
+  );
+  assert.deepEqual(selected, ['gea-html-inventory-aqkc']);
+  await open();
+  await React.act(async () => {
+    identity = {
+      ...navigationIdentity,
+      scope: 'tenant:test:another-user',
+      subject: 'another-user',
+    };
+    for (const listener of listeners) listener();
+  });
+  assert.deepEqual(shown(), options.slice(0, 5), 'old identity cannot retain business options');
+  await React.act(async () => reads[1].reject(Error('catalog offline')));
+  assert.deepEqual(shown(), options.slice(0, 5));
+  await React.act(async () => {
+    identity = {
+      ...navigationIdentity,
+      scope: 'tenant:test:third-user',
+      subject: 'third-user',
+    };
+    for (const listener of listeners) listener();
+  });
+  await React.act(async () =>
+    reads[2].resolve({
+      ...catalog,
+      agents: [
+        marketAgents[2],
+        { id: 'mps', agentCode: 'mps', agentName: 'MPS', businessDomain: null },
+      ],
+    }),
+  );
+  assert.deepEqual(shown(), [
+    ...options.slice(0, 5),
+    'gea-html-inventory-fc',
+    'gea-html-inventory-mps',
+  ]);
+  await React.act(async () => {
+    identity = {
+      ...navigationIdentity,
+      scope: null,
+      status: { ...navigationIdentity.status, authenticated: false },
+    };
+    for (const listener of listeners) listener();
+  });
+  assert.deepEqual(shown(), options.slice(0, 5), 'logout removes business options');
+  assert.deepEqual(
+    selected,
+    ['gea-html-inventory-aqkc'],
+    'filtering never changes a Session or saved default',
+  );
+});
+
+test('opening the native Agent picker refreshes resources registered after its first roster read', async (t) => {
+  const mounted = await mountedDom(t);
+  const core = new SlotCore();
+  core.register(
+    {
+      name: 'root',
+      children: { 'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' } },
+    },
+    () => null,
+  );
+  core.register(
+    { name: 'conversation.hero.agentPreset', inject: () => ({}) },
+    OfficialAgentPresetSeat,
+  );
+  const allowed = new Set(['gea-html-inventory-mps', 'gea-html-inventory-aqkc']);
+  mountMenuAgentSelection(
+    {
+      slots: {
+        inject: (_name, fn) => {
+          t.after(fn());
+        },
+        entries: (name) => core.entries(name),
+        subscribe: (name, listener) => core.subscribe(name, listener),
+        register: (options, component) => core.register(options, component),
+      },
+    },
+    () => allowed,
+  );
+  let roster = [{ id: 'standard' }, { id: 'gea-html-inventory-mps', isDefault: true }];
+  let reads = 0;
+  const selections = [];
+  const seat = new AgentPresetSeatController(
+    {
+      configForms: { developerTools: { enabled: { getSnapshot: () => true } } },
+      remote: {
+        agentPresets: {
+          list: async () => {
+            reads++;
+            return { ok: true, value: { presets: roster } };
+          },
+          select: async (...args) => {
+            selections.push(args);
+          },
+        },
+      },
+    },
+    () => undefined,
+  );
+  const Picker = core
+    .entries('conversation.hero.agentPreset')
+    .find((entry) => entry.options.priority === -20).component;
+  const load = () => seat.load();
+  await React.act(async () =>
+    mounted.root.render(
+      React.createElement(Picker, {
+        useAgentPresetSeat: (select) =>
+          select(React.useSyncExternalStore(seat.store.subscribe, seat.store.getSnapshot)),
+        useDeveloperTools: (select) => select(true),
+        useSessionRetainInfo: (select) => select(undefined),
+        load,
+        select: (id) => seat.select(id),
+        introduced: () => seat.introduced(),
+        t: (key) => key,
+      }),
+    ),
+  );
+  assert.equal(reads, 1);
+  roster = [...roster, { id: 'gea-html-inventory-aqkc' }, { id: 'gea-html-unauthorized' }];
+  await React.act(async () => document.querySelector('button[title="seatHint"]').click());
+  const options = [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')].map(
+    (node) => node.textContent.replace('noDescription', ''),
+  );
+  assert.ok(
+    options.includes('gea-html-inventory-aqkc'),
+    'late registered authorized resource is selectable without reloading the page',
+  );
+  assert.equal(options.includes('gea-html-unauthorized'), false);
+  assert.equal(reads, 2);
+  assert.equal(seat.store.getSnapshot().current, 'gea-html-inventory-mps');
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')]
+      .find((node) => node.textContent.startsWith('gea-html-inventory-aqkc'))
+      .click(),
+  );
+  assert.equal(seat.store.getSnapshot().current, 'gea-html-inventory-aqkc');
+  assert.equal(roster.find((entry) => entry.isDefault)?.id, 'gea-html-inventory-mps');
+  assert.deepEqual(selections, []);
+});
+
+test('menu Agent selection preserves Core injection and follows preset plugin registration and disposal', async () => {
+  const core = new SlotCore();
+  core.register(
+    {
+      name: 'root',
+      children: { 'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' } },
+    },
+    () => null,
+  );
+  let cleanup;
+  mountMenuAgentSelection(
+    {
+      slots: {
+        inject: (_name, fn) => {
+          cleanup = fn();
+        },
+        entries: (name) => core.entries(name),
+        subscribe: (name, listener) => core.subscribe(name, listener),
+        register: (options, component) => core.register(options, component),
+      },
+    },
+    () => new Set(),
+  );
+  assert.equal(core.entries('conversation.hero.agentPreset').length, 0);
+  const register = (label) =>
+    core.register(
+      {
+        name: 'conversation.hero.agentPreset',
+        locale: 'settings.agentPreset',
+        inject: (sessionId) => ({ sessionId, label }),
+      },
+      () => null,
+    );
+  const release = register('first');
+  await new Promise(setImmediate);
+  const wrapper = () =>
+    core.entries('conversation.hero.agentPreset').find((entry) => entry.options.priority === -20);
+  assert.deepEqual(wrapper().inject('session-example'), {
+    sessionId: 'session-example',
+    label: 'first',
+  });
+  assert.equal(wrapper().locale, 'settings.agentPreset');
+  release();
+  await new Promise(setImmediate);
+  assert.equal(core.entries('conversation.hero.agentPreset').length, 0);
+  const releaseReplacement = register('replacement');
+  await new Promise(setImmediate);
+  assert.deepEqual(wrapper().inject(undefined), { sessionId: undefined, label: 'replacement' });
+  cleanup();
+  assert.equal(core.entries('conversation.hero.agentPreset').length, 1);
+  releaseReplacement();
+  assert.equal(core.entries('conversation.hero.agentPreset').length, 0);
 });
