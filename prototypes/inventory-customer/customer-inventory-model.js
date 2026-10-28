@@ -69,8 +69,12 @@ export function mapCustomerInventoryRows(rows) {
     if (!code || !name) throw Error('CUSTOMER_INVENTORY_IDENTITY_MISSING');
     const skuRows = finite(row.sku_rows) ?? 0;
     const complete = (field) => finite(row[field]) === skuRows;
+    const inventorySkuRows = Object.hasOwn(row, 'inventory_sku_rows') ? finite(row.inventory_sku_rows) : skuRows;
+    const inventoryComplete = (field) => inventorySkuRows > 0 && finite(row[field]) === inventorySkuRows;
     const quantity = complete('stock_coverage') ? finite(row.stock_qty) : null;
-    const valueAmount = complete('value_coverage') ? finite(row.stock_amt) : null;
+    const largeDateQuantity = Object.hasOwn(row, 'large_date_stock_qty')
+      ? finite(row.large_date_stock_qty) : quantity;
+    const valueAmount = inventoryComplete('value_coverage') ? finite(row.stock_amt) : null;
     const sales30 = complete('sales_coverage') ? finite(row.sales_qty_30days) : null;
     const planSameDate = row.plan_snapshot_date === rowSnapshot;
     const completePlanTransit = planSameDate && finite(row.plan_sku_rows) > 0 && finite(row.plan_transit_coverage) === finite(row.plan_sku_rows);
@@ -78,12 +82,13 @@ export function mapCustomerInventoryRows(rows) {
       : completePlanTransit ? finite(row.plan_in_transit_qty) : null;
     // SKU discrepancies are diagnostics, not a business-risk rule or a reason
     // to discard a customer's otherwise calculable aggregate.
-    const largeDateQty = complete('large_date_coverage') ? finite(row.large_date_qty) : null;
+    const largeDateQty = finite(row.large_date_coverage) > 0 ? finite(row.large_date_qty) : null;
+    const largeDatePartial = largeDateQty !== null && !inventoryComplete('large_date_coverage');
     const largeDateInvalid =
-      largeDateQty < 0 || (largeDateQty !== null && quantity !== null && largeDateQty > quantity);
+      largeDateQty < 0 || (largeDateQty !== null && largeDateQuantity !== null && largeDateQty > largeDateQuantity);
     const largeDateRatio =
-      !largeDateInvalid && largeDateQty !== null && quantity > 0
-        ? (largeDateQty / quantity) * 100
+      !largeDateInvalid && largeDateQty !== null && largeDateQuantity > 0
+        ? (largeDateQty / largeDateQuantity) * 100
         : null;
     // The confirmed customer target metrics come from the dealer-side target
     // calculation. Do not derive a substitute from recent sales while that
@@ -108,6 +113,13 @@ export function mapCustomerInventoryRows(rows) {
       targetTurnover: planComplete('standard_coverage') && finite(row.minimum_standard_days) === finite(row.maximum_standard_days)
         ? finite(row.minimum_standard_days) : null,
       planSnapshot: row.plan_snapshot_date ?? null,
+      inventorySnapshot: Object.hasOwn(row, 'inventory_snapshot_date') ? row.inventory_snapshot_date : rowSnapshot,
+      organizationSnapshot: row.organization_snapshot_date ?? null,
+      inventorySkuCount: inventorySkuRows,
+      inTransitKnownQty: finite(row.in_transit_qty),
+      inTransitCoverage: finite(row.transit_coverage),
+      largeDateQuantity,
+      largeDateFieldCoverage: finite(row.large_date_coverage),
       targetCoverage: finite(row.target_coverage),
       standardCoverage: finite(row.standard_coverage),
       ageCoverage: finite(row.age_coverage),
@@ -144,23 +156,25 @@ export function mapCustomerInventoryRows(rows) {
       largeDateQty,
       largeDateRatio,
       largeDateEstimated: false,
+      largeDatePartial,
+      freshnessEstimated: largeDatePartial,
       largeDateInvalid,
       largeDateSkuIssueCount: finite(row.large_date_invalid_sku) ?? 0,
       largeDateMessage: largeDateInvalid
         ? '大日期数量与库存不一致，占比及新鲜度暂不计算'
         : largeDateQty === null
           ? '大日期数量缺失'
-          : quantity === null
+          : largeDateQuantity === null
             ? '库存数据缺失，无法计算占比'
-            : quantity === 0
+            : largeDateQuantity === 0
               ? '库存总量为0，无法计算占比'
-              : '',
+              : largeDatePartial ? `已知大日期数量；覆盖 ${row.large_date_coverage}/${inventorySkuRows} SKU，新鲜度为测算上限` : '',
       shortageSku: finite(row.shortage_sku),
       expirySku: null,
       noSalesSku: finite(row.no_sales_sku),
     };
   });
-  return { snapshot, rows: mapped };
+  return { snapshot, inventorySnapshot: mapped[0]?.inventorySnapshot ?? null, organizationSnapshot: mapped[0]?.organizationSnapshot ?? null, rows: mapped };
 }
 
 /** Preserve book balances; incomplete or anomalous inputs cannot establish healthy KPIs. */
@@ -173,11 +187,11 @@ export function summarizeCustomerInventory(rows) {
   const sales30 = sum('sales30');
   const anomalous = quantity < 0 || sum('value') < 0;
   const largeDateRows = rows.filter(
-    (row) => Number.isFinite(row.largeDateQty) && Number.isFinite(row.quantity),
+    (row) => Number.isFinite(row.largeDateQty) && Number.isFinite(row.largeDateQuantity),
   );
   const largeDateQty = sum('largeDateQty');
   const coveredLargeDateQty = largeDateRows.reduce((total, row) => total + row.largeDateQty, 0);
-  const largeDateQuantity = largeDateRows.reduce((total, row) => total + row.quantity, 0);
+  const largeDateQuantity = largeDateRows.reduce((total, row) => total + row.largeDateQuantity, 0);
   const turnoverRows = rows.filter((row) => Number.isFinite(row.turnover));
   const turnoverSales = turnoverRows.reduce((total, row) => total + row.sales30, 0);
   const structureRows = rows.filter((row) => Number.isFinite(row.structureScore));
@@ -201,6 +215,8 @@ export function summarizeCustomerInventory(rows) {
         ? (coveredLargeDateQty / largeDateQuantity) * 100
         : null,
     largeDateEstimated: false,
+    largeDatePartial: rows.some(row => row.largeDatePartial),
+    freshnessEstimated: largeDateRows.some(row => row.freshnessEstimated),
     largeDateCoverageCount: rows.filter((row) => Number.isFinite(row.largeDateQty)).length,
     largeDateRatioCoverageCount: largeDateRows.length,
     largeDateInvalidCount: rows.filter((row) => row.largeDateInvalid).length,
@@ -213,7 +229,7 @@ export function summarizeCustomerInventory(rows) {
         ? (1 - coveredLargeDateQty / largeDateQuantity) * 100
         : null,
     turnover:
-      !anomalous && turnoverSales > 0
+      !(quantity < 0) && turnoverSales > 0
         ? turnoverRows.reduce((total, row) => total + row.quantity + (row.inTransit ?? 0), 0) /
           (turnoverSales / 30)
         : null,
@@ -239,6 +255,9 @@ export function summarizeCustomerInventory(rows) {
     missingValueCount: rows.filter((row) => !Number.isFinite(row.value)).length,
     abnormalCustomerCount: rows.filter((row) => row.quantity < 0 || row.value < 0).length,
     normalCoverageCount: largeDateRows.length,
+    inventoryDates: [...new Set(rows.map(row => row.inventorySnapshot).filter(Boolean))],
+    inventoryCustomerCount: rows.filter(row => row.inventorySkuCount > 0).length,
+    inventorySkuCount: rows.reduce((total, row) => total + (row.inventorySkuCount ?? 0), 0),
   };
 }
 
@@ -276,7 +295,7 @@ export function structureUnavailableMessage(rows) {
   return `${reasons.join('；')}，${unscored.length === rows.length ? '结构分暂不计算' : `${unscored.length}家客户未评分`}`;
 }
 export function largeDateStatus(row) {
-  return !Number.isFinite(row.largeDateRatio)
+  return !Number.isFinite(row.largeDateRatio) || (row.largeDatePartial && row.largeDateRatio < 5)
     ? 'unknown'
     : row.largeDateRatio >= 5
       ? 'attention'

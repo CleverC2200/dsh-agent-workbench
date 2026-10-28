@@ -7,6 +7,7 @@ import { customerPageContext } from './page-context.js';
 
 let snapshot;
 let inventorySnapshot;
+let sourceDates;
 let authorizationScope;
 let unregister = () => {};
 let attached = true;
@@ -109,7 +110,10 @@ function report(value) {
     source: 'gea-governed-sql',
     dataAuthority: 'current-gea-identity',
     authorizationScope,
-    inventorySnapshot,
+    inventorySnapshot: sourceDates?.inventory,
+    planSnapshot: inventorySnapshot,
+    sourceDates,
+    primaryTable: 'agents_scm_cust_plan_order_analysis_d',
     pageId: 'inventory-customer',
     capturedAt: new Date().toISOString(),
   };
@@ -139,6 +143,7 @@ async function reloadCustomerInventory() {
       onInventory(inventory) {
         if (!attached || generation !== loadGeneration) return;
         inventorySnapshot = inventory.snapshot;
+        sourceDates = { plan: inventory.snapshot, inventory: inventory.inventorySnapshot, organization: inventory.organizationSnapshot };
         hasData = true;
         presentation.update(inventory);
         showLoadState(inventory.rows.length ? 'enriching' : 'empty');
@@ -146,6 +151,7 @@ async function reloadCustomerInventory() {
     });
     if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
+    sourceDates = { plan: inventory.snapshot, inventory: inventory.inventorySnapshot, organization: inventory.organizationSnapshot };
     hasData = true;
     syncStatus('');
     showLoadState(inventory.rows.length ? 'ready' : 'empty');
@@ -195,6 +201,7 @@ function invalidateInventory() {
   snapshot = undefined;
   authorizationScope = undefined;
   inventorySnapshot = undefined;
+  sourceDates = undefined;
   presentation.update(emptyInventory());
   syncStatus('');
   showLoadState('changed');
