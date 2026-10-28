@@ -167,6 +167,73 @@ async function fixture(t, platform = 'darwin', conversation = false) {
   return page;
 }
 
+test('company sidebar follows light and dark theme with readable controls', async (t) => {
+  const page = await fixture(t, 'win32');
+  const luminance = (color) => {
+    const rgb = color
+      .match(/[\d.]+/g)
+      .slice(0, 3)
+      .map((part) => {
+        const value = Number(part) / 255;
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+    return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+  };
+  const contrast = (a, b) =>
+    (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
+  for (const dark of [false, true, false]) {
+    await page.evaluate((dark) => {
+      document.body.toggleAttribute('data-ds-dark-theme', dark);
+      document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    }, dark);
+    await expect
+      .poll(async () => {
+        const background = await page
+          .locator('.gea-sidebar-owned')
+          .evaluate((node) => getComputedStyle(node).backgroundColor);
+        const color = await page
+          .locator('.gea-sidebar-tab')
+          .first()
+          .evaluate((node) => getComputedStyle(node).color);
+        return contrast(color, background);
+      })
+      .toBeGreaterThanOrEqual(4.5);
+    const colors = await page.evaluate(() => {
+      const sidebar = document.querySelector('.gea-sidebar-owned');
+      const entry = sidebar.querySelector('.gea-ai-workbench-entry');
+      return {
+        background: getComputedStyle(sidebar).backgroundColor,
+        labels: [
+          '.gea-sidebar-tab',
+          '.gea-brand-subtitle',
+          '[data-slot="sidebar.brand.name"] span',
+        ].map((selector) => ({
+          selector,
+          color: getComputedStyle(sidebar.querySelector(selector)).color,
+        })),
+        entry: {
+          color: getComputedStyle(entry).color,
+          stops: getComputedStyle(entry).backgroundImage.match(/rgba?\([^)]+\)/g),
+        },
+      };
+    });
+    assert.ok(
+      dark ? luminance(colors.background) < 0.1 : luminance(colors.background) > 0.8,
+      'sidebar surface follows the active theme',
+    );
+    for (const label of colors.labels)
+      assert.ok(
+        contrast(label.color, colors.background) >= 4.5,
+        `${label.selector} remains readable in ${dark ? 'dark' : 'light'} mode`,
+      );
+    for (const stop of colors.entry.stops)
+      assert.ok(
+        contrast(colors.entry.color, stop) >= 4.5,
+        'AI workbench label remains readable across its entry surface',
+      );
+  }
+});
+
 for (const target of ['home', 'business'])
   test(
     'Windows ' + target + ' retains a clickable caption toggle after zero-width collapse',
