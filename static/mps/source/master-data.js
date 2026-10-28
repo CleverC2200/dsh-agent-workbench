@@ -11,7 +11,8 @@ export const sourceNames = {
 const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 export function normalizedMonth(value) {
   if (typeof value !== 'string') return null;
-  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) return value;
+  const numeric = /^(\d{4})-(0?[1-9]|1[0-2])$/.exec(value);
+  if (numeric) return `${numeric[1]}-${numeric[2].padStart(2, '0')}`;
   const chinese = /^(\d{4})年(0?[1-9]|1[0-2])月$/.exec(value);
   if (chinese) return `${chinese[1]}-${chinese[2].padStart(2, '0')}`;
   const match = /^([a-z]{3})-(\d{2})$/i.exec(value);
@@ -25,6 +26,7 @@ export function sourceMonthValues(month) {
     month,
     name[0].toUpperCase() + name.slice(1) + '-' + month.slice(2, 4),
     `${month.slice(0, 4)}年${Number(month.slice(5))}月`,
+    ...(month[5] === '0' ? [`${month.slice(0, 4)}-${Number(month.slice(5))}`] : []),
   ];
 }
 export function hasMpsSource() {
@@ -66,8 +68,8 @@ export function productRows(rows) {
     大类: text(row.sub_category),
     系列: text(row.series),
     物料组: text(row.product_item),
-    老品编码: '',
-    老品名称: '',
+    老品编码: text(row.replacement_material_code),
+    老品名称: text(row.replacement_product),
   }));
 }
 export function annualRows(rows) {

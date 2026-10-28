@@ -99,9 +99,10 @@ async function version(frame, month = '2026-10') {
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
 }
 
-test('product source fields and exact group children appear without claiming a source replacement is an old-product relationship', async (t) => {
+test('product replacement fields populate old-product columns and the list omits base names', async (t) => {
   const { frame } = await mpsPage(t, config, fixture);
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
   await expect(section).toContainText('源标签：汤圆');
   const parent = section.locator('tbody tr').filter({ hasText: '物料组甲' });
   await expect(parent).toContainText('汤圆');
@@ -111,12 +112,13 @@ test('product source fields and exact group children appear without claiming a s
   await expect(dialog).toContainText('REPLACE');
   await expect(dialog).toContainText('产品A');
   await expect(dialog).toContainText('产品B');
-  await expect(dialog).toContainText('不作为老品继承关系');
+  await expect(dialog).toContainText('对应老品编码、老品名称分别取替换物料编码、替换品');
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   const child = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
-  await expect(child.locator('td').nth(6)).toHaveText('-');
+  await expect(child.locator('td').nth(5)).toHaveText('REPLACE');
+  await expect(child.locator('td').nth(6)).toHaveText('源替换品');
 });
 
 test('first-step shares reuse the existing computation while final category demand remains unavailable', async (t) => {

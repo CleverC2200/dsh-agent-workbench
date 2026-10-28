@@ -345,12 +345,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               (!business || records.every((row) => row[column] !== ''))
                 ? quantity(records, column)
                 : '',
-            缺失数量条数: records.filter((row) => row[column] === '').length,
           };
         })
       : [];
     const displayed = preview === '明细' ? rows : grouped;
-    const columns = preview === '明细' ? detailColumns : ['名称', '数量合计', '缺失数量条数'];
+    const columns = preview === '明细' ? detailColumns : ['名称', '数量合计'];
     return h(
       'section',
       { 'aria-label': definition.title, className: 'dc-card dc-source' },
@@ -1674,7 +1673,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'colgroup',
                 {},
-                [7, 9, 21, 8, 12, 10, 8, 15, 10].map((width, index) =>
+                [10, 24, 8, 12, 10, 10, 16, 10].map((width, index) =>
                   h('col', { key: index, style: { width: width + '%' } }),
                 ),
               ),
@@ -1685,7 +1684,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   'tr',
                   {},
                   [
-                    '基地名称',
                     '产品编码',
                     '产品名称',
                     '大类',
@@ -1702,55 +1700,51 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 {},
                 filteredProducts
                   .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-                  .map(({ row, index, display, children, inherited, labels, candidateBases }) =>
+                  .map(({ row, index, display, children, inherited, labels }) =>
                     h(
                       'tr',
                       { key: index },
-                      productColumns.map((column) =>
-                        h(
-                          'td',
-                          {
-                            key: column,
-                            'aria-label':
-                              column === '产品名称' ? display[column] || '-' : undefined,
-                            title: inherited.includes(column)
-                              ? '同物料组SKU的唯一源值，仅用于展示'
-                              : row[column] || '',
-                          },
-                          column === '产品编码' && children.length
-                            ? h(
-                                'button',
-                                {
-                                  className: 'dc-link',
-                                  onClick: () => setProductDetails(index),
-                                  'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
-                                },
-                                `物料组 · ${children.length} SKU`,
-                              )
-                            : column === '基地' && !row[column] && candidateBases.length
+                      productColumns
+                        .filter((column) => column !== '基地')
+                        .map((column) =>
+                          h(
+                            'td',
+                            {
+                              key: column,
+                              'aria-label':
+                                column === '产品名称' ? display[column] || '-' : undefined,
+                              title: inherited.includes(column)
+                                ? '同物料组SKU的唯一源值，仅用于展示'
+                                : row[column] || '',
+                            },
+                            column === '产品编码' && children.length
                               ? h(
-                                  'span',
-                                  { title: '来自已读取事实的候选基地，不代表产品唯一所属基地' },
-                                  candidateBases.join(' / ') + '（候选）',
+                                  'button',
+                                  {
+                                    className: 'dc-link',
+                                    onClick: () => setProductDetails(index),
+                                    'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
+                                  },
+                                  `物料组 · ${children.length} SKU`,
                                 )
                               : display[column] || '-',
-                          column === '产品名称' &&
-                            h(
-                              'div',
-                              { className: 'dc-product-source' },
-                              labels.length > 0 && h('span', {}, '源标签：' + labels.join(' / ')),
+                            column === '产品名称' &&
                               h(
-                                'button',
-                                {
-                                  className: 'dc-link',
-                                  onClick: () => setProductDetails(index),
-                                  'aria-label': `查看源字段 ${row['产品编码'] || row['物料组'] || index}`,
-                                },
-                                '源字段',
+                                'div',
+                                { className: 'dc-product-source' },
+                                labels.length > 0 && h('span', {}, '源标签：' + labels.join(' / ')),
+                                h(
+                                  'button',
+                                  {
+                                    className: 'dc-link',
+                                    onClick: () => setProductDetails(index),
+                                    'aria-label': `查看源字段 ${row['产品编码'] || row['物料组'] || index}`,
+                                  },
+                                  '源字段',
+                                ),
                               ),
-                            ),
+                          ),
                         ),
-                      ),
                       h(
                         'td',
                         { className: 'dc-row-actions' },
@@ -1908,7 +1902,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-muted' },
-              '产品标签、替换品按源字段展示。替换方向尚未确认，不作为老品继承关系。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
+              '对应老品编码、老品名称分别取替换物料编码、替换品。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
             ),
             table(
               ['字段', '源值'],
