@@ -192,3 +192,6 @@ body {
   .sales-preview-hint { margin: 12px 0; }
   .sales-preview-actions { padding: 12px 0; }
 }
+
+:is(.dimension-table, .orders, .delivery-order-sku-table, .confirmation-log-table, .sales-preview-table-scroll table) :is(th, td) { text-align: center !important; vertical-align: middle; }
+#fulfillmentView table :is(.quantity-cell, .customer-type-cell) { text-align: center; }
