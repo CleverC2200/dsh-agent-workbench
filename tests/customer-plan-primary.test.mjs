@@ -76,9 +76,12 @@ test('large-date ratios use the supplementary same-day stock, not current plan s
   assert.equal(row.normalRatio, 80);
   assert.equal(row.turnover, 100);
   assert.equal(summarizeCustomerInventory([row]).largeDateRatio, 20);
-  const oldNegativeValue={...row,value:-5};
-  assert.equal(summarizeCustomerInventory([oldNegativeValue]).turnover,100,
-    'an old inventory valuation cannot invalidate the independent current plan turnover');
+  const oldNegativeValue = { ...row, value: -5 };
+  assert.equal(
+    summarizeCustomerInventory([oldNegativeValue]).turnover,
+    100,
+    'an old inventory valuation cannot invalidate the independent current plan turnover',
+  );
 });
 test('new plan-only customers remain visible without invented original inventory', () => {
   const row = mapCustomerInventoryRows([
@@ -123,26 +126,48 @@ test('queries start from the latest plan keys and never coalesce missing busines
 });
 
 test('partial large-date quantities display known totals and freshness as an explicit upper bound', () => {
-  const row=mapCustomerInventoryRows([{...raw,sku_rows:367,inventory_sku_rows:367,
-    stock_qty:88292,stock_coverage:367,large_date_stock_qty:88292,
-    large_date_qty:8636,large_date_coverage:53}]).rows[0];
-  assert.equal(row.largeDateQty,8636);
-  assert.equal(row.largeDatePartial,true);
-  assert.equal(row.freshnessEstimated,true);
-  assert.ok(Math.abs(row.normalRatio-90.21881937)<0.0001);
-  assert.match(row.largeDateMessage,/53\/367/);
-  assert.equal(summarizeCustomerInventory([row]).freshnessEstimated,true);
+  const row = mapCustomerInventoryRows([
+    {
+      ...raw,
+      sku_rows: 367,
+      inventory_sku_rows: 367,
+      stock_qty: 88292,
+      stock_coverage: 367,
+      large_date_stock_qty: 88292,
+      large_date_qty: 8636,
+      large_date_coverage: 53,
+    },
+  ]).rows[0];
+  assert.equal(row.largeDateQty, 8636);
+  assert.equal(row.largeDatePartial, true);
+  assert.equal(row.freshnessEstimated, true);
+  assert.ok(Math.abs(row.normalRatio - 90.21881937) < 0.0001);
+  assert.match(row.largeDateMessage, /53\/367/);
+  assert.equal(summarizeCustomerInventory([row]).freshnessEstimated, true);
 });
 
 test('original inventory retains more SKUs than the plan without multiplying its aggregates', () => {
-  const row = mapCustomerInventoryRows([{...raw, sku_rows:1, stock_qty:900, stock_coverage:1,
-    inventory_sku_rows:3, stock_amt:2000, value_coverage:3, large_date_qty:20,
-    large_date_coverage:3, large_date_stock_qty:100}]).rows[0];
-  assert.equal(row.quantity,900);
-  assert.equal(row.value,0.2);
-  assert.equal(row.largeDateRatio,20);
-  assert.equal(row.normalRatio,80);
-  const incomplete=mapCustomerInventoryRows([{...raw,value_coverage:7,large_date_coverage:7}]).rows[0];
-  assert.equal(incomplete.value,null);
-  assert.equal(incomplete.largeDateQty,null);
+  const row = mapCustomerInventoryRows([
+    {
+      ...raw,
+      sku_rows: 1,
+      stock_qty: 900,
+      stock_coverage: 1,
+      inventory_sku_rows: 3,
+      stock_amt: 2000,
+      value_coverage: 3,
+      large_date_qty: 20,
+      large_date_coverage: 3,
+      large_date_stock_qty: 100,
+    },
+  ]).rows[0];
+  assert.equal(row.quantity, 900);
+  assert.equal(row.value, 0.2);
+  assert.equal(row.largeDateRatio, 20);
+  assert.equal(row.normalRatio, 80);
+  const incomplete = mapCustomerInventoryRows([
+    { ...raw, value_coverage: 7, large_date_coverage: 7 },
+  ]).rows[0];
+  assert.equal(incomplete.value, null);
+  assert.equal(incomplete.largeDateQty, null);
 });

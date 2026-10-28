@@ -44,8 +44,14 @@ test('customer plan joins by customer and preserves incomplete targets as unknow
   const sameDate = mapCustomerInventoryRows(mergeCustomerPlanRows([row], [withTransit])).rows[0];
   assert.equal(sameDate.inTransit, 4);
   withTransit.plan_snapshot_date = '2026-10-19';
-  assert.throws(() => mergeCustomerPlanRows([row], [withTransit]), /CUSTOMER_PLAN_SNAPSHOT_CHANGED/);
-  assert.equal(mergeCustomerPlanRows([row], [{...plan,plan_snapshot_date:null}])[0].target_qty, undefined);
+  assert.throws(
+    () => mergeCustomerPlanRows([row], [withTransit]),
+    /CUSTOMER_PLAN_SNAPSHOT_CHANGED/,
+  );
+  assert.equal(
+    mergeCustomerPlanRows([row], [{ ...plan, plan_snapshot_date: null }])[0].target_qty,
+    undefined,
+  );
   assert.equal(mergeCustomerPlanRows([row], [])[0].stock_qty, 20);
   assert.match(CUSTOMER_PLAN_SQL, /create_date <= \(SELECT inventory_date FROM snapshot\)/);
   assert.match(CUSTOMER_PLAN_SQL, /COUNT\(\*\) = 1/);
