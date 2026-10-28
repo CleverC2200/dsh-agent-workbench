@@ -538,8 +538,12 @@ export function Table<_T = any>({
             </thead>
             <tbody>{rows.map((r: any, i: number) => render(r, i))}</tbody>
           </table>
-          {!rows.length && !loading && <p>暂无符合条件的数据</p>}
         </div>
+        {!rows.length && !loading && (
+          <div className="inventory-empty-state inventory-empty-state--inset" role="status">
+            暂无符合条件的数据
+          </div>
+        )}
       </div>
       {pagination && (
         <DataPagination

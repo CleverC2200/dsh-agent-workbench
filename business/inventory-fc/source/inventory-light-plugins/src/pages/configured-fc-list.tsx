@@ -90,7 +90,8 @@ export function FcWorkflowProvider({ children }: { children: React.ReactNode }) 
     <WorkflowContext.Provider value={{ trial, setTrial }}>{children}</WorkflowContext.Provider>
   );
 }
-export const fcTrialScope = (asOf: string, days: number) => JSON.stringify([asOf, days]);
+export const fcTrialScope = (asOf: string, days: number, warehouse = '') =>
+  JSON.stringify([asOf, days, warehouse]);
 export function useFcWorkflow() {
   const value = useContext(WorkflowContext);
   if (!value) throw Error('缺少分仓工作台上下文');
@@ -167,7 +168,10 @@ export function FcConfiguredList(
       window.removeEventListener('gea-identity-changed', restore);
     };
   }, [draftKey, planDraftKey]);
-  const plans = trial?.scope === fcTrialScope(scope.input.asOf, days) ? trial.plans : [];
+  const plans =
+    trial?.scope === fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code)
+      ? trial.plans
+      : [];
   const save = (next: Draft) => {
     setDraft(next);
     memoryStorage.setItem(draftKey, JSON.stringify(next));
@@ -353,13 +357,26 @@ export function FcConfiguredList(
       setImportPlans(parsed.plans);
       if (parsed.errors.length) return;
       const rows = await readFcActionRows(
-        { ...scope, viewId: 'replenishment', input: { ...scope.input, filters: {} } },
+        {
+          ...scope,
+          viewId: 'replenishment',
+          input: {
+            ...scope.input,
+            filters: scope.input.filters?.warehouse_code
+              ? { warehouse_code: scope.input.filters.warehouse_code }
+              : {},
+          },
+        },
         signal,
       );
       const calculated = rows.map((row) => applyFcPlan(row, parsed.plans, scope.input.asOf, days));
       const summary = summarizeFcRows(calculated);
       signal.throwIfAborted();
-      setTrial({ scope: fcTrialScope(scope.input.asOf, days), plans: parsed.plans, ...summary });
+      setTrial({
+        scope: fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code),
+        plans: parsed.plans,
+        ...summary,
+      });
       setDialog(null);
       setNotice('计划已导入并完成试算');
     });

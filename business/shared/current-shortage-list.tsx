@@ -19,10 +19,12 @@ export function CurrentShortageList({
   config,
   revision = 0,
   initialFilters = {},
+  warehouseCode,
   onRead,
 }: {
   config: AgentSqlConfig;
   revision?: number;
+  warehouseCode?: string;
   initialFilters?: Partial<{ base: string; warehouse_code: string; sku: string }>;
   onRead?: (value: unknown) => void;
 }) {
@@ -43,11 +45,16 @@ export function CurrentShortageList({
     const controller = new AbortController();
     setBusy(true);
     setResult(null);
-    readCurrentShortage(config, 'current-shortage.detail', filters, {
-      signal: controller.signal,
-      page,
-      pageSize,
-    })
+    readCurrentShortage(
+      config,
+      'current-shortage.detail',
+      { ...filters, ...(warehouseCode ? { warehouse_code: warehouseCode } : {}) },
+      {
+        signal: controller.signal,
+        page,
+        pageSize,
+      },
+    )
       .then((value) => {
         if (!controller.signal.aborted) {
           setResult(value);
@@ -82,7 +89,7 @@ export function CurrentShortageList({
         if (!controller.signal.aborted) setBusy(false);
       });
     return () => controller.abort();
-  }, [config, filters, page, pageSize, revision]);
+  }, [config, filters, page, pageSize, revision, warehouseCode]);
   const allColumns = columns
     .filter(([key]) => config.agentId !== 'inventory-aqkc' || key !== 'warehouse_code')
     .map(([field, label]) => ({
@@ -101,7 +108,11 @@ export function CurrentShortageList({
           { name: 'base', label: '基地' },
           { name: 'warehouse_code', label: '分仓编码' },
           { name: 'sku', label: 'SKU' },
-        ].filter((field) => config.agentId !== 'inventory-fc' || field.name !== 'base'),
+        ].filter(
+          (field) =>
+            (config.agentId !== 'inventory-fc' || field.name !== 'base') &&
+            (!warehouseCode || field.name !== 'warehouse_code'),
+        ),
       }}
       columns={allColumns.filter((column) => chosenColumns.includes(column.field))}
       chosenColumns={chosenColumns}

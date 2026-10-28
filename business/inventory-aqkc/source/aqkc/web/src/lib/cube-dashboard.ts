@@ -334,14 +334,36 @@ function categoryName(value: unknown) {
   return String(value ?? '').trim() || '未分类';
 }
 
-function skuRisk(current: number, target: number | null) {
+function skuRisk(current: number, target: number | null, shortage?: number | null) {
+  if (shortage != null && shortage > 0) return '缺货';
   return target === null
-    ? '缺失目标'
+    ? '无目标'
     : current < target
       ? '库存偏低'
       : current > target
         ? '库存偏高'
         : '正常';
+}
+
+/** Group warnings use child-SKU counts; net inventory must not cancel opposite risks. */
+export function stockGroupRisk(rows: Record<string, any>[], shortage: number | null) {
+  const sum = (key: string) => rows.reduce((n, row) => n + (numeric(row[key]) ?? 0), 0);
+  if (shortage != null && shortage > 0) return '缺货';
+  if (sum('low_stock_count') > 0) return '库存偏低';
+  if (sum('high_stock_count') > 0) return '库存偏高';
+  if (sum('missing_target_count') > 0) return '无目标';
+  const n = sum('row_count');
+  return n > 0 && sum('inventory_count') === n && sum('target_count') === n && shortage === 0
+    ? '正常'
+    : '-';
+}
+
+function weightedStockAge(rows: Record<string, any>[]): number | null {
+  const valid = rows.filter(
+    (row) => numeric(row.age_qty) != null && numeric(row.age_weighted_sum) != null,
+  );
+  const qty = valid.reduce((n, row) => n + Number(row.age_qty), 0);
+  return qty > 0 ? valid.reduce((n, row) => n + Number(row.age_weighted_sum), 0) / qty : null;
 }
 
 // 纠偏版优先，但目标库存计算链路中的空值和 0 值不是有效的“纠偏结果”。
@@ -752,8 +774,6 @@ const AGE_COLUMNS = [
   { key: 'age31To40', label: '31-40天量/占比' },
   { key: 'age41To60', label: '41-60天量/占比' },
   { key: 'age60Plus', label: '60+天量/占比' },
-  { key: 'unknownAgeQty', label: '未计龄库存' },
-  { key: 'negativeQty', label: '负库存调整' },
   { key: 'future7', label: '未来7日预计超龄' },
   { key: 'future14', label: '未来14日预计超龄' },
   { key: 'last30d', label: '日均动销' },
@@ -970,7 +990,7 @@ function aggregateDrillMetricRows(
       const risk =
         direct && value.currentMissing
           ? '-'
-          : skuRisk(value.current, value.targetMissing ? null : value.target);
+          : skuRisk(value.current, value.targetMissing ? null : value.target, pending?.shortage);
       return {
         level: value.level,
         risk,
@@ -1250,7 +1270,7 @@ export async function loadInventoryDashboardTabs(
     !(selectedBase && normalizedCategory && categoryLevel !== 'base')
   ) {
     const groupBy = normalizedCategory ? 'base' : 'category';
-    const [{ groups }, orderRows, pendingRows, batchAges] = await Promise.all([
+    const [{ groups }, orderRows, pendingRows] = await Promise.all([
       readConfiguredStockSummary(selectedBases, {
         signal,
         structure: { groupBy, category: normalizedCategory },
@@ -1270,19 +1290,6 @@ export async function loadInventoryDashboardTabs(
           return null;
         },
       ),
-      readBatchAge(
-        sqlConfiguration,
-        {
-          asOf: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()),
-          bases: selectedBases.length ? selectedBases : [...KNOWN_BASES],
-          category: normalizedCategory || undefined,
-          groupBy,
-        },
-        { signal },
-      ).catch((error) => {
-        if (signal?.aborted) throw error;
-        return null;
-      }),
     ]);
     const rows = groups
       .map((r: any) => {
@@ -1313,17 +1320,11 @@ export async function loadInventoryDashboardTabs(
         const shortage =
           orders?.reduce((v, o) => v + numberOf(o['workbench.shortage_quantity']), 0) ?? 0;
         const show = (f: string) => (r[f + '_count'] > 0 ? displayNumber(r[f]) : '-');
-        const risk =
-          r.inventory_count < r.row_count
-            ? '-'
-            : skuRisk(r.inventory, r.target_count === r.row_count ? r.target : null);
+        const risk = stockGroupRisk([r], currentShortageSum(pending, 'shortage'));
         return {
           level: r.level,
           risk,
-          warning:
-            r.inventory_count === r.row_count && r.target_count === r.row_count
-              ? fixedWorkbenchWarning(r.inventory, r.target, r.daily_demand ?? 0).label
-              : '-',
+          warning: risk,
           current: show('inventory'),
           target: show('target'),
           gap: r.gap_count ? displayNumber(r.gap) : '-',
@@ -1340,7 +1341,7 @@ export async function loadInventoryDashboardTabs(
             ? displayDailyMovement(r.stock_avg_30d_sale_valid)
             : '-',
           age: (() => {
-            const age = batchAges?.rows.find((row) => row.level === r.level)?.average_age;
+            const age = weightedStockAge([r]);
             return age == null ? '-' : `${age.toFixed(1)}天`;
           })(),
           orderFillRate: invalid
@@ -2444,7 +2445,7 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
     );
     return {
       table: {
-        columns: sourceColumns(AGE_COLUMNS.filter((c) => c.key !== 'skuCount')),
+        columns: sourceColumns(AGE_COLUMNS),
         rows: result.rows.map(batchAgeDisplay),
         notice: '暂无数据。',
       },
@@ -2472,27 +2473,18 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
   const order = new Map<string, number>(
     result.facts.map((row: any, index: number) => [String(row.sku), index]),
   );
-  if (!age && result.facts.length) {
-    const current = await readCurrentShortage(
-      sqlConfiguration,
-      'current-shortage.skus',
-      {
-        base: input.base,
-        skus: result.facts.map((row: any) => String(row.sku)),
-      },
-      { signal },
-    ).catch((e) => {
-      if (signal?.aborted) throw e;
-      return null;
-    });
-    const bySku = new Map((current?.rows ?? []).map((row: any) => [String(row.sku), row]));
-    for (const row of computed) {
-      const sku = String(row.level).split(' ')[0];
-      const pending: any = bySku.get(sku);
-      row.orderQuantity = current ? displayNumber(pending?.demand ?? 0) : '-';
-      row.shortageQuantity = current ? displayNumber(pending?.shortage ?? 0) : '-';
-      row.allocatedQuantity = current ? displayNumber(pending?.allocated ?? 0) : '-';
-    }
+  const factsBySku = new Map<string, any>(result.facts.map((row: any) => [String(row.sku), row]));
+  for (const row of computed) {
+    const fact = factsBySku.get(String(row.level).split(' ')[0]);
+    if (!fact) continue;
+    const quantity = (field: string) =>
+      numeric(fact[field]) == null ? '-' : displayNumber(fact[field]);
+    row.orderQuantity = quantity('current_demand');
+    row.shortageQuantity = quantity('current_shortage');
+    row.allocatedQuantity = quantity('current_allocated');
+    row.risk = row.warning = fact.risk ?? '-';
+    const average = weightedStockAge([fact]);
+    row.age = average == null ? '-' : `${average.toFixed(1)}天`;
   }
   computed.sort(
     (left, right) =>
@@ -2651,19 +2643,20 @@ function configuredSummaryWorkspace(
       ? `健康表 ${health.snapshotDate} · ${health.summary.age_valid_count}/${health.summary.row_count} 条记录，平均货龄按有效批次库存数量加权`
       : '当前无仓库货龄快照';
   const baseRows = bases.map((base) => {
-    const s = stats(groups.filter((r: any) => r.base === base)),
-      target = s.sum('target'),
-      current = s.sum('inventory'),
-      demand = s.sum('daily_demand');
-    const warning =
-      s.n > 0 && s.sum('target_count') === s.n && s.sum('inventory_count') === s.n
-        ? fixedWorkbenchWarning(current, target, demand)
-        : { label: '-', tone: 'gray' };
+    const s = stats(groups.filter((r: any) => r.base === base));
+    const baseGroups = groups.filter((r: any) => r.base === base);
+    const warning = stockGroupRisk(
+      baseGroups,
+      currentShortageSum(
+        currentRows?.filter((r: any) => r.base === base),
+        'shortage',
+      ),
+    );
     return {
       id: base,
       level: base,
-      warning: warning.label,
-      warningTone: warning.tone,
+      warning,
+      warningTone: warning === '缺货' ? 'red' : warning === '正常' ? 'green' : 'gray',
       current: show(s, 'inventory'),
       target: show(s, 'target'),
       gap: s.gap === null ? '-' : displayNumber(s.gap),
@@ -2673,7 +2666,11 @@ function configuredSummaryWorkspace(
       last30d: s.sum('stock_avg_30d_sale_valid_count')
         ? displayDailyMovement(s.sum('stock_avg_30d_sale_valid'))
         : '-',
-      age: days(health.rows?.find((row: BatchAgeRow) => row.level === base)?.average_age ?? null),
+      age: days(
+        weightedStockAge(baseGroups) ??
+          health.rows?.find((row: BatchAgeRow) => row.level === base)?.average_age ??
+          null,
+      ),
       orderFillRate:
         business.orderByBase[base]?.rate == null
           ? '-'

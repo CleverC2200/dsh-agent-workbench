@@ -51,6 +51,7 @@ export function renderCharts(computed,total,drill) {
   if(detail)detail.textContent=`当前节点订单按订单去重；缺失时限或状态未确认 ${computed.nodes.unknown}张，不计作正常。满足率区间覆盖 ${total?.rate_coverage??0}/${total?.rate_total??0}张订单，未覆盖订单不分档。`;
 }
 let coordinationRows=[],coordinationPage=0,coordinationLimit=20;
+let coordinationServer=null, requestCoordinationPage;
 const columns=[
   ['基本信息','base','基地'],['基本信息','sku','产品编号'],['基本信息','material_name','产品名称'],['基本信息','product_item','品项'],['基本信息','series','系列'],['基本信息','stock_date','库存日期'],
   ['销售信息','main_plan_initial','主品销售计划（初版）'],['销售信息','main_plan_adjusted','主品销售计划（纠偏）'],['销售信息','bp_plan_initial','BP销售计划（初版）'],['销售信息','bp_plan_adjusted','BP销售计划（纠偏）'],['销售信息','transfer_plan_initial','调拨出库计划（初版）'],['销售信息','transfer_plan_adjusted','调拨出库计划（纠偏）'],['销售信息','next_month_sales_plan','下月销售计划'],
@@ -58,7 +59,7 @@ const columns=[
   ['库存信息','stock_qty','现库存'],['库存信息','available_qty','可用库存'],['库存信息','over60_source_qty','60天以上库存（源口径）'],
 ];
 export function renderCoordination(result,{reset=true}={}) {
-  if(reset){coordinationRows=result?.rows??[];coordinationPage=0;}
+  if(reset){coordinationRows=result?.rows??[];coordinationServer=result?.serverPage?result:null;coordinationPage=coordinationServer?result.page-1:0;if(coordinationServer)coordinationLimit=result.size;}
   const table=document.getElementById('itemCoordinationTable');
   table.parentElement.classList.add('fulfillment-table-scroll');
   if(!table.querySelector('colgroup')) { const widths=document.createElement('colgroup'); for(let i=0;i<columns.length;i++){const col=document.createElement('col');col.style.width=(i===0?80:i===1?130:i===2?260:145)+'px';widths.append(col);} table.prepend(widths); }
@@ -69,16 +70,17 @@ export function renderCoordination(result,{reset=true}={}) {
   }
   for(const [group,,label] of columns){const th=document.createElement('th');th.textContent=label;th.className=`coord-group-${['基本信息','销售信息','生产信息','库存信息'].indexOf(group)+1}`;labels.append(th);}
   const select=document.getElementById('itemCoordinationBase');
-  if(reset){const previous=select.value;select.replaceChildren(new Option('全部基地',''));for(const base of [...new Set(coordinationRows.map(row=>row.base).filter(Boolean))].sort())select.append(new Option(base,base));select.value=[...select.options].some(option=>option.value===previous)?previous:'';}
+  if(reset){const previous=select.value;select.replaceChildren(new Option('全部基地',''));for(const base of [...new Set(result?.baseOptions??coordinationRows.map(row=>row.base).filter(Boolean))].sort())select.append(new Option(base,base));if(previous&&![...select.options].some(option=>option.value===previous))select.append(new Option(previous,previous));select.value=previous;}
   const search=document.getElementById('itemCoordinationSearch').value.trim().toLowerCase();
-  const rows=coordinationRows.filter(row=>(!select.value||row.base===select.value)&&(!search||[row.sku,row.material_name,row.product_item].some(value=>String(value??'').toLowerCase().includes(search))));
-  const pages=Math.max(1,Math.ceil(rows.length/coordinationLimit));coordinationPage=Math.min(Math.max(0,coordinationPage),pages-1);
+  const rows=coordinationServer?coordinationRows:coordinationRows.filter(row=>(!select.value||row.base===select.value)&&(!search||[row.sku,row.material_name,row.product_item].some(value=>String(value??'').toLowerCase().includes(search))));
+  const total=coordinationServer?.total??rows.length;
+  const pages=Math.max(1,Math.ceil(total/coordinationLimit));coordinationPage=Math.min(Math.max(0,coordinationPage),pages-1);
   const body=table.tBodies[0];body.replaceChildren();
-  for(const row of rows.slice(coordinationPage*coordinationLimit,(coordinationPage+1)*coordinationLimit)){
+  for(const row of coordinationServer?rows:rows.slice(coordinationPage*coordinationLimit,(coordinationPage+1)*coordinationLimit)){
     const line=body.insertRow();for(const [group,key] of columns){const td=line.insertCell();td.textContent=text(row[key]);td.className=`coord-group-${['基本信息','销售信息','生产信息','库存信息'].indexOf(group)+1}`;if(td.textContent==='—')td.title='当前源字段缺失或存在重复记录，未补零';}
   }
   if(!body.rows.length){const td=body.insertRow().insertCell();td.colSpan=columns.length;td.textContent='当前授权和筛选范围无产销协同记录';}
-  document.getElementById('itemCoordinationCount').textContent=`共${rows.length}条（当前授权${coordinationRows.length}条）`;
+  document.getElementById('itemCoordinationCount').textContent=coordinationServer?`共${total}条`:`共${rows.length}条（当前授权${coordinationRows.length}条）`;
   document.getElementById('itemCoordinationPageInfo').textContent=`第 ${coordinationPage+1} / ${pages} 页`;
   document.getElementById('itemCoordinationPrev').disabled=coordinationPage===0;
   document.getElementById('itemCoordinationNext').disabled=coordinationPage>=pages-1;
@@ -90,15 +92,17 @@ export function clearPanels() {
   for(const svg of document.querySelectorAll('svg.delivery-line-chart'))svg.replaceChildren(svgNode('text',{x:80,y:120,fill:'#8d98a8'},'等待读取当前授权数据'));
   document.getElementById('orderStatusChartDetail').textContent='等待读取当前授权数据';
 }
-export function bindPanelControls() {
+export function bindPanelControls(loadPage) {
+  requestCoordinationPage=loadPage;
+  const update=()=>{if(requestCoordinationPage)void requestCoordinationPage({page:coordinationPage+1,size:coordinationLimit,base:document.getElementById('itemCoordinationBase').value||null,search:document.getElementById('itemCoordinationSearch').value.trim()||null});else renderCoordination(null,{reset:false});};
   const next=document.getElementById('itemCoordinationNext');
   const nav=document.createElement('nav');nav.className='order-pagination';nav.setAttribute('aria-label','产销协同分页');
   const size=document.createElement('select');size.setAttribute('aria-label','每页条数');
   for(const n of [20,50,100])size.append(new Option(`${n}条/页`,String(n)));
   next.after(nav);
   nav.append(document.getElementById('itemCoordinationCount'),size,document.getElementById('itemCoordinationPrev'),document.getElementById('itemCoordinationPageInfo'),next);
-  size.addEventListener('change',()=>{coordinationLimit=Number(size.value);coordinationPage=0;renderCoordination(null,{reset:false});});
-  for(const id of ['itemCoordinationSearch','itemCoordinationBase'])document.getElementById(id).addEventListener(id.endsWith('Base')?'change':'input',()=>{coordinationPage=0;renderCoordination(null,{reset:false});});
-  document.getElementById('itemCoordinationPrev').addEventListener('click',()=>{coordinationPage--;renderCoordination(null,{reset:false});});
-  document.getElementById('itemCoordinationNext').addEventListener('click',()=>{coordinationPage++;renderCoordination(null,{reset:false});});
+  size.addEventListener('change',()=>{coordinationLimit=Number(size.value);coordinationPage=0;update();});
+  for(const id of ['itemCoordinationSearch','itemCoordinationBase'])document.getElementById(id).addEventListener(id.endsWith('Base')?'change':'input',()=>{coordinationPage=0;update();});
+  document.getElementById('itemCoordinationPrev').addEventListener('click',()=>{coordinationPage--;update();});
+  document.getElementById('itemCoordinationNext').addEventListener('click',()=>{coordinationPage++;update();});
 }

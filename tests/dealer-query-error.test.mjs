@@ -49,3 +49,56 @@ test('the actual shared SQL reader preserves a missing-dataset failure across th
     },
   );
 });
+
+test('legacy page queries reuse the common explicit-refresh boundary without caching rows in the page', async () => {
+  const listeners = new Map(),
+    calls = [];
+  const previous = globalThis.window;
+  globalThis.window = {
+    addEventListener(name, callback) {
+      listeners.set(name, callback);
+    },
+  };
+  globalThis.__pageSqlCalls = calls;
+  try {
+    const output = await build({
+      stdin: {
+        contents:
+          "export { executeGeaSqlPage } from './business/shared/sql-reader.ts'; export { configuredQueryFreshAfter } from './business/shared/query-cache.ts';",
+        resolveDir: process.cwd(),
+      },
+      bundle: true,
+      platform: 'node',
+      format: 'esm',
+      write: false,
+      plugins: [
+        {
+          name: 'page-transport',
+          setup(api) {
+            api.onResolve({ filter: /channel\.js$/ }, () => ({
+              path: 'transport',
+              namespace: 'fixture',
+            }));
+            api.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
+              contents:
+                'export async function call(method, input) { globalThis.__pageSqlCalls.push(input); return { rows: [{ qty: 1 }], total: 1 }; }',
+            }));
+          },
+        },
+      ],
+    });
+    const reader = await import(
+      'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
+    );
+    await reader.executeGeaSqlPage('SELECT qty FROM inventory');
+    assert.equal(calls[0].cacheFreshAfter, 0);
+    listeners.get('gea-page-refresh')();
+    await reader.executeGeaSqlPage('SELECT qty FROM inventory');
+    assert.ok(calls[1].cacheFreshAfter > 0);
+    assert.equal(calls[1].cacheFreshAfter, reader.configuredQueryFreshAfter());
+    assert.equal(calls.length, 2, 'the Host, not browser storage, owns result reuse');
+  } finally {
+    globalThis.window = previous;
+    delete globalThis.__pageSqlCalls;
+  }
+});

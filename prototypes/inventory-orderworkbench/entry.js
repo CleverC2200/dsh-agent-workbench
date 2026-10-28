@@ -17,6 +17,9 @@ let selectedMonth = currentMonth;
 let selectedWeek = selectedMonth+'-01';
 let liveFacts = null, liveReadKey = '', liveController, liveConnected = false;
 let liveSkuDetails = {};
+let liveSkuPagination = {};
+const workbenchSkuPages = new Map();
+let applyLiveFacts = () => {};
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
 let eventFilter = 'focus';
 let taskFilter = 'all';
@@ -2233,6 +2236,7 @@ const topMetricCards = [
 ];
 function clearLiveMetrics() {
   liveSkuDetails = {};
+  liveSkuPagination={};workbenchSkuPages.clear();
   workbenchDimensions['region-change'].customerDetails = [];
   for (const metric of topMetricCards) Object.assign(metric,{value:'—',status:'数据不足',footer:'按文档口径；缺失依据不估算',comparison:['—','—','—','—']});
   for (const metric of metricDefinitions) Object.assign(metric,{value:'—',display:'—',previous:'上期 —',same:'同期 —',change:'—',sameChange:'—',gap:'—',trend:'—',status:'数据不足',note:'当前缺少完整口径或同范围证据，不使用演示结果。'});
@@ -2276,7 +2280,7 @@ async function readCurrentPeriod() {
   const applyFacts = (facts, storedPresentation) => {
     if (controller.signal.aborted || liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation??workbenchPresentation(facts);
+    const presentation=storedPresentation&&!storedPresentation.lazy?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
     for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     for(const metric of metricDefinitions) {
@@ -2292,9 +2296,11 @@ async function readCurrentPeriod() {
     }
     for(const [name,dimension] of Object.entries(presentation.dimensions)) Object.assign(workbenchDimensions[name],dimension);
     liveSkuDetails=presentation.skus;
+    liveSkuPagination=presentation.skuPagination??{};
     renderSelectedPeriod();
     updateReport();
   };
+  applyLiveFacts = applyFacts;
   try {
     let saved;
     try {
@@ -2438,7 +2444,9 @@ function renderWorkbenchSkuDetail(category) {
         `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
     )
     .join('');
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为可用库存，计划为滚动销售计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  const paging=liveSkuPagination[category];
+  const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为可用库存，计划为滚动销售计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
@@ -2659,11 +2667,17 @@ function renderWorkbenchDimensions() {
     })
     .join('');
   panel.innerHTML = `<div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === 'region-change' ? 'region-change-table' : ''}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
+  panel.querySelectorAll('[data-wb-sku-page]').forEach(button=>button.addEventListener('click',()=>{
+    workbenchSkuPages.set(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));
+    if(liveFacts)applyLiveFacts(liveFacts);
+    renderWorkbenchDimensions();
+  }));
   panel.querySelectorAll('[data-wb-sku-toggle]').forEach((button) =>
     button.addEventListener('click', () => {
       const key = `${dimensionTab}:${button.dataset.wbSkuToggle}`;
       if (expandedSkuCategories.has(key)) expandedSkuCategories.delete(key);
       else expandedSkuCategories.add(key);
+      if(liveFacts)applyLiveFacts(liveFacts);
       renderWorkbenchDimensions();
     }),
   );
@@ -2680,6 +2694,7 @@ const wbDimensionTabButtons = [...workbenchView.querySelectorAll('[data-wb-dimen
 wbDimensionTabButtons.forEach((button) => {
   button.addEventListener('click', () => {
     dimensionTab = button.dataset.wbDimensionTab;
+    if(liveFacts)applyLiveFacts(liveFacts);
     renderWorkbenchDimensions();
   });
 });
@@ -3522,6 +3537,7 @@ workbenchView.addEventListener('keydown', (event) => {
   if (event.key === 'End') index = tabs.length - 1;
   event.preventDefault();
   dimensionTab = tabs[index].dataset.wbDimensionTab;
+  if(liveFacts)applyLiveFacts(liveFacts);
   renderWorkbenchDimensions();
   tabs[index].focus();
 });

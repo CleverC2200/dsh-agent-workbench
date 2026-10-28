@@ -99,7 +99,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
   }
   return tables;
 }
-export function workbenchPresentation(facts) {
+export function workbenchPresentation(facts, options = {}) {
   const { periods, selected } = facts,
     current = periods[selected];
   const previous = periods[selected === 'month' ? 'previousMonth' : 'previousWeek'],
@@ -107,7 +107,7 @@ export function workbenchPresentation(facts) {
   const metrics = current.metrics;
   const loading = facts.complete === false;
   const comparison = (a, b, name) =>
-    loading && (!periods[a] || !periods[b])
+    loading && (!periods[a] || !periods[b] || periods[a].metrics[name]?.loading || periods[b].metrics[name]?.loading)
       ? '加载中'
       : metricDelta(periods[a]?.metrics, periods[b]?.metrics, name);
   const cards = metricNames.map((name) => ({
@@ -116,7 +116,7 @@ export function workbenchPresentation(facts) {
       metricValue(metrics, name) === null
         ? '—'
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
-    status: metricState(name, metricValue(metrics, name)),
+    status: metrics[name]?.loading ? '加载中' : metricState(name, metricValue(metrics, name)),
     formula: metrics[name].note,
     footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}`,
     comparison: [
@@ -139,7 +139,7 @@ export function workbenchPresentation(facts) {
       ['item-performance', 'item'],
     ].map(([key, field]) => [
       key,
-      field === 'director' && facts.directors?.status === 'loading'
+      (options.dimension && options.dimension !== key) || (field === 'director' && facts.directors?.status === 'loading')
         ? { month: [], week: [] }
         : summaryRows(periods, field, directorMap, loading),
     ]),
@@ -154,7 +154,7 @@ export function workbenchPresentation(facts) {
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
     bases = distinct(all.map((row) => dimensionValue(row.base)));
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
-  const fill = categories.map((category) => {
+  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map((category) => {
     const filter = (row) => dimensionValue(row.category) === category,
       m = metric(current, filter),
       p = metric(previous, filter),
@@ -169,7 +169,7 @@ export function workbenchPresentation(facts) {
       metricState('订单满足率', metricValue(m, '订单满足率')),
     ];
   });
-  const days = categories.map((category) => {
+  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map((category) => {
     const filter = (row) => dimensionValue(row.category) === category,
       m = metric(current, filter),
       stock = rows(current, 'stock').filter(filter);
@@ -204,7 +204,7 @@ export function workbenchPresentation(facts) {
       Number(row.names) === 1 ? row.manager : Number(row.names) > 1 ? '多位销售人员' : '—',
     ]),
   );
-  const changes = regions.map((region) => {
+  const changes = (options.dimension && options.dimension !== 'region-change' ? [] : regions).map((region) => {
     const filter = (row) => dimensionValue(row.province || row.region) === region,
       m = metric(current, filter),
       p = metric(previous, filter);
@@ -238,10 +238,13 @@ export function workbenchPresentation(facts) {
         ),
       ),
     ]);
-  const skus = {};
-  for (const category of categories) {
+  const skus = {}, skuPagination = {};
+  for (const category of categories.filter(category => !options.dimension || options.skuCategories?.includes(category))) {
     const filtered = all.filter((row) => dimensionValue(row.category) === category);
-    const keys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
+    const allKeys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
+    const page=Math.min(Math.max(0,options.skuPages?.[category]??0),Math.max(0,Math.ceil(allKeys.length/20)-1));
+    const keys=options.dimension?allKeys.slice(page*20,page*20+20):allKeys;
+    skuPagination[category]={page,total:allKeys.length,size:20};
     skus[category] = keys.map((key) => {
       const [base, sku] = JSON.parse(key),
         stock = rows(current, 'stock').find((row) => row.base === base && row.sku === sku);
@@ -256,9 +259,11 @@ export function workbenchPresentation(facts) {
     });
   }
   return {
+    lazy: !!options.dimension,
     cards,
     performance,
     skus,
+    skuPagination,
     dimensions: {
       'category-fill': { rows: fill },
       'category-days': {
@@ -274,8 +279,8 @@ export function workbenchPresentation(facts) {
         ],
       },
       'region-change': { rows: changes, customerDetails: customers },
-      'base-category': { columns: ['基地 \\ 品类', ...categories], rows: cross('订单满足率') },
-      'base-category-days': { columns: ['基地 \\ 品类', ...categories], rows: cross('周转天数') },
+      'base-category': { columns: ['基地 \\ 品类', ...categories], rows: !options.dimension || options.dimension === 'base-category' ? cross('订单满足率') : [] },
+      'base-category-days': { columns: ['基地 \\ 品类', ...categories], rows: !options.dimension || options.dimension === 'base-category-days' ? cross('周转天数') : [] },
     },
   };
 }

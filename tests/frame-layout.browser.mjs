@@ -159,6 +159,7 @@ test('the shared Document title row reserves safe space and window drag above bo
 });
 
 for (const id of [
+  'gea-proof',
   'inventory-qll',
   'inventory-fc',
   'inventory-aqkc',

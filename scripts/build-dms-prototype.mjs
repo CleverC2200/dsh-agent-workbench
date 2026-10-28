@@ -11,7 +11,7 @@ const output = resolve(root, 'lib/prototypes/dms');
 const agent = resolve(root, '../dsh-agent-manage/business-resources/inventory-dms');
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const theme = await readFile(resolve(root, 'theme/tokens.css'), 'utf8');
-if (sha256(theme) !== '19c4e31943862d2087c1be1d0efa5966cde7dcce1989e92390f540ce0c3eaa66')
+if (sha256(theme) !== '281fe7eebe0775b6bedabad6806753db6afe5eded52e6d9ade54067d23e20ef8')
   throw Error('DMS_THEME_RESOURCE_MISMATCH');
 const result = await build({
   entryPoints: [resolve(source, 'main.ts')],
