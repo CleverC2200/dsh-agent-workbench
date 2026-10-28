@@ -90,9 +90,12 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
       assert.equal(r1.session, 'owned');
       port.onmessage({ data: { type: 'response', id: r1.id, result: { rows: [{ fixture: 1 }] } } });
       assert.deepEqual((await first).rows, [{ fixture: 1 }]);
-      const second = client.read(id, { ...values, offset: 10 });
+      const second = mod
+        .createAgentQueries(config, undefined, { freshAfter: 123 })
+        .read(id, { ...values, offset: 10 });
       const r2 = await request(2);
       assert.equal(r2.parameters.parameters.offset, 10);
+      assert.equal(r2.parameters.freshAfter, 123);
       assert.equal(r2.parameters.parameters.page_size, 10);
       port.onmessage({ data: { type: 'response', id: r2.id, result: { rows: [{ fixture: 2 }] } } });
       assert.deepEqual((await second).rows, [{ fixture: 2 }]);
@@ -100,6 +103,11 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
       const pending = client.read(id, values, { signal: abort.signal });
       const rejected = assert.rejects(pending, { name: 'AbortError' });
       const r3 = await request(3);
+      assert.equal(
+        r3.parameters.freshAfter,
+        0,
+        'export freshness does not invalidate other page queries',
+      );
       abort.abort();
       await rejected;
       assert.ok(sent.some((m) => m.type === 'cancel' && m.id === r3.id));

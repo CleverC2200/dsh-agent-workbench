@@ -153,11 +153,33 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     initialDirectoryReads,
   );
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(firstCard).toContainText('999');
+  await expect(picker).toBeEnabled();
+  assert.equal(
+    calls.filter((c) => c.id === 'branch-warehouse.directory').length,
+    initialDirectoryReads,
+    'valid 20-minute directory must survive card refresh without another request',
+  );
   assert.deepEqual(errors, []);
   await page.setViewportSize({ width: 520, height: 900 });
   await expect(picker).toBeVisible();
   await picker.selectOption('N417');
   await expect(firstCard).toContainText('123');
+  await page.evaluate(() => {
+    const now = Date.now();
+    Date.now = () => now + 21 * 60 * 1000;
+  });
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect
+    .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
+    .toBe(initialDirectoryReads + 1);
+  await expect(picker).toBeEnabled();
+  await page.evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
+  await expect
+    .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
+    .toBe(initialDirectoryReads + 2);
+  await expect(picker).toHaveValue('');
 });
 
 test('FC aging exposes immediate risk filters, leading risk column and cached page blocks', async (t) => {
@@ -258,7 +280,7 @@ test('FC aging exposes immediate risk filters, leading risk column and cached pa
   assert.deepEqual(errors, []);
 });
 
-test('FC shows system plans before import and downloads every authorized row through 50-row pages', async (t) => {
+test('FC shows system plans before import and downloads every authorized row through bounded template pages', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -276,8 +298,8 @@ test('FC shows system plans before import and downloads every authorized row thr
     const query = config.queries[id];
     let rows;
     if (id.startsWith('source.')) rows = [{ day: '2026-10-28' }];
-    else if (id === 'transfer_plan.detail.atomic') {
-      const count = Math.max(0, Math.min(50, values.page_size, 121 - values.offset));
+    else if (id === 'transfer_plan.detail.atomic' || id === 'transfer_plan.template.atomic') {
+      const count = Math.max(0, Math.min(values.page_size, 121 - values.offset));
       rows = Array.from({ length: count }, (_, index) => ({
         ...Object.fromEntries(query.resultColumns.map((key) => [key, null])),
         warehouse_code: '001',
@@ -334,11 +356,11 @@ test('FC shows system plans before import and downloads every authorized row thr
   assert.match(sheet, /SKU-120/);
   assert.match(sheet, />600</, 'November uses the next-month system plan');
   const reads = calls.filter(
-    (call) => call.id === 'transfer_plan.detail.atomic' && call.values.page_size === 50,
+    (call) => call.id === 'transfer_plan.template.atomic' && call.values.page_size === 200,
   );
   assert.deepEqual(
     reads.map((call) => call.values.offset).sort((a, b) => a - b),
-    [0, 50, 100],
+    [0],
   );
   assert.deepEqual(errors, []);
 });

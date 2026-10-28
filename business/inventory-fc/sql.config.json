@@ -21386,7 +21386,8 @@
         "mode": "sql_limit_offset",
         "countQuery": "branch-warehouse.directory.count"
       },
-      "resultColumns": ["warehouse_code", "warehouse_name", "base"]
+      "resultColumns": ["warehouse_code", "warehouse_name", "base"],
+      "priority": 100
     },
     "branch-warehouse.directory.count": {
       "title": "可见分仓目录数量",
@@ -21549,6 +21550,316 @@
         "page_row_present",
         "page_scope_total"
       ]
+    },
+    "transfer_plan.template": {
+      "title": "分仓计划模板取数",
+      "request": {
+        "sql": "WITH source_records AS (SELECT t.warehouse_code AS warehouse_code, t.material_code AS material_code, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_month_out_plan) ELSE NULL END AS warehouse_month_out_plan, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_future30_qty) ELSE NULL END AS warehouse_future30_qty, COUNT(*) AS source_rows FROM agents_scm_warehouse_transfer_plan_data_d AS t WHERE t.stat_month = SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) GROUP BY t.warehouse_code, t.material_code), business_rows AS (SELECT s.warehouse_code AS warehouse_code, s.material_code AS sku, s.warehouse_name AS warehouse_name, s.material_name AS material_name, s.product_categ_name AS category, s.warehouse_month_out_plan AS month_out_plan, s.warehouse_future30_qty AS future30_qty, s.source_rows AS source_rows FROM source_records AS s), filtered AS (SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.category AS category, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.source_rows AS source_rows FROM business_rows AS r WHERE (:gea_p1 = 'all' OR (:gea_p1 = 'equal' AND r.warehouse_code = :gea_p2) OR (:gea_p1 = 'missing' AND r.warehouse_code IS NULL)) AND (:gea_p3 = 'all' OR (:gea_p3 = 'equal' AND r.sku = :gea_p4) OR (:gea_p3 = 'missing' AND r.sku IS NULL)) AND (:gea_p5 = 'all' OR (:gea_p5 = 'equal' AND r.category = :gea_p6) OR (:gea_p5 = 'missing' AND r.category IS NULL)) AND (:gea_p7 IS NULL OR LOWER(r.sku) LIKE LOWER(:gea_p7) OR LOWER(r.material_name) LIKE LOWER(:gea_p7) OR LOWER(r.warehouse_name) LIKE LOWER(:gea_p7))) SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.source_rows AS source_rows, CASE WHEN r.source_rows = 1 THEN SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) ELSE NULL END AS stat_month, CAST(NULL AS DECIMAL(20, 6)) AS warehouse_month_transfer_plan, r.future30_qty AS period_next_out FROM filtered AS r ORDER BY r.warehouse_code, r.sku LIMIT :gea_p8 OFFSET :gea_p9",
+        "parameters": {
+          "gea_p1": "all",
+          "gea_p2": null,
+          "gea_p3": "all",
+          "gea_p4": null,
+          "gea_p5": "all",
+          "gea_p6": null,
+          "gea_p7": null,
+          "gea_p8": 10,
+          "gea_p9": 0,
+          "gea_p2700": "2026-10-01"
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "warehouse_code_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p2": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p3": {
+          "name": "sku_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p4": {
+          "name": "sku",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "category_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p6": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true,
+          "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+        },
+        "gea_p8": {
+          "name": "page_size",
+          "type": "integer",
+          "example": 20,
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p9": {
+          "name": "offset",
+          "type": "integer",
+          "example": 0,
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p2700": {
+          "name": "month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "nullable": false,
+          "required": true,
+          "example": "2026-10-01"
+        }
+      },
+      "resultColumns": [
+        "warehouse_code",
+        "sku",
+        "warehouse_name",
+        "material_name",
+        "month_out_plan",
+        "future30_qty",
+        "source_rows",
+        "stat_month",
+        "warehouse_month_transfer_plan",
+        "period_next_out"
+      ],
+      "pagination": {
+        "mode": "sql_limit_offset",
+        "countQuery": "transfer_plan.template.count",
+        "atomicQuery": "transfer_plan.template.atomic"
+      }
+    },
+    "transfer_plan.template.atomic": {
+      "title": "分仓计划模板取数",
+      "request": {
+        "sql": "WITH source_records AS (SELECT t.warehouse_code AS warehouse_code, t.material_code AS material_code, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_month_out_plan) ELSE NULL END AS warehouse_month_out_plan, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_future30_qty) ELSE NULL END AS warehouse_future30_qty, COUNT(*) AS source_rows FROM agents_scm_warehouse_transfer_plan_data_d AS t WHERE t.stat_month = SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) GROUP BY t.warehouse_code, t.material_code), business_rows AS (SELECT s.warehouse_code AS warehouse_code, s.material_code AS sku, s.warehouse_name AS warehouse_name, s.material_name AS material_name, s.product_categ_name AS category, s.warehouse_month_out_plan AS month_out_plan, s.warehouse_future30_qty AS future30_qty, s.source_rows AS source_rows FROM source_records AS s), filtered AS (SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.category AS category, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.source_rows AS source_rows FROM business_rows AS r WHERE (:gea_p1 = 'all' OR (:gea_p1 = 'equal' AND r.warehouse_code = :gea_p2) OR (:gea_p1 = 'missing' AND r.warehouse_code IS NULL)) AND (:gea_p3 = 'all' OR (:gea_p3 = 'equal' AND r.sku = :gea_p4) OR (:gea_p3 = 'missing' AND r.sku IS NULL)) AND (:gea_p5 = 'all' OR (:gea_p5 = 'equal' AND r.category = :gea_p6) OR (:gea_p5 = 'missing' AND r.category IS NULL)) AND (:gea_p7 IS NULL OR LOWER(r.sku) LIKE LOWER(:gea_p7) OR LOWER(r.material_name) LIKE LOWER(:gea_p7) OR LOWER(r.warehouse_name) LIKE LOWER(:gea_p7))) SELECT p.warehouse_code AS warehouse_code, p.sku AS sku, p.warehouse_name AS warehouse_name, p.material_name AS material_name, p.month_out_plan AS month_out_plan, p.future30_qty AS future30_qty, p.source_rows AS source_rows, p.stat_month AS stat_month, p.warehouse_month_transfer_plan AS warehouse_month_transfer_plan, p.period_next_out AS period_next_out, c.total AS page_scope_total, p.page_row_present AS page_row_present FROM (SELECT COUNT(*) AS total FROM filtered) AS c LEFT JOIN (SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.source_rows AS source_rows, CASE WHEN r.source_rows = 1 THEN SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) ELSE NULL END AS stat_month, CAST(NULL AS DECIMAL(20, 6)) AS warehouse_month_transfer_plan, r.future30_qty AS period_next_out, 1 AS page_row_present FROM filtered AS r ORDER BY r.warehouse_code, r.sku LIMIT :gea_p8 OFFSET :gea_p9) AS p ON TRUE ORDER BY p.warehouse_code, p.sku LIMIT :gea_p8",
+        "parameters": {
+          "gea_p1": "all",
+          "gea_p2": null,
+          "gea_p3": "all",
+          "gea_p4": null,
+          "gea_p5": "all",
+          "gea_p6": null,
+          "gea_p7": null,
+          "gea_p8": 10,
+          "gea_p9": 0,
+          "gea_p2700": "2026-10-01"
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "warehouse_code_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p2": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p3": {
+          "name": "sku_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p4": {
+          "name": "sku",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "category_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p6": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true,
+          "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+        },
+        "gea_p8": {
+          "name": "page_size",
+          "type": "integer",
+          "example": 20,
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p9": {
+          "name": "offset",
+          "type": "integer",
+          "example": 0,
+          "required": true,
+          "nullable": false,
+          "minimum": 0
+        },
+        "gea_p2700": {
+          "name": "month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "nullable": false,
+          "required": true,
+          "example": "2026-10-01"
+        }
+      },
+      "resultColumns": [
+        "warehouse_code",
+        "sku",
+        "warehouse_name",
+        "material_name",
+        "month_out_plan",
+        "future30_qty",
+        "source_rows",
+        "stat_month",
+        "warehouse_month_transfer_plan",
+        "period_next_out",
+        "page_scope_total",
+        "page_row_present"
+      ]
+    },
+    "transfer_plan.template.count": {
+      "title": "分仓计划模板取数",
+      "request": {
+        "sql": "WITH source_records AS (SELECT t.warehouse_code AS warehouse_code, t.material_code AS material_code, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_name) ELSE NULL END AS warehouse_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.product_categ_name) ELSE NULL END AS product_categ_name, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_month_out_plan) ELSE NULL END AS warehouse_month_out_plan, CASE WHEN COUNT(*) = 1 THEN MAX(t.warehouse_future30_qty) ELSE NULL END AS warehouse_future30_qty, COUNT(*) AS source_rows FROM agents_scm_warehouse_transfer_plan_data_d AS t WHERE t.stat_month = SUBSTRING(REPLACE(CAST(:gea_p2700 AS VARCHAR(10)), '-', ''), 1, 6) GROUP BY t.warehouse_code, t.material_code), business_rows AS (SELECT s.warehouse_code AS warehouse_code, s.material_code AS sku, s.warehouse_name AS warehouse_name, s.material_name AS material_name, s.product_categ_name AS category, s.warehouse_month_out_plan AS month_out_plan, s.warehouse_future30_qty AS future30_qty, s.source_rows AS source_rows FROM source_records AS s), filtered AS (SELECT r.warehouse_code AS warehouse_code, r.sku AS sku, r.warehouse_name AS warehouse_name, r.material_name AS material_name, r.category AS category, r.month_out_plan AS month_out_plan, r.future30_qty AS future30_qty, r.source_rows AS source_rows FROM business_rows AS r WHERE (:gea_p1 = 'all' OR (:gea_p1 = 'equal' AND r.warehouse_code = :gea_p2) OR (:gea_p1 = 'missing' AND r.warehouse_code IS NULL)) AND (:gea_p3 = 'all' OR (:gea_p3 = 'equal' AND r.sku = :gea_p4) OR (:gea_p3 = 'missing' AND r.sku IS NULL)) AND (:gea_p5 = 'all' OR (:gea_p5 = 'equal' AND r.category = :gea_p6) OR (:gea_p5 = 'missing' AND r.category IS NULL)) AND (:gea_p7 IS NULL OR LOWER(r.sku) LIKE LOWER(:gea_p7) OR LOWER(r.material_name) LIKE LOWER(:gea_p7) OR LOWER(r.warehouse_name) LIKE LOWER(:gea_p7))) SELECT COUNT(*) AS total FROM filtered AS r",
+        "parameters": {
+          "gea_p1": "all",
+          "gea_p2": null,
+          "gea_p3": "all",
+          "gea_p4": null,
+          "gea_p5": "all",
+          "gea_p6": null,
+          "gea_p7": null,
+          "gea_p2700": "2026-10-01"
+        },
+        "includeTotal": false
+      },
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "warehouse_code_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p2": {
+          "name": "warehouse_code",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p3": {
+          "name": "sku_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p4": {
+          "name": "sku",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p5": {
+          "name": "category_mode",
+          "type": "string",
+          "example": "all",
+          "required": true,
+          "nullable": false,
+          "enum": ["all", "equal", "missing"]
+        },
+        "gea_p6": {
+          "name": "category",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true
+        },
+        "gea_p7": {
+          "name": "search_pattern",
+          "type": "string",
+          "example": null,
+          "required": true,
+          "nullable": true,
+          "format": "LIKE pattern; host escapes literal %/_/backslash and surrounds with % for literal contains"
+        },
+        "gea_p2700": {
+          "name": "month",
+          "type": "string",
+          "format": "YYYY-MM-01",
+          "nullable": false,
+          "required": true,
+          "example": "2026-10-01"
+        }
+      },
+      "resultColumns": ["total"]
     }
   },
   "templates": {
