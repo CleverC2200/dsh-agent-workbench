@@ -143,7 +143,7 @@ test('a clean candidate binds the selected registered official declaration sourc
     manifest.core,
     process.env.DSH_RC2_CORE_CHECKOUT
       ? '639ed015397290b3745d163aafe02ffee4aa3f84'
-      : (process.env.QUALITY_CORE_HEAD ?? '5badb15009ae1756c3afe0ae0cef1faafc290ccc'),
+      : (process.env.QUALITY_CORE_HEAD ?? git(official, 'rev-parse', 'HEAD')),
   );
   const result = run();
   assert.equal(result.status, 0, result.stderr);
