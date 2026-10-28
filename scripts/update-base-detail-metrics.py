@@ -6,6 +6,9 @@ from pathlib import Path
 import sqlglot
 from sqlglot import exp
 
+WITH_KEY = 'with_' if 'with_' in exp.Select.arg_types else 'with'
+FROM_KEY = 'from_' if 'from_' in exp.Select.arg_types else 'from'
+
 ROOT = Path(__file__).resolve().parents[1]
 PATH = ROOT / 'business/inventory-aqkc/sql.config.json'
 
@@ -40,7 +43,7 @@ def age_statistics(tree):
             continue
         if not {'inventory', 'current_stock'}.intersection(select.named_selects):
             continue
-        source = select.args.get('from_')
+        source = select.args.get(FROM_KEY)
         if not source or not isinstance(source.this, exp.Table):
             continue
         table = source.this.name
@@ -69,7 +72,7 @@ def update(config):
             SUM(d.invalid_sku) AS invalid
           FROM detail_shortage_source AS d WHERE d.location_type='基地'
           GROUP BY d.belong_base,d.material_code)
-        SELECT 1 AS marker""").args['with_'].expressions
+        SELECT 1 AS marker""").args[WITH_KEY].expressions
     risk = """CASE WHEN p.source_order_count > 0 AND o.invalid=0 AND o.shortage > 0 THEN '缺货'
         WHEN s.inventory < s.target THEN '库存偏低'
         WHEN s.inventory > s.target THEN '库存偏高'
@@ -96,7 +99,7 @@ def update(config):
             for field in ['demand', 'allocated', 'shortage']:
                 fields.append(f'CASE WHEN p.source_order_count > 0 AND COALESCE(o.invalid,0)=0 THEN COALESCE(o.{field},0) END AS current_{field}')
             wrapped = parse('SELECT '+', '.join(fields)+' FROM ('+render(original)+') AS s LEFT JOIN detail_pending AS o ON o.base=s.base AND o.sku=s.sku CROSS JOIN detail_order_presence AS p')
-            wrapped.set('with_', exp.With(expressions=[c.copy() for c in pending]))
+            wrapped.set(WITH_KEY, exp.With(expressions=[c.copy() for c in pending]))
             cte.set('this', wrapped)
         for cte in tree.find_all(exp.CTE):
             if cte.alias == 'stock_rows':
@@ -111,7 +114,7 @@ def update(config):
                 original = cte.this.copy()
                 cte.set('this', parse('SELECT k.base AS base,k.sku AS sku FROM ('+render(original)+') AS k UNION ALL SELECT o.base AS base,o.sku AS sku FROM detail_pending AS o LEFT JOIN ('+render(original)+') AS k ON k.base=o.base AND k.sku=o.sku WHERE k.sku IS NULL AND o.sku IS NOT NULL'))
         for select in tree.find_all(exp.Select):
-            source_from = select.args.get('from_')
+            source_from = select.args.get(FROM_KEY)
             if not source_from or not isinstance(source_from.this, exp.Table):
                 continue
             table = source_from.this.name

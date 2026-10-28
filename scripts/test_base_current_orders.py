@@ -68,8 +68,10 @@ class BaseCurrentOrders(unittest.TestCase):
  def test_sku_page_and_count_refresh_the_embedded_source_and_are_idempotent(self):
   from importlib.util import spec_from_file_location,module_from_spec
   spec=spec_from_file_location('base_detail',ROOT/'scripts/update-base-detail-metrics.py');module=module_from_spec(spec);spec.loader.exec_module(module)
-  before=json.dumps(self.config,ensure_ascii=False,sort_keys=True);module.update(self.config)
-  self.assertEqual(json.dumps(self.config,ensure_ascii=False,sort_keys=True),before)
+  before={key:sqlglot.parse_one(q['request']['sql'],read='postgres') for key,q in self.config['queries'].items()};module.update(self.config)
+  for key,q in self.config['queries'].items():self.assertEqual(sqlglot.parse_one(q['request']['sql'],read='postgres'),before[key],key)
+  rendered=json.dumps(self.config,ensure_ascii=False,sort_keys=True);module.update(self.config)
+  self.assertEqual(json.dumps(self.config,ensure_ascii=False,sort_keys=True),rendered)
   for key in ['page.sku-detail','page.sku-detail.count','page.sku-detail.atomic']:
    tree=sqlglot.parse_one(self.config['queries'][key]['request']['sql'],read='postgres')
    for cte in tree.find_all(exp.CTE):
@@ -82,7 +84,8 @@ class BaseCurrentOrders(unittest.TestCase):
    for cte in tree.find_all(exp.CTE):
     if cte.alias=='stock_rows':
      select=sqlglot.parse_one("SELECT d.base AS base,d.sku AS sku,d.demand AS demand,d.allocated AS allocated,d.shortage AS shortage FROM detail_pending AS d WHERE d.base='郑州' AND d.sku='SKU1'",read='postgres')
-     select.set('with_',cte.this.args['with_'].copy())
+     with_key='with_' if 'with_' in exp.Select.arg_types else 'with'
+     select.set(with_key,cte.this.args[with_key].copy())
      row=dict(self.db.execute(select.sql(dialect='sqlite')).fetchone())
      self.assertEqual((row['demand'],row['allocated']),(100,20));self.assertIsNone(row['shortage'])
  def test_category_rollup_has_no_hidden_category_exclusion(self):

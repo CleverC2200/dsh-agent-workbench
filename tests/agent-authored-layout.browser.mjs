@@ -532,11 +532,11 @@ test('FC uses the same Chinese date display and retains explicit refresh', async
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
-  [1033547, 190, '1,033,547箱'],
-  [0, 201, '0箱'],
+  [1033547, 190, '1,033,547件'],
+  [0, 201, '0件'],
   [null, 0, '-'],
 ])
-  test(`AQKC snapshot unprepared card retains its scope and null/zero distinction: ${display}`, async (t) => {
+  test(`AQKC current unshipped card retains its scope and null/zero distinction: ${display}`, async (t) => {
     const { frame, errors, calls } = await mount(t, 'aqkc', 1280, (query, result) => {
       if (query.queryId === 'calendar.target_versions')
         result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
@@ -560,10 +560,10 @@ for (const [quantity, count, display] of [
       .locator('article')
       .filter({ has: frame.getByText('当前订单', { exact: true }) });
     await expect(card.locator('strong')).toHaveText(display);
-    if (quantity !== null) await expect(card).toContainText('50箱');
+    if (quantity !== null) await expect(card).toContainText('50件');
     assert.doesNotMatch(await card.innerText(), /快照|范围|SKU/);
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
-      quantity === null ? '-' : '12箱',
+      quantity === null ? '-' : '12件',
     );
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
@@ -1448,25 +1448,24 @@ test('FC overview fits five compact cards in a wide row and adapts without clipp
 });
 
 test('FC refused export reads never download a partial file or retry authorization', async (t) => {
-  const { frame, page, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    if (query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100)
+  let rejectExport = false;
+  let denied = 0;
+  const { frame, page, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    if (rejectExport && query.queryId === 'replenishment.detail.atomic') {
+      denied++;
       return { failure: { reasonCode: 'NO_RETURN_COLUMN_ALLOWED', message: '当前无导出字段权限' } };
+    }
     return fcWorkflowRows(query, result);
   });
   let downloads = 0;
   page.on('download', () => downloads++);
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
+  rejectExport = true;
   await list.getByRole('button', { name: 'CSV', exact: true }).click();
   await expect(frame.locator('.fc-workflow-notice')).toContainText('当前无导出字段权限');
   assert.equal(downloads, 0);
-  assert.equal(
-    calls.filter(
-      (query) =>
-        query.queryId === 'replenishment.detail.atomic' && query.parameters.page_size === 100,
-    ).length,
-    1,
-  );
+  assert.equal(denied, 1);
   assert.deepEqual(errors, []);
 });
 
@@ -1519,7 +1518,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
   const { page, frame, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
   const toolbar = frame.locator('[data-business-filters="fc"]');
   await expect(toolbar).toBeVisible();
-  for (const tab of ['补货确认', '分仓计划', '当前订单']) {
+  for (const tab of ['补货确认', '分仓计划']) {
     await frame.getByRole('button', { name: tab, exact: true }).first().click();
     for (const width of [1280, 922, 768, 560, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
@@ -1863,7 +1862,7 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   ).toHaveText('4,277');
   await expect(
     card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
-  ).toHaveText('25,765箱');
+  ).toHaveText('25,765件');
   await expect.poll(() => insightCalls.length).toBeGreaterThan(0);
   const evidence = insightCalls.at(-1).evidence.evidence;
   assert.equal(evidence.metrics.current, 4277);

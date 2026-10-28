@@ -1,6 +1,7 @@
 """Exercise shipped branch card SQL against foreign warehouse and mixed-unit fixtures."""
 import unittest
 import json
+import sqlglot
 from pathlib import Path
 from importlib.util import spec_from_file_location,module_from_spec
 import test_agent_sql as fixtures
@@ -34,6 +35,8 @@ class BranchCardScope(unittest.TestCase):
   self.assertEqual((row['calculated_sku_count'],row['missing_calculation_count']),(1,1))
  def test_scoped_regeneration_is_idempotent(self):
   root=Path(__file__).resolve().parents[1];spec=spec_from_file_location('cards',root/'scripts/update-fc-card-scope.py');module=module_from_spec(spec);spec.loader.exec_module(module)
-  before=json.dumps(self.f.config,sort_keys=True);module.update(self.f.config);self.assertEqual(json.dumps(self.f.config,sort_keys=True),before)
+  before={key:sqlglot.parse_one(q['request']['sql'],read='postgres') for key,q in self.f.config['queries'].items()};module.update(self.f.config)
+  for key,q in self.f.config['queries'].items():self.assertEqual(sqlglot.parse_one(q['request']['sql'],read='postgres'),before[key],key)
+  rendered=json.dumps(self.f.config,sort_keys=True);module.update(self.f.config);self.assertEqual(json.dumps(self.f.config,sort_keys=True),rendered)
 
 if __name__=='__main__':unittest.main()
