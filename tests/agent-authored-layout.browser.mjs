@@ -1220,7 +1220,9 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
 });
 
 function fcWorkflowRows(query, result) {
-  const detail = /^(replenishment|transfer_plan)\.detail(?:\.atomic)?$/.test(query.queryId);
+  const detail = /^(?:replenishment\.detail|transfer_plan\.(?:detail|template))(?:\.atomic)?$/.test(
+    query.queryId,
+  );
   const values = (index) => ({
     warehouse_code: '001',
     warehouse_name: '上海分仓',
@@ -1321,7 +1323,7 @@ test('FC restored quantity draft survives server paging and submits a real workb
 });
 
 test('FC restores real plan template, validates warehouse scope and applies an import trial', async (t) => {
-  const { frame, page, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
+  const { frame, page, errors, calls } = await mount(t, 'fc', 1280, fcWorkflowRows);
   await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
   const list = frame.getByRole('region', { name: '分仓计划', exact: true });
   await expect(list.locator('tbody tr')).toHaveCount(10);
@@ -1337,6 +1339,12 @@ test('FC restores real plan template, validates warehouse scope and applies an i
     await import('../business/inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbook.ts');
   const content = await unzipWorkbook(new Uint8Array(await readFile(await file.path())).buffer);
   const sheet = new TextDecoder().decode(content.get('xl/worksheets/sheet1.xml'));
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.queryId === 'transfer_plan.template.atomic' && call.parameters.page_size === 200,
+    ),
+  );
   assert.match(sheet, /仓库编号/);
   assert.match(sheet, />001</, 'warehouse leading zeros must survive the template');
   assert.equal(

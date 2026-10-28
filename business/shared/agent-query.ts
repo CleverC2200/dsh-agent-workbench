@@ -10,7 +10,11 @@ export type ConfiguredExecution = (
 ) => Promise<any>;
 
 /** Pages select a configured query; credentials and the physical database stay in the host. */
-export function createAgentQueries(fallback: AgentSqlConfig, execute?: ConfiguredExecution) {
+export function createAgentQueries(
+  fallback: AgentSqlConfig,
+  execute?: ConfiguredExecution,
+  freshness: { freshAfter?: number } = {},
+) {
   const config = agentSqlConfig(fallback);
   const run: ConfiguredExecution =
     execute ??
@@ -74,7 +78,7 @@ export function createAgentQueries(fallback: AgentSqlConfig, execute?: Configure
         {
           queryId: options.queryId,
           parameters: options.values,
-          freshAfter: configuredQueryFreshAfter(),
+          freshAfter: freshness.freshAfter ?? configuredQueryFreshAfter(),
         },
         { signal: options.signal },
       );
