@@ -36,7 +36,8 @@ class GovernedFcRendering(unittest.TestCase):
             target.parent.mkdir(parents=True)
             target.write_text(json.dumps(config, ensure_ascii=False))
             script = root / 'scripts/align-fc-workflow.py'
-            shutil.copyfile(ROOT / 'scripts/align-fc-workflow.py', script)
+            for name in ('align-fc-workflow.py', 'scope-fc-cycle-rules.py'):
+                shutil.copyfile(ROOT / 'scripts' / name, root / 'scripts' / name)
             subprocess.run([sys.executable, str(script)], check=True, capture_output=True)
             result = json.loads(target.read_text())
             for key, tree in before.items():
