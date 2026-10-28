@@ -1,3 +1,4 @@
+import { openBranchDms } from './html-dms-navigation.ts';
 import type { PageExecutionConnection, WorkbenchPageExecution } from './frame.ts';
 import { startPageBridgeClient } from './page-interaction/page-bridge/client.ts';
 
@@ -157,6 +158,16 @@ export function connectHtmlFrame(
             AbortSignal.any([signal, lifetime.signal, task.signal]),
           );
           result = { drafted: true };
+        } else if (message.method === 'branch-dms-open') {
+          result = await openBranchDms(
+            connection.page.id,
+            message.parameters,
+            () => call('branch-dms', { operation: 'login' }, task.signal),
+            () => alive() && !task.signal.aborted,
+            (url) => {
+              window.open(url, '_blank', 'noopener,noreferrer');
+            },
+          );
         } else if (message.method === 'conversation') {
           const text = message.parameters?.text;
           if (
@@ -175,9 +186,15 @@ export function connectHtmlFrame(
           );
           result = { sent: true };
         } else if (
-          ['sql', 'workspace', 'access', 'context', 'branch-dms', 'insight'].includes(
-            message.method,
-          )
+          [
+            'sql',
+            'workspace',
+            'access',
+            'context',
+            'branch-dms',
+            'insight',
+            'branch-storage',
+          ].includes(message.method)
         )
           result = await call(message.method, message.parameters, task.signal);
         else throw Error('HTML_METHOD_NOT_ALLOWED');

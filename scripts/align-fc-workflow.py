@@ -150,3 +150,6 @@ for view in config['sourceViews']['views']:
             if c['field']=='safety_days':c['label']='目标覆盖天数'
 path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
 print('FC net calculation aligned; no other agent configuration changed')
+# Saved cycle configurations are warehouse-scoped even on all-warehouse lists.
+import runpy
+runpy.run_path(str(Path(__file__).with_name('scope-fc-cycle-rules.py')))

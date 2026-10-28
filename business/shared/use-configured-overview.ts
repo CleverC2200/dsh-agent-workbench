@@ -13,6 +13,7 @@ export function useConfiguredOverview(
   viewIds?: readonly string[],
   fcCycleRules?: FcCycleRule[],
   warehouseCode?: string,
+  fcCycleWarehouse?: string,
 ) {
   const previousRevision = useRef(revision);
   if (previousRevision.current !== revision) {
@@ -27,6 +28,7 @@ export function useConfiguredOverview(
     cycleDays,
     fcCycleRules,
     warehouseCode,
+    fcCycleWarehouse,
   ]);
   const [state, setState] = useState<any>({ key: scopeKey, parts: {}, busy: true, errors: [] });
   useEffect(() => {
@@ -42,6 +44,7 @@ export function useConfiguredOverview(
       cycleDays,
       fcCycleRules,
       warehouseCode,
+      fcCycleWarehouse,
       viewIds,
       onProgress: (parts) => {
         if (!controller.signal.aborted)
@@ -95,6 +98,7 @@ export function useConfiguredOverview(
     cycleDays,
     JSON.stringify(fcCycleRules),
     warehouseCode,
+    fcCycleWarehouse,
   ]);
   return state.key === scopeKey ? state : { parts: {}, busy: true, errors: [] };
 }

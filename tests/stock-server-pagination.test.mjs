@@ -10,10 +10,14 @@ const bundle = await build({
   platform: 'node',
   format: 'esm',
 });
-const { readConfiguredStockPage, readConfiguredStockSummary, startConfiguredStockReadCycle } =
-  await import(
-    'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
-  );
+const {
+  readConfiguredStockPage,
+  readConfiguredStockSummary,
+  readConfiguredHealthSummary,
+  startConfiguredStockReadCycle,
+} = await import(
+  'data:text/javascript;base64,' + Buffer.from(bundle.outputFiles[0].text).toString('base64')
+);
 const now = new Date('2026-10-15T01:00:00Z');
 function source() {
   const calls = [];
@@ -24,7 +28,7 @@ function source() {
     if (call.queryId === 'calendar.target_versions.count') rows = [{ total: 1 }];
     else if (call.queryId === 'calendar.target_versions')
       rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-    else if (call.queryId === 'source.stock-date') rows = [{ day: '2026-10-14' }];
+    else if (call.queryId === 'source.health-date') rows = [{ day: '2026-10-14' }];
     else if (call.queryId === 'page.dashboard-groups')
       rows = [
         { ...Object.fromEntries(columns.map((c) => [c, null])), base: '郑州', category: '汤圆' },
@@ -171,7 +175,7 @@ test('independent target calendar and stock date start in the same gateway wave'
   );
   assert.equal(
     seen.find(([q]) => q === 'calendar.target_versions')[1],
-    seen.find(([q]) => q === 'source.stock-date')[1],
+    seen.find(([q]) => q === 'source.health-date')[1],
   );
   assert.equal(wave, 2);
 });
@@ -227,7 +231,7 @@ test('cancelling a drill does not cancel another consumer of the refresh metadat
   startConfiguredStockReadCycle(cycle.signal);
   const release = [];
   const execute = async (...args) => {
-    if (['calendar.target_versions', 'source.stock-date'].includes(args[1].queryId))
+    if (['calendar.target_versions', 'source.health-date'].includes(args[1].queryId))
       await new Promise((r) => release.push(r));
     return io.execute(...args);
   };
@@ -243,7 +247,7 @@ test('cancelling a drill does not cancel another consumer of the refresh metadat
     release.forEach((f) => f());
     await aborted;
     assert.equal((await second).rows.length, 10);
-    assert.equal(io.calls.filter((c) => c.queryId === 'source.stock-date').length, 1);
+    assert.equal(io.calls.filter((c) => c.queryId === 'source.health-date').length, 1);
     assert.equal(io.calls.filter((c) => c.queryId === 'page.sku-detail.atomic').length, 1);
   } finally {
     cycle.abort();
@@ -368,4 +372,51 @@ test('a slow optional inventory query cannot hold a successful full dashboard or
   assert.equal(early?.groups[0].inventory, 100);
   assert.equal(early.groups[0].target, 80);
   assert.equal(progress.length, 0);
+});
+
+test('base inventory and age cards share the batch date without coupling target failures', async () => {
+  startConfiguredStockReadCycle(new AbortController().signal);
+  const io = source();
+  const execute = async (...args) => {
+    if (args[1].queryId === 'page.health-groups') {
+      const columns = config.queries['page.health-groups'].resultColumns;
+      return {
+        configVersion: 'v1',
+        rows: [
+          {
+            ...Object.fromEntries(columns.map((key) => [key, null])),
+            level: '郑州',
+            average_age: 20,
+            weighted_age_sum: 200,
+            age_weight_qty: 10,
+            max_age: 30,
+          },
+        ],
+      };
+    }
+    return io.execute(...args);
+  };
+  try {
+    const [stock, health] = await Promise.all([
+      readConfiguredStockSummary(undefined, { now, execute }),
+      readConfiguredHealthSummary(undefined, undefined, { now, execute }),
+    ]);
+    assert.equal(stock.day, health.snapshotDate);
+    assert.equal(io.calls.filter((call) => call.queryId === 'source.health-date').length, 1);
+    startConfiguredStockReadCycle(new AbortController().signal);
+    const oldMonth = async (...args) =>
+      args[1].queryId === 'source.health-date'
+        ? { configVersion: 'v1', rows: [{ day: '2026-09-30' }] }
+        : execute(...args);
+    const [missingStock, validHealth] = await Promise.allSettled([
+      readConfiguredStockSummary(undefined, { now, execute: oldMonth }),
+      readConfiguredHealthSummary(undefined, undefined, { now, execute: oldMonth }),
+    ]);
+    assert.equal(missingStock.status, 'rejected');
+    assert.equal(missingStock.reason.code, 'INVALID_SOURCE_DATE');
+    assert.equal(validHealth.status, 'fulfilled');
+    assert.equal(validHealth.value.snapshotDate, '2026-09-30');
+  } finally {
+    startConfiguredStockReadCycle();
+  }
 });

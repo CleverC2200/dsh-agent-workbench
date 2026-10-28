@@ -1,10 +1,16 @@
+import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
+import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
+import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
+import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-persistence';
+import { fcPersistence } from './fc-storage-client';
+import type { FcStoreScope } from '../../../../../shared/fc-persistence';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import { knownNumber } from '../../../../../shared/configured-overview';
 import { call } from '../channel.js';
 import { dmsWorkbookRows } from '../fc-feedback';
 import { updateContext } from '../native/context';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { z } from 'zod';
 import { OriginalBusinessList } from '../../../../../shared/original-business-list';
 import { Modal, DataPagination } from '../dsh-ui/controls';
@@ -67,10 +73,28 @@ type Trial = {
 };
 const WorkflowContext = createContext<{
   trial: Trial | null;
+  planningPlans: ImportedPlan[];
+  setPlanningPlans: (plans: ImportedPlan[]) => void;
+  storedVersions: FcStoredVersions;
+  recordVersion: (warehouse: string, kind: 'plans' | 'cycles', record: any) => void;
   setTrial: (trial: Trial | null) => void;
 } | null>(null);
 export function FcWorkflowProvider({ children }: { children: React.ReactNode }) {
-  const [trial, setTrial] = useState<Trial | null>(null);
+  const [trial, setTrialState] = useState<Trial | null>(null);
+  const [planningPlans, setPlanningPlans] = useState<ImportedPlan[]>([]);
+  const [storedVersions, setStoredVersions] = useState<FcStoredVersions>({});
+  const setTrial = useCallback((next: Trial | null) => {
+    setTrialState(next);
+    if (next) setPlanningPlans(next.plans);
+  }, []);
+  const recordVersion = useCallback(
+    (warehouse: string, kind: 'plans' | 'cycles', record: any) =>
+      setStoredVersions((previous) => ({
+        ...previous,
+        [warehouse]: { ...previous[warehouse], [kind]: record },
+      })),
+    [],
+  );
   useEffect(() => {
     updateContext(
       'localPlanning',
@@ -78,16 +102,26 @@ export function FcWorkflowProvider({ children }: { children: React.ReactNode }) 
     );
   }, [trial]);
   useEffect(() => {
-    const clear = () => setTrial(null);
+    const clear = () => {
+      setTrialState(null);
+      setPlanningPlans([]);
+      setStoredVersions({});
+    };
     window.addEventListener('workbench-fc-view-restored', clear);
     window.addEventListener('gea-identity-changed', clear);
+    window.addEventListener('gea-session-changing', clear);
     return () => {
       window.removeEventListener('workbench-fc-view-restored', clear);
       window.removeEventListener('gea-identity-changed', clear);
+      window.removeEventListener('gea-session-changing', clear);
     };
   }, []);
   return (
-    <WorkflowContext.Provider value={{ trial, setTrial }}>{children}</WorkflowContext.Provider>
+    <WorkflowContext.Provider
+      value={{ trial, setTrial, planningPlans, setPlanningPlans, storedVersions, recordVersion }}
+    >
+      {children}
+    </WorkflowContext.Provider>
   );
 }
 export const fcTrialScope = (asOf: string, days: number, warehouse = '') =>
@@ -105,7 +139,7 @@ export function FcConfiguredList(
   props: React.ComponentProps<typeof OriginalBusinessList> & { actionScope: FcReadScope },
 ) {
   const { actionScope: scope } = props;
-  const { trial, setTrial } = useFcWorkflow();
+  const { planningPlans, setTrial, storedVersions } = useFcWorkflow();
   const month = scope.input.asOf.slice(0, 7),
     days = scope.input.cycleDays ?? 7;
   const draftKey = keyFor('order-draft', month),
@@ -132,7 +166,17 @@ export function FcConfiguredList(
     orderCode: string;
     aiPreOrderCode: string;
   } | null>(null);
-  const [dmsRedirect, setDmsRedirect] = useState('');
+  const [receiptArchived, setReceiptArchived] = useState(false);
+  const pendingReceipts = fcPersistence.pendingReceipts();
+  const warehouseReceiptPending = pendingReceipts.some(
+    (pending) => pending.warehouseCode === exportWarehouse,
+  );
+  const [consumptionReviewed, setConsumptionReviewed] = useState(false);
+  useEffect(() => setConsumptionReviewed(false), [exportRows, draft, exportWarehouse]);
+  useEffect(() => {
+    setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
+    setDmsReceipt(null);
+  }, [exportWarehouse]);
   const [dialogPage, setDialogPage] = useState(1);
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
@@ -145,14 +189,12 @@ export function FcConfiguredList(
     setDetailRow(null);
     setNotice('');
     setDmsReceipt(null);
-    setDmsRedirect('');
     return () => active.current?.abort();
   }, [scopeId]);
   useEffect(() => {
     const restore = () => {
       active.current?.abort();
       setDmsReceipt(null);
-      setDmsRedirect('');
       setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
       setBusy(false);
       setDraft(loadDraft(draftKey));
@@ -163,15 +205,14 @@ export function FcConfiguredList(
     };
     window.addEventListener('workbench-fc-view-restored', restore);
     window.addEventListener('gea-identity-changed', restore);
+    window.addEventListener('gea-session-changing', restore);
     return () => {
       window.removeEventListener('workbench-fc-view-restored', restore);
       window.removeEventListener('gea-identity-changed', restore);
+      window.removeEventListener('gea-session-changing', restore);
     };
   }, [draftKey, planDraftKey]);
-  const plans =
-    trial?.scope === fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code)
-      ? trial.plans
-      : [];
+  const plans = planningPlans;
   const save = (next: Draft) => {
     setDraft(next);
     memoryStorage.setItem(draftKey, JSON.stringify(next));
@@ -232,7 +273,11 @@ export function FcConfiguredList(
             className="fc-quantity-input"
             type="number"
             aria-label={`${text(row.sku)}实际补货量`}
-            disabled={knownNumber(row.recommended_qty) === null}
+            disabled={
+              busy ||
+              (dialog === 'export' && Boolean(dmsReceipt)) ||
+              knownNumber(row.recommended_qty) === null
+            }
             min={0}
             max={1e9}
             step="any"
@@ -256,6 +301,7 @@ export function FcConfiguredList(
           <input
             className="fc-reason-input"
             aria-label={`${text(row.sku)}调整原因`}
+            disabled={busy || (dialog === 'export' && Boolean(dmsReceipt))}
             maxLength={500}
             value={draft.reasons[key] ?? ''}
             onChange={(event) =>
@@ -307,7 +353,6 @@ export function FcConfiguredList(
       const warehouses = [...new Set(selected.map((row) => String(row.warehouse_code)))];
       setExportWarehouse(warehouses.length === 1 ? warehouses[0] : '');
       setDmsReceipt(null);
-      setDmsRedirect('');
       setExportRows(selected);
       setDialogPage(1);
       setDialog(mode);
@@ -369,12 +414,13 @@ export function FcConfiguredList(
         },
         signal,
       );
-      const calculated = rows.map((row) => applyFcPlan(row, parsed.plans, scope.input.asOf, days));
+      const mergedPlans = mergeFcPlans(plans, parsed.plans);
+      const calculated = rows.map((row) => applyFcPlan(row, mergedPlans, scope.input.asOf, days));
       const summary = summarizeFcRows(calculated);
       signal.throwIfAborted();
       setTrial({
         scope: fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code),
-        plans: parsed.plans,
+        plans: mergedPlans,
         ...summary,
       });
       setDialog(null);
@@ -383,7 +429,7 @@ export function FcConfiguredList(
   const exportCsv = () =>
     run(async (signal) => {
       const rows = await readFcActionRows(scope, signal);
-      const columns: { field: string; label: string }[] = props.columns;
+      const columns: { field: string; label: string; valueField?: string }[] = props.columns;
       const escape = (value: unknown) => {
         const valueText = value == null ? '' : String(value);
         return (
@@ -465,6 +511,7 @@ export function FcConfiguredList(
   const submitDms = () =>
     run(async (signal) => {
       if (!exportWarehouse) throw Error('请选择分仓');
+      if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
       const selected = previewRows.filter(
         (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
       );
@@ -486,7 +533,8 @@ export function FcConfiguredList(
         throw Error('请填写客户、收货地址和提货点编码');
       const order = {
         ...fields,
-        ...(remarks ? { remarks } : {}),
+        ...(remarks ? { orderRemarks: remarks } : {}),
+        orderModel: 'cg',
         itemList: selected
           .map((row) => ({
             productCode: String(row.sku),
@@ -494,38 +542,151 @@ export function FcConfiguredList(
           }))
           .sort((a, b) => a.productCode.localeCompare(b.productCode)),
       };
-      // Stable intent survives page reloads; DMS has no documented idempotency guarantee.
-      const digest = await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(JSON.stringify([month, exportWarehouse, order])),
-      );
-      const aiPreOrderCode =
-        'AI' +
-        Array.from(new Uint8Array(digest))
-          .map((value) => value.toString(16).padStart(2, '0'))
-          .join('')
-          .slice(0, 30);
+      const provenance = await fcSubmissionProvenance({
+        warehouse: exportWarehouse,
+        asOf: scope.input.asOf,
+        plans,
+        days,
+        rules: scope.input.fcCycleRules ?? [],
+        cycleWarehouse: scope.input.fcCycleWarehouse,
+        stored: storedVersions,
+        rows: previewRows,
+      });
       signal.throwIfAborted();
-      const receipt = (await call(
+      if (
+        provenance.calculationContext.planSource === 'human-trial' ||
+        provenance.calculationContext.cycleSource === 'page-trial'
+      )
+        throw Error('请先保存当前人工计划或周期规则，再提交补货');
+      const currentRows = (await readFcActionRows({ ...scope, viewId: 'replenishment' }, signal))
+        .map((row) => applyFcPlan(row, plans, scope.input.asOf, days))
+        .filter(
+          (row) =>
+            String(row.warehouse_code) === exportWarehouse &&
+            (Object.hasOwn(draft.quantities, rowKey(row)) ||
+              knownNumber(row.recommended_qty) === null ||
+              quantity(row.recommended_qty) > 0),
+        );
+      const currentProvenance = await fcSubmissionProvenance({
+        warehouse: exportWarehouse,
+        asOf: scope.input.asOf,
+        plans,
+        days,
+        rules: scope.input.fcCycleRules ?? [],
+        cycleWarehouse: scope.input.fcCycleWarehouse,
+        stored: storedVersions,
+        rows: currentRows,
+      });
+      signal.throwIfAborted();
+      if (provenance.snapshotVersion !== currentProvenance.snapshotVersion)
+        throw Error('库存、订单或计划数据已变化，请重新打开确认清单复核后提交');
+      const confirmationRows = previewRows
+        .map((row) => ({
+          sku: String(row.sku),
+          productName: String(row.material_name ?? ''),
+          recommendedQty: Number(row.recommended_qty),
+          actualQty: draft.quantities[rowKey(row)] ?? Number(row.recommended_qty),
+          reason: draft.reasons[rowKey(row)] ?? '',
+        }))
+        .sort((a, b) => a.sku.localeCompare(b.sku));
+      const { aiPreOrderCode, legacyAiPreOrderCode } = await fcSubmissionIdentity({
+        warehouseCode: exportWarehouse,
+        month,
+        snapshotVersion: provenance.snapshotVersion,
+        planRevision: provenance.planRevision,
+        cycleRevision: provenance.cycleRevision,
+        consumptionReviewed,
+        rows: confirmationRows,
+        order,
+      });
+      signal.throwIfAborted();
+      const readiness = (await call(
         'branch-dms',
-        { operation: 'submit', order: { aiPreOrderCode, ...order } },
+        {
+          operation: 'preflight',
+          warehouseCode: exportWarehouse,
+          order: { aiPreOrderCode, ...order },
+        },
         { signal },
-      )) as { orderCode: string; aiPreOrderCode: string };
+      )) as { ready?: boolean; scope?: string };
+      signal.throwIfAborted();
+      if (readiness?.ready !== true || readiness.scope !== 'local-configuration')
+        throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
+      const receipt = await persistAndSubmitFc(
+        exportWarehouse,
+        {
+          stage: 'confirmed',
+          ...provenance,
+          month,
+          consumptionReviewed,
+          aiPreOrderCode,
+          rows: confirmationRows,
+        },
+        signal,
+        async () =>
+          call(
+            'branch-dms',
+            {
+              operation: 'submit',
+              warehouseCode: exportWarehouse,
+              order: { aiPreOrderCode, ...order },
+            },
+            { signal },
+          ),
+        (received) => {
+          signal.throwIfAborted();
+          setReceiptArchived(false);
+          setDmsReceipt(received);
+          setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
+        },
+        legacyAiPreOrderCode,
+      );
       signal.throwIfAborted();
       setDmsReceipt(receipt);
+      setReceiptArchived(true);
       setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
+      try {
+        await call('branch-dms-open', {}, { signal });
+        signal.throwIfAborted();
+        setNotice(
+          `已暂存至DMS，订单号：${receipt.orderCode}；已请求打开订单管理。若未打开，请点击“进入DMS订单管理”，无需重新提交。`,
+        );
+      } catch {
+        if (!signal.aborted)
+          setNotice(
+            `已暂存至DMS，订单号：${receipt.orderCode}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
+          );
+      }
+    });
+  const verifyReceiptArchive = (pending: FcStoreScope) =>
+    run(async (signal) => {
+      const receipt = await verifyFcReceiptArchive(pending, signal);
+      signal.throwIfAborted();
+      if (pending.warehouseCode === exportWarehouse && receipt.orderCode === dmsReceipt?.orderCode)
+        setReceiptArchived(true);
+      setNotice(`DMS订单 ${receipt.orderCode} 的回执归档已核实；未重新下单。`);
     });
   const loginDms = () =>
     run(async (signal) => {
-      const result = (await call('branch-dms', { operation: 'login' }, { signal })) as {
-        redirect: string;
-      };
+      await call('branch-dms-open', {}, { signal });
       signal.throwIfAborted();
-      setDmsRedirect(result.redirect);
+      setNotice('已请求打开DMS订单管理；此操作不会重复下单。');
     });
   const count = new Set([...Object.keys(draft.quantities), ...Object.keys(draft.reasons)]).size;
   const toolbar = (
     <>
+      {scope.viewId === 'replenishment' &&
+        pendingReceipts.map((pending) => (
+          <button
+            key={JSON.stringify(pending)}
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void verifyReceiptArchive(pending)}
+          >
+            核对回执归档（{pending.warehouseCode}）
+          </button>
+        ))}
       {scope.viewId === 'plan' && (
         <>
           <button
@@ -766,6 +927,7 @@ export function FcConfiguredList(
                   分仓{' '}
                   <select
                     aria-label="导出补货分仓"
+                    disabled={busy}
                     value={exportWarehouse}
                     onChange={(event) => {
                       setDmsReceipt(null);
@@ -820,15 +982,27 @@ export function FcConfiguredList(
                 </fieldset>
               )}
               {dmsReceipt && dialog === 'export' && (
-                <p>
-                  预订单号：{dmsReceipt.aiPreOrderCode}；DMS订单号：{dmsReceipt.orderCode}
-                </p>
+                <div>
+                  <p>
+                    预订单号：{dmsReceipt.aiPreOrderCode}；DMS订单号：{dmsReceipt.orderCode}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy || !receiptArchived}
+                    onClick={() => void previewDraft('export')}
+                  >
+                    重新读取，准备下一批
+                  </button>
+                  {!receiptArchived && (
+                    <p role="alert">DMS已收单，回执归档待核对，请先核对归档再开始下一批。</p>
+                  )}
+                  <p>
+                    重新读取后请复核数量和保留的人工调整；相同快照和确认内容仍返回原批次，数据或确认内容变化后形成新批次。
+                  </p>
+                </div>
               )}
-              {dmsRedirect && dialog === 'export' && (
-                <a href={dmsRedirect} target="_blank" rel="noopener noreferrer">
-                  进入DMS继续处理（短时免登链接）
-                </a>
-              )}
+
               <p>
                 {previewRows.length}个SKU
                 {dialog === 'export'
@@ -926,10 +1100,21 @@ export function FcConfiguredList(
             )}
             {dialog === 'export' && (
               <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={consumptionReviewed}
+                    disabled={busy || Boolean(dmsReceipt)}
+                    onChange={(e) => setConsumptionReviewed(e.target.checked)}
+                  />
+                  已复核库存消化与本次补货数量
+                </label>
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={busy || !previewRows.length || Boolean(dmsReceipt)}
+                  disabled={
+                    busy || !previewRows.length || Boolean(dmsReceipt) || warehouseReceiptPending
+                  }
                   onClick={() => void submitDms()}
                 >
                   确认暂存至DMS
@@ -940,7 +1125,7 @@ export function FcConfiguredList(
                   disabled={busy}
                   onClick={() => void loginDms()}
                 >
-                  获取DMS免登链接
+                  进入DMS订单管理
                 </button>
                 <button
                   type="button"

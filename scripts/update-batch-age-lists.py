@@ -104,7 +104,8 @@ for agent in ['aqkc','fc','qll']:
   view.update(queryId='batch-age.groups',description=notes,overrides={'group_level':'base' if agent=='aqkc' else 'detail'})
   view.pop('summaryId',None);view['metrics']=[];view['gapIds']=[]
   if agent == 'fc':
-   view['pageReadSize'] = 50
+   view.pop('pageReadSize', None)
+   view['maxPageSize'] = 50
    view['filters'] = [f for f in view['filters'] if f['name'] != 'risk'] + [{'name': 'risk', 'label': '风险快捷查询', 'options': [{'label': label, 'value': label if label != '全部' else ''} for label in ['预警', '滞库', '正常', '全部']]}]
   for col in view['columns']:
    if col['field'] in mappings[agent][view['id']]:

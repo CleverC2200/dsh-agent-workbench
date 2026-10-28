@@ -11,7 +11,7 @@ def definition(dimensions,location_type,detail=False,sku_page=False,source=SOURC
  fixed=" AND r.location_type = '"+location_type+"'" if location_type else ''
  source_ctes, source_select = source.rsplit('\nSELECT',1)
  ctes=source_ctes+', shortage_source AS (SELECT'+source_select+'''), order_presence AS (
- SELECT COUNT(*) AS source_order_count FROM agents_scm_execute_detail_d
+ SELECT COUNT(*) AS source_order_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS probe_order LIMIT 1) AS order_probe
  ), filtered AS (
  SELECT '''+', '.join('r.'+k+' AS '+v for k,v in DIMS.items())+', '+', '.join('r.'+k+' AS '+v for k,v in MEASURES.items())+''',
  CASE WHEN p.source_order_count=0 THEN 1 ELSE r.invalid_sku END AS invalid

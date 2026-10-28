@@ -60,10 +60,33 @@ def age_statistics(tree):
             add(select, f'{alias}.{field} AS {field}')
 
 
+def share_page_stock(tree):
+    """Let count and displayed rows reuse the identical classified SKU source."""
+    root_with = tree.args.get(WITH_KEY)
+    if root_with and any(cte.alias == 'stock_rows' for cte in root_with.expressions):
+        return
+    count = tree.args[FROM_KEY].this.this
+    page = tree.args['joins'][0].this.this
+    count_with, page_with = count.args.get(WITH_KEY), page.args.get(WITH_KEY)
+    if not count_with or not page_with or len(count_with.expressions) != 1:
+        return
+    shared = count_with.expressions[0]
+    matching = [cte for cte in page_with.expressions if cte.alias == 'stock_rows']
+    if shared.alias != 'stock_rows' or len(matching) != 1 or shared.this != matching[0].this:
+        return
+    count.set(WITH_KEY, None)
+    remaining = [cte for cte in page_with.expressions if cte.alias != 'stock_rows']
+    if remaining:
+        page_with.set('expressions', remaining)
+    else:
+        page.set(WITH_KEY, None)
+    tree.set(WITH_KEY, exp.With(expressions=[*(root_with.expressions if root_with else []), shared.copy()]))
+
+
 def update(config):
     source = (ROOT / 'business/inventory-aqkc/current-orders-source.sql').read_text().strip().rstrip(';')
     pending = parse(f"""WITH detail_shortage_source AS ({source}),
-        detail_order_presence AS (SELECT COUNT(*) AS source_order_count FROM agents_scm_execute_detail_d),
+        detail_order_presence AS (SELECT COUNT(*) AS source_order_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS probe_order LIMIT 1) AS order_probe),
         detail_pending AS (
           SELECT d.belong_base AS base, d.material_code AS sku,
             CASE WHEN COUNT(d.demand_qty)=COUNT(*) THEN SUM(d.demand_qty) END AS demand,
@@ -133,6 +156,7 @@ def update(config):
         if name.endswith('.atomic'):
             for field in ['age_weighted_sum', 'age_qty', 'current_demand', 'current_allocated', 'current_shortage']:
                 add(tree, f'p.{field} AS {field}')
+            share_page_stock(tree)
         query['request']['sql'] = render(tree)
         query['resultColumns'] = tree.named_selects
         spec = query['parameterSpec']['gea_p3001']

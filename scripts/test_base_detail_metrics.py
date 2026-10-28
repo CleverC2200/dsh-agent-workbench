@@ -1,12 +1,36 @@
 """Exercise the shipped warning and weighted-age expressions with conflicting SKU facts."""
 import sqlite3
 import unittest
+import runpy
+from pathlib import Path
 from agent_sql import config_for
 import sqlglot
 from sqlglot import exp
 
 
 class BaseDetailMetrics(unittest.TestCase):
+    def test_shared_page_source_preserves_counts_pages_and_empty_page_marker(self):
+        helper = runpy.run_path(str(Path(__file__).with_name('update-base-detail-metrics.py')))['share_page_stock']
+        self.db.execute('CREATE TABLE items(sku INTEGER, qty REAL)')
+        self.db.executemany('INSERT INTO items VALUES (?,?)', [(n, n*2) for n in range(25)])
+        for offset in [0, 10, 20, 30]:
+            source = 'SELECT sku AS sku, qty AS qty FROM items WHERE qty >= 0'
+            original = f'''SELECT p.sku AS sku,p.qty AS qty,c.total AS page_scope_total,p.present AS page_row_present
+                FROM (WITH stock_rows AS ({source}) SELECT COUNT(*) AS total FROM stock_rows AS s) AS c
+                LEFT JOIN (WITH stock_rows AS ({source}) SELECT s.sku AS sku,s.qty AS qty,1 AS present
+                    FROM stock_rows AS s ORDER BY s.sku LIMIT 10 OFFSET {offset}) AS p ON TRUE ORDER BY p.sku'''
+            tree = self.tree_sql(original)
+            helper(tree)
+            expected = self.db.execute(original).fetchall()
+            self.assertEqual(self.db.execute(tree.sql(dialect='sqlite')).fetchall(), expected)
+            rendered = tree.sql()
+            helper(tree)
+            self.assertEqual(tree.sql(), rendered)
+
+    @staticmethod
+    def tree_sql(sql):
+        return sqlglot.parse_one(sql, read='postgres')
+
     def setUp(self):
         self.config = config_for('aqkc')
         self.db = sqlite3.connect(':memory:')

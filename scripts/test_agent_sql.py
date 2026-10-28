@@ -610,6 +610,13 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         params['fc_cycle_0_to']='2026-10-19'
         self.assertEqual(self.read('replenishment.detail',**params)[0]['recommended_qty'],35)
 
+    def test_saved_cycle_scope_does_not_apply_to_another_warehouse(self):
+        params=dict(fc_cycle_warehouse='OTHER',fc_cycle_0_level='sku',fc_cycle_0_object='S1',fc_cycle_0_days=14,cycle_days=21)
+        row=self.read('replenishment.detail',**params)[0]
+        self.assertEqual((row['cycle_days'],row['recommended_qty']),(7,35))
+        params['fc_cycle_warehouse']='WH1'
+        self.assertEqual(self.read('replenishment.detail',**params)[0]['cycle_days'],14)
+
     def test_forecast_ceil_and_month_end_without_current_plan(self):
         self.db.execute('UPDATE agents_scm_warehouse_transfer_plan_data_d SET warehouse_month_out_plan=32')
         row=self.read('replenishment.detail',days_remaining_in_month=5)[0]

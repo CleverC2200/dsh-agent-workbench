@@ -234,7 +234,7 @@ export function OriginalBusinessList({
         (qll || aqkc || fc || agentId === 'inventory-dealer' ? (
           <PlanPagination
             ariaLabel={qll ? undefined : `${view.title}分页`}
-            maxPageSize={view.pageReadSize}
+            maxPageSize={view.maxPageSize}
             totalCount={result.total}
             page={page}
             pageSize={pageSize}

@@ -182,7 +182,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(picker).toHaveValue('');
 });
 
-test('FC aging exposes immediate risk filters, leading risk column and cached page blocks', async (t) => {
+test('FC aging exposes immediate risk filters, leading risk column and ten-row server pages', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -242,9 +242,11 @@ test('FC aging exposes immediate risk filters, leading risk column and cached pa
   const agingReads = calls.filter((c) => c.id === 'batch-age.atomic');
   assert.equal(agingReads.length, 2);
   assert.deepEqual(
-    agingReads[0].values,
-    agingReads[1].values,
-    'adjacent pages retain one Host cache key',
+    agingReads.map((call) => [call.values.page_size, call.values.offset]),
+    [
+      [10, 0],
+      [10, 10],
+    ],
   );
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
   for (const risk of ['预警', '滞库', '正常']) {

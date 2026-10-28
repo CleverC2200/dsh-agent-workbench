@@ -10,6 +10,7 @@ const kinds = {
   cycles: 'cycle-preview',
   preferences: 'preferences',
   cycleEdits: 'cycle-edit',
+  writeIntents: 'write-intent',
 } as const;
 const supported = (key: string, kind: string) =>
   key.startsWith('branch-inventory:v1:' + kind + ':') ||
@@ -49,6 +50,7 @@ view.subscribe((snapshot: Record<string, unknown>) => {
   if (before !== after) window.dispatchEvent(new Event('workbench-fc-view-restored'));
 });
 export const memoryStorage = {
+  keys: () => [...values.keys()],
   getItem: (key: string) => values.get(key) ?? null,
   setItem: (key: string, value: string) => {
     values.set(key, String(value));
@@ -64,6 +66,9 @@ window.addEventListener('gea-identity-changed', () => values.clear());
 
 /** Workbench persists only the current page's calculation setting, within its identity/session scope. */
 export const configuredCycleState = {
+  warehouse(): string {
+    return String(view.get().fcCycleWarehouse ?? '');
+  },
   rules(): FcCycleRule[] {
     try {
       return validateFcCycleRules(view.get().fcCycleRules ?? []);
@@ -77,9 +82,13 @@ export const configuredCycleState = {
       ? value
       : undefined;
   },
-  save(days: number, rules: FcCycleRule[] = this.rules()) {
+  save(days: number, rules: FcCycleRule[] = this.rules(), warehouse = this.warehouse()) {
     publish();
-    view.update({ replenishmentCycleDays: days, fcCycleRules: validateFcCycleRules(rules) });
+    view.update({
+      replenishmentCycleDays: days,
+      fcCycleRules: validateFcCycleRules(rules),
+      fcCycleWarehouse: warehouse,
+    });
   },
   subscribe(listener: () => void) {
     const stop = view.subscribe(listener);
@@ -87,4 +96,11 @@ export const configuredCycleState = {
       stop();
     };
   },
+};
+
+/** Only the selected warehouse is UI intent; formal values must be reloaded from the service. */
+export const fcStorageSelection = {
+  read: () => String(view.get().fcStorageWarehouse ?? ''),
+  save: (warehouse: string) => view.update({ fcStorageWarehouse: warehouse }),
+  subscribe: (listener: () => void) => view.subscribe(listener),
 };
