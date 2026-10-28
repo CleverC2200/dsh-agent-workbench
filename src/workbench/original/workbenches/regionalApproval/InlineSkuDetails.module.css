@@ -36,12 +36,17 @@
   vertical-align: middle;
 }
 .table thead th {
+  box-sizing: border-box;
+  height: 38px;
+  padding-block: 4px;
   position: sticky;
   top: 0;
   z-index: 1;
   background: var(--bg-2);
   text-align: right;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.35;
   white-space: nowrap;
 }
 .table thead th:first-child {
