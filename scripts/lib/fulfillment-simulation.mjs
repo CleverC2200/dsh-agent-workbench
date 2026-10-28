@@ -73,7 +73,7 @@ export function applySimulationEvent(state, event, scope) {
 
 export function simulationCard(scope, state, view = 'home') {
   const plain = content => ({ tag: 'plain_text', content });
-  const escape = value => String(value ?? '—').replace(/[<>&*_\[\]\x60]/g, '');
+  const escape = value => String(value ?? '—').replace(/[<>&*_[\]\x60]/g, '');
   const actionValue = action => ({ simulation: true, runId: scope.runId, orderNo: scope.orderNo, action });
   const button = (label, action, confirm = false) => ({
     tag: 'button', text: plain(label), type: action === 'confirm' ? 'primary_filled' : 'default',
