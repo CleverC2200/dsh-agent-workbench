@@ -22,6 +22,10 @@ api('GET').then(data=>{snapshot=data;render();const view=new URLSearchParams(loc
 </script></body></html>`;
 
 export function simulationWebSnapshot(scope, state) {
-  const { orderNo, customerCode, customer, base, rate, quantity, unit, lines, pickup, vehicle } = scope;
-  return { scope: { orderNo, customerCode, customer, base, rate, quantity, unit, lines, pickup, vehicle }, state };
+  const { orderNo, customerCode, customer, base, rate, quantity, unit, lines, pickup, vehicle } =
+    scope;
+  return {
+    scope: { orderNo, customerCode, customer, base, rate, quantity, unit, lines, pickup, vehicle },
+    state,
+  };
 }

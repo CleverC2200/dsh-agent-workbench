@@ -34,12 +34,28 @@ const save = () => {
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
   if (config.previewHtmlPath) {
     const path = resolve(config.previewHtmlPath);
-    if (path !== 'D:\\order-agent-preview-merged-172\\candidate\\dsh-agent-workbench\\lib\\business\\inventory-orderfulfillment\\index.html')
+    if (
+      path !==
+      'D:\\order-agent-preview-merged-172\\candidate\\dsh-agent-workbench\\lib\\business\\inventory-orderfulfillment\\index.html'
+    )
       throw Error('SIMULATION_PREVIEW_PATH_INVALID');
     const html = fs.readFileSync(path, 'utf8');
-    fs.writeFileSync(path, html.replace(/(<script type="application\/json" id="fulfillment-simulation-config">)[\s\S]*?(<\/script>)/,
-      (_match, start, end) => start + JSON.stringify({ runId: scope.runId, orderNo: scope.orderNo,
-        customerCode: scope.customerCode, base: scope.base, state }).replaceAll('<', '\\u003c') + end));
+    fs.writeFileSync(
+      path,
+      html.replace(
+        /(<script type="application\/json" id="fulfillment-simulation-config">)[\s\S]*?(<\/script>)/,
+        (_match, start, end) =>
+          start +
+          JSON.stringify({
+            runId: scope.runId,
+            orderNo: scope.orderNo,
+            customerCode: scope.customerCode,
+            base: scope.base,
+            state,
+          }).replaceAll('<', '\\u003c') +
+          end,
+      ),
+    );
   }
 };
 save();
@@ -70,7 +86,9 @@ function run(args) {
 }
 async function patch(view = 'home') {
   const started = Date.now();
-  const body = JSON.stringify({ content: JSON.stringify(simulationCard({ ...scope, webToken: config.token }, state, view)) });
+  const body = JSON.stringify({
+    content: JSON.stringify(simulationCard({ ...scope, webToken: config.token }, state, view)),
+  });
   const path = resolve(config.patchPath);
   fs.writeFileSync(path, body);
   const local = relative(process.cwd(), path);
@@ -113,36 +131,83 @@ const server = createServer(async (req, res) => {
     res.setHeader('Referrer-Policy', 'no-referrer');
     if (req.method === 'GET' && /^\/simulation(?:\?|$)/.test(req.url)) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      );
       res.end(simulationWebHtml);
       return;
     }
     res.setHeader('Content-Type', 'application/json');
-    if (req.url !== '/simulation/api' || req.headers['x-simulation-token'] !== config.token ||
+    if (
+      req.url !== '/simulation/api' ||
+      req.headers['x-simulation-token'] !== config.token ||
       !['GET', 'POST'].includes(req.method) ||
-      (req.method === 'POST' && (req.headers.origin !== 'http://127.0.0.1:3197' || req.headers['content-type'] !== 'application/json'))) {
-      res.writeHead(403); res.end(JSON.stringify({ error: 'SIMULATION_ACCESS_DENIED' })); return;
+      (req.method === 'POST' &&
+        (req.headers.origin !== 'http://127.0.0.1:3197' ||
+          req.headers['content-type'] !== 'application/json'))
+    ) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ error: 'SIMULATION_ACCESS_DENIED' }));
+      return;
     }
     try {
       if (req.method === 'POST') {
         let body = '';
-        for await (const data of req) { body += data; if (body.length > 2048) throw Error('SIMULATION_REQUEST_TOO_LARGE'); }
+        for await (const data of req) {
+          body += data;
+          if (body.length > 2048) throw Error('SIMULATION_REQUEST_TOO_LARGE');
+        }
         const input = JSON.parse(body);
-        if (!['confirm', 'defer'].includes(input.action) || !/^[a-f\d-]{36}$/i.test(input.eventId ?? '')) throw Error('SIMULATION_ACTION_DENIED');
-        const next = applySimulationEvent(state, { chat_id: scope.chatId, message_id: scope.messageId,
-          operator_id: scope.operatorId, event_id: 'h5:' + input.eventId,
-          simulation_transport: 'LOCAL_FEISHU_H5',
-          action_value: { simulation: true, runId: scope.runId, orderNo: scope.orderNo, action: input.action, days: input.days } }, scope);
-        if (next !== state) { state = next; save(); refresh(); }
-        console.log(JSON.stringify({ simulationWeb: input.action, status: state.status, count: state.records.length }));
+        if (
+          !['confirm', 'defer'].includes(input.action) ||
+          !/^[a-f\d-]{36}$/i.test(input.eventId ?? '')
+        )
+          throw Error('SIMULATION_ACTION_DENIED');
+        const next = applySimulationEvent(
+          state,
+          {
+            chat_id: scope.chatId,
+            message_id: scope.messageId,
+            operator_id: scope.operatorId,
+            event_id: 'h5:' + input.eventId,
+            simulation_transport: 'LOCAL_FEISHU_H5',
+            action_value: {
+              simulation: true,
+              runId: scope.runId,
+              orderNo: scope.orderNo,
+              action: input.action,
+              days: input.days,
+            },
+          },
+          scope,
+        );
+        if (next !== state) {
+          state = next;
+          save();
+          refresh();
+        }
+        console.log(
+          JSON.stringify({
+            simulationWeb: input.action,
+            status: state.status,
+            count: state.records.length,
+          }),
+        );
       }
       res.end(JSON.stringify(simulationWebSnapshot(scope, state)));
-    } catch (error) { res.writeHead(400); res.end(JSON.stringify({ error: error.message })); }
+    } catch (error) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ error: error.message }));
+    }
     return;
   }
   const origin = req.headers.origin;
   // Workbench HTML runs in an opaque-origin sandbox; the per-run token still gates reads.
-  if (![config.origin, 'null'].includes(origin) || req.headers.host !== `127.0.0.1:${config.port}`) {
+  if (
+    ![config.origin, 'null'].includes(origin) ||
+    req.headers.host !== `127.0.0.1:${config.port}`
+  ) {
     res.writeHead(403);
     res.end();
     return;
@@ -202,7 +267,13 @@ function consume(raw) {
     typeof event.action_value === 'string' ? JSON.parse(event.action_value) : event.action_value;
   if (value?.runId !== scope.runId || value.orderNo !== scope.orderNo || value.simulation !== true)
     return;
-  console.log(JSON.stringify({ callback: value.action, tag: event.action_tag, receivedAt: new Date().toISOString() }));
+  console.log(
+    JSON.stringify({
+      callback: value.action,
+      tag: event.action_tag,
+      receivedAt: new Date().toISOString(),
+    }),
+  );
   const views = { open_details: 'details', home: 'home' };
   if (views[value.action]) return refresh(views[value.action]);
   event.event_id ||= createHash('sha256')
