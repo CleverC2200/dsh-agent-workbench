@@ -15,7 +15,7 @@ const { SlotCore } = await import(resolve(corePath, 'packages/client/ui-slots/li
 const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {
-    contents: `export {mountMenuAgentSelection} from './src/company/agent-menu-selection.tsx';export {AgentPresetSeat as OfficialAgentPresetSeat} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx'))};export {ConversationContent} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx'))};export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';`,
+    contents: `export {mountMenuAgentSelection} from './src/company/agent-menu-selection.tsx';export {AgentPresetSeatController} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-agent-preset/src/client/seat-store.ts'))};export {AgentPresetSeat as OfficialAgentPresetSeat} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-agent-preset/src/client/AgentPresetSeat.tsx'))};export {ConversationContent} from ${JSON.stringify(resolve(corePath, 'packages/client/ui-conversation/src/client/skeleton/ConversationContent.tsx'))};export {mountCompanyUI} from './src/company/ui.tsx';export {WorkbenchController} from './src/workbench.ts';`,
     resolveDir: process.cwd(),
   },
   bundle: true,
@@ -49,6 +49,7 @@ const {
   WorkbenchController,
   ConversationContent,
   OfficialAgentPresetSeat,
+  AgentPresetSeatController,
 } = module.exports;
 function fixture(
   account,
@@ -2814,6 +2815,95 @@ test('native Agent picker follows the sidebar catalog through identity changes a
     ['gea-html-inventory-aqkc'],
     'filtering never changes a Session or saved default',
   );
+});
+
+test('opening the native Agent picker refreshes resources registered after its first roster read', async (t) => {
+  const mounted = await mountedDom(t);
+  const core = new SlotCore();
+  core.register(
+    {
+      name: 'root',
+      children: { 'conversation.hero.agentPreset': { kind: 'single', scope: 'session-maybe' } },
+    },
+    () => null,
+  );
+  core.register(
+    { name: 'conversation.hero.agentPreset', inject: () => ({}) },
+    OfficialAgentPresetSeat,
+  );
+  const allowed = new Set(['gea-html-inventory-mps', 'gea-html-inventory-aqkc']);
+  mountMenuAgentSelection(
+    {
+      slots: {
+        inject: (_name, fn) => {
+          t.after(fn());
+        },
+        entries: (name) => core.entries(name),
+        subscribe: (name, listener) => core.subscribe(name, listener),
+        register: (options, component) => core.register(options, component),
+      },
+    },
+    () => allowed,
+  );
+  let roster = [{ id: 'standard' }, { id: 'gea-html-inventory-mps', isDefault: true }];
+  let reads = 0;
+  const selections = [];
+  const seat = new AgentPresetSeatController(
+    {
+      configForms: { developerTools: { enabled: { getSnapshot: () => true } } },
+      remote: {
+        agentPresets: {
+          list: async () => {
+            reads++;
+            return { ok: true, value: { presets: roster } };
+          },
+          select: async (...args) => {
+            selections.push(args);
+          },
+        },
+      },
+    },
+    () => undefined,
+  );
+  const Picker = core
+    .entries('conversation.hero.agentPreset')
+    .find((entry) => entry.options.priority === -20).component;
+  const load = () => seat.load();
+  await React.act(async () =>
+    mounted.root.render(
+      React.createElement(Picker, {
+        useAgentPresetSeat: (select) =>
+          select(React.useSyncExternalStore(seat.store.subscribe, seat.store.getSnapshot)),
+        useDeveloperTools: (select) => select(true),
+        useSessionRetainInfo: (select) => select(undefined),
+        load,
+        select: (id) => seat.select(id),
+        introduced: () => seat.introduced(),
+        t: (key) => key,
+      }),
+    ),
+  );
+  assert.equal(reads, 1);
+  roster = [...roster, { id: 'gea-html-inventory-aqkc' }, { id: 'gea-html-unauthorized' }];
+  await React.act(async () => document.querySelector('button[title="seatHint"]').click());
+  const options = [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')].map(
+    (node) => node.textContent.replace('noDescription', ''),
+  );
+  assert.ok(
+    options.includes('gea-html-inventory-aqkc'),
+    'late registered authorized resource is selectable without reloading the page',
+  );
+  assert.equal(options.includes('gea-html-unauthorized'), false);
+  assert.equal(reads, 2);
+  assert.equal(seat.store.getSnapshot().current, 'gea-html-inventory-mps');
+  await React.act(async () =>
+    [...document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]')]
+      .find((node) => node.textContent.startsWith('gea-html-inventory-aqkc'))
+      .click(),
+  );
+  assert.equal(seat.store.getSnapshot().current, 'gea-html-inventory-aqkc');
+  assert.equal(roster.find((entry) => entry.isDefault)?.id, 'gea-html-inventory-mps');
+  assert.deepEqual(selections, []);
 });
 
 test('menu Agent selection preserves Core injection and follows preset plugin registration and disposal', async () => {

@@ -11,6 +11,7 @@ type SeatState = {
 };
 type SeatProps = PropsRuntime<'conversation.hero.agentPreset'> & {
   useAgentPresetSeat<T>(selector: (state: SeatState) => T): T;
+  load(): Promise<void>;
   select(id: string): Promise<string | undefined>;
 };
 
@@ -60,15 +61,17 @@ export function mountMenuAgentSelection(ctx: Context, useAllowed: () => Readonly
       if (!Component) return null;
       const useFilteredSeat: SeatProps['useAgentPresetSeat'] = (selector) => selector(filtered);
       return (
-        <Component
-          {...props}
-          useAgentPresetSeat={useFilteredSeat}
-          select={(id) =>
-            isMenuAgentVisible(id, allowedRef.current)
-              ? props.select(id)
-              : Promise.resolve(undefined)
-          }
-        />
+        <span style={{ display: 'contents' }} onClickCapture={() => void props.load()}>
+          <Component
+            {...props}
+            useAgentPresetSeat={useFilteredSeat}
+            select={(id) =>
+              isMenuAgentVisible(id, allowedRef.current)
+                ? props.select(id)
+                : Promise.resolve(undefined)
+            }
+          />
+        </span>
       );
     }
     const stop = ctx.slots.subscribe('conversation.hero.agentPreset', refresh);
