@@ -64,7 +64,7 @@ test('confirmed monthly versions and shipment measures populate independently wh
   const preview = frame.getByRole('dialog');
   await expect(preview).toContainText('含赠品数量');
   await expect(preview).toContainText('不含税收入');
-  await expect(preview).toContainText('未提供');
+  await expect(preview.getByRole('cell', { name: '-', exact: true }).first()).toBeVisible();
   const previewDownload = page.waitForEvent('download');
   await preview.getByRole('button', { name: '下载明细', exact: true }).click();
   const previewCsv = await readFile(await (await previewDownload).path(), 'utf8');
@@ -208,4 +208,55 @@ test('history failures stay bound to the read period after switching historical 
   await expect(history.getByRole('alert')).toContainText('暂无数据权限');
   await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
   await expect(quantity).toHaveText('7');
+});
+
+test('source previews show final integer results and missing counts while downloads preserve decimals', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    const response = fixture(query);
+    if (query.queryId === 'facts.report')
+      response.rows = [
+        {
+          ...response.rows[0],
+          [plan + 'cust_code']: 'C1',
+          [plan + 'belong_base']: '基地甲',
+          [plan + 'material_code']: '001',
+          [plan + 'plannum_total']: 12.5,
+          [plan + 'allnum_total']: 0,
+        },
+      ];
+    if (query.queryId === 'facts.history')
+      response.rows = [
+        {
+          ...response.rows[0],
+          [shipment + 'belong_base']: '基地甲',
+          [shipment + 'material_code']: '001',
+          [shipment + 'act_dl_qty_total']: 7.5,
+          [shipment + 'act_dl_qty_all_total']: 0,
+          [shipment + 'income_excl_tax_local_total']: 10.5,
+        },
+      ];
+    return response;
+  });
+  const history = frame.getByRole('region', { name: '历史同期发货', exact: true });
+  await expect(history).toContainText('发货数量：8件；含赠品数量：0件；不含税收入：11元');
+  for (const [title, expected] of [
+    ['计划提报数据', '13'],
+    ['历史同期发货', '8'],
+  ]) {
+    const section = frame.getByRole('region', { name: title, exact: true });
+    await section.getByRole('button', { name: '基地 1', exact: true }).click();
+    const dialog = frame.getByRole('dialog');
+    await expect(dialog.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
+    await expect(dialog.locator('tbody tr').first().locator('td').nth(1)).toHaveText(expected);
+    await expect(dialog).not.toContainText('公式');
+    await expect(dialog).not.toContainText('代入');
+    await dialog.getByRole('button', { name: '关闭弹窗' }).click();
+    await section.getByText('口径与统计说明', { exact: true }).click();
+    await expect(section.getByRole('button', { name: '下载CSV模板' })).toHaveCount(0);
+    await expect(section).not.toContainText('公式：');
+    const download = page.waitForEvent('download');
+    await section.getByRole('button', { name: '导出当前明细' }).click();
+    const csv = await readFile(await (await download).path(), 'utf8');
+    assert(csv.includes(title === '计划提报数据' ? '12.5' : '7.5,0,10.5'));
+  }
 });

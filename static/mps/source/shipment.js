@@ -44,7 +44,7 @@ const columns = [
 ];
 const keyOf = (row) => JSON.stringify([row.base, row.code]);
 const display = (value) =>
-  value == null ? '待定' : value.toLocaleString('zh-CN', { maximumFractionDigits: 2 });
+  value == null ? '待定' : value.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
 const completeSum = (rows, field) =>
   rows.length && rows.every((row) => row[field] != null)
     ? finite(rows.reduce((sum, row) => sum + row[field], 0))

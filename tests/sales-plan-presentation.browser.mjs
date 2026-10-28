@@ -102,6 +102,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
   const base=baseSkuFor(versionId);
@@ -217,9 +218,9 @@ async function assertExpandedSkuLayout(region) {
     true,
     'SKU row background must continue to the right edge',
   );
-  assert.ok(layout.columns[0] <= 360, `SKU column too wide: ${layout.columns[0]}`);
+  assert.ok(layout.columns[0] <= 240, `SKU column too wide: ${layout.columns[0]}`);
   assert.ok(
-    layout.columns.slice(1).every((width) => width <= 220),
+    layout.columns.slice(1).every((width) => width <= 160),
     `metric columns too wide: ${layout.columns}`,
   );
   return layout;
@@ -881,6 +882,35 @@ test('退回计划可继续修改本地草稿，组织汇总分摊不触发重�
   );
 });
 
+test(
+  'returned group submission carries each customer allocation from inline edits',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, groupBox } = await openWorkbench(t, true, 'returned');
+    await groupBox.locator('xpath=ancestor::tr').getByRole('button').first().click();
+    const group = page.getByTestId('regional-approval-group-sku-summary').first();
+    await group.getByRole('spinbutton', { name: '确认计划量 1001', exact: true }).fill('80');
+    await groupBox.click();
+    await page.getByRole('button', { name: '提交所选', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.approvalItems?.length)).toBe(2);
+    const items = await page.evaluate(() => window.approvalItems);
+    assert.deepEqual(
+      items
+        .map((item) => ({
+          kind: item.kind,
+          customer: item.row.dealerName,
+          role: item.approvalRole,
+          value: item.pendingValues['1001'],
+        }))
+        .sort((left, right) => left.customer.localeCompare(right.customer)),
+      [
+        { kind: 'resubmit', customer: '客户1', role: 'region', value: '40' },
+        { kind: 'resubmit', customer: '客户2', role: 'region', value: '40' },
+      ],
+    );
+  },
+);
+
 test('split sales plan wraps control groups without clipping actions or the table header', async (t) => {
   const { page } = await openWorkbench(t);
   for (const width of [907, 760, 620]) {
@@ -957,6 +987,13 @@ test('展开 SKU 表在宽屏保持紧凑，长描述换行且窄屏可用键盘
     await page.screenshot({
       path: resolve(process.env.GEA_LAYOUT_EVIDENCE, 'expanded-narrow.png'),
     });
+});
+
+test('发货实绩缺失时显示状态并保留期间原因', { timeout: 30000 }, async (t) => {
+  const { page } = await openWorkbench(t, false, 'shipment-missing');
+  const status = page.getByText('发货实绩未取得', { exact: true });
+  await expect(status).toBeVisible();
+  await expect(status).toHaveAttribute('title', '未取得该客户 2026-10 的发货数据');
 });
 
 test('pagination footer keeps counts and controls on one line', { timeout: 30000 }, async (t) => {

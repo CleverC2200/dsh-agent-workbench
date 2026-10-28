@@ -14,10 +14,8 @@ const DESKTOP_AGENTS = new Map<string, DesktopAgent>([
   ['aps', { group: 'supply', title: 'menuSupplyPage', pageId: 'inventory-apsplan' }],
   ['04', { group: 'plan', title: 'menuCategoryPage' }],
   ['sales_forecast', { group: 'plan', title: 'menuSalesPage', pageId: 'gea-proof' }],
-  ['area_plan', { group: 'plan', title: 'menuRegionalPage' }],
   ['mps', { group: 'plan', title: 'menuMpsPage', pageId: 'plan-category-production' }],
   ['03', { group: 'plan', title: 'prototypeCapacity' }],
-  ['02', { group: 'plan', title: 'menuCategoryProductionPage' }],
   [
     'full-chain-inventory',
     { group: 'inventory', title: 'menuFullInventoryPage', pageId: 'inventory-qll' },
@@ -106,7 +104,7 @@ export function resolveBusinessMenu(
     return (aOrder < 0 ? order.length : aOrder) - (bOrder < 0 ? order.length : bOrder);
   });
   for (const agent of agents) {
-    if (agent.agentCode === 'workbench') continue;
+    if (['workbench', 'area_plan', '02'].includes(agent.agentCode ?? '')) continue;
     const desktop = agent.agentCode ? DESKTOP_AGENTS.get(agent.agentCode) : undefined;
     const pageId = desktop?.pageId;
     let reason: string | undefined;

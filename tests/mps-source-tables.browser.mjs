@@ -91,7 +91,13 @@ test('one forecast batch drives two selectable target months and delivery source
   await expect(forecast).toContainText('数量合计0（单位待确认）');
   await forecast.getByLabel('预测期间').selectOption('2');
   await expect(forecast).toContainText('核对期间 2027-01');
-  await expect(forecast).toContainText('数量合计12.5（单位待确认）');
+  await expect(forecast).toContainText('数量合计13（单位待确认）');
+  await forecast.getByRole('button', { name: '基地 1', exact: true }).click();
+  const preview = frame.getByRole('dialog');
+  await expect(preview.locator('th')).toHaveText(['名称', '数量合计', '缺失数量条数']);
+  await expect(preview.locator('tbody tr').first().locator('td').nth(1)).toHaveText('13');
+  await expect(preview).not.toContainText('公式');
+  await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细' }).click();
   const csv = await readFile(await (await download).path(), 'utf8');
@@ -114,6 +120,7 @@ test('one forecast batch drives two selectable target months and delivery source
     name: '基地多维发货指标',
     exact: true,
   });
+  await delivery.getByRole('button', { name: '展开基地多维发货指标' }).click();
   await expect(delivery.getByText('业务来源', { exact: true })).toBeVisible();
   await expect(delivery).toContainText('0.012000000000');
   await expect(delivery).toContainText('-0.125000000000');
@@ -203,6 +210,7 @@ test('a late delivery period cannot overwrite the newly selected month', async (
     name: '基地多维发货指标',
     exact: true,
   });
+  await delivery.getByRole('button', { name: '展开基地多维发货指标' }).click();
   await expect(delivery.getByText('业务来源', { exact: true })).toBeVisible();
   await delivery.getByLabel('发货指标月份').fill('2026-08');
   await expect.poll(() => blocked).toBe(true);
@@ -247,4 +255,59 @@ test('forecast context reports unread business data and preserves a local file w
         context.parts?.check?.sourceSummaries?.forecast?.businessSource === 'table-not-built',
     ),
   );
+});
+
+test('delivery indicators start collapsed and paginate ten rows without changing raw ratios or exports', async (t) => {
+  const { page, frame } = await mpsPage(
+    t,
+    config,
+    fixture((kind, month) =>
+      kind === 'forecast'
+        ? []
+        : Array.from({ length: 31 }, (_, index) =>
+            row(kind, {
+              stat_month: month,
+              dimension_type: '基地+大类',
+              dimension_value: `类别${index}`,
+              dimension_act_dl_qty:
+                index === 0
+                  ? '0'
+                  : index === 2
+                    ? '9007199254740992.5'
+                    : index === 3
+                      ? '-12.5'
+                      : '12.5',
+              dimension_act_dl_qty_rate: '0.012000000000',
+            }),
+          ),
+    ),
+  );
+  const section = frame.getByRole('region', { name: '基地多维发货指标', exact: true });
+  await expect(section.getByRole('button', { name: '展开基地多维发货指标' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await expect(section.locator('table')).toBeHidden();
+  await section.getByRole('button', { name: '展开基地多维发货指标' }).click();
+  await expect(section.locator('tbody tr')).toHaveCount(10);
+  await expect(section.locator('tbody tr').first().locator('td').nth(3)).toHaveText('-');
+  await expect(section.locator('tbody tr').first().locator('td').nth(6)).toHaveText('0');
+  await expect(section.locator('tbody tr').nth(1).locator('td').nth(6)).toHaveText('13');
+  await expect(section.locator('tbody tr').nth(2).locator('td').nth(6)).toHaveText(
+    '9007199254740993',
+  );
+  await expect(section.locator('tbody tr').nth(3).locator('td').nth(6)).toHaveText('-13');
+  await expect(section).toContainText('0.012000000000');
+  await section.getByLabel('每页发货指标条数').selectOption('25');
+  await expect(section.locator('tbody tr')).toHaveCount(25);
+  await section.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(section.locator('tbody tr')).toHaveCount(6);
+  await section.getByLabel('每页发货指标条数').selectOption('50');
+  await expect(section.locator('tbody tr')).toHaveCount(31);
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: '下载当前指标' }).click();
+  const csv = await readFile(await (await download).path(), 'utf8');
+  assert(csv.includes('12.5'));
+  assert(csv.includes('9007199254740992.5'));
+  assert(csv.includes('0.012000000000'));
 });

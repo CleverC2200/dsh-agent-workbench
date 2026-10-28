@@ -437,3 +437,17 @@ test('MPS shipment conflicting source product dimensions remain unresolved after
   const csv = await exported(page, frame);
   assert.doesNotMatch(csv, /水饺|汤圆/);
 });
+
+test('MPS shipment rounds displayed quantities while keeping decimal source values in exports', async (t) => {
+  const { page, frame, table } = await shipment(t);
+  await upload(frame, ['2026-09,郑州,A,产品A,汤圆,系列,组,12.5,0,0,1.5,100,200,80']);
+  await frame.getByRole('button', { name: '展开 郑州', exact: true }).click();
+  await expect(
+    table.getByRole('button', { name: '郑州 A 本月已发货 计算过程', exact: true }),
+  ).toHaveText('13');
+  await expect(
+    table.getByRole('button', { name: '郑州 A 近三天日均发货量 计算过程', exact: true }),
+  ).toHaveText('2');
+  const csv = await exported(page, frame);
+  assert(csv.includes('12.5,0,0,1.5'));
+});
