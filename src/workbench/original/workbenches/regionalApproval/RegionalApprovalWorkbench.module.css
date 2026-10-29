@@ -111,11 +111,11 @@
 
 /* V1.8 #14：差额正数红、负数绿，颜色只作用于差额数值本身。 */
 .queueMetrics .variancePositive {
-  color: #c8112a;
+  color: rgb(var(--danger-6));
 }
 
 .queueMetrics .varianceNegative {
-  color: #168e58;
+  color: rgb(var(--success-6));
 }
 
 .scope :global(.arco-select) {
