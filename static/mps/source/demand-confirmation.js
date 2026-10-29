@@ -1,6 +1,6 @@
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
-import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
+import { hasMpsSource, readProducts, readAnnual, readAnnualDetails } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
@@ -10,6 +10,8 @@ import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workfl
 import { productProjections } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
 import { productFileText } from './product-file.js';
+import { workbookBytes } from './workbook.js';
+import { annualWorkbookTables } from './annual-workbook.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -135,7 +137,7 @@ function parseCsv(text, columns) {
     );
   return rows;
 }
-function downloadCsv(name, columns, rows) {
+function downloadCsvLegacy(name, columns, rows) {
   const cell = (value, column) => {
     let text = String(value ?? '');
     if (typeof value !== 'number' && !column?.includes('数量') && /^[\s]*[=+\-@\t\r\n]/.test(text))
@@ -148,6 +150,13 @@ function downloadCsv(name, columns, rows) {
       .map((row) => row.map((value, index) => cell(value, columns[index])).join(','))
       .join('\r\n');
   downloadFile(name, 'text/csv;charset=utf-8', csv);
+}
+async function downloadWorkbook(name, tables) {
+  const bytes = await workbookBytes(tables);
+  downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
+}
+function downloadCsv(name, columns, rows) {
+  return downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [{ name: '数据', columns, rows }]);
 }
 const integer = new Intl.NumberFormat('zh-CN', {
   useGrouping: false,
@@ -624,7 +633,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
     );
   }
-  function Annual({ draft, read, sync, update, error, busy }) {
+  function Annual({
+    draft,
+    read,
+    sync,
+    update,
+    error,
+    busy,
+    exportAnnual,
+    exporting,
+    exportError,
+  }) {
     const [expanded, setExpanded] = react.useState(false);
     const live = draft.annualSource === 'business';
     const unit = live ? '源数量' : '件';
@@ -779,28 +798,31 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'button',
             {
-              disabled: !draft.annual.length,
+              disabled: !draft.annual.length || exporting || busy,
               onClick: () =>
-                downloadCsv(
-                  live ? '年度需求-源数量.csv' : '年度计划-全部已读.csv',
-                  live
-                    ? ['基地', ...annualColumns, '源月份', '源记录数', '缺失数量', '重复记录数']
-                    : annualColumns,
-                  draft.annual,
-                ),
+                live
+                  ? exportAnnual(months, base)
+                  : downloadCsvLegacy('年度计划-全部已读.csv', annualColumns, draft.annual),
             },
-            '下载',
+            exporting ? '正在导出…' : live ? '下载年度SKU模板' : '下载',
           ),
         ),
         busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
+        exportError && h('p', { role: 'alert' }, exportError),
+        live &&
+          h(
+            'p',
+            { className: 'dc-card-note' },
+            '下载当前基地全年SKU明细、大类汇总及物料组核对表。各表冻结首行；缺失月份不补零，物料组汇总不重复计入大类。',
+          ),
         h('div', { hidden: !expanded }, table(['大类', ...months, '全年合计'], rows)),
       ),
     );
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
-  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv });
+  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv: downloadCsvLegacy });
   const SourceInputs = createSourceInputs(react, {
     Dialog,
     table,
@@ -812,7 +834,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     Dialog,
     Upload,
     parseCsv,
-    downloadCsv,
+    downloadCsv: downloadCsvLegacy,
     monthOffset,
   });
   return function DemandConfirmation({
@@ -889,6 +911,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           epoch === generation.current &&
           requests.current[type] === request,
       };
+    };
+    const exportAnnual = async (months, base) => {
+      const { signal, valid } = begin('annualExport');
+      try {
+        const rows = await readAnnualDetails(months, base, signal);
+        const tables = annualWorkbookTables(rows, months, base);
+        const bytes = await workbookBytes(tables);
+        if (valid())
+          downloadFile(
+            `年度销售计划-${base}-${months[0]}至${months.at(-1)}.xlsx`,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            bytes,
+          );
+      } catch (failure) {
+        if (valid()) setErrors((state) => ({ ...state, annualExport: failure.message }));
+      } finally {
+        if (valid()) setBusy((state) => ({ ...state, annualExport: false }));
+      }
     };
     const sync = async (type) => {
       const id = draft.id;
@@ -1958,7 +1998,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 }),
               ),
           ),
-        h(Annual, { draft, read, sync, update, error: errors.annual, busy: busy.annual }),
+        h(Annual, {
+          draft,
+          read,
+          sync,
+          update,
+          error: errors.annual,
+          busy: busy.annual,
+          exportAnnual,
+          exporting: busy.annualExport,
+          exportError: errors.annualExport,
+        }),
         h(
           'div',
           { className: 'dc-source-grid' },

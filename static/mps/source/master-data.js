@@ -152,3 +152,13 @@ export async function readAnnual(signal) {
   );
   return annualRows(result.rows);
 }
+export async function readAnnualDetails(months, base, signal) {
+  const { config, query } = client();
+  const definition = config.queries['annual.export'];
+  const result = await query.readAll(
+    'annual.export',
+    { months: [...new Set(months.flatMap(sourceMonthValues))], base, page_size: 200, offset: 0 },
+    { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+  );
+  return result.rows;
+}

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const row = (kind, values) => ({
   ...Object.fromEntries(config.queries[kind + '.detail'].columns.map((c) => [c, null])),
@@ -103,7 +104,7 @@ test('one forecast batch drives two selectable target months and delivery source
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细' }).click();
-  const csv = await readFile(await (await download).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await download).path());
   assert.match(
     csv,
     /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
@@ -115,7 +116,7 @@ test('one forecast batch drives two selectable target months and delivery source
   assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12,0,12.5,1,'));
   const allDownload = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
-  const allCsv = await readFile(await (await allDownload).path(), 'utf8');
+  const allCsv = await mpsDownloadText(await (await allDownload).path());
   assert(allCsv.includes('物料组未匹配主数据，分类留空'));
   assert(allCsv.includes('2026-12,基地甲,001'));
   assert(allCsv.includes('2027-01,基地甲,001'));
@@ -311,7 +312,7 @@ test('delivery indicators start collapsed and paginate ten rows without changing
   await expect(section.locator('tbody tr')).toHaveCount(31);
   const download = page.waitForEvent('download');
   await section.getByRole('button', { name: '下载当前指标' }).click();
-  const csv = await readFile(await (await download).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await download).path());
   assert(csv.includes('12.5'));
   assert(csv.includes('9007199254740992.5'));
   assert(csv.includes('0.012000000000'));
