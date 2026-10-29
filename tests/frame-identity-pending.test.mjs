@@ -524,11 +524,14 @@ async function fixture(
     newConversation: async () =>
       act(async () => dom.window.document.querySelector('[aria-label="新建对话"]').click()),
     selectInterpreter: async (id) =>
-      act(async () => {
-        const chooser = dom.window.document.querySelector('[aria-label="pageInterpreter"]');
-        chooser.value = id;
-        chooser.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
-      }),
+      (async () => {
+        await act(async () =>
+          dom.window.document.querySelector('button[aria-label="pageInterpreter"]').click(),
+        );
+        await act(async () =>
+          dom.window.document.querySelector(`[role="option"][data-value="${id}"]`).click(),
+        );
+      })(),
     selectHistory: async (id) =>
       act(async () => {
         await restorePageSession(page.id, id, new AbortController().signal);
@@ -536,6 +539,11 @@ async function fixture(
       }),
     resolve: async (item, value) => act(async () => item.resolve(Response.json(value))),
   };
+}
+function interpreterChoices(document) {
+  return [...document.querySelectorAll('.gea-interpreter-options [role="option"]')].map(
+    (option) => option.dataset.value,
+  );
 }
 test('reopening a restored Document revalidates the same subject Session after its Host scope changes', async (t) => {
   const sessionId = 'session-00000000-0000-4000-8000-000000000034';
@@ -709,12 +717,7 @@ test('restoring an unbound resource Document reads Interpreter choices without c
   assert.equal(f.sessionOpenRequests(), 0);
   assert.equal(f.currentSession(), undefined);
   assert.equal(f.selection(), undefined);
-  assert.deepEqual(
-    [...f.dom.window.document.querySelector('[aria-label="pageInterpreter"]').options].map(
-      (option) => option.value,
-    ),
-    ['original', 'other'],
-  );
+  assert.deepEqual(interpreterChoices(f.dom.window.document), ['original', 'other']);
   assert.equal(
     f.calls.some(([operation]) => ['core-create', 'core-select-preset'].includes(operation)),
     false,
@@ -1114,10 +1117,7 @@ test('a fresh validated selection publishes its declared installed Interpreter c
     chooser,
     'Manage validates page choices during the first selection, after the initial list',
   );
-  assert.deepEqual(
-    [...chooser.options].map((option) => option.value),
-    ['original', 'other'],
-  );
+  assert.deepEqual(interpreterChoices(f.dom.window.document), ['original', 'other']);
   assert.deepEqual(f.counts(), { sessions: 1, listRequests: 1, selectionRequests: 1 });
 });
 
@@ -1190,10 +1190,7 @@ test('an unknown projection retains Document metadata for confirmed recovery whi
 
 test('validated Interpreter choices survive unknown and failed identity observation without another directory or selection', async (t) => {
   const f = await fixture(t, { secondInterpreter: true });
-  const choices = () =>
-    [...(f.dom.window.document.querySelector('[aria-label="pageInterpreter"]')?.options ?? [])].map(
-      (option) => option.value,
-    );
+  const choices = () => interpreterChoices(f.dom.window.document);
   assert.deepEqual(choices(), ['original', 'other']);
   await f.identityUnknown();
   assert.deepEqual(choices(), [], 'unknown identity cannot select cached business choices');
@@ -1212,10 +1209,7 @@ test('validated Interpreter choices survive unknown and failed identity observat
 
 test('validated Interpreter choices survive leaving and reactivating the same Document without another catalog request', async (t) => {
   const f = await fixture(t, { secondInterpreter: true });
-  const choices = () =>
-    [...(f.dom.window.document.querySelector('[aria-label="pageInterpreter"]')?.options ?? [])].map(
-      (option) => option.value,
-    );
+  const choices = () => interpreterChoices(f.dom.window.document);
   assert.deepEqual(choices(), ['original', 'other']);
   await f.hide();
   await f.show();
@@ -1255,10 +1249,7 @@ test('a cached Document releases cancelled selection busy state and a late old c
     association,
     'cancellation preserves the real Session association',
   );
-  assert.deepEqual(
-    [...chooser().options].map((option) => option.value),
-    ['original', 'other'],
-  );
+  assert.deepEqual(interpreterChoices(document), ['original', 'other']);
   assert.equal(
     document.querySelector('[aria-label="SDK draft fixture"]').value,
     '未发送的历史草稿',
@@ -1324,12 +1315,7 @@ test('a failed Interpreter selection restores the cached Document selector and r
 
 test('a confirmed new identity scope reads fresh choices and cannot borrow the previous validated Interpreter metadata', async (t) => {
   const f = await fixture(t, { secondInterpreter: true, secondInterpreterOnlyInFirstScope: true });
-  assert.deepEqual(
-    [...f.dom.window.document.querySelector('[aria-label="pageInterpreter"]').options].map(
-      (option) => option.value,
-    ),
-    ['original', 'other'],
-  );
+  assert.deepEqual(interpreterChoices(f.dom.window.document), ['original', 'other']);
   await f.changeIdentity();
   assert.equal(
     f.dom.window.document.querySelector('[aria-label="pageInterpreter"]'),
@@ -1347,12 +1333,7 @@ test('a confirmed new identity scope reads fresh choices and cannot borrow the p
 
 test('a new resource adapter lifetime refreshes Interpreter metadata without preparing another Session', async (t) => {
   const f = await fixture(t, { secondInterpreter: true });
-  assert.deepEqual(
-    [...f.dom.window.document.querySelector('[aria-label="pageInterpreter"]').options].map(
-      (option) => option.value,
-    ),
-    ['original', 'other'],
-  );
+  assert.deepEqual(interpreterChoices(f.dom.window.document), ['original', 'other']);
   const association = f.association();
   await f.replaceResourceAdapter();
   assert.equal(
