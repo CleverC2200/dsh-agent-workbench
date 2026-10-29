@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
+import React from 'react';
 
 const require = createRequire(import.meta.url);
 const bundle = await build({
@@ -26,10 +27,14 @@ const settle = () => new Promise((resolve) => setImmediate(resolve));
 
 async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspace/B' } = {}) {
   const dom = new JSDOM('<main id="root"></main>', { url: 'https://host.example/workbench' });
-  const saved = ['window', 'document', 'fetch', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [
-    key,
-    Object.getOwnPropertyDescriptor(globalThis, key),
-  ]);
+  const saved = [
+    'window',
+    'document',
+    'Node',
+    'HTMLElement',
+    'fetch',
+    'IS_REACT_ACT_ENVIRONMENT',
+  ].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]);
   const lists = [],
     selections = [],
     sessions = [],
@@ -54,6 +59,8 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
   Object.assign(globalThis, {
     window: dom.window,
     document: dom.window.document,
+    Node: dom.window.Node,
+    HTMLElement: dom.window.HTMLElement,
     fetch: request,
     IS_REACT_ACT_ENVIRONMENT: true,
   });
@@ -162,7 +169,10 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     originalError = console.error;
   console.error = (...args) => errors.push(args);
   apply(ctx);
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
   t.after(async () => {
+    await React.act(() => root.unmount());
     cleanups.reverse().forEach((off) => off());
     console.error = originalError;
     dom.window.close();
@@ -171,6 +181,9 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
       else delete globalThis[key];
     }
   });
+  await React.act(() =>
+    root.render(React.createElement(slots.get('gea-workspace-directory-prompt'))),
+  );
   return {
     ctx,
     sessionCatalogue,
@@ -181,58 +194,84 @@ async function fixture(t, { cwd, configCwd, language = 'zh', picked = '/workspac
     opened,
     errors,
     pickerCalls: () => pickerCalls,
+    chooseDirectory: async () => {
+      await React.act(settle);
+      const dialog = document.querySelector('[role="dialog"]');
+      assert.ok(dialog, 'explain directory selection before opening the system picker');
+      assert.equal(pickerCalls, 0);
+      await React.act(() => dialog.querySelector('[data-modal-autofocus]').click());
+    },
     text: () => dom.window.document.body.textContent,
   };
 }
 
-test('Agent configuration starts the chosen preset in a fresh native Conversation with the current Workspace', async (t) => {
-  const h = await fixture(t, { cwd: '/workspace/A', configCwd: '/configured/unused' });
-  const original = structuredClone(h.sessionCatalogue.byId.current);
-  h.ctx.agentWorkbench.registerFrame({ id: 'agent-config', kind: 'native', render() {} });
-  await h.ctx.agentWorkbench.open('agent-config');
-  await h.ctx.agentWorkbench.startAgent('personal-agent');
-  assert.deepEqual(h.sessions, [{ cwd: '/workspace/A' }]);
-  assert.deepEqual([...h.selectedPresets], [['created-0', 'personal-agent']]);
-  assert.deepEqual(h.opened, ['created-0']);
-  assert.equal(h.pickerCalls(), 0);
-  assert.equal(h.ctx.agentWorkbench.getSnapshot().selectedDocument, undefined);
-  assert.deepEqual(h.sessionCatalogue.byId.current, original);
-});
-
-for (const configCwd of ['/configured/project', undefined]) {
-  test(`Agent start uses ${configCwd ? 'the configured Workspace' : 'the user-selected directory'} without a current Conversation`, async (t) => {
-    const h = await fixture(t, { configCwd });
+test(
+  'Agent configuration starts the chosen preset in a fresh native Conversation with the current Workspace',
+  { timeout: 10000 },
+  async (t) => {
+    const h = await fixture(t, { cwd: '/workspace/A', configCwd: '/configured/unused' });
+    const original = structuredClone(h.sessionCatalogue.byId.current);
+    h.ctx.agentWorkbench.registerFrame({ id: 'agent-config', kind: 'native', render() {} });
+    await h.ctx.agentWorkbench.open('agent-config');
     await h.ctx.agentWorkbench.startAgent('personal-agent');
-    assert.deepEqual(h.sessions, [{ cwd: configCwd ?? '/workspace/B' }]);
+    assert.deepEqual(h.sessions, [{ cwd: '/workspace/A' }]);
     assert.deepEqual([...h.selectedPresets], [['created-0', 'personal-agent']]);
     assert.deepEqual(h.opened, ['created-0']);
-    assert.equal(h.pickerCalls(), configCwd ? 0 : 1);
-  });
+    assert.equal(h.pickerCalls(), 0);
+    assert.equal(h.ctx.agentWorkbench.getSnapshot().selectedDocument, undefined);
+    assert.deepEqual(h.sessionCatalogue.byId.current, original);
+  },
+);
+
+for (const configCwd of ['/configured/project', undefined]) {
+  test(
+    `Agent start uses ${configCwd ? 'the configured Workspace' : 'the user-selected directory'} without a current Conversation`,
+    { timeout: 10000 },
+    async (t) => {
+      const h = await fixture(t, { configCwd });
+      const starting = h.ctx.agentWorkbench.startAgent('personal-agent');
+      if (!configCwd) await h.chooseDirectory();
+      await starting;
+      assert.deepEqual(h.sessions, [{ cwd: configCwd ?? '/workspace/B' }]);
+      assert.deepEqual([...h.selectedPresets], [['created-0', 'personal-agent']]);
+      assert.deepEqual(h.opened, ['created-0']);
+      assert.equal(h.pickerCalls(), configCwd ? 0 : 1);
+    },
+  );
 }
 
-test('cancelling Agent start directory selection retains the configuration page and creates no Conversation', async (t) => {
-  const h = await fixture(t, { picked: null });
-  h.ctx.agentWorkbench.registerFrame({ id: 'agent-config', kind: 'native', render() {} });
-  await h.ctx.agentWorkbench.open('agent-config');
-  await assert.rejects(
-    h.ctx.agentWorkbench.startAgent('personal-agent'),
-    /WORKBENCH_WORKSPACE_REQUIRED/,
-  );
-  assert.deepEqual(h.sessions, []);
-  assert.deepEqual([...h.selectedPresets], []);
-  assert.deepEqual(h.opened, []);
-  assert.equal(h.ctx.agentWorkbench.getSnapshot().selectedDocument.id, 'agent-config');
-});
+test(
+  'cancelling Agent start directory selection retains the configuration page and creates no Conversation',
+  { timeout: 10000 },
+  async (t) => {
+    const h = await fixture(t, { picked: null });
+    h.ctx.agentWorkbench.registerFrame({ id: 'agent-config', kind: 'native', render() {} });
+    await h.ctx.agentWorkbench.open('agent-config');
+    const starting = h.ctx.agentWorkbench.startAgent('personal-agent');
+    const rejected = assert.rejects(starting, /WORKBENCH_WORKSPACE_REQUIRED/);
+    await h.chooseDirectory();
+    await rejected;
+    assert.deepEqual(h.sessions, []);
+    assert.deepEqual([...h.selectedPresets], []);
+    assert.deepEqual(h.opened, []);
+    assert.equal(h.ctx.agentWorkbench.getSnapshot().selectedDocument.id, 'agent-config');
+  },
+);
 
-test('a late Agent directory choice after navigation cannot create or select a Conversation', async (t) => {
-  const choice = Promise.withResolvers();
-  const h = await fixture(t, { picked: choice.promise });
-  const starting = h.ctx.agentWorkbench.startAgent('personal-agent');
-  await settle();
-  h.ctx.layout.beginNavigation();
-  choice.resolve('/late/project');
-  await assert.rejects(starting, { name: 'AbortError' });
-  assert.deepEqual(h.sessions, []);
-  assert.deepEqual([...h.selectedPresets], []);
-  assert.deepEqual(h.opened, []);
-});
+test(
+  'a late Agent directory choice after navigation cannot create or select a Conversation',
+  { timeout: 10000 },
+  async (t) => {
+    const choice = Promise.withResolvers();
+    const h = await fixture(t, { picked: choice.promise });
+    const starting = h.ctx.agentWorkbench.startAgent('personal-agent');
+    await h.chooseDirectory();
+    await settle();
+    h.ctx.layout.beginNavigation();
+    choice.resolve('/late/project');
+    await assert.rejects(starting, { name: 'AbortError' });
+    assert.deepEqual(h.sessions, []);
+    assert.deepEqual([...h.selectedPresets], []);
+    assert.deepEqual(h.opened, []);
+  },
+);

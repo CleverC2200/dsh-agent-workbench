@@ -7,7 +7,10 @@ import {
   bindPanelControls,
   clearPanels,
 } from '../prototypes/inventory-orderfulfillment/live-panels.js';
-import { batchAges } from '../prototypes/inventory-orderfulfillment/live-model.mjs';
+import {
+  batchAges,
+  futureProduction,
+} from '../prototypes/inventory-orderfulfillment/live-model.mjs';
 
 test('coordination uses granted rows, supports search/base/paging and clears identity-owned data', () => {
   const dom = new JSDOM(
@@ -84,9 +87,10 @@ test('batch age buckets validate complete dates and quantities without gateway d
     minimum_quantity: 10,
   };
   assert.equal(batchAges([row])[0].age_lt40, 10);
-  assert.equal(batchAges([row], '2026-10-22')[0].age_lt40, 10);
+  assert.equal(batchAges([row], '2026-10-22')[0].age_lt40, null);
   assert.equal(batchAges([row], '2026-10-21')[0].age_lt40, 10);
-  assert.equal(batchAges([row], '2026-10-23')[0].age_lt40, 10);
+  assert.equal(batchAges([row], '2026-10-23')[0].age_lt40, null);
+  assert.equal(batchAges([row], '20261021')[0].age_lt40, 10);
   assert.equal(batchAges([row], '2026-10-20')[0].age_lt40, null);
   assert.equal(batchAges([row], 'invalid')[0].age_lt40, null);
   assert.equal(batchAges([{ ...row, production_date: null }], '2026-10-21')[0].age_lt40, null);
@@ -96,4 +100,36 @@ test('batch age buckets validate complete dates and quantities without gateway d
   assert.equal(batchAges([{ ...row, production_date: '2026-02-30' }])[0].age_lt40, null);
   assert.equal(batchAges([{ ...row, known_quantities: 0 }])[0].age_lt40, null);
   assert.equal(batchAges([{ ...row, minimum_quantity: -1 }])[0].age_lt40, null);
+  const empty = { ...row, production_date: null, quantity: 0, minimum_quantity: 0 };
+  assert.equal(batchAges([row, empty], '2026-10-21')[0].age_lt40, 10);
+  assert.equal(batchAges([empty], '2026-10-21')[0].age_lt40, 0);
+  assert.equal(batchAges([row, { ...empty, quantity: 1 }], '2026-10-21')[0].age_lt40, null);
+  assert.equal(
+    batchAges([row, { ...empty, minimum_quantity: -1 }], '2026-10-21')[0].age_lt40,
+    null,
+  );
+  assert.equal(batchAges([row, { ...empty, known_quantities: 0 }], '2026-10-21')[0].age_lt40, null);
+  const datedEmpty = { ...empty, production_date: '2025-01-01' };
+  assert.deepEqual(
+    batchAges([row, empty, datedEmpty], '2026-10-21'),
+    batchAges([row, { ...empty, batch_rows: 2, known_quantities: 2 }], '2026-10-21'),
+  );
+});
+test('future production preserves native units and rejects incomplete quantities', () => {
+  const row = { unit: 'ST', quantity: 100, records: 2, known_quantities: 2, minimum_quantity: 0 };
+  assert.deepEqual(futureProduction([row, { ...row, unit: 'KG', quantity: 50 }]), [
+    ['ST', 100],
+    ['KG', 50],
+  ]);
+  assert.deepEqual(futureProduction([{ ...row, quantity: 0 }]), [['ST', 0]]);
+  for (const changes of [
+    { quantity: null },
+    { known_quantities: 1 },
+    { unit: null },
+    { minimum_quantity: -1 },
+    { minimum_quantity: 'invalid' },
+  ])
+    assert.equal(futureProduction([{ ...row, ...changes }]), null);
+  assert.equal(futureProduction([row, row]), null);
+  assert.deepEqual(futureProduction([]), []);
 });
