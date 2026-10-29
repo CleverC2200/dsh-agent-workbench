@@ -12,7 +12,7 @@ export const config = orderWorkbenchSourceConfig(
 const built = await build({
   stdin: {
     contents:
-      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js';",
+      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js'; export * from './prototypes/inventory-orderworkbench/missing-reasons.mjs';",
     resolveDir: resolve('.'),
   },
   bundle: true,

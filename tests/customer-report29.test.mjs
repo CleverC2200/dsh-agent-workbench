@@ -6,6 +6,8 @@ import {
   customerAssessmentNote,
 } from '../prototypes/inventory-customer/table-state.js';
 import { customerInventoryStatus } from '../prototypes/inventory-customer/customer-inventory-model.js';
+import { validatePageCatalog } from '../src/page-bridge/catalog.ts';
+import { htmlPageCatalog } from '../src/html-page-catalog.ts';
 
 test('sort the full index before paging, retain zero, keep unknown last and ties stable', () => {
   const rows = [
@@ -64,6 +66,16 @@ test('authored controls apply only validated view changes and register filter ac
     ['华南'],
   );
   assert.equal(controls.elements.filter((element) => element.editable).length, 5);
+  assert.doesNotThrow(() =>
+    validatePageCatalog(
+      htmlPageCatalog({
+        surface: 'inventory-customer',
+        tool: 'gea_plugin_page_apply',
+        label: 'Customer controls',
+        elements: controls.elements,
+      }),
+    ),
+  );
   controls.filter({ region: '华南', tab: 'risk' });
   assert.deepEqual(changes, { region: '华南', tab: 'risk' });
   assert.throws(() => controls.filter({ region: 'outside', status: 'risk' }), /VALUE_INVALID/);

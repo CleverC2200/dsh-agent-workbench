@@ -8,9 +8,9 @@ export function customerControls(state, setters, regions) {
   const labels = { region: '列表区域筛选', status: '列表状态筛选', tab: '客户库存页签', search: '经销商名称或编码搜索', page: '列表页码' };
   const values = { region: state.region, status: state.status, tab: state.tab, search: state.search, page: state.page };
   const elements = Object.keys(labels).map(key => ({
-    id: `customer-control:${key}`, role: 'control', label: labels[key], editable: true, effect: 'view',
+    id: `customer-control:${key}`, role: 'control', label: key === 'page' ? `${labels[key]}（整数1至${state.pageCount}）` : labels[key], editable: true, effect: 'view',
     value: String(values[key] ?? ''),
-    description: choices[key] ? `可选值：${choices[key].join('、')}` : key === 'page' ? `整数1至${state.pageCount}` : '只影响列表，不改变卡片统计范围',
+    ...(choices[key] ? { options: choices[key] } : {}),
   }));
   function validate(key, value) {
     if (!(key in labels)) throw Error('CUSTOMER_CONTROL_UNKNOWN');
