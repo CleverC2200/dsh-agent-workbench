@@ -54,7 +54,7 @@ for (const agent of ['fc', 'qll']) {
     assert.ok(ordersReady, `orders waited for quick stock; initial calls: ${calls.join(', ')}`);
   });
 
-  test(`${agent}: dependent summaries reuse the quick-stock snapshot`, async () => {
+  test(`${agent}: dependent summaries share one inventory snapshot read`, async () => {
     const config = JSON.parse(
       await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
     );
@@ -94,7 +94,14 @@ for (const agent of ['fc', 'qll']) {
         };
       },
     });
-    assert.equal(calls.filter((id) => id === config.overviewQuickStock).length, 1);
-    assert.ok(!calls.includes('source.branch-stock-date'), calls.join(', '));
+    if (agent === 'fc') {
+      assert.ok(!calls.includes('overview.quick-stock'));
+      assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 1);
+      assert.ok(calls.includes('health.inventory'));
+      assert.ok(calls.includes('health.cards'));
+    } else {
+      assert.equal(calls.filter((id) => id === config.overviewQuickStock).length, 1);
+      assert.ok(!calls.includes('source.branch-stock-date'), calls.join(', '));
+    }
   });
 }
