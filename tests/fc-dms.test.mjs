@@ -67,7 +67,7 @@ test('branch confirmation sends documented order, retains draft on failure, and 
   const calls = [];
   let fail = true;
   globalThis.dmsFixture = {
-    rows,
+    rows: [...rows, { warehouse_code: 'W1', sku: null, recommended_qty: null }],
     persistenceCalls: 0,
     preflightError: '签名密钥未配置',
     call: async (method, payload) => {
@@ -285,9 +285,23 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     assert.match(document.body.textContent, /读取失败，请重试/);
     assert.equal(button('确认暂存至DMS'), undefined);
     await click('重新读取');
-    await act(async () => jobs[2].resolve(rows));
+    const incomplete = [
+      { warehouse_code: 'A230', sku: null, recommended_qty: null },
+      { warehouse_code: ' ', sku: 'SKU2', recommended_qty: 5 },
+    ];
+    await act(async () => jobs[2].resolve([...rows, ...incomplete]));
     assert.equal(button('确认暂存至DMS').disabled, false);
     assert.match(document.body.textContent, /1个SKU/);
+    assert.match(document.querySelector('[role="alert"]').textContent, /2条记录缺少分仓或商品编码/);
+    const choices = [...document.querySelector('[aria-label="导出补货分仓"]').options];
+    assert.deepEqual(choices.map((option) => option.value), ['', 'W1']);
+    await click('取消');
+    await click('提交');
+    assert.doesNotMatch(document.body.textContent, /2条记录缺少分仓或商品编码/);
+    await act(async () => jobs[3].resolve(incomplete));
+    assert.equal(button('确认暂存至DMS').disabled, true);
+    assert.match(document.body.textContent, /0个SKU/);
+    assert.match(document.body.textContent, /2条记录缺少分仓或商品编码/);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();

@@ -157,6 +157,7 @@ export function FcConfiguredList(
   const [importPlans, setImportPlans] = useState<ImportedPlan[]>([]);
   const [exportRows, setExportRows] = useState<FcRow[]>([]);
   const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'failed'>('ready');
+  const [incompletePreviewCount, setIncompletePreviewCount] = useState(0);
   const [previewProgress, setPreviewProgress] = useState<{ loaded: number; total: number } | null>(
     null,
   );
@@ -338,6 +339,7 @@ export function FcConfiguredList(
   const previewDraft = (mode: 'draft' | 'export') => {
     setDialog(mode);
     setPreviewState('loading');
+    setIncompletePreviewCount(0);
     setPreviewProgress(null);
     setExportRows([]);
     setDmsReceipt(null);
@@ -350,7 +352,7 @@ export function FcConfiguredList(
           })
         ).map((row) => applyFcPlan(row, plans, scope.input.asOf, days));
         signal.throwIfAborted();
-        const selected = rows.filter((row) =>
+        const candidates = rows.filter((row) =>
           mode === 'draft'
             ? Object.hasOwn(draft.quantities, rowKey(row)) ||
               Object.hasOwn(draft.reasons, rowKey(row))
@@ -358,12 +360,10 @@ export function FcConfiguredList(
               knownNumber(row.recommended_qty) === null ||
               quantity(row.recommended_qty) > 0,
         );
-        if (
-          selected.some(
-            (row) => !String(row.warehouse_code ?? '').trim() || !String(row.sku ?? '').trim(),
-          )
-        )
-          throw Error('补货清单缺少分仓或商品编码，未导出');
+        const selected = candidates.filter(
+          (row) => String(row.warehouse_code ?? '').trim() && String(row.sku ?? '').trim(),
+        );
+        setIncompletePreviewCount(candidates.length - selected.length);
         const warehouses = [
           ...new Set<string>(selected.map((row: FcRow) => String(row.warehouse_code))),
         ];
@@ -594,6 +594,7 @@ export function FcConfiguredList(
         .filter(
           (row) =>
             String(row.warehouse_code) === exportWarehouse &&
+            Boolean(String(row.sku ?? '').trim()) &&
             (Object.hasOwn(draft.quantities, rowKey(row)) ||
               knownNumber(row.recommended_qty) === null ||
               quantity(row.recommended_qty) > 0),
@@ -972,6 +973,11 @@ export function FcConfiguredList(
             </>
           ) : (
             <>
+              {incompletePreviewCount > 0 && (
+                <p role="alert">
+                  {incompletePreviewCount}条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
+                </p>
+              )}
               {dialog === 'export' && (
                 <label>
                   分仓{' '}
