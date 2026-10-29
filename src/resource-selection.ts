@@ -138,6 +138,7 @@ export async function selectResource(
 export function mountNativeResourceSelection(
   ctx: Context,
   ready: (host: NativeResourceSelection | undefined) => void,
+  pickDirectory?: () => Promise<string | null>,
 ): ReturnType<Context['inject']> {
   let active: NativeResourceSelection | undefined;
   return ctx.inject(
@@ -145,7 +146,7 @@ export function mountNativeResourceSelection(
     (scope) => {
       const host: NativeResourceSelection = {
         fetch: (...args) => fetch(...args),
-        pickDirectory: () => scope.uiWorkspace.pickDirectory(),
+        pickDirectory: pickDirectory ?? (() => scope.uiWorkspace.pickDirectory()),
         workspace: (path) => scope.workspaces.create({ path }),
         create: (options) =>
           scope.sessions.create({ workspaceId: options.workspaceId as WorkspaceId }),
