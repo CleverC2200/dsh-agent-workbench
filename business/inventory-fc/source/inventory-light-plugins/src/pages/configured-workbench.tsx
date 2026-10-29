@@ -1,3 +1,7 @@
+import {
+  formatChainValue as show,
+  formatChainValueParts,
+} from '../../../../../shared/full-chain-display';
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { FcPersistencePanel } from './fc-persistence-panel';
@@ -48,8 +52,6 @@ const views: Record<string, string[]> = {
   base: ['base-resources'],
   operations: ['cost'],
 };
-const show = (n: number | null, unit = '') =>
-  n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 export default function ConfiguredWorkbench() {
   return (
     <FcWorkflowProvider>
@@ -387,8 +389,10 @@ function WorkbenchBody() {
                     <span>{c.title}</span>
                   </div>
                   <div className={`kpi-value ${c.color}`}>
-                    {show(c.value)}
-                    {c.value != null && <small>{c.unit}</small>}
+                    {formatChainValueParts(c.value, c.unit).value}
+                    {formatChainValueParts(c.value, c.unit).unit && (
+                      <small>{formatChainValueParts(c.value, c.unit).unit}</small>
+                    )}
                   </div>
                   {c.title === '待补货量' && missingRecommendations > 0 && (
                     <small>

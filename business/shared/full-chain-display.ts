@@ -113,12 +113,58 @@ export function fullChainCards(
   ];
 }
 
+export function formatChainValueParts(value: number | null, unit = '') {
+  if (value == null || !Number.isFinite(value)) return { value: '-', unit: '' };
+  const quantity = ['件', '箱', '件/天', '箱/天'].includes(unit);
+  const scale = quantity
+    ? Math.abs(value) >= 100000000
+      ? 100000000
+      : Math.abs(value) >= 10000
+        ? 10000
+        : 1
+    : 1;
+  const suffix = scale === 100000000 ? '亿' : scale === 10000 ? '万' : '';
+  return {
+    value: (value / scale).toLocaleString('zh-CN', { maximumFractionDigits: 2 }),
+    unit: suffix + unit,
+  };
+}
+
 export function formatChainValue(value: number | null, unit = '') {
-  if (value == null || !Number.isFinite(value)) return '-';
-  if (['件', '箱', '件/天', '箱/天'].includes(unit)) {
-    const scale = Math.abs(value) >= 100000000 ? 100000000 : Math.abs(value) >= 10000 ? 10000 : 1;
-    const suffix = scale === 100000000 ? '亿' : scale === 10000 ? '万' : '';
-    return `${(value / scale).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}${suffix}${unit}`;
-  }
-  return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
+  const formatted = formatChainValueParts(value, unit);
+  return formatted.value + formatted.unit;
+}
+
+const inventoryQuantityLabels = new Set([
+  '当前库存',
+  '目标库存',
+  '库存差额',
+  '当前订单',
+  '基地未备单量',
+  '未发货订单占用',
+  '未备单订单占用',
+  '基地已备单占用',
+  '已备单占用',
+  '缺货量',
+  '已发订单量',
+  '发货量',
+  '实际发货量',
+  '超龄库存',
+  '超60天库存',
+  '本月订单量',
+  '本月发货量',
+  '当前待发总量',
+  '备单量',
+]);
+
+// Older dashboard payloads contain formatted text instead of numeric quantities.
+// Only known quantity metrics may acquire a unit; other metrics stay unchanged.
+export function formatInventoryMetricTextParts(label: string, text: string) {
+  if (!inventoryQuantityLabels.has(label)) return { value: text, unit: '' };
+  const match = text
+    .trim()
+    .match(/^([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*(件|箱)?(（部分）)?$/u);
+  if (!match) return { value: text, unit: '' };
+  const formatted = formatChainValueParts(Number(match[1].replaceAll(',', '')), match[2] || '件');
+  return { value: formatted.value, unit: formatted.unit + (match[3] || '') };
 }

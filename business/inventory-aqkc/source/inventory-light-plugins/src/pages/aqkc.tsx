@@ -1,3 +1,4 @@
+import { formatInventoryMetricTextParts } from '../../../../../shared/full-chain-display';
 import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
@@ -1241,6 +1242,11 @@ function Kpi({
   value: string;
   helpers: { label: string; value: string }[];
 }) {
+  const formatted = formatInventoryMetricTextParts(title, value);
+  const formattedHelpers = helpers.map((item) => {
+    const display = formatInventoryMetricTextParts(item.label, item.value);
+    return { ...item, value: display.value + display.unit };
+  });
   return (
     <article className={styles.kpiCard}>
       <div>
@@ -1263,13 +1269,11 @@ function Kpi({
         }
         className={`${styles.kpiValue} ${tone === 'red' ? styles.toneRed : ''}`}
       >
-        {value}
-        {(title === '当前订单' || title === '基地未备单量') && value !== '-' ? (
-          <small className={styles.kpiUnit}>{title === '当前订单' ? '件' : '箱'}</small>
-        ) : null}
+        {formatted.value}
+        {formatted.unit ? <small className={styles.kpiUnit}>{formatted.unit}</small> : null}
       </strong>
       <dl>
-        {helpers.slice(0, 2).map((item) => (
+        {formattedHelpers.slice(0, 2).map((item) => (
           <div key={item.label}>
             <dt>{item.label}</dt>
             <dd
