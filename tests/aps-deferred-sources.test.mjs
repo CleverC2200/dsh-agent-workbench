@@ -285,3 +285,42 @@ test('landing cards start before pending-order analysis and all sources share th
   assert.equal(pendingStarted, true);
   assert.ok(peak <= 3, `pending analysis created a fourth source: ${peak}`);
 });
+
+test('complete historical months include demand plan dependencies; month-to-date comparisons refuse whole-month accuracy', async (t) => {
+  const prior = globalThis.document;
+  t.after(() => {
+    globalThis.document = prior;
+    delete globalThis.__apsSourceRead;
+  });
+  globalThis.document = { getElementById: (id) => (id === 'agent-sql-direct' ? {} : null) };
+  const calls = [];
+  globalThis.__apsSourceRead = async (name, values) => {
+    calls.push({ name, start: values.start, end: values.end });
+    return [];
+  };
+  const load = createGeaWorkspace(() => {
+    throw Error('unexpected transport');
+  });
+  const input = {
+    date: '2026-09-30',
+    granularity: 'month',
+    version: '滚动',
+    orderType: 'M',
+    comparison: true,
+  };
+  await load(input);
+  assert.ok(calls.some((c) => c.name === 'plans-source' && c.start === '2025-09-01'));
+  assert.ok(calls.some((c) => c.name === 'demand-accuracy' && c.end === '2025-09-30'));
+  calls.length = 0;
+  const result = await load({ ...input, date: '2026-10-29' });
+  for (const period of [result.previous, result.annual]) {
+    for (const key of ['sales-accuracy', 'demand-accuracy']) {
+      const section = period.sections.find((s) => s.id === key);
+      assert.equal(section.status, 'unavailable');
+      assert.equal(section.error.code, 'HISTORICAL_CUTOFF_UNAVAILABLE');
+      assert.match(section.error.message, new RegExp(period.end));
+    }
+  }
+  assert.ok(!calls.some((c) => ['sales-accuracy', 'demand-accuracy'].includes(c.name)));
+  assert.ok(calls.some((c) => c.name === 'production'));
+});

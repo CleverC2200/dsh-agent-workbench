@@ -1,5 +1,6 @@
 """Restore branch-owned open orders, independently of the unprepared shortage model."""
 import json
+from update_order_piece_units import write_queries
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 p = ROOT / 'business/inventory-fc/sql.config.json'
@@ -11,12 +12,12 @@ source = mapping + ''', branch_order_lines AS (
  o.cust_code AS customer_code, o.cust_name AS customer_name,
  o.material_code AS sku, o.material_name AS material_name,
  o.requireddeliverytime AS requested_at, o.header_addtime AS created_at,
- o.qtyordered AS ordered, o.qtyordered AS demand,
- o.qtyallocated AS allocated, o.delivery_qty AS shipped,
- CASE WHEN o.qtyordered IS NULL OR o.qtyallocated IS NULL THEN NULL
-      WHEN o.qtyordered > o.qtyallocated THEN o.qtyordered-o.qtyallocated ELSE 0 END AS remaining,
+ (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END) AS ordered, (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END) AS demand,
+ (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END) AS allocated, (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyshipped / o.bizunitconvertrate END) AS shipped,
+ CASE WHEN o.qtyordered IS NULL OR o.qtyallocated IS NULL OR o.bizunitconvertrate IS NULL OR o.bizunitconvertrate <= 0 THEN NULL
+      WHEN o.qtyordered > o.qtyallocated THEN (o.qtyordered-o.qtyallocated)/o.bizunitconvertrate ELSE 0 END AS remaining,
  o.bizflowstatus AS order_status,
- CASE WHEN o.qtyordered IS NULL OR o.delivery_qty IS NULL OR o.delivery_qty<o.qtyordered THEN 1 ELSE 0 END AS unshipped
+ CASE WHEN o.qtyordered IS NULL OR o.qtyshipped IS NULL OR o.qtyshipped<o.qtyordered THEN 1 ELSE 0 END AS unshipped
  FROM agents_scm_execute_detail_d AS o
  INNER JOIN point_locations AS m ON o.pickup_point=m.pickup_point
  WHERE m.location_type='分仓' AND o.detailstatus=10
@@ -85,6 +86,6 @@ for key,sql,cols,params,values in [
  ('branch-current-orders.page',source+summary,columns,{**common,'gea_p2':spec('customer_code'),'gea_p3':spec('search_pattern'),'gea_p4':spec('shortage_only','boolean',False)},{'gea_p1':None,'gea_p2':None,'gea_p3':None,'gea_p4':False,'gea_p5':10,'gea_p6':0}),
  ('branch-current-orders.lines',source+detail,linecols,{**common,'gea_p1':spec('warehouse_code',nullable=False),'gea_p2':spec('order_no',nullable=False),'gea_p3':spec('customer_code')},{'gea_p1':'A020','gea_p2':'CE1','gea_p3':None,'gea_p5':10,'gea_p6':0}),
 ]:
- c['queries'][key]={'title':'分仓当前未发货完成订单' if key.endswith('page') else '分仓订单SKU明细','grain':'warehouse + customer order' if key.endswith('page') else 'warehouse + customer order + SKU','notes':'当前有效且未关闭/作废的分仓自身订单；按实际发货件数与预期EA需求判断未发完，包含已备单和部分发货；保留同一未发完订单的已发完SKU。订单量与需求取当前执行单预期EA，订单占用取EA，实际发货取件；不使用原始包装数量或有差异的下单折合件字段。缺失数量不按0。未备量逐行max(需求-订单占用,0)，不把库存按订单重复扣减；此列表不修改三层缺货模型。','parameterSpec':params,'request':{'sql':sql,'parameters':values,'includeTotal':False},'resultColumns':cols+['page_row_present','page_scope_total']}
-p.write_text(json.dumps(c,ensure_ascii=False,indent=2)+'\n')
+ c['queries'][key]={'title':'分仓当前未发货完成订单' if key.endswith('page') else '分仓订单SKU明细','grain':'warehouse + customer order' if key.endswith('page') else 'warehouse + customer order + SKU','notes':'当前有效且未关闭/作废的分仓自身订单；以同为EA的实际发货与需求判断未发完，包含已备单和部分发货；保留同一未发完订单的已发完SKU。订单需求、占用、发货逐行除以业务单位转换率统一为件，缺失或无效换算率保持未知；不使用原始包装数量或有差异的下单折合件字段。缺失数量不按0。未备量逐行max(需求-订单占用,0)，不把库存按订单重复扣减；此列表不修改三层缺货模型。','parameterSpec':params,'request':{'sql':sql,'parameters':values,'includeTotal':False},'resultColumns':cols+['page_row_present','page_scope_total']}
+write_queries(p,c)
 print('Added branch-owned open-order page and SKU detail')

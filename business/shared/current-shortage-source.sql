@@ -93,11 +93,13 @@ WITH latest_inventory AS (
       WHEN COUNT(DISTINCT NULLIF(TRIM(o.material_name), '')) = 1
       THEN MAX(NULLIF(TRIM(o.material_name), ''))
     END AS material_name,
-    SUM(COALESCE(o.adjust_order_qty, 0)) AS demand_qty,
-    SUM(COALESCE(o.qtyallocated, 0)) AS allocated_qty,
+    CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) END AS demand_qty,
+    CASE WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) = COUNT(*) AND MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) >= 0 THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) END AS allocated_qty,
     CASE
-      WHEN SUM(COALESCE(o.adjust_order_qty, 0)) - SUM(COALESCE(o.qtyallocated, 0)) > 0
-      THEN SUM(COALESCE(o.adjust_order_qty, 0)) - SUM(COALESCE(o.qtyallocated, 0))
+      WHEN COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) <> COUNT(*) OR COUNT((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) <> COUNT(*)
+        OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) < 0 OR MIN((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) < 0 THEN NULL
+      WHEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END)) > 0
+      THEN SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END)) - SUM((CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END))
       ELSE 0
     END AS remaining_qty,
     COUNT(*) AS source_row_count,
@@ -106,6 +108,9 @@ WITH latest_inventory AS (
         WHEN m.pickup_point IS NULL
         OR NULLIF(TRIM(o.cust_order_no), '') IS NULL
         OR NULLIF(TRIM(o.material_code), '') IS NULL
+        OR o.bizunitconvertrate IS NULL OR o.bizunitconvertrate <= 0
+        OR o.qtyordered IS NULL OR o.qtyallocated IS NULL
+        OR o.qtyordered < 0 OR o.qtyallocated < 0
         THEN 1
         ELSE 0
       END
@@ -151,9 +156,9 @@ WITH latest_inventory AS (
       WHEN COUNT(DISTINCT eligible_order_sku.material_name) = 1
       THEN MAX(eligible_order_sku.material_name)
     END AS material_name,
-    SUM(eligible_order_sku.demand_qty) AS demand_qty,
-    SUM(eligible_order_sku.allocated_qty) AS allocated_qty,
-    SUM(eligible_order_sku.remaining_qty) AS remaining_qty,
+    CASE WHEN COUNT(eligible_order_sku.demand_qty) = COUNT(*) THEN SUM(eligible_order_sku.demand_qty) END AS demand_qty,
+    CASE WHEN COUNT(eligible_order_sku.allocated_qty) = COUNT(*) THEN SUM(eligible_order_sku.allocated_qty) END AS allocated_qty,
+    CASE WHEN COUNT(eligible_order_sku.remaining_qty) = COUNT(*) THEN SUM(eligible_order_sku.remaining_qty) END AS remaining_qty,
     SUM(eligible_order_sku.source_row_count) AS source_row_count,
     COUNT(*) AS order_sku_count,
     MAX(eligible_order_sku.input_invalid) AS input_invalid
