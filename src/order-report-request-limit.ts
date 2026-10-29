@@ -9,9 +9,14 @@ export function assertPageRequestSize(
   const owner = resolveOwner();
   const report = input.parameters?.report;
   if (
-    owner.page.id !== 'inventory-orderworkbench' || !owner.grant.workspace ||
-    input.parameters?.operation !== 'save' || report?.encoding !== 'gzip-base64' ||
-    typeof report.data !== 'string' || report.data.length > 4_000_000 ||
-    size - report.data.length > 4096 || !/^[A-Za-z0-9+/]*={0,2}$/.test(report.data)
-  ) throw Error('REQUEST_TOO_LARGE');
+    owner.page.id !== 'inventory-orderworkbench' ||
+    !owner.grant.workspace ||
+    input.parameters?.operation !== 'save' ||
+    report?.encoding !== 'gzip-base64' ||
+    typeof report.data !== 'string' ||
+    report.data.length > 4_000_000 ||
+    size - report.data.length > 4096 ||
+    !/^[A-Za-z0-9+/]*={0,2}$/.test(report.data)
+  )
+    throw Error('REQUEST_TOO_LARGE');
 }

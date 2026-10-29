@@ -408,9 +408,12 @@ test('base/province comparisons use complete quantities and disjoint order bucke
     1,
   );
   assert.equal(partial.allocation_rate, null);
-  assert.equal(partial.known_allocation_rate,100*Math.abs(line.order_qty-line.pack_unitqty)/line.order_qty);
-  assert.equal(partial.quantity_coverage,1);
-  assert.equal(partial.quantity_total,2);
+  assert.equal(
+    partial.known_allocation_rate,
+    (100 * Math.abs(line.order_qty - line.pack_unitqty)) / line.order_qty,
+  );
+  assert.equal(partial.quantity_coverage, 1);
+  assert.equal(partial.quantity_total, 2);
   const withVoidSku = comparisonMetrics(
     [
       line,

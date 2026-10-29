@@ -201,18 +201,31 @@ test('order workbench reference interactions', async () => {
     submit('wbSummaryEditForm');
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'waiting');
-    assert.equal(JSON.stringify([...window.savedReports]), savesBeforeEdit, 'partial facts must not be saved');
+    assert.equal(
+      JSON.stringify([...window.savedReports]),
+      savesBeforeEdit,
+      'partial facts must not be saved',
+    );
     const leave = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);
     assert.equal(leave.defaultPrevented, true);
     click('[data-period-month="2026-07"]');
     assert.match(document.getElementById('periodPickerValue').textContent, /2026年8月/);
     window.pendingReads[0].progress(partial);
-    assert.equal(document.querySelector('[data-wb-summary-content="positive"]').textContent, '对比加载时编辑的摘要');
+    assert.equal(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '对比加载时编辑的摘要',
+    );
     window.pendingReads[0].resolve(window.liveFixture);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'saved');
-    assert.ok([...window.savedReports.values()].some(value => value.report.facts.complete === true && value.report.edits.summary.positive === '对比加载时编辑的摘要'));
+    assert.ok(
+      [...window.savedReports.values()].some(
+        (value) =>
+          value.report.facts.complete === true &&
+          value.report.edits.summary.positive === '对比加载时编辑的摘要',
+      ),
+    );
     click('[data-period-month="2026-07"]');
     assert.ok(
       document.querySelector('[data-period-month="2026-09"]'),
