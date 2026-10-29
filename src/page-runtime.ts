@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assertPageRequestSize } from './order-report-request-limit.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionId } from '@deepseek-ai/dsh-session';
 import type {} from '@deepseek-ai/dsh-api-session-controller';
@@ -367,7 +368,7 @@ export class PageRuntime {
   private async fetchOperation(request: Request): Promise<Response> {
     try {
       const input = await request.json();
-      if (JSON.stringify(input).length > 500000) throw Error('REQUEST_TOO_LARGE');
+      assertPageRequestSize(input, () => this.assert(input.owner));
       if (input.operation === 'open')
         return Response.json(
           await this.open(input.pageId, input.sessionId, input.resourceId, request.signal),

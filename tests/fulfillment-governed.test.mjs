@@ -62,9 +62,11 @@ const config = JSON.parse(
     'utf8',
   ),
 );
-test('batch detail and count include the latest snapshot on the selected date', () => {
-  for (const id of ['sku.age', 'sku.age.count']) {
-    assert.match(config.queries[id].request.sql, /month_date <= REPLACE\(:gea_p1/);
+test('batch detail and count match the inventory snapshot instead of the order date', () => {
+  for (const id of ['sku.age', 'sku.age.count', 'sku.age.page', 'sku.age.page.count']) {
+    assert.match(config.queries[id].request.sql, /b\.month_date=\(SELECT REPLACE\(MAX\(s2\.the_date\),'-',''\) FROM agents_scm_stock_detail_d s2 WHERE s2\.the_date<:gea_p2\)/);
+    assert.doesNotMatch(config.queries[id].request.sql, /MAX\(month_date\)/);
+    assert.match(config.queries[id].request.sql, /CASE WHEN b\.live_qty=0 THEN NULL ELSE b\.prod_date END/);
     assert.match(config.queries[id].request.sql, /warehouse_classify='01'/);
   }
 });
@@ -153,7 +155,7 @@ test('order01 queries bind business filters only and expose no transport credent
     const values = Object.fromEntries(
       Object.values(query.parameterSpec).map(({ name }) => [
         name,
-        name === 'page_size' ? 20 : name === 'offset' ? 0 : (filters[name] ?? null),
+        name === 'page_size' ? 20 : name === 'offset' ? 0 : name === 'plan_end_exclusive' ? '2026-10-25' : (filters[name] ?? null),
       ]),
     );
     const request = makeRequest(config, id, values);
@@ -165,6 +167,17 @@ test('order01 queries bind business filters only and expose no transport credent
       JSON.stringify(query),
       /100\.100\.1\.75|develop_hr|password|delegationToken/,
     );
+  }
+});
+test('future production binds order scope and native units without substituting a monthly plan', () => {
+  for(const id of ['production.future','production.future.count']){
+    const sql=config.queries[id].request.sql;
+    assert.match(sql,/agents_prod_schedule_detail_d/);
+    assert.match(sql,/scope\.factory_code=p\.factory_code AND scope\.material_code=p\.material_code/);
+    assert.match(sql,/p\.base_finish_day>=REPLACE\(:gea_p1/);
+    assert.match(sql,/p\.base_finish_day<REPLACE\(:gea_p14/);
+    assert.match(sql,/GROUP BY p\.measure_unit/);
+    assert.match(sql,/p\.data_source='工厂'/);
   }
 });
 

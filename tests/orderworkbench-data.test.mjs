@@ -173,6 +173,32 @@ test('progress publishes validated cards before slower sections and reuses compl
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages').length, 6);
 });
 
+test('metadata loads while comparisons are pending and final facts remain identical', async () => {
+  const source = progressiveSource();
+  const options = { now: new Date('2026-10-24T00:00:00Z') };
+  const expected = await model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, { ...options, execute: source.execute });
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  const metadata = new Set();
+  let complete = false;
+  const running = model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
+    ...options,
+    execute: async (request, context) => {
+      if (['workbench.directors', 'workbench.customers', 'workbench.customermanagers'].includes(context.queryId)) metadata.add(context.queryId);
+      else if (context.values.start === '2026-09-01') await held;
+      return source.execute(request, context);
+    },
+    onProgress: facts => { complete ||= facts.complete; },
+  });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(metadata.size, 3, 'auxiliary queries must not wait for historical queries');
+  assert.equal(complete, false);
+  release();
+  const actual = await running;
+  const withoutReadAt = ({ readAt, ...facts }) => facts;
+  assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
+});
+
 test('lazy table presentation preserves card and selected-dimension results without building hidden SKU details', () => {
   const period = fixturePeriod();
   period.metrics = model.computeWorkbenchMetrics(period);
