@@ -150,8 +150,8 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     await click('确认暂存至DMS');
     assert.equal(calls.length, 0);
     for (const [label, value] of [
-      ['收货地址编码', 'A1'],
       ['客户编码', 'C1'],
+      ['收货地址编码', 'A1'],
       ['提货点编码', 'P1'],
     ]) {
       const input = document.querySelector(`[aria-label="${label}"]`);

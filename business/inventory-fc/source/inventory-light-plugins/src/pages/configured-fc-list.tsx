@@ -1109,8 +1109,8 @@ export function FcConfiguredList(
                   <legend>DMS 暂存信息</legend>
                   {(
                     [
-                      ['customerCode', '客户编码'],
                       ['addressCode', '收货地址编码'],
+                      ['customerCode', '客户编码'],
                       ['pupCode', '提货点编码'],
                     ] as const
                   ).map(([field, label]) => (
@@ -1137,7 +1137,15 @@ export function FcConfiguredList(
                           const value = event.target.value;
                           setDmsFields((current) =>
                             field === 'addressCode'
-                              ? { addressCode: value, customerCode: '', pupCode: '' }
+                              ? {
+                                  addressCode: value,
+                                  customerCode: automaticTargetFields.includes('customerCode')
+                                    ? ''
+                                    : current.customerCode,
+                                  pupCode: automaticTargetFields.includes('pupCode')
+                                    ? ''
+                                    : current.pupCode,
+                                }
                               : { ...current, [field]: value },
                           );
                         }}
