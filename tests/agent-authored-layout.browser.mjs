@@ -1370,9 +1370,8 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   await expect(list.locator('tbody tr')).toHaveCount(10);
   await list.getByRole('button', { name: '下载模板', exact: true }).click();
   const template = frame.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
-  await template
-    .getByRole('combobox', { name: '模板计划月份', exact: true })
-    .selectOption('2026-10');
+  await template.getByRole('button', { name: '模板计划月份', exact: true }).click();
+  await template.getByRole('option', { name: '2026年10月', exact: true }).click();
   const downloaded = page.waitForEvent('download');
   await template.getByRole('button', { name: '下载模板', exact: true }).click();
   const file = await downloaded;
