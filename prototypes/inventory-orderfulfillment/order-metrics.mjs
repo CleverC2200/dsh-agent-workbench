@@ -198,6 +198,9 @@ export function comparisonMetrics(facts,dimension,shortages=null,{now=Date.now()
     const complete=q.length>0&&q.every(row=>row.original_qty!==null&&row.source_short_qty!==null);
     const demand=complete?q.reduce((sum,row)=>sum+row.original_qty,0):0;
     const missing=complete?q.reduce((sum,row)=>sum+row.source_short_qty,0):0;
+    const known=q.filter(row=>row.original_qty!==null&&row.original_qty>0&&row.source_short_qty!==null&&row.source_short_qty>=0);
+    const knownDemand=known.reduce((sum,row)=>sum+row.original_qty,0);
+    const knownShort=known.reduce((sum,row)=>sum+row.source_short_qty,0);
     const orderRates=new Map();
     for(const order of orders) {
       const lines=q.filter(row=>row.order_no===order);
@@ -229,6 +232,8 @@ export function comparisonMetrics(facts,dimension,shortages=null,{now=Date.now()
       shortage_coverage:covered.size,shortage_total:pendingKeys.size,
       shortage_orders:shortages===null?null:new Set(linked.filter(row=>Number(row.source_rows)===1&&number(row.after_inventory_short_qty)>0).map(row=>row.order_no)).size,
       allocation_rate:complete&&demand>0?100*Math.abs(demand-missing)/demand:null,
+      known_allocation_rate:knownDemand>0?100*Math.abs(knownDemand-knownShort)/knownDemand:null,
+      quantity_coverage:known.length,quantity_total:q.length,
       buckets,rate_coverage:[...orderRates.values()].filter(rate=>rate!==null).length,rate_total:orders.size};
   }).sort((a,b)=>a.group_name.localeCompare(b.group_name,'zh-CN'));
 }

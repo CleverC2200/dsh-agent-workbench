@@ -93,7 +93,8 @@ function restoreReportEdits(edits = {}) {
 }
 function saveDatabaseReport() {
   if (!liveFacts || liveFacts.complete !== true) {
-    persistenceStatus.textContent = ' · 数据未加载完整，暂不能保存';
+    persistenceStatus.dataset.state = 'waiting';
+    persistenceStatus.textContent = ' · 摘要已暂存于当前页面，完整数据加载后自动保存';
     return false;
   }
   return persistence.save({ schemaVersion: 1, facts: liveFacts, presentation: savedPresentation ?? workbenchPresentation(liveFacts), edits: reportEdits() });
@@ -104,14 +105,14 @@ function saveWorkbenchDirectorNotes() { return saveEditedReport(); }
 function saveWorkbenchReferenceLinks() { return saveEditedReport(); }
 function saveWorkbenchUnmetState() { return saveEditedReport(); }
 function saveWorkbenchLocalState() { return saveEditedReport(); }
-window.addEventListener('beforeunload', event => { if (reportEdited && persistence.pending()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (reportEdited) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
-  if ((!reportLoaded || liveFacts?.complete !== true) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
+  if ((!reportLoaded || (liveFacts?.complete !== true && !button?.hasAttribute('data-wb-summary-edit'))) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
   }
-  if (reportEdited && persistence.pending() && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
+  if (reportEdited && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
   }
@@ -3274,7 +3275,7 @@ summaryEditForm.addEventListener('submit', (event) => {
   showWorkbenchToast(
     persisted
       ? '本期结论摘要已更新，正在保存到数据库…'
-      : '摘要已更新；数据库未保存，请查看页面保存状态。',
+      : '摘要已暂存于当前页面，完整数据加载后自动保存；请勿离开页面。',
   );
 });
 document.getElementById('wbSummaryEditClose').addEventListener('click', closeWorkbenchSummaryEdit);
