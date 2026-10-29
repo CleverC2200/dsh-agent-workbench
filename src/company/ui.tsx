@@ -998,7 +998,9 @@ export function mountCompanyUI(
           </div>
         </div>
         <footer className="gea-sidebar-footer">
-          {renderSlot('sidebar.settings', { wide: !collapsed })}
+          <div className="gea-sidebar-account">
+            {renderSlot('sidebar.settings', { wide: !collapsed })}
+          </div>
           {renderSlot('sidebar.footer.action', { wide: !collapsed })}
         </footer>
       </aside>
