@@ -17,6 +17,7 @@ const productColumns = [
   '大类',
   '系列',
   '物料组',
+  '物料组名称',
   '老品编码',
   '老品名称',
 ];
@@ -78,6 +79,13 @@ function parseCsv(text, columns) {
   }
   if (quoted) throw Error('CSV引号未闭合。');
   if (cell || row.length) finish();
+  const legacyProductColumns = productColumns.filter((column) => column !== '物料组名称');
+  if (
+    columns === productColumns &&
+    table[0]?.join('\u0000') === legacyProductColumns.join('\u0000')
+  ) {
+    for (const row of table) row.splice(6, 0, row === table[0] ? '物料组名称' : '');
+  }
   if (!table.length || table[0].join('\u0000') !== columns.join('\u0000'))
     throw Error(`表头必须依模板排列：${columns.join('、')}。`);
   if (table.length - 1 > 10000) throw Error('超过10000条上限，未读取任何行，请拆分文件后核对。');
@@ -98,6 +106,7 @@ function parseCsv(text, columns) {
       } else if (
         columns === productColumns &&
         column !== '基地' &&
+        column !== '物料组名称' &&
         !column.startsWith('老品') &&
         !value
       )
@@ -1704,11 +1713,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   'tr',
                   {},
                   [
-                    '产品编码',
-                    '产品名称',
+                    '物料编码',
+                    '物料名称',
                     '大类',
                     '系列',
-                    '物料组',
+                    '物料组编码',
+                    '物料组名称',
                     '对应老品编码',
                     '老品名称',
                     '操作',
@@ -1720,7 +1730,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 {},
                 filteredProducts
                   .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-                  .map(({ row, index, display, children, inherited, labels }) =>
+                  .map(({ row, index, display, children, inherited }) =>
                     h(
                       'tr',
                       { key: index },
@@ -1748,21 +1758,6 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                                   `物料组 · ${children.length} SKU`,
                                 )
                               : display[column] || '-',
-                            column === '产品名称' &&
-                              h(
-                                'div',
-                                { className: 'dc-product-source' },
-                                labels.length > 0 && h('span', {}, '源标签：' + labels.join(' / ')),
-                                h(
-                                  'button',
-                                  {
-                                    className: 'dc-link',
-                                    onClick: () => setProductDetails(index),
-                                    'aria-label': `查看源字段 ${row['产品编码'] || row['物料组'] || index}`,
-                                  },
-                                  '源字段',
-                                ),
-                              ),
                           ),
                         ),
                       h(

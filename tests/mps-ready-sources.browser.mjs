@@ -103,7 +103,11 @@ test('product replacement fields populate old-product columns and the list omits
   const { frame } = await mpsPage(t, config, fixture);
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
-  await expect(section).toContainText('源标签：汤圆');
+  await expect(section).not.toContainText('源标签：汤圆');
+  await expect(section.getByRole('button', { name: /^查看源字段/ })).toHaveCount(0);
+  await expect(
+    section.getByRole('columnheader', { name: '物料组名称', exact: true }),
+  ).toBeVisible();
   const parent = section.locator('tbody tr').filter({ hasText: '物料组甲' });
   await expect(parent).toContainText('汤圆');
   await section.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }).click();
@@ -117,8 +121,8 @@ test('product replacement fields populate old-product columns and the list omits
   const child = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
-  await expect(child.locator('td').nth(5)).toHaveText('REPLACE');
-  await expect(child.locator('td').nth(6)).toHaveText('源替换品');
+  await expect(child.locator('td').nth(6)).toHaveText('REPLACE');
+  await expect(child.locator('td').nth(7)).toHaveText('源替换品');
 });
 
 test('first-step shares reuse the existing computation while final category demand remains unavailable', async (t) => {

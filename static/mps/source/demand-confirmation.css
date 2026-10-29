@@ -141,14 +141,6 @@
   color: var(--dc-muted);
   font-size: 11.5px;
 }
-.dc-product-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 4px;
-  font-size: 11.5px;
-}
 .dc-page-head {
   margin: 0 -24px 18px;
   padding: 0 24px;
