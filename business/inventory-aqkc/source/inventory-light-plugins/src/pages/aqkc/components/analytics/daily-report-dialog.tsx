@@ -2,8 +2,9 @@
 import { QueryErrors } from '../../../../../../../../shared/query-errors';
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Checkbox, Input, Modal, Select, Spin } from '../../../../dsh-ui/controls';
-import { IconClose, IconDownload, IconFile, IconRefresh } from '../../../../dsh-ui/icons';
+import { IconClose, IconDown, IconDownload, IconFile, IconRefresh } from '../../../../dsh-ui/icons';
 import { withAppBasePath } from '../../../../../../aqkc/web/src/lib/app-base-path.ts';
 import { createRuntimeId } from '../../../../../../aqkc/web/src/lib/runtime-id.ts';
 import {
@@ -27,6 +28,135 @@ import {
 import { dailyReportMarkdown } from '../../../../../../aqkc/web/src/lib/daily-report-export.ts';
 import dialogStyles from './answer-result-dialog.module.css';
 import styles from './daily-report-dialog.module.css';
+
+function ReportBaseSelect({
+  bases,
+  value,
+  onChange,
+}: {
+  bases: string[];
+  value: string;
+  onChange: (base: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const height = Math.min(bases.length * 34 + 12, 250);
+      setPosition({
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - 168)),
+        top:
+          rect.bottom + height + 4 <= window.innerHeight - 8
+            ? rect.bottom + 4
+            : Math.max(8, rect.top - height - 4),
+      });
+    };
+    const close = (event: PointerEvent) => {
+      if (
+        !trigger.current?.contains(event.target as Node) &&
+        !menu.current?.contains(event.target as Node)
+      )
+        setOpen(false);
+    };
+    update();
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [open, bases]);
+  useEffect(() => {
+    if (!bases.length) setOpen(false);
+  }, [bases.length]);
+  const dialog = trigger.current?.closest('dialog');
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        className={styles.baseSelect}
+        aria-label="切换日报基地"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={!bases.length}
+        onClick={() => setOpen(!open)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+            requestAnimationFrame(() =>
+              menu.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus(),
+            );
+          }
+          if (event.key === 'Escape' && open) {
+            event.preventDefault();
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        <span>{value ? `${value}基地` : '暂无可见基地'}</span>
+        <IconDown />
+      </button>
+      {open &&
+        position &&
+        dialog &&
+        createPortal(
+          <div
+            ref={menu}
+            className={styles.baseSelectMenu}
+            role="listbox"
+            aria-label="日报基地"
+            style={position}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                event.stopPropagation();
+                setOpen(false);
+                trigger.current?.focus();
+              }
+              if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const options = Array.from(
+                  menu.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [],
+                );
+                const index = options.indexOf(document.activeElement as HTMLButtonElement);
+                options[
+                  (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length
+                ]?.focus();
+              }
+            }}
+          >
+            {bases.map((base) => (
+              <button
+                key={base}
+                type="button"
+                role="option"
+                aria-selected={value === base}
+                onClick={() => {
+                  onChange(base);
+                  setOpen(false);
+                  trigger.current?.focus();
+                }}
+              >
+                <span>{base}基地</span>
+                {value === base && <span aria-hidden="true">✓</span>}
+              </button>
+            ))}
+          </div>,
+          dialog,
+        )}
+    </>
+  );
+}
 
 const DIRECTORY = [
   ['summary', '今日分析'],
@@ -939,21 +1069,13 @@ export function DailyReportButton({ className, bases, initialBase, onBoard, onAs
               </small>
             </span>
             <div className={styles.baseSwitcher}>
-              <Select
-                aria-label="切换日报基地"
-                size="small"
-                value={selectedBase || undefined}
-                disabled={!availableBases.length}
-                placeholder="暂无可见基地"
-                options={availableBases.map((base) => ({
-                  label: `${base}基地`,
-                  value: base,
-                }))}
+              <ReportBaseSelect
+                bases={availableBases}
+                value={selectedBase}
                 onChange={(base) => {
                   setBaseSelection(base);
                   setAttempt(0);
                 }}
-                style={{ width: 160 }}
               />
               <Button
                 size="small"

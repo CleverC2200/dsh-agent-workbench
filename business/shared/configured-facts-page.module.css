@@ -47,7 +47,7 @@
 }
 .page input,
 .page select,
-.page button {
+.page button:not([data-plan-pagination] button) {
   height: 36px;
   border: 1px solid var(--ui-border-strong);
   border-radius: 8px;
@@ -62,14 +62,14 @@
 }
 .page input,
 .page select,
-.page button {
+.page button:not([data-plan-pagination] button) {
   font-size: 11px;
 }
-.page button {
+.page button:not([data-plan-pagination] button) {
   cursor: pointer;
   white-space: nowrap;
 }
-.page button:hover:not(:disabled) {
+.page button:not([data-plan-pagination] button):hover:not(:disabled) {
   background: var(--ui-hover);
   border-color: var(--ui-accent-line);
   color: var(--ui-accent);
@@ -78,7 +78,7 @@
   outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
 }
-.page button:disabled {
+.page button:not([data-plan-pagination] button):disabled {
   color: var(--ui-faint);
   background: var(--ui-soft);
   cursor: default;
@@ -598,4 +598,11 @@
     padding-right: 135px;
     min-height: 36px;
   }
+}
+
+.page.embedded .filters input:focus,
+.page.embedded .filters input:focus-visible {
+  outline: none;
+  border-color: var(--ui-accent);
+  box-shadow: none;
 }

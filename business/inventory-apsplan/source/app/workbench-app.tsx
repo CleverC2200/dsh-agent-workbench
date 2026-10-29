@@ -7608,38 +7608,40 @@ export default function Home({
             <section
               className={`analysis-workspace panel scope-${analysisScope}${analysisScope === 'production' ? ` production-${productionDimension}` : ''}`}
             >
-              <div className="dashboard-module-toolbar" aria-label="看板工具栏">
-                <span className="dashboard-module-label">
-                  <LayoutGrid />
-                  {'产销协同看板'}
-                </span>
-                <button
-                  className="open-intelligent-tasks"
-                  onClick={() => {
-                    setActiveWorkspace('intelligent');
-                    requestAnimationFrame(() =>
+              {!embedMode && (
+                <div className="dashboard-module-toolbar" aria-label="看板工具栏">
+                  <span className="dashboard-module-label">
+                    <LayoutGrid />
+                    {'产销协同看板'}
+                  </span>
+                  <button
+                    className="open-intelligent-tasks"
+                    onClick={() => {
+                      setActiveWorkspace('intelligent');
                       requestAnimationFrame(() =>
-                        document
-                          .querySelector<HTMLElement>('.intelligent-workspace-page')
-                          ?.scrollTo({ top: 0 }),
-                      ),
-                    );
-                  }}
-                >
-                  {embedMode ? (
-                    <>
-                      <ArrowLeft />
-                      {'返回智能工作台'}
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardCheck />
-                      {'任务统一到智能工作台管理'}
-                      <ArrowRight />
-                    </>
-                  )}
-                </button>
-              </div>
+                        requestAnimationFrame(() =>
+                          document
+                            .querySelector<HTMLElement>('.intelligent-workspace-page')
+                            ?.scrollTo({ top: 0 }),
+                        ),
+                      );
+                    }}
+                  >
+                    {embedMode ? (
+                      <>
+                        <ArrowLeft />
+                        {'返回智能工作台'}
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardCheck />
+                        {'任务统一到智能工作台管理'}
+                        <ArrowRight />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="scope-tabs" role="tablist" aria-label="业务分析视角">
                 <button
                   role="tab"

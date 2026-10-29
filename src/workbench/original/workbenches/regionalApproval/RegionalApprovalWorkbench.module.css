@@ -2467,3 +2467,7 @@
     flex-wrap: wrap;
   }
 }
+
+:global(html[data-shared-workbench-toolbar]) .header {
+  padding-right: 300px;
+}

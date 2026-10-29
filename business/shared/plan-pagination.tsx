@@ -116,7 +116,7 @@ export function PlanPagination({
   }, [loading]);
 
   return (
-    <nav className={css.footer} aria-label={ariaLabel}>
+    <nav className={css.footer} aria-label={ariaLabel} data-plan-pagination>
       <span className={css.total}>共 {totalCount.toLocaleString('zh-CN')} 条</span>
       <div className={css.controls}>
         <span className={css.sizeLabel}>每页条数</span>
@@ -182,7 +182,7 @@ export function PlanPagination({
                 </button>
               ))}
             </div>,
-            document.body,
+            trigger.current?.closest('dialog') ?? document.body,
           )}
         <div className={css.navigation}>
           <button

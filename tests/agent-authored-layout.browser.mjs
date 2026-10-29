@@ -2098,6 +2098,27 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
   assert.deepEqual(errors, []);
 });
 
+test('base daily report uses an accessible floating base selector', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280);
+  await frame.getByRole('button', { name: '查看日报' }).click();
+  const trigger = frame.getByRole('button', { name: '切换日报基地' });
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '日报基地' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: '暂无可见基地' })).toHaveCount(0);
+  await expect(menu.getByRole('option', { name: '华东基地' })).toBeVisible();
+  await menu.getByRole('option', { name: '华东基地' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toContainText('华东基地');
+  await trigger.click();
+  await menu.getByRole('option', { name: '华东基地' }).press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(frame.getByRole('dialog')).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
 test('base dashboard model insight does not block metrics and renders model text as plain paragraphs', async (t) => {
   let finish;
   const waiting = new Promise((resolve) => {
@@ -2132,5 +2153,48 @@ test('base dashboard model failure leaves cards and detail rows visible', async 
   );
   await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
   await expect(frame.locator('tbody tr').first()).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
+test('APS workspace tabs switch and align with the toolbar edge without a return button', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  const intelligent = frame.getByRole('button', { name: '智能工作台', exact: true });
+  const board = frame.getByRole('button', { name: '产销协同看板', exact: true });
+  await expect(intelligent).toBeVisible();
+  await expect(board).toBeVisible();
+  await board.click();
+  await expect(board).toHaveAttribute('aria-current', 'page');
+  await expect(frame.getByRole('button', { name: '返回智能工作台', exact: true })).toHaveCount(0);
+  const difference = await board.evaluate((element) =>
+    Math.abs(
+      element.getBoundingClientRect().bottom -
+        element.closest('[data-business-toolbar]').getBoundingClientRect().bottom,
+    ),
+  );
+  assert.ok(difference <= 2, `selected tab does not meet toolbar: ${difference}`);
+  await intelligent.click();
+  await expect(intelligent).toHaveAttribute('aria-current', 'page');
+  assert.deepEqual(errors, []);
+});
+
+test('APS board sticky view and period bars have no leftover return-toolbar gap', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  const offsets = await frame.locator('.analysis-workspace').evaluate((element) => {
+    const tabs = element.querySelector(':scope > .scope-tabs');
+    const period = element.querySelector(':scope > .secondary-analysis-toolbar');
+    return {
+      tabs: getComputedStyle(tabs).top,
+      period: getComputedStyle(period).top,
+      tabsPosition: getComputedStyle(tabs).position,
+      periodPosition: getComputedStyle(period).position,
+    };
+  });
+  assert.deepEqual(offsets, {
+    tabs: '0px',
+    period: '48px',
+    tabsPosition: 'sticky',
+    periodPosition: 'sticky',
+  });
   assert.deepEqual(errors, []);
 });

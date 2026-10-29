@@ -298,13 +298,13 @@ html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intel
 /* Keep the board's view and period controls visible while its document scrolls. */
 html.aps-plugin-host .analysis-workspace > .scope-tabs {
   position: sticky;
-  top: 50px;
+  top: 0;
   z-index: 11;
   background: #fff;
 }
 html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   position: sticky;
-  top: 98px;
+  top: 48px;
   z-index: 10;
   background: #fff;
 }
@@ -661,4 +661,15 @@ html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
 .aps-drill-pagination button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+/* The workspace indicator meets the shared toolbar bottom border. */
+html.aps-plugin-host .plugin-workspace-tabs.scope-tabs {
+  align-self: stretch;
+  height: 56px;
+  margin-block: -9px;
+}
+html.aps-plugin-host .plugin-workspace-tabs.scope-tabs > button {
+  height: 56px;
+  min-height: 56px;
 }
