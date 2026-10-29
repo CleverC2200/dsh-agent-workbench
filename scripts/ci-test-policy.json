@@ -309,6 +309,25 @@
       "repo": "dsh-agent-workbench",
       "pattern": "^\\.gitignore$",
       "tests": ["tests/candidate-input.test.mjs", "tests/quality-ci.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^docs/proposed-postgresql\\.sql$",
+      "tests": ["tests/fc-persistence.test.mjs", "tests/fc-submission-persistence.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^scripts/(?:scope-fc-cycle-rules|update-qll-overview-orders)\\.py$",
+      "tests": ["tests/agent-sql-direct.test.mjs", "tests/agent-sql-config.test.mjs"]
+    },
+    {
+      "repo": "dsh-agent-workbench",
+      "pattern": "^(?:business/shared/qll-category-tree\\.ts|business/inventory-qll/source/inventory-light-plugins/src/pages/(?:configured-workbench\\.tsx|qll/components/category-hierarchy\\.(?:tsx|module\\.css))|scripts/update-qll-category-tree\\.py|business/inventory-qll/sql\\.config\\.json)$",
+      "tests": [
+        "tests/qll-category-tree.test.mjs",
+        "tests/qll-category-tree.browser.mjs",
+        "tests/agent-sql-config.test.mjs"
+      ]
     }
   ],
   "sourceTools": {

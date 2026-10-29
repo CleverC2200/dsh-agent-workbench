@@ -5,18 +5,14 @@ import { QueryErrors } from '../../../../../shared/query-errors';
 import { BusinessDateInput } from '../../../../../shared/business-date-input';
 import React, { useState, useEffect } from 'react';
 import { createPageViewState, usePageViewField } from '../../../../../shared/view-state.js';
-import { ConfiguredTrends } from './configured-trends';
+import { CategoryHierarchy } from './qll/components/category-hierarchy';
 import config from '../../../../sql.config.json';
 import { Tabs } from '../dsh-ui/controls';
 import { KpiCard } from './qll';
-import {
-  originalQllView,
-  originalQllLayerView,
-} from '../../../../../shared/original-business-views';
+import { originalQllLayerView } from '../../../../../shared/original-business-views';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { useConfiguredOverview } from '../../../../../shared/use-configured-overview';
 import { currentShortageSum } from '../../../../../shared/current-shortage';
-import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import {
   businessDay,
   fulfillmentPercent,
@@ -29,15 +25,7 @@ import common from '../../../../../shared/restored-workbench.module.css';
 const tabs = [
   ['category', '品类结构'],
   ['structure', '组织结构'],
-  ['aging', '库存库龄'],
-  ['shortage', '订单缺口'],
 ];
-const views: Record<string, string[]> = {
-  category: ['category'],
-  structure: ['organization'],
-  aging: ['aging'],
-  shortage: ['fulfillment-path'],
-};
 const viewState = createPageViewState('inventory-qll');
 export default function ConfiguredWorkbench() {
   const [channel, setChannel] = usePageViewField(
@@ -48,10 +36,14 @@ export default function ConfiguredWorkbench() {
     (value) => (value ? 'all-channel' : 'company'),
     (value) => value === 'all-channel',
   );
-  const [tab, setTab] = usePageViewField(React, viewState, 'tab', 'category'),
+  const [savedTab, setTab] = usePageViewField(React, viewState, 'tab', 'category'),
     [date, setDate] = usePageViewField(React, viewState, 'asOf', businessDay),
     [draft, setDraft] = useState(businessDay),
     [revision, refresh] = useState(0);
+  const tab = savedTab === 'structure' ? 'structure' : 'category';
+  useEffect(() => {
+    if (savedTab !== tab) setTab(tab);
+  }, [savedTab, tab, setTab]);
   useEffect(() => setDraft(date), [date]);
   const overviewViews = React.useMemo(
     () => config.overviewViewIds.filter((id) => !['base-shipments', 'orders'].includes(id)),
@@ -154,7 +146,6 @@ export default function ConfiguredWorkbench() {
                   checked={channel}
                   onChange={(e) => {
                     setChannel(e.target.checked);
-                    if (e.target.checked) setTab('structure');
                   }}
                   title="1件=1箱；不同日期及范围的客户库存单独查看"
                 />
@@ -202,15 +193,7 @@ export default function ConfiguredWorkbench() {
                       stockDays: knownNumber(customer?.cover_days),
                       date: parts['channel-overview']?.snapshotDate,
                     }}
-                    onOpen={() =>
-                      setTab(
-                        key === 'aging'
-                          ? 'aging'
-                          : ['fulfillment', 'orderGap'].includes(key)
-                            ? 'shortage'
-                            : 'structure',
-                      )
-                    }
+                    onOpen={() => setTab('structure')}
                   />
                 ),
               )}
@@ -222,7 +205,7 @@ export default function ConfiguredWorkbench() {
                 <span className={styles.aiInsightBadge}>经营洞察</span>
               </div>
               <p>
-                <b>核心判断：</b>公司库存 {show(companyQty, '箱')}
+                <b>核心判断：</b>公司库存 {show(companyQty, '件')}
                 。结合品类结构、组织结构和订单缺口安排库存协同。
               </p>
             </section>
@@ -232,43 +215,17 @@ export default function ConfiguredWorkbench() {
                   <Tabs.TabPane key={id} title={label} />
                 ))}
               </Tabs>
-              {tab === 'shortage' ? (
-                <CurrentShortageList
-                  config={config}
-                  revision={revision}
-                  onRead={(value) => updateContext('data', value)}
-                />
-              ) : tab === 'structure' ? (
+              {tab === 'category' ? (
+                <CategoryHierarchy key={[date, revision].join(':')} date={date} channel={channel} />
+              ) : (
                 <OrganizationHierarchy
                   date={date}
                   revision={revision}
                   channel={channel}
                   onRead={(v: any) => updateContext('data', v)}
                 />
-              ) : (
-                <ConfiguredFactsPage
-                  key={[tab, date, revision].join(':')}
-                  config={config}
-                  embedded
-                  viewIds={views[tab]}
-                  presentation={originalQllView(config, tab)}
-                  date={date}
-                  onRead={(v) => {
-                    updateContext('data', v);
-                    updateContext('queryState', {
-                      state: ['available', 'empty'].includes(v.status) ? 'ready' : v.status,
-                      message: v.message,
-                    });
-                    updateContext('fullChainWorkspace', {
-                      realData: ['available', 'empty'].includes(v.status),
-                      date,
-                      scope: channel ? 'all-channel' : 'company',
-                    });
-                  }}
-                />
               )}
             </section>
-            <ConfiguredTrends key={revision} date={date} />
           </div>
         </section>
       </div>

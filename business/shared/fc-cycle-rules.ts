@@ -1,4 +1,5 @@
 export type FcCycleRule = {
+  status?: 'effective' | 'paused';
   level: 'sku' | 'material-group' | 'category' | 'warehouse';
   object: string;
   days: number;
@@ -14,6 +15,7 @@ export function validateFcCycleRules(value: unknown): FcCycleRule[] {
     if (
       !rule ||
       !levels.includes(rule.level) ||
+      ![undefined, 'effective', 'paused'].includes(rule.status) ||
       typeof rule.object !== 'string' ||
       !rule.object.trim() ||
       rule.object.length > 100 ||
@@ -39,7 +41,7 @@ export function validateFcCycleRules(value: unknown): FcCycleRule[] {
     .sort((a, b) => levels.indexOf(a.level) - levels.indexOf(b.level));
 }
 export function fcCycleParameters(rules: FcCycleRule[] = []) {
-  const ordered = validateFcCycleRules(rules);
+  const ordered = validateFcCycleRules(rules).filter((rule) => rule.status !== 'paused');
   return Object.fromEntries(
     Array.from({ length: FC_CYCLE_LIMIT }, (_, index) => {
       const rule = ordered[index];

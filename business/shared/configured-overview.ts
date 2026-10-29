@@ -3,6 +3,7 @@ import type { FcCycleRule } from './fc-cycle-rules';
 import { readConfiguredFacts } from './configured-facts';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readCurrentShortage } from './current-shortage';
+import { readGroupedOrderOverview } from './grouped-order-overview';
 
 export const businessDay = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
@@ -40,6 +41,7 @@ export async function readConfiguredOverview(
     cycleDays?: number;
     fcCycleRules?: FcCycleRule[];
     warehouseCode?: string;
+    fcCycleWarehouse?: string;
     execute?: any;
     onProgress?: (parts: Record<string, any>) => void;
   } = {},
@@ -96,58 +98,70 @@ export async function readConfiguredOverview(
           configVersion: result.configVersion,
         };
   let quickStockFailed = false;
-  if (config.overviewQuickStock && ids.some((id) => ['health', 'branch-stock'].includes(id))) {
-    try {
-      const result = await createAgentQueries(config, options.execute).read(
-        config.overviewQuickStock,
-        { as_of: asOf },
-        {
-          signal: options.signal,
-          requiredColumns: config.queries[config.overviewQuickStock].resultColumns,
-        },
-      );
-      for (const row of result.rows) {
-        const id =
-          row.location_type === '基地'
-            ? 'health'
-            : row.location_type === '分仓'
-              ? 'branch-stock'
-              : undefined;
-        if (!id || !ids.includes(id)) continue;
-        const { location_type: _type, snapshot_date: snapshotDate, ...summary } = row;
-        const instant =
-          typeof snapshotDate === 'string' ? Date.parse(snapshotDate + 'T00:00:00Z') : NaN;
-        if (
-          !Number.isFinite(instant) ||
-          new Date(instant).toISOString().slice(0, 10) !== snapshotDate ||
-          snapshotDate > asOf
-        ) {
-          publish(id, { error: '库存快照无效', partial: true });
-          continue;
-        }
-        publish(id, {
-          summary,
-          snapshotDate,
-          total: Number(row.row_count),
-          configVersion: result.configVersion,
-        });
-        const snapshotId = id === 'health' ? 'source.health-date' : 'source.branch-stock-date';
-        snapshotReads.set(
-          JSON.stringify([config.agentId, snapshotId, { as_of: asOf }]),
-          Promise.resolve({ ...result, rows: [{ day: snapshotDate }] }),
+  const quickStock = (async () => {
+    if (config.overviewQuickStock && ids.some((id) => ['health', 'branch-stock'].includes(id))) {
+      try {
+        const result = await createAgentQueries(config, options.execute).read(
+          config.overviewQuickStock,
+          { as_of: asOf },
+          {
+            signal: options.signal,
+            requiredColumns: config.queries[config.overviewQuickStock].resultColumns,
+          },
         );
+        for (const row of result.rows) {
+          const id =
+            row.location_type === '基地'
+              ? 'health'
+              : row.location_type === '分仓'
+                ? 'branch-stock'
+                : undefined;
+          if (!id || !ids.includes(id)) continue;
+          const { location_type: _type, snapshot_date: snapshotDate, ...summary } = row;
+          const instant =
+            typeof snapshotDate === 'string' ? Date.parse(snapshotDate + 'T00:00:00Z') : NaN;
+          if (
+            !Number.isFinite(instant) ||
+            new Date(instant).toISOString().slice(0, 10) !== snapshotDate ||
+            snapshotDate > asOf
+          ) {
+            publish(id, { error: '库存快照无效', partial: true });
+            continue;
+          }
+          publish(id, {
+            summary,
+            snapshotDate,
+            total: Number(row.row_count),
+            configVersion: result.configVersion,
+          });
+          const snapshotId = id === 'health' ? 'source.health-date' : 'source.branch-stock-date';
+          snapshotReads.set(
+            JSON.stringify([config.agentId, snapshotId, { as_of: asOf }]),
+            Promise.resolve({ ...result, rows: [{ day: snapshotDate }] }),
+          );
+        }
+      } catch (error: any) {
+        if (options.signal?.aborted || error.code === 'QUERY_CONFIG_CHANGED') throw error;
+        quickStockFailed = true;
+        for (const id of ['health', 'branch-stock'])
+          if (ids.includes(id)) publish(id, { error: error.message, partial: true });
       }
-    } catch (error: any) {
-      if (options.signal?.aborted || error.code === 'QUERY_CONFIG_CHANGED') throw error;
-      quickStockFailed = true;
-      for (const id of ['health', 'branch-stock'])
-        if (ids.includes(id)) publish(id, { error: error.message, partial: true });
     }
-  }
+  })();
+  let groupedOrders: ReturnType<typeof readGroupedOrderOverview> | undefined;
   await Promise.all(
     ids.map(async (id) => {
       let part: any;
-      if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
+      const view = config.sourceViews?.views.find((view: any) => view.id === id);
+      // Only reads sharing its inventory snapshot wait for quick stock. Order
+      // metrics have independent inputs and must not inherit that latency.
+      if (
+        ['health', 'branch-stock'].includes(id) ||
+        ['source.health-date', 'source.branch-stock-date'].includes(view?.snapshotQuery)
+      ) {
+        await quickStock;
+        if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
+      }
       try {
         if (id === 'current-shortage') {
           const result = await readCurrentShortage(
@@ -162,13 +176,16 @@ export async function readConfiguredOverview(
             configVersion: result.configVersion,
             snapshotDate: result.rows[0]?.snapshot_date,
           };
+        } else if (config.overviewOrderGroups?.views[id] && !customer && !options.warehouseCode) {
+          groupedOrders ??= readGroupedOrderOverview(config, asOf, options);
+          part = (await groupedOrders)[id];
         } else {
-          const view = config.sourceViews?.views.find((view: any) => view.id === id);
           const input = {
             asOf,
             customer,
             cycleDays: options.cycleDays,
             fcCycleRules: options.fcCycleRules,
+            fcCycleWarehouse: options.fcCycleWarehouse,
             filters:
               options.warehouseCode && config.agentId === 'inventory-fc'
                 ? { warehouse_code: options.warehouseCode }

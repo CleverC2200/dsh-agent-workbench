@@ -99,6 +99,7 @@ export interface PageBusinessGrant {
   readonly referenceScope: string;
   readonly access: unknown;
   /** Optional dedicated DMS grant, provided only by the authorized branch adapter. */
+  branchStorage?(input: any, signal: AbortSignal): Promise<unknown>;
   branchDms?(input: any, signal: AbortSignal): Promise<unknown>;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
   /** Read-only model interpretation, executed under this page's business identity. */
@@ -390,6 +391,10 @@ export class PageRuntime {
           if (!owner.grant.insight || !owner.grant.allowsEffect('view'))
             throw Error('METHOD_NOT_ALLOWED');
           value = await owner.grant.insight(input.parameters, signal);
+          break;
+        case 'branch-storage':
+          if (!owner.grant.branchStorage) throw Error('METHOD_NOT_ALLOWED');
+          value = await owner.grant.branchStorage(input.parameters, signal);
           break;
         case 'branch-dms':
           if (!owner.grant.branchDms) throw Error('METHOD_NOT_ALLOWED');

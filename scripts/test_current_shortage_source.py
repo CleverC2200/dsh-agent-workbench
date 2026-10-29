@@ -49,4 +49,15 @@ class SourceFormula(unittest.TestCase):
   rows=self.run_case([('a','s','p',10,0),('b','s','new',8,0)],[('w','s',3)],[('w','p')],config['queries']['current-shortage.summary']['request']['sql'])
   mapped=next(r for r in rows if r['location_type']=='基地');unknown=next(r for r in rows if r['location_type']=='待映射')
   self.assertEqual(mapped['shortage'],7);self.assertEqual(unknown['demand'],8);self.assertEqual(unknown['remaining'],8);self.assertEqual(unknown['invalid'],1);self.assertIsNone(unknown['shortage'])
+ def test_summary_distinguishes_empty_source_from_no_active_orders(self):
+  config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-qll/sql.config.json').read_text())
+  sql=config['queries']['current-shortage.summary']['request']['sql']
+  empty=self.run_case([],[('w','s',3)],[('w','p')],sql)[0]
+  inactive=self.run_case([('o','s','p',5,0,'作废')],[('w','s',3)],[('w','p')],sql)[0]
+  self.assertEqual(empty['invalid'],1);self.assertIsNone(empty['shortage'])
+  self.assertEqual(inactive['invalid'],0);self.assertEqual(inactive['shortage'],0)
+ def test_summary_presence_probe_does_not_limit_demand_rows(self):
+  config=json.loads((pathlib.Path(__file__).resolve().parents[1]/'business/inventory-qll/sql.config.json').read_text())
+  row=self.run_case([('o','s','p',5,0),('o2','s','p',2,0)],[('w','s',3)],[('w','p')],config['queries']['current-shortage.summary']['request']['sql'])[0]
+  self.assertEqual(row['demand'],7);self.assertEqual(row['shortage'],4);self.assertEqual(row['invalid'],0)
 if __name__=='__main__':unittest.main()

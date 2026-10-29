@@ -136,9 +136,7 @@ test('the built dealer page opens safely, reports current scope and restores the
     requests.filter((m) => m.method === 'conversation'),
     [],
   );
-  const previous = [...root.querySelectorAll('button')].find(
-    (button) => button.textContent === '上一页',
-  );
+  const previous = root.querySelector('button[aria-label="上一页"]');
   assert.ok(previous);
   previous.click();
   await until(() =>

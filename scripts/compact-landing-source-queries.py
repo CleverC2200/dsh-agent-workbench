@@ -1,6 +1,7 @@
 """Prune unused intermediate fields from landing reads; preserve every returned field."""
 import json
 import re
+import argparse
 from pathlib import Path
 
 import sqlglot
@@ -10,17 +11,23 @@ from sqlglot.optimizer.pushdown_projections import pushdown_projections
 
 ROOT = Path(__file__).resolve().parents[1]
 QUERIES = {
-    'aqkc': ['page.health-groups', 'page.workbench-support-by-base', 'current-shortage.locations'],
-    'fc': ['health.cards', 'orders.summary', 'current-shortage.summary', 'replenishment.summary',
-           'replenishment.detail.atomic'],
-    'qll': ['health.cards', 'branch-health.cards', 'current-shortage.summary'],
+    'aqkc': ['page.health-groups', 'page.workbench-support-by-base', 'current-shortage.locations',
+             'page.inventory-groups', 'page.dashboard-groups'],
+    # Replenishment is owned by update-fc-card-scope.py; preserve its canonical CTEs.
+    'fc': ['health.cards', 'orders.summary', 'current-shortage.summary'],
+    'qll': ['health.cards', 'branch-health.cards', 'current-shortage.summary',
+            'orders.summary', 'inventory.summary', 'branch-turnover.cards'],
     'apsplan': ['overview.orders-month', 'overview.production', 'page.budget-performance',
                 'overview.demand-accuracy', 'overview.sales-accuracy', 'overview.delivery-daily',
                 'overview.orders-month-products', 'overview.forecast', 'overview.plans-source',
                 'current-shortage.locations'],
 }
 
-for agent, ids in QUERIES.items():
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--agents', nargs='+', choices=QUERIES, default=list(QUERIES))
+args = parser.parse_args()
+for agent in args.agents:
+    ids = QUERIES[agent]
     path = ROOT / f'business/inventory-{agent}/sql.config.json'
     config = json.loads(path.read_text())
     for query_id in ids:

@@ -143,11 +143,39 @@ export type StockPageContext = {
 };
 type ResolvedStockScope = { context: StockPageContext; scope: SafetyStockScope };
 let readCycle:
-  | { signal: AbortSignal; day?: string; pending?: Promise<ResolvedStockScope> }
+  | {
+      signal: AbortSignal;
+      day?: string;
+      pending?: Promise<ResolvedStockScope>;
+      snapshots?: Map<string, Promise<any>>;
+    }
   | undefined;
 /** Pin business date/version metadata for this page's refresh cycle, never rows or authorization. */
 export function startConfiguredStockReadCycle(signal?: AbortSignal) {
   readCycle = signal ? { signal } : undefined;
+}
+async function readBatchSnapshot(
+  client: ReturnType<typeof createAgentQueries>,
+  asOf: string,
+  signal?: AbortSignal,
+) {
+  const cycle = readCycle;
+  cycle?.signal.throwIfAborted();
+  signal?.throwIfAborted();
+  const reads = cycle ? (cycle.snapshots ??= new Map()) : undefined;
+  let pending = reads?.get(asOf);
+  if (!pending) {
+    pending = client.read(
+      'source.health-date',
+      { as_of: asOf },
+      { signal: cycle?.signal ?? signal, requiredColumns: ['day'] },
+    );
+    reads?.set(asOf, pending);
+  }
+  const result = await pending;
+  cycle?.signal.throwIfAborted();
+  signal?.throwIfAborted();
+  return result;
 }
 async function resolveStockContext(
   client: ReturnType<typeof createAgentQueries>,
@@ -175,11 +203,9 @@ async function resolveStockContext(
           singlePageFirst: true,
         },
       ),
-      client.read(
-        'source.stock-date',
-        { month, as_of: end },
-        { signal: readSignal, requiredColumns: ['day'] },
-      ),
+      // Both cards use the same base-batch date. The month check below still
+      // rejects an old-month snapshot for stock/target comparisons.
+      readBatchSnapshot(client, end, readSignal),
     ]);
     if (latest.configVersion !== versions.configVersion)
       throw Object.assign(Error('配置已变化，请刷新重读'), { code: 'QUERY_CONFIG_CHANGED' });
@@ -406,15 +432,14 @@ export async function readConfiguredStockPage(
 export async function readConfiguredHealthSummary(
   bases: string[] | undefined,
   signal?: AbortSignal,
+  options: { execute?: any; now?: Date } = {},
 ) {
   const config = agentSqlConfig(sqlConfiguration);
-  const client = createAgentQueries(config);
-  const asOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date());
-  const latest = await client.read(
-    'source.health-date',
-    { as_of: asOf },
-    { signal, requiredColumns: ['day'] },
+  const client = createAgentQueries(config, options.execute);
+  const asOf = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(
+    options.now ?? new Date(),
   );
+  const latest = await readBatchSnapshot(client, asOf, signal);
   const snapshotDate = latest.rows[0]?.day;
   if (snapshotDate == null) return { rows: [], summary: null, snapshotDate: null };
   if (

@@ -115,7 +115,10 @@ export function fullChainCards(
 
 export function formatChainValue(value: number | null, unit = '') {
   if (value == null || !Number.isFinite(value)) return '-';
-  if (['件', '箱', '件/天', '箱/天'].includes(unit) && Math.abs(value) >= 10000)
-    return `${(value / 10000).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}万${unit}`;
+  if (['件', '箱', '件/天', '箱/天'].includes(unit)) {
+    const scale = Math.abs(value) >= 100000000 ? 100000000 : Math.abs(value) >= 10000 ? 10000 : 1;
+    const suffix = scale === 100000000 ? '亿' : scale === 10000 ? '万' : '';
+    return `${(value / scale).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}${suffix}${unit}`;
+  }
   return value.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 }

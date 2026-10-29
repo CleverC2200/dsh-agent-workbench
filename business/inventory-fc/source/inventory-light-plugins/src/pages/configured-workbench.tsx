@@ -1,5 +1,7 @@
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
+import { FcPersistencePanel } from './fc-persistence-panel';
+import { readFcActionRows, applyFcPlan, summarizeFcRows } from './fc-workflow';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
@@ -56,7 +58,7 @@ export default function ConfiguredWorkbench() {
   );
 }
 function WorkbenchBody() {
-  const { trial, setTrial } = useFcWorkflow();
+  const { trial, setTrial, planningPlans, setPlanningPlans, recordVersion } = useFcWorkflow();
   const [warehouse, setWarehouse] = useState('');
   const [warehouses, setWarehouses] = useState<FcWarehouse[]>([]);
   const directoryCache = useRef<{ key: string; at: number; rows: FcWarehouse[] } | null>(null);
@@ -72,18 +74,60 @@ function WorkbenchBody() {
     ),
     [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
     [cycleOpen, setCycleOpen] = useState(false),
+    [cycleWarehouse, setCycleWarehouse] = useState(() => configuredCycleState.warehouse()),
     [cycleRules, setCycleRules] = useState<FcCycleRule[]>(() => configuredCycleState.rules()),
     [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
-    [cycleError, setCycleError] = useState('');
-  useEffect(
-    () => setTrial(null),
-    [date, warehouse, cycleDays, JSON.stringify(cycleRules), revision, setTrial],
-  );
+    [cycleError, setCycleError] = useState(''),
+    [planningError, setPlanningError] = useState('');
+  useEffect(() => {
+    const plans = planningPlans;
+    setTrial(null);
+    setPlanningError('');
+    if (!plans?.length) return;
+    const controller = new AbortController();
+    void readFcActionRows(
+      {
+        config,
+        viewId: 'replenishment',
+        input: {
+          asOf: date,
+          filters: warehouse ? { warehouse_code: warehouse } : {},
+          cycleDays,
+          fcCycleRules: cycleRules,
+          fcCycleWarehouse: cycleWarehouse,
+        },
+      },
+      controller.signal,
+    )
+      .then((rows) => {
+        if (!controller.signal.aborted)
+          setTrial({
+            scope: fcTrialScope(date, cycleDays, warehouse),
+            plans,
+            ...summarizeFcRows(rows.map((row) => applyFcPlan(row, plans, date, cycleDays))),
+          });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          setPlanningError('重新计算失败，请重新读取计划：' + error.message);
+      });
+    return () => controller.abort();
+  }, [
+    date,
+    warehouse,
+    cycleDays,
+    cycleWarehouse,
+    JSON.stringify(cycleRules),
+    revision,
+    planningPlans,
+    setTrial,
+  ]);
   useEffect(
     () =>
       configuredCycleState.subscribe(() => {
         setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays);
         setCycleRules(configuredCycleState.rules());
+        setCycleWarehouse(configuredCycleState.warehouse());
       }),
     [],
   );
@@ -140,6 +184,7 @@ function WorkbenchBody() {
     config.overviewViewIds.filter((id) => id !== 'shipments'),
     cycleRules,
     warehouse,
+    cycleWarehouse,
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
@@ -299,7 +344,29 @@ function WorkbenchBody() {
         />
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
-            <QueryErrors errors={errors} />
+            <QueryErrors errors={[...errors, ...(planningError ? [planningError] : [])]} />
+            <FcPersistencePanel
+              plans={planningPlans}
+              days={cycleDays}
+              rules={cycleRules}
+              cycleWarehouse={cycleWarehouse}
+              refreshKey={revision}
+              onCycles={(days, rules, warehouse, version) => {
+                configuredCycleState.save(days, rules, warehouse);
+                if (version)
+                  recordVersion(warehouse, 'cycles', { revision: version, value: { days, rules } });
+              }}
+              onPlans={async (plans, signal, version, warehouse) => {
+                signal.throwIfAborted();
+                setPlanningPlans([
+                  ...planningPlans.filter((p) => p.warehouseCode !== warehouse),
+                  ...plans,
+                ]);
+                if (version && warehouse)
+                  recordVersion(warehouse, 'plans', { revision: version, value: { plans } });
+              }}
+            />
+
             <div
               className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
               data-overview-cards="fc"
@@ -399,6 +466,7 @@ function WorkbenchBody() {
                       revision,
                       cycleDays,
                       JSON.stringify(cycleRules),
+                      cycleWarehouse,
                     ].join(':')}
                     config={config}
                     embedded
@@ -415,6 +483,7 @@ function WorkbenchBody() {
                     date={date}
                     cycleDays={cycleDays}
                     fcCycleRules={cycleRules}
+                    fcCycleWarehouse={cycleWarehouse}
                     onRead={(v) => updateContext('data', v)}
                   />
                 )}
@@ -470,6 +539,23 @@ function WorkbenchBody() {
             <fieldset key={index}>
               <legend>周期规则 {index + 1}</legend>
               <div className={common.cycleRuleFields}>
+                <select
+                  aria-label={`规则${index + 1}状态`}
+                  value={rule.status ?? 'effective'}
+                  onChange={(event) =>
+                    setRuleDraft(
+                      ruleDraft.map((r, i) =>
+                        i === index
+                          ? { ...r, status: event.target.value as 'effective' | 'paused' }
+                          : r,
+                      ),
+                    )
+                  }
+                >
+                  <option value="effective">生效</option>
+                  <option value="paused">暂停</option>
+                </select>
+
                 <select
                   aria-label={`规则${index + 1}层级`}
                   value={rule.level}

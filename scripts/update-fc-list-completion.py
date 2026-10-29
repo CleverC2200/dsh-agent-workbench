@@ -8,7 +8,7 @@ canonical_ctes,canonical_select=source.rsplit('\nSELECT',1)
 canonical_ctes=canonical_ctes.removeprefix('WITH ')
 # Keep the same source/status/allocation/three-stage formula as the current-order card.
 current_ctes=canonical_ctes+', fc_current_orders AS (SELECT'+canonical_select+'''), fc_order_presence AS (
-SELECT COUNT(*) AS source_order_count FROM agents_scm_execute_detail_d AS o
+SELECT COUNT(*) AS source_order_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS probe_order LIMIT 1) AS order_probe
 )'''
 month_key='gea_p2700'
 def period_cte():

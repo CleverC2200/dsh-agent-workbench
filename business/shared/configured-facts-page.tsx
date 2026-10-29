@@ -47,6 +47,7 @@ export function ConfiguredFactsPage({
   date,
   cycleDays,
   fcCycleRules,
+  fcCycleWarehouse,
   customerCode,
   onChooseCustomer,
   currentPage,
@@ -67,6 +68,7 @@ export function ConfiguredFactsPage({
   date?: string;
   cycleDays?: number;
   fcCycleRules?: FcCycleRule[];
+  fcCycleWarehouse?: string;
   customerCode?: string;
   onChooseCustomer?: (code: string) => void;
   currentPage?: number;
@@ -135,6 +137,7 @@ export function ConfiguredFactsPage({
     customer,
     cycleDays,
     fcCycleRules,
+    fcCycleWarehouse,
     filters,
     scopeFilters,
     revision,
@@ -158,6 +161,7 @@ export function ConfiguredFactsPage({
         customer,
         cycleDays,
         fcCycleRules,
+        fcCycleWarehouse,
         readContext,
       },
       // Business lists display rows; their independent overview owns card totals.
@@ -217,7 +221,13 @@ export function ConfiguredFactsPage({
         actionScope={{
           config,
           viewId,
-          input: { asOf, filters: { ...filters, ...scopeFilters }, cycleDays, fcCycleRules },
+          input: {
+            asOf,
+            filters: { ...filters, ...scopeFilters },
+            cycleDays,
+            fcCycleRules,
+            fcCycleWarehouse,
+          },
         }}
         agentId={config.agentId}
         view={view}
