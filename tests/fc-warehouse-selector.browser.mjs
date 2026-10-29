@@ -28,6 +28,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const calls = [],
     errors = [];
+  let releaseConfirmation;
   t.after(() => assert.deepEqual(errors, []));
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('http://127.0.0.1:19486/**', async (route) => {
@@ -38,6 +39,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
     calls.push({ id, values });
+    if (id === 'replenishment.detail.atomic' && values.page_size === 200)
+      await new Promise((resolve) => {
+        releaseConfirmation = resolve;
+      });
     const q = config.queries[id];
     assert.ok(q, id);
     let rows;
@@ -65,7 +70,13 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       id.includes('atomic') ||
       id.startsWith('branch-current-orders.')
     )
-      rows = [{ page_scope_total: 0, page_row_present: null }];
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
+          page_scope_total: 0,
+          page_row_present: null,
+        },
+      ];
     else if (id.endsWith('.detail') || id.includes('batch-age.groups')) rows = [];
     else {
       const row = Object.fromEntries(q.resultColumns.map((k) => [k, 0]));
@@ -208,6 +219,38 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
     .toBe(initialDirectoryReads + 2);
   await expect(picker).toContainText('全部分仓');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: '补货确认', exact: true }).click();
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  const confirmation = page.getByRole('dialog');
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  assert.equal(
+    releaseConfirmation,
+    undefined,
+    'opening all-warehouse confirmation must not scan every warehouse',
+  );
+  await confirmation.getByLabel('导出补货分仓').selectOption('N417');
+  await expect(confirmation).toContainText('正在读取补货清单，请稍候');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
+  await expect.poll(() => typeof releaseConfirmation).toBe('function');
+  assert.equal(
+    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
+      .values.warehouse_code,
+    'N417',
+  );
+  assert.equal(
+    calls.filter((c) => c.id === 'branch-warehouse.directory').length,
+    initialDirectoryReads + 2,
+    'confirmation reuses the authorized directory',
+  );
+  await confirmation.screenshot({ path: '.scratch/fc-confirmation-loading.png' });
+  releaseConfirmation();
+  await expect(confirmation).not.toContainText('正在读取补货清单');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toBeDisabled();
+  await expect(confirmation).toContainText('0个SKU');
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
 });
 
 test('FC aging exposes immediate risk filters, leading risk column and ten-row server pages', async (t) => {

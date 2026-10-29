@@ -24,9 +24,9 @@ for suffix in ['detail', 'count', 'detail.atomic']:
         marker = 'scope_count AS (SELECT COUNT(*) AS page_scope_total FROM filtered AS r)'
         assert sql.count(marker) == 1
         sql = sql.replace(marker, 'scope_count AS (SELECT COUNT(*) AS page_scope_total FROM filtered AS r WHERE r.recommended_qty > 0)')
-        marker = 'ORDER BY p.warehouse_code, p.sku'
+        marker = 'ORDER BY p.warehouse_code, p.sku LIMIT :gea_p8'
         assert sql.endswith(marker)
-        sql = sql[:-len(marker)] + 'ORDER BY p.recommended_qty DESC, p.warehouse_code, p.sku'
+        sql = sql[:-len(marker)] + 'ORDER BY p.recommended_qty DESC, p.warehouse_code, p.sku LIMIT :gea_p8'
     query['request']['sql'] = sql
     query['title'] = '分仓建议补货清单（沿页面测算，只列正建议量）'
     query['notes'] = '沿原补货计算，仅在SQL分页和计数前限定正建议量并降序；零建议不扫描到对话，空页保留全范围计数。'

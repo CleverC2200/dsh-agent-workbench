@@ -73,6 +73,7 @@ import {
 } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
+import { comparisonEvidence } from './data/comparison-evidence';
 import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
 import {
   metricValues as _metricValues,
@@ -6613,6 +6614,13 @@ export default function Home({
       })) ?? [],
     missing: apsVisibleNames.filter((name) => apsViewMetrics[name]?.value == null),
     comparison: comparisonValues(live.data, live.previous, live.annual, viewScope),
+    comparisonEvidence: comparisonEvidence(
+      live.data,
+      live.previous,
+      live.annual,
+      viewScope,
+      live.comparisonBusy,
+    ),
   };
   apsViewRef.current = {
     current: apsCurrent,
@@ -6642,6 +6650,7 @@ export default function Home({
     live.data,
     live.previous,
     live.annual,
+    live.comparisonBusy,
     live.busy,
     live.error,
     liveDate,
