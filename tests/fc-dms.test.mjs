@@ -28,7 +28,7 @@ const mocks = {
   '../../../fc/src/lib/planning':
     'export const IMPORT_FIELDS=[]; export const defaultPlanTemplateMonth=()=>"2026-11"; export const currentPlanningMonth=()=>"2026-10"; export const nextMonth=()=>"2026-11";',
   './fc-workflow':
-    'export const summarizeFcRows=()=>({}); export const validateFcSubmission=()=>{}; export const applyFcPlan=x=>x; export const planKey=x=>x.sku; export const rowKey=x=>x.sku; export const quantity=x=>Number(x??0); export const readFcActionRows=async(...args)=>{const f=globalThis.dmsFixture;return f.read?f.read(...args):f.rows;}; export const validateFcImport=()=>[];',
+    'export const summarizeFcRows=()=>({}); export const validateFcSubmission=()=>{}; export const applyFcPlan=x=>x; export const planKey=x=>x.sku; export const rowKey=x=>x.sku; export const quantity=x=>Number(x??0); export const readFcActionRows=async(...args)=>{const f=globalThis.dmsFixture;(f.readScopes??=[]).push(args[0]);return f.read?f.read(...args):f.rows.filter(r=>!r.warehouse_code||r.warehouse_code===args[0].input.filters?.warehouse_code);}; export const validateFcImport=()=>[];',
 };
 await mkdir('.scratch', { recursive: true });
 const compiled = await build({
@@ -56,9 +56,31 @@ const compiled = await build({
   ],
 });
 await writeFile('.scratch/fc-dms.mjs', compiled.outputFiles[0].text);
-const { FcConfiguredList, FcWorkflowProvider } = await import(
-  pathToFileURL(resolve('.scratch/fc-dms.mjs'))
-);
+const {
+  FcConfiguredList,
+  FcWorkflowProvider: WorkflowProvider,
+  FcConfirmationDirectory,
+} = await import(pathToFileURL(resolve('.scratch/fc-dms.mjs')));
+const FcWorkflowProvider = ({ children }) =>
+  React.createElement(
+    WorkflowProvider,
+    null,
+    React.createElement(
+      FcConfirmationDirectory.Provider,
+      {
+        value: {
+          rows: ['W1', 'W2'].map((warehouse_code) => ({
+            warehouse_code,
+            warehouse_name: warehouse_code,
+          })),
+          loading: false,
+          error: '',
+          retry: () => {},
+        },
+      },
+      children,
+    ),
+  );
 test('branch confirmation sends documented order, retains draft on failure, and displays receipt only after acknowledgement', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
@@ -110,6 +132,14 @@ test('branch confirmation sends documented order, retains draft on failure, and 
       ),
     );
     await click('提交');
+    assert.match(document.body.textContent, /请先选择本次补货的分仓/);
+    assert.equal(globalThis.dmsFixture.readScopes, undefined);
+    await act(async () => {
+      const select = document.querySelector('[aria-label="导出补货分仓"]');
+      select.value = 'W1';
+      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    });
+    assert.equal(globalThis.dmsFixture.readScopes[0].input.filters.warehouse_code, 'W1');
     await click('确认暂存至DMS');
     assert.equal(calls.length, 0);
     for (const [label, value] of [
@@ -244,8 +274,8 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     call: () => {
       throw Error('must not submit while reading');
     },
-    read: (_scope, signal, progress) =>
-      new Promise((resolve, reject) => jobs.push({ signal, progress, resolve, reject })),
+    read: (scope, signal, progress) =>
+      new Promise((resolve, reject) => jobs.push({ scope, signal, progress, resolve, reject })),
   };
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(document.getElementById('root'));
@@ -265,7 +295,10 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
           React.createElement(FcConfiguredList, {
             columns: [],
             view: { title: '补货' },
-            actionScope: { viewId: 'replenishment', input: { asOf: '2026-10-29' } },
+            actionScope: {
+              viewId: 'replenishment',
+              input: { asOf: '2026-10-29', filters: { warehouse_code: 'W1', sku: 'SKU' } },
+            },
           }),
         ),
       ),
@@ -274,6 +307,7 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     assert.match(document.body.textContent, /正在读取补货清单，请稍候/);
     assert.ok(button('取消'));
     assert.equal(button('确认暂存至DMS'), undefined);
+    assert.deepEqual(jobs[0].scope.input.filters, { warehouse_code: 'W1', sku: 'SKU' });
     await act(async () => jobs[0].progress(100, 301));
     assert.match(document.body.textContent, /100 \/ 301/);
     await click('取消');
@@ -294,7 +328,10 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     assert.match(document.body.textContent, /1个SKU/);
     assert.match(document.querySelector('[role="alert"]').textContent, /2条记录缺少分仓或商品编码/);
     const choices = [...document.querySelector('[aria-label="导出补货分仓"]').options];
-    assert.deepEqual(choices.map((option) => option.value), ['', 'W1']);
+    assert.deepEqual(
+      choices.map((option) => option.value),
+      ['', 'W1'],
+    );
     await click('取消');
     await click('提交');
     assert.doesNotMatch(document.body.textContent, /2条记录缺少分仓或商品编码/);
@@ -302,6 +339,11 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     assert.equal(button('确认暂存至DMS').disabled, true);
     assert.match(document.body.textContent, /0个SKU/);
     assert.match(document.body.textContent, /2条记录缺少分仓或商品编码/);
+    await click('取消');
+    await click('提交');
+    await act(async () => jobs[4].resolve([{ ...rows[0], warehouse_code: 'W2' }]));
+    assert.match(document.body.textContent, /返回数据不属于所选分仓/);
+    assert.equal(button('确认暂存至DMS'), undefined);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();

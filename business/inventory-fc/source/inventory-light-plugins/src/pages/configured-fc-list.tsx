@@ -1,3 +1,4 @@
+import type { FcWarehouse } from './fc-warehouse-directory';
 import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
 import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
 import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
@@ -71,6 +72,12 @@ type Trial = {
   missingCount: number;
   forwardTurnover: number | null;
 };
+export const FcConfirmationDirectory = createContext<{
+  rows: FcWarehouse[];
+  loading: boolean;
+  error: string;
+  retry: () => void;
+}>({ rows: [], loading: false, error: '', retry: () => {} });
 const WorkflowContext = createContext<{
   trial: Trial | null;
   planningPlans: ImportedPlan[];
@@ -139,6 +146,8 @@ export function FcConfiguredList(
   props: React.ComponentProps<typeof OriginalBusinessList> & { actionScope: FcReadScope },
 ) {
   const { actionScope: scope } = props;
+  const directory = useContext(FcConfirmationDirectory);
+  const scopedWarehouse = String(scope.input.filters?.warehouse_code ?? '').trim();
   const { planningPlans, setTrial, storedVersions } = useFcWorkflow();
   const month = scope.input.asOf.slice(0, 7),
     days = scope.input.cycleDays ?? 7;
@@ -156,7 +165,9 @@ export function FcConfiguredList(
   >([]);
   const [importPlans, setImportPlans] = useState<ImportedPlan[]>([]);
   const [exportRows, setExportRows] = useState<FcRow[]>([]);
-  const [previewState, setPreviewState] = useState<'loading' | 'ready' | 'failed'>('ready');
+  const [previewState, setPreviewState] = useState<'selecting' | 'loading' | 'ready' | 'failed'>(
+    'ready',
+  );
   const [incompletePreviewCount, setIncompletePreviewCount] = useState(0);
   const [previewProgress, setPreviewProgress] = useState<{ loaded: number; total: number } | null>(
     null,
@@ -336,18 +347,34 @@ export function FcConfiguredList(
       setPlanDraft(next);
       if (!parsed.errors.length) memoryStorage.setItem(planDraftKey, JSON.stringify(next));
     });
-  const previewDraft = (mode: 'draft' | 'export') => {
+  const previewDraft = (
+    mode: 'draft' | 'export',
+    warehouse = scopedWarehouse || exportWarehouse,
+  ) => {
     setDialog(mode);
-    setPreviewState('loading');
+    active.current?.abort();
+    setBusy(false);
+    setNotice('');
+    setPreviewState(mode === 'export' && !warehouse ? 'selecting' : 'loading');
+    if (mode === 'export') setExportWarehouse(warehouse);
     setIncompletePreviewCount(0);
     setPreviewProgress(null);
     setExportRows([]);
     setDmsReceipt(null);
     setDialogPage(1);
+    if (mode === 'export' && !warehouse) return;
+    const readScope = {
+      ...scope,
+      viewId: 'replenishment',
+      input:
+        mode === 'export'
+          ? { ...scope.input, filters: { ...scope.input.filters, warehouse_code: warehouse } }
+          : scope.input,
+    };
     return run(async (signal) => {
       try {
         const rows = (
-          await readFcActionRows({ ...scope, viewId: 'replenishment' }, signal, (loaded, total) => {
+          await readFcActionRows(readScope, signal, (loaded, total) => {
             if (!signal.aborted) setPreviewProgress({ loaded, total });
           })
         ).map((row) => applyFcPlan(row, plans, scope.input.asOf, days));
@@ -364,10 +391,8 @@ export function FcConfiguredList(
           (row) => String(row.warehouse_code ?? '').trim() && String(row.sku ?? '').trim(),
         );
         setIncompletePreviewCount(candidates.length - selected.length);
-        const warehouses = [
-          ...new Set<string>(selected.map((row: FcRow) => String(row.warehouse_code))),
-        ];
-        setExportWarehouse(warehouses.length === 1 ? warehouses[0] : '');
+        if (mode === 'export' && selected.some((row) => String(row.warehouse_code) !== warehouse))
+          throw Error('返回数据不属于所选分仓，请重新读取');
         setExportRows(selected);
         setPreviewState('ready');
       } catch (error) {
@@ -894,9 +919,50 @@ export function FcConfiguredList(
         style={{ width: 'min(760px, calc(100vw - 32px))' }}
       >
         <div className="fc-workflow-dialog">
+          {dialog === 'export' && (
+            <label>
+              分仓{' '}
+              <select
+                aria-label="导出补货分仓"
+                disabled={busy || directory.loading || Boolean(dmsReceipt)}
+                value={exportWarehouse}
+                onChange={(event) => void previewDraft('export', event.target.value)}
+              >
+                <option value="">请选择分仓</option>
+                {(scopedWarehouse
+                  ? [
+                      {
+                        warehouse_code: scopedWarehouse,
+                        warehouse_name: directory.rows.find(
+                          (row) => row.warehouse_code === scopedWarehouse,
+                        )?.warehouse_name,
+                      },
+                    ]
+                  : directory.rows
+                ).map((row) => (
+                  <option key={row.warehouse_code} value={row.warehouse_code}>
+                    {row.warehouse_name ?? row.warehouse_code}（{row.warehouse_code}）
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {(dialog === 'draft' || dialog === 'export') && previewState !== 'ready' ? (
             <div role="status" aria-live="polite">
-              {previewState === 'loading' ? (
+              {previewState === 'selecting' ? (
+                <>
+                  <p>
+                    {directory.loading
+                      ? '正在读取分仓列表…'
+                      : directory.error || '请先选择本次补货的分仓，读取该分仓的补货清单。'}
+                  </p>
+                  {directory.error && (
+                    <button type="button" className="secondary-button" onClick={directory.retry}>
+                      重试分仓列表
+                    </button>
+                  )}
+                </>
+              ) : previewState === 'loading' ? (
                 <p>
                   {previewProgress
                     ? `正在读取补货清单：${previewProgress.loaded} / ${previewProgress.total} 条…`
@@ -975,37 +1041,9 @@ export function FcConfiguredList(
             <>
               {incompletePreviewCount > 0 && (
                 <p role="alert">
-                  {incompletePreviewCount}条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
+                  {incompletePreviewCount}
+                  条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
                 </p>
-              )}
-              {dialog === 'export' && (
-                <label>
-                  分仓{' '}
-                  <select
-                    aria-label="导出补货分仓"
-                    disabled={busy}
-                    value={exportWarehouse}
-                    onChange={(event) => {
-                      setDmsReceipt(null);
-                      setExportWarehouse(event.target.value);
-                      setDialogPage(1);
-                    }}
-                  >
-                    <option value="">请选择分仓</option>
-                    {[
-                      ...new Map(
-                        exportRows.map((row) => [
-                          String(row.warehouse_code),
-                          String(row.warehouse_name ?? row.warehouse_code),
-                        ]),
-                      ).entries(),
-                    ].map(([code, name]) => (
-                      <option key={code} value={code}>
-                        {name}（{code}）
-                      </option>
-                    ))}
-                  </select>
-                </label>
               )}
               {dialog === 'export' && (
                 <fieldset disabled={busy || Boolean(dmsReceipt)}>

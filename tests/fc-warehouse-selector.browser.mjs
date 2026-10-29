@@ -219,9 +219,26 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = page.getByRole('dialog');
   await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  assert.equal(
+    releaseConfirmation,
+    undefined,
+    'opening all-warehouse confirmation must not scan every warehouse',
+  );
+  await confirmation.getByLabel('导出补货分仓').selectOption('N417');
   await expect(confirmation).toContainText('正在读取补货清单，请稍候');
   await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
   await expect.poll(() => typeof releaseConfirmation).toBe('function');
+  assert.equal(
+    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
+      .values.warehouse_code,
+    'N417',
+  );
+  assert.equal(
+    calls.filter((c) => c.id === 'branch-warehouse.directory').length,
+    initialDirectoryReads + 2,
+    'confirmation reuses the authorized directory',
+  );
   await confirmation.screenshot({ path: '.scratch/fc-confirmation-loading.png' });
   releaseConfirmation();
   await expect(confirmation).not.toContainText('正在读取补货清单');

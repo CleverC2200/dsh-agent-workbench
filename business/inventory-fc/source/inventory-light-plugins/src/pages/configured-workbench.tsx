@@ -9,6 +9,7 @@ import { readFcActionRows, applyFcPlan, summarizeFcRows } from './fc-workflow';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
+  FcConfirmationDirectory,
   FcWorkflowProvider,
   fcTrialScope,
   useFcWorkflow,
@@ -463,34 +464,43 @@ function WorkbenchBody() {
                 ) : tab === 'base' && warehouse && !selectedBase ? (
                   <p role="status">当前分仓尚未关联基地。</p>
                 ) : (
-                  <ConfiguredFactsPage
-                    key={[
-                      tab,
-                      date,
-                      warehouse,
-                      revision,
-                      cycleDays,
-                      JSON.stringify(cycleRules),
-                      cycleWarehouse,
-                    ].join(':')}
-                    config={config}
-                    embedded
-                    scopeFilters={
-                      tab === 'base'
-                        ? warehouse && selectedBase
-                          ? { base: selectedBase }
-                          : {}
-                        : scopeFilters
-                    }
-                    presentation={originalFcView(config, tab)}
-                    businessList={FcConfiguredList}
-                    viewIds={views[tab]}
-                    date={date}
-                    cycleDays={cycleDays}
-                    fcCycleRules={cycleRules}
-                    fcCycleWarehouse={cycleWarehouse}
-                    onRead={(v) => updateContext('data', v)}
-                  />
+                  <FcConfirmationDirectory.Provider
+                    value={{
+                      rows: warehouses,
+                      loading: warehouseLoading,
+                      error: warehouseError,
+                      retry: () => reloadWarehouses((value) => value + 1),
+                    }}
+                  >
+                    <ConfiguredFactsPage
+                      key={[
+                        tab,
+                        date,
+                        warehouse,
+                        revision,
+                        cycleDays,
+                        JSON.stringify(cycleRules),
+                        cycleWarehouse,
+                      ].join(':')}
+                      config={config}
+                      embedded
+                      scopeFilters={
+                        tab === 'base'
+                          ? warehouse && selectedBase
+                            ? { base: selectedBase }
+                            : {}
+                          : scopeFilters
+                      }
+                      presentation={originalFcView(config, tab)}
+                      businessList={FcConfiguredList}
+                      viewIds={views[tab]}
+                      date={date}
+                      cycleDays={cycleDays}
+                      fcCycleRules={cycleRules}
+                      fcCycleWarehouse={cycleWarehouse}
+                      onRead={(v) => updateContext('data', v)}
+                    />
+                  </FcConfirmationDirectory.Provider>
                 )}
               </div>
             </section>
