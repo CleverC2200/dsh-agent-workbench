@@ -1,4 +1,5 @@
 import { renderSummaryDetails } from './summary-details.mjs';
+import { fulfillmentMissingReason } from './missing-reasons.mjs';
 import { mountSalesConfirmation } from './sales-confirmation.mjs';
 import { mountSalesSimulation } from './sales-simulation.mjs';
 import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
@@ -383,6 +384,7 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
     const q=qs.some(Boolean)?{original_qty:demand,adjusted_qty:sum('adjusted_qty'),allocated_qty:sum('allocated_qty'),shipped_qty:sum('shipped_qty'),ordered_qty:sum('ordered_qty'),
       order_allocation_rate:demand>0&&short!==null?100*Math.abs(demand-short)/demand:null,
       business_stage:same('business_stage'),node_status:same('node_status')??'unknown',sales_person:same('sales_person'),order_person:same('order_person'),carrier:same('carrier'),
+      missingReasons:Object.fromEntries(['original_qty','adjusted_qty','ordered_qty','allocated_qty','shipped_qty','order_allocation_rate','sales_person','order_person','carrier'].map(field=>[field,[...new Set(qs.filter(item=>item?.[field]==null).map(item=>item?.missingReasons?.[field]).filter(Boolean))].join('；')])),
       quantity_issue:qs.map(q=>q?.quantity_issue).filter(Boolean).join('；')}:null;
     const trace = (traces?.rows ?? []).find(
       (t) =>
@@ -448,14 +450,20 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
       quantityText(q, 'shipped_qty', quantities),
       quantityText(q, 'ordered_qty', quantities),
     ];
-    for (const v of values) {
+    const fields=['order_no','created_at','customer_name','sales_group','province','region','channel','sales_person','order_person','base','carrier','business_stage','node_status','order_allocation_rate','original_qty','adjusted_qty','allocated_qty','shipped_qty','ordered_qty'];
+    for (const [index,v] of values.entries()) {
       const node=cell(v);
-      if(v==='—')node.title='当前授权结果缺少该字段，或完整计算条件不足；不是零';
+      if(v==='—') {
+        const calculated=index>=13;
+        const derived=[7,8,10,11,12].includes(index);
+        node.title=fulfillmentMissingReason(fields[index],calculated||derived?q:row,calculated||derived?quantities:orders,
+          calculated?q?.quantity_issue:index===12?'节点状态缺少有效时限、时间或状态依据':'');
+      }
       tr.append(node);
     }
     tr.cells[7].className='customer-type-cell';
     if(!['—','无权限'].includes(channelCode))tr.cells[7].title=`${channelLabel(channelCode)}；原始编码：${channelCode}`;
-    tr.cells[14].title=q?.quantity_issue||'整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
+    if(values[13]!=='—')tr.cells[14].title='整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
     if (body.id === 'deliveryOrderDetailRows') {
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
       const statusButton=document.createElement('button');statusButton.type='button';statusButton.className='confirmation-status';statusButton.textContent='未接入';
@@ -516,7 +524,12 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
         quantityText(skuQuantity, 'original_qty', quantities),
         quantityText(skuQuantity, 'source_short_qty', quantities),
         skuQuantity?.sku_allocation_rate===null||skuQuantity?.sku_allocation_rate===undefined?'—':Number(skuQuantity.sku_allocation_rate).toFixed(1)+'%',
-      ])line.append(cell(v));
+      ].entries()) {
+        const [index,valueText]=v;
+        const target=cell(valueText);
+        if(valueText==='—')target.title=fulfillmentMissingReason(['material_name','original_qty','source_short_qty','sku_allocation_rate'][index],skuQuantity,quantities,skuQuantity?.quantity_issue);
+        line.append(target);
+      }
     }
     content.append(table);
     button.addEventListener('click', () => {
@@ -566,10 +579,18 @@ function renderInventory(result, ages, owners=null, resetPage=true) {
     ])
       tr.append(cell(text));
     body.append(tr);
-    tr.cells[1].title=owners?'执行明细中当前基地及SKU的应责总监；多个负责人并列展示':'应责总监字段未发布、未授权或源值缺失，未补值';
+    const inventoryFields=['material_name','director','product_item','series','product_tag','transfer_tag','base','stock_qty','oem_qty','ship_days','age_lt40','age_40_60','age_60_90','age_90_120','age_ge120'];
+    for(const [index,target] of [...tr.cells].entries())if(target.textContent==='—') {
+      target.title=index===1?fulfillmentMissingReason('director',matching[0],owners)
+        :index===8?'源数据未提供：尚无可确认的OEM库存来源，不能用基地库存替代。'
+        :index===9?'系统未能计算：可发货天数需要有效库存、计划数量及周期，缺值或零需求时不计算。'
+        :fulfillmentMissingReason(inventoryFields[index],index>=10?age:row,index>=10?ages:result,
+          index>=10&&age?'批次生产日期、库存日期或数量异常，不能完成货龄分箱':'');
+    }
+    if(ownerNames.length)tr.cells[1].title='执行明细中当前基地及SKU的应责总监；多个负责人并列展示';
     tr.cells[7].title=`库存日期 ${row.stock_date??'—'}；基地库存沿用库存明细源值，货龄分箱沿用同日批次库存，不强行调平两个源口径`;
-    tr.cells[8].title='尚无可核实的OEM库存归属映射，不将其他仓库库存当作OEM库存';
-    for(const node of [...tr.cells].slice(10))node.title=`货龄快照与库存日期 ${row.stock_date??'—'} 对齐；零库存批次不影响分箱，非零库存缺生产日期或数量异常时保持未知`;
+    for(const node of [...tr.cells].slice(10))if(node.textContent!=='—')node.title=`货龄快照与库存日期 ${row.stock_date??'—'} 对齐；零库存批次不影响分箱，非零库存缺生产日期或数量异常时保持未知`;
+
   }
   if (!body.children.length) placeholder(body, '当前授权范围无库存记录');
   const note = $('itemDimensionPanel').querySelector(':scope > .dimension-note');
@@ -634,6 +655,7 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
       tr.cells[7].title=`原始数量与当前缺货量加权；可计算明细${row.quantity_coverage}/${row.quantity_total}项，标注“部分”时不代表全量；完整可计算订单${row.rate_coverage}/${row.rate_total}张；缺数量或零分母不补零，不是SKU百分比平均或发货满足率`;
       for(let i=8;i<13;i++)tr.cells[i].title=`完整需求可计算订单${row.rate_coverage}/${row.rate_total}张；未知订单不分入任何区间`;
     }
+    for(const target of tr.cells)if(target.textContent==='—')target.title=`系统未能计算：当前分组缺少完整数量、有效分母或节点时限，不能归入0或正常。${target.title}`;
     body.append(tr);
     if(calculated) {
       const detail=document.createElement('tr');detail.hidden=!expanded.has(row.group_name);

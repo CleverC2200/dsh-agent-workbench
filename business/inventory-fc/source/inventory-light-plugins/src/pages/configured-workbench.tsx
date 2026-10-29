@@ -1,3 +1,7 @@
+import {
+  formatChainValue as show,
+  formatChainValueParts,
+} from '../../../../../shared/full-chain-display';
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
 import { FcPersistencePanel } from './fc-persistence-panel';
@@ -5,12 +9,14 @@ import { readFcActionRows, applyFcPlan, summarizeFcRows } from './fc-workflow';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
+  FcConfirmationDirectory,
   FcWorkflowProvider,
   fcTrialScope,
   useFcWorkflow,
 } from './configured-fc-list';
 import { configuredCycleState } from '../native/memory-storage';
 import { Modal } from '../dsh-ui/controls';
+import { WarehouseSelect } from './fc/components/warehouse-select';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
@@ -48,8 +54,6 @@ const views: Record<string, string[]> = {
   base: ['base-resources'],
   operations: ['cost'],
 };
-const show = (n: number | null, unit = '') =>
-  n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 export default function ConfiguredWorkbench() {
   return (
     <FcWorkflowProvider>
@@ -262,27 +266,27 @@ function WorkbenchBody() {
         <BusinessToolbar
           filters={
             <>
-              <label className="warehouse-switch">
-                <select
-                  aria-label="选择分仓"
+              <div className="warehouse-switch">
+                <WarehouseSelect
+                  label="选择分仓"
                   value={warehouse}
                   disabled={warehouseLoading}
-                  onChange={(event) => {
-                    setWarehouse(event.target.value);
+                  options={[
+                    { id: '', name: warehouseLoading ? '分仓加载中…' : '全部分仓' },
+                    ...(warehouse && !warehouses.some((item) => item.warehouse_code === warehouse)
+                      ? [{ id: warehouse, name: warehouse }]
+                      : []),
+                    ...warehouses.map((item) => ({
+                      id: item.warehouse_code,
+                      name: `${item.warehouse_name || item.warehouse_code}（${item.warehouse_code}）`,
+                    })),
+                  ]}
+                  onChange={(value) => {
+                    setWarehouse(value);
                     setTrial(null);
                   }}
-                >
-                  <option value="">{warehouseLoading ? '分仓加载中…' : '全部分仓'}</option>
-                  {warehouse && !warehouses.some((item) => item.warehouse_code === warehouse) && (
-                    <option value={warehouse}>{warehouse}</option>
-                  )}
-                  {warehouses.map((item) => (
-                    <option key={item.warehouse_code} value={item.warehouse_code}>
-                      {item.warehouse_name || item.warehouse_code}（{item.warehouse_code}）
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
               {warehouseError && <span role="status">{warehouseError}</span>}
               <button
                 type="button"
@@ -346,6 +350,7 @@ function WorkbenchBody() {
           <section className="workspace">
             <QueryErrors errors={[...errors, ...(planningError ? [planningError] : [])]} />
             <FcPersistencePanel
+              showControls={false}
               plans={planningPlans}
               days={cycleDays}
               rules={cycleRules}
@@ -386,8 +391,10 @@ function WorkbenchBody() {
                     <span>{c.title}</span>
                   </div>
                   <div className={`kpi-value ${c.color}`}>
-                    {show(c.value)}
-                    {c.value != null && <small>{c.unit}</small>}
+                    {formatChainValueParts(c.value, c.unit).value}
+                    {formatChainValueParts(c.value, c.unit).unit && (
+                      <small>{formatChainValueParts(c.value, c.unit).unit}</small>
+                    )}
                   </div>
                   {c.title === '待补货量' && missingRecommendations > 0 && (
                     <small>
@@ -458,34 +465,43 @@ function WorkbenchBody() {
                 ) : tab === 'base' && warehouse && !selectedBase ? (
                   <p role="status">当前分仓尚未关联基地。</p>
                 ) : (
-                  <ConfiguredFactsPage
-                    key={[
-                      tab,
-                      date,
-                      warehouse,
-                      revision,
-                      cycleDays,
-                      JSON.stringify(cycleRules),
-                      cycleWarehouse,
-                    ].join(':')}
-                    config={config}
-                    embedded
-                    scopeFilters={
-                      tab === 'base'
-                        ? warehouse && selectedBase
-                          ? { base: selectedBase }
-                          : {}
-                        : scopeFilters
-                    }
-                    presentation={originalFcView(config, tab)}
-                    businessList={FcConfiguredList}
-                    viewIds={views[tab]}
-                    date={date}
-                    cycleDays={cycleDays}
-                    fcCycleRules={cycleRules}
-                    fcCycleWarehouse={cycleWarehouse}
-                    onRead={(v) => updateContext('data', v)}
-                  />
+                  <FcConfirmationDirectory.Provider
+                    value={{
+                      rows: warehouses,
+                      loading: warehouseLoading,
+                      error: warehouseError,
+                      retry: () => reloadWarehouses((value) => value + 1),
+                    }}
+                  >
+                    <ConfiguredFactsPage
+                      key={[
+                        tab,
+                        date,
+                        warehouse,
+                        revision,
+                        cycleDays,
+                        JSON.stringify(cycleRules),
+                        cycleWarehouse,
+                      ].join(':')}
+                      config={config}
+                      embedded
+                      scopeFilters={
+                        tab === 'base'
+                          ? warehouse && selectedBase
+                            ? { base: selectedBase }
+                            : {}
+                          : scopeFilters
+                      }
+                      presentation={originalFcView(config, tab)}
+                      businessList={FcConfiguredList}
+                      viewIds={views[tab]}
+                      date={date}
+                      cycleDays={cycleDays}
+                      fcCycleRules={cycleRules}
+                      fcCycleWarehouse={cycleWarehouse}
+                      onRead={(v) => updateContext('data', v)}
+                    />
+                  </FcConfirmationDirectory.Provider>
                 )}
               </div>
             </section>
@@ -556,24 +572,25 @@ function WorkbenchBody() {
                   <option value="paused">暂停</option>
                 </select>
 
-                <select
-                  aria-label={`规则${index + 1}层级`}
+                <WarehouseSelect
+                  label={`规则${index + 1}层级`}
+                  compact
+                  disabled={false}
                   value={rule.level}
-                  onChange={(event) =>
+                  options={[
+                    { id: 'sku', name: 'SKU' },
+                    { id: 'material-group', name: '物料组' },
+                    { id: 'category', name: '品类' },
+                    { id: 'warehouse', name: '分仓' },
+                  ]}
+                  onChange={(value) =>
                     setRuleDraft(
                       ruleDraft.map((r, i) =>
-                        i === index
-                          ? { ...r, level: event.target.value as FcCycleRule['level'] }
-                          : r,
+                        i === index ? { ...r, level: value as FcCycleRule['level'] } : r,
                       ),
                     )
                   }
-                >
-                  <option value="sku">SKU</option>
-                  <option value="material-group">物料组</option>
-                  <option value="category">品类</option>
-                  <option value="warehouse">分仓</option>
-                </select>
+                />
                 <input
                   aria-label={`规则${index + 1}对象`}
                   placeholder="对象编码/分类名称"
@@ -605,29 +622,25 @@ function WorkbenchBody() {
                 />
                 <label>
                   生效日
-                  <input
-                    type="date"
+                  <BusinessDateInput
+                    aria-label={`规则${index + 1}生效日`}
+                    avoidTriggerOverlap
                     value={rule.from}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setRuleDraft(
-                        ruleDraft.map((r, i) =>
-                          i === index ? { ...r, from: event.target.value } : r,
-                        ),
+                        ruleDraft.map((r, i) => (i === index ? { ...r, from: value } : r)),
                       )
                     }
                   />
                 </label>
                 <label>
                   失效日
-                  <input
-                    type="date"
+                  <BusinessDateInput
+                    aria-label={`规则${index + 1}失效日`}
+                    avoidTriggerOverlap
                     value={rule.to}
-                    onChange={(event) =>
-                      setRuleDraft(
-                        ruleDraft.map((r, i) =>
-                          i === index ? { ...r, to: event.target.value } : r,
-                        ),
-                      )
+                    onValueChange={(value) =>
+                      setRuleDraft(ruleDraft.map((r, i) => (i === index ? { ...r, to: value } : r)))
                     }
                   />
                 </label>

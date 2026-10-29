@@ -3,6 +3,7 @@ import styles from './business-date-input.module.css';
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange'> & {
   onValueChange: (value: string) => void;
+  avoidTriggerOverlap?: boolean;
 };
 const isoDate = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -12,7 +13,13 @@ const labelDate = (value: string) =>
   `${value.slice(0, 4)}年${value.slice(5, 7)}月${value.slice(8, 10)}日`;
 
 /** The native date field preserves ISO form validation; the calendar has an explicit Chinese UI. */
-export function BusinessDateInput({ className, value, onValueChange, ...props }: Props) {
+export function BusinessDateInput({
+  className,
+  value,
+  onValueChange,
+  avoidTriggerOverlap = false,
+  ...props
+}: Props) {
   const date = readDate(value);
   const today = isoDate(new Date());
   const [popup, setPopup] = useState<{ month: string; left: number; top: number } | null>(null);
@@ -38,7 +45,15 @@ export function BusinessDateInput({ className, value, onValueChange, ...props }:
     setPopup({
       month: initial.slice(0, 7),
       left: Math.max(8, Math.min(rect.left, window.innerWidth - 288)),
-      top: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 352)),
+      top: avoidTriggerOverlap
+        ? Math.max(
+            8,
+            window.innerHeight - rect.bottom - 8 >= Math.min(352, window.innerHeight - 16) ||
+              window.innerHeight - rect.bottom - 8 >= rect.top - 8
+              ? rect.bottom + 7
+              : rect.top - Math.min(352, window.innerHeight - 16) - 7,
+          )
+        : Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 352)),
     });
   };
   useEffect(() => {

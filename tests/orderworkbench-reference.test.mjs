@@ -46,6 +46,7 @@ test('order workbench reference interactions', async () => {
   window.workbenchPresentation = model.workbenchPresentation;
   window.workbenchEvidence = model.workbenchEvidence;
   window.workbenchMetricDetail = model.workbenchMetricDetail;
+  window.workbenchCellMissingReason = model.workbenchCellMissingReason;
   window.Date = class extends Date {
     constructor(...args) {
       super(...(args.length ? args : ['2026-09-18T00:00:00Z']));

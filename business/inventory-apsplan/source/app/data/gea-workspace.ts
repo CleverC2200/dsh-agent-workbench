@@ -171,7 +171,16 @@ export function createGeaWorkspace(transport: SqlTransport) {
     // separate maps, and each consumer receives its own converted row objects.
     const directReads = new Map<string, Promise<Row[]>>();
     const primary = usesConfiguredSql()
-      ? ['finance', 'stock', 'orders', 'production', 'sales-budget']
+      ? [
+          'finance',
+          'stock',
+          'orders',
+          'production',
+          'plans',
+          'demand-accuracy',
+          'sales-accuracy',
+          'sales-budget',
+        ]
       : primarySources;
     const values: Row = {
       summary: input.summary,
@@ -355,6 +364,10 @@ export function createGeaWorkspace(transport: SqlTransport) {
                 ? 'unavailable'
                 : 'empty',
             rows: [],
+            error: {
+              code: 'HISTORICAL_CUTOFF_UNAVAILABLE',
+              message: `${result.label}仅有月度累计值，无法还原${end}的历史月中值；不能用历史整月值替代同期值。`,
+            },
           };
         let query =
           key === 'plans' ? (kind === 'year' ? 'plans-source-year' : 'plans-source') : key;
@@ -521,7 +534,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
           const key = keys[nextKey++];
           const result = await section(key);
           byId.set(key, result);
-          if (!selected && !input.signal?.aborted) input.onProgress?.(snapshot());
+          if (!input.signal?.aborted) input.onProgress?.(snapshot());
         }
       }),
     );
@@ -556,9 +569,17 @@ export function createGeaWorkspace(transport: SqlTransport) {
     // Shippable reuses stock. Do not let that waiting consumer occupy the
     // second annual worker ahead of independent production.
     const keys = usesConfiguredSql()
-      ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'production', 'shippable']
+      ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'plans', 'production', 'shippable']
       : comparisonKeys;
-    const previousRead = run({ ...input, date: previous[1] }, previous, keys).then((before) => {
+    const previousRead = run(
+      {
+        ...input,
+        date: previous[1],
+        onProgress: (data) => input.onComparison?.({ previous: data }),
+      },
+      previous,
+      keys,
+    ).then((before) => {
       if (!input.signal?.aborted) input.onComparison?.({ previous: before });
       return before;
     });
@@ -567,7 +588,16 @@ export function createGeaWorkspace(transport: SqlTransport) {
         ? // Let annual orders/production progress while stock pages are in flight.
           // Both periods still share the adapter's three-source limit.
           previousRead
-        : run({ ...input, date: annual[1] }, annual, keys, 2);
+        : run(
+            {
+              ...input,
+              date: annual[1],
+              onProgress: (data) => input.onComparison?.({ annual: data }),
+            },
+            annual,
+            keys,
+            2,
+          );
     const [before, yearBefore] = await Promise.all([previousRead, annualRead]);
     return { previous: before, annual: yearBefore };
   };

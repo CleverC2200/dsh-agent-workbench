@@ -1,5 +1,12 @@
 /** 独立销售计划页面使用的本地化文案。 */
 const copy = {
+  workspaceDirectoryTitle: ['先选择工作文件夹', 'Choose a working folder'],
+  workspaceDirectoryDescription: [
+    '开始对话前，需要选择一个工作文件夹，用于存放本次工作的文件。接下来会打开系统文件夹选择器，请选择已有文件夹，或新建一个文件夹。',
+    'Before starting the conversation, choose a working folder for the files you work on. The system folder picker will open next. Select an existing folder or create one.',
+  ],
+  workspaceDirectoryChoose: ['选择工作文件夹', 'Choose working folder'],
+  workspaceDirectoryCancel: ['暂不选择', 'Not now'],
   menuSupply: ['产销协同', 'Supply collaboration'],
   menuPlan: ['计划管理', 'Planning'],
   menuInventory: ['库存管理', 'Inventory'],
@@ -333,6 +340,7 @@ const copy = {
   newConversationFailed: ['新会话创建失败。', 'Unable to create a new conversation.'],
   geaBusiness: ['Synear GEA', 'Synear GEA'],
   brandSubtitle: ['智能体工作台', 'Agent workspace'],
+  testEnvironment: ['测试环境', 'Test environment'],
   functionArea: ['业务工作台', 'Business workbenches'],
   workspaceArea: ['AI工作台', 'AI workbench'],
   recentArea: ['历史会话', 'Session history'],

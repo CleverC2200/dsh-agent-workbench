@@ -28,6 +28,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const calls = [],
     errors = [];
+  let releaseConfirmation;
   t.after(() => assert.deepEqual(errors, []));
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('http://127.0.0.1:19486/**', async (route) => {
@@ -38,6 +39,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
     calls.push({ id, values });
+    if (id === 'replenishment.detail.atomic' && values.page_size === 200)
+      await new Promise((resolve) => {
+        releaseConfirmation = resolve;
+      });
     const q = config.queries[id];
     assert.ok(q, id);
     let rows;
@@ -65,13 +70,20 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       id.includes('atomic') ||
       id.startsWith('branch-current-orders.')
     )
-      rows = [{ page_scope_total: 0, page_row_present: null }];
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
+          page_scope_total: 0,
+          page_row_present: null,
+        },
+      ];
     else if (id.endsWith('.detail') || id.includes('batch-age.groups')) rows = [];
     else {
       const row = Object.fromEntries(q.resultColumns.map((k) => [k, 0]));
       Object.assign(row, {
         row_count: 1,
-        total_qty: values.warehouse_code ? 123 : 999,
+        total_qty: values.warehouse_code ? 123 : 210750.2,
+        known_in_transit: 1103569,
         fulfillment_rate: 0.95,
         demand: 100,
         shortage: 5,
@@ -98,19 +110,44 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await expect(picker.locator('option')).toHaveCount(3);
+  await picker.click();
+  await expect(page.getByRole('listbox', { name: '选择分仓' }).getByRole('option')).toHaveCount(3);
+  await picker.click();
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
+  await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '保存人工计划', exact: true })).toHaveCount(0);
   const replenishmentCard = page
     .locator('[data-overview-cards="fc"] article')
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
+  await expect(replenishmentCard).toContainText('110.36万件');
   await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  const toolbar = page.locator('form[data-business-filters="fc"]');
+  for (const width of [1280, 900, 640]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await toolbar.evaluate((form) => {
+      const controls = [...form.children].map((node) => node.getBoundingClientRect());
+      const bounds = form.getBoundingClientRect();
+      return {
+        sameLine: controls.every((rect) => Math.abs(rect.top - controls[0].top) < 2),
+        contained: controls.every((rect) => rect.left >= bounds.left && rect.right <= bounds.right),
+      };
+    });
+    assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
+    if (width >= 900)
+      assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
+  }
+  await page.setViewportSize({ width: 900, height: 900 });
+  await mkdir('.scratch', { recursive: true });
+  await toolbar.screenshot({ path: '.scratch/fc-toolbar-inline.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const initialDirectoryReads = calls.filter((c) => c.id === 'branch-warehouse.directory').length;
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
-  await picker.selectOption('A170');
+  await picker.click();
+  await page.locator('[role=option][data-value="A170"]').click();
   await expect(firstCard).toContainText('123');
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
@@ -135,7 +172,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     )
     .toBe(true);
   await page.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A170');
+  await expect(picker).toContainText('A170');
   const orderCalls = calls.filter((c) => c.id === 'branch-current-orders.page');
   assert.ok(orderCalls.every((c) => c.values.warehouse_code === 'A170'));
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
@@ -146,15 +183,16 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(true);
   await mkdir('.scratch', { recursive: true });
   await page.screenshot({ path: '.scratch/fc-warehouse-selector.png' });
-  await picker.selectOption('');
-  await expect(firstCard).toContainText('999');
+  await picker.click();
+  await page.locator('[role=option][data-value=""]').click();
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
     initialDirectoryReads,
   );
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
   await page.getByRole('button', { name: '刷新', exact: true }).click();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   await expect(picker).toBeEnabled();
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
@@ -164,7 +202,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.deepEqual(errors, []);
   await page.setViewportSize({ width: 520, height: 900 });
   await expect(picker).toBeVisible();
-  await picker.selectOption('N417');
+  await picker.click();
+  await page.locator('[role=option][data-value="N417"]').click();
   await expect(firstCard).toContainText('123');
   await page.evaluate(() => {
     const now = Date.now();
@@ -179,7 +218,39 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect
     .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
     .toBe(initialDirectoryReads + 2);
-  await expect(picker).toHaveValue('');
+  await expect(picker).toContainText('全部分仓');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: '补货确认', exact: true }).click();
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  const confirmation = page.getByRole('dialog');
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  assert.equal(
+    releaseConfirmation,
+    undefined,
+    'opening all-warehouse confirmation must not scan every warehouse',
+  );
+  await confirmation.getByLabel('导出补货分仓').selectOption('N417');
+  await expect(confirmation).toContainText('正在读取补货清单，请稍候');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
+  await expect.poll(() => typeof releaseConfirmation).toBe('function');
+  assert.equal(
+    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
+      .values.warehouse_code,
+    'N417',
+  );
+  assert.equal(
+    calls.filter((c) => c.id === 'branch-warehouse.directory').length,
+    initialDirectoryReads + 2,
+    'confirmation reuses the authorized directory',
+  );
+  await confirmation.screenshot({ path: '.scratch/fc-confirmation-loading.png' });
+  releaseConfirmation();
+  await expect(confirmation).not.toContainText('正在读取补货清单');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toBeDisabled();
+  await expect(confirmation).toContainText('0个SKU');
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
 });
 
 test('FC aging exposes immediate risk filters, leading risk column and ten-row server pages', async (t) => {
@@ -344,7 +415,8 @@ test('FC shows system plans before import and downloads every authorized row thr
   await expect(list.locator('tbody tr').first()).toContainText('分仓同步表');
   await list.getByRole('button', { name: '下载模板', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
-  await dialog.getByRole('combobox', { name: '模板计划月份', exact: true }).selectOption('2026-11');
+  await dialog.getByRole('button', { name: '模板计划月份', exact: true }).click();
+  await dialog.getByRole('option', { name: '2026年11月' }).click();
   const download = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click();
   const file = await download;
@@ -444,9 +516,10 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await picker.selectOption('A020');
+  await picker.click();
+  await page.locator('[role=option][data-value="A020"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const list = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(list.getByText('长沙直营', { exact: true })).toBeVisible();
@@ -472,7 +545,7 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     )
     .toBe('%CE2600000190%');
   await list.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A020');
+  await expect(picker).toContainText('A020');
   assert.ok(
     calls
       .filter((call) => call.id.startsWith('branch-current-orders.'))

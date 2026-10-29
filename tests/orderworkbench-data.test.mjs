@@ -12,7 +12,7 @@ export const config = orderWorkbenchSourceConfig(
 const built = await build({
   stdin: {
     contents:
-      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js';",
+      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js'; export * from './prototypes/inventory-orderworkbench/missing-reasons.mjs';",
     resolveDir: resolve('.'),
   },
   bundle: true,
@@ -34,6 +34,37 @@ const built = await build({
 export const model = await import(
   'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
 );
+
+test('missing metric reasons distinguish empty sources, rejected reads and zero denominators', () => {
+  const period = {
+    kind: 'month',
+    start: '2026-10-01',
+    end: '2026-10-29',
+    sections: [
+      { id: 'changes', status: 'ready', rows: [{ kind: '1', numerator: 0, denominator: 0 }] },
+    ],
+  };
+  const zero = model.computeWorkbenchMetrics(period)['作废率'];
+  assert.equal(zero.value, null);
+  assert.match(zero.missingReason, /系统未能计算/);
+  assert.match(
+    model.workbenchMetricMissingReason(
+      { ...period, sections: [{ id: 'changes', status: 'ready', rows: [] }] },
+      '作废率',
+    ),
+    /源数据未提供.*无记录/,
+  );
+  assert.match(
+    model.workbenchMetricMissingReason(
+      {
+        ...period,
+        sections: [{ id: 'changes', status: 'error', code: 'FIELD_NOT_PUBLISHED', rows: [] }],
+      },
+      '作废率',
+    ),
+    /系统读取未成功.*FIELD_NOT_PUBLISHED/,
+  );
+});
 export function fixturePeriod() {
   return {
     start: '2026-10-01',

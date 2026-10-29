@@ -2,6 +2,7 @@ import { bindGovernedSql } from '../../business/shared/governed-parameters.ts';
 import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';
 import { mapCustomerInventoryRows } from './customer-inventory-model.js';
 import { CUSTOMER_PLAN_SQL, mergeCustomerPlanRows } from './plan-source.js';
+import { CUSTOMER_MANAGER_SQL, mergeCustomerManagers } from './manager-source.js';
 
 export { mapCustomerInventoryRows } from './customer-inventory-model.js';
 
@@ -16,6 +17,7 @@ WITH snapshot AS (
   SELECT MAX(stat_date) AS inventory_date FROM agents_scm_cust_jxc_ai_daliy_d
 ), plan_sku AS (
   SELECT p.create_date AS stat_date, p.cust_code, p.material_code,
+    COUNT(*) AS source_rows,
     MAX(p.cust_name) AS cust_name,
     CASE WHEN COUNT(*) = 1 THEN MAX(p.stock_qty) END AS stock_qty,
     CASE WHEN COUNT(*) = 1 THEN MAX(p.in_transit_qty) END AS in_transit_qty,
@@ -29,7 +31,7 @@ WITH snapshot AS (
   WHERE p.create_date = (SELECT plan_date FROM snapshot)
   GROUP BY p.create_date, p.cust_code, p.material_code
 ), inventory_sku AS (
-  SELECT cust_code, material_code,
+  SELECT cust_code, material_code, source_rows,
     cif_price_min, cif_price_max, cif_price_complete, stock_amt,
     stock_qty AS original_stock_qty,
     CAST(NULL AS DECIMAL(18,4)) AS normal_stock_qty,
@@ -37,6 +39,7 @@ WITH snapshot AS (
   FROM plan_sku
 ), inventory_customer AS (
   SELECT cust_code, COUNT(*) AS inventory_sku_rows,
+    SUM(CASE WHEN source_rows > 1 THEN 1 ELSE 0 END) AS duplicate_sku_rows,
     MIN(cif_price_min) AS cif_price_min, MAX(cif_price_max) AS cif_price_max,
     SUM(cif_price_complete) AS cif_price_coverage,
     SUM(stock_amt) AS stock_amt, COUNT(stock_amt) AS value_coverage,
@@ -78,6 +81,7 @@ SELECT
   MAX(i.cif_price_coverage) AS cif_price_coverage,
   SUM(stock_qty) AS stock_qty,
   MAX(i.large_date_stock_qty) AS large_date_stock_qty,
+  MAX(i.duplicate_sku_rows) AS duplicate_sku_rows,
   MAX(i.stock_amt) AS stock_amt,
   SUM(sales_qty_30days) AS sales_qty_30days,
   MAX(i.normal_stock_qty) AS normal_stock_qty,
@@ -141,13 +145,17 @@ export async function loadCustomerInventory(options = {}) {
   } catch (error) {
     return {plans:[],planState:error.code ?? 'PLAN_SOURCE_UNAVAILABLE'};
   } })();
+  const managerInput = bindGovernedSql(CUSTOMER_MANAGER_SQL);
+  const managerRead = executeAllGeaSqlPages(managerInput.sql, {
+    parameters: managerInput.parameters, signal: options.signal, pageConcurrency: 3,
+  }).then(rows => ({ rows, state: 'ready' }), error => ({ rows: [], state: error.code ?? 'MANAGER_SOURCE_UNAVAILABLE' }));
   const rows = await inventoryRead;
   options.signal?.throwIfAborted();
   options.onInventory?.({ ...mapCustomerInventoryRows(rows), planState: 'loading' });
-  const [{plans,planState}, addresses] = await Promise.all([planRead,addressRead]);
+  const [{plans,planState}, addresses, managers] = await Promise.all([planRead,addressRead,managerRead]);
   options.signal?.throwIfAborted();
   const addressByCustomer = new Map(addresses.rows.map(row => [String(row.cust_code), row.dealer_receive_addr]));
-  const joinedRows = rows.map(row => ({...row, dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null}));
+  const joinedRows = mergeCustomerManagers(rows, managers.rows).map(row => ({...row, manager_state:managers.state, dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null}));
   const pageCache = new Map();
   const readDetails = async (codes, {signal} = {}) => {
     const lifetime=options.pageSignal??options.signal;
@@ -163,8 +171,8 @@ export async function loadCustomerInventory(options = {}) {
       throw Error('CUSTOMER_PAGE_INCOMPLETE');
     const signature=row=>JSON.stringify(Object.entries(row).sort(([a],[b])=>a.localeCompare(b)));
     for(const row of page){const original=rows.find(item=>String(item.cust_code)===String(row.cust_code));if(signature(row)!==signature(original))throw Error('CUSTOMER_SNAPSHOT_CHANGED');}
-    const mapped=mapCustomerInventoryRows(mergeCustomerPlanRows(page.map(row=>({...row,dealer_receive_addr:addressByCustomer.get(String(row.cust_code))??null})),plans)).rows;
+    const mapped=mapCustomerInventoryRows(mergeCustomerPlanRows(mergeCustomerManagers(page,managers.rows).map(row=>({...row,manager_state:managers.state,dealer_receive_addr:addressByCustomer.get(String(row.cust_code))??null})),plans)).rows;
     pageCache.set(key,mapped);return structuredClone(mapped);
   };
-  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state, readDetails };
+  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state, managerState: managers.state, readDetails };
 }

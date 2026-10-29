@@ -56,9 +56,13 @@ async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal) {
 }
 
 /** Only explicit download/import/submit actions enumerate their authorized filter scope. */
-export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) {
+export async function readFcActionRows(
+  scope: FcReadScope,
+  signal: AbortSignal,
+  onProgress?: (loaded: number, total: number) => void,
+) {
   if (scope.viewId === 'plan') return readFcPlanRows(scope, signal);
-  const pageSize = 50;
+  const pageSize = 200;
   const read = (page: number, readContext?: FactInput['readContext']) =>
     readConfiguredFacts(
       scope.config,
@@ -81,7 +85,9 @@ export async function readFcActionRows(scope: FcReadScope, signal: AbortSignal) 
       result.rows.length !== Math.min(pageSize, total - (page - 1) * pageSize)
     )
       throw Error('读取期间数据或配置已变化，请重新操作');
+    signal.throwIfAborted();
     rows.push(...result.rows.map((row: unknown) => rowSchema.parse(row)));
+    onProgress?.(rows.length, total);
   };
   add(first, 1);
   const stop = new AbortController();

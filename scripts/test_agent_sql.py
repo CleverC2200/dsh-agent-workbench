@@ -363,6 +363,30 @@ class ReadOnlySqlTests(unittest.TestCase):
 
 class FcReplenishmentCoverageTests(unittest.TestCase):
     """Execute the shipped config against independent inventory/plan/shipment grains."""
+    def test_confirmation_pages_survive_gateway_default_limit_without_missing_rows(self):
+        for index in range(250):
+            self.insert('agents_scm_warehouse_transfer_plan_data_d', warehouse_code='WH1', material_code=f'PAGE{index:03}', warehouse_month_out_plan=310, warehouse_future30_qty=300, warehouse_transfer_qty=0, stat_month='202610')
+            self.insert('agents_scm_inventory_sku_data_d', warehouseid='WH1', material_code=f'PAGE{index:03}', month_date='20261019', warehouse_classify='20', live_qty=0, available_qty=0, pack_unit_qty=0, freeze_qty=0)
+        for query_id in ['replenishment.detail.atomic', 'replenishment-suggestions.detail.atomic']:
+            query = self.config['queries'][query_id]
+            tree = sqlglot.parse_one(query['request']['sql'], read='postgres')
+            # The governed gateway applies its default 50-row limit when only an inner CTE is paged.
+            def gateway_page(offset):
+                limit = tree.args.get('limit')
+                bound = query['parameterSpec'][limit.expression.this]['name'] if limit else None
+                gateway_size = 200 if bound == 'page_size' else 50
+                return self.read(query_id, page_size=200, offset=offset)[:gateway_size]
+            first = gateway_page(0)
+            self.assertEqual(len(first), 200, query_id)
+            total = first[0]['page_scope_total']
+            second = gateway_page(200)
+            self.assertEqual(len(second), total - 200, query_id)
+            self.assertEqual(len({(r['warehouse_code'], r['sku']) for r in first + second}), total)
+            self.assertTrue(all(r['page_scope_total'] == total for r in first + second))
+            empty = gateway_page(400)
+            self.assertEqual(len(empty), 1)
+            self.assertEqual((empty[0]['page_scope_total'], empty[0]['page_row_present']), (total, 0))
+
     def test_branch_stock_and_snapshot_exclude_base_and_other_warehouse_classes(self):
         for kind, qty in [('01',1000),('02',2000),('03',4000)]:
             self.insert('agents_scm_inventory_sku_data_d',month_date='20261019',warehouseid='OTHER'+kind,warehouse_classify=kind,material_code='S1',live_qty=qty,available_qty=qty,prod_date='2026-01-01')
@@ -399,10 +423,10 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
             'agents_order_execute_isontime_mi': 'new_material_code new_material_name',
             'agents_scm_warehouse_transfer_plan_data_d': 'warehouse_code material_code warehouse_name material_name product_categ_name future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty last_month_actual_qty current_day_avg_qty stat_month',
             'agents_scm_cust_deliv_daily_di': 'warehouse material_code material_name material_group_name product_categ_name act_ship_date act_dl_qty warehouse_classify belong_base',
-            'agents_scm_execute_detail_d': 'cust_order_no cust_code material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyordered qtyallocated delivery_qty detailstatus order_close_time wms_close_time canceltime',
+            'agents_scm_execute_detail_d': 'cust_order_no cust_code material_code material_name pickup_point pickup_point_name belong_base bizflowstatus adjust_order_qty qtyordered qtyallocated qtyshipped bizunitconvertrate delivery_qty detailstatus order_close_time wms_close_time canceltime',
             'agents_scm_material_in_out_summary_d': 'warehouseid pickup_point material_code material_name material_group_name warehouse_name product_categ_name',
         }
-        numeric = set('adjust_order_qty qtyordered qtyallocated delivery_qty detailstatus live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
+        numeric = set('adjust_order_qty qtyordered qtyallocated qtyshipped bizunitconvertrate delivery_qty detailstatus live_qty unrestricted_qty is_overaged overaged_qty total_qty available_qty pack_unit_qty freeze_qty is_low_stock is_high_stock safe_stock_qty target_stock_qty current_stock age_days future30_avg_plan warehouse_month_out_plan warehouse_future30_qty warehouse_transfer_qty transfer_onway_qty transfer_prepare_qty warehouse_month_transfer_plan manual_month_out_plan manual_month_transfer_plan last_month_actual_qty current_day_avg_qty act_dl_qty'.split())
         for name, columns in tables.items():
             self.db.execute('CREATE TABLE '+name+' ('+', '.join(field+(' REAL' if field in numeric else ' TEXT') for field in columns.split())+')')
         self.addCleanup(self.db.close)
@@ -416,6 +440,8 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
     def insert(self, table, **values):
         if table == 'agents_scm_execute_detail_d':
             values.setdefault('qtyordered', values.get('adjust_order_qty'))
+            values.setdefault('bizunitconvertrate', 1)
+            values.setdefault('qtyshipped', values.get('delivery_qty', 0))
             values.setdefault('delivery_qty', 0)
             values.setdefault('detailstatus', 10)
         self.db.execute('INSERT INTO '+table+' ('+', '.join(values)+') VALUES ('+', '.join('?' for _ in values)+')',list(values.values()))

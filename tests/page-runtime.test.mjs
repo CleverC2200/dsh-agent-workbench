@@ -643,6 +643,8 @@ test('correlated HTML replies resolve only the matching action and cancellation 
   });
   await new Promise((resolve) => setImmediate(resolve));
   const [event] = (await h.call('events', { owner })).value;
+  assert.match(event.session, /^session-/);
+  assert.equal(event.session, h.id);
   assert.deepEqual(event.arguments, { warehouseId: 'A' });
   let settled = false;
   pending.then(() => {

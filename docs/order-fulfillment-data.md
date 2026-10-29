@@ -103,3 +103,8 @@ The latest glossary replaces the corresponding historical formulas above. Quanti
 按用户本次要求，订单履约和客户库存移除顶部正常加载状态条，取消页面内部固定高度的纵向滚动层，保留单一页面滚动；业务卡片、筛选和表格结构不变。
 
 订单履约按已完成查询逐区显示，连接与视图恢复使用同一有效读取，身份或筛选变化仍取消旧读取。客户库存的后续分页并发读取，全部分页的总数、字段权限和行数通过检查后才使用；身份展示信息不阻塞数据展示。当前用户、同一受控查询的耗时记录见[加载验证](reports/inventory-loading-20261021.json)，不代表其他网络或数据规模下的固定时限。
+# Missing-value reasons / 空值原因
+
+Missing quantity tooltips retain provenance: absent source values, failed/unpublished reads, unmatched keys, ambiguous split/unit conversion, duplicate keys and invalid denominators are distinct. No missing value is filled with zero, and formulas/authorization remain unchanged. / 数量横线的悬浮提示区分源字段空值、查询或发布失败、关联未命中、拆单/单位不明、重复键及无效分母，不改变公式与权限。
+
+Shortage diagnosis reads existing governed `shortage.detail` only. `agents_scm_shortage_trace_f` rows with `source_flag='缺货供应匹配'` are joined by execution order plus `material_code`, then checked against customer; SKU-only fallback is forbidden. `final_short_qty=0` is known zero, NULL is missing. Duplicates stay unaggregated; a missing match in current results does not prove the source table lacks the order. / 终缺判断沿已授权明细，以执行单号＋物料匹配并核对客户；不得按SKU串单。真实0保留，NULL、缺键、未匹配与重复分别计数和提示。

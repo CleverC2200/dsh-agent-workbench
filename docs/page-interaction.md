@@ -22,6 +22,8 @@ GEA 的 `businessAccount` 提供唯一身份只读投影；GEA 业务 adapter �
 
 HTML 的 context、动作登记、lease 续期、待执行队列、回执与取消由 [html-sessions](../src/html-sessions.ts) 集中维护，PageRuntime 只调用其操作接口，不持有可变会话 record。Native 的 context 继续交给业务 grant 的观察回调，不进入 HTML 动作队列。
 
+HTML待执行动作携带其owned lease对应的真实`session`。页面端在调用已登记handler前校验该Session，缺失或不同Session不执行；不能通过放松页面校验来修复动作超时。动作完成仍由原lease及请求ID关联回执，身份变化/关闭仍取消旧动作。
+
 公共页面选择与引用实现位于 [src/page-interaction](../src/page-interaction)，公开导出查 package.json。React Grab 仍仅用于用户明确的内容选择；没有 shell DOM 扫描或旧主会话接线。构建把 picker 内嵌脚本置于 lib/page-picker.js，实际 HTML 读取时才注入。FC/AQKC 初始化在无连接时显示明确等待/失败，不伪造数据；连接后执行原查询和计算。
 
 ## 载荷与取消

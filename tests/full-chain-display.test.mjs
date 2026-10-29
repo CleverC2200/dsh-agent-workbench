@@ -8,7 +8,7 @@ const output = await build({
   platform: 'node',
   format: 'esm',
 });
-const { fullChainCards, formatChainValue } = await import(
+const { fullChainCards, formatChainValue, formatInventoryMetricTextParts } = await import(
   'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
 );
 test('available base inventory and matched turnover are primary values with their distinct coverage', () => {
@@ -136,4 +136,22 @@ test('quantity display scales in the original unit without abbreviating days, pe
   assert.equal(formatChainValue(NaN, '件'), '-');
   assert.equal(formatChainValue(10000, '天'), '10,000天');
   assert.equal(formatChainValue(95.81, '%'), '95.81%');
+});
+
+test('base KPI quantities share units while preserving missing and partial data', () => {
+  const show = (label, text) => {
+    const parts = formatInventoryMetricTextParts(label, text);
+    return parts.value + parts.unit;
+  };
+  assert.equal(show('当前库存', '4,399,631'), '439.96万件');
+  assert.equal(show('当前订单', '26,879,396'), '2,687.94万件');
+  assert.equal(show('未发货订单占用', '14,621,803件'), '1,462.18万件');
+  assert.equal(show('库存差额', '-868,218'), '-86.82万件');
+  assert.equal(show('目标库存', '3,453,117（部分）'), '345.31万件（部分）');
+  assert.equal(show('超龄库存', '0'), '0件');
+  assert.equal(show('当前库存', '-'), '-');
+  assert.equal(show('当前库存', '439.96万件'), '439.96万件');
+  assert.equal(show('超龄SKU', '679'), '679');
+  assert.equal(show('平均货龄', '18.8天'), '18.8天');
+  assert.equal(show('订单满足率', '96.0%'), '96.0%');
 });
