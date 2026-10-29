@@ -52,7 +52,7 @@ def update_agents(agents):
   if agent=='aqkc':
    for value in data.values():
     value['title']='当前未发货完成订单三层缺货'
-    value['notes']='仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；按qtyordered和qtyallocated统一件数，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。'
+    value['notes']='仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；qtyordered和qtyallocated逐行除以bizunitconvertrate统一为件，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。'
   for key,value in data.items():
    match=re.search(r'"'+re.escape(key)+r'"\s*:\s*',text)
    if match:

@@ -12,13 +12,13 @@ class BranchCurrentOrders(unittest.TestCase):
   self.db=sqlite3.connect(':memory:');self.db.row_factory=sqlite3.Row;self.addCleanup(self.db.close)
   self.db.execute('CREATE TABLE agents_scm_inventory_sku_data_d(month_date TEXT,warehouseid TEXT,warehouse_name TEXT,belong_base TEXT,material_code TEXT,material_name TEXT,prod_date TEXT,sap_warehouseid TEXT,plant TEXT,quality_batch TEXT,is_good_prod TEXT,warehouse_classify TEXT,available_qty REAL)')
   self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d(warehouseid TEXT,pickup_point TEXT)')
-  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,executeorderno TEXT,cust_code TEXT,cust_name TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,requireddeliverytime TEXT,header_addtime TEXT,order_qty_convert REAL,qtyordered REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT)')
+  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,executeorderno TEXT,cust_code TEXT,cust_name TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,requireddeliverytime TEXT,header_addtime TEXT,order_qty_convert REAL,bizunitconvertrate REAL,qtyshipped REAL,qtyordered REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT)')
   for warehouse,point,kind in [('W1','P1','20'),('W2','P2','20'),('BASE','PB','01')]:
    self.db.execute('INSERT INTO agents_scm_inventory_sku_data_d(month_date,warehouseid,warehouse_name,belong_base,warehouse_classify) VALUES(?,?,?,?,?)',('20261028',warehouse,warehouse,'B',kind))
    self.db.execute('INSERT INTO agents_scm_material_in_out_summary_d VALUES(?,?)',(warehouse,point))
  def add(self,order,**changes):
   row=dict(cust_order_no=order,executeorderno='E'+order,cust_code='C1',cust_name='客户一',material_code='SKU1',material_name='商品',pickup_point='P1',requireddeliverytime='2026-10-29',header_addtime='2024-01-01',order_qty_convert=100,qtyordered=100,qtyallocated=50,delivery_qty=0,bizflowstatus='等待组波',detailstatus=10,order_close_time=None,wms_close_time=None,canceltime=None)
-  row.update(changes);self.db.execute('INSERT INTO agents_scm_execute_detail_d('+','.join(row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
+  row.update(changes);row.setdefault('bizunitconvertrate',1);row.setdefault('qtyshipped',row['delivery_qty']);self.db.execute('INSERT INTO agents_scm_execute_detail_d('+','.join(row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
  def read(self,key='branch-current-orders.page',**values):
   q=self.config['queries'][key];p=q['request']['parameters'].copy()
   for name,value in values.items():p[next(k for k,v in q['parameterSpec'].items() if v['name']==name)]=value

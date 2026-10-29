@@ -80,10 +80,10 @@ WITH latest_inventory AS (
   SELECT o.cust_order_no AS cust_order_no, o.cust_code AS cust_code,
     o.material_code AS material_code, o.material_name AS material_name,
     o.pickup_point AS pickup_point, o.pickup_point_name AS pickup_point_name,
-    o.belong_base AS belong_base, o.qtyordered AS demand_qty,
-    o.qtyallocated AS allocated_qty,
-    CASE WHEN o.qtyordered IS NULL OR o.delivery_qty IS NULL
-      OR o.delivery_qty < o.qtyordered THEN 1 ELSE 0 END AS unshipped
+    o.belong_base AS belong_base, (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END) AS demand_qty,
+    (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END) AS allocated_qty,
+    CASE WHEN o.qtyordered IS NULL OR o.qtyshipped IS NULL
+      OR o.qtyshipped < o.qtyordered THEN 1 ELSE 0 END AS unshipped
   FROM agents_scm_execute_detail_d AS o
   WHERE o.detailstatus = 10
     AND o.order_close_time IS NULL AND o.wms_close_time IS NULL

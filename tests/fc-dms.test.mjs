@@ -28,7 +28,7 @@ const mocks = {
   '../../../fc/src/lib/planning':
     'export const IMPORT_FIELDS=[]; export const defaultPlanTemplateMonth=()=>"2026-11"; export const currentPlanningMonth=()=>"2026-10"; export const nextMonth=()=>"2026-11";',
   './fc-workflow':
-    'export const summarizeFcRows=()=>({}); export const validateFcSubmission=()=>{}; export const applyFcPlan=x=>x; export const planKey=x=>x.sku; export const rowKey=x=>x.sku; export const quantity=x=>Number(x??0); export const readFcActionRows=async()=>globalThis.dmsFixture.rows; export const validateFcImport=()=>[];',
+    'export const summarizeFcRows=()=>({}); export const validateFcSubmission=()=>{}; export const applyFcPlan=x=>x; export const planKey=x=>x.sku; export const rowKey=x=>x.sku; export const quantity=x=>Number(x??0); export const readFcActionRows=async(...args)=>{const f=globalThis.dmsFixture;return f.read?f.read(...args):f.rows;}; export const validateFcImport=()=>[];',
 };
 await mkdir('.scratch', { recursive: true });
 const compiled = await build({
@@ -226,6 +226,68 @@ test('branch confirmation sends documented order, retains draft on failure, and 
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     assert.doesNotMatch(document.body.textContent, /DMS订单号：LATE|DMS已返回订单号：LATE/);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.dmsFixture;
+  }
+});
+
+test('confirmation opens before a slow read; cancellation, errors and retry never expose partial orders', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const jobs = [];
+  globalThis.dmsFixture = {
+    rows,
+    call: () => {
+      throw Error('must not submit while reading');
+    },
+    read: (_scope, signal, progress) =>
+      new Promise((resolve, reject) => jobs.push({ signal, progress, resolve, reject })),
+  };
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  const button = (name) =>
+    [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === name);
+  const click = (name) =>
+    act(async () => {
+      assert.ok(button(name), name);
+      button(name).click();
+    });
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          FcWorkflowProvider,
+          null,
+          React.createElement(FcConfiguredList, {
+            columns: [],
+            view: { title: '补货' },
+            actionScope: { viewId: 'replenishment', input: { asOf: '2026-10-29' } },
+          }),
+        ),
+      ),
+    );
+    await click('提交');
+    assert.match(document.body.textContent, /正在读取补货清单，请稍候/);
+    assert.ok(button('取消'));
+    assert.equal(button('确认暂存至DMS'), undefined);
+    await act(async () => jobs[0].progress(100, 301));
+    assert.match(document.body.textContent, /100 \/ 301/);
+    await click('取消');
+    assert.equal(jobs[0].signal.aborted, true);
+    await click('提交');
+    await act(async () => jobs[0].resolve(rows));
+    assert.equal(button('确认暂存至DMS'), undefined);
+    await act(async () => jobs[1].reject(Error('读取失败，请重试')));
+    assert.match(document.body.textContent, /读取失败，请重试/);
+    assert.equal(button('确认暂存至DMS'), undefined);
+    await click('重新读取');
+    await act(async () => jobs[2].resolve(rows));
+    assert.equal(button('确认暂存至DMS').disabled, false);
+    assert.match(document.body.textContent, /1个SKU/);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();
