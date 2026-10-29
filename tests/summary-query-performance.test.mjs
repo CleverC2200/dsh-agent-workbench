@@ -53,35 +53,37 @@ for (const agent of ['fc', 'qll', 'dealer'])
   });
 
 for (const filters of [{ warehouse_code: 'W1' }, { warehouse_code: 'W1', material_code: 'SKU1' }])
-test(`filtered inventory summary preserves its scope: ${JSON.stringify(filters)}`, async () => {
-  const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
-  const calls = [];
-  await readConfiguredFacts(
-    config,
-    'branch-stock',
-    { asOf: '2026-10-23', filters },
-    {
-      summaryOnly: true,
-      execute: async (_, o) => {
-        calls.push({ id: o.queryId, values: o.values });
-        return {
-          configVersion: 'v1',
-          rows: [
-            Object.fromEntries(
-              config.queries[o.queryId].resultColumns.map((k) => [
-                k,
-                k === 'day' ? '2026-10-23' : 1,
-              ]),
-            ),
-          ],
-        };
+  test(`filtered inventory summary preserves its scope: ${JSON.stringify(filters)}`, async () => {
+    const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+    const calls = [];
+    await readConfiguredFacts(
+      config,
+      'branch-stock',
+      { asOf: '2026-10-23', filters },
+      {
+        summaryOnly: true,
+        execute: async (_, o) => {
+          calls.push({ id: o.queryId, values: o.values });
+          return {
+            configVersion: 'v1',
+            rows: [
+              Object.fromEntries(
+                config.queries[o.queryId].resultColumns.map((k) => [
+                  k,
+                  k === 'day' ? '2026-10-23' : 1,
+                ]),
+              ),
+            ],
+          };
+        },
       },
-    },
-  );
-  const expected = filters.material_code ? 'health.summary' : 'health.cards';
-  assert.ok(calls.some((c) => c.id === expected));
-  assert.ok(!calls.some((c) => c.id === (filters.material_code ? 'health.cards' : 'health.summary')));
-  const query = calls.find((c) => c.id === expected);
-  assert.equal(query.values.warehouse_code, 'W1');
-  if (filters.material_code) assert.equal(query.values.material_code, 'SKU1');
-});
+    );
+    const expected = filters.material_code ? 'health.summary' : 'health.cards';
+    assert.ok(calls.some((c) => c.id === expected));
+    assert.ok(
+      !calls.some((c) => c.id === (filters.material_code ? 'health.cards' : 'health.summary')),
+    );
+    const query = calls.find((c) => c.id === expected);
+    assert.equal(query.values.warehouse_code, 'W1');
+    if (filters.material_code) assert.equal(query.values.material_code, 'SKU1');
+  });
