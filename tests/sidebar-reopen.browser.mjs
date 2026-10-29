@@ -59,7 +59,7 @@ const bundle = await build({
  ctx.slots.inject('sidebar.workspaces',()=>ctx.slots.register({name:'sidebar.workspaces',children:{'sidebar.workspaces.session.menu.item':{kind:'list',scope:'root'},'sidebar.workspaces.session.row.action':{kind:'list',scope:'root'},'sidebar.session.row.leading':{kind:'single',scope:'root'},'sidebar.session.row.hover':{kind:'list',scope:'root'},'sidebar.workspaces.directoryFlow':{kind:'single',scope:'root'}}},props=><WorkspaceBrowser {...props} {...workspaceProps} t={key=>workspaceCopy[key]??commonCopy[key]??key}/>));
 
  ctx.provide('inputTriggers',{registerSource:()=>()=>{}});ctx.provide('conversation',{input:{for:()=>({})}});
- ctx.provide('remote',{session:{}});ctx.provide('businessAccount',{...source({state:'confirmed',scope:null,status:{authenticated:false}})});
+ ctx.provide('remote',{session:{}});ctx.provide('businessAccount',{...source(window.fixtureIdentity??{state:'confirmed',scope:null,status:{authenticated:false}})});
  mountFramePresentation(ctx,()=>undefined,key=>key,workbench);
  const page={id:'inventory-fc',kind:'local',label:'分仓库存',body:()=> <input aria-label="业务筛选" defaultValue="保留业务筛选"/>};
  workbench.registerFrame(page);
@@ -104,7 +104,7 @@ const bundle = await build({
   ],
 });
 
-async function fixture(t, platform = 'darwin', conversation = false) {
+async function fixture(t, platform = 'darwin', conversation = false, identity) {
   const browser = await chromium.launch({
     headless: true,
     channel: process.env.DSH_TEST_BROWSER_CHANNEL,
@@ -156,6 +156,10 @@ async function fixture(t, platform = 'darwin', conversation = false) {
       document.documentElement.style.setProperty('--dsh-windows-titlebar-height', '40px');
     }
   }, platform);
+  if (identity)
+    await page.evaluate((value) => {
+      window.fixtureIdentity = value;
+    }, identity);
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
@@ -166,6 +170,39 @@ async function fixture(t, platform = 'darwin', conversation = false) {
   if (conversation) await page.evaluate(() => window.useConversationFixture());
   return page;
 }
+
+test('Test environment badge stays beside the brand subtitle without covering the inbox in either theme', async (t) => {
+  const page = await fixture(t, 'darwin', false, {
+    state: 'confirmed',
+    scope: 'fixture:test:user',
+    subject: 'user',
+    status: { environment: 'test', authenticated: true, user: null },
+  });
+  const badge = page.getByTitle('测试环境', { exact: true });
+  await expect(badge).toHaveText('Test');
+  for (const dark of [false, true]) {
+    await page.evaluate(
+      (value) => document.body.toggleAttribute('data-ds-dark-theme', value),
+      dark,
+    );
+    const marker = await badge.boundingBox();
+    const subtitle = await page.locator('.gea-brand-subtitle').boundingBox();
+    const inbox = await page.getByRole('button', { name: '消息待办', exact: true }).boundingBox();
+    assert.ok(
+      marker.x >= subtitle.x &&
+        marker.y >= subtitle.y &&
+        marker.y + marker.height <= subtitle.y + subtitle.height + 1,
+    );
+    assert.ok(marker.x + marker.width < inbox.x, 'badge does not cover the inbox control');
+    if (process.env.GEA_TEST_BADGE_EVIDENCE)
+      await page.screenshot({
+        path: resolve(
+          process.env.GEA_TEST_BADGE_EVIDENCE,
+          dark ? 'badge-dark.png' : 'badge-light.png',
+        ),
+      });
+  }
+});
 
 test('company sidebar follows light and dark theme with readable controls', async (t) => {
   const page = await fixture(t, 'win32');

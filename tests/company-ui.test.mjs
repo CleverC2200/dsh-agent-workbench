@@ -2059,6 +2059,40 @@ const marketAgents = [
     enterpriseManaged: false,
   },
 ];
+test('brand Test badge follows confirmed test login and clears on production, logout and identity errors', async (t) => {
+  let identity = navigationIdentity;
+  const listeners = new Set();
+  await mountNavigation(t, {
+    account: {
+      getSnapshot: () => identity,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
+  });
+  const badge = () => document.querySelector('.gea-test-environment-badge');
+  assert.equal(badge()?.textContent, 'Test');
+  assert.equal(badge()?.title, '测试环境');
+  for (const next of [
+    { ...navigationIdentity, status: { ...navigationIdentity.status, environment: 'production' } },
+    { ...navigationIdentity, status: { ...navigationIdentity.status, authenticated: false } },
+    { ...navigationIdentity, state: 'unknown' },
+    { ...navigationIdentity, error: 'identity unavailable' },
+  ]) {
+    await React.act(async () => {
+      identity = next;
+      for (const listener of listeners) listener();
+    });
+    assert.equal(badge(), null);
+  }
+  await React.act(async () => {
+    identity = navigationIdentity;
+    for (const listener of listeners) listener();
+  });
+  assert.equal(badge()?.textContent, 'Test');
+});
+
 async function mountNavigation(t, options = {}) {
   const mounted = await mountedDom(t);
   const result = fixture(options.account ?? navigationAccount, undefined, options);
