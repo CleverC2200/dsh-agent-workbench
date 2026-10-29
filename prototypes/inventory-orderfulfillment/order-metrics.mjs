@@ -1,3 +1,4 @@
+import { quantityMissingReasons } from './missing-reasons.mjs';
 const number=value=>value===null||value===undefined||value===''?null:Number.isFinite(Number(value))?Number(value):null;
 export function shanghaiTime(value) {
   if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(value)) return null;
@@ -116,6 +117,7 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
       sales_person:consistent('sales_person'),order_person:consistent('order_person'),carrier:consistent('logistics_provider'),
       sku_allocation_rate:q.skuRate??null,allocation_rate:q.allocationRate??null,
       business_stage:new Set(valid.map(row=>row.prapare_order_status)).size===1?valid[0]?.prapare_order_status:null,
+      missingReasons:quantityMissingReasons(valid),
       quantity_issue:valid.length===0?'无有效执行明细':valid.length===1&&q.original===null?'源原始数量缺失':q.original===null||q.adjusted===null?'拆单需求不一致或缺失，归并未确认':''});
   }
   const pending=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&row.prapare_order_status==='备单中');

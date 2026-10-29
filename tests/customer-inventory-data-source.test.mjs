@@ -113,11 +113,14 @@ test('inventory and optional plans start together without weakening failures or 
       new Promise((resolve, reject) => calls.push({ sql, options, resolve, reject })),
   );
   const loading = loader.loadCustomerInventory();
-  assert.equal(calls.length, 3, '库存、地址、计划三个独立数据源并行');
+  assert.equal(calls.length, 4, '库存、地址、计划和客户经理四个独立数据源并行');
   calls[1].resolve([]);
   calls[2].reject(Object.assign(Error('plan denied'), { code: 'RETURN_PERMISSION_DENIED' }));
+  calls[3].reject(Object.assign(Error('manager denied'), { code: 'FIELD_NOT_PUBLISHED' }));
   calls[0].resolve([]);
-  assert.equal((await loading).planState, 'RETURN_PERMISSION_DENIED');
+  const unavailable = await loading;
+  assert.equal(unavailable.planState, 'RETURN_PERMISSION_DENIED');
+  assert.equal(unavailable.managerState, 'FIELD_NOT_PUBLISHED');
   calls = [];
   let first;
   const combined = loader.loadCustomerInventory({
@@ -150,9 +153,12 @@ test('inventory and optional plans start together without weakening failures or 
     { cust_code: 'outside', dealer_receive_addr: '[]' },
   ]);
   calls[2].resolve([]);
+  calls[3].resolve([{ cust_code: 'B', customer_manager: '张三' }, { cust_code: 'outside', customer_manager: '范围外' }]);
   const joined = await combined;
   assert.equal(joined.rows.length, 2, '辅助数据不能增加库存客户');
   assert.deepEqual(joined.rows.find((row) => row.code === 'B').cities, ['郑州市']);
+  assert.equal(joined.rows.find((row) => row.code === 'B').manager, '张三');
+  assert.equal(joined.rows.find((row) => row.code === 'A').manager, '—');
   assert.equal(
     joined.rows.reduce((sum, row) => sum + row.quantity, 0),
     30,
