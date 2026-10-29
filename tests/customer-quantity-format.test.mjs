@@ -15,7 +15,10 @@ test('missing quantities omit units while real zero retains its unit', () => {
 });
 
 test('customer table and diagnostic metrics use the missing-safe unit formatter', async () => {
-  const source = await readFile(new URL('../prototypes/inventory-customer/application.js', import.meta.url), 'utf8');
+  const source = await readFile(
+    new URL('../prototypes/inventory-customer/application.js', import.meta.url),
+    'utf8',
+  );
   assert.ok(source.includes('formatCustomerQuantity(N,"万",1)'));
   assert.ok(source.includes('formatCustomerQuantity(N,"箱")'));
   assert.ok(!source.includes('pe(N,1),"\\u4E07"'));

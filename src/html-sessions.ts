@@ -129,7 +129,13 @@ export function createHtmlSessions() {
           timer,
         });
         signal.addEventListener('abort', abort, { once: true });
-        page.queue.push({ type: 'invoke', session: page.session, id, name: action.name, arguments: args });
+        page.queue.push({
+          type: 'invoke',
+          session: page.session,
+          id,
+          name: action.name,
+          arguments: args,
+        });
       });
     },
     reply(lease: string, message: { id: string; error?: unknown; result?: unknown }) {

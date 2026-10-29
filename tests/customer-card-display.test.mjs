@@ -11,7 +11,10 @@ test('only unassessed card labels become current scope', () => {
 });
 
 test('scope wording is card-only and the removed list scope row stays absent', async () => {
-  const source = await readFile(new URL('../prototypes/inventory-customer/application.js', import.meta.url), 'utf8');
+  const source = await readFile(
+    new URL('../prototypes/inventory-customer/application.js', import.meta.url),
+    'utf8',
+  );
   assert.ok(source.includes('Z.default.createElement(Ev,{status:z[N.key],card:true})'));
   assert.ok(source.includes('card?customerCardStatusLabel(r,zv[r].label):zv[r].label'));
   assert.ok(!source.includes('customer-list-scope'));

@@ -153,7 +153,10 @@ test('inventory and optional plans start together without weakening failures or 
     { cust_code: 'outside', dealer_receive_addr: '[]' },
   ]);
   calls[2].resolve([]);
-  calls[3].resolve([{ cust_code: 'B', customer_manager: '张三' }, { cust_code: 'outside', customer_manager: '范围外' }]);
+  calls[3].resolve([
+    { cust_code: 'B', customer_manager: '张三' },
+    { cust_code: 'outside', customer_manager: '范围外' },
+  ]);
   const joined = await combined;
   assert.equal(joined.rows.length, 2, '辅助数据不能增加库存客户');
   assert.deepEqual(joined.rows.find((row) => row.code === 'B').cities, ['郑州市']);
