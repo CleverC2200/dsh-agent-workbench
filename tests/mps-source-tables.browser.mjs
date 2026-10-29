@@ -113,7 +113,7 @@ test('one forecast batch drives two selectable target months and delivery source
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)
     .toContain('物料组未匹配主数据，分类留空');
-  assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12,0,12.5,1,'));
+  assert(csv.includes('2027-01,基地甲,001,产品甲,,,12.5,2026-12,2026/12,0,12.5,1,'));
   const allDownload = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const allCsv = await mpsDownloadText(await (await allDownload).path());
@@ -161,7 +161,7 @@ test('one forecast batch drives two selectable target months and delivery source
     )
     .toBe(true);
 });
-test('all forecast pages are loaded, duplicates do not inflate totals, and a refresh failure invalidates the aggregate', async (t) => {
+test('all group forecast pages are loaded, grouped source counts retain valid quantities, and a refresh failure invalidates the aggregate', async (t) => {
   let deny = false;
   const { frame, calls } = await mpsPage(
     t,
@@ -189,7 +189,7 @@ test('all forecast pages are loaded, duplicates do not inflate totals, and a ref
   });
   await expect(forecast.getByText('业务来源', { exact: true })).toBeVisible();
   await forecast.getByText('口径与统计说明', { exact: true }).click();
-  await expect(forecast).toContainText('当前期间201条，数量合计未提供，缺失数量1条');
+  await expect(forecast).toContainText('当前期间201条，数量合计201（单位待确认），缺失数量0条');
   assert(calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.offset === 200));
   deny = true;
   await forecast.getByRole('button', { name: '同步', exact: true }).click();

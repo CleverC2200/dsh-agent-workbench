@@ -217,7 +217,7 @@ test('MPS product details start with ten rows and keep pagination aligned with f
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
 });
 
-test('annual plan starts collapsed and keeps sync beside its detail title without a template', async (t) => {
+test('annual plan starts collapsed and keeps sync beside its detail title and the annual SKU workbook download', async (t) => {
   const { frame } = await livePage(t, fixture);
   const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
   await expect(section.getByRole('button', { name: '展开年度销售计划' })).toHaveAttribute(
@@ -231,7 +231,7 @@ test('annual plan starts collapsed and keeps sync beside its detail title withou
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
   await section.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(section.locator('table')).toBeVisible();
-  await expect(section.getByRole('button', { name: '下载', exact: true })).toBeVisible();
+  await expect(section.getByRole('button', { name: '下载年度SKU模板', exact: true })).toBeVisible();
 });
 
 test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {

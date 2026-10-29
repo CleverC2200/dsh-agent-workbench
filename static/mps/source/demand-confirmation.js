@@ -1742,7 +1742,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'colgroup',
                 {},
-                [10, 24, 8, 12, 10, 10, 16, 10].map((width, index) =>
+                [9, 20, 7, 10, 8, 15, 9, 13, 9].map((width, index) =>
                   h('col', { key: index, style: { width: width + '%' } }),
                 ),
               ),

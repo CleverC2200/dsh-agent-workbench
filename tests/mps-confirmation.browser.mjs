@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { expect } from '@playwright/test';
 import { authorPage } from './helpers/author-page.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
+import { readFile } from 'node:fs/promises';
+import * as XLSX from 'xlsx-republish';
 
 async function confirmation(t) {
   const page = await authorPage(t);
@@ -121,9 +124,7 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
   const download = page.waitForEvent('download');
   await source.getByRole('button', { name: '导出当前明细', exact: true }).click();
   const file = await download;
-  const chunks = [];
-  for await (const chunk of await file.createReadStream()) chunks.push(chunk);
-  const csv = Buffer.concat(chunks).toString('utf8');
+  const csv = await mpsDownloadText(await file.path());
   assert.match(csv, /2026-12,郑州,P1/);
   assert.doesNotMatch(csv, /999/);
   await source.getByLabel('提报口径').selectOption('adjust');
@@ -136,7 +137,7 @@ test('MPS reads CSV atomically and uses the same selected-period rows for covera
   await expect(source.getByRole('cell', { name: '-', exact: true })).toBeVisible();
 });
 
-test('MPS forecast crosses the year and historical periods do not borrow other rows; CSV export escapes spreadsheet formulas', async (t) => {
+test('MPS forecast crosses the year and historical periods do not borrow other rows; XLSX export keeps formula-like names as text', async (t) => {
   const { page, frame } = await confirmation(t);
   await createVersion(frame, '2026-12');
   const columns = '月份,基地,产品编码,产品名称,大类,系列,物料组,数量';
@@ -152,9 +153,10 @@ test('MPS forecast crosses the year and historical periods do not borrow other r
   await expect(forecast).toContainText('当前期间1条，数量合计7件');
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细', exact: true }).click();
-  const chunks = [];
-  for await (const chunk of await (await download).createReadStream()) chunks.push(chunk);
-  assert.match(Buffer.concat(chunks).toString('utf8'), /'=1\+1/);
+  const book = XLSX.read(await readFile(await (await download).path()), { type: 'buffer' });
+  const cell = Object.values(book.Sheets[book.SheetNames[0]]).find((cell) => cell?.v === '=1+1');
+  assert.equal(cell?.t, 's');
+  assert.equal(cell?.f, undefined);
   await forecast.getByLabel('预测期间').selectOption('2');
   await expect(forecast).toContainText('核对期间 2027-01');
   await expect(forecast).toContainText('当前期间1条，数量合计9件');
@@ -242,9 +244,7 @@ test('MPS preserves missing dimensions and signed local quantities instead of in
   await source.locator('summary').filter({ hasText: '口径与统计说明' }).click();
   const downloading = page.waitForEvent('download');
   await source.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
-  const chunks = [];
-  for await (const chunk of await (await downloading).createReadStream()) chunks.push(chunk);
-  const csv = Buffer.concat(chunks).toString('utf8');
+  const csv = await mpsDownloadText(await (await downloading).path());
   assert.match(csv, /组甲,-2,/);
   assert.doesNotMatch(csv, /'-2/);
   await upload(frame, '选择计划提报CSV', csv);
@@ -293,7 +293,7 @@ test('MPS starts without sample products when no source is configured and still 
   await expect(products.getByRole('cell', { name: '编辑后产品', exact: true })).toBeVisible();
   const download = page.waitForEvent('download');
   await products.getByRole('button', { name: '下载', exact: true }).click();
-  assert.equal((await download).suggestedFilename(), '产品关系.csv');
+  assert.equal((await download).suggestedFilename(), '产品关系.xlsx');
 });
 
 test('MPS creates and compares local evaluation versions in dialogs without occupying the product first card', async (t) => {
