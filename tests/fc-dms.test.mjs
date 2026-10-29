@@ -94,6 +94,12 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     persistenceCalls: 0,
     preflightError: '签名密钥未配置',
     call: async (method, payload) => {
+      if (payload.operation === 'resolve-target')
+        return {
+          warehouseCode: payload.warehouseCode,
+          fields: { customerCode: '', addressCode: '', pupCode: '' },
+          message: '未匹配，请补填',
+        };
       if (method === 'branch-dms-open') {
         globalThis.dmsFixture.navigationCalls = (globalThis.dmsFixture.navigationCalls ?? 0) + 1;
         if (globalThis.dmsFixture.navigationFail) throw Error('跳转失败');
@@ -144,8 +150,8 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     await click('确认暂存至DMS');
     assert.equal(calls.length, 0);
     for (const [label, value] of [
-      ['客户编码', 'C1'],
       ['收货地址编码', 'A1'],
+      ['客户编码', 'C1'],
       ['提货点编码', 'P1'],
     ]) {
       const input = document.querySelector(`[aria-label="${label}"]`);
@@ -223,7 +229,7 @@ test('branch confirmation sends documented order, retains draft on failure, and 
       });
     const fillCustomer = async () =>
       act(async () => {
-        for (const label of ['客户编码', '收货地址编码', '提货点编码']) {
+        for (const label of ['收货地址编码', '客户编码', '提货点编码']) {
           const field = document.querySelector(`[aria-label="${label}"]`);
           Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
             field,
@@ -345,6 +351,103 @@ test('confirmation opens before a slow read; cancellation, errors and retry neve
     await act(async () => jobs[4].resolve([{ ...rows[0], warehouse_code: 'W2' }]));
     assert.match(document.body.textContent, /返回数据不属于所选分仓/);
     assert.equal(button('确认暂存至DMS'), undefined);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.dmsFixture;
+  }
+});
+
+test('master values fill independently; stale warehouse results and errors leave manual fallback usable', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  let late;
+  globalThis.dmsFixture = {
+    rows,
+    call: async (_method, p) => {
+      assert.equal(p.operation, 'resolve-target');
+      if (p.warehouseCode === 'W2')
+        return new Promise((r) => {
+          late = r;
+        });
+      if (!p.addressCode)
+        return {
+          warehouseCode: p.warehouseCode,
+          fields: { customerCode: '', addressCode: '', pupCode: '' },
+          message: '请补填收货地址',
+        };
+      return {
+        warehouseCode: p.warehouseCode,
+        fields: { customerCode: 'C1', addressCode: p.addressCode, pupCode: '02' },
+        message: '已关联主数据',
+      };
+    },
+  };
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  const tick = () => new Promise((r) => setTimeout(r, 20));
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          FcWorkflowProvider,
+          null,
+          React.createElement(FcConfiguredList, {
+            columns: [],
+            view: { title: '补货' },
+            actionScope: { viewId: 'replenishment', input: { asOf: '2026-10-29' } },
+          }),
+        ),
+      ),
+    );
+    await act(async () => {
+      [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
+      await tick();
+    });
+    const select = document.querySelector('[aria-label="导出补货分仓"]');
+    await act(async () => {
+      select.value = 'W1';
+      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await tick();
+    });
+    const addr = document.querySelector('[aria-label="收货地址编码"]');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(
+        addr,
+        'A1',
+      );
+      addr.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      addr.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+      await tick();
+    });
+    assert.equal(document.querySelector('[aria-label="客户编码"]').value, 'C1');
+    assert.equal(document.querySelector('[aria-label="提货点编码"]').value, '02');
+    assert.equal(document.querySelector('[aria-label="提货点编码"]').readOnly, true);
+    await act(async () => {
+      [...document.querySelectorAll('button')]
+        .find((b) => b.textContent === '手动调整编码')
+        .click();
+    });
+    assert.equal(document.querySelector('[aria-label="提货点编码"]').readOnly, false);
+    await act(async () => {
+      select.value = 'W2';
+      select.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      await tick();
+    });
+    await act(async () => {
+      window.dispatchEvent(new dom.window.Event('gea-session-changing'));
+      late({
+        warehouseCode: 'W2',
+        fields: { customerCode: 'LATE', addressCode: 'A2', pupCode: '03' },
+        message: '迟到',
+      });
+      await tick();
+    });
+    assert.doesNotMatch(document.body.textContent, /LATE|迟到/);
   } finally {
     await act(async () => root.unmount());
     dom.window.close();

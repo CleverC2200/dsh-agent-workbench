@@ -91,7 +91,9 @@ export async function readConfiguredFacts(
   const view =
     options.summaryOnly &&
     configuredView?.overviewSummaryId &&
-    Object.values(input.filters ?? {}).every((value) => !value.trim()) &&
+    Object.entries(input.filters ?? {}).every(
+      ([name, value]) => !value.trim() || configuredView.overviewFilterNames?.includes(name),
+    ) &&
     !input.customer?.trim()
       ? {
           ...configuredView,
