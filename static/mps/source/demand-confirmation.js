@@ -9,6 +9,7 @@ import { createWorkflow } from './workflow-view.js';
 import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 import { productProjections } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
+import { productFileText } from './product-file.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -94,7 +95,12 @@ function parseCsv(text, columns) {
       } else if (column.includes('数量')) {
         if (value !== '' && (!/^[-+]?\d+(\.\d+)?$/.test(value) || !Number.isFinite(Number(value))))
           errors.push(`第${index + 2}行${column}须为有限数或留空`);
-      } else if (columns === productColumns && !column.startsWith('老品') && !value)
+      } else if (
+        columns === productColumns &&
+        column !== '基地' &&
+        !column.startsWith('老品') &&
+        !value
+      )
         errors.push(`第${index + 2}行${column}不能为空`);
     }
     if (columns === productColumns && !!record['老品编码'] !== !!record['老品名称'])
@@ -237,7 +243,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h('div', { className: 'dc-dialog-footer' }, footer),
     );
   }
-  function Upload({ label, text = '上传', read }) {
+  function Upload({ label, text = '上传', read, accept = '.csv,text/csv' }) {
     const input = react.useRef();
     return h(
       react.Fragment,
@@ -247,7 +253,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ref: input,
         type: 'file',
         hidden: true,
-        accept: '.csv,text/csv',
+        accept,
         'aria-label': label,
         onChange: (event) => {
           const file = event.target.files[0];
@@ -954,7 +960,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       try {
         if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未读取任何行。');
         const rows = parseCsv(
-          await file.text(),
+          type === 'products' ? await productFileText(file) : await file.text(),
           type === 'products'
             ? productColumns
             : type === 'annual'
@@ -1150,8 +1156,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const normalized = Object.fromEntries(
         productColumns.map((column) => [column, product[column].trim()]),
       );
-      if (productColumns.slice(0, 6).some((column) => !normalized[column])) {
-        setError('基地、产品编码、产品名称、大类、系列和物料组不能为空。');
+      if (productColumns.slice(1, 6).some((column) => !normalized[column])) {
+        setError('产品编码、产品名称、大类、系列和物料组不能为空；全国产品基地可留空。');
         return;
       }
       if (!!normalized['老品编码'] !== !!normalized['老品名称']) {
@@ -1659,7 +1665,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               },
               '下载',
             ),
-            h(Upload, { label: '选择产品关系CSV', read: (file) => read('products', file) }),
+            h(Upload, {
+              label: '选择产品关系CSV或Excel',
+              accept:
+                '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              read: (file) => read('products', file),
+            }),
             h(
               'button',
               {

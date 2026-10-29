@@ -173,7 +173,7 @@ test('history failures stay bound to the read period after switching historical 
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '期间核对.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(

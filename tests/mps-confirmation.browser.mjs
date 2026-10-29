@@ -203,7 +203,7 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
     { length: 26 },
     (_, index) => `郑州,P${index},产品${index},汤圆,系列,组,,`,
   );
-  await upload(frame, '选择产品关系CSV', columns + '\n' + rows.join('\n'));
+  await upload(frame, '选择产品关系CSV或Excel', columns + '\n' + rows.join('\n'));
   await expect(products.getByText('演示数据', { exact: true })).toHaveCount(0);
   await products.getByLabel('每页产品条数').selectOption('25');
   await expect(products.getByRole('row')).toHaveCount(26);
@@ -213,7 +213,7 @@ test('MPS bounds large previews without silently dropping rows and rejects an ov
   await expect(products.getByRole('row')).toHaveCount(2);
   await upload(
     frame,
-    '选择产品关系CSV',
+    '选择产品关系CSV或Excel',
     columns +
       '\n' +
       Array.from({ length: 10001 }, (_, index) => `郑州,Q${index},产品,汤圆,系列,组,,`).join('\n'),
