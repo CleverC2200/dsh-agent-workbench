@@ -39,7 +39,7 @@ const compiled = await build({
   write: false,
   platform: 'node',
   format: 'esm',
-  external: ['react', 'zod'],
+  external: ['react', 'react-dom', 'zod'],
   plugins: [
     {
       name: 'fixture',
