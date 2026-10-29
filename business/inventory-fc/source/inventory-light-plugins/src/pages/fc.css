@@ -4764,9 +4764,26 @@ body,
 }
 .fc-workflow-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+}
+.fc-workflow-actions > button {
+  height: 36px;
+  flex: 0 0 auto;
+}
+.fc-workflow-actions > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  max-width: 100%;
+  line-height: 1.4;
+}
+.fc-workflow-actions > label > input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin: 0;
 }
 .fc-workflow-notice {
   margin: 8px 0;

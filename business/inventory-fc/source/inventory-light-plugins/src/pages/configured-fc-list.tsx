@@ -1201,7 +1201,7 @@ export function FcConfiguredList(
                     disabled={busy || Boolean(dmsReceipt)}
                     onChange={(e) => setConsumptionReviewed(e.target.checked)}
                   />
-                  已复核库存消化与本次补货数量
+                  <span>已复核库存消化与本次补货数量</span>
                 </label>
                 <button
                   type="button"

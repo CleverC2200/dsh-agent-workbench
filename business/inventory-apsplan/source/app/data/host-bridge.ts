@@ -49,6 +49,7 @@ export function context() {
     sources: isCurrentDataset ? (view?.sources ?? query.sources) : [],
     missing: isCurrentDataset ? view?.missing : undefined,
     comparison: isCurrentDataset ? view?.comparison : undefined,
+    comparisonEvidence: isCurrentDataset ? view?.comparisonEvidence : undefined,
     error: periodMatches && !preview && !view?.pending ? query.error : undefined,
     analysisPolicy: pageAnalysisPolicy,
     limitations: isCurrentDataset
