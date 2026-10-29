@@ -43,9 +43,8 @@ export function WarehouseSelect({
     if (!open) return;
     const place = () => {
       const r = trigger.current!.getBoundingClientRect();
-      const dialog = trigger.current!.closest('dialog')?.getBoundingClientRect();
-      const topEdge = dialog?.top ?? 0,
-        bottomEdge = dialog?.bottom ?? innerHeight;
+      const topEdge = 0,
+        bottomEdge = innerHeight;
       const width = Math.min(
         compact ? Math.max(132, r.width) : Math.max(220, r.width),
         innerWidth - 16,

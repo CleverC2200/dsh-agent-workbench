@@ -2063,16 +2063,20 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
     await expect(row.getByRole('cell', { name: value, exact: true })).toHaveCount(1);
   await expect(row).toContainText('缺货');
   await expect(row).toContainText('65.0天');
-  const menu = sku.locator('details');
-  await menu.locator('summary').click();
-  await menu.getByRole('checkbox', { name: '无目标', exact: true }).check();
-  await expect(menu).toHaveAttribute('open', '');
+  const trigger = sku.getByRole('button', { name: '库存风险', exact: true });
+  await trigger.click();
+  const menu = frame.getByRole('menu', { name: '库存风险多选' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitemcheckbox', { name: '无目标', exact: true }).click();
+  await expect(menu).toBeVisible();
   await sku.getByPlaceholder('编码或名称').click();
-  await expect(menu).not.toHaveAttribute('open', '');
-  await menu.locator('summary').click();
-  await expect(menu.getByRole('checkbox', { name: '无目标', exact: true })).toBeChecked();
-  await menu.locator('summary').press('Escape');
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(menu).toHaveCount(0);
+  await trigger.click();
+  await expect(
+    frame.getByRole('menuitemcheckbox', { name: '无目标', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await trigger.press('Escape');
+  await expect(menu).toHaveCount(0);
   assert.ok(
     calls.some(
       (call) =>

@@ -372,7 +372,8 @@ test('FC shows system plans before import and downloads every authorized row thr
   await expect(list.locator('tbody tr').first()).toContainText('分仓同步表');
   await list.getByRole('button', { name: '下载模板', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
-  await dialog.getByRole('combobox', { name: '模板计划月份', exact: true }).selectOption('2026-11');
+  await dialog.getByRole('button', { name: '模板计划月份', exact: true }).click();
+  await dialog.getByRole('option', { name: '2026年11月' }).click();
   const download = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click();
   const file = await download;
