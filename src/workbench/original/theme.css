@@ -11,6 +11,16 @@
   --primary-6: var(--red-6);
 }
 
+body[data-ds-dark-theme] {
+  --bg-1: var(--workbench-page);
+  --bg-2: var(--workbench-surface);
+  --bg-3: var(--workbench-border);
+  --bg-4: var(--workbench-control-border);
+  --text-primary: var(--workbench-text);
+  --text-secondary: var(--workbench-body);
+  --text-disabled: var(--workbench-muted);
+}
+
 html,
 body,
 #root {

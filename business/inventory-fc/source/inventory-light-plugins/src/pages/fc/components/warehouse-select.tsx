@@ -7,11 +7,15 @@ export function WarehouseSelect({
   options,
   disabled,
   onChange,
+  label = '选择分仓',
+  compact = false,
 }: {
   value: string;
   options: { id: string; name: string }[];
   disabled: boolean;
   onChange: (value: string) => void;
+  label?: string;
+  compact?: boolean;
 }) {
   const trigger = useRef<HTMLButtonElement>(null),
     list = useRef<HTMLDivElement>(null);
@@ -38,13 +42,25 @@ export function WarehouseSelect({
   useEffect(() => {
     if (!open) return;
     const place = () => {
-      const r = trigger.current!.getBoundingClientRect(),
-        width = Math.min(220, innerWidth - 16);
+      const r = trigger.current!.getBoundingClientRect();
+      const topEdge = 0,
+        bottomEdge = innerHeight;
+      const width = Math.min(
+        compact ? Math.max(132, r.width) : Math.max(220, r.width),
+        innerWidth - 16,
+      );
+      const below = bottomEdge - r.bottom - 12,
+        above = r.top - topEdge - 12;
+      const desired = Math.min(280, options.length * 34 + 10);
+      const placeAbove = below < desired && above > below;
+      const maxHeight = Math.max(80, Math.min(280, placeAbove ? above : below));
       setPosition({
         left: Math.max(8, Math.min(r.left, innerWidth - width - 8)),
-        top: r.bottom + 4,
+        top: placeAbove
+          ? Math.max(topEdge + 6, r.top - 7 - Math.min(desired, maxHeight))
+          : r.bottom + 7,
         width,
-        maxHeight: Math.max(80, Math.min(280, innerHeight - r.bottom - 12)),
+        maxHeight,
       });
     };
     const outside = (e: PointerEvent) => {
@@ -61,7 +77,7 @@ export function WarehouseSelect({
       window.removeEventListener('resize', place);
       document.removeEventListener('scroll', place, true);
     };
-  }, [open]);
+  }, [open, compact, options.length]);
   useEffect(() => {
     if (open) list.current?.children[active]?.scrollIntoView({ block: 'nearest' });
   }, [open, active]);
@@ -77,7 +93,7 @@ export function WarehouseSelect({
         type="button"
         className="warehouse-select-trigger"
         disabled={disabled}
-        aria-label="选择分仓"
+        aria-label={label}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? id : undefined}
@@ -90,7 +106,20 @@ export function WarehouseSelect({
         }}
       >
         <span>{options.find((o) => o.id === value)?.name ?? '选择分仓'}</span>
-        <span aria-hidden="true">⌄</span>
+        <svg
+          className="warehouse-select-chevron"
+          aria-hidden="true"
+          viewBox="0 0 16 16"
+          fill="none"
+        >
+          <path
+            d="m4 6 4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </button>
       {open &&
         createPortal(
@@ -99,7 +128,7 @@ export function WarehouseSelect({
             id={id}
             role="listbox"
             tabIndex={-1}
-            aria-label="选择分仓"
+            aria-label={label}
             aria-activedescendant={`${id}-${active}`}
             className="warehouse-select-list"
             style={position}
@@ -133,6 +162,7 @@ export function WarehouseSelect({
                 id={`${id}-${i}`}
                 role="option"
                 aria-selected={o.id === value}
+                data-value={o.id}
                 data-active={active === i}
                 onMouseMove={() => setActive(i)}
                 onClick={() => choose(i)}
@@ -142,7 +172,7 @@ export function WarehouseSelect({
               </div>
             ))}
           </div>,
-          document.body,
+          trigger.current?.closest('dialog') ?? document.body,
         )}
     </>
   );

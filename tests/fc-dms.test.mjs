@@ -9,6 +9,7 @@ import React, { act } from 'react';
 
 const rows = [{ warehouse_code: 'W1', warehouse_name: '分仓', sku: 'SKU1', recommended_qty: 3 }];
 const mocks = {
+  './fc/components/warehouse-select': 'export const WarehouseSelect=()=>null;',
   './fc-submission-persistence':
     'export const persistAndSubmitFc=async(w,s,signal,submit,ack)=>{const f=globalThis.dmsFixture;f.persistenceCalls++;const r=await submit();ack(r);if(f.archiveFail){f.pendingArchive={kind:"submission",warehouseCode:w,entityId:s.aiPreOrderCode};f.archiveReceipt=r;throw Error("回执归档待核对");}return r;}; export const verifyFcReceiptArchive=async()=>{const f=globalThis.dmsFixture;f.archiveChecks=(f.archiveChecks??0)+1;f.pendingArchive=null;return f.archiveReceipt;};',
   './fc-storage-client':

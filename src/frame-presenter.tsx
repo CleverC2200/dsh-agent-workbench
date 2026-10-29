@@ -39,6 +39,115 @@ import layoutCss from './frame-presenter.css';
 import { connectHtmlViewState } from './html-view-channel.ts';
 import { isBusinessViewPage } from './html-view-state.ts';
 
+function InterpreterSelect({
+  value,
+  options,
+  disabled,
+  label,
+  onChange,
+}: {
+  value: string;
+  options: { id: string; label: string }[];
+  disabled: boolean;
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', close);
+    return () => document.removeEventListener('pointerdown', close);
+  }, [open]);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
+  useEffect(() => {
+    if (open)
+      root.current
+        ?.querySelector<HTMLButtonElement>('[role="option"][aria-selected="true"]')
+        ?.focus();
+  }, [open]);
+  return (
+    <div
+      ref={root}
+      className="gea-interpreter-select"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setOpen(false);
+          root.current?.querySelector('button')?.focus();
+        }
+      }}
+    >
+      <button
+        type="button"
+        className="gea-conversation-toolbar-tool"
+        aria-label={label}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen(!open)}
+      >
+        <span>{options.find((option) => option.id === value)?.label ?? label}</span>
+        <svg className="gea-interpreter-chevron" aria-hidden="true" viewBox="0 0 16 16" fill="none">
+          <path
+            d="m4 6 4 4 4-4"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+      <div
+        hidden={!open}
+        className="gea-interpreter-options"
+        role="listbox"
+        aria-label={label}
+        onKeyDown={(event) => {
+          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          const buttons = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+          );
+          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          const next =
+            event.key === 'Home'
+              ? 0
+              : event.key === 'End'
+                ? buttons.length - 1
+                : Math.max(
+                    0,
+                    Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)),
+                  );
+          buttons[next]?.focus();
+        }}
+      >
+        {options.map((option) => (
+          <button
+            type="button"
+            role="option"
+            data-value={option.id}
+            key={option.id}
+            aria-selected={option.id === value}
+            onClick={() => {
+              setOpen(false);
+              onChange(option.id);
+              root.current?.querySelector('button')?.focus();
+            }}
+          >
+            {option.label}
+            <span aria-hidden="true">{option.id === value ? '✓' : ''}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface SlotFactoryMap {
     'agent-workbench.document': {
@@ -544,19 +653,13 @@ export function mountFramePresentation(
           toolsExpanded={toolsExpanded}
         >
           {page.id !== 'inventory-fc' && identityReady && interpreters.length > 1 && (
-            <select
-              className="gea-conversation-toolbar-tool"
-              aria-label={t('pageInterpreter')}
+            <InterpreterSelect
+              label={t('pageInterpreter')}
               disabled={busy}
-              value={currentPreset ?? selection?.preset ?? page.resourceId}
-              onChange={(event) => void selectInterpreter(event.target.value)}
-            >
-              {interpreters.map((resource) => (
-                <option key={resource.id} value={resource.id}>
-                  {resource.label}
-                </option>
-              ))}
-            </select>
+              value={currentPreset ?? selection?.preset ?? page.resourceId ?? ''}
+              options={interpreters}
+              onChange={(value) => void selectInterpreter(value)}
+            />
           )}
         </ConversationToolbar>
       </div>

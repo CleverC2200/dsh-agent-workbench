@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import { chromium, expect } from '@playwright/test';
 
 const bundle = await build({
@@ -9,12 +10,9 @@ const bundle = await build({
     resolveDir: process.cwd(),
     loader: 'tsx',
     contents: `
-import React from 'react';import {createRoot} from 'react-dom/client';
-import {WorkbenchPage,workbenchHost} from './src/workbench/page.tsx';
-import {WorkbenchHostProvider} from './src/workbench/original/bridge.ts';
-import {zh} from './src/client/locales.ts';
+import './src/workbench-entry.tsx';
 window.publishIdentity=(snapshot)=>window.dispatchEvent(new MessageEvent('message',{origin:location.origin,source:window.parent,data:{type:'gea:identity-snapshot',snapshot}}));
-createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value={workbenchHost}><WorkbenchPage t={key=>zh[key]}/></WorkbenchHostProvider>);
+
 `,
   },
   bundle: true,
@@ -26,8 +24,13 @@ createRoot(document.getElementById('root')).render(<WorkbenchHostProvider value=
   define: { 'process.env.NODE_ENV': '"test"' },
   loader: { '.svg': 'dataurl', '.png': 'dataurl' },
 });
-async function open(t, authenticated, { pollStatus = 'authenticated', clock = false } = {}) {
+async function open(
+  t,
+  authenticated,
+  { pollStatus = 'authenticated', clock = false, dark = false } = {},
+) {
   const assets = new Map(bundle.outputFiles.map((x) => [x.path.split('/').at(-1), x.text]));
+  assets.set('theme.css', await readFile('theme/tokens.css', 'utf8'));
   const server = createServer((req, res) => {
     const name = req.url.slice(1);
     res.setHeader(
@@ -40,7 +43,7 @@ async function open(t, authenticated, { pollStatus = 'authenticated', clock = fa
     );
     res.end(
       assets.get(name) ??
-        '<meta charset="utf-8"><link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module" src="/app.js"></script>',
+        '<meta charset="utf-8"><link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/theme.css"><div id="gea-workbench"></div><script type="module" src="/app.js"></script>',
     );
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
@@ -48,7 +51,10 @@ async function open(t, authenticated, { pollStatus = 'authenticated', clock = fa
     server.closeAllConnections();
     return new Promise((r) => server.close(r));
   });
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage();
   if (clock) await page.clock.install();
@@ -84,9 +90,24 @@ async function open(t, authenticated, { pollStatus = 'authenticated', clock = fa
       value = { records: [], total: 0, size: 100, current: 1, pages: 0 };
     await route.fulfill({ json: { ok: true, value } });
   });
-  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}/?locale=zh`);
   await page.waitForFunction(() => window.publishIdentity);
   await expect(page.locator('.gea-workbench-boot')).toBeVisible();
+  if (dark) {
+    await page.evaluate(() =>
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          origin: location.origin,
+          source: window.parent,
+          data: { protocol: 'agent-workbench-theme', dark: true },
+        }),
+      ),
+    );
+    await expect(page.locator('.gea-workbench-boot')).toHaveCSS(
+      'background-color',
+      'rgb(27, 29, 33)',
+    );
+  }
   const publish = (snapshot) => page.evaluate((value) => window.publishIdentity(value), snapshot);
   await publish({ state: 'confirmed', scope: null, status });
   return { page, calls, errors, external: () => external, status, publish };
@@ -189,3 +210,47 @@ test(
     assert.equal(f.external(), 0);
   },
 );
+
+test('Native approval follows parent theme for business surfaces and Arco controls', async (t) => {
+  const { page } = await open(t, true, { dark: true });
+  await expect(page.locator('.gea-original-workbench')).toBeVisible();
+  for (const dark of [true, false, true]) {
+    await page.evaluate(
+      (dark) =>
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            origin: location.origin,
+            source: window.parent,
+            data: { protocol: 'agent-workbench-theme', dark, fontSize: 16 },
+          }),
+        ),
+      dark,
+    );
+    await expect(page.locator('body')).toHaveCSS(
+      'background-color',
+      dark ? 'rgb(27, 29, 33)' : 'rgb(249, 250, 251)',
+    );
+    await expect(page.locator('body')).toHaveAttribute('arco-theme', dark ? 'dark' : 'light');
+    await expect(page.locator('[aria-label="需求预测区域经理审批工作台"]')).toHaveCSS(
+      'background-color',
+      dark ? 'rgb(36, 38, 43)' : 'rgb(255, 255, 255)',
+    );
+    await expect(page.locator('.arco-table-th').first()).toHaveCSS(
+      'background-color',
+      dark ? 'rgb(48, 52, 59)' : 'rgb(245, 246, 248)',
+    );
+    const colors = await page
+      .locator('.arco-table')
+      .first()
+      .evaluate((node) => ({
+        background: getComputedStyle(node).getPropertyValue('--color-bg-2').trim(),
+        text: getComputedStyle(node).getPropertyValue('--text-primary').trim(),
+      }));
+    assert.equal(colors.background, dark ? '#232324' : '#fff');
+    assert.equal(colors.text, dark ? '#edf0f5' : '#000000');
+    if (process.env.NATIVE_THEME_EVIDENCE)
+      await page.screenshot({
+        path: `${process.env.NATIVE_THEME_EVIDENCE}/native-${dark ? 'dark' : 'light'}.png`,
+      });
+  }
+});

@@ -1148,10 +1148,32 @@ export function mountCompanyUI(
     ctx.slots.register(
       { name: 'sidebar.brand.name', priority: -10, locale: 'companyWorkbench' },
       function BrandName() {
+        const authority = useSyncExternalStore(
+          subscribeAccount,
+          () => account,
+          () => account,
+        );
+        const identity = useSyncExternalStore(
+          authority?.subscribe ?? noSubscribe,
+          authority?.getSnapshot ?? (() => unavailableAccount),
+          authority?.getSnapshot ?? (() => unavailableAccount),
+        );
+        const testEnvironment =
+          identity.state === 'confirmed' &&
+          !identity.error &&
+          identity.status?.authenticated === true &&
+          identity.status.environment === 'test';
         return (
           <div className="gea-brand-copy" onClick={(event) => event.stopPropagation()}>
             <span className="gea-brand-title">{t('geaBusiness')}</span>
-            <div className="gea-brand-subtitle">{t('brandSubtitle')}</div>
+            <div className="gea-brand-subtitle">
+              {t('brandSubtitle')}
+              {testEnvironment && (
+                <small className="gea-test-environment-badge" title={t('testEnvironment')}>
+                  Test
+                </small>
+              )}
+            </div>
           </div>
         );
       },

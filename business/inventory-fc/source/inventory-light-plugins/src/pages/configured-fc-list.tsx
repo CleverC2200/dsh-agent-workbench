@@ -15,6 +15,7 @@ import React, { createContext, useContext, useEffect, useRef, useState, useCallb
 import { z } from 'zod';
 import { OriginalBusinessList } from '../../../../../shared/original-business-list';
 import { Modal, DataPagination } from '../dsh-ui/controls';
+import { WarehouseSelect } from './fc/components/warehouse-select';
 import { downloadWorkbook, readWorkbook } from '../dsh-ui/workbook';
 import { memoryStorage } from '../native/memory-storage';
 import {
@@ -982,17 +983,19 @@ export function FcConfiguredList(
           ) : dialog === 'template' ? (
             <label>
               计划月份{' '}
-              <select
-                aria-label="模板计划月份"
+              <WarehouseSelect
+                label="模板计划月份"
+                compact
+                disabled={busy}
                 value={templateMonth}
-                onChange={(event) => setTemplateMonth(event.target.value)}
-              >
-                {[currentPlanningMonth(), nextMonth(currentPlanningMonth())].map((value) => (
-                  <option key={value} value={value}>
-                    {value.slice(0, 4)}年{Number(value.slice(5, 7))}月
-                  </option>
-                ))}
-              </select>
+                options={[currentPlanningMonth(), nextMonth(currentPlanningMonth())].map(
+                  (value) => ({
+                    id: value,
+                    name: `${value.slice(0, 4)}年${Number(value.slice(5, 7))}月`,
+                  }),
+                )}
+                onChange={setTemplateMonth}
+              />
             </label>
           ) : dialog === 'import' ? (
             <>

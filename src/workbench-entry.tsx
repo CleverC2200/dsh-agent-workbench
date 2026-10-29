@@ -24,7 +24,10 @@ window.addEventListener('message', (event) => {
     event.data?.protocol !== 'agent-workbench-theme'
   )
     return;
-  document.body.toggleAttribute('data-ds-dark-theme', event.data.dark === true);
+  const dark = event.data.dark === true;
+  document.body.toggleAttribute('data-ds-dark-theme', dark);
+  document.body.setAttribute('arco-theme', dark ? 'dark' : 'light');
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
   if (Number.isFinite(event.data.fontSize))
     document.documentElement.style.setProperty(
       '--dsh-content-font-size',

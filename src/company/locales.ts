@@ -333,6 +333,7 @@ const copy = {
   newConversationFailed: ['新会话创建失败。', 'Unable to create a new conversation.'],
   geaBusiness: ['Synear GEA', 'Synear GEA'],
   brandSubtitle: ['智能体工作台', 'Agent workspace'],
+  testEnvironment: ['测试环境', 'Test environment'],
   functionArea: ['业务工作台', 'Business workbenches'],
   workspaceArea: ['AI工作台', 'AI workbench'],
   recentArea: ['历史会话', 'Session history'],

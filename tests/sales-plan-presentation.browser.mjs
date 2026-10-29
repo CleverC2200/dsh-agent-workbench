@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client';
 import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import './src/workbench/workbench.css';
+import './theme/tokens.css';
 import zh from './src/workbench/original/zh-CN.json';
 import Workbench from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalWorkbench.tsx';
 import { WorkbenchHostProvider } from './src/workbench/original/bridge.ts';
@@ -102,6 +103,7 @@ const baseSkuFor = (versionId) => ({
 });
 
 const comparison=new URL(location.href).searchParams.get('comparison');
+if(comparison==='surplus') for(const plan of sourcePlans) plan.targetAmount='50';
 if(comparison==='shipment-missing') sourcePlans[0].shipmentError='未取得该客户 2026-10 的发货数据';
 const plans=comparison==='returned'?sourcePlans.map(plan=>({...plan,status:7})):comparison==='empty'?[]:comparison==='readonly'?sourcePlans.slice(0,1).map(plan=>({...plan,orderType:'Z'})):new URL(location.href).searchParams.has('grouped')?sourcePlans:sourcePlans.slice(0,1);
 const skuFor=(versionId)=>{
@@ -172,6 +174,7 @@ async function openWorkbench(t, grouped = false, comparison) {
   });
   browser = await chromium.launch({
     headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
     executablePath: process.env.GEA_TEST_CHROMIUM,
   });
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1536, height: 920 } });
@@ -291,7 +294,7 @@ test(
     assert.equal(await approve.isDisabled(), true);
     assert.deepEqual(await state(approve), {
       background: 'rgb(245, 246, 248)',
-      color: 'rgb(160, 164, 172)',
+      color: 'rgb(98, 107, 120)',
       border: 'rgb(227, 230, 234)',
       radius: '6px',
       height: '30px',
@@ -374,7 +377,7 @@ test(
       color: getComputedStyle(node).color,
       background: getComputedStyle(node).backgroundColor,
     }));
-    assert.deepEqual(status, { color: 'rgb(102, 112, 133)', background: 'rgb(238, 241, 245)' });
+    assert.deepEqual(status, { color: 'rgb(98, 107, 120)', background: 'rgb(245, 246, 248)' });
     const month = page.getByRole('combobox', { name: '销售计划周期' });
     const trigger = await month.evaluate((node) => {
       const view = node.querySelector('.arco-select-view');
@@ -389,7 +392,7 @@ test(
     assert.deepEqual(trigger, {
       height: '36px',
       radius: '8px',
-      color: 'rgb(52, 59, 70)',
+      color: 'rgb(32, 35, 42)',
       weight: '700',
     });
     await month.click();
@@ -402,8 +405,8 @@ test(
       check: getComputedStyle(node, '::after').content,
     }));
     assert.deepEqual(option, {
-      color: 'rgb(52, 59, 70)',
-      background: 'rgb(255, 245, 246)',
+      color: 'rgb(32, 35, 42)',
+      background: 'rgb(255, 240, 242)',
       height: '34px',
       check: '"✓"',
     });
@@ -1052,6 +1055,48 @@ test('pagination footer keeps counts and controls on one line', { timeout: 30000
     if (viewportWidth === 1536) {
       const overflow = await footer.evaluate((node) => node.scrollWidth - node.clientWidth);
       assert.ok(overflow <= 1, `桌面宽度不应横向溢出：${overflow}`);
+    }
+  }
+});
+
+test('real sales plan differences stay legible in both themes without changing their sign', async (t) => {
+  for (const [comparison, sign] of [
+    [undefined, 'Negative'],
+    ['surplus', 'Positive'],
+  ]) {
+    const { page } = await openWorkbench(t, false, comparison);
+    const value = page.locator(`[class*="queueMetrics"] strong[class*="variance${sign}"]`);
+    await expect(value).toBeVisible();
+    await expect(value).not.toHaveText('—');
+    const text = await value.textContent();
+    for (const dark of [true, false]) {
+      await page.evaluate((dark) => {
+        document.body.toggleAttribute('data-ds-dark-theme', dark);
+        document.body.setAttribute('arco-theme', dark ? 'dark' : 'light');
+      }, dark);
+      const contrast = await value.evaluate((node) => {
+        const luminance = (color) => {
+          const rgb = color
+            .match(/[\d.]+/g)
+            .slice(0, 3)
+            .map(Number)
+            .map((value) => {
+              const srgb = value / 255;
+              return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+            });
+          return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+        };
+        const foreground = luminance(getComputedStyle(node).color);
+        const background = luminance(
+          getComputedStyle(node.closest('[data-testid="regional-approval-workbench"]'))
+            .backgroundColor,
+        );
+        return (
+          (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+        );
+      });
+      assert.ok(contrast >= 4.5, `${sign} difference in ${dark ? 'dark' : 'light'}: ${contrast}`);
+      await expect(value).toHaveText(text);
     }
   }
 });
