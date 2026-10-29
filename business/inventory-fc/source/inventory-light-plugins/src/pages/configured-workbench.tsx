@@ -346,6 +346,7 @@ function WorkbenchBody() {
           <section className="workspace">
             <QueryErrors errors={[...errors, ...(planningError ? [planningError] : [])]} />
             <FcPersistencePanel
+              showControls={false}
               plans={planningPlans}
               days={cycleDays}
               rules={cycleRules}

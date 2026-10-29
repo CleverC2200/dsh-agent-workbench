@@ -103,6 +103,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(picker.locator('option')).toHaveCount(3);
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
   await expect(firstCard).toContainText('999');
+  await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '保存人工计划', exact: true })).toHaveCount(0);
   const replenishmentCard = page
     .locator('[data-overview-cards="fc"] article')
     .filter({ hasText: '待补货量' });
