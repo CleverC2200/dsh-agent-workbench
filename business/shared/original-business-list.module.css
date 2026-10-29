@@ -9,6 +9,45 @@
   flex-wrap: wrap;
   gap: 8px;
 }
+.list:has(> .qllToolbar) {
+  container: qll-list / inline-size;
+}
+.qllToolbar.toolbar {
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+.qllToolbar.toolbar > label {
+  flex: 1 1 0;
+}
+.qllToolbar.toolbar > label > span {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.qllToolbar.toolbar input:not([type='checkbox']) {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+}
+.qllToolbar > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+@container qll-list (max-width: 720px) {
+  .qllToolbar.toolbar {
+    flex-wrap: wrap;
+  }
+  .qllToolbar.toolbar > label {
+    flex: 1 1 180px;
+  }
+}
+@container qll-list (max-width: 520px) {
+  .qllToolbar.toolbar > label {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: 5em minmax(0, 1fr);
+  }
+}
 .quickFilters {
   display: inline-flex;
   flex-wrap: wrap;
