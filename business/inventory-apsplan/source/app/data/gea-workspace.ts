@@ -364,6 +364,10 @@ export function createGeaWorkspace(transport: SqlTransport) {
                 ? 'unavailable'
                 : 'empty',
             rows: [],
+            error: {
+              code: 'HISTORICAL_CUTOFF_UNAVAILABLE',
+              message: `${result.label}仅有月度累计值，无法还原${end}的历史月中值；不能用历史整月值替代同期值。`,
+            },
           };
         let query =
           key === 'plans' ? (kind === 'year' ? 'plans-source-year' : 'plans-source') : key;
@@ -565,7 +569,7 @@ export function createGeaWorkspace(transport: SqlTransport) {
     // Shippable reuses stock. Do not let that waiting consumer occupy the
     // second annual worker ahead of independent production.
     const keys = usesConfiguredSql()
-      ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'production', 'shippable']
+      ? [...comparisonKeys.filter((key) => key !== 'shippable'), 'plans', 'production', 'shippable']
       : comparisonKeys;
     const previousRead = run(
       {

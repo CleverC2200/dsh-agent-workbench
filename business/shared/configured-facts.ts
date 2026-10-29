@@ -109,7 +109,11 @@ export async function readConfiguredFacts(
     return { status: 'select_customer', rows: [], total: null, viewId };
   const page = input.page ?? 1,
     pageSize = input.pageSize ?? 10;
-  if (!Number.isSafeInteger(page) || page < 1 || ![10, 20, 50, 100].includes(pageSize))
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    !([10, 20, 50, 100].includes(pageSize) || (options.detailsOnly && pageSize === 200))
+  )
     return fail('INVALID_PAGE', '分页参数无效');
   for (const [name, value] of Object.entries(input.filters ?? {}))
     if (

@@ -33,7 +33,9 @@ globalThis.fetch = async (_url, init) => {
         ? 2472
         : mode === 'recover' && attempt > 1
           ? 2472
-          : 2471;
+          : mode === 'small'
+            ? 150
+            : 2471;
     const actualTotal = mode === 'changing' && values.offset === 0 ? 2471 : total;
     rows = Array.from(
       { length: Math.max(0, Math.min(values.page_size, total - values.offset)) },
@@ -132,4 +134,41 @@ test('continually changing source fails after one bounded restart', async () => 
     { code: 'SOURCE_CHANGED' },
   );
   assert.equal(attempt, 2);
+});
+
+test('replenishment confirmation reads 200 rows per batch and reports complete progress', async () => {
+  calls.length = 0;
+  mode = 'stable';
+  const progress = [];
+  const rows = await readFcActionRows(
+    { config, viewId: 'replenishment', input: { asOf: '2026-10-28', filters: {} } },
+    new AbortController().signal,
+    (loaded, total) => progress.push([loaded, total]),
+  );
+  assert.equal(rows.length, 2471);
+  assert.equal(new Set(rows.map((r) => r.sku)).size, 2471);
+  const pages = calls.filter((c) => c.queryId.includes('atomic'));
+  assert.equal(pages.length, 13);
+  assert.ok(pages.every((c) => c.values.page_size === 200));
+  assert.deepEqual(progress[0], [200, 2471]);
+  assert.deepEqual(progress.at(-1), [2471, 2471]);
+  assert.ok(progress.every((p, i) => i === 0 || p[0] > progress[i - 1][0]));
+});
+
+test('confirmation within the transport limit reads all rows in a single detail request', async () => {
+  calls.length = 0;
+  mode = 'small';
+  const rows = await readFcActionRows(
+    {
+      config,
+      viewId: 'replenishment',
+      input: { asOf: '2026-10-28', filters: { warehouse_code: 'A020' } },
+    },
+    new AbortController().signal,
+  );
+  assert.equal(rows.length, 150);
+  const pages = calls.filter((c) => c.queryId.includes('atomic'));
+  assert.equal(pages.length, 1);
+  assert.equal(pages[0].values.page_size, 200);
+  assert.equal(pages[0].values.warehouse_code, 'A020');
 });

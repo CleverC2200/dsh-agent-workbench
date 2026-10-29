@@ -1,4 +1,4 @@
-"""Execute the shipped base-order cohort and three-stage deficits with EA fixtures."""
+"""Execute the shipped base-order cohort and three-stage deficits with piece fixtures."""
 import json
 from pathlib import Path
 import sqlite3
@@ -15,7 +15,7 @@ class BaseCurrentOrders(unittest.TestCase):
   self.db.create_function('CONCAT',-1,lambda *x:''.join('' if a is None else str(a) for a in x))
   self.db.execute('CREATE TABLE agents_scm_inventory_sku_data_d(month_date TEXT,warehouseid TEXT,warehouse_name TEXT,belong_base TEXT,material_code TEXT,material_name TEXT,prod_date TEXT,sap_warehouseid TEXT,plant TEXT,quality_batch TEXT,is_good_prod TEXT,warehouse_classify TEXT,available_qty REAL)')
   self.db.execute('CREATE TABLE agents_scm_material_in_out_summary_d(warehouseid TEXT,pickup_point TEXT,material_code TEXT,product_categ_name TEXT,material_group_name TEXT)')
-  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,cust_code TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,pickup_point_name TEXT,belong_base TEXT,qtyordered REAL,adjust_order_qty REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT)')
+  self.db.execute('CREATE TABLE agents_scm_execute_detail_d(cust_order_no TEXT,cust_code TEXT,material_code TEXT,material_name TEXT,pickup_point TEXT,pickup_point_name TEXT,belong_base TEXT,bizunitconvertrate REAL,qtyshipped REAL,qtyordered REAL,adjust_order_qty REAL,qtyallocated REAL,delivery_qty REAL,bizflowstatus TEXT,detailstatus INTEGER,order_close_time TEXT,wms_close_time TEXT,canceltime TEXT)')
   for w,p,kind,base in [('W1','P1','01','郑州'),('W2','P2','02','郑州'),('F','PF','20','郑州'),('S','PS','01','遂平')]:
    self.stock(w,'SKU1',0,kind,base)
    self.db.execute('INSERT INTO agents_scm_material_in_out_summary_d VALUES(?,?,?,?,?)',(w,p,'SKU1','面点','馒头'))
@@ -23,7 +23,7 @@ class BaseCurrentOrders(unittest.TestCase):
   self.db.execute('INSERT INTO agents_scm_inventory_sku_data_d VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',('20261028',w,w,base,sku,sku,'20261001','SAP','PLANT',sku,'1',kind,qty))
  def add(self,order,**changes):
   row=dict(cust_order_no=order,cust_code='C',material_code='SKU1',material_name='商品',pickup_point='P1',pickup_point_name='基地',belong_base='郑州',qtyordered=100,adjust_order_qty=10,qtyallocated=20,delivery_qty=0,bizflowstatus='等待组波',detailstatus=10,order_close_time=None,wms_close_time=None,canceltime=None)
-  row.update(changes);self.db.execute('INSERT INTO agents_scm_execute_detail_d('+','.join(row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
+  row.update(changes);row.setdefault('bizunitconvertrate',1);row.setdefault('qtyshipped',row['delivery_qty']);self.db.execute('INSERT INTO agents_scm_execute_detail_d('+','.join(row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
  def read(self,key='current-shortage.locations',**values):
   q=self.config['queries'][key];p=q['request']['parameters'].copy()
   for name,value in values.items():p[next(k for k,v in q['parameterSpec'].items() if v['name']==name)]=value
@@ -31,7 +31,7 @@ class BaseCurrentOrders(unittest.TestCase):
   sql=sqlglot.parse_one(q['request']['sql'],read='postgres').sql(dialect='sqlite')
   return [dict(r) for r in self.db.execute(sql,p)]
  def base(self,**values):return next(r for r in self.read(**values) if r['base']=='郑州')
- def test_same_ea_cohort_includes_prepared_and_partial_orders_excludes_finished_cancelled_closed(self):
+ def test_same_piece_cohort_includes_prepared_and_partial_orders_excludes_finished_cancelled_closed(self):
   self.add('OPEN');self.add('PREPARED',bizflowstatus='OCP已下发',qtyallocated=100)
   self.add('PART',material_code='S2',qtyordered=30,qtyallocated=30,delivery_qty=30)
   self.add('PART',material_code='S3',qtyordered=40,qtyallocated=20,delivery_qty=10)

@@ -156,6 +156,9 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
   await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
+  await frame
+    .locator('.analysis-workspace')
+    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
   await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
   await expect(frame.locator('#cross-analysis')).toBeVisible();
   await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
@@ -1345,6 +1348,8 @@ test('FC restored quantity draft survives server paging and submits a real workb
   await draft.getByRole('button', { name: '取消', exact: true }).click();
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  await confirmation.getByLabel('导出补货分仓').selectOption('001');
   await expect(confirmation).toContainText('21个SKU');
   const downloaded = page.waitForEvent('download');
   await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
@@ -1529,6 +1534,12 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
           warehouse_name: second ? '北京分仓' : '上海分仓',
         };
       });
+    if (query.queryId.startsWith('replenishment.detail') && query.parameters.warehouse_code) {
+      const total = query.parameters.warehouse_code === '001' ? 10 : 11;
+      value.rows = value.rows
+        .filter((row) => row.warehouse_code === query.parameters.warehouse_code)
+        .map((row) => ({ ...row, page_scope_total: total, total, row_count: total }));
+    }
     return value;
   });
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
@@ -1538,9 +1549,10 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   await list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }).fill('17');
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
-  await expect(
-    confirmation.getByRole('button', { name: '仅导出Excel', exact: true }),
-  ).toBeDisabled();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  await expect(confirmation.getByRole('button', { name: '仅导出Excel', exact: true })).toHaveCount(
+    0,
+  );
   await confirmation
     .getByRole('combobox', { name: '导出补货分仓', exact: true })
     .selectOption('001');
