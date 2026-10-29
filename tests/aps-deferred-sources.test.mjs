@@ -118,6 +118,7 @@ test('annual order and production queries overlap a slow stock query within thre
     active = 0,
     peak = 0;
   const annual = [];
+  const progress = [];
   globalThis.__apsSourceRead = async (name, values) => {
     active++;
     peak = Math.max(peak, active);
@@ -140,13 +141,18 @@ test('annual order and production queries overlap a slow stock query within thre
     version: '滚动',
     orderType: 'M',
     comparison: true,
+    onComparison: (data) => progress.push(data),
   });
   await new Promise(setImmediate);
   const overlap = annual.includes('orders-month') && annual.includes('production');
+  const earlyProduction = progress.some((p) =>
+    p.annual?.sections.some((s) => s.id === 'production' && s.status === 'empty'),
+  );
   release();
   await job;
   assert.ok(overlap, 'annual comparisons must not serialize behind the slow stock source');
   assert.ok(peak <= 3);
+  assert.ok(earlyProduction, 'completed annual production must publish before slow stock finishes');
 });
 
 test('summary defers branch and operations until explicit details are requested', async (t) => {

@@ -151,8 +151,8 @@ export function OriginalBusinessList({
     <section className={css.list} aria-label={view.title} aria-busy={loading}>
       {(view.filters.length > 0 || fc) && (
         <LocalQueryForm
-          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : ''}`}
-          data-business-filters={fc ? 'fc' : undefined}
+          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : qll ? css.qllToolbar : ''}`}
+          data-business-filters={fc ? 'fc' : qll ? 'qll' : undefined}
           onSubmit={submit}
         >
           {view.filters

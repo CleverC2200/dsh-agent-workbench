@@ -139,6 +139,99 @@ test('APS source limitations do not masquerade as query failures', async (t) => 
   assert.deepEqual(errors, []);
 });
 
+test('APS mounts only the selected analysis cards and detail lists', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await expect(
+    frame.locator(
+      '#category-operations, #base-dashboard, #base, #cross-analysis, #sales-region-dashboard',
+    ),
+  ).toHaveCount(0);
+  await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+  await expect(frame.locator('#category-operations')).toBeVisible();
+  await expect(
+    frame.locator('#base-dashboard, #base, #cross-analysis, #sales-region-dashboard'),
+  ).toHaveCount(0);
+  await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
+  await expect(frame.locator('#base-dashboard')).toBeVisible();
+  await expect(frame.locator('#base')).toBeVisible();
+  await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
+  await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
+  await expect(frame.locator('#cross-analysis')).toBeVisible();
+  await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS demand attainment fills after matching plan data arrives', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(query.queryId))
+      return {
+        ...result,
+        rows: [
+          {
+            ...result.rows[0],
+            month: '202610',
+            base: '华东',
+            initial_plan: 100,
+            adjusted_plan: 0,
+            actual: 21,
+            records: 1,
+            missing_actual: 0,
+            invalid: 0,
+          },
+        ],
+      };
+    if (/^(overview|page|drill\.organization|drill\.product)\.plans-source$/.test(query.queryId))
+      return {
+        ...result,
+        rows: [
+          {
+            ...result.rows[0],
+            month: '202610',
+            base: '华东',
+            demand_initial_plan: 100,
+            demand_adjusted_plan: 80,
+            records: 1,
+          },
+        ],
+      };
+    return result;
+  });
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+  const row = frame
+    .locator('.overview-list-row.active-period-list')
+    .filter({ has: frame.locator('strong').filter({ hasText: /^需求预测达成率$/ }) });
+  await expect(row.locator('b')).toHaveText('26.25%');
+  await expect(row).not.toContainText('无数据');
+  assert.deepEqual(errors, []);
+});
+
+test('APS monthly comparisons distinguish unavailable cutoff from empty history', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (
+      /^(page|overview|drill\.organization|drill\.product)\.production$/.test(query.queryId) &&
+      query.parameters.start !== '20261001'
+    )
+      return { ...result, rows: [] };
+    return result;
+  });
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+  const rows = frame
+    .locator('.overview-list-row.active-period-list')
+    .filter({ has: frame.locator('strong') });
+  const demand = rows.filter({
+    has: frame.locator('strong').filter({ hasText: /^需求预测达成率$/ }),
+  });
+  const production = rows.filter({
+    has: frame.locator('strong').filter({ hasText: /^生产计划达成率$/ }),
+  });
+  await expect(demand).toContainText('暂无同期口径');
+  await expect(production).toContainText('暂无同期数据');
+  assert.deepEqual(errors, []);
+});
+
 test('APS query diagnostics stay in logs while other sources finish', async (t) => {
   const { frame, calls, errors, diagnostics } = await mount(t, 'apsplan', 1280, (query, result) => {
     if (query.queryId === 'source.stock-date')
