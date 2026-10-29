@@ -156,6 +156,9 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
   await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
+  await frame
+    .locator('.analysis-workspace')
+    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
   await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
   await expect(frame.locator('#cross-analysis')).toBeVisible();
   await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
