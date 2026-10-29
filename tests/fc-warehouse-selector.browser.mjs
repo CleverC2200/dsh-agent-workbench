@@ -99,9 +99,11 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await expect(picker.locator('option')).toHaveCount(3);
+  await picker.click();
+  await expect(page.getByRole('listbox', { name: '选择分仓' }).getByRole('option')).toHaveCount(3);
+  await picker.click();
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
   await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
@@ -133,7 +135,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await page.setViewportSize({ width: 1280, height: 900 });
   const initialDirectoryReads = calls.filter((c) => c.id === 'branch-warehouse.directory').length;
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
-  await picker.selectOption('A170');
+  await picker.click();
+  await page.locator('[role=option][data-value="A170"]').click();
   await expect(firstCard).toContainText('123');
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
@@ -158,7 +161,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     )
     .toBe(true);
   await page.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A170');
+  await expect(picker).toContainText('A170');
   const orderCalls = calls.filter((c) => c.id === 'branch-current-orders.page');
   assert.ok(orderCalls.every((c) => c.values.warehouse_code === 'A170'));
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
@@ -169,7 +172,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(true);
   await mkdir('.scratch', { recursive: true });
   await page.screenshot({ path: '.scratch/fc-warehouse-selector.png' });
-  await picker.selectOption('');
+  await picker.click();
+  await page.locator('[role=option][data-value=""]').click();
   await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
@@ -187,7 +191,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.deepEqual(errors, []);
   await page.setViewportSize({ width: 520, height: 900 });
   await expect(picker).toBeVisible();
-  await picker.selectOption('N417');
+  await picker.click();
+  await page.locator('[role=option][data-value="N417"]').click();
   await expect(firstCard).toContainText('123');
   await page.evaluate(() => {
     const now = Date.now();
@@ -202,7 +207,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect
     .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
     .toBe(initialDirectoryReads + 2);
-  await expect(picker).toHaveValue('');
+  await expect(picker).toContainText('全部分仓');
 });
 
 test('FC aging exposes immediate risk filters, leading risk column and ten-row server pages', async (t) => {
@@ -467,9 +472,10 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await picker.selectOption('A020');
+  await picker.click();
+  await page.locator('[role=option][data-value="A020"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const list = page.getByRole('region', { name: '当前订单', exact: true });
   await expect(list.getByText('长沙直营', { exact: true })).toBeVisible();
@@ -495,7 +501,7 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     )
     .toBe('%CE2600000190%');
   await list.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A020');
+  await expect(picker).toContainText('A020');
   assert.ok(
     calls
       .filter((call) => call.id.startsWith('branch-current-orders.'))
