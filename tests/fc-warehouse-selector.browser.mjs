@@ -71,7 +71,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       const row = Object.fromEntries(q.resultColumns.map((k) => [k, 0]));
       Object.assign(row, {
         row_count: 1,
-        total_qty: values.warehouse_code ? 123 : 999,
+        total_qty: values.warehouse_code ? 123 : 210750.2,
+        known_in_transit: 1103569,
         fulfillment_rate: 0.95,
         demand: 100,
         shortage: 5,
@@ -102,12 +103,34 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(picker).toBeEnabled();
   await expect(picker.locator('option')).toHaveCount(3);
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
+  await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '保存人工计划', exact: true })).toHaveCount(0);
   const replenishmentCard = page
     .locator('[data-overview-cards="fc"] article')
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
+  await expect(replenishmentCard).toContainText('110.36万件');
   await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  const toolbar = page.locator('form[data-business-filters="fc"]');
+  for (const width of [1280, 900, 640]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await toolbar.evaluate((form) => {
+      const controls = [...form.children].map((node) => node.getBoundingClientRect());
+      const bounds = form.getBoundingClientRect();
+      return {
+        sameLine: controls.every((rect) => Math.abs(rect.top - controls[0].top) < 2),
+        contained: controls.every((rect) => rect.left >= bounds.left && rect.right <= bounds.right),
+      };
+    });
+    assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
+    if (width >= 900)
+      assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
+  }
+  await page.setViewportSize({ width: 900, height: 900 });
+  await mkdir('.scratch', { recursive: true });
+  await toolbar.screenshot({ path: '.scratch/fc-toolbar-inline.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const initialDirectoryReads = calls.filter((c) => c.id === 'branch-warehouse.directory').length;
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
   await picker.selectOption('A170');
@@ -147,14 +170,14 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await mkdir('.scratch', { recursive: true });
   await page.screenshot({ path: '.scratch/fc-warehouse-selector.png' });
   await picker.selectOption('');
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
     initialDirectoryReads,
   );
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
   await page.getByRole('button', { name: '刷新', exact: true }).click();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   await expect(picker).toBeEnabled();
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,

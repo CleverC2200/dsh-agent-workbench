@@ -11,12 +11,14 @@ export function FcPersistencePanel({
   onPlans,
   onCycles,
   refreshKey = 0,
+  showControls = true,
 }: {
   plans: ImportedPlan[];
   days: number;
   rules: FcCycleRule[];
   cycleWarehouse?: string;
   refreshKey?: number;
+  showControls?: boolean;
   onPlans: (
     plans: ImportedPlan[],
     signal: AbortSignal,
@@ -180,6 +182,7 @@ export function FcPersistencePanel({
       if (active.current === controller) setBusy(false);
     }
   }
+  if (!showControls) return null;
   return (
     <section className="fc-persistence-panel" aria-label="分仓业务保存">
       <label>

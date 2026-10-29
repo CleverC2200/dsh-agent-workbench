@@ -474,7 +474,7 @@ test('FC uses the same Chinese date display and retains explicit refresh', async
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
-  [1033547, 190, '1,033,547件'],
+  [1033547, 190, '103.35万件'],
   [0, 201, '0件'],
   [null, 0, '-'],
 ])
@@ -1484,6 +1484,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
           return {
             left: r.left,
             right: r.right,
+            top: r.top,
             height: r.height,
             background: getComputedStyle(node).backgroundColor,
           };
@@ -1512,11 +1513,18 @@ test('FC list filters align compact white controls, retain actions and adapt to 
         layout.fields.every((control) => control.background === 'rgb(255, 255, 255)'),
         'inputs use a white surface',
       );
-      if (width >= 768)
+      if (width >= 922) {
         assert.ok(
-          layout.fields.every((control) => Math.abs(control.right - control.left - 170) <= 1),
-          'desktop fields use the reviewed 170px width',
+          layout.controls.every((control) => Math.abs(control.top - layout.controls[0].top) <= 1),
+          'desktop filters and column settings remain on the same row',
         );
+        assert.ok(
+          layout.fields.every(
+            (control) => control.right - control.left >= 80 && control.right - control.left <= 200,
+          ),
+          'desktop fields shrink while keeping usable input width',
+        );
+      }
       const columns = toolbar.locator('summary[aria-label="列设置"]');
       await columns.click();
       const menu = await toolbar.locator('details > div').boundingBox();
@@ -1811,10 +1819,10 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   const card = frame.locator('[data-overview-cards="aqkc"] article');
   await expect(
     card.filter({ has: frame.getByText('当前库存', { exact: true }) }).locator('strong'),
-  ).toHaveText('4,277');
+  ).toHaveText('4,277件');
   await expect(
     card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
-  ).toHaveText('25,765件');
+  ).toHaveText('2.58万件');
   await expect.poll(() => insightCalls.length).toBeGreaterThan(0);
   const evidence = insightCalls.at(-1).evidence.evidence;
   assert.equal(evidence.metrics.current, 4277);

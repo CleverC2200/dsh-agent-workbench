@@ -174,9 +174,14 @@
   outline-offset: 2px;
 }
 
+.list:has(> .fcToolbar) {
+  container: fc-list / inline-size;
+}
+
 /* Keep the FC filter row independent of the migrated page's form defaults. */
 .fcToolbar.toolbar {
   display: flex;
+  flex-wrap: nowrap;
   min-height: 60px;
   align-items: center;
   gap: 8px;
@@ -188,7 +193,8 @@
   box-shadow: none;
 }
 .fcToolbar .filterField {
-  flex: 0 1 auto;
+  flex: 0 1 200px;
+  min-width: 120px;
   gap: 6px;
   margin: 0 4px 0 0;
   font-size: 11px;
@@ -196,7 +202,8 @@
 }
 .fcToolbar .filterField input {
   box-sizing: border-box;
-  width: 170px;
+  flex: 1 1 140px;
+  width: 140px;
   min-width: 0;
   height: 36px;
   min-height: 36px;
@@ -309,5 +316,20 @@
   }
   .fcToolbar .filterField input {
     width: 100%;
+  }
+}
+
+.fcToolbar > button {
+  flex-shrink: 0;
+}
+.fcToolbar:has(.quickFilters) {
+  flex-wrap: wrap;
+}
+@container fc-list (max-width: 720px) {
+  .fcToolbar.toolbar {
+    flex-wrap: wrap;
+  }
+  .fcToolbar .filterField {
+    flex: 1 1 180px;
   }
 }

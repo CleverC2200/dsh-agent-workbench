@@ -36,6 +36,49 @@ await writeFile('.scratch/fc-persistence-panel.mjs', built.outputFiles[0].text);
 const { FcPersistencePanel } = await import(
   pathToFileURL(resolve('.scratch/fc-persistence-panel.mjs'))
 );
+test('dashboard restores saved inputs without rendering the storage controls', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  const applied = [];
+  globalThis.fcPanelFixture = {
+    selected: '001',
+    pending: () => false,
+    load: async (scope) => ({
+      revision: '2',
+      value: scope.kind === 'plans' ? { plans: [] } : { days: 14, rules: [] },
+    }),
+  };
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(FcPersistencePanel, {
+          showControls: false,
+          plans: [],
+          days: 7,
+          rules: [],
+          onPlans: async () => {
+            applied.push('plans');
+          },
+          onCycles: (days) => {
+            applied.push(days);
+          },
+        }),
+      ),
+    );
+    assert.deepEqual(applied, [14, 'plans']);
+    assert.equal(document.getElementById('root').innerHTML, '');
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.window;
+    delete globalThis.document;
+    delete globalThis.fcPanelFixture;
+  }
+});
 test('saved plans merge untouched SKUs; failed recalculation retries application, then another save creates a new version', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
