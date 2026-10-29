@@ -615,14 +615,7 @@
     },
     "forecast.detail": {
       "title": "forecast",
-      "grain": [
-        "stat_month",
-        "belong_base",
-        "material_code",
-        "material_name",
-        "current_month_forecast_qty",
-        "next_month_forecast_qty"
-      ],
+      "grain": ["stat_month", "belong_base", "material_code"],
       "parameterSpec": {
         "gea_p1": {
           "name": "months",
@@ -648,7 +641,7 @@
         }
       },
       "request": {
-        "sql": "SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty ORDER BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code ORDER BY stat_month, belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "forecast.count"
@@ -673,7 +666,7 @@
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code) AS mps_rows"
       }
     },
     "delivery.detail": {

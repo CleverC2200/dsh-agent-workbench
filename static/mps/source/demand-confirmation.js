@@ -302,9 +302,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
+    const sourceDimensions =
+      type === 'forecast' && business ? ['基地', '大类', '系列', '物料组'] : dimensions;
+    const visibleColumns =
+      type === 'forecast' && business
+        ? ['月份', '基地', '物料组', '物料组名称', '大类', '系列']
+        : sourceColumns;
     const detailColumns = business
       ? [
-          ...sourceColumns,
+          ...visibleColumns,
           ...(type === 'report'
             ? ['月初数量', '纠偏数量']
             : type === 'forecast'
@@ -334,7 +340,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       update(changes);
       setPage(0);
     };
-    const grouped = dimensions.includes(preview)
+    const grouped = sourceDimensions.includes(preview)
       ? [...new Set(rows.map((row) => row[preview]))].map((name) => {
           const records = rows.filter((row) => row[preview] === name);
           return {
@@ -436,7 +442,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             type === 'report'
               ? '期初与纠偏为两个完整版本，分别使用，不相加；按基地×SKU汇总，源记录按客户×基地×SKU校验唯一性，缺基地或源值不可用时留空。'
               : type === 'forecast'
-                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。基地×物料重复时不合计，单位待确认。产品分类只按精确编码的唯一关系补充。`
+                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料组汇总，缺数量时不以部分合计代替完整预测。分类按同物料组SKU的一致源值补充，单位待确认。`
                 : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',
           ),
         business &&
@@ -458,7 +464,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'div',
           { className: 'dc-coverage' },
-          dimensions.map((dimension) =>
+          sourceDimensions.map((dimension) =>
             h(
               'button',
               {
@@ -1207,7 +1213,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
                 : undefined,
             dimensions: Object.fromEntries(
-              dimensions.map((dimension) => [
+              (type === 'forecast' && draft.forecastSource === 'business'
+                ? ['基地', '大类', '系列', '物料组']
+                : dimensions
+              ).map((dimension) => [
                 dimension,
                 {
                   count: new Set(rows.map((row) => row[dimension]).filter(Boolean)).size,

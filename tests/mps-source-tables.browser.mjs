@@ -108,15 +108,15 @@ test('one forecast batch drives two selectable target months and delivery source
     csv,
     /预测批次,源批次月份,源当月预测数量,源下一月预测数量,源记录数,缺项原因,读取状态/,
   );
-  assert(csv.includes('2026-12,2026/12/1,0,12.5,1,产品编码未匹配主数据，分类留空,ready'));
+  assert(csv.includes('2026-12,2026/12,0,12.5,1,物料组未匹配主数据，分类留空,ready'));
   await expect
     .poll(() => contexts.at(-1)?.parts?.check?.sourceSummaries?.forecast?.missingReasons)
-    .toContain('产品编码未匹配主数据，分类留空');
-  assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12/1,0,12.5,1,'));
+    .toContain('物料组未匹配主数据，分类留空');
+  assert(csv.includes('2027-01,基地甲,001,产品甲,,,,12.5,2026-12,2026/12,0,12.5,1,'));
   const allDownload = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出全部已读明细', exact: true }).click();
   const allCsv = await readFile(await (await allDownload).path(), 'utf8');
-  assert(allCsv.includes('产品编码未匹配主数据，分类留空'));
+  assert(allCsv.includes('物料组未匹配主数据，分类留空'));
   assert(allCsv.includes('2026-12,基地甲,001'));
   assert(allCsv.includes('2027-01,基地甲,001'));
   const delivery = frame.getByRole('region', {

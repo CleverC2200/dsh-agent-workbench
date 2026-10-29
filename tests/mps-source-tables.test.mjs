@@ -42,9 +42,11 @@ test('forecast fixes one source batch across a year boundary, preserves zero and
     /精度/,
   );
 });
-test('both identical duplicate rows and conflicting business keys leave usable forecast quantities empty', () => {
+test('group aggregates retain source counts while conflicting group summaries stay unavailable', () => {
   const same = forecastRows([forecast({ source_rows: 2 })], '2026-12');
-  assert(same.every((r) => r['数量'] === '' && r['缺项原因'].includes('重复')));
+  assert.equal(same[0]['数量'], 0);
+  assert.equal(same[0]['源记录数'], 2);
+  assert.equal(same[1]['数量'], '');
   const conflicting = forecastRows(
     [forecast(), forecast({ material_name: '另一名称', current_month_forecast_qty: 8 })],
     '2026-12',
@@ -55,9 +57,9 @@ test('both identical duplicate rows and conflicting business keys leave usable f
   assert(
     forecastRows([forecast({ belong_base: '   ' })], '2026-12').every((r) => r['数量'] === ''),
   );
-  const products = [{ 基地: '', 产品编码: '001', 大类: '汤圆', 系列: '系列甲', 物料组: '组甲' }];
+  const products = [{ 基地: '', 产品编码: '10001', 大类: '汤圆', 系列: '系列甲', 物料组: '001' }];
   assert.equal(forecastDimensions(same, products)[0]['大类'], '汤圆');
-  assert.equal(forecastDimensions(same, [{ ...products[0], 产品编码: '1' }])[0]['大类'], '');
+  assert.equal(forecastDimensions(same, [{ ...products[0], 物料组: '1' }])[0]['大类'], '');
   assert.equal(
     forecastDimensions(same, [...products, { ...products[0], 大类: '饺子' }])[0]['大类'],
     '',
@@ -192,7 +194,7 @@ test('delivery accepts finite small numeric ratios while preserving precise deci
     );
 });
 
-test('forecast classification explains missing and ambiguous exact product matches without erasing quantities', () => {
+test('forecast classification explains missing and ambiguous group members without erasing quantities', () => {
   const rows = forecastRows(
     [forecast({ current_month_forecast_qty: 8, next_month_forecast_qty: null })],
     '2026-12',
@@ -204,10 +206,10 @@ test('forecast classification explains missing and ambiguous exact product match
   assert.equal(missingQuantity['数量'], '');
   assert.match(missingQuantity['缺项原因'], /预测数量缺失.*未匹配主数据/);
   const [ambiguous] = forecastDimensions(rows, [
-    { 产品编码: '001', 大类: '汤圆' },
-    { 产品编码: '001', 大类: '饺子' },
+    { 产品编码: '10001', 物料组: '001', 大类: '汤圆' },
+    { 产品编码: '10002', 物料组: '001', 大类: '饺子' },
   ]);
   assert.equal(ambiguous['数量'], 8);
   assert.equal(ambiguous['大类'], '');
-  assert.match(ambiguous['缺项原因'], /多条主数据/);
+  assert.match(ambiguous['缺项原因'], /多个源值/);
 });

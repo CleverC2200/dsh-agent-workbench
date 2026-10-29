@@ -68,6 +68,7 @@ export function productRows(rows) {
     大类: text(row.sub_category),
     系列: text(row.series),
     物料组: text(row.product_item),
+    物料组名称: text(row.product_item_name),
     老品编码: text(row.replacement_material_code),
     老品名称: text(row.replacement_product),
   }));
