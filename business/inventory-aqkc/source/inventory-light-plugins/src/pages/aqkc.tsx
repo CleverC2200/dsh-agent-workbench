@@ -33,11 +33,13 @@ import {
   type ReactNode,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
 } from 'react';
 
+import { createPortal } from 'react-dom';
 import { Button, Dropdown, Menu } from '../dsh-ui/controls';
 
 import { IconDown } from '../dsh-ui/icons';
@@ -1372,6 +1374,141 @@ function BoardRow({
   );
 }
 
+function SkuRiskFilter({
+  age,
+  risks,
+  onChange,
+}: {
+  age: boolean;
+  risks: string[];
+  onChange: (values: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState({ left: 0, top: 0, width: 220, maxHeight: 280 });
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const id = useId();
+  const options = age ? ['预警', '正常'] : ['缺货', '库存偏低', '库存偏高', '无目标', '正常'];
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = trigger.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(Math.max(200, rect.width), window.innerWidth - 16);
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const desired = (options.length + 1) * 34 + 10;
+      const up = below < desired && above > below;
+      const maxHeight = Math.max(80, Math.min(280, up ? above : below));
+      setPosition({
+        left: Math.max(8, Math.min(rect.left, innerWidth - width - 8)),
+        top: up ? Math.max(8, rect.top - 7 - Math.min(desired, maxHeight)) : rect.bottom + 7,
+        width,
+        maxHeight,
+      });
+    };
+    const outside = (event: PointerEvent) => {
+      if (
+        !trigger.current?.contains(event.target as Node) &&
+        !menu.current?.contains(event.target as Node)
+      )
+        setOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    };
+    place();
+    menu.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]')?.focus();
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', place, true);
+    return () => {
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', place);
+      document.removeEventListener('scroll', place, true);
+    };
+  }, [open, age]);
+  const choose = (risk: string) => {
+    if (!risk) {
+      onChange([]);
+      if (age) {
+        setOpen(false);
+        trigger.current?.focus();
+      }
+    } else if (age) {
+      onChange([risk]);
+      setOpen(false);
+      trigger.current?.focus();
+    } else
+      onChange(risks.includes(risk) ? risks.filter((value) => value !== risk) : [...risks, risk]);
+  };
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        className={styles.skuRiskTrigger}
+        aria-label={age ? '货龄风险' : '库存风险'}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? id : undefined}
+        onClick={() => setOpen(!open)}
+      >
+        <span>风险：{risks.length ? risks.join('、') : '全部'}</span>
+        <IconDown />
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={menu}
+            id={id}
+            role="menu"
+            aria-label={age ? '货龄风险筛选' : '库存风险多选'}
+            className={styles.skuRiskPopup}
+            style={position}
+            onKeyDown={(event) => {
+              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const items = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>('button'),
+              );
+              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? items.length - 1
+                    : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+              items[next]?.focus();
+            }}
+          >
+            {['', ...options].map((risk) => {
+              const selected = risk ? risks.includes(risk) : risks.length === 0;
+              return (
+                <button
+                  key={risk || 'all'}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={selected}
+                  onClick={() => choose(risk)}
+                >
+                  <span>{risk || '全部'}</span>
+                  <span aria-hidden="true">{selected ? '✓' : ''}</span>
+                </button>
+              );
+            })}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSpan: number }) {
   const age = detail.tab === '货龄结构';
   const [risks, setRisks] = useState<string[]>(() =>
@@ -1385,25 +1522,6 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
     setRisks(values);
     setPage(1);
   };
-  const riskMenu = useRef<HTMLDetailsElement>(null);
-  useEffect(() => {
-    const closeOutside = (event: PointerEvent) => {
-      if (riskMenu.current?.open && !riskMenu.current.contains(event.target as Node))
-        riskMenu.current.open = false;
-    };
-    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape' && riskMenu.current?.open) {
-        riskMenu.current.open = false;
-        riskMenu.current.querySelector('summary')?.focus();
-      }
-    };
-    document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
   const remote = usesConfiguredSql();
   const [remotePage, setRemotePage] = useState<any>(null);
   const remoteContext = useRef<any>(undefined);
@@ -1569,52 +1687,7 @@ function InlineSkuDetail({ detail, colSpan }: { detail: ExpandedSkuDetail; colSp
           aria-label={`${detail.base}${detail.category} SKU 明细`}
         >
           <div className={styles.skuFilters} aria-label="SKU 明细筛选">
-            {age && !remote ? (
-              <label>
-                风险
-                <select
-                  aria-label="货龄风险"
-                  value={risks[0] ?? '全部'}
-                  onChange={(event) =>
-                    changeRisks(event.target.value === '全部' ? [] : [event.target.value])
-                  }
-                >
-                  <option>全部</option>
-                  <option>预警</option>
-                  <option>正常</option>
-                </select>
-              </label>
-            ) : !age ? (
-              <details ref={riskMenu} className={styles.skuRiskMenu}>
-                <summary>风险：{risks.length ? risks.join('、') : '全部'}</summary>
-                <fieldset aria-label="库存风险多选">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={!risks.length}
-                      onChange={() => changeRisks([])}
-                    />
-                    全部
-                  </label>
-                  {['缺货', '库存偏低', '库存偏高', '无目标', '正常'].map((risk) => (
-                    <label key={risk}>
-                      <input
-                        type="checkbox"
-                        checked={risks.includes(risk)}
-                        onChange={() =>
-                          changeRisks(
-                            risks.includes(risk)
-                              ? risks.filter((value) => value !== risk)
-                              : [...risks, risk],
-                          )
-                        }
-                      />
-                      {risk}
-                    </label>
-                  ))}
-                </fieldset>
-              </details>
-            ) : null}
+            {(!age || !remote) && <SkuRiskFilter age={age} risks={risks} onChange={changeRisks} />}
             <label>
               SKU
               <input
