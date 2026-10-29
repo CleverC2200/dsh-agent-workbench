@@ -2177,45 +2177,45 @@ test('APS workspace tabs switch and align with the toolbar edge without a return
   assert.deepEqual(errors, []);
 });
 
-test('APS board sticky view and period bars have no leftover return-toolbar gap', async (t) => {
-  const { frame, errors } = await mount(t, 'apsplan', 1280);
-  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
-  const offsets = await frame.locator('.analysis-workspace').evaluate((element) => {
-    const tabs = element.querySelector(':scope > .scope-tabs');
-    const period = element.querySelector(':scope > .secondary-analysis-toolbar');
-    return {
-      tabs: getComputedStyle(tabs).top,
-      period: getComputedStyle(period).top,
-      tabsPosition: getComputedStyle(tabs).position,
-      periodPosition: getComputedStyle(period).position,
-    };
+for (const width of [1280, 390])
+  test(`APS board sticky rows remain usable at ${width}px`, async (t) => {
+    const { frame, errors } = await mount(t, 'apsplan', width);
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    const offsets = await frame.locator('.analysis-workspace').evaluate((element) => {
+      const tabs = element.querySelector(':scope > .scope-tabs');
+      const period = element.querySelector(':scope > .secondary-analysis-toolbar');
+      return {
+        tabs: parseFloat(getComputedStyle(tabs).top),
+        period: parseFloat(getComputedStyle(period).top),
+        toolbar: document.querySelector('[data-business-toolbar]').getBoundingClientRect().height,
+        tabsPosition: getComputedStyle(tabs).position,
+        periodPosition: getComputedStyle(period).position,
+      };
+    });
+    assert.ok(Math.abs(offsets.tabs - offsets.toolbar) <= 1, JSON.stringify(offsets));
+    assert.ok(Math.abs(offsets.period - offsets.toolbar - 48) <= 1, JSON.stringify(offsets));
+    assert.equal(offsets.tabsPosition, 'sticky');
+    assert.equal(offsets.periodPosition, 'sticky');
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    await frame
+      .locator('.analysis-workspace')
+      .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const geometry = await frame.locator('html').evaluate(() => {
+      const toolbar = document.querySelector('[data-business-toolbar]').getBoundingClientRect();
+      const tabs = document
+        .querySelector('.analysis-workspace > .scope-tabs')
+        .getBoundingClientRect();
+      return { toolbarBottom: toolbar.bottom, tabsTop: tabs.top, scroll: window.scrollY };
+    });
+    assert.ok(geometry.scroll > 0, 'page actually scrolled');
+    assert.ok(
+      geometry.tabsTop >= geometry.toolbarBottom - 1,
+      `sticky rows overlap: ${JSON.stringify(geometry)}`,
+    );
+    await frame.getByRole('tab', { name: '销售视角' }).click();
+    await expect(frame.getByRole('tab', { name: '销售视角' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    assert.deepEqual(errors, []);
   });
-  assert.deepEqual(offsets, {
-    tabs: '56px',
-    period: '104px',
-    tabsPosition: 'sticky',
-    periodPosition: 'sticky',
-  });
-  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
-  await frame
-    .locator('.analysis-workspace')
-    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
-  const geometry = await frame.locator('html').evaluate(() => {
-    const toolbar = document.querySelector('[data-business-toolbar]').getBoundingClientRect();
-    const tabs = document
-      .querySelector('.analysis-workspace > .scope-tabs')
-      .getBoundingClientRect();
-    return { toolbarBottom: toolbar.bottom, tabsTop: tabs.top, scroll: window.scrollY };
-  });
-  assert.ok(geometry.scroll > 0, 'page actually scrolled');
-  assert.ok(
-    geometry.tabsTop >= geometry.toolbarBottom - 1,
-    `sticky rows overlap: ${JSON.stringify(geometry)}`,
-  );
-  await frame.getByRole('tab', { name: '销售视角' }).click();
-  await expect(frame.getByRole('tab', { name: '销售视角' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  assert.deepEqual(errors, []);
-});

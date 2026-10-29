@@ -304,13 +304,13 @@ html.aps-plugin-host .embed-mode .main-content > [data-business-toolbar] {
 
 html.aps-plugin-host .analysis-workspace > .scope-tabs {
   position: sticky;
-  top: 56px;
+  top: var(--gea-business-toolbar-height, 56px);
   z-index: 11;
   background: #fff;
 }
 html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   position: sticky;
-  top: 104px;
+  top: calc(var(--gea-business-toolbar-height, 56px) + 48px);
   z-index: 10;
   background: #fff;
 }
