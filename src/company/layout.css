@@ -36,7 +36,7 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   align-items: center;
   flex: none;
 }
-.gea-sidebar-footer > div:first-child {
+.gea-sidebar-account {
   flex: 1;
   min-width: 0;
 }
