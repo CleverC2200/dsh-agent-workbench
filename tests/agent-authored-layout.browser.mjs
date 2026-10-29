@@ -2191,10 +2191,31 @@ test('APS board sticky view and period bars have no leftover return-toolbar gap'
     };
   });
   assert.deepEqual(offsets, {
-    tabs: '0px',
-    period: '48px',
+    tabs: '56px',
+    period: '104px',
     tabsPosition: 'sticky',
     periodPosition: 'sticky',
   });
+  await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+  await frame
+    .locator('.analysis-workspace')
+    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  const geometry = await frame.locator('html').evaluate(() => {
+    const toolbar = document.querySelector('[data-business-toolbar]').getBoundingClientRect();
+    const tabs = document
+      .querySelector('.analysis-workspace > .scope-tabs')
+      .getBoundingClientRect();
+    return { toolbarBottom: toolbar.bottom, tabsTop: tabs.top, scroll: window.scrollY };
+  });
+  assert.ok(geometry.scroll > 0, 'page actually scrolled');
+  assert.ok(
+    geometry.tabsTop >= geometry.toolbarBottom - 1,
+    `sticky rows overlap: ${JSON.stringify(geometry)}`,
+  );
+  await frame.getByRole('tab', { name: '销售视角' }).click();
+  await expect(frame.getByRole('tab', { name: '销售视角' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   assert.deepEqual(errors, []);
 });

@@ -295,16 +295,22 @@ html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intel
   padding-bottom: 0;
 }
 
-/* Keep the board's view and period controls visible while its document scrolls. */
-html.aps-plugin-host .analysis-workspace > .scope-tabs {
+/* Keep the shared toolbar and board controls on separate sticky rows. */
+html.aps-plugin-host .embed-mode .main-content > [data-business-toolbar] {
   position: sticky;
   top: 0;
+  z-index: 20;
+}
+
+html.aps-plugin-host .analysis-workspace > .scope-tabs {
+  position: sticky;
+  top: 56px;
   z-index: 11;
   background: #fff;
 }
 html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   position: sticky;
-  top: 48px;
+  top: 104px;
   z-index: 10;
   background: #fff;
 }
