@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const plan = 'agents_sales_plan_demand_m.';
 const shipment = 'agents_scm_cust_deliv_daily_di.';
@@ -67,20 +68,20 @@ test('confirmed monthly versions and shipment measures populate independently wh
   await expect(preview.getByRole('cell', { name: '-', exact: true }).first()).toBeVisible();
   const previewDownload = page.waitForEvent('download');
   await preview.getByRole('button', { name: '下载明细', exact: true }).click();
-  const previewCsv = await readFile(await (await previewDownload).path(), 'utf8');
+  const previewCsv = await mpsDownloadText(await (await previewDownload).path());
   assert.match(previewCsv, /数量,含赠品数量,不含税收入/);
   assert.match(previewCsv, /,7,9,\r?\n?$/);
   await preview.getByRole('button', { name: '关闭弹窗' }).click();
   const downloaded = page.waitForEvent('download');
   await history.getByRole('button', { name: '导出当前明细' }).click();
-  const csv = await readFile(await (await downloaded).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await downloaded).path());
   assert.match(csv, /数量,含赠品数量,不含税收入/);
   assert.match(csv, /,7,9,\r?\n?$/);
   assert.equal(previewCsv, csv);
   await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
   const reportDownload = page.waitForEvent('download');
   await frame.getByRole('dialog').getByRole('button', { name: '下载明细', exact: true }).click();
-  const reportCsv = await readFile(await (await reportDownload).path(), 'utf8');
+  const reportCsv = await mpsDownloadText(await (await reportDownload).path());
   assert.match(reportCsv, /月初数量,纠偏数量/);
   assert.match(reportCsv, /,10,20\r?\n?$/);
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗' }).click();
@@ -173,7 +174,7 @@ test('history failures stay bound to the read period after switching historical 
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '期间核对.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(
@@ -256,7 +257,7 @@ test('source previews omit missing-count columns while downloads preserve decima
     await expect(section).not.toContainText('公式：');
     const download = page.waitForEvent('download');
     await section.getByRole('button', { name: '导出当前明细' }).click();
-    const csv = await readFile(await (await download).path(), 'utf8');
+    const csv = await mpsDownloadText(await (await download).path());
     assert(csv.includes(title === '计划提报数据' ? '12.5' : '7.5,0,10.5'));
   }
 });
