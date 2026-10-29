@@ -4828,3 +4828,9 @@ body,
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.fc-dashboard-insight p {
+  min-height: 5.25em;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
