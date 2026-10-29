@@ -26,14 +26,14 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #f8f9fb;
+  background: var(--workbench-page);
 }
 .gea-center-surface > iframe {
   display: block;
   width: 100%;
   height: 100%;
   border: 0;
-  background: #fff;
+  background: var(--workbench-surface);
 }
 .gea-center-surface > .gea-original-workbench {
   width: 100%;
@@ -95,7 +95,7 @@
   justify-content: center;
   height: 100dvh;
   min-height: 0;
-  background: #f8f9fb;
+  background: var(--workbench-page);
 }
 .gea-login-page {
   box-sizing: border-box;

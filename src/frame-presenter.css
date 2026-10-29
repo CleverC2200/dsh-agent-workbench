@@ -20,6 +20,8 @@
   color: var(--workbench-text);
   border-bottom: 1px solid var(--workbench-border);
   box-sizing: border-box;
+}
+html[data-platform='darwin'] .agent-workbench-document-chrome {
   -webkit-app-region: drag;
 }
 .agent-workbench-document-chrome[data-workbench-view='center'],
