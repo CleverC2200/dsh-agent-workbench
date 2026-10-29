@@ -90,3 +90,8 @@ node --test tests/configured-facts.test.mjs
 当前来源列表默认每页10行，翻页重新查询；汇总独立全量计算。基地SKU采用服务端筛选、排序与分页，产销初始加载延后未使用的商品预测明细。同一筛选范围内只复用快照日期和配置版本，业务明细不缓存；刷新或筛选变化重新解析快照。
 
 订单履约 order01 使用相同 Host 命名查询通道，不启用本地直连预览。指标口径、权限失败及字段缺口见 [订单履约接入](order-fulfillment-data.md)。 / Fulfillment uses the same governed channel without a direct preview fallback.
+# Missing-data hover diagnostics / 空值悬浮诊断
+
+Customer inventory, order fulfillment and order workbench explain unknown values from current governed results, not assumptions about the whole database. Missing source fields, failed or unpublished reads, unmatched joins and invalid calculation conditions are distinct. Values and GEA authorization are unchanged. / 三个页面基于当前受控结果区分源字段缺失、查询/发布失败、未匹配与计算条件不足；不把未知改成0，不扩大权限。
+
+Order workbench retains each metric's `missingReason` beside its formula. Cards, period comparisons, grouped performance tables and expanded SKU rows expose native hover titles; empty periods and zero denominators have different explanations. / 订单工作台在指标元数据保留原因，卡片、周期对比、分组表和SKU展开用悬浮提示说明；无来源记录与零分母分别处理。

@@ -118,6 +118,7 @@ export function workbenchPresentation(facts, options = {}) {
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
     status: metrics[name]?.loading ? '加载中' : metricState(name, metricValue(metrics, name)),
     formula: metrics[name].note,
+    missingReason: metrics[name].missingReason,
     footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}`,
     comparison: [
       comparison('month', 'previousMonth', name),
@@ -255,6 +256,11 @@ export function workbenchPresentation(facts, options = {}) {
         inventory: text(stock?.available, '件', 0),
         salesPlan: text(stock?.sales_plan, '件', 0),
         shipDays: text(metricValue(m, '周转天数'), '天'),
+        missingReasons: {
+          inventory: stock ? '源数据未提供：当前基地SKU的可用库存 available 为空。' : '系统未匹配：当前基地SKU在所选库存快照中没有对应记录。',
+          salesPlan: stock ? '源数据未提供：当前基地SKU的滚动销售计划 sales_plan 为空。' : '系统未匹配：当前基地SKU没有对应滚动计划记录。',
+          shipDays: m['周转天数']?.missingReason ?? '',
+        },
       };
     });
   }

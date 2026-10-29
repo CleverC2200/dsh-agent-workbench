@@ -1,4 +1,5 @@
 import { encodeReportRequest } from './report-transfer.mjs';
+import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { draft, ready, call } from '../../business/shared/channel.js';
@@ -2356,7 +2357,7 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b>${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b>${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b>${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b>${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:liveFacts?.selected??"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
   renderWorkbenchTasks();
@@ -2456,7 +2457,7 @@ function renderWorkbenchSkuDetail(category) {
   const rows = samples
     .map(
       (sku) =>
-        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
+        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td title="${escapeHtml(sku.inventory==="—"?(sku.missingReasons?.inventory||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.inventory)}</td><td title="${escapeHtml(sku.salesPlan==="—"?(sku.missingReasons?.salesPlan||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.salesPlan)}</td><td title="${escapeHtml(sku.shipDays==="—"?(sku.missingReasons?.shipDays||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.shipDays)}</td></tr>`,
     )
     .join('');
   const paging=liveSkuPagination[category];
@@ -2487,15 +2488,18 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const body = rows
     .map((row) => {
       const cells = row
-        .map((value) => {
+        .map((value,columnIndex) => {
+          const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
+          const missing=(value?.text??value)==='—';
+          const title=missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
           if (value && typeof value === 'object' && 'text' in value) {
             const marker =
               value.state && value.state !== 'good'
                 ? `<span class="wb-performance-marker ${escapeHtml(value.state)}" aria-label="${value.state === 'warning' ? '关注' : '超出参考线'}">${value.state === 'warning' ? '!' : '●'}</span>`
                 : '';
-            return `<td class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
+            return `<td${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
           }
-          return `<td>${escapeHtml(String(value))}</td>`;
+          return `<td${title}>${escapeHtml(String(value))}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
@@ -2667,7 +2671,8 @@ function renderWorkbenchDimensions() {
                 : escapeHtml(
                     workbenchDimensionCellText(dimensionTab, rowIndex, columnIndex, value),
                   );
-          return `<td class="${workbenchDimensionCellClass(dimensionTab, rowIndex, columnIndex, value)}">${content}</td>`;
+          const title=value==='—'?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{header:dimension.columns[columnIndex],row,dimension:dimensionTab,period:liveFacts?.selected??'month'}))}"`:'';
+          return `<td${title} class="${workbenchDimensionCellClass(dimensionTab, rowIndex, columnIndex, value)}">${content}</td>`;
         })
         .join('');
       const detail =

@@ -4,10 +4,16 @@ import { ready, publish, reportElements } from '../../business/shared/channel.js
 import { customerLoadLocales, customerLoadFailure } from './load-state.js';
 import { keepPageObservation } from '../../business/shared/page-observation.js';
 import { customerPageContext } from './page-context.js';
+import { showCustomerObservation, customerObservationChange } from './observation.js';
+import { customerRegionalValues } from './regional-values.js';
 
 let snapshot;
 let inventorySnapshot;
 let sourceDates;
+let dataCapturedAt;
+let observationRows = [];
+let priorObservation;
+let observationChange = '';
 let authorizationScope;
 let unregister = () => {};
 let attached = true;
@@ -17,10 +23,10 @@ let hasData = false;
 let loadGeneration = 0;
 let loadController;
 const copy = customerLoadLocales[document.documentElement.lang.startsWith('en') ? 'en' : 'zh'];
-const emptyInventory = () => ({ snapshot: null, rows: [] });
+const emptyInventory = () => ({ snapshot: null, rows: [], missingReason:'系统尚未完成读取：页面连接或数据加载未完成，不能判断为源表缺数据。' });
 const presentation = mountCustomerPrototype(report, emptyInventory());
 let loadState = 'waiting';
-function showLoadState(state) {
+function showLoadState(state, error) {
   loadState = state;
   document.getElementById('root')?.setAttribute('aria-busy', String(state === 'waiting' || state === 'loading'));
   const status = document.getElementById('customer-load-status');
@@ -28,6 +34,9 @@ function showLoadState(state) {
     status.textContent = copy[state] ?? '';
     status.hidden = state === 'ready';
     status.dataset.state = state;
+    const reason=error?String(error?.cause?.message??error?.message??error?.code??'QUERY_FAILED').replace(/(token|authorization|password|secret)\s*[:=]\s*\S+/gi,'$1=[redacted]').slice(0,400):'';
+    status.title=reason?`系统读取未成功：${reason}；不是源数据为0。`:'';
+    if(error)presentation.update({...emptyInventory(),missingReason:status.title});
   }
 }
 showLoadState('waiting');
@@ -105,8 +114,16 @@ async function publishLatest() {
 }
 function report(value) {
   if (!hasData || !attached) return;
+  if (value.capturedAt && value.capturedAt !== dataCapturedAt) return;
+  const observation = { at: dataCapturedAt, scope: JSON.stringify([inventorySnapshot, value.summary?.customerCodes]), quantity: value.summary?.largeDateQty };
+  if (priorObservation?.at !== observation.at || priorObservation?.scope !== observation.scope)
+    observationChange = customerObservationChange(priorObservation, observation);
+  priorObservation = observation;
+  showCustomerObservation(value, dataCapturedAt, document, observationChange);
   snapshot = {
     ...customerPageContext(value),
+    regionalInventoryValues: customerRegionalValues(observationRows, value.summary?.customerCodes).region,
+    filteredRegionalInventoryValues: customerRegionalValues(observationRows, value.filteredCustomerCodes).region,
     source: 'gea-governed-sql',
     dataAuthority: 'current-gea-identity',
     authorizationScope,
@@ -115,7 +132,8 @@ function report(value) {
     sourceDates,
     primaryTable: 'agents_scm_cust_plan_order_analysis_d',
     pageId: 'inventory-customer',
-    capturedAt: new Date().toISOString(),
+    capturedAt: dataCapturedAt,
+    observationSemantics: 'capturedAt为本次页面数据取回时间，筛选、翻页和上下文上报不刷新；不是数据库不可变快照或Cube查询版本。',
   };
   if (!attached) return;
   unregister();
@@ -143,6 +161,8 @@ async function reloadCustomerInventory() {
       onInventory(inventory) {
         if (!attached || generation !== loadGeneration) return;
         inventorySnapshot = inventory.snapshot;
+        dataCapturedAt = new Date().toISOString();
+        observationRows = inventory.rows;
         sourceDates = { plan: inventory.snapshot, inventory: inventory.inventorySnapshot, organization: inventory.organizationSnapshot };
         hasData = true;
         presentation.update(inventory);
@@ -151,6 +171,8 @@ async function reloadCustomerInventory() {
     });
     if (!attached || generation !== loadGeneration) return;
     inventorySnapshot = inventory.snapshot;
+    dataCapturedAt = new Date().toISOString();
+    observationRows = inventory.rows;
     sourceDates = { plan: inventory.snapshot, inventory: inventory.inventorySnapshot, organization: inventory.organizationSnapshot };
     hasData = true;
     syncStatus('');
@@ -158,7 +180,7 @@ async function reloadCustomerInventory() {
     presentation.update(inventory);
   } catch (error) {
     if (attached && generation === loadGeneration && !controller.signal.aborted)
-      showLoadState(customerLoadFailure(error));
+      showLoadState(customerLoadFailure(error),error);
   }
 }
 void ready.then(reloadCustomerInventory);
