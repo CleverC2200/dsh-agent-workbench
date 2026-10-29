@@ -625,14 +625,8 @@
       ],
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         },
@@ -654,7 +648,7 @@
         }
       },
       "request": {
-        "sql": "SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty ORDER BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty ORDER BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "forecast.count"
@@ -672,20 +666,14 @@
     "forecast.count": {
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty) AS mps_rows"
       }
     },
     "delivery.detail": {

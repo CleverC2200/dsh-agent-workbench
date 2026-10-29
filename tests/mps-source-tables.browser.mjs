@@ -22,10 +22,13 @@ function fixture(records, options = {}) {
         hasMorePages: false,
       };
     if (options.deny?.(kind)) throw Error('AGENT_ACCESS_DENIED');
-    const period = kind === 'forecast' ? parameters.month : parameters.months[0];
+    const period = parameters.months[0];
     const values = records(kind, period).map((row) => ({
       ...row,
-      stat_month: kind === 'forecast' ? parameters.source_month : period.replace('-', ''),
+      stat_month:
+        kind === 'forecast'
+          ? `${period.slice(0, 4)}/${Number(period.slice(5))}`
+          : period.replace('-', ''),
     }));
     return {
       rows: queryId.endsWith('.count')
@@ -129,14 +132,16 @@ test('one forecast batch drives two selectable target months and delivery source
   await expect(delivery).toContainText('0.015000000000');
   await expect(delivery).not.toContainText('0.012000000000');
   const checked = calls.filter(
-    (c) => c.queryId === 'forecast.detail' && c.parameters.month === '2026-12',
+    (c) => c.queryId === 'forecast.detail' && c.parameters.months.includes('2026-12'),
   );
   assert.equal(checked.length, 1);
-  assert.equal(checked[0].parameters.source_month, '2026/12/1');
+  assert(checked[0].parameters.months.includes('2026/12'));
   assert(
     calls.some((c) => c.queryId === 'delivery.detail' && c.parameters.months.includes('202612')),
   );
-  assert(!calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.month === '2027-01'));
+  assert(
+    !calls.some((c) => c.queryId === 'forecast.detail' && c.parameters.months.includes('2027-01')),
+  );
   await page.locator('iframe').evaluate((el) => {
     el.style.width = '600px';
   });

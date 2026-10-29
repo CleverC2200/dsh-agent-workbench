@@ -143,9 +143,10 @@ test('new table queries bind month parameters and read all pages with required c
     page_size: 200,
     offset: 0,
   });
-  assert.equal(forecastRequest.parameters.gea_p1, '2026-12');
-  assert.equal(forecastRequest.parameters.gea_p2, '2026/12/1');
-  assert.match(forecastRequest.sql, /stat_month IN \(:gea_p1, :gea_p2\)/);
+  assert(forecastRequest.parameters.gea_p1.includes('2026-12'));
+  assert(forecastRequest.parameters.gea_p1.includes('2026/12'));
+  assert(forecastRequest.parameters.gea_p1.includes('2026/12/1'));
+  assert.match(forecastRequest.sql, /stat_month IN \(:gea_p1\)/);
   assert.match(request.sql, /FROM agents_scm_base_dimension_delivery_mi/);
   assert(!request.sql.includes('2026-12'));
 });

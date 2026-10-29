@@ -50,7 +50,7 @@ const countsBy = (rows, key) => {
 const tableMonth = (value) => {
   const source = text(value);
   const compact = /^(\d{4})(0[1-9]|1[0-2])$/.exec(source);
-  const slash = /^(\d{4})\/(0?[1-9]|1[0-2])\/0?1$/.exec(source);
+  const slash = /^(\d{4})\/(0?[1-9]|1[0-2])(?:\/0?1)?$/.exec(source);
   return (
     normalizedMonth(source) ??
     (compact
@@ -63,7 +63,14 @@ const tableMonth = (value) => {
 export function sourceTableParameters(kind, month) {
   const months = sourceMonthValues(month);
   if (kind === 'forecast')
-    return { month, source_month: `${month.slice(0, 4)}/${Number(month.slice(5))}/1` };
+    return {
+      months: [
+        ...months,
+        `${month.slice(0, 4)}/${Number(month.slice(5))}`,
+        `${month.slice(0, 4)}/${Number(month.slice(5))}/1`,
+        month.replace('-', ''),
+      ],
+    };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
 }
