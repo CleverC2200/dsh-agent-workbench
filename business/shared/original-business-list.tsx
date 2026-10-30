@@ -259,7 +259,7 @@ export function OriginalBusinessList({
       {result?.status === 'select_customer' ? (
         <p className={css.empty}>请选择客户。</p>
       ) : loading && (aqkc || fc) ? (
-        <DashboardTableSkeleton label={`${view.title}加载中`} />
+        <DashboardTableSkeleton label={`${view.title}加载中`} embedded />
       ) : (
         renderTable
       )}

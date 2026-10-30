@@ -470,7 +470,7 @@ export function ConfiguredFactsPage({
           </LocalQueryForm>
         )}
         <QueryErrors errors={error ? [`${error.message}（${error.code}）`] : []} />
-        {loading && <DashboardTableSkeleton label={`${view.title}加载中`} />}
+        {loading && <DashboardTableSkeleton label={`${view.title}加载中`} embedded={embedded} />}
         {!loading && result?.status === 'select_customer' && (
           <p role="status" className={css.empty}>
             请选择客户后查看该客户的{view.title}。

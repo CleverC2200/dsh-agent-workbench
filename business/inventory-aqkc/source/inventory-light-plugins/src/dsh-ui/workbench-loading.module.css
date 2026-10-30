@@ -214,3 +214,10 @@
 .embedded .content {
   padding: 0;
 }
+
+/* The surrounding business list already owns its border and corners. */
+.embeddedTable {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}

@@ -126,10 +126,10 @@ const forbidden=async()=>{writes.push('write');throw Error('LOCAL_RENDER_ACTION_
 const drafts=new Map();
 const host={salesPlan:{
   periods:{invoke:async()=>({records:[{periodId:'period-1',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'}],total:1,size:100,current:1,pages:1})},
-  list:{invoke:async(q)=>{const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
+  list:{invoke:async(q)=>{if(comparison==='loading') await new Promise(resolve=>setTimeout(resolve,4000));const records=q?.status===undefined||q.status===1?plans:[];return {records,total:records.length,size:200,current:1,pages:1}}},
   detail:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return {currentVersion:{...plan,id:plan.versionId,effective:true},skus:[skuFor(plan.versionId)],versions:versionsFor(plan),logs:[],actionContext:{versionId:plan.versionId,status:plan.status,nodeOrder:2,allowedActions:comparison==='returned'?['REJECT']:['APPROVE','REJECT'],snapshotHash:'a'.repeat(64)}}}},
   versions:{invoke:async({planId})=>{const plan=plans.find(row=>row.planId===planId);return versionsFor(plan)}},
-  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return [skuFor(versionId)]}},
+  versionSkus:{invoke:async({versionId})=>{readCalls.push({versionId});if(comparison==='category-loading') await new Promise(resolve=>setTimeout(resolve,5000));if(comparison==='forbidden'&&versionId.includes('previous'))throw Object.assign(Error('forbidden'),{status:403});return [skuFor(versionId)]}},
   draft:{invoke:async(q)=>{const key=q.planId+':'+q.versionId;if(q.draft){writes.push('draft');window.savedDrafts.push(q.draft);drafts.set(key,q.draft);}return {draft:drafts.get(key)??null}}},
   logs:{invoke:async()=>[]},compare:{invoke:async({planId,fromVersionId,toVersionId})=>{
     readCalls.push({planId,fromVersionId,toVersionId});
@@ -1100,3 +1100,34 @@ test('real sales plan differences stay legible in both themes without changing t
     }
   }
 });
+
+test(
+  'sales plan loading preserves controls and shows an embedded accessible skeleton before rows',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'loading');
+    const skeleton = page.getByRole('status', { name: '销售计划加载中' });
+    await expect(skeleton).toBeVisible();
+    await expect(skeleton).toHaveCSS('border-radius', '0px');
+    await expect(skeleton.locator('table')).toHaveAttribute('aria-hidden', 'true');
+    await expect(page.getByTestId('regional-approval-queue-footer')).toBeVisible();
+    await expect(skeleton).toBeHidden({ timeout: 20000 });
+    await expect(page.getByText('华南大区').first()).toBeVisible();
+  },
+);
+
+test(
+  'sales plan uses table skeleton while SKU data is loading after queue arrives',
+  { timeout: 30000 },
+  async (t) => {
+    const { page } = await openWorkbench(t, false, 'category-loading');
+    await expect
+      .poll(async () => await page.evaluate(() => window.readCalls.length))
+      .toBeGreaterThan(0);
+    const skeleton = page.getByRole('status', { name: '销售计划加载中' });
+    await expect(skeleton).toBeVisible({ timeout: 2000 });
+    await expect(page.locator('.arco-spin-loading')).toHaveCount(0);
+    await expect(skeleton).toBeHidden({ timeout: 15000 });
+    await expect(page.getByText('华南大区').first()).toBeVisible();
+  },
+);
