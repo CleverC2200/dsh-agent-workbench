@@ -20,7 +20,7 @@ const row = {
   outboundQty: 10,
   transferQty: 2,
 };
-test('partial imports preserve other SKUs, months and warehouses; explicit zero replaces existing plan', () => {
+test('imports replace a complete warehouse/month package, including removal of omitted SKUs', () => {
   const old = [
     row,
     { ...row, sku: 'SKU2' },
@@ -29,7 +29,7 @@ test('partial imports preserve other SKUs, months and warehouses; explicit zero 
   ];
   const copy = structuredClone(old);
   const merged = mergeFcPlans(old, [{ ...row, outboundQty: 0, transferQty: 0 }]);
-  assert.equal(merged.length, 4);
+  assert.equal(merged.length, 3);
   assert.equal(
     merged.find((x) => x.warehouseCode === '001' && x.month === '2026-10' && x.sku === 'SKU1')
       .outboundQty,
@@ -39,7 +39,7 @@ test('partial imports preserve other SKUs, months and warehouses; explicit zero 
     merged
       .filter((x) => !(x.warehouseCode === '001' && x.month === '2026-10' && x.sku === 'SKU1'))
       .map((x) => x.outboundQty),
-    [10, 10, 10],
+    [10, 10],
   );
   assert.deepEqual(old, copy);
   assert.deepEqual(mergeFcPlans(merged, [{ ...row, outboundQty: 0, transferQty: 0 }]), merged);

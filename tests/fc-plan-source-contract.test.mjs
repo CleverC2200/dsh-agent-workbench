@@ -45,11 +45,11 @@ const base = {
   本月出货计划: 310,
   本月调拨计划: '',
 };
-test('blank imported monthly quantities never become zero; an explicit zero remains valid', () => {
+test('explicit plan imports treat blanks as zero like the original, without converting missing source values', () => {
   for (const value of ['', '   ', undefined]) {
     const result = validateFcImport([{ ...base, 本月调拨计划: value }], source);
-    assert.equal(result.plans.length, 0);
-    assert.ok(result.errors.some((error) => error.field === '本月调拨计划'));
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.plans[0].transferQty, 0);
   }
   const zero = validateFcImport([{ ...base, 本月调拨计划: 0 }], source);
   assert.deepEqual(zero.errors, []);
@@ -67,7 +67,8 @@ test('blank imported monthly quantities never become zero; an explicit zero rema
     ],
     source,
   );
-  assert.ok(modern.errors.some((error) => error.field === '确认调拨计划量'));
+  assert.deepEqual(modern.errors, []);
+  assert.equal(modern.plans[0].transferQty, 0);
 });
 test('no local plan preserves the monthly transfer gap; explicit local input stays a local trial', () => {
   const date = currentPlanningMonth() + '-01';

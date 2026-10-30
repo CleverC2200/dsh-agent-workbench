@@ -82,12 +82,12 @@ export const configuredCycleState = {
       ? value
       : undefined;
   },
-  save(days: number, rules: FcCycleRule[] = this.rules(), warehouse = this.warehouse()) {
+  save(days: number, rules?: FcCycleRule[], warehouse?: string): void {
     publish();
     view.update({
       replenishmentCycleDays: days,
-      fcCycleRules: validateFcCycleRules(rules),
-      fcCycleWarehouse: warehouse,
+      fcCycleRules: validateFcCycleRules(rules ?? configuredCycleState.rules()),
+      fcCycleWarehouse: warehouse ?? configuredCycleState.warehouse(),
     });
   },
   subscribe(listener: () => void) {

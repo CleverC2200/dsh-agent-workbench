@@ -168,6 +168,125 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   assert.deepEqual(errors, []);
 });
 
+for (const width of [1280, 900, 760]) {
+  test(`APS cross matrices retain returned groups, quantity formulas and heatmap layout at ${width}px`, async (t) => {
+    const categories = ['汤圆', '面点', '饺子', '馄饨', '休闲', '饼类', '粽子', '调理肉制品'];
+    const { frame, errors } = await mount(t, 'apsplan', width, (query, result) => {
+      if (
+        [
+          'overview.stock',
+          'page.stock-overview',
+          'drill.organization.stock',
+          'drill.product.stock',
+        ].includes(query.queryId)
+      ) {
+        return {
+          ...result,
+          rows: ['华东', '华南', '西南'].flatMap((base) =>
+            categories.map((category) => ({
+              ...result.rows[0],
+              base,
+              category,
+              inventory: 300,
+              available: base === '华东' && category === '面点' ? 200 : 100,
+              demand: base === '华南' && category === '粽子' ? 0 : 10,
+              records: 2,
+              invalid: 1,
+            })),
+          ),
+        };
+      }
+      if (/^(overview|page|drill\.organization|drill\.product)\.production$/.test(query.queryId)) {
+        return {
+          ...result,
+          rows: [
+            ['华东', '汤圆', 90],
+            ['华东', '面点', 100],
+            ['华南', '汤圆', 97],
+          ].map(([base, category, actual]) => ({
+            ...result.rows[0],
+            base,
+            category,
+            planned: 100,
+            actual,
+            records: 2,
+            invalid: 1,
+            source_basis: 'MES_QUANTITY',
+          })),
+        };
+      }
+      return result;
+    });
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+    await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+    await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
+    const cross = frame.locator('#cross-analysis');
+    const cell = (scope) => cross.locator(`.matrix-row button[title^="${scope} ·"]`);
+    await cross
+      .locator('.cross-tabs')
+      .getByRole('button', { name: '可发货天数', exact: true })
+      .click();
+    await expect(cross.locator('.matrix-row > button:not(:disabled)')).toHaveCount(23);
+    await expect(cell('华东 × 汤圆')).toHaveText('10.0天');
+    await expect(cell('华东 × 面点')).toHaveClass('heat-critical');
+    await expect(cell('华南 × 粽子')).toBeDisabled();
+    await expect(cell('华南 × 粽子')).toHaveText('-');
+    await expect(cross.locator('.matrix-header > span')).toHaveCount(9);
+    await expect(cross.locator('.matrix-format-note')).not.toContainText('剔除大日期');
+    const grid = await cross
+      .locator('.matrix-row')
+      .nth(1)
+      .evaluate((row) => ({
+        display: getComputedStyle(row).display,
+        columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
+      }));
+    assert.deepEqual(grid, { display: 'grid', columns: 9 });
+    for (const metric of ['可发货天数', '生产计划达成率', '库存量']) {
+      await cross.locator('.cross-tabs').getByRole('button', { name: metric, exact: true }).click();
+      await expect(cross.locator('.matrix-row')).toHaveCount(4);
+      await expect(cross.locator('.matrix-note p')).toContainText(metric);
+      if (metric === '生产计划达成率') {
+        await expect(cross.locator('.matrix-row > button:not(:disabled)')).toHaveCount(3);
+        await expect(cell('华东 × 汤圆')).toHaveText('90.00%');
+        await expect(cell('华东 × 汤圆')).toHaveClass('heat-critical');
+        await expect(cell('华南 × 汤圆')).toHaveClass('heat-watch');
+        await expect(cell('华东 × 面点')).toHaveClass('heat-good');
+      }
+      if (metric === '库存量') {
+        await expect(cross.locator('.matrix-row > button:not(:disabled)')).toHaveCount(24);
+        await expect(cell('华东 × 汤圆')).toHaveText('0.03万箱');
+        await expect(cell('华东 × 汤圆')).toHaveClass('matrix-observation');
+        await expect(cross.locator('.matrix .heat-good, .matrix .heat-critical')).toHaveCount(0);
+        await expect(cross.locator('.matrix-note')).toContainText('无目标观察指标');
+        await expect(cross.locator('.matrix-inventory-list [role="columnheader"]')).toHaveCount(5);
+        await expect(cross.locator('.matrix-inventory-list')).not.toContainText('任务派发');
+      }
+      const fits = await cross.evaluate((section) => {
+        const pane = section.getBoundingClientRect();
+        const matrix = section.querySelector('.matrix').getBoundingClientRect();
+        const note = section.querySelector('.matrix-note').getBoundingClientRect();
+        return (
+          matrix.left >= pane.left - 1 &&
+          matrix.right <= pane.right + 1 &&
+          note.right <= pane.right + 1
+        );
+      });
+      assert.equal(fits, true);
+      if (process.env.AGENT_LAYOUT_EVIDENCE) {
+        await mkdir(process.env.AGENT_LAYOUT_EVIDENCE, { recursive: true });
+        await cross
+          .locator('.matrix-layout')
+          .evaluate((node) => node.scrollIntoView({ block: 'center', behavior: 'instant' }));
+        await cross.locator('.matrix-layout').screenshot({
+          path: `${process.env.AGENT_LAYOUT_EVIDENCE}/aps-cross-${metric}-${width}.png`,
+        });
+      }
+    }
+    assert.deepEqual(errors, []);
+  });
+}
+
 test('APS demand attainment fills after matching plan data arrives', async (t) => {
   const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
     if (/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(query.queryId))
@@ -211,6 +330,105 @@ test('APS demand attainment fills after matching plan data arrives', async (t) =
   await expect(row.locator('b')).toHaveText('26.25%');
   await expect(row).not.toContainText('无数据');
   assert.deepEqual(errors, []);
+});
+
+test('APS demand accuracy retains the initial-stage explanation without replacing the composite', async (t) => {
+  for (const width of [1280, 760]) {
+    await t.test(`${width}px`, async (t) => {
+      const { frame, errors } = await mount(t, 'apsplan', width, (query, result) => {
+        if (
+          !/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(
+            query.queryId,
+          )
+        )
+          return result;
+        return {
+          ...result,
+          rows: [
+            {
+              ...result.rows[0],
+              month: '202610',
+              base: '华东',
+              initial_plan: 100,
+              initial_deviation: 55.17,
+              adjusted_plan: 0,
+              adjusted_deviation: 21,
+              actual: 21,
+              records: 1,
+              missing_actual: 0,
+              invalid: 0,
+            },
+          ],
+        };
+      });
+      await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+      await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+      await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+      const card = frame.locator('.period-kpi-card').filter({
+        has: frame.locator('.kpi-name > span').filter({ hasText: /^需求预测准确率$/ }),
+      });
+      const explanation = card.locator('.kpi-source-note');
+      await expect(explanation).toContainText('月初阶段准确率 44.83%');
+      await expect(explanation).toContainText('纠偏计划合计为0');
+      await expect(explanation).toContainText('暂不能计算两阶段综合准确率');
+      await expect(card.locator('.kpi-value')).toHaveText('-');
+      await expect(card.locator('.achievement-status')).toHaveText('数据不足');
+      await expect(card.locator('.kpi-foot')).toContainText('差距 -');
+      const fits = await explanation.evaluate((node) => {
+        const note = node.getBoundingClientRect();
+        const card = node.closest('article').getBoundingClientRect();
+        return note.left >= card.left && note.right <= card.right && note.bottom <= card.bottom;
+      });
+      assert.equal(fits, true);
+      assert.deepEqual(errors, []);
+    });
+  }
+});
+
+test('APS demand accuracy omits the stage explanation after completion or a failed read', async (t) => {
+  for (const state of ['complete', 'failed']) {
+    await t.test(state, async (t) => {
+      const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+        if (
+          !/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(
+            query.queryId,
+          )
+        )
+          return result;
+        if (state === 'failed') throw Error('GEA_DATA_PERMISSION_DENIED');
+        return {
+          ...result,
+          rows: [
+            {
+              ...result.rows[0],
+              month: '202610',
+              base: '华东',
+              initial_plan: 100,
+              initial_deviation: 0,
+              adjusted_plan: 100,
+              adjusted_deviation: 0,
+              actual: 100,
+              records: 1,
+              missing_actual: 0,
+              invalid: 0,
+            },
+          ],
+        };
+      });
+      await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+      await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+      await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+      const card = frame.locator('.period-kpi-card').filter({
+        has: frame.locator('.kpi-name > span').filter({ hasText: /^需求预测准确率$/ }),
+      });
+      await expect(card.locator('.achievement-status')).toHaveText(
+        state === 'complete' ? '达标' : '读取失败',
+      );
+      await expect(card.locator('.kpi-source-note')).toHaveCount(0);
+      await expect(card.locator('.kpi-value')).toHaveText(state === 'complete' ? '100.00%' : '-');
+      assert.deepEqual(errors, []);
+    });
+  }
 });
 
 test('APS monthly comparisons distinguish unavailable cutoff from empty history', async (t) => {

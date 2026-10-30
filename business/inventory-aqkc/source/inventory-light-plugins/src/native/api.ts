@@ -33,14 +33,14 @@ async function dispatch(url: URL, method: string, body: any, signal?: AbortSigna
           signal,
           base ? base.split(',') : undefined,
           false,
-          base
-            ? undefined
-            : (workspace: unknown) => {
-                signal?.throwIfAborted();
-                window.dispatchEvent(
-                  new CustomEvent('aqkc-dashboard-progress', { detail: { workspace } }),
-                );
-              },
+          (workspace: unknown) => {
+            signal?.throwIfAborted();
+            window.dispatchEvent(
+              new CustomEvent('aqkc-dashboard-progress', {
+                detail: { workspace, bases: base ? base.split(',') : undefined },
+              }),
+            );
+          },
         ),
       };
     }

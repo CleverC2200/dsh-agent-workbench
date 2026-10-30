@@ -11,13 +11,18 @@ test('base changes and closed details cannot retain or publish obsolete query re
   const { JSDOM } = require('jsdom');
   const dom = new JSDOM('<div id="app"></div>', { url: 'https://html-plugin.local' });
   const previous = new Map(
-    ['window', 'document', 'fetch', 'IS_REACT_ACT_ENVIRONMENT', 'stockRangeTest'].map((key) => [
-      key,
-      Object.getOwnPropertyDescriptor(globalThis, key),
-    ]),
+    [
+      'window',
+      'document',
+      'fetch',
+      'CustomEvent',
+      'IS_REACT_ACT_ENVIRONMENT',
+      'stockRangeTest',
+    ].map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)]),
   );
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
+  globalThis.CustomEvent = dom.window.CustomEvent;
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const container = document.getElementById('app');
   Object.defineProperty(container, 'innerText', { get: () => container.textContent });
@@ -57,7 +62,18 @@ test('base changes and closed details cannot retain or publish obsolete query re
     published: [],
     hold: null,
     deferred: [],
-    load: async (_ref, _op, _signal, bases) => workspace(bases),
+    insightCalls: [],
+    overviewCalls: [],
+    overviewWaiters: [],
+    overviewHold: null,
+    load: async (_ref, _op, signal, bases, _gea, onProgress) => {
+      stockRangeTest.overviewCalls.push({ bases, signal, onProgress });
+      if (bases?.[0] === stockRangeTest.overviewHold)
+        return new Promise((resolve) =>
+          stockRangeTest.overviewWaiters.push(() => resolve(workspace(bases))),
+        );
+      return workspace(bases);
+    },
     tabs: (_ref, base, category, tab, _op, signal) => {
       const result = {
         [tab]: {
@@ -117,7 +133,7 @@ test('base changes and closed details cannot retain or publish obsolete query re
             contents: args.path.includes('aqkc-engine')
               ? 'export const load=(...a)=>stockRangeTest.load(...a);export const loadInventoryDashboardTabs=(...a)=>stockRangeTest.tabs(...a);'
               : args.path.endsWith('channel.js')
-                ? "export const call=async()=>({principalId:'fixture',trusted:false});export const ready=Promise.resolve();export const action=(key,info,handler)=>{stockRangeTest.handlers[key]=handler};export const reportElements=()=>()=>{};export const publish=async value=>stockRangeTest.published.push(structuredClone(value));export const ask=async()=>{};"
+                ? "export const call=async(method,payload)=>method==='insight'?(stockRangeTest.insightCalls.push(payload),{answer:'固定样本'}):({principalId:'fixture',trusted:false});export const ready=Promise.resolve();export const action=(key,info,handler)=>{stockRangeTest.handlers[key]=handler};export const reportElements=()=>()=>{};export const publish=async value=>stockRangeTest.published.push(structuredClone(value));export const ask=async()=>{};"
                 : args.path.endsWith('/data')
                   ? 'export const clearReadCache=()=>{};'
                   : args.path.includes('workspace-normalizer')
@@ -254,5 +270,56 @@ test('base changes and closed details cannot retain or publish obsolete query re
       false,
       'unknown restored IDs never trigger a detail read',
     );
+
+    stockRangeTest.overviewHold = '华东';
+    await filter({ bases: ['华东基地'], tab: '基地结构' });
+    const scoped = stockRangeTest.overviewCalls.at(-1);
+    assert.deepEqual(scoped.bases, ['华东']);
+    assert.equal(
+      typeof scoped.onProgress,
+      'function',
+      'selected bases must publish ready stock before all sources finish',
+    );
+    await React.act(async () => scoped.onProgress(workspace(['华东'])));
+    await settle();
+    assert.equal(page.pageContext().parts.stockOverview.rows[0].level, '华东');
+    const insightCount = stockRangeTest.insightCalls.length;
+    await React.act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    assert.equal(
+      stockRangeTest.insightCalls.length,
+      insightCount,
+      'partial overview updates must not spend model calls while remaining facts are pending',
+    );
+    const count = stockRangeTest.overviewCalls.length;
+    await React.act(async () =>
+      window.dispatchEvent(
+        new CustomEvent('aqkc-dashboard-progress', {
+          detail: { workspace: workspace() },
+        }),
+      ),
+    );
+    await settle();
+    assert.equal(
+      stockRangeTest.overviewCalls.length,
+      count,
+      'national progress must not restart selected-base queries',
+    );
+    assert.equal(scoped.signal.aborted, false);
+    assert.equal(page.pageContext().parts.stockOverview.rows[0].level, '华东');
+    await filter({ bases: ['华南基地'], tab: '基地结构' });
+    assert.equal(scoped.signal.aborted, true);
+    await React.act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('aqkc-dashboard-progress', {
+          detail: { workspace: workspace(['华东']), bases: ['华东'] },
+        }),
+      );
+      stockRangeTest.overviewWaiters.shift()();
+    });
+    await settle();
+    assert.equal(page.pageContext().parts.stockOverview.rows[0].level, '华南');
+    assert.equal(page.pageContext().parts.queryState.scope, '华南基地');
   }
 });

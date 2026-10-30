@@ -21,14 +21,11 @@ class BranchCardScope(unittest.TestCase):
   row=self.f.read('replenishment.summary')[0]
   self.assertEqual((row['warehouse_count'],row['known_in_transit'],row['known_preparing']),(1,20,20))
   detail=self.f.read('replenishment.detail');self.assertEqual({r['warehouse_code'] for r in detail},{'WH1'})
- def test_unprepared_allocation_uses_only_valid_unshipped_branch_orders_in_pieces(self):
-  self.add('OPEN')
-  for order,values in [('VOID',dict(detailstatus=20)),('CANCEL',dict(canceltime='2026-10-19')),('CLOSED',dict(order_close_time='2026-10-19')),('WMS',dict(wms_close_time='2026-10-19')),('SHIPPED',dict(delivery_qty=100)),('PREPARED',dict(bizflowstatus='OCP已下发',qtyallocated=100))]:self.add(order,**values)
-  row=self.f.read('current-shortage.summary')[0]
-  self.assertEqual((row['demand'],row['allocated'],row['remaining'],row['shortage']),(100,20,80,55))
+ def test_customer_orders_never_replace_branch_asn_demand(self):
+  self.add('DEALER')
   detail=next(r for r in self.f.read('replenishment.detail') if r['sku']=='S1')
-  self.assertEqual((detail['current_order_demand'],detail['current_order_allocated'],detail['calculation_order_remaining']),(100,20,80))
-  self.assertEqual(detail['recommended_qty'],115)
+  self.assertEqual((detail['current_order_demand'],detail['current_order_allocated'],detail['calculation_order_remaining']),(0,0,0))
+  self.assertEqual(detail['recommended_qty'],35)
  def test_unknown_sku_does_not_erase_calculable_replenishment(self):
   row=self.f.read('replenishment.summary')[0]
   self.assertIsNone(row['recommended_qty']);self.assertEqual(row['known_recommended_qty'],35)

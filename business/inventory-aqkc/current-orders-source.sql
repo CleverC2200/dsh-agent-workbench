@@ -80,7 +80,7 @@ WITH latest_inventory AS (
   SELECT o.cust_order_no AS cust_order_no, o.cust_code AS cust_code,
     o.material_code AS material_code, o.material_name AS material_name,
     o.pickup_point AS pickup_point, o.pickup_point_name AS pickup_point_name,
-    o.belong_base AS belong_base, (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyordered / o.bizunitconvertrate END) AS demand_qty,
+    o.belong_base AS belong_base, (CASE WHEN o.bizunitconvertrate > 0 THEN CASE WHEN NULLIF(TRIM(CAST(o.bdwctime AS TEXT)), '') IS NOT NULL OR o.prapare_order_status IN ('备单完成','备单完毕') THEN o.qtyallocated / o.bizunitconvertrate ELSE o.qtyordered / o.bizunitconvertrate END END) AS demand_qty,
     (CASE WHEN o.bizunitconvertrate > 0 THEN o.qtyallocated / o.bizunitconvertrate END) AS allocated_qty,
     CASE WHEN o.qtyordered IS NULL OR o.qtyshipped IS NULL
       OR o.qtyshipped < o.qtyordered THEN 1 ELSE 0 END AS unshipped
@@ -88,6 +88,8 @@ WITH latest_inventory AS (
   WHERE o.detailstatus = 10
     AND o.order_close_time IS NULL AND o.wms_close_time IS NULL
     AND NULLIF(TRIM(o.canceltime), '') IS NULL
+    AND NULLIF(TRIM(CAST(o.dmscanceltime AS TEXT)), '') IS NULL
+    AND (o.prapare_order_status IS NULL OR o.prapare_order_status NOT IN ('作废','已签收'))
     AND NULLIF(TRIM(o.cust_order_no), '') IS NOT NULL
 ), current_open_orders AS (
   SELECT l.cust_order_no AS cust_order_no, l.cust_code AS cust_code,

@@ -62,3 +62,15 @@ test('leaving during recovery cancels the retry', async () => {
   await assert.rejects(pending, { name: 'AbortError' });
   assert.equal(calls, 1);
 });
+
+test('an empty initialization directory is read again without signing out', async () => {
+  let calls = 0;
+  const rows = await readFcWarehouseDirectory(
+    config,
+    '2026-10-30',
+    new AbortController().signal,
+    async () => (++calls === 1 ? { ...success, rows: [] } : success),
+  );
+  assert.equal(calls, 2);
+  assert.equal(rows[0].warehouse_code, 'A020');
+});

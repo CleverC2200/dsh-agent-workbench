@@ -61,6 +61,14 @@ test('partial target coverage, local trials and failed sources remain bounded ra
   let e = branchDashboardEvidence(p);
   assert.match(e.coverage.kind, /子集/);
   assert.equal(e.totals.targetMissingSkuCount, 1);
+  assert.equal(e.totals.targetInventoryQty, null);
+  assert.equal(e.totals.inventoryDeviationQty, null);
+  assert.equal(e.totals.inventoryDeviationPercent, null);
+  assert.equal(e.comparison.orderAdjustedAvailableQty, 60);
+  assert.equal(e.comparison.targetInventoryQty, 80);
+  assert.equal(e.comparison.inventoryDeviationQty, -20);
+  assert.equal(e.comparison.inventoryDeviationPercent, -25);
+  assert.equal(e.skuIntersections.missingTargetAndCalculation, null);
   p.localPlanTrial = true;
   e = branchDashboardEvidence(p);
   assert.equal(e.totals.targetInventoryQty, null);

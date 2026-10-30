@@ -204,6 +204,8 @@ export function InventoryOperationsWorkbench() {
   } | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dashboardLoading, setDashboardLoading] = useState(true);
+  const [dashboardReadPending, setDashboardReadPending] = useState(true);
+  const [scopedPendingKey, setScopedPendingKey] = useState<string | null>(null);
   const [dashboardTabs, setDashboardTabs] = useState<Partial<DashboardTabs> | null>(null);
   const [dashboardTabsError, setDashboardTabsError] = useState<string | null>(null);
   const [dashboardTabsLoading, setDashboardTabsLoading] = useState<DashboardTabName | null>(null);
@@ -304,6 +306,7 @@ export function InventoryOperationsWorkbench() {
     setDashboardLoading(true);
     const progress = (event: Event) => {
       if (!active || controller.signal.aborted || !(event instanceof CustomEvent)) return;
+      if (event.detail?.bases !== undefined) return;
       const workspace = normalizeWorkspaceState(event.detail?.workspace);
       if (workspace) {
         setDashboardWorkspaceState(workspace);
@@ -332,7 +335,10 @@ export function InventoryOperationsWorkbench() {
         );
       })
       .finally(() => {
-        if (active) setDashboardLoading(false);
+        if (active) {
+          setDashboardLoading(false);
+          setDashboardReadPending(false);
+        }
       });
     return () => {
       active = false;
@@ -793,6 +799,7 @@ export function InventoryOperationsWorkbench() {
             ? '全部可见基地'
             : `${paths.length}个基地`;
   const overviewKey = paths.join(',');
+  const hasDashboardWorkspace = dashboardWorkspace !== null;
   const overviewWorkspace = allBasesSelected
     ? dashboardWorkspace
     : scopedOverview?.key === overviewKey
@@ -817,6 +824,8 @@ export function InventoryOperationsWorkbench() {
     !!overviewWorkspace &&
       paths.length > 0 &&
       !dashboardLoading &&
+      !dashboardReadPending &&
+      scopedPendingKey !== overviewKey &&
       !overviewLoading &&
       !overviewError &&
       !dashboardError,
@@ -898,10 +907,25 @@ export function InventoryOperationsWorkbench() {
     dashboardTabsError,
   ]);
   useEffect(() => {
-    if (!dashboardWorkspace || allBasesSelected || !paths.length) return;
+    if (!hasDashboardWorkspace || allBasesSelected || !overviewKey) return;
     const controller = new AbortController();
+    setScopedPendingKey(overviewKey);
+    const selectedPaths = overviewKey.split(',');
+    const selectedBases = selectedPaths.map((path) => path.replace(/基地$/u, '')).sort();
     let active = true;
-    loadSelectedDashboardPayload(paths, controller.signal)
+    const progress = (event: Event) => {
+      if (!active || controller.signal.aborted || !(event instanceof CustomEvent)) return;
+      const bases = event.detail?.bases;
+      if (
+        !Array.isArray(bases) ||
+        JSON.stringify([...bases].sort()) !== JSON.stringify(selectedBases)
+      )
+        return;
+      const workspace = normalizeWorkspaceState(event.detail?.workspace);
+      if (workspace) setScopedOverview({ key: overviewKey, workspace, error: null });
+    };
+    window.addEventListener('aqkc-dashboard-progress', progress);
+    loadSelectedDashboardPayload(selectedPaths, controller.signal)
       .then((payload) => {
         if (!active) return;
         const workspace = normalizeWorkspaceState(payload.workspace);
@@ -917,12 +941,17 @@ export function InventoryOperationsWorkbench() {
             error instanceof Error ? error.message : '所选基地指标加载失败，请重试。',
           ),
         });
+      })
+      .finally(() => {
+        if (active) setScopedPendingKey((key) => (key === overviewKey ? null : key));
       });
     return () => {
       active = false;
       controller.abort();
+      setScopedPendingKey((key) => (key === overviewKey ? null : key));
+      window.removeEventListener('aqkc-dashboard-progress', progress);
     };
-  }, [allBasesSelected, dashboardWorkspace, overviewKey, paths]);
+  }, [allBasesSelected, hasDashboardWorkspace, overviewKey]);
   return (
     <div className={styles.shell}>
       <section ref={boardRef} className={styles.boardPanel} aria-label="业务看板">

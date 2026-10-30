@@ -26,7 +26,7 @@ const present = (
     }),
   };
 };
-export function originalFcView(config: any, tab: string) {
+export function originalFcView(config: any, tab: string, asOf?: string) {
   if (tab === 'replenishment')
     return present(
       config,
@@ -37,14 +37,12 @@ export function originalFcView(config: any, tab: string) {
         'material_name',
         'inventory_qty',
         'available_qty',
-        ['missing_preparingQty', '当前未备单需求'],
+        ['missing_preparingQty', '当前待收货需求'],
         'missing_shortageQty',
         'historical_turnover_days',
         'target_inventory_qty',
         'remaining_outbound_qty',
         'rolling_ship_daily',
-        'last_month_actual_qty',
-        'current_day_avg_qty',
         'open_transfer_reported_qty',
         'missing_expectedMonthEndInventoryQty',
         'missing_currentRemainingTransferQty',
@@ -72,8 +70,10 @@ export function originalFcView(config: any, tab: string) {
         'missing_reason',
         'plan_source',
         'calculation_status',
+        'last_month_actual_qty',
+        'current_day_avg_qty',
       ],
-      ['warehouse_code', 'sku'],
+      ['warehouse_search', 'search', 'list_mode', 'sort_field', 'sort_direction'],
     );
   if (tab === 'orders')
     return present(
@@ -110,7 +110,7 @@ export function originalFcView(config: any, tab: string) {
           (field) => field !== 'missing_age_10',
         ),
       ],
-      ['base', 'material_code', 'risk'],
+      ['base', 'search', 'risk', 'age_filter', 'sort_field', 'sort_direction'],
     );
   if (tab === 'plan')
     return present(
@@ -130,7 +130,7 @@ export function originalFcView(config: any, tab: string) {
         'last_month_actual_qty',
         'current_day_avg_qty',
       ],
-      ['warehouse_code', 'sku'],
+      ['warehouse_search', 'search'],
     );
   return present(
     config,
@@ -140,7 +140,15 @@ export function originalFcView(config: any, tab: string) {
       'base',
       'missing_transit',
       ['known_available', '可用库存（件）'],
-      ...Array.from({ length: 7 }, (_, i) => `missing_production_${i}`),
+      ...Array.from({ length: 7 }, (_, i): [string, string] | string => {
+        if (!asOf) return `missing_production_${i}`;
+        const date = new Date(asOf + 'T00:00:00Z');
+        date.setUTCDate(date.getUTCDate() + i);
+        return [
+          `missing_production_${i}`,
+          `${date.toISOString().slice(5, 10).replace('-', '/')} ${new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', weekday: 'short' }).format(date)}`,
+        ];
+      }),
       'missing_production_total',
     ],
     ['base', 'sku'],

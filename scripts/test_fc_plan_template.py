@@ -25,6 +25,8 @@ class PlanTemplate(unittest.TestCase):
         ])
 
     def read(self, **overrides):
+        if not any(r[1]=='warehouse_month_transfer_plan' for r in self.db.execute("PRAGMA table_info(agents_scm_warehouse_transfer_plan_data_d)")):
+            self.db.execute("ALTER TABLE agents_scm_warehouse_transfer_plan_data_d ADD COLUMN warehouse_month_transfer_plan REAL")
         params = {**self.query['request']['parameters'], 'gea_p8':200, **overrides}
         sql = sqlglot.transpile(self.query['request']['sql'], read='postgres', write='sqlite')[0]
         return [dict(r) for r in self.db.execute(sql,params)]

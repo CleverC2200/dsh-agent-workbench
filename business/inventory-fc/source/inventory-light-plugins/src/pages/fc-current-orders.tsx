@@ -4,6 +4,8 @@ import { createAgentQueries } from '../../../../../shared/agent-query';
 import { unpackAtomicPage } from '../../../../../shared/atomic-page';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
+import { currentOrderStatus, ORDER_STATUSES } from '../../../fc/src/lib/current-orders';
+import { useFcWorkflow } from './configured-fc-list';
 import { PlanPagination } from '../../../../../shared/plan-pagination';
 import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
 import css from './fc-current-orders.module.css';
@@ -29,6 +31,7 @@ const lineSchema = z.object({
   allocated: numeric,
   shipped: numeric,
   remaining: numeric,
+  shortage: numeric,
   order_status: z.string().nullable(),
 });
 const orderSchema = lineSchema.omit({ sku: true, material_name: true }).extend({
@@ -122,11 +125,10 @@ function OrderLines({
               <tr>
                 {[
                   '产品',
-                  '订单量（件）',
                   '需求量（件）',
-                  '占用量（件）',
-                  '实际发货量（件）',
-                  '未备量（件）',
+                  '基地已占用（件）',
+                  '剩余需求量（件）',
+                  '缺货量（件）',
                 ].map((label) => (
                   <th key={label}>{label}</th>
                 ))}
@@ -138,11 +140,9 @@ function OrderLines({
                   <td>
                     {text(row.sku)} {text(row.material_name)}
                   </td>
-                  {[row.ordered, row.demand, row.allocated, row.shipped, row.remaining].map(
-                    (value, index) => (
-                      <td key={index}>{qty(value)}</td>
-                    ),
-                  )}
+                  {[row.demand, row.allocated, row.remaining, row.shortage].map((value, index) => (
+                    <td key={index}>{qty(value)}</td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -169,26 +169,35 @@ export function FcCurrentOrders({
   warehouseCode = '',
   revision = 0,
   onRead,
+  initialFilter,
+  rememberFilter,
 }: {
   config: AgentSqlConfig;
   warehouseCode?: string;
   revision?: number;
   onRead?: (value: unknown) => void;
+  initialFilter?: { warehouse: string; shortageOnly: boolean };
+  rememberFilter?: (filter: { warehouse: string; shortageOnly: boolean }) => void;
 }) {
-  const empty = { warehouse: '', customer: '', search: '', shortageOnly: false };
-  const [draft, setDraft] = useState(empty),
-    [filters, setFilters] = useState(empty);
+  const { listSearch, setListSearch } = useFcWorkflow();
+  const empty = { warehouse: '', search: listSearch, shortageOnly: false };
+  const initial = { ...empty, ...initialFilter };
+  const [draft, setDraft] = useState(initial),
+    [filters, setFilters] = useState(initial);
+  useEffect(() => {
+    rememberFilter?.({ warehouse: filters.warehouse, shortageOnly: filters.shortageOnly });
+  }, [filters]);
   const [page, setPage] = useState(1),
     [pageSize, setPageSize] = useState(10);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [state, setState] = useState<ReadState<Order>>({ kind: 'loading' });
   const [identityRevision, reloadIdentity] = useState(0);
   useEffect(() => {
     const clear = () => {
       setState({ kind: 'loading' });
-      setExpanded(null);
-      setDraft(empty);
-      setFilters(empty);
+      setExpanded(new Set());
+      setDraft({ ...empty, search: '' });
+      setFilters({ ...empty, search: '' });
       setPage(1);
       reloadIdentity((value) => value + 1);
     };
@@ -198,14 +207,17 @@ export function FcCurrentOrders({
   useEffect(() => {
     const controller = new AbortController();
     setState({ kind: 'loading' });
-    setExpanded(null);
+    setExpanded(new Set());
     const escaped = filters.search.trim().replace(/[\\%_]/g, '\\$&');
     void readPage(
       config,
       'branch-current-orders.page',
       {
-        warehouse_code: warehouseCode || filters.warehouse.trim() || null,
-        customer_code: filters.customer.trim() || null,
+        warehouse_code: warehouseCode || null,
+        warehouse_search_pattern: filters.warehouse.trim()
+          ? '%' + filters.warehouse.trim().replace(/[\\%_]/g, '\\$&') + '%'
+          : null,
+        customer_code: null,
         search_pattern: escaped ? `%${escaped}%` : null,
         shortage_only: filters.shortageOnly,
       },
@@ -252,56 +264,55 @@ export function FcCurrentOrders({
         onSubmit={submit}
       >
         {!warehouseCode && (
-          <label className={filtersCss.filterField}>
-            <span>分仓编码</span>
+          <label>
+            分仓
             <input
-              aria-label="分仓编码"
-              placeholder="请输入分仓编码"
+              aria-label="分仓"
+              placeholder="请输入分仓名称或编码"
               value={draft.warehouse}
               onChange={(event) => setDraft({ ...draft, warehouse: event.target.value })}
             />
           </label>
         )}
-        <label className={filtersCss.filterField}>
-          <span>客户编码</span>
+        <label>
+          调拨单号／基地／SKU
           <input
-            aria-label="客户编码"
-            placeholder="全部客户"
-            value={draft.customer}
-            onChange={(event) => setDraft({ ...draft, customer: event.target.value })}
-          />
-        </label>
-        <label className={filtersCss.filterField}>
-          <span>订单号／客户</span>
-          <input
-            aria-label="订单号或客户名称"
-            placeholder="订单号／客户搜索"
+            aria-label="调拨单号或供货基地"
+            placeholder="调拨单号／基地／SKU／产品名称"
             value={draft.search}
-            onChange={(event) => setDraft({ ...draft, search: event.target.value })}
+            onChange={(event) => {
+              setListSearch(event.target.value);
+              setDraft({ ...draft, search: event.target.value });
+            }}
           />
         </label>
         <button type="submit" className={filtersCss.filterQuery}>
           查询
         </button>
+        <label>
+          状态
+          <select
+            aria-label="订单状态"
+            value={draft.shortageOnly ? '缺口' : '全部'}
+            onChange={(event) => {
+              const next = { ...draft, shortageOnly: event.target.value === '缺口' };
+              setDraft(next);
+              setFilters(next);
+              setPage(1);
+            }}
+          >
+            {ORDER_STATUSES.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className={filtersCss.filterReset}
-          aria-pressed={filters.shortageOnly}
           onClick={() => {
-            const next = { ...draft, shortageOnly: !filters.shortageOnly };
-            setDraft(next);
-            setFilters(next);
-            setPage(1);
-          }}
-        >
-          {filters.shortageOnly ? '全部订单' : '看缺货订单'}
-        </button>
-        <button
-          type="button"
-          className={filtersCss.filterReset}
-          onClick={() => {
-            setDraft(empty);
-            setFilters(empty);
+            setListSearch('');
+            setDraft({ ...empty, search: '' });
+            setFilters({ ...empty, search: '' });
             setPage(1);
           }}
         >
@@ -321,15 +332,15 @@ export function FcCurrentOrders({
               <thead>
                 <tr>
                   {[
-                    '客户',
                     '订单号',
-                    '需求时间',
-                    '下单时间',
-                    '订单量（件）',
-                    '未备量（件）',
+                    '供货基地',
+                    '订单日期',
                     'SKU个数',
-                    '满足率',
-                    '备注',
+                    '需求量（件）',
+                    '基地已占用（件）',
+                    '剩余需求量（件）',
+                    '缺货量（件）',
+                    '状态',
                   ].map((label) => (
                     <th key={label}>{label}</th>
                   ))}
@@ -339,35 +350,53 @@ export function FcCurrentOrders({
                 {state.data.rows.map((row) => (
                   <React.Fragment key={orderKey(row)}>
                     <tr>
-                      <td>{text(row.customer_name || row.customer_code)}</td>
                       <td>
                         <button
                           type="button"
                           className={css.order}
-                          aria-label={`${expanded === orderKey(row) ? '收起' : '展开'}订单${row.order_no}`}
-                          aria-expanded={expanded === orderKey(row)}
+                          aria-label={`${expanded.has(orderKey(row)) ? '收起' : '展开'}订单${row.order_no}`}
+                          aria-expanded={expanded.has(orderKey(row))}
                           onClick={() =>
-                            setExpanded(expanded === orderKey(row) ? null : orderKey(row))
+                            setExpanded((previous) => {
+                              const next = new Set(previous);
+                              const key = orderKey(row);
+                              if (next.has(key)) next.delete(key);
+                              else next.add(key);
+                              return next;
+                            })
                           }
                         >
                           {row.order_no}
                         </button>
                       </td>
-                      <td>{text(row.requested_at)}</td>
-                      <td>{text(row.created_at)}</td>
-                      <td>{qty(row.ordered)}</td>
-                      <td>{qty(row.remaining)}</td>
+                      <td>{text(row.customer_name || row.customer_code)}</td>
+                      <td>{text(row.created_at?.slice(0, 10) ?? null)}</td>
                       <td>{qty(row.sku_count)}</td>
-                      <td>
-                        {row.satisfaction === null
-                          ? '-'
-                          : `${(row.satisfaction * 100).toFixed(1)}%`}
+                      <td>{qty(row.demand)}</td>
+                      <td>{qty(row.allocated)}</td>
+                      <td
+                        className={
+                          row.remaining !== null && row.remaining > 0 ? 'danger-text' : undefined
+                        }
+                      >
+                        {qty(row.remaining)}
+                      </td>
+                      <td
+                        className={
+                          row.shortage !== null && row.shortage > 0 ? 'danger-text' : undefined
+                        }
+                      >
+                        {qty(row.shortage)}
                       </td>
                       <td>
-                        {row.remaining === null ? '-' : row.remaining > 0 ? '存在未备量' : '正常'}
+                        <span
+                          className={`status ${currentOrderStatus(row.shortage, row.demand) === '缺口' ? 'danger' : currentOrderStatus(row.shortage, row.demand) === '正常' ? 'success' : 'warning'}`}
+                        >
+                          {currentOrderStatus(row.shortage, row.demand)}
+                        </span>
                       </td>
                     </tr>
-                    {expanded === orderKey(row) && (
+                    {expanded.has(orderKey(row)) && (
                       <tr>
                         <td colSpan={9}>
                           <OrderLines config={config} order={row} revision={revision} />

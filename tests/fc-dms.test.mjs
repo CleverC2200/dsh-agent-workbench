@@ -9,9 +9,13 @@ import React, { act } from 'react';
 
 const rows = [{ warehouse_code: 'W1', warehouse_name: '分仓', sku: 'SKU1', recommended_qty: 3 }];
 const mocks = {
+  './fc/components/planning-settings': 'export const PlanningTable=()=>null;',
+  './fc-planned-page': 'export const projectFcPlannedRows=rows=>rows;',
+  './fc-batch-details': 'export const FcBatchDetails=()=>null;',
+  './fc-transfer-details': 'export const FcTransferDetails=()=>null;',
   './fc/components/warehouse-select': 'export const WarehouseSelect=()=>null;',
   './fc-submission-persistence':
-    'export const persistAndSubmitFc=async(w,s,signal,submit,ack)=>{const f=globalThis.dmsFixture;f.persistenceCalls++;const r=await submit();ack(r);if(f.archiveFail){f.pendingArchive={kind:"submission",warehouseCode:w,entityId:s.aiPreOrderCode};f.archiveReceipt=r;throw Error("回执归档待核对");}return r;}; export const verifyFcReceiptArchive=async()=>{const f=globalThis.dmsFixture;f.archiveChecks=(f.archiveChecks??0)+1;f.pendingArchive=null;return f.archiveReceipt;};',
+    'export const persistAndSubmitFc=async(w,s,signal,submit,ack)=>{const f=globalThis.dmsFixture;f.lastSnapshot=s;f.persistenceCalls++;const r=await submit();ack(r);if(f.archiveFail){f.pendingArchive={kind:"submission",warehouseCode:w,entityId:s.aiPreOrderCode};f.archiveReceipt=r;throw Error("回执归档待核对");}return r;}; export const verifyFcReceiptArchive=async()=>{const f=globalThis.dmsFixture;f.archiveChecks=(f.archiveChecks??0)+1;f.pendingArchive=null;return f.archiveReceipt;};',
   './fc-storage-client':
     'export const fcPersistence={pendingReceipts:()=>globalThis.dmsFixture?.pendingArchive?[globalThis.dmsFixture.pendingArchive]:[]};',
   '../../../../../shared/configured-facts-page': 'export const ConfiguredFactsPage=()=>null;',
@@ -25,7 +29,7 @@ const mocks = {
     'import React from "react"; export const Modal=p=>p.visible?React.createElement("div",null,p.children):null; export const DataPagination=()=>null;',
   '../dsh-ui/workbook': 'export const downloadWorkbook=()=>{}; export const readWorkbook=()=>{};',
   '../native/memory-storage':
-    'export const memoryStorage={getItem:k=>k.includes("order-draft")?JSON.stringify({quantities:{},reasons:{SKU1:"分仓复核"},dirty:true}):null,setItem:()=>{}};',
+    'export const memoryStorage={getItem:k=>k.includes("order-draft")?JSON.stringify({quantities:globalThis.dmsFixture?.quantities??{},reasons:{SKU1:"分仓复核"},dirty:true}):null,setItem:()=>{}};',
   '../../../fc/src/lib/planning':
     'export const IMPORT_FIELDS=[]; export const defaultPlanTemplateMonth=()=>"2026-11"; export const currentPlanningMonth=()=>"2026-10"; export const nextMonth=()=>"2026-11";',
   './fc-workflow':
@@ -82,6 +86,58 @@ const FcWorkflowProvider = ({ children }) =>
       children,
     ),
   );
+test('confirmation hides missing and zero amounts, while retaining positive manual quantities', async () => {
+  const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
+  globalThis.window = dom.window;
+  globalThis.document = dom.window.document;
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+  globalThis.dmsFixture = {
+    rows: [
+      { warehouse_code: 'W1', sku: 'SKU1', recommended_qty: null },
+      { warehouse_code: 'W1', sku: 'EMPTY', recommended_qty: null },
+      { warehouse_code: 'W1', sku: 'ZERO', recommended_qty: 0 },
+      { warehouse_code: 'W1', sku: 'SKIP', recommended_qty: 10 },
+    ],
+    quantities: { SKU1: 7, SKIP: 0 },
+    call: async () => ({ warehouseCode: 'W1', fields: {}, message: '请核对编码' }),
+  };
+  const { createRoot } = await import('react-dom/client');
+  const root = createRoot(document.getElementById('root'));
+  try {
+    await act(async () =>
+      root.render(
+        React.createElement(
+          FcWorkflowProvider,
+          null,
+          React.createElement(FcConfiguredList, {
+            columns: [],
+            view: { title: '补货' },
+            actionScope: {
+              viewId: 'replenishment',
+              input: { asOf: '2026-10-30', filters: { warehouse_code: 'W1' } },
+            },
+          }),
+        ),
+      ),
+    );
+    await act(async () => {
+      [...document.querySelectorAll('button')].find((b) => b.textContent === '提交').click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    const input = document.querySelector('[aria-label="SKU1实际补货量"]');
+    assert.ok(input);
+    assert.equal(input.disabled, false, 'unknown advice must not disable manual quantity');
+    assert.equal(input.readOnly, false);
+    assert.equal(input.value, '7');
+    for (const sku of ['EMPTY', 'ZERO', 'SKIP'])
+      assert.equal(document.querySelector(`[aria-label="${sku}实际补货量"]`), null);
+    assert.match(document.body.textContent, /1个SKU/);
+  } finally {
+    await act(async () => root.unmount());
+    dom.window.close();
+    delete globalThis.dmsFixture;
+  }
+});
 test('branch confirmation sends documented order, retains draft on failure, and displays receipt only after acknowledgement', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://fixture.test' });
   globalThis.window = dom.window;
@@ -90,7 +146,12 @@ test('branch confirmation sends documented order, retains draft on failure, and 
   const calls = [];
   let fail = true;
   globalThis.dmsFixture = {
-    rows: [...rows, { warehouse_code: 'W1', sku: null, recommended_qty: null }],
+    rows: [
+      ...rows,
+      { warehouse_code: 'W1', sku: null, recommended_qty: null },
+      { warehouse_code: 'W1', sku: 'NO_AMOUNT', recommended_qty: null },
+      { warehouse_code: 'W1', sku: 'ZERO_AMOUNT', recommended_qty: 0 },
+    ],
     persistenceCalls: 0,
     preflightError: '签名密钥未配置',
     call: async (method, payload) => {
@@ -179,6 +240,11 @@ test('branch confirmation sends documented order, retains draft on failure, and 
     assert.equal(calls[0].payload.order.orderRemarks, 'SKU1: 3；分仓复核');
     assert.equal(Object.hasOwn(calls[0].payload.order, 'remarks'), false);
     assert.deepEqual(calls[0].payload.order.itemList, [{ productCode: 'SKU1', quantity: 3 }]);
+    assert.deepEqual(
+      globalThis.dmsFixture.lastSnapshot.rows.map((row) => row.sku),
+      ['SKU1'],
+    );
+    assert.equal(document.querySelector('[aria-label="NO_AMOUNT实际补货量"]'), null);
     assert.match(document.body.textContent, /DMS结果未知/);
     assert.doesNotMatch(document.body.textContent, /DMS订单号：DMS1/);
     fail = false;

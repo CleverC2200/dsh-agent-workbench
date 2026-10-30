@@ -11,6 +11,10 @@ import { buildInventoryInsight, numeric } from './inventory-insight';
 import type { WorkspaceState } from '../../../../inventory-light-plugins/src/pages/aqkc/components/analytics/workspace-normalizer';
 import { dashboardTabQueryPlan, type DashboardTabName } from './dashboard-tab-request-plan';
 import { resolveInitialSafetyStockScope } from './safety-stock-scope';
+import {
+  selectWholeBaseTargetVersion,
+  targetVersionCandidates,
+} from './target-inventory-version-policy.js';
 import { queryStock } from '../../../../inventory-light-plugins/src/data';
 import { usesConfiguredSql } from '../../../../../../shared/sql-config';
 import { coveredStockComparison } from 'dsh-agent-manage/inventory-compute/covered-stock-comparison';
@@ -299,6 +303,10 @@ export function targetInventoryOutput(row: CubeRow): number | null {
     row['safety_stock.source'] === 'ai-db-stock-only'
   )
     return null;
+  if (usesConfiguredSql() && 'safety_stock.effective_target_inventory' in row)
+    return numeric(row['safety_stock.effective_target_inventory']);
+  const publishedTarget = numeric(row['safety_stock.final_target_inventory']);
+  if (publishedTarget === 0) return 0;
   const productCategory = String(row['safety_stock.product_categ_name'] ?? '').trim();
   const productLabel = String(row['safety_stock.product_label'] ?? '');
   const materialName = String(row['safety_stock.material_name'] ?? '');
@@ -306,9 +314,10 @@ export function targetInventoryOutput(row: CubeRow): number | null {
     productCategory === '粽子' || productLabel.includes('粽子') || materialName.includes('粽子');
   if (!isZongzi) {
     const rawTarget = row['safety_stock.final_target_inventory'];
-    return rawTarget === null || rawTarget === undefined || rawTarget === ''
-      ? null
-      : numberOf(rawTarget);
+    if (rawTarget !== null && rawTarget !== undefined && rawTarget !== '')
+      return numeric(rawTarget);
+    const daily = numeric(row['safety_stock.planned_daily_demand']);
+    return usesConfiguredSql() && daily !== null && daily >= 0 ? daily * 9 : null;
   }
   if (
     usesConfiguredSql() &&
@@ -366,36 +375,6 @@ function weightedStockAge(rows: Record<string, any>[]): number | null {
   return qty > 0 ? valid.reduce((n, row) => n + Number(row.age_weighted_sum), 0) / qty : null;
 }
 
-// 纠偏版优先，但目标库存计算链路中的空值和 0 值不是有效的“纠偏结果”。
-// 同月月初版存在有效值时，只回退这些业务字段；当前库存等快照事实允许为 0，
-// 不参与回退，避免把真实零库存误写成月初库存。
-const TARGET_FIELD_FALLBACK_MEMBERS = [
-  'safety_stock.target_inventory',
-  'safety_stock.management_target_inventory',
-  'safety_stock.final_target_inventory',
-  'safety_stock.safety_stock_amount',
-  'safety_stock.turnover_inventory',
-  'safety_stock.planned_daily_demand',
-  'safety_stock.average_current_turnover_days',
-  'safety_stock.average_target_fill_rate',
-] as const;
-
-function normalizedInventoryVersion(value: unknown) {
-  const version = String(value ?? '')
-    .replace(/\s+/g, '')
-    .replaceAll('版', '');
-  if (version.includes('纠偏')) return '纠偏';
-  if (version.includes('月初')) return '月初';
-  if (version.includes('滚动')) return '滚动';
-  return version;
-}
-
-function hasUsableTargetValue(value: CubeRow[string]) {
-  if (value === null || value === undefined || value === '') return false;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0;
-}
-
 function skuVersionKey(row: CubeRow) {
   return [
     String(row['safety_stock.base_name'] ?? ''),
@@ -403,49 +382,8 @@ function skuVersionKey(row: CubeRow) {
   ].join('\u0000');
 }
 
-function versionsWithMonthStartFallback(versions: string[]) {
-  return versions.some((version) => normalizedInventoryVersion(version) === '纠偏')
-    ? [...new Set([...versions, '月初'])]
-    : versions;
-}
-
-function applyCorrectionFieldFallback(rows: CubeRow[]) {
-  const correctionRows = new Map<string, CubeRow>();
-  const monthStartRows = new Map<string, CubeRow>();
-  const otherRows: CubeRow[] = [];
-
-  for (const row of rows) {
-    const version = normalizedInventoryVersion(row['safety_stock.inventory_version']);
-    if (version === '纠偏') correctionRows.set(skuVersionKey(row), row);
-    else if (version === '月初') monthStartRows.set(skuVersionKey(row), row);
-    else otherRows.push(row);
-  }
-
-  if (!correctionRows.size) return { rows, fallbackFieldCount: 0 };
-
-  let fallbackFieldCount = 0;
-  const mergedRows = [...correctionRows.entries()].map(([key, correction]) => {
-    const monthStart = monthStartRows.get(key);
-    if (!monthStart) return correction;
-    const merged: CubeRow = { ...correction };
-    for (const member of TARGET_FIELD_FALLBACK_MEMBERS) {
-      if (!hasUsableTargetValue(correction[member]) && hasUsableTargetValue(monthStart[member])) {
-        merged[member] = monthStart[member];
-        fallbackFieldCount += 1;
-      }
-    }
-    return merged;
-  });
-
-  // 某 SKU 没有纠偏行时，整行使用同月月初版；这是“没有纠偏取月初”的
-  // SKU 级表达，不会跨目标月份。
-  for (const [key, monthStart] of monthStartRows) {
-    if (!correctionRows.has(key)) {
-      mergedRows.push(monthStart);
-      fallbackFieldCount += TARGET_FIELD_FALLBACK_MEMBERS.length;
-    }
-  }
-  return { rows: [...mergedRows, ...otherRows], fallbackFieldCount };
+function selectBaseTargetRows(rows: CubeRow[]) {
+  return { rows: selectWholeBaseTargetVersion(rows) };
 }
 
 function aggregateSkuRowsByBase(rows: CubeRow[]) {
@@ -633,7 +571,7 @@ function detailOrder(value: string | undefined) {
 function detailFilters(filters: DetailFilters) {
   return {
     targetMonth: detailMonth(filters.month),
-    versions: versionsWithMonthStartFallback(detailVersions(filters.version)),
+    versions: targetVersionCandidates(detailVersions(filters.version)),
     bases: detailBases(filters.base),
     materialCode: detailMaterialCode(filters.sku),
     productCategory: detailProductCategory(filters.category),
@@ -647,8 +585,7 @@ function sortDetailRows(rows: CubeRow[], sort: string | undefined) {
       skuVersionKey(left).localeCompare(skuVersionKey(right), 'zh-CN'),
     );
   }
-  // Keep the existing API validation boundary. Sorting happens after SKU-level
-  // fallback so the order and page membership match the values users see.
+  // Sorting follows whole-base version selection and user filters.
   detailOrder(sort);
   const [label, direction] = sort.split(':');
   const valueOf = (row: CubeRow) => {
@@ -687,10 +624,10 @@ export async function loadSafetyStockDetailPage(
   const scoped = detailFilters(filters);
   // User filters are applied after the fixed SQL query so no request value is
   // concatenated into executable SQL.
-  const data = (
+  const candidates = (
     await loadWorkbenchSqlQuery(gatewayContextRef, workbenchSql.safetyStockRows, operation, signal)
-  ).filter((row) => {
-    if (!inSafetyStockScope(row, scoped.targetMonth, scoped.versions)) return false;
+  ).filter((row) => inSafetyStockScope(row, scoped.targetMonth, scoped.versions));
+  const data = selectWholeBaseTargetVersion(candidates).filter((row) => {
     const base = String(row['safety_stock.base_name'] ?? '');
     const materialCode = String(row['safety_stock.material_code'] ?? '');
     const category = String(row['safety_stock.product_categ_name'] ?? '');
@@ -711,7 +648,7 @@ export async function loadSafetyStockDetailPage(
     return [];
   });
   const aligned = alignAgeInventory(
-    applyCorrectionFieldFallback(data).rows,
+    selectBaseTargetRows(data).rows,
     ageRows.filter((row) => {
       const base = String(row['inventory_age.base_name'] ?? '');
       const material = String(row['inventory_age.material_code'] ?? '');
@@ -799,6 +736,7 @@ function aggregateDrillMetricRows(
   orderRows: CubeRow[] | null,
   groupBy: 'base' | 'category' | 'sku',
   pendingRows: CubeRow[] | null,
+  options: { retainZeroRows?: boolean } = {},
 ) {
   if (ageRows === null && !usesConfiguredSql()) throw new Error('货龄库存数据读取失败，请刷新重试');
   safetyRows = alignAgeInventory(safetyRows, ageRows ?? []);
@@ -967,6 +905,7 @@ function aggregateDrillMetricRows(
   return [...byLevel.entries()]
     .filter(
       ([, value]) =>
+        options.retainZeroRows ||
         groupBy !== 'sku' ||
         !(
           !value.targetMissing &&
@@ -1433,12 +1372,10 @@ export async function loadInventoryDashboardTabs(
       (!normalizedCategory || normalizedCategory === rowCategory)
     );
   };
-  const sourceRows = allSafetyRows.filter(
-    (row) =>
-      inSafetyStockScope(row, scope.targetMonth, versionsWithMonthStartFallback(scope.versions)) &&
-      inSelectedDimension(row),
+  const sourceRows = allSafetyRows.filter((row) =>
+    inSafetyStockScope(row, scope.targetMonth, targetVersionCandidates(scope.versions)),
   );
-  const effectiveRows = applyCorrectionFieldFallback(sourceRows).rows;
+  const effectiveRows = selectBaseTargetRows(sourceRows).rows.filter(inSelectedDimension);
   const categoryGroupBy = normalizedCategory
     ? selectedBase && categoryLevel !== 'base'
       ? 'sku'
@@ -1537,10 +1474,10 @@ export function selectWorkbenchTargetRows(allRows: CubeRow[], now = new Date()) 
   const scope = resolveInitialSafetyStockScope(rows, now);
   const selected = scope.published
     ? rows.filter((row) =>
-        inSafetyStockScope(row, scope.targetMonth, versionsWithMonthStartFallback(scope.versions)),
+        inSafetyStockScope(row, scope.targetMonth, targetVersionCandidates(scope.versions)),
       )
     : [];
-  return { scope, ...applyCorrectionFieldFallback(selected) };
+  return { scope, ...selectBaseTargetRows(selected) };
 }
 
 export async function loadInitialDashboard(
@@ -1615,11 +1552,10 @@ export async function loadInitialDashboard(
     return unavailableWorkspace();
   }
 
-  // 目标字段回退必须发生在 SKU 粒度、且早于基地汇总与节令规则。否则一条
-  // 纠偏记录中的 0 会把同基地月初有效值一起聚合掉。
+  // 按基地与月份整体选版，再汇总；已选版本中的空值和真实0保持原样。
   const sourceSkuRows = allSafetyRows.filter(
     (row) =>
-      inSafetyStockScope(row, scope.targetMonth, versionsWithMonthStartFallback(scope.versions)) &&
+      inSafetyStockScope(row, scope.targetMonth, targetVersionCandidates(scope.versions)) &&
       (selectedBases === undefined ||
         selectedBases.includes(String(row['safety_stock.base_name']))),
   );
@@ -1691,11 +1627,7 @@ export async function loadInitialDashboard(
       const rows = result.value.filter(
         (row) =>
           String(row['safety_stock.base_name'] ?? '').trim() === base &&
-          inSafetyStockScope(
-            row,
-            scope.targetMonth,
-            versionsWithMonthStartFallback(scope.versions),
-          ),
+          inSafetyStockScope(row, scope.targetMonth, targetVersionCandidates(scope.versions)),
       );
       if (
         rows.some(
@@ -1713,7 +1645,7 @@ export async function loadInitialDashboard(
       }
     }
   }
-  const correctionFallback = applyCorrectionFieldFallback(sourceSkuRows);
+  const correctionFallback = selectBaseTargetRows(sourceSkuRows);
   const missingTargetBases = missingSafetyStockTargetBases(
     correctionFallback.rows,
     selectedAgeRows,
@@ -1891,10 +1823,7 @@ export async function loadInitialDashboard(
           gap < 0 ? '低于目标库存' : gap > 0 ? '高于目标库存' : '与目标库存持平',
           targetMissing,
         );
-  const fallbackDescription =
-    correctionFallback.fallbackFieldCount > 0
-      ? `${scope.selectionRule}；纠偏版中 ${correctionFallback.fallbackFieldCount} 个目标库存相关字段无有效值，已按同月月初版补齐。`
-      : scope.selectionRule;
+  const fallbackDescription = scope.selectionRule;
   const businessSummary = workbenchBusinessSummaryFromRows(
     supportRows.filter((row) => visibleBases.includes(String(row['workbench.base']))),
   );
@@ -2128,8 +2057,7 @@ export async function loadInitialDashboard(
       targetMonth: scope.targetMonthLabel,
       planScope: fallbackDescription,
       usage: '安全库存工作台',
-      status:
-        scope.fallbackUsed || correctionFallback.fallbackFieldCount > 0 ? '使用备选版本' : '只读',
+      status: scope.fallbackUsed ? '使用备选版本' : '只读',
     },
     record: {
       id: 'sql-initial-dashboard',
@@ -2180,7 +2108,7 @@ export async function loadInitialDashboard(
     presentation: 'fixed_workbench',
     workbench: {
       status: 'ready',
-      statusDescription: `工作台默认展示最新已发布数据：${scope.targetMonthLabel}，优先使用${scope.versionLabel}${correctionFallback.fallbackFieldCount > 0 ? '；纠偏版缺失字段已按同月月初版补齐' : ''}。${missingTargetBases.length ? `${missingTargetBases.join('、')}目标库存明细未返回，需核对 GEA 查询返回范围。` : ''}`,
+      statusDescription: `工作台默认展示最新已发布数据：${scope.targetMonthLabel}，优先使用${scope.versionLabel}。${missingTargetBases.length ? `${missingTargetBases.join('、')}目标库存明细未返回，需核对 GEA 查询返回范围。` : ''}`,
       overallAnalysis,
       inventoryInsight: {
         text: insight.text,
@@ -2468,7 +2396,7 @@ export async function loadInventorySkuPage(input: StockPageInput, signal?: Abort
   const age = input.tab === '货龄结构';
   const computed = age
     ? dailyAgeRows(result.rows, 'sku')
-    : aggregateDrillMetricRows(result.rows, null, orders, 'sku', null);
+    : aggregateDrillMetricRows(result.rows, null, orders, 'sku', null, { retainZeroRows: true });
   // The formatter has legacy ordering; restore the database's stable sort/page order.
   const order = new Map<string, number>(
     result.facts.map((row: any, index: number) => [String(row.sku), index]),
@@ -2598,7 +2526,11 @@ function configuredSummaryWorkspace(
   );
   // Cards and drill-downs retain every category in the same base batch scope.
   const groups = sourceGroups
-    .filter((r: any) => KNOWN_BASES.has(String(r.base)))
+    .filter(
+      (r: any) =>
+        KNOWN_BASES.has(String(r.base)) &&
+        (!selectedBases?.length || selectedBases.includes(String(r.base))),
+    )
     .map((r: any) => ({ ...r, category: categoryName(r.category) }));
   const stats = (rs: any[]) => {
     const sum = (key: string) => rs.reduce((n, r) => n + (numeric(r[key]) ?? 0), 0);
@@ -2622,8 +2554,11 @@ function configuredSummaryWorkspace(
         ...groups.map((r: any) => String(r.base)),
         ...(currentRows ?? []).map((r: any) => String(r.base)),
         ...(!stock ? support.map((r) => String(r['workbench.base'])).filter(Boolean) : []),
+        ...(!stock ? (health.rows ?? []).map((r: BatchAgeRow) => r.level) : []),
       ]),
-    ];
+    ].filter(
+      (base) => KNOWN_BASES.has(base) && (!selectedBases?.length || selectedBases.includes(base)),
+    );
   const business = workbenchBusinessSummaryFromRows(
     support.filter((r) => bases.includes(String(r['workbench.base']))),
   );

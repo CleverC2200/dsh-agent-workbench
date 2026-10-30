@@ -123,6 +123,20 @@ test('built live page renders granted records, hides denied fields, and clears f
             ],
             configVersion: 'v1',
           };
+        else if (id === 'sku.detail')
+          result = {
+            rows: [
+              Object.fromEntries(
+                config.queries[id].resultColumns.map((key) => [
+                  key,
+                  key === 'sku' ? 'M1' : key === 'base' ? '郑州' : key === 'source_rows' ? 1 : null,
+                ]),
+              ),
+            ],
+            returnedColumns: config.queries[id].resultColumns,
+            rejectedColumns: [],
+            configVersion: 'v1',
+          };
         else if (id === 'execution.trace')
           result = {
             rows: [
@@ -233,7 +247,7 @@ test('built live page renders granted records, hides denied fields, and clears f
       .textContent.includes('23'),
   );
   const warehouseMetrics = window.document.querySelectorAll('.warehouse-summary > .metric');
-  assert.equal(warehouseMetrics[0].querySelector('.metric-head strong').textContent, '0张');
+  assert.equal(warehouseMetrics[0].querySelector('.metric-head strong').textContent, '0张0件');
   assert.match(
     warehouseMetrics[0].querySelector('[data-breakdown="open-total"]').textContent,
     /未开1 张/,
@@ -242,7 +256,7 @@ test('built live page renders granted records, hides denied fields, and clears f
     warehouseMetrics[3].querySelector('.metric-head > span').textContent,
     '已开订单满足率',
   );
-  assert.equal(warehouseMetrics[3].querySelector('.metric-head strong').textContent, '—%');
+  assert.equal(warehouseMetrics[3].querySelector('.metric-head strong').textContent, '—');
   assert.ok(!window.document.querySelector('.delivery-summary').textContent.includes('≥'));
   const charts = window.document.querySelectorAll('svg.delivery-line-chart');
   assert.equal(window.getComputedStyle(charts[0].closest('.dimension-card')).display, 'none');

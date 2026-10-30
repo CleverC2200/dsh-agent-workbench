@@ -7,7 +7,12 @@ import { PlanPagination } from './plan-pagination';
 import { DashboardTableSkeleton } from '../inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbench-loading';
 import React, { useEffect, useRef, useState } from 'react';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
-import { factMetric, readConfiguredFacts, initialFiltersForView } from './configured-facts';
+import {
+  factMetric,
+  readConfiguredFacts,
+  initialFiltersForView,
+  type FactInput,
+} from './configured-facts';
 import css from './configured-facts-page.module.css';
 import { formatFactValue } from './fact-display';
 import { batchAgeShare } from './batch-age';
@@ -38,6 +43,14 @@ function cellValue(row: any, field: string, format?: string) {
   return formatFactValue(row[field], format);
 }
 
+export type ConfiguredListState = {
+  filters: Record<string, string>;
+  draft: Record<string, string>;
+  columns: Record<string, string[]>;
+  frozen: string[];
+  replenishment?: FactInput['replenishment'];
+};
+
 /** Partial source contracts for the existing plugin entry. Missing domains never block another tab. */
 export function ConfiguredFactsPage({
   config: fallback,
@@ -58,7 +71,13 @@ export function ConfiguredFactsPage({
   onPageSizeChange,
   presentation,
   businessList,
+  readFacts = readConfiguredFacts,
+  initialState,
+  rememberState,
 }: {
+  readFacts?: typeof readConfiguredFacts;
+  initialState?: ConfiguredListState;
+  rememberState?: (state: ConfiguredListState) => void;
   businessList?: React.ComponentType<React.ComponentProps<typeof OriginalBusinessList>>;
   config: AgentSqlConfig;
   presentation?: { title: string; columns: any[]; filters?: string[] };
@@ -90,10 +109,51 @@ export function ConfiguredFactsPage({
     [dateDraft, setDateDraft] = useState(date ?? today());
   const [customer, setCustomer] = useState(customerCode ?? ''),
     [customerDraft, setCustomerDraft] = useState(customerCode ?? '');
-  const defaultsFor = (id: string) => initialFiltersForView(config, id, initialFilters);
-  const [filters, setFilters] = useState<Record<string, string>>(() => defaultsFor(viewId));
-  const [draft, setDraft] = useState<Record<string, string>>(() => defaultsFor(viewId));
-  const [columnChoices, setColumnChoices] = useState<Record<string, string[]>>({});
+  const defaultsFor = (id: string) =>
+    initialFiltersForView(config, id, {
+      ...definition.views.find((view: any) => view.id === id)?.defaultFilters,
+      ...initialFilters,
+    });
+  const [filters, setFilters] = useState<Record<string, string>>(() => ({
+    ...defaultsFor(viewId),
+    ...initialState?.filters,
+    ...initialFilters,
+  }));
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    ...defaultsFor(viewId),
+    ...initialState?.draft,
+    ...initialFilters,
+  }));
+  const [columnChoices, setColumnChoices] = useState<Record<string, string[]>>(
+    () => initialState?.columns ?? {},
+  );
+  const [frozenColumns, setFrozenColumns] = useState<string[]>(
+    () =>
+      initialState?.frozen ??
+      (config.agentId === 'inventory-fc' && viewId === 'replenishment'
+        ? ['sku', 'material_name', 'missing_actualQty']
+        : []),
+  );
+  const [replenishment, setReplenishment] = useState<FactInput['replenishment']>(() =>
+    config.agentId === 'inventory-fc' && viewId === 'replenishment'
+      ? (initialState?.replenishment ?? {
+          neededOnly: true,
+          businessOnly: false,
+          positiveActualKeys: [],
+        })
+      : undefined,
+  );
+  const remember = useRef(rememberState);
+  remember.current = rememberState;
+  useEffect(() => {
+    remember.current?.({
+      filters,
+      draft,
+      columns: columnChoices,
+      frozen: frozenColumns,
+      replenishment,
+    });
+  }, [filters, draft, columnChoices, frozenColumns, replenishment]);
   const [localPage, setLocalPage] = useState(1),
     [localPageSize, setLocalPageSize] = useState(10),
     [revision, refresh] = useState(0);
@@ -130,7 +190,9 @@ export function ConfiguredFactsPage({
     : sourceView;
   const chosenColumns =
     columnChoices[viewId] ?? view.defaultColumns ?? view.columns.map((c: any) => c.field);
-  const columns = view.columns.filter((c: any) => chosenColumns.includes(c.field));
+  const columns = chosenColumns
+    .map((field: string) => view.columns.find((c: any) => c.field === field))
+    .filter(Boolean);
   const snapshot = useRef<{ key: string; context: any } | undefined>(undefined);
   const scopeKey = JSON.stringify([
     config.agentId,
@@ -143,6 +205,7 @@ export function ConfiguredFactsPage({
     filters,
     scopeFilters,
     revision,
+    replenishment,
   ]);
   useEffect(() => {
     const controller = new AbortController();
@@ -152,23 +215,41 @@ export function ConfiguredFactsPage({
     onRead?.({ plugin: config.agentId, viewId, status: 'loading', summary: null });
     const readContext = snapshot.current?.key === scopeKey ? snapshot.current.context : undefined;
     snapshot.current = undefined;
-    void readConfiguredFacts(
-      config,
-      viewId,
-      {
-        asOf,
-        page,
-        pageSize,
-        filters: { ...filters, ...scopeFilters },
-        customer,
-        cycleDays,
-        fcCycleRules,
-        fcCycleWarehouse,
-        readContext,
-      },
-      // Business lists display rows; their independent overview owns card totals.
-      { signal: controller.signal, detailsOnly: Boolean(presentation) },
-    )
+    const read = (freshAfter?: number) =>
+      readFacts(
+        config,
+        viewId,
+        {
+          asOf,
+          page,
+          pageSize,
+          filters: { ...filters, ...scopeFilters },
+          customer,
+          cycleDays,
+          fcCycleRules,
+          fcCycleWarehouse,
+          replenishment,
+          readContext: freshAfter ? undefined : readContext,
+        },
+        // Business lists display rows; their independent overview owns card totals.
+        { signal: controller.signal, detailsOnly: Boolean(presentation), freshAfter },
+      );
+    void (async () => {
+      try {
+        return await read();
+      } catch (failure) {
+        controller.signal.throwIfAborted();
+        if (
+          config.agentId !== 'inventory-fc' ||
+          !(failure instanceof Error) ||
+          !('code' in failure) ||
+          !['SOURCE_CHANGED', 'RESULT_INCOMPLETE'].includes(String(failure.code))
+        )
+          throw failure;
+        snapshot.current = undefined;
+        return read(Date.now());
+      }
+    })()
       .then((value) => {
         if (controller.signal.aborted) return;
         snapshot.current = { key: scopeKey, context: value.readContext };
@@ -195,7 +276,7 @@ export function ConfiguredFactsPage({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [scopeKey, page, pageSize]);
+  }, [scopeKey, page, pageSize, readFacts]);
   const navigate = (id: string) => {
     setViewId(id);
     setPage(1);
@@ -228,20 +309,51 @@ export function ConfiguredFactsPage({
             cycleDays,
             fcCycleRules,
             fcCycleWarehouse,
+            replenishment,
           },
+        }}
+        onReplenishmentFilter={(next: NonNullable<FactInput['replenishment']>) => {
+          setReplenishment(next);
+          setPage(1);
         }}
         agentId={config.agentId}
         view={view}
         columns={columns}
         chosenColumns={chosenColumns}
+        frozenColumns={config.agentId === 'inventory-fc' ? frozenColumns : undefined}
+        onFrozenColumns={config.agentId === 'inventory-fc' ? setFrozenColumns : undefined}
         onColumns={(next: string[]) => setColumnChoices((old) => ({ ...old, [viewId]: next }))}
         filters={draft}
         appliedFilters={filters}
         onFilter={(name: string, value: string) => setDraft((old) => ({ ...old, [name]: value }))}
         onQuickFilter={(name: string, value: string) => {
-          setDraft((old) => ({ ...old, [name]: value }));
-          setFilters((old) => ({ ...old, [name]: value }));
+          const sort =
+            config.agentId === 'inventory-fc' &&
+            name === 'list_mode' &&
+            ['urgent', 'recommended'].includes(value)
+              ? {
+                  sort_field: value === 'urgent' ? 'current_order_shortage' : 'recommended_qty',
+                  sort_direction: 'desc',
+                }
+              : {};
+          setDraft((old) => ({ ...old, [name]: value, ...sort }));
+          setFilters((old) => ({ ...old, [name]: value, ...sort }));
           setPage(1);
+        }}
+        onSort={(field: string) => {
+          const next = {
+            sort_field: field,
+            sort_direction:
+              filters.sort_field === field && filters.sort_direction === 'desc' ? 'asc' : 'desc',
+          };
+          setFilters((old) => ({ ...old, ...next }));
+          setDraft((old) => ({ ...old, ...next }));
+          setPage(1);
+        }}
+        retry={() => {
+          snapshot.current = undefined;
+          refreshConfiguredQueries();
+          refresh((value) => value + 1);
         }}
         submit={(event: React.FormEvent) => {
           event.preventDefault();
@@ -252,8 +364,17 @@ export function ConfiguredFactsPage({
           refresh((n) => n + 1);
         }}
         reset={() => {
-          setDraft(defaultsFor(viewId));
-          setFilters(defaultsFor(viewId));
+          setReplenishment((current) =>
+            current ? { ...current, neededOnly: true, businessOnly: false } : current,
+          );
+          const defaults = defaultsFor(viewId);
+          if (
+            config.agentId === 'inventory-fc' &&
+            view.filters.some((field: any) => field.name === 'search')
+          )
+            defaults.search = '';
+          setDraft(defaults);
+          setFilters(defaults);
           setPage(1);
         }}
         result={result}

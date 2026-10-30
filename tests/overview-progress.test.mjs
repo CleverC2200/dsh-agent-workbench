@@ -13,6 +13,7 @@ const { readConfiguredOverview, completeCount } = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+config.overviewViewIds = ['branch-supply', 'replenishment', 'branch-stock'];
 const reply = (id, version = 'v1') => ({
   configVersion: version,
   rows: [
@@ -29,17 +30,17 @@ test('fast overview cards render while another source is pending; shared snapsho
     onProgress: (p) => progress.push(p),
     execute: async (_, o) => {
       calls.push(o.queryId);
-      if (o.queryId === 'orders.summary') await new Promise((r) => (finishSlow = r));
+      if (o.queryId === 'branch-supply.summary') await new Promise((r) => (finishSlow = r));
       return reply(o.queryId);
     },
   });
   await new Promise(setImmediate);
-  const early = progress.some((p) => p.replenishment?.summary && !p.orders);
+  const early = progress.some((p) => p.replenishment?.summary && !p['branch-supply']);
   finishSlow();
   const result = await promise;
   assert.ok(early, 'a slow source must not hide ready cards');
   assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 1);
-  assert.equal(result.orders.summary.row_count, 1);
+  assert.equal(result['branch-supply'].summary.row_count, 1);
   assert.ok(progress[0] !== result, 'published partial snapshots must not be mutated later');
 });
 test('refresh creates a new snapshot scope and permission failures do not retry', async () => {
@@ -51,10 +52,12 @@ test('refresh creates a new snapshot scope and permission failures do not retry'
       : reply(o.queryId);
   };
   for (let n = 0; n < 2; n++) {
-    const parts = await readConfiguredOverview(config, '2026-10-19', '', { execute });
+    const parts = await readConfiguredOverview(config, '2026-10-19', '', {
+      execute,
+    });
     assert.equal(parts.replenishment.error, 'denied');
     assert.equal(parts['branch-stock'].error, 'denied');
-    assert.equal(parts.orders.summary.row_count, 1);
+    assert.equal(parts['branch-supply'].summary.row_count, 1);
   }
   assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 2);
   assert.ok(!calls.includes('health.summary'));
@@ -64,7 +67,8 @@ test('changed configuration rejects the load before publishing mixed cards', asy
   await assert.rejects(
     readConfiguredOverview(config, '2026-10-19', '', {
       onProgress: (p) => progress.push(p),
-      execute: async (_, o) => reply(o.queryId, o.queryId === 'orders.summary' ? 'v2' : 'v1'),
+      execute: async (_, o) =>
+        reply(o.queryId, o.queryId === 'branch-supply.summary' ? 'v2' : 'v1'),
     }),
     { code: 'QUERY_CONFIG_CHANGED' },
   );
@@ -105,6 +109,11 @@ for (const agent of ['qll', 'dealer'])
     const job = readConfiguredOverview(c, '2026-10-19', '', {
       onProgress: (p) => progress.push(p),
       execute: async (_, o) => {
+        if (o.queryId === 'calendar.target_versions')
+          return {
+            configVersion: 'v1',
+            rows: [{ month: '2026-10-01', inventory_version: '月初' }],
+          };
         if (o.queryId === slow) await new Promise((r) => (finish = r));
         return {
           configVersion: 'v1',

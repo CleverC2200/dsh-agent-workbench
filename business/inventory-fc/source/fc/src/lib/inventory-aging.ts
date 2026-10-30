@@ -48,26 +48,7 @@ export function inventoryAging(row: InventoryRow) {
       weightedAge += batch.quantity * age;
       buckets[age < 30 ? 0 : age < 60 ? 1 : age < 90 ? 2 : 3] += batch.quantity;
     }
-  const risk =
-    buckets[3] > 0
-      ? '滞库风险'
-      : buckets[2] > 0
-        ? '大日期'
-        : unknownAgeQty > 0
-          ? '货龄待核实'
-          : positiveQty <= 0
-            ? '无库存'
-            : '正常';
-  const suggestion =
-    buckets[3] > 0
-      ? '优先消耗90天以上批次，评估调拨或促销'
-      : buckets[2] > 0
-        ? '优先匹配近期订单，先进先出'
-        : unknownAgeQty > 0
-          ? '核实批次生产日期后安排出库'
-          : positiveQty <= 0
-            ? '核实库存与补货需求'
-            : '按先进先出正常出库';
+  const { risk, suggestion } = agingAdvice(buckets, positiveQty, unknownAgeQty);
   return {
     buckets,
     positiveQty,
@@ -110,4 +91,33 @@ export function agingCells(row: InventoryRow): Array<string | number> {
     row.actualDailyOutboundQty === 0 ? '—' : decimal(row.turnoverDays),
     age.suggestion,
   ];
+}
+
+/** Shared by batch-backed and configured-table projections of the same inventory. */
+export function agingAdvice(
+  buckets: readonly number[],
+  positiveQty: number,
+  unknownAgeQty: number,
+) {
+  const risk =
+    buckets[3] > 0
+      ? '滞库风险'
+      : buckets[2] > 0
+        ? '大日期'
+        : unknownAgeQty > 0
+          ? '货龄待核实'
+          : positiveQty <= 0
+            ? '无库存'
+            : '正常';
+  const suggestion =
+    buckets[3] > 0
+      ? '优先消耗90天以上批次，评估调拨或促销'
+      : buckets[2] > 0
+        ? '优先匹配近期订单，先进先出'
+        : unknownAgeQty > 0
+          ? '核实批次生产日期后安排出库'
+          : positiveQty <= 0
+            ? '核实库存与补货需求'
+            : '按先进先出正常出库';
+  return { risk, suggestion };
 }

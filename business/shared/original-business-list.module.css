@@ -173,6 +173,41 @@
 .columns input {
   accent-color: var(--ui-accent);
 }
+.sortHeader {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sortHeader:focus-visible,
+.columnChoice button:focus-visible {
+  outline: 2px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.columnChoice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.columnChoice > label:first-child {
+  flex: 1;
+}
+.columnChoice button {
+  padding: 2px 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 4px;
+  background: var(--ui-surface);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.columnChoice button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 @media (max-width: 720px) {
   .toolbar {
     padding: 12px;
@@ -378,4 +413,14 @@
   outline: none;
   border-color: #e59ca8;
   box-shadow: 0 0 0 3px #df17321a;
+}
+.quickBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 16px 0;
+}
+.quickBar:empty {
+  display: none;
 }
