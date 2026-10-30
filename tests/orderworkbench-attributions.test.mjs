@@ -9,6 +9,10 @@ import { applyPeriodAttributions } from '../prototypes/inventory-orderworkbench/
 
 test('attributions remain scoped to the period and base/SKU, reject ambiguity and use business items', () => {
   const db = new DatabaseSync(':memory:');
+  db.aggregate('ARRAY_AGG', {
+    start: () => '[]',
+    step: (state, value) => JSON.stringify([...JSON.parse(state), value]),
+  });
   try {
     for (const table of ['agents_scm_execute_detail_d', 'agents_scm_execute_detail_hourly_d'])
       db.exec(

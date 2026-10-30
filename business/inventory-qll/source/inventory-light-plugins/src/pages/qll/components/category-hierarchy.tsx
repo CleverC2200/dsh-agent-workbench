@@ -14,6 +14,7 @@ import {
 import { ownContextPart } from '../../../native/context';
 import config from '../../../../../../sql.config.json';
 import css from './category-hierarchy.module.css';
+import { DashboardTableSkeleton } from '../../../dsh-ui/workbench-loading';
 
 type Page = { rows: TreeRow[]; hasNext: boolean; snapshot?: string };
 type Read = ReturnType<typeof categoryTreeReader>;
@@ -319,11 +320,13 @@ function LayerCatalog({
   read,
   date,
   onResult,
+  onPending,
 }: {
   layer: ChainLayer;
   read: Read;
   date: string;
   onResult: (layer: ChainLayer, value: Page) => void;
+  onPending: (layer: ChainLayer, pending: boolean) => void;
 }) {
   const [error, setError] = useState(''),
     [busy, setBusy] = useState(true),
@@ -331,6 +334,7 @@ function LayerCatalog({
   useEffect(() => {
     const controller = new AbortController();
     setBusy(true);
+    onPending(layer, true);
     setError('');
     void (async () => {
       const rows: TreeRow[] = [];
@@ -353,13 +357,14 @@ function LayerCatalog({
         if (!controller.signal.aborted) setError(e.message);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setBusy(false);
+        if (!controller.signal.aborted) {
+          setBusy(false);
+          onPending(layer, false);
+        }
       });
     return () => controller.abort();
-  }, [read, date, layer, retry, onResult]);
-  return busy ? (
-    <p role="status">正在读取{layerLabels[layer]}品类…</p>
-  ) : error ? (
+  }, [read, date, layer, retry, onResult, onPending]);
+  return busy ? null : error ? (
     <p role="alert">
       {layerLabels[layer]}：{error} <button onClick={() => setRetry(retry + 1)}>重试</button>
     </p>
@@ -369,6 +374,15 @@ export function CategoryHierarchy({ date, channel }: { date: string; channel: bo
   const read = useMemo(() => categoryTreeReader(config), []);
   const [catalog, setCatalog] = useState<Partial<Record<ChainLayer, Page>>>({}),
     [page, setPage] = useState(1);
+  const [pending, setPending] = useState<Partial<Record<ChainLayer, boolean>>>({
+    base: true,
+    branch: true,
+    customer: true,
+  });
+  const onPending = React.useCallback(
+    (layer: ChainLayer, value: boolean) => setPending((old) => ({ ...old, [layer]: value })),
+    [],
+  );
   const receive = React.useCallback(
     (layer: ChainLayer, value: Page) => setCatalog((old) => ({ ...old, [layer]: value })),
     [],
@@ -386,53 +400,66 @@ export function CategoryHierarchy({ date, channel }: { date: string; channel: bo
       {layers
         .filter((layer) => !catalog[layer])
         .map((layer) => (
-          <LayerCatalog key={layer} layer={layer} read={read} date={date} onResult={receive} />
+          <LayerCatalog
+            key={layer}
+            layer={layer}
+            read={read}
+            date={date}
+            onResult={receive}
+            onPending={onPending}
+          />
         ))}
-      <Table channel={channel}>
-        {categories.slice((page - 1) * 10, page * 10).map((category) => (
-          <ExpandRow
-            key={category}
-            label={category}
-            row={categorySummary(category, active)}
-            channel={channel}
-          >
-            <Table channel={channel}>
-              {layers.map((layer) => {
-                const row = catalog[layer]?.rows.find((r) => r.node_key === category);
-                return row ? (
-                  <ExpandRow
-                    key={layer}
-                    label={layerLabels[layer]}
-                    row={row}
-                    layer={layer}
-                    channel={channel}
-                  >
-                    <Children
-                      read={read}
-                      date={date}
-                      snapshot={catalog[layer]?.snapshot}
-                      category={category}
-                      layer={layer}
-                      channel={channel}
-                    />
-                  </ExpandRow>
-                ) : (
-                  <tr key={layer}>
-                    <td>{layerLabels[layer]}</td>
-                    <td colSpan={channel ? 11 : 10}>
-                      {catalog[layer] ? '该品类无数据' : '该层数据尚未取得'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </Table>
-          </ExpandRow>
-        ))}
-      </Table>
-      {layers.every((l) => catalog[l]) && categories.length === 0 && (
-        <p role="status">暂无符合条件的数据</p>
+      {!layers.some((layer) => catalog[layer]) && layers.some((layer) => pending[layer]) ? (
+        <DashboardTableSkeleton label="品类结构加载中" />
+      ) : (
+        <>
+          <Table channel={channel}>
+            {categories.slice((page - 1) * 10, page * 10).map((category) => (
+              <ExpandRow
+                key={category}
+                label={category}
+                row={categorySummary(category, active)}
+                channel={channel}
+              >
+                <Table channel={channel}>
+                  {layers.map((layer) => {
+                    const row = catalog[layer]?.rows.find((r) => r.node_key === category);
+                    return row ? (
+                      <ExpandRow
+                        key={layer}
+                        label={layerLabels[layer]}
+                        row={row}
+                        layer={layer}
+                        channel={channel}
+                      >
+                        <Children
+                          read={read}
+                          date={date}
+                          snapshot={catalog[layer]?.snapshot}
+                          category={category}
+                          layer={layer}
+                          channel={channel}
+                        />
+                      </ExpandRow>
+                    ) : (
+                      <tr key={layer}>
+                        <td>{layerLabels[layer]}</td>
+                        <td colSpan={channel ? 11 : 10}>
+                          {catalog[layer] ? '该品类无数据' : '该层数据尚未取得'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </Table>
+              </ExpandRow>
+            ))}
+          </Table>
+          {layers.every((l) => catalog[l]) && categories.length === 0 && (
+            <p role="status">暂无符合条件的数据</p>
+          )}
+          <Pager page={page} next={page * 10 < categories.length} busy={false} setPage={setPage} />
+        </>
       )}
-      <Pager page={page} next={page * 10 < categories.length} busy={false} setPage={setPage} />
     </div>
   );
 }

@@ -349,7 +349,7 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "annual.summary.count"
@@ -368,84 +368,54 @@
     "annual.summary.count": {
       "parameterSpec": {},
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
       }
     },
     "facts.report": {
       "title": "report",
-      "grain": [
-        "agents_sales_plan_demand_m.belong_base",
-        "agents_sales_plan_demand_m.material_code"
-      ],
+      "grain": ["region_name", "belong_base", "material_code"],
       "columns": [
-        "agents_sales_plan_demand_m.belong_base",
-        "agents_sales_plan_demand_m.material_code",
-        "agents_sales_plan_demand_m.plannum_total",
-        "agents_sales_plan_demand_m.allnum_total"
+        "region_name",
+        "belong_base",
+        "material_code",
+        "material_name",
+        "sub_category",
+        "series",
+        "product_item",
+        "product_item_name",
+        "plannum_total",
+        "allnum_total"
       ],
       "parameterSpec": {
         "month": {
           "name": "month",
           "type": "string",
+          "required": true,
           "nullable": false,
           "format": "YYYY-MM-01"
         },
-        "page_size": {
+        "gea_p98": {
           "name": "page_size",
           "type": "integer",
+          "required": true,
           "nullable": false,
           "minimum": 1,
           "maximum": 200
         },
-        "offset": {
+        "gea_p99": {
           "name": "offset",
           "type": "integer",
+          "required": true,
           "nullable": false,
           "minimum": 0,
           "maximum": 100000
         }
       },
       "request": {
-        "cube": {
-          "measures": [
-            "agents_sales_plan_demand_m.plannum_total",
-            "agents_sales_plan_demand_m.allnum_total"
-          ],
-          "dimensions": [
-            "agents_sales_plan_demand_m.belong_base",
-            "agents_sales_plan_demand_m.material_code"
-          ],
-          "timeDimensions": [
-            {
-              "dimension": "agents_sales_plan_demand_m.stat_month",
-              "dateRange": {
-                "$monthRange": "month"
-              }
-            }
-          ],
-          "timezone": "UTC",
-          "order": [
-            ["agents_sales_plan_demand_m.belong_base", "asc"],
-            ["agents_sales_plan_demand_m.material_code", "asc"]
-          ],
-          "limit": {
-            "$parameter": "page_size"
-          },
-          "offset": {
-            "$parameter": "offset"
-          },
-          "filters": [
-            {
-              "member": "agents_sales_plan_demand_m.cust_code",
-              "operator": "set"
-            },
-            {
-              "member": "agents_sales_plan_demand_m.cust_code",
-              "operator": "notEquals",
-              "values": [""]
-            }
-          ]
-        }
+        "sql": "SELECT r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name, SUM(p.plannum) AS plannum_total, SUM(p.allnum) AS allnum_total FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code LEFT JOIN (SELECT material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(sub_category), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(sub_category), '')) = 1 THEN MAX(sub_category) ELSE NULL END AS sub_category, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(NULLIF(TRIM(product_item_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item_name), '')) = 1 THEN MAX(product_item_name) ELSE NULL END AS product_item_name FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND material_code <> '' GROUP BY material_code) m ON p.material_code = m.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name ORDER BY CASE WHEN r.region_name IS NULL THEN 1 ELSE 0 END, r.region_name, p.belong_base, p.material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.report.count"
       }
     },
     "facts.history": {
@@ -615,24 +585,11 @@
     },
     "forecast.detail": {
       "title": "forecast",
-      "grain": [
-        "stat_month",
-        "belong_base",
-        "material_code",
-        "material_name",
-        "current_month_forecast_qty",
-        "next_month_forecast_qty"
-      ],
+      "grain": ["stat_month", "belong_base", "material_code"],
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         },
@@ -654,7 +611,7 @@
         }
       },
       "request": {
-        "sql": "SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty ORDER BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code ORDER BY stat_month, belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "forecast.count"
@@ -672,20 +629,14 @@
     "forecast.count": {
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code) AS mps_rows"
       }
     },
     "delivery.detail": {
@@ -772,6 +723,287 @@
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate, COUNT(*) AS source_rows FROM agents_scm_base_dimension_delivery_mi WHERE stat_month IN (:gea_p1) GROUP BY dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate) AS mps_rows"
       }
+    },
+    "annual.export": {
+      "title": "年度SKU模板",
+      "grain": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "gea_p2": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND belong_base = :gea_p2 GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty ORDER BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual.export.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "annual.export.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND belong_base = :gea_p2 GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_rows"
+      }
+    },
+    "facts.report.count": {
+      "title": "计划提报维度明细计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT r.region_name, p.belong_base, p.material_code FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code) report_rows"
+      }
+    },
+    "plan-rate.detail": {
+      "title": "销售提报计划占比",
+      "grain": [
+        "dimension_type",
+        "stat_month",
+        "belong_base",
+        "category_name",
+        "material_group_name",
+        "material_code",
+        "product_name",
+        "dimension_allnum",
+        "parent_allnum",
+        "dimension_rate"
+      ],
+      "columns": [
+        "dimension_type",
+        "stat_month",
+        "belong_base",
+        "category_name",
+        "material_group_name",
+        "material_code",
+        "product_name",
+        "dimension_allnum",
+        "parent_allnum",
+        "dimension_rate"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT DISTINCT dimension_type, stat_month, belong_base, category_name, material_group_name, material_code, product_name, dimension_allnum, parent_allnum, dimension_rate FROM agents_scm_dimension_plan_rate_mi WHERE stat_month IN (:gea_p1) ORDER BY stat_month, dimension_type, belong_base, category_name, material_group_name, material_code, product_name, dimension_allnum, parent_allnum, dimension_rate LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "plan-rate.count"
+      }
+    },
+    "plan-rate.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT dimension_type, stat_month, belong_base, category_name, material_group_name, material_code, product_name, dimension_allnum, parent_allnum, dimension_rate FROM agents_scm_dimension_plan_rate_mi WHERE stat_month IN (:gea_p1)) plan_rates"
+      }
+    },
+    "category-history.detail": {
+      "title": "当前产品池三年全国大类发货指标",
+      "grain": ["stat_month", "dimension_value"],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 24
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "request": {
+        "sql": "SELECT '基地+大类' AS dimension_type, m.stat_month, '全国' AS belong_base, m.category AS dimension_value, '' AS product_name, m.quantity AS dimension_act_dl_qty, m.fiscal_year, f.annual_quantity AS national_dimension_fiscal_act_dl_qty, m.quantity / NULLIF(f.annual_quantity, 0) AS dimension_act_dl_qty_rate, CONCAT(CAST(CAST(SUBSTRING(m.stat_month, 1, 4) AS INT) - 1 AS STRING), SUBSTRING(m.stat_month, 5, 2)) AS last_year_stat_month, y.quantity AS last_year_dimension_act_dl_qty, m.quantity - y.quantity AS year_on_year_act_dl_qty, m.quantity / NULLIF(y.quantity, 0) - 1 AS year_on_year_rate, CASE WHEN SUBSTRING(m.stat_month, 5, 2) = '01' THEN CONCAT(CAST(CAST(SUBSTRING(m.stat_month, 1, 4) AS INT) - 1 AS STRING), '12') ELSE CAST(CAST(m.stat_month AS INT) - 1 AS STRING) END AS last_month_stat_month, b.quantity AS last_month_dimension_act_dl_qty, m.quantity - b.quantity AS month_on_month_act_dl_qty, m.quantity / NULLIF(b.quantity, 0) - 1 AS month_on_month_rate, 1 AS source_rows FROM (SELECT h.stat_month, p.category, MIN(h.fiscal_year) AS fiscal_year, CASE WHEN COUNT(h.quantity) = COUNT(*) AND COUNT(h.fiscal_year) = COUNT(*) AND COUNT(DISTINCT h.fiscal_year) = 1 THEN SUM(h.quantity) END AS quantity FROM (SELECT stat_month, belong_base, material_code, MIN(fiscal_year) AS fiscal_year, CASE WHEN COUNT(*) = 1 THEN MAX(dimension_act_dl_qty) END AS quantity, CASE WHEN COUNT(*) = 1 THEN MAX(national_dimension_fiscal_act_dl_qty) END AS annual_quantity FROM (SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM agents_scm_base_dimension_delivery_mi WHERE dimension_type = '基地+产品') AS raw_values GROUP BY stat_month, belong_base, material_code) AS h INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON h.material_code = p.material_code GROUP BY h.stat_month, p.category) AS m LEFT JOIN (SELECT h.stat_month, p.category, MIN(h.fiscal_year) AS fiscal_year, CASE WHEN COUNT(h.quantity) = COUNT(*) AND COUNT(h.fiscal_year) = COUNT(*) AND COUNT(DISTINCT h.fiscal_year) = 1 THEN SUM(h.quantity) END AS quantity FROM (SELECT stat_month, belong_base, material_code, MIN(fiscal_year) AS fiscal_year, CASE WHEN COUNT(*) = 1 THEN MAX(dimension_act_dl_qty) END AS quantity, CASE WHEN COUNT(*) = 1 THEN MAX(national_dimension_fiscal_act_dl_qty) END AS annual_quantity FROM (SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM agents_scm_base_dimension_delivery_mi WHERE dimension_type = '基地+产品') AS raw_values GROUP BY stat_month, belong_base, material_code) AS h INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON h.material_code = p.material_code GROUP BY h.stat_month, p.category) AS y ON y.category = m.category AND y.stat_month = CONCAT(CAST(CAST(SUBSTRING(m.stat_month, 1, 4) AS INT) - 1 AS STRING), SUBSTRING(m.stat_month, 5, 2)) LEFT JOIN (SELECT h.stat_month, p.category, MIN(h.fiscal_year) AS fiscal_year, CASE WHEN COUNT(h.quantity) = COUNT(*) AND COUNT(h.fiscal_year) = COUNT(*) AND COUNT(DISTINCT h.fiscal_year) = 1 THEN SUM(h.quantity) END AS quantity FROM (SELECT stat_month, belong_base, material_code, MIN(fiscal_year) AS fiscal_year, CASE WHEN COUNT(*) = 1 THEN MAX(dimension_act_dl_qty) END AS quantity, CASE WHEN COUNT(*) = 1 THEN MAX(national_dimension_fiscal_act_dl_qty) END AS annual_quantity FROM (SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM agents_scm_base_dimension_delivery_mi WHERE dimension_type = '基地+产品') AS raw_values GROUP BY stat_month, belong_base, material_code) AS h INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON h.material_code = p.material_code GROUP BY h.stat_month, p.category) AS b ON b.category = m.category AND b.stat_month = CASE WHEN SUBSTRING(m.stat_month, 5, 2) = '01' THEN CONCAT(CAST(CAST(SUBSTRING(m.stat_month, 1, 4) AS INT) - 1 AS STRING), '12') ELSE CAST(CAST(m.stat_month AS INT) - 1 AS STRING) END LEFT JOIN (SELECT h.fiscal_year, p.category, CASE WHEN COUNT(h.annual_quantity) = COUNT(*) THEN SUM(h.annual_quantity) END AS annual_quantity FROM (SELECT fiscal_year, material_code, CASE WHEN COUNT(annual_quantity) = COUNT(*) AND COUNT(DISTINCT annual_quantity) = 1 THEN MAX(annual_quantity) END AS annual_quantity FROM (SELECT stat_month, belong_base, material_code, MIN(fiscal_year) AS fiscal_year, CASE WHEN COUNT(*) = 1 THEN MAX(dimension_act_dl_qty) END AS quantity, CASE WHEN COUNT(*) = 1 THEN MAX(national_dimension_fiscal_act_dl_qty) END AS annual_quantity FROM (SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM agents_scm_base_dimension_delivery_mi WHERE dimension_type = '基地+产品') AS raw_values GROUP BY stat_month, belong_base, material_code) AS sku_values GROUP BY fiscal_year, material_code) AS h INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON h.material_code = p.material_code GROUP BY h.fiscal_year, p.category) AS f ON f.category = m.category AND f.fiscal_year = m.fiscal_year WHERE m.stat_month IN (:gea_p1) ORDER BY m.stat_month, m.category LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "category-history.count"
+      },
+      "columns": [
+        "dimension_type",
+        "stat_month",
+        "belong_base",
+        "dimension_value",
+        "product_name",
+        "dimension_act_dl_qty",
+        "fiscal_year",
+        "national_dimension_fiscal_act_dl_qty",
+        "dimension_act_dl_qty_rate",
+        "last_year_stat_month",
+        "last_year_dimension_act_dl_qty",
+        "year_on_year_act_dl_qty",
+        "year_on_year_rate",
+        "last_month_stat_month",
+        "last_month_dimension_act_dl_qty",
+        "month_on_month_act_dl_qty",
+        "month_on_month_rate",
+        "source_rows"
+      ]
+    },
+    "category-history.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 24
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT h.stat_month, p.category, MIN(h.fiscal_year) AS fiscal_year, CASE WHEN COUNT(h.quantity) = COUNT(*) AND COUNT(h.fiscal_year) = COUNT(*) AND COUNT(DISTINCT h.fiscal_year) = 1 THEN SUM(h.quantity) END AS quantity FROM (SELECT stat_month, belong_base, material_code, MIN(fiscal_year) AS fiscal_year, CASE WHEN COUNT(*) = 1 THEN MAX(dimension_act_dl_qty) END AS quantity, CASE WHEN COUNT(*) = 1 THEN MAX(national_dimension_fiscal_act_dl_qty) END AS annual_quantity FROM (SELECT DISTINCT stat_month, belong_base, TRIM(dimension_value) AS material_code, fiscal_year, dimension_act_dl_qty, national_dimension_fiscal_act_dl_qty FROM agents_scm_base_dimension_delivery_mi WHERE dimension_type = '基地+产品') AS raw_values GROUP BY stat_month, belong_base, material_code) AS h INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON h.material_code = p.material_code GROUP BY h.stat_month, p.category) AS m WHERE stat_month IN (:gea_p1)"
+      }
+    },
+    "annual-pool.detail": {
+      "title": "当前产品池年度大类需求",
+      "grain": ["belong_base", "sub_category", "stat_month"],
+      "parameterSpec": {
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "request": {
+        "sql": "SELECT a.belong_base, p.category AS sub_category, a.stat_month, SUM(a.source_rows) AS source_rows, SUM(a.missing_qty) AS missing_qty, SUM(CASE WHEN a.quantity_variants > 1 THEN a.source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN a.quantity_variants = 1 AND a.missing_qty = 0 THEN a.raw_quantity ELSE 0 END) AS demand_qty, MAX(a.update_time) AS update_time FROM (SELECT belong_base, material_code, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS a INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON a.material_code = p.material_code GROUP BY a.belong_base, p.category, a.stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual-pool.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "stat_month",
+        "source_rows",
+        "missing_qty",
+        "duplicate_rows",
+        "demand_qty",
+        "update_time"
+      ]
+    },
+    "annual-pool.count": {
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT a.belong_base, p.category AS sub_category, a.stat_month, SUM(a.source_rows) AS source_rows, SUM(a.missing_qty) AS missing_qty, SUM(CASE WHEN a.quantity_variants > 1 THEN a.source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN a.quantity_variants = 1 AND a.missing_qty = 0 THEN a.raw_quantity ELSE 0 END) AS demand_qty, MAX(a.update_time) AS update_time FROM (SELECT belong_base, material_code, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS a INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON a.material_code = p.material_code GROUP BY a.belong_base, p.category, a.stat_month) AS mps_rows"
+      },
+      "parameterSpec": {}
     }
   }
 }

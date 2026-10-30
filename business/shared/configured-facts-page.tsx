@@ -3,6 +3,8 @@ import type { FcCycleRule } from './fc-cycle-rules';
 import { QueryErrors } from './query-errors';
 import { OriginalBusinessList } from './original-business-list';
 import { LocalQueryForm } from './local-query-form';
+import { PlanPagination } from './plan-pagination';
+import { DashboardTableSkeleton } from '../inventory-fc/source/inventory-light-plugins/src/dsh-ui/workbench-loading';
 import React, { useEffect, useRef, useState } from 'react';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { factMetric, readConfiguredFacts, initialFiltersForView } from './configured-facts';
@@ -213,7 +215,6 @@ export function ConfiguredFactsPage({
 
   const businessTitleId = React.useId();
   const titleId = presentation ? businessTitleId : 'source-view-title';
-  const totalPages = result?.total == null ? null : Math.max(1, Math.ceil(result.total / pageSize));
   const BusinessList = businessList ?? OriginalBusinessList;
   if (presentation)
     return (
@@ -469,7 +470,7 @@ export function ConfiguredFactsPage({
           </LocalQueryForm>
         )}
         <QueryErrors errors={error ? [`${error.message}（${error.code}）`] : []} />
-        {loading && <p role="status">正在读取{view.title}…</p>}
+        {loading && <DashboardTableSkeleton label={`${view.title}加载中`} />}
         {!loading && result?.status === 'select_customer' && (
           <p role="status" className={css.empty}>
             请选择客户后查看该客户的{view.title}。
@@ -506,7 +507,7 @@ export function ConfiguredFactsPage({
               {presentation ? '暂无数据。' : view.description}
             </p>
           ))}
-        {result && ['available', 'empty'].includes(result.status) && (
+        {!loading && result && ['available', 'empty'].includes(result.status) && (
           <>
             <QueryErrors
               errors={
@@ -623,37 +624,18 @@ export function ConfiguredFactsPage({
                     </tbody>
                   </table>
                 </div>
-                <div className={css.pagination}>
-                  <span>
-                    共 {display(result.total)} 行 · 第 {page} / {totalPages} 页
-                  </span>
-                  <label>
-                    每页
-                    <select
-                      aria-label="每页行数"
-                      value={pageSize}
-                      onChange={(e) => {
-                        setPageSize(Number(e.target.value));
-                        setPage(1);
-                      }}
-                    >
-                      {[10, 20, 50, 100].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button disabled={loading || page <= 1} onClick={() => setPage((n) => n - 1)}>
-                    上一页
-                  </button>
-                  <button
-                    disabled={loading || page >= totalPages!}
-                    onClick={() => setPage((n) => n + 1)}
-                  >
-                    下一页
-                  </button>
-                </div>
+                <PlanPagination
+                  ariaLabel={`${view.title}分页`}
+                  totalCount={result.total}
+                  page={page}
+                  pageSize={pageSize}
+                  loading={loading}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                />
               </>
             )}
           </>

@@ -1,3 +1,5 @@
+import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
+import { branchDashboardEvidence } from '../../../../../shared/fc-dashboard-insight';
 import {
   formatChainValue as show,
   formatChainValueParts,
@@ -200,6 +202,27 @@ function WorkbenchBody() {
     ? trial.missingCount
     : (knownNumber(plan?.missing_calculation_count) ?? 0);
   const branchStock = parts['branch-stock']?.summary;
+  const insightEvidence = branchDashboardEvidence({
+    warehouseCode: warehouse,
+    warehouseName:
+      warehouses.find((item) => item.warehouse_code === warehouse)?.warehouse_name || '全部分仓',
+    asOf: date,
+    cycleDays,
+    parts,
+    localPlanTrial: !!trialActive,
+    recommendedQty: recommended,
+    missingCalculationCount: missingRecommendations,
+    currentOrderShortageQty: currentShortageSum(parts['current-shortage']?.rows, 'shortage'),
+  });
+  const modelInsight = useDashboardInsight(insightEvidence, !busy && Object.keys(parts).length > 0);
+  useEffect(() => {
+    updateContext('dashboardAIInsight', {
+      scope: warehouse || '全部分仓',
+      status: modelInsight.status,
+      source: 'model',
+      text: modelInsight.status === 'ready' ? modelInsight.answer : undefined,
+    });
+  }, [warehouse, modelInsight.status, modelInsight.answer]);
   const cards = [
     {
       title: '当前库存',
@@ -413,19 +436,20 @@ function WorkbenchBody() {
                 </article>
               ))}
             </div>
-            <section className="priority-analysis" aria-label="AI 洞察">
+            <section
+              className="priority-analysis fc-dashboard-insight"
+              aria-label="AI 洞察"
+              aria-busy={modelInsight.status === 'loading'}
+            >
               <h3>
                 <span className="analysis-label">AI 洞察</span>
-                <small>经营洞察</small>
               </h3>
-              <p>
-                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '件')}
-                ，建议补货 {show(recommended, '件')}。
-                {missingRecommendations > 0 && (
-                  <span>
-                    以上为可计算部分，另有 {missingRecommendations} 项要素待核实，未按0计入。
-                  </span>
-                )}
+              <p role={modelInsight.status === 'error' ? 'status' : undefined}>
+                {modelInsight.status === 'ready'
+                  ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
+                  : modelInsight.status === 'error'
+                    ? 'AI 洞察暂时生成失败，可刷新后重试。'
+                    : 'AI 洞察生成中…'}
               </p>
             </section>
             <section className="fc-list-panel" aria-label="库存业务列表">
@@ -555,22 +579,23 @@ function WorkbenchBody() {
             <fieldset key={index}>
               <legend>周期规则 {index + 1}</legend>
               <div className={common.cycleRuleFields}>
-                <select
-                  aria-label={`规则${index + 1}状态`}
+                <WarehouseSelect
+                  label={`规则${index + 1}状态`}
+                  compact
+                  disabled={false}
                   value={rule.status ?? 'effective'}
-                  onChange={(event) =>
+                  options={[
+                    { id: 'effective', name: '生效' },
+                    { id: 'paused', name: '暂停' },
+                  ]}
+                  onChange={(value) =>
                     setRuleDraft(
                       ruleDraft.map((r, i) =>
-                        i === index
-                          ? { ...r, status: event.target.value as 'effective' | 'paused' }
-                          : r,
+                        i === index ? { ...r, status: value as 'effective' | 'paused' } : r,
                       ),
                     )
                   }
-                >
-                  <option value="effective">生效</option>
-                  <option value="paused">暂停</option>
-                </select>
+                />
 
                 <WarehouseSelect
                   label={`规则${index + 1}层级`}

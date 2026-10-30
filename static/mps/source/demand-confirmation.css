@@ -141,14 +141,6 @@
   color: var(--dc-muted);
   font-size: 11.5px;
 }
-.dc-product-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 4px;
-  font-size: 11.5px;
-}
 .dc-page-head {
   margin: 0 -24px 18px;
   padding: 0 24px;
@@ -568,6 +560,22 @@
 }
 .dc-dialog table {
   min-width: 700px;
+}
+.dc-source-detail .dc-table-scroll {
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+}
+.dc-source-detail thead {
+  position: sticky;
+  top: 0;
+}
+.dc-dialog.dc-source-detail table {
+  width: max-content;
+  min-width: 100%;
+}
+.dc-source-detail th,
+.dc-source-detail td {
+  white-space: nowrap;
 }
 @media (max-width: 720px) {
   .ap-app:is([data-step='check'], [data-step='ship']) .ap-board-head {

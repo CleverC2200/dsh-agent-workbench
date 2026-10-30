@@ -1,3 +1,4 @@
+import { buildCategoryDemand } from './category-demand.js';
 import { computeMpsWorkflow } from 'dsh-agent-manage/mps-compute/workflow';
 
 const number = (value) => {
@@ -104,7 +105,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
   const result = computeMpsWorkflow({
     context,
     products,
-    categoryDemand: (draft.categoryDemand ?? []).map((row) => ({
+    categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft, []).rows).map((row) => ({
       month: text(row.month),
       category: text(row.category),
       quantity: number(row.quantity),

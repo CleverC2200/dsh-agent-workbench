@@ -52,6 +52,21 @@ export function addWorkbenchSummaryQueries(config) {
       if (field === 'base' || field === 'category') return 'q.' + field + ' AS ' + field;
       if (field === 'item') return item + ' AS item';
       if (field === 'sku') return 'NULL AS sku';
+      if (
+        name === 'stock' &&
+        ['available', 'inventory', 'sales_plan', 'transfer_plan'].includes(field)
+      )
+        return (
+          'CASE WHEN COUNT(q.' +
+          field +
+          ')=COUNT(*)' +
+          (['sales_plan', 'transfer_plan'].includes(field) ? ' AND MIN(q.' + field + ')>=0' : '') +
+          ' THEN SUM(q.' +
+          field +
+          ') END AS ' +
+          field
+        );
+
       if (['name', 'stock_date', 'snapshot_date'].includes(field))
         return 'MAX(q.' + field + ') AS ' + field;
       if (field === 'source_rows')
@@ -60,7 +75,7 @@ export function addWorkbenchSummaryQueries(config) {
     });
     const extra = [];
     if (name === 'stock')
-      for (const field of ['available', 'sales_plan', 'transfer_plan']) {
+      for (const field of ['available', 'inventory', 'sales_plan', 'transfer_plan']) {
         extra.push('missing_' + field);
         fields.push('SUM(CASE WHEN q.' + field + ' IS NULL THEN 1 ELSE 0 END) AS missing_' + field);
       }

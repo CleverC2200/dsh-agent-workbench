@@ -188,7 +188,7 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
         kind: 'month',
         start: '2026-10-01',
         end: '2026-10-21',
-        sections: ['orders', 'stock', 'ages', 'changes'].map((id) => ({
+        sections: ['orders', 'stock', 'ages', 'changes', 'directors'].map((id) => ({
           id,
           status: 'ready',
           rows: data[id] ?? [],

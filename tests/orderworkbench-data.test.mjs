@@ -94,9 +94,37 @@ export function fixturePeriod() {
         id: 'changes',
         status: 'ready',
         rows: [
-          { kind: '1', region: '华中', province: '河南', numerator: 10, denominator: 100 },
-          { kind: '2', region: '华中', province: '河南', numerator: -5, denominator: 100 },
+          {
+            kind: '1',
+            region: '华中',
+            province: '河南',
+            numerator: 10,
+            denominator: 100,
+            invalid: 0,
+          },
+          {
+            kind: '2',
+            region: '华中',
+            province: '河南',
+            numerator: 5,
+            denominator: 100,
+            invalid: 0,
+          },
         ],
+      },
+      {
+        id: 'ontime',
+        status: 'ready',
+        rows: Array.from({ length: 10 }, (_, i) => ({
+          order_no: 'order-' + i,
+          customer: 'customer',
+          base: '郑州',
+          category: '水饺',
+          item: '小水饺',
+          sku: 'sku-1',
+          ontime: i < 9 ? 1 : 0,
+          invalid: 0,
+        })),
       },
       {
         id: 'stock',
@@ -300,13 +328,13 @@ test('failed completeness checks are not cached as good data; cancellation stops
   );
   assert.equal(progress, 1);
 });
-test('six metrics use sums, signed change quantities, judged records and calendar-day demand', () => {
+test('document metrics use order counts, distinct arrival orders and calendar-day demand', () => {
   const metrics = model.computeWorkbenchMetrics(fixturePeriod());
   assert.deepEqual(
     Object.values(metrics).map((metric) => metric.value),
-    [10, -5, 96, 90, 10, 10],
+    [10, 5, 96, 90, 10, 15],
   );
-  assert.match(metrics['准交率'].note, /2条空判定/);
+  assert.match(metrics['准交率'].note, /客户编码＋原订单号去重/);
   const period = fixturePeriod();
   period.sections[0].rows.push({
     ...period.sections[0].rows[0],
@@ -322,7 +350,7 @@ test('six metrics use sums, signed change quantities, judged records and calenda
 });
 test('denied, duplicated, zero denominator and invalid age data remain unknown', () => {
   for (const [id, field, value, name] of [
-    ['orders', 'judged', 0, '准交率'],
+    ['ontime', 'invalid', 1, '准交率'],
     ['stock', 'source_rows', 2, '周转天数'],
     ['ages', 'invalid', 1, '货龄（>60天库存占比）'],
   ]) {
@@ -370,8 +398,8 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.cards.length, 6);
   assert.equal(presentation.cards[0].footer, '本周作废率 10.00%');
   assert.equal(presentation.cards[4].footer, '本周货龄占比 10.00%');
-  assert.equal(presentation.cards[5].footer, '本周可发货天数 10.0天');
-  assert.match(presentation.cards[0].formula, /下单量/);
+  assert.equal(presentation.cards[5].footer, '本周可发货天数 15.0天');
+  assert.match(presentation.cards[0].formula, /订单数/);
   const differentWeek = {
     ...period,
     metrics: { ...period.metrics, 作废率: { ...period.metrics['作废率'], value: 3 } },
@@ -388,7 +416,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.performance['item-performance'].week[0].length, 8);
   assert.equal(presentation.performance['director-performance'].month.length, 2);
   assert.equal(presentation.dimensions['category-fill'].rows[0][1], '96.00%');
-  assert.equal(presentation.skus['水饺'][0].shipDays, '10.00天');
+  assert.equal(presentation.skus['水饺'][0].shipDays, '15.00天');
   assert.equal(model.workbenchEvidence(facts).periods.month.sections[0].total, 1);
   const evidence = model.workbenchEvidence(facts);
   const compressed = JSON.parse(
@@ -405,15 +433,25 @@ test('configured sources keep formal field rules and safe pagination', () => {
   for (const id of Object.keys(config.queries)) assert.match(id, /^[a-z][a-z0-9_.-]{0,119}$/);
   assert.ok(config.queries['workbench.agedate']);
   assert.ok(config.queries['workbench.customermanagers']);
-  assert.match(config.queries['workbench.changes'].request.sql, /SUM\(COALESCE\(cancel_qty,0\)\)/);
+  assert.doesNotMatch(
+    config.queries['workbench.changes'].request.sql,
+    /cancel_qty|SUM\(COALESCE\(order_qty/,
+  );
+  assert.match(config.queries['workbench.changes'].request.sql, /GROUP BY cust_code,cust_order_no/);
+  assert.match(config.queries['workbench.changes'].request.sql, /INTERVAL '12' HOUR/);
   assert.match(config.queries['workbench.orders'].request.sql, /exp_flag='否'/);
-  assert.match(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
-  assert.match(config.queries['workbench.orders'].request.sql, /COUNT\(is_ontime\)/);
+  assert.match(config.queries['workbench.stock'].request.sql, /main_sales_plan_adj>0/);
+  assert.doesNotMatch(config.queries['workbench.stock'].request.sql, /avg_daily_planned_demand/);
+  assert.match(config.queries['workbench.orders'].request.sql, /LEAST\(m.sent,m.demand\)/);
+  assert.match(
+    config.queries['workbench.ontime'].request.sql,
+    /gpsisinraildate_to,t.arriveconfirm_time/,
+  );
   assert.match(
     config.queries['workbench.ages'].request.sql,
-    /b.live_qty<>0 AND CAST\(b.prod_date AS DATE\)>/,
+    /b.live_qty<>0 AND \(CAST\(b.prod_date AS DATE\) IS NULL OR CAST\(b.prod_date AS DATE\)>/,
   );
-  for (const name of ['orders', 'stock', 'changes', 'ages', 'customers', 'directors']) {
+  for (const name of ['orders', 'ontime', 'stock', 'changes', 'ages', 'customers', 'directors']) {
     assert.ok(config.queries[config.queries['workbench.' + name].pagination.countQuery]);
     assert.match(
       config.queries['workbench.' + name].request.sql,
@@ -466,24 +504,24 @@ test('an invalid SKU does not hide valid item comparisons; detail exposes source
     directors: { rows: [] },
     customers: { rows: [] },
   };
-  assert.equal(previous.metrics['周转天数'].value, 94 / 40);
+  assert.equal(previous.metrics['周转天数'].value, null);
   assert.equal(
     model.computeWorkbenchMetrics(previous, (row) => row.item === '小水饺')['周转天数'].value,
-    10,
+    15,
   );
   const presentation = model.workbenchPresentation(facts);
   const row = presentation.performance['item-performance'].month.find((row) => row[0] === '小水饺');
   assert.equal(row[5], '+0.00天');
   const detail = model.workbenchMetricDetail(facts, '周转天数');
-  assert.match(detail, /本月.*10.0天/);
-  assert.match(detail, /上月同期.*2\.4天/);
+  assert.match(detail, /本月.*15.0天/);
+  assert.match(detail, /上月同期.*不能作为完整合计/);
   const absent = { ...previous, sections: [] };
   absent.metrics = model.computeWorkbenchMetrics(absent);
   facts.periods.yearMonth = absent;
   assert.match(model.workbenchMetricDetail(facts, '订单满足率'), /去年同月同期.*该周期无来源数据/);
 });
 
-test('null numeric values and invalid source flags follow APS zero policy without filling absent snapshots', () => {
+test('missing inputs remain unknown instead of following APS zero policy', () => {
   const period = fixturePeriod();
   const stock = period.sections.find((section) => section.id === 'stock').rows[0];
   stock.sales_plan = null;
@@ -492,13 +530,59 @@ test('null numeric values and invalid source flags follow APS zero policy withou
   orders.shortage = null;
   orders.invalid = 1;
   const result = model.computeWorkbenchMetrics(period);
-  assert.equal(result['周转天数'].value, 20);
-  assert.equal(model.stockDaily({ ...stock, daily_demand: 12 }), 12);
-  assert.equal(model.stockDaily({ ...stock, daily_demand: null }), 0);
-  assert.equal(result['订单满足率'].value, 100);
+  assert.equal(result['周转天数'].value, null);
+  assert.equal(model.stockDaily({ ...stock, daily_demand: 12 }), null);
+  assert.equal(model.stockDaily({ ...stock, daily_demand: null }), null);
+  assert.equal(result['订单满足率'].value, null);
   period.sections.find((section) => section.id === 'ages').rows = [];
   period.sections.find((section) => section.id === 'stock').rows = [];
   const historical = model.computeWorkbenchMetrics(period);
   assert.equal(historical['货龄（>60天库存占比）'].value, null);
   assert.equal(historical['周转天数'].value, null);
+});
+
+test('one arrival order with many SKUs counts once; incomplete orders never become a sample rate', () => {
+  const p = fixturePeriod(),
+    part = p.sections.find((s) => s.id === 'ontime');
+  part.rows.push({ ...part.rows[9], sku: 'another-sku' });
+  assert.equal(model.computeWorkbenchMetrics(p)['准交率'].value, 90);
+  part.rows[0].ontime = null;
+  part.rows[0].invalid = 1;
+  const missing = model.computeWorkbenchMetrics(p)['准交率'];
+  assert.equal(missing.value, null);
+  assert.match(missing.missingReason, /不能以已有判定样本代替/);
+});
+
+test('base and item turnover use different transfer weights; missing transfer does not become zero', () => {
+  const p = fixturePeriod();
+  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, 15);
+  assert.equal(
+    model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'item' })['周转天数'].value,
+    30,
+  );
+  const stock = p.sections.find((s) => s.id === 'stock').rows[0];
+  stock.transfer_plan = null;
+  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, null);
+  assert.equal(
+    model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'item' })['周转天数'].value,
+    30,
+  );
+});
+
+test('missing cancellation timestamp and shipment-date association explain unavailable metrics', () => {
+  const p = fixturePeriod();
+  Object.assign(p.sections.find((s) => s.id === 'changes').rows[0], {
+    invalid: 2,
+    numerator: null,
+    denominator: null,
+  });
+  Object.assign(p.sections.find((s) => s.id === 'orders').rows[0], {
+    missing_ship_date: 1,
+    invalid: 1,
+  });
+  const m = model.computeWorkbenchMetrics(p);
+  assert.equal(m['作废率'].value, null);
+  assert.match(m['作废率'].missingReason, /canceltime/);
+  assert.equal(m['订单满足率'].value, null);
+  assert.match(m['订单满足率'].missingReason, /发货日期/);
 });

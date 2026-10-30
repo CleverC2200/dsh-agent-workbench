@@ -77,6 +77,7 @@ test('annual SQL counts equal quantities once per full grain and retains conflic
     row('休闲', 'A', 100),
     row('休闲', 'A', 100, '全国', '2026-10-27'),
     row('休闲', 'B', 100),
+    row('休闲', '', 200),
     row('休闲', 'A', 100, '华东'),
     row('饼类', 'C', 100),
     row('饼类', 'C', 120),

@@ -19,6 +19,20 @@ createRoot(root).render(
 
 window.addEventListener('message', (event) => {
   if (
+    event.source === window.parent &&
+    event.origin === window.location.origin &&
+    event.data?.protocol === 'gea-toolbar-layout'
+  ) {
+    document.documentElement.toggleAttribute(
+      'data-shared-workbench-toolbar',
+      event.data.shared === true,
+    );
+  }
+});
+window.parent.postMessage({ protocol: 'gea-toolbar-layout-ready' }, window.location.origin);
+
+window.addEventListener('message', (event) => {
+  if (
     event.source !== window.parent ||
     event.origin !== window.location.origin ||
     event.data?.protocol !== 'agent-workbench-theme'

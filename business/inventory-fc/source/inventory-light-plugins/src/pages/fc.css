@@ -1426,7 +1426,6 @@ button {
   cursor: pointer;
 }
 button:focus-visible,
-input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgba(224, 45, 45, 0.16);
@@ -4827,4 +4826,26 @@ body,
   .agent-root .workspace > .kpi-grid.fc-compact-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Text fields use the shared focus border and shadow without a second outline. */
+input:focus-visible,
+.dsh-modal-content div input:focus-visible {
+  outline: none;
+  border-color: var(--ui-accent);
+  box-shadow: var(--ui-focus);
+}
+
+.warehouse-switch:has(> .warehouse-select-trigger) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fc-dashboard-insight p {
+  min-height: 5.25em;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
 }
