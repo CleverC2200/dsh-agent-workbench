@@ -5,8 +5,60 @@ import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
-const plan = 'agents_sales_plan_demand_m.';
+const plan = '';
 const shipment = 'agents_scm_cust_deliv_daily_di.';
+
+test('reported plan details include matched product dimensions, region and explicit unmatched reasons', async (t) => {
+  const records = [
+    {
+      region_name: '直营渠道销售',
+      belong_base: '华东',
+      material_code: '10000008',
+      material_name: '小小汤圆',
+      sub_category: '汤圆',
+      series: '3.9g汤圆',
+      product_item: '102018',
+      product_item_name: '小小汤圆组',
+      plannum_total: 450,
+      allnum_total: 450,
+      region_matches: 1,
+      product_matches: 1,
+    },
+    {
+      region_name: null,
+      belong_base: '华东',
+      material_code: 'UNMATCHED',
+      plannum_total: 0,
+      allnum_total: 1,
+      region_matches: 0,
+      product_matches: 0,
+    },
+  ];
+  const { page, frame } = await mpsPage(t, config, (query) =>
+    fixture(query, query.queryId.startsWith('facts.report') ? records : undefined),
+  );
+  const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
+  await report.getByRole('button', { name: '预览当前明细', exact: true }).click();
+  const preview = frame.getByRole('dialog');
+  await expect(preview.getByRole('columnheader', { name: '大区', exact: true })).toBeVisible();
+  await expect(
+    preview.getByRole('columnheader', { name: '物料组名称', exact: true }),
+  ).toBeVisible();
+  const matched = preview.getByRole('row').filter({ hasText: '10000008' });
+  await expect(matched).toContainText('直营渠道销售');
+  await expect(matched).toContainText('小小汤圆组');
+  await expect(matched).toContainText('3.9g汤圆');
+  const missing = preview.getByRole('row').filter({ hasText: 'UNMATCHED' });
+  await expect(missing).toContainText('客户与物料未匹配大区关系');
+  await expect(missing).toContainText('产品编码未匹配产品清单');
+  const pending = page.waitForEvent('download');
+  await preview.getByRole('button', { name: '下载明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  assert.match(csv, /月份,大区,基地,产品编码,产品名称,大类,系列,物料组,物料组名称/);
+  assert.match(csv, /直营渠道销售,华东,10000008,小小汤圆,汤圆,3.9g汤圆,102018,小小汤圆组/);
+});
+
 function fixture({ queryId, parameters }, records) {
   if (!queryId.startsWith('facts.'))
     return {
@@ -14,11 +66,11 @@ function fixture({ queryId, parameters }, records) {
       returnedColumns: config.queries[queryId].columns,
       configVersion: 'v1',
     };
-  const report = queryId === 'facts.report';
+  const report = queryId.startsWith('facts.report');
   const prefix = report ? plan : shipment;
-  const rows = records ?? [
+  const supplied = records ?? [
     Object.fromEntries(
-      config.queries[queryId].columns.map((field) => [
+      config.queries[report ? 'facts.report' : queryId].columns.map((field) => [
         field,
         field === prefix + 'belong_base'
           ? '基地甲'
@@ -38,9 +90,17 @@ function fixture({ queryId, parameters }, records) {
       ]),
     ),
   ];
+  const rows = supplied.map((row) => ({
+    ...Object.fromEntries(
+      config.queries[report ? 'facts.report' : queryId].columns.map((field) => [field, null]),
+    ),
+    ...row,
+  }));
   return {
-    rows: rows.slice(parameters.offset, parameters.offset + parameters.page_size),
-    returnedColumns: config.queries[queryId].columns,
+    rows: queryId.endsWith('.count')
+      ? [{ total: rows.length }]
+      : rows.slice(parameters.offset, parameters.offset + parameters.page_size),
+    returnedColumns: queryId.endsWith('.count') ? ['total'] : config.queries[queryId].columns,
     rejectedColumns: [],
     configVersion: 'v1',
     totalRowCount: rows.length,
@@ -102,7 +162,7 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   }));
   const { frame, calls } = await mpsPage(t, config, (query) => {
     if (query.queryId === 'facts.history') throw Error('AGENT_ACCESS_DENIED');
-    return fixture(query, query.queryId === 'facts.report' ? records : undefined);
+    return fixture(query, query.queryId.startsWith('facts.report') ? records : undefined);
   });
   const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
   await expect(report.getByText('业务来源', { exact: true })).toBeVisible();
@@ -145,14 +205,13 @@ test('truncated facts are rejected and a late historical period cannot overwrite
   });
   let historyCalls = 0;
   const { frame } = await mpsPage(t, config, async (query) => {
-    if (query.queryId === 'facts.report')
-      return { ...fixture(query), totalRowCount: 2, hasMorePages: false };
+    if (query.queryId === 'facts.report.count') return { ...fixture(query), rows: [{ total: 2 }] };
     if (query.queryId === 'facts.history' && ++historyCalls === 1) await pending;
     return fixture(query);
   });
   await expect(
     frame.getByRole('region', { name: '计划提报数据' }).getByRole('alert'),
-  ).toContainText('未采用不完整结果');
+  ).toContainText('分页与计数不一致');
   const history = frame.getByRole('region', { name: '历史同期发货' });
   await expect.poll(() => historyCalls).toBe(1);
   await history.getByLabel('历史同期').selectOption('2');

@@ -561,6 +561,22 @@
 .dc-dialog table {
   min-width: 700px;
 }
+.dc-source-detail .dc-table-scroll {
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+}
+.dc-source-detail thead {
+  position: sticky;
+  top: 0;
+}
+.dc-dialog.dc-source-detail table {
+  width: max-content;
+  min-width: 100%;
+}
+.dc-source-detail th,
+.dc-source-detail td {
+  white-space: nowrap;
+}
 @media (max-width: 720px) {
   .ap-app:is([data-step='check'], [data-step='ship']) .ap-board-head {
     padding-left: 16px;

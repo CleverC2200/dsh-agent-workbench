@@ -373,79 +373,51 @@
     },
     "facts.report": {
       "title": "report",
-      "grain": [
-        "agents_sales_plan_demand_m.belong_base",
-        "agents_sales_plan_demand_m.material_code"
-      ],
+      "grain": ["region_name", "belong_base", "material_code"],
       "columns": [
-        "agents_sales_plan_demand_m.belong_base",
-        "agents_sales_plan_demand_m.material_code",
-        "agents_sales_plan_demand_m.plannum_total",
-        "agents_sales_plan_demand_m.allnum_total"
+        "region_name",
+        "belong_base",
+        "material_code",
+        "material_name",
+        "sub_category",
+        "series",
+        "product_item",
+        "product_item_name",
+        "plannum_total",
+        "allnum_total",
+        "region_matches",
+        "product_matches"
       ],
       "parameterSpec": {
         "month": {
           "name": "month",
           "type": "string",
+          "required": true,
           "nullable": false,
           "format": "YYYY-MM-01"
         },
-        "page_size": {
+        "gea_p98": {
           "name": "page_size",
           "type": "integer",
+          "required": true,
           "nullable": false,
           "minimum": 1,
           "maximum": 200
         },
-        "offset": {
+        "gea_p99": {
           "name": "offset",
           "type": "integer",
+          "required": true,
           "nullable": false,
           "minimum": 0,
           "maximum": 100000
         }
       },
       "request": {
-        "cube": {
-          "measures": [
-            "agents_sales_plan_demand_m.plannum_total",
-            "agents_sales_plan_demand_m.allnum_total"
-          ],
-          "dimensions": [
-            "agents_sales_plan_demand_m.belong_base",
-            "agents_sales_plan_demand_m.material_code"
-          ],
-          "timeDimensions": [
-            {
-              "dimension": "agents_sales_plan_demand_m.stat_month",
-              "dateRange": {
-                "$monthRange": "month"
-              }
-            }
-          ],
-          "timezone": "UTC",
-          "order": [
-            ["agents_sales_plan_demand_m.belong_base", "asc"],
-            ["agents_sales_plan_demand_m.material_code", "asc"]
-          ],
-          "limit": {
-            "$parameter": "page_size"
-          },
-          "offset": {
-            "$parameter": "offset"
-          },
-          "filters": [
-            {
-              "member": "agents_sales_plan_demand_m.cust_code",
-              "operator": "set"
-            },
-            {
-              "member": "agents_sales_plan_demand_m.cust_code",
-              "operator": "notEquals",
-              "values": [""]
-            }
-          ]
-        }
+        "sql": "SELECT r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name, SUM(p.plannum) AS plannum_total, SUM(p.allnum) AS allnum_total, MIN(COALESCE(r.source_rows, 0)) AS region_matches, MAX(COALESCE(m.source_rows, 0)) AS product_matches FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name, COUNT(*) AS source_rows FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code LEFT JOIN (SELECT material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(sub_category), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(sub_category), '')) = 1 THEN MAX(sub_category) ELSE NULL END AS sub_category, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(NULLIF(TRIM(product_item_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item_name), '')) = 1 THEN MAX(product_item_name) ELSE NULL END AS product_item_name, COUNT(*) AS source_rows FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND material_code <> '' GROUP BY material_code) m ON p.material_code = m.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name ORDER BY CASE WHEN r.region_name IS NULL THEN 1 ELSE 0 END, r.region_name, p.belong_base, p.material_code LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "facts.report.count"
       }
     },
     "facts.history": {
@@ -834,6 +806,22 @@
       },
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND belong_base = :gea_p2 GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_rows"
+      }
+    },
+    "facts.report.count": {
+      "title": "计划提报维度明细计数",
+      "columns": ["total"],
+      "parameterSpec": {
+        "month": {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "nullable": false,
+          "format": "YYYY-MM-01"
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT r.region_name, p.belong_base, p.material_code FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name, COUNT(*) AS source_rows FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code) report_rows"
       }
     }
   }

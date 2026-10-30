@@ -34,13 +34,13 @@ const products = [
 function fixture({ queryId, parameters }) {
   let rows = [];
   if (queryId.startsWith('products.')) rows = products;
-  if (queryId === 'facts.report')
+  if (queryId.startsWith('facts.report'))
     rows = ['A', 'B'].map((code, index) =>
-      record(queryId, {
-        'agents_sales_plan_demand_m.belong_base': '郑州',
-        'agents_sales_plan_demand_m.material_code': code,
-        'agents_sales_plan_demand_m.plannum_total': index ? 30 : 10,
-        'agents_sales_plan_demand_m.allnum_total': index ? 60 : 20,
+      record('facts.report', {
+        belong_base: '郑州',
+        material_code: code,
+        plannum_total: index ? 30 : 10,
+        allnum_total: index ? 60 : 20,
       }),
     );
   if (queryId === 'facts.history')
