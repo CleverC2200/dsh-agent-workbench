@@ -410,7 +410,7 @@ export function CategoryHierarchy({ date, channel }: { date: string; channel: bo
           />
         ))}
       {!layers.some((layer) => catalog[layer]) && layers.some((layer) => pending[layer]) ? (
-        <DashboardTableSkeleton label="品类结构加载中" />
+        <DashboardTableSkeleton label="品类结构加载中" embedded />
       ) : (
         <>
           <Table channel={channel}>

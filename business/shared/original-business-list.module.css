@@ -372,3 +372,10 @@
     flex: 1 1 180px;
   }
 }
+
+.list :global(.fc-reason-input):focus-visible,
+.list :global(.fc-quantity-input):focus-visible {
+  outline: none;
+  border-color: #e59ca8;
+  box-shadow: 0 0 0 3px #df17321a;
+}
