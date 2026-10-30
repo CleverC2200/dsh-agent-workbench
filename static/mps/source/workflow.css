@@ -104,3 +104,36 @@
     gap: 4px;
   }
 }
+.wf-note {
+  margin: 0;
+  padding: 12px 18px;
+  color: var(--dc-muted);
+  line-height: 1.6;
+  white-space: normal;
+}
+.wf-share-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+  white-space: normal;
+}
+.wf-share-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 6px;
+}
+.wf-share-editor label {
+  min-width: 110px;
+  flex: 1 1 110px;
+}
+.wf-page td input {
+  min-width: 110px;
+}
+.wf-page button:focus-visible,
+.wf-page input:focus-visible,
+.wf-page select:focus-visible {
+  outline: 2px solid var(--dc-accent, #b62036);
+  outline-offset: 2px;
+}
