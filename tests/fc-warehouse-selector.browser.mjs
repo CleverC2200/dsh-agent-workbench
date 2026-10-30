@@ -194,7 +194,9 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
-    .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))
+    .poll(() =>
+      calls.some((c) => c.id === 'branch-supply.summary' && c.values.warehouse_code === 'A170'),
+    )
     .toBe(true);
   await expect
     .poll(() =>

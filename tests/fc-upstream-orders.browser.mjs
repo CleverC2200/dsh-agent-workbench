@@ -171,6 +171,6 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
   await expect(cards.filter({ hasText: '当前订单' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
-  assert.equal(calls.filter((c) => c.id === 'branch-supply.summary').length, 2);
+  assert.equal(calls.filter((c) => c.id === 'branch-supply.summary').length, 1);
   assert.equal(calls.filter((c) => c.id === 'replenishment.summary').length, 1);
 });
