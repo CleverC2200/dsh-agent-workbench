@@ -5,6 +5,10 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { validHtmlViewState } from '../src/html-view-state.ts';
 import { model, fixturePeriod } from './orderworkbench-data.test.mjs';
+import {
+  shippableDaysTarget,
+  performanceStyleVersion,
+} from '../prototypes/inventory-orderworkbench/performance-rules.mjs';
 
 test('order workbench reference interactions', async () => {
   const dom = new JSDOM(readFileSync('prototypes/inventory-orderworkbench/index.html', 'utf8'), {
@@ -47,6 +51,8 @@ test('order workbench reference interactions', async () => {
   window.workbenchEvidence = model.workbenchEvidence;
   window.workbenchMetricDetail = model.workbenchMetricDetail;
   window.workbenchCellMissingReason = model.workbenchCellMissingReason;
+  window.shippableDaysTarget = shippableDaysTarget;
+  window.performanceStyleVersion = performanceStyleVersion;
   window.Date = class extends Date {
     constructor(...args) {
       super(...(args.length ? args : ['2026-09-18T00:00:00Z']));
