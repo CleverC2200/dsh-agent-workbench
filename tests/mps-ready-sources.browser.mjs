@@ -458,6 +458,7 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
     .getByRole('region', { name: '逐月测算', exact: true })
     .locator('tbody tr')
     .first();
+  await expect(calculation.locator('td').nth(2)).toHaveText('125.00%');
   await expect(calculation.locator('td').nth(3)).toHaveText('156.25%');
   await expect(calculation.locator('td').nth(4)).toHaveText('63');
   await expect(calculation.locator('td').nth(5)).toHaveText('10.00%');

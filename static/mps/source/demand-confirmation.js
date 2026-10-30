@@ -322,6 +322,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                         Number.isFinite(Number(row[column]))
                       ? integer(row[column])
                       : [
+                            '历史平均环比',
                             '环比链',
                             '同期平均占比',
                             '三年月占比',
