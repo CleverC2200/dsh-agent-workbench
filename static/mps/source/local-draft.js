@@ -128,7 +128,7 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         action: undo ? 'undo' : 'set',
         systemValue: entry.systemValue ?? null,
         value: undo ? (entry.systemValue ?? null) : value,
-        reason: undo ? `撤销：${entry.reason}` : entry.reason,
+        reason: entry.reason,
         at: new Date().toISOString(),
       },
     ],

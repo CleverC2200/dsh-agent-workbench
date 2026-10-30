@@ -210,7 +210,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
             draft.adjustments.history
               .filter((entry) => entry.kind === 'categoryDemand')
               .map((entry) => ({
-                对象: JSON.parse(entry.key).join(' · '),
+                对象: entry.key,
                 操作: entry.action === 'undo' ? '撤销' : '调整',
                 系统值: entry.systemValue ?? '',
                 有效值: entry.value ?? '',

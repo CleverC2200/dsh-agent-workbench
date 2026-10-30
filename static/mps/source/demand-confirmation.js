@@ -1136,18 +1136,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setReference('');
         setVersionName('');
       };
+      const restore = (snapshot) => {
+        clearFiles();
+        const restored = decodeLocalDrafts(snapshot.localDrafts, makeDraft, initialDrafts);
+        localRef.current = restored;
+        setLocalState(restored);
+        setScopeGeneration((value) => value + 1);
+      };
       const stop = view.subscribe((snapshot, event) => {
         if (event === 'released') reset();
         else if (event === 'rejected')
           setRetentionError('工作台未能保存本地草稿，请导出核对底稿后再离开页面。');
-        else {
-          clearFiles();
-          const restored = decodeLocalDrafts(snapshot.localDrafts, makeDraft, initialDrafts);
-          localRef.current = restored;
-          setLocalState(restored);
-          setScopeGeneration((value) => value + 1);
-        }
+        else restore(snapshot);
       });
+      if (view.get().localDrafts) restore(view.get());
       const reconnect = () => setScopeGeneration((value) => value + 1);
       window.addEventListener('gea-session-changing', reset);
       window.addEventListener('gea-session-changed', reconnect);
