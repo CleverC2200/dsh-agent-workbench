@@ -253,3 +253,6 @@ body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span, small) {
 .dealer-table-card .metric-cell { justify-content: center; }
 .customer-assessment-note { display: block; white-space: normal; color: #86909c; font-size: 12px; line-height: 1.5; }
 .customer-observation-notice { margin-top: 8px; padding: 0 2px; color: #86909c; font-size: 12px; line-height: 20px; }
+
+.customer-sku-cell { white-space: normal; overflow-wrap: anywhere; }
+.customer-sku-cell small { display: block; margin-top: 4px; color: var(--workbench-muted); font-size: 12px; }

@@ -1,5 +1,7 @@
 # 客户库存新版指标 / Customer inventory metrics
 
+客户列表的「SKU库存」页签复用经销商库存 `sku-stock` 的明细查询和展示列，通过当前客户库存 Consumer 执行。明细范围跟随上方角色、组织、状态、区域和经销商筛选，按该范围查询全部客户SKU并十行分页；不再设置独立筛选栏、下载按钮或口径说明区。该明细为截至计划快照日最近的客户日库存，与顶部计划库存指标分别注明日期和来源。商品资料关联包含 `agents_dim_material_prod_sales_info_d`；真实环境仍须由资源声明所有者及 GEA 核对 `customer_inventory` 对相关表/字段的只读授权，本次页面实现不授予权限。读取失败、缺失与负数沿用经销商库存的合同，不补零。
+
 Source: [客户库存知识库](https://klvcodtump.feishu.cn/docx/Alj7d3XXjow3GrxGOsEcXijJnBb), revision 431, read 2026-10-20.
 
 页面布局保持不变；最新快照先按客户与SKU合并，再在受控SQL中计算占比差与缺货项，最后按客户发布。SQL只读，身份、字段与行授权仍由GEA执行。

@@ -4,6 +4,84 @@ import { DatabaseSync } from 'node:sqlite';
 import { addWorkbenchSummaryQueries } from '../business/inventory-orderworkbench/summary-queries.mjs';
 import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 import { model } from './orderworkbench-data.test.mjs';
+
+test('SQL summary keeps independent nationwide contributions from stock-only and plan-only SKUs', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    const config = { queries: {} };
+    for (const name of ['orders', 'stock', 'ages', 'directors', 'items']) {
+      const columns = workbenchQueries[name].columns;
+      db.exec(
+        'CREATE TABLE independent_' +
+          name +
+          ' (' +
+          columns.map((column) => '"' + column + '"').join(',') +
+          ')',
+      );
+      config.queries['workbench.' + name] = {
+        request: {
+          sql:
+            'SELECT ' + columns.join(',') + ' FROM independent_' + name + ' ORDER BY ' + columns[0],
+        },
+        resultColumns: columns,
+        parameterSpec: {},
+      };
+    }
+    const rows = [
+      {
+        sku: 'stock-only',
+        national_inventory: 100,
+        national_stock_records: 1,
+        national_plan_records: 0,
+        inventory: 100,
+        invalid: 1,
+      },
+      {
+        sku: 'plan-only',
+        national_sales_plan: 310,
+        national_stock_records: 0,
+        national_plan_records: 1,
+        sales_plan: 310,
+        source_rows: 1,
+        invalid: 1,
+      },
+      {
+        sku: 'both',
+        national_inventory: 50,
+        national_sales_plan: 310,
+        national_stock_records: 1,
+        national_plan_records: 1,
+        inventory: 50,
+        sales_plan: 310,
+        source_rows: 1,
+        invalid: 0,
+      },
+    ].map((row) => ({
+      base: '郑州',
+      category: '食品',
+      item: '水饺',
+      stock_date: '2026-10-25',
+      national_stock_invalid: 0,
+      national_plan_invalid: 0,
+      ...row,
+    }));
+    const columns = workbenchQueries.stock.columns;
+    const insert = db.prepare(
+      'INSERT INTO independent_stock VALUES (' + columns.map(() => '?').join(',') + ')',
+    );
+    for (const row of rows) insert.run(...columns.map((column) => row[column] ?? null));
+    addWorkbenchSummaryQueries(config);
+    const summary = db
+      .prepare(config.queries['workbench.stock.summary'].request.sql)
+      .all({ gea_p1001: 200, gea_p1002: 0 });
+    assert.equal(summary.length, 1);
+    assert.equal(summary[0].inventory, null, 'paired detail totals remain incomplete');
+    assert.equal(model.nationalStockDays(summary), 7.5);
+    assert.equal(model.nationalStockDays(summary), model.nationalStockDays(rows));
+  } finally {
+    db.close();
+  }
+});
 test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visible dimension', () => {
   const db = new DatabaseSync(':memory:');
   try {
@@ -148,6 +226,15 @@ test('SQL summaries preserve NULL, zero, duplicate-stock guards and every visibl
       directors: owners,
       items: owners.map((row) => ({ sku: row.sku, item: row.item, names: row.items })),
     };
+    for (const row of source.stock)
+      Object.assign(row, {
+        national_inventory: row.inventory,
+        national_sales_plan: row.sales_plan,
+        national_stock_records: 1,
+        national_plan_records: 1,
+        national_stock_invalid: row.inventory === null ? 1 : 0,
+        national_plan_invalid: row.sales_plan === null || row.source_rows !== 1 ? 1 : 0,
+      });
     const config = { queries: {} };
     for (const [name, rows] of Object.entries(source)) {
       const columns = workbenchQueries[name].columns;
