@@ -27,6 +27,35 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
       setEditing(null);
       setError('');
     }, [draft.id, draft.month]);
+    const undo = (row) => {
+      const candidate = buildCategoryDemand(
+        {
+          ...draft,
+          adjustments: {
+            ...draft.adjustments,
+            categoryDemand: (draft.adjustments?.categoryDemand ?? []).filter(
+              (entry) => entry.month !== row.month || entry.category !== row.category,
+            ),
+          },
+        },
+        categories,
+      );
+      update({
+        adjustments: changeAdjustment(
+          draft.adjustments,
+          'categoryDemand',
+          {
+            month: row.month,
+            category: row.category,
+            effectiveValue:
+              candidate.rows.find(
+                (entry) => entry.month === row.month && entry.category === row.category,
+              )?.quantity ?? null,
+          },
+          true,
+        ),
+      });
+    };
     const rows = result.rows.map((row, index) => {
       const edit = draft.adjustments?.categoryDemand?.find(
         (entry) => entry.month === row.month && entry.category === row.category,
@@ -64,15 +93,7 @@ export function createCategoryDemand(react, { table, downloadCsv, categories, us
             h(
               'button',
               {
-                onClick: () =>
-                  update({
-                    adjustments: changeAdjustment(
-                      draft.adjustments,
-                      'categoryDemand',
-                      { month: row.month, category: row.category },
-                      true,
-                    ),
-                  }),
+                onClick: () => undo(row),
                 'aria-label': `撤销 ${row.category} ${row.month}`,
               },
               '撤销',

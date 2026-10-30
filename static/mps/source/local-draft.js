@@ -72,6 +72,22 @@ export function encodeLocalDrafts(drafts, selected) {
         ? {
             shipment: {
               ...fields(draft.shipment, ['cutoff', 'activeSource', 'values', 'remaining']),
+              ...(draft.shipment.sourceEdits
+                ? {
+                    sourceEdits: Object.fromEntries(
+                      ['local-file', 'business'].flatMap((source) =>
+                        draft.shipment.sourceEdits[source]
+                          ? [
+                              [
+                                source,
+                                fields(draft.shipment.sourceEdits[source], ['values', 'remaining']),
+                              ],
+                            ]
+                          : [],
+                      ),
+                    ),
+                  }
+                : {}),
               ...(draft.shipment.rows ? fields(draft.shipment, ['rows', 'file']) : {}),
             },
           }
@@ -127,7 +143,7 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         key,
         action: undo ? 'undo' : 'set',
         systemValue: entry.systemValue ?? null,
-        value: undo ? (entry.systemValue ?? null) : value,
+        value: undo ? (input.effectiveValue ?? null) : value,
         reason: entry.reason,
         at: new Date().toISOString(),
       },

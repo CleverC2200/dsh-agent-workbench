@@ -448,3 +448,138 @@ test('MPS share undo preserves group balance and stale overrides remain removabl
   await view.getByRole('button', { name: '撤销当前占比调整 郑州 A 2026-12', exact: true }).click();
   await expect(active).toContainText('暂无记录');
 });
+
+test('MPS accepted share undo audits its recomputed effective value separately from the captured system value', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,\n华东,A,产品甲,汤圆,系列,组,,\n郑州,B,产品乙,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,30,30\n2026-12,华东,A,产品甲,汤圆,系列,组,30,30\n2026-12,郑州,B,产品乙,汤圆,系列,组,40,40',
+  );
+  await upload(
+    frame,
+    '选择历史发货CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,30\n2025-12,华东,A,产品甲,汤圆,系列,组,30\n2025-12,郑州,B,产品乙,汤圆,系列,组,40',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  for (const [code, share] of [
+    ['B', '0.2'],
+    ['A', '0.3'],
+  ]) {
+    await view.getByRole('button', { name: `郑州 ${code} 2026-12 调整占比`, exact: true }).click();
+    await view.getByLabel(`郑州 ${code} 2026-12 最终占比`, { exact: true }).fill(share);
+    await view.getByLabel(`郑州 ${code} 2026-12 调整原因`, { exact: true }).fill('已确认组内调整');
+    await view.getByRole('button', { name: '应用占比', exact: true }).click();
+  }
+  await expect(
+    view.getByRole('button', { name: '华东 A 2026-12 有效占比 计算过程', exact: true }),
+  ).toHaveText('50.00%');
+  await view.getByRole('button', { name: '郑州 A 2026-12 撤销占比调整', exact: true }).click();
+  await expect(
+    view.getByRole('button', { name: '郑州 A 2026-12 有效占比 计算过程', exact: true }),
+  ).toHaveText('40.00%');
+  const undo = view
+    .getByRole('table', { name: '占比调整记录', exact: true })
+    .locator('tbody tr')
+    .last();
+  await expect(undo.locator('td').nth(1)).toHaveText('撤销');
+  await expect(undo.locator('td').nth(2)).toHaveText('0.3');
+  await expect(undo.locator('td').nth(3)).toHaveText('0.4');
+  await page.locator('iframe').evaluate((element) => (element.src = element.src));
+  await expect(undo.locator('td').nth(3)).toHaveText('0.4');
+  const entry = await page.evaluate(() => {
+    const state = window.readView().localDrafts;
+    return state.drafts.find((draft) => draft.id === state.selected).adjustments.history.at(-1);
+  });
+  assert.equal(entry.systemValue, 0.3);
+  assert.equal(entry.value, 0.4);
+});
+
+test('MPS category undo audits the current inherited quantity after an upstream adjustment changes', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('annual-pool.')) return emptySource(query);
+    return {
+      rows: query.queryId.endsWith('.count')
+        ? [{ total: 2 }]
+        : [
+            {
+              belong_base: '全国',
+              sub_category: '汤圆',
+              stat_month: '2026-11',
+              source_rows: 1,
+              missing_qty: 0,
+              duplicate_rows: 0,
+              demand_qty: 100,
+              update_time: null,
+            },
+            {
+              belong_base: '全国',
+              sub_category: '汤圆',
+              stat_month: '2026-12',
+              source_rows: 1,
+              missing_qty: 0,
+              duplicate_rows: 0,
+              demand_qty: 150,
+              update_time: null,
+            },
+          ],
+      returnedColumns: query.queryId.endsWith('.count')
+        ? ['total']
+        : config.queries[query.queryId].columns,
+      rejectedColumns: [],
+      configVersion: 'audit-fixture-v1',
+    };
+  });
+  await version(frame, '2026-10');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+  );
+  await frame.getByRole('button', { name: '读取三年同比源值', exact: true }).click();
+  await expect(frame.getByRole('button', { name: '读取三年同比源值', exact: true })).toBeEnabled();
+  const adjust = async (month, quantity) => {
+    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
+    const form = frame.getByRole('group', { name: '大类需求调整' });
+    await form.getByLabel('调整需求数量').fill(quantity);
+    await form.getByLabel('调整原因').fill('已确认月需求');
+    await form.getByRole('button', { name: '应用大类调整', exact: true }).click();
+  };
+  await adjust('2026-11', '200');
+  await adjust('2026-12', '350');
+  await adjust('2026-11', '400');
+  await frame.getByRole('button', { name: '撤销 汤圆 2026-12', exact: true }).click();
+  const row = frame
+    .getByRole('region', { name: '逐月测算', exact: true })
+    .getByRole('row')
+    .filter({ hasText: '2026-12（M+3）' })
+    .filter({ hasText: '汤圆' });
+  await expect(row.locator('td').nth(9)).toHaveText('600');
+  const audit = frame
+    .getByRole('region', { name: '大类调整记录', exact: true })
+    .locator('tbody tr')
+    .last();
+  await expect(audit.locator('td').nth(3)).toHaveText('600');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const state = window.readView().localDrafts;
+        return state.drafts.find((draft) => draft.id === state.selected).adjustments.history.at(-1)
+          .value;
+      }),
+    )
+    .toBe(600);
+  const entry = await page.evaluate(() => {
+    const state = window.readView().localDrafts;
+    return state.drafts.find((draft) => draft.id === state.selected).adjustments.history.at(-1);
+  });
+  assert.equal(entry.systemValue, null);
+  assert.equal(entry.value, 600);
+});

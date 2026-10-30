@@ -108,7 +108,10 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft, []).rows).map((row) => ({
       month: text(row.month),
       category: text(row.category),
-      quantity: number(Object.hasOwn(row, 'systemQuantity') ? row.systemQuantity : row.quantity),
+      quantity: number(row.quantity),
+      ...(Object.hasOwn(row, 'systemQuantity')
+        ? { systemQuantity: number(row.systemQuantity) }
+        : {}),
     })),
     report,
     history,

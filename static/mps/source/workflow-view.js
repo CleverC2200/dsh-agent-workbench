@@ -528,7 +528,10 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         setShareError(`此次撤销会破坏组内占比对平，请先撤销关联调整。${introduced.join('；')}`);
         return;
       }
-      onUndoShareAdjustment?.({ rowId });
+      onUndoShareAdjustment?.({
+        rowId,
+        effectiveValue: candidate.rows.find((row) => row.id === rowId)?.share ?? null,
+      });
       setShareError('');
     };
     const shareIdentity = (rowId) => {
