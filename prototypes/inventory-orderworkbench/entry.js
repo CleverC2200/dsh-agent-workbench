@@ -6,6 +6,7 @@ import { draft, ready, call } from '../../business/shared/channel.js';
 import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
 import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
+import { metricCalculationVersion } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
@@ -2359,8 +2360,8 @@ async function readCurrentPeriod() {
     } catch (error) { controller.signal.throwIfAborted(); }
 
     controller.signal.throwIfAborted();
-    if(saved?.facts?.complete && saved.facts.attributionVersion === 2) entry.apply(saved.facts,saved.presentation);
-    if (saved?.facts?.complete && saved.facts.attributionVersion === 2 && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
+    if(saved?.facts?.complete && saved.facts.attributionVersion === 2 && saved.facts.metricCalculationVersion === metricCalculationVersion) entry.apply(saved.facts,saved.presentation);
+    if (saved?.facts?.complete && saved.facts.attributionVersion === 2 && saved.facts.metricCalculationVersion === metricCalculationVersion && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
       entry.apply(saved.facts, saved.presentation);entry.finished=Date.now();
       return;
     }
@@ -2402,6 +2403,12 @@ function renderWorkbench() {
       return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:liveFacts?.selected??"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
+  document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
+    const metric=topMetricCards[index];
+    if(metric.coverageNote)card.querySelector('strong').title=metric.coverageNote;
+    card.querySelectorAll('.wb-kpi-compare b').forEach((cell,i)=>{if(metric.comparisonNotes?.[i])cell.title=metric.comparisonNotes[i];});
+    if(metric.footerNote)card.querySelector('.wb-kpi-foot').title=metric.footerNote;
+  });
   renderWorkbenchTasks();
   renderWorkbenchDimensions();
   renderWorkbenchReferenceLinks();
@@ -2539,7 +2546,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
           const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
           const unmapped=['未映射','归属待补全'].includes(value);
           const missing=unmapped||(value?.text??value)==='—';
-          const title=missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
+          const title=value?.title?` title="${escapeHtml(value.title)}"`:missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
           if (value && typeof value === 'object' && 'text' in value) {
             const marker =
               value.state && value.state !== 'good'
@@ -2674,7 +2681,7 @@ function renderWorkbenchPerformance(dimension) {
         : dimensionTab === 'director-performance'
           ? renderWorkbenchDirectorNotes()
           : '';
-  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。“—”表示该范围数据不足。共同责任分别展示，不相加。</p>`;
+  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。*表示可判定样本或样本差，覆盖率见悬浮，不代表全量指标。“—”表示无有效计算依据。共同责任分别展示，不相加。</p>`;
 }
 function renderWorkbenchDimensions() {
   const panel = document.getElementById('wbDimensionPanel');
@@ -2719,7 +2726,7 @@ function renderWorkbenchDimensions() {
                 : escapeHtml(
                     workbenchDimensionCellText(dimensionTab, rowIndex, columnIndex, value),
                   );
-          const title=value==='—'?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{header:dimension.columns[columnIndex],row,dimension:dimensionTab,period:liveFacts?.selected??'month'}))}"`:'';
+          const title=value==='—'||(typeof value==='string'&&value.includes('*'))?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{header:dimension.columns[columnIndex],row,dimension:dimensionTab,period:liveFacts?.selected??'month'}))}"`:'';
           return `<td${title} class="${workbenchDimensionCellClass(dimensionTab, rowIndex, columnIndex, value)}">${content}</td>`;
         })
         .join('');

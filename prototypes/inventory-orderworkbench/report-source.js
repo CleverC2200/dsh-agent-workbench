@@ -1,12 +1,19 @@
 import { applyPeriodAttributions } from './period-attributions.mjs';
 import { createAgentQueries } from '../../business/shared/agent-query.ts';
 import { workbenchQueries } from '../../business/inventory-orderworkbench/queries.mjs';
-import { computeWorkbenchMetrics, dayOffset, reportPeriods } from './metric-model.mjs';
+import {
+  computeWorkbenchMetrics, dayOffset, reportPeriods, metricCalculationVersion,
+} from './metric-model.mjs';
 
 const config = ORDER_WORKBENCH_APS_CONFIG;
 const numbers = new Set([
   'demand',
   'shortage',
+  'sample_demand',
+  'sample_shortage',
+  'sample_records',
+  'sample_numerator',
+  'sample_denominator',
   'records',
   'invalid',
   'ontime',
@@ -186,6 +193,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
     ]),
   );
   const snapshot = (complete = false) => ({
+    metricCalculationVersion,
     start,
     end,
     selected,

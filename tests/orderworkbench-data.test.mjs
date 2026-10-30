@@ -355,7 +355,12 @@ test('denied, duplicated, zero denominator and invalid age data remain unknown',
     ['ages', 'invalid', 1, '货龄（>60天库存占比）'],
   ]) {
     const period = fixturePeriod();
-    period.sections.find((section) => section.id === id).rows[0][field] = value;
+    const source = period.sections.find((section) => section.id === id).rows;
+    if (id === 'ontime')
+      source.forEach((row) => {
+        row[field] = value;
+      });
+    else source[0][field] = value;
     assert.equal(model.computeWorkbenchMetrics(period)[name].value, null);
   }
   const period = fixturePeriod();
@@ -541,7 +546,7 @@ test('missing inputs remain unknown instead of following APS zero policy', () =>
   assert.equal(historical['周转天数'].value, null);
 });
 
-test('one arrival order with many SKUs counts once; incomplete orders never become a sample rate', () => {
+test('one arrival order with many SKUs counts once; incomplete orders leave an explicitly labelled sample', () => {
   const p = fixturePeriod(),
     part = p.sections.find((s) => s.id === 'ontime');
   part.rows.push({ ...part.rows[9], sku: 'another-sku' });
@@ -549,8 +554,9 @@ test('one arrival order with many SKUs counts once; incomplete orders never beco
   part.rows[0].ontime = null;
   part.rows[0].invalid = 1;
   const missing = model.computeWorkbenchMetrics(p)['准交率'];
-  assert.equal(missing.value, null);
-  assert.match(missing.missingReason, /不能以已有判定样本代替/);
+  assert.equal(missing.value, (8 / 9) * 100);
+  assert.deepEqual([missing.sample.known, missing.sample.total], [9, 10]);
+  assert.match(missing.coverageNote, /不是全量指标/);
 });
 
 test('base and item turnover use different transfer weights; missing transfer does not become zero', () => {

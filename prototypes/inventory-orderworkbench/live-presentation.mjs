@@ -1,6 +1,8 @@
 import {
   computeWorkbenchMetrics,
   metricDelta,
+  metricComparisonNote,
+  metricCoverageSummary,
   metricNames,
   metricState,
   metricValue,
@@ -14,7 +16,9 @@ import {
 } from './performance-rules.mjs';
 const text = (value, unit = '%', digits = 2) =>
   value === null || value === undefined ? '—' : Number(value).toFixed(digits) + unit;
-const value = (metrics, name) => text(metricValue(metrics, name), name === '周转天数' ? '' : '%');
+const value = (metrics, name) =>
+  text(metricValue(metrics, name), name === '周转天数' ? '' : '%') +
+  (metrics?.[name]?.sample ? '*' : '');
 const rows = (period, id) =>
   period?.sections.find((section) => section.id === id && section.status === 'ready')?.rows ?? [];
 const distinct = (values) =>
@@ -71,15 +75,30 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ...rows(selected, 'orders'),
     ...rows(selected, 'stock'),
     ...rows(selected, 'ages').filter(
-      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) =>
+        Number(row.active_records ?? 0) > 0 ||
+        Number(row.stock_qty) !== 0 ||
+        Number(row.invalid) !== 0,
     ),
   ];
   let groups;
   const directors = (row, key = periods.month ? 'month' : 'week') => {
-    const mapping = (Number(row.summary)===1 || row.periodAttribution===true)?row:directorMap?.get(JSON.stringify([row.base, row.sku]));
-    if (!row.periodAttribution && Number(row.summary)!==1) {
-      const part = periods[key]?.sections.find(section => section.id === 'directors');
-      return directorNames(part ? (part.status==='ready'?part.rows:[]) : ['month','week'].includes(key)?[...directorMap.values()]:[],row);
+    const mapping =
+      Number(row.summary) === 1 || row.periodAttribution === true
+        ? row
+        : directorMap?.get(JSON.stringify([row.base, row.sku]));
+    if (!row.periodAttribution && Number(row.summary) !== 1) {
+      const part = periods[key]?.sections.find((section) => section.id === 'directors');
+      return directorNames(
+        part
+          ? part.status === 'ready'
+            ? part.rows
+            : []
+          : ['month', 'week'].includes(key)
+            ? [...directorMap.values()]
+            : [],
+        row,
+      );
     }
     return mapping?.names === 1 && mapping.director
       ? mapping.director
@@ -133,16 +152,24 @@ function summaryRows(periods, field, directorMap, loading = false) {
       const y = periods[year]
         ? computeWorkbenchMetrics(periods[year], (row) => group.filter(row, year), formulaOptions)
         : {};
-      const cells = (name) => [
-        performanceCurrentCell(
+      const cells = (name) => {
+        const currentCell = performanceCurrentCell(
           name,
           metricValue(m, name),
           value(m, name),
           field === 'director' ? group.labels[1] : field === 'base' ? group.labels[0] : '',
-        ),
-        loading && !periods[previous] ? '加载中' : metricDelta(m, p, name),
-        loading && !periods[year] ? '加载中' : metricDelta(m, y, name),
-      ];
+        );
+        if (m[name]?.sample && currentCell && typeof currentCell === 'object')
+          currentCell.title = metricCoverageSummary(m[name]) + '；不是全量指标。';
+        const delta = (other, otherKey) => {
+          if (loading && !periods[otherKey]) return '加载中';
+          const text = metricDelta(m, other, name);
+          return text !== '—' && (m[name]?.sample || other[name]?.sample)
+            ? { text, title: metricComparisonNote(m, other, name) }
+            : text;
+        };
+        return [currentCell, delta(p, previous), delta(y, year)];
+      };
       if (field === 'item')
         return [
           ...group.labels,
@@ -197,10 +224,22 @@ export function workbenchPresentation(facts, options = {}) {
       metricValue(metrics, name) === null
         ? '—'
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
-    status: metrics[name]?.loading ? '加载中' : metricState(name, metricValue(metrics, name)),
+    status: metrics[name]?.loading
+      ? '加载中'
+      : metrics[name]?.sample
+        ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
+        : metricState(name, metricValue(metrics, name)),
+    coverageNote: metrics[name]?.coverageNote ?? '',
+    comparisonNotes: [
+      metricComparisonNote(periods.month?.metrics, periods.previousMonth?.metrics, name),
+      metricComparisonNote(periods.month?.metrics, periods.yearMonth?.metrics, name),
+      metricComparisonNote(periods.week?.metrics, periods.previousWeek?.metrics, name),
+      metricComparisonNote(periods.week?.metrics, periods.yearWeek?.metrics, name),
+    ],
     formula: metrics[name].note,
     missingReason: metrics[name].missingReason,
-    footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}`,
+    footer: `本周${name === '货龄（>60天库存占比）' ? '货龄占比' : name === '周转天数' ? '可发货天数' : name === '订单满足率' ? '满足率' : name} ${loading && !periods.week ? '加载中' : text(metricValue(periods.week?.metrics, name), name === '周转天数' ? '天' : '%', name === '周转天数' ? 1 : 2)}${periods.week?.metrics[name]?.sample ? '（可判定样本）' : ''}`,
+    footerNote: periods.week?.metrics[name]?.coverageNote ?? '',
     comparison: [
       comparison('month', 'previousMonth', name),
       comparison('month', 'yearMonth', name),
@@ -231,50 +270,65 @@ export function workbenchPresentation(facts, options = {}) {
     ...rows(current, 'orders'),
     ...rows(current, 'stock'),
     ...rows(current, 'ages').filter(
-      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) =>
+        Number(row.active_records ?? 0) > 0 ||
+        Number(row.stock_qty) !== 0 ||
+        Number(row.invalid) !== 0,
     ),
   ];
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
     bases = distinct(all.map((row) => dimensionValue(row.base)));
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
-  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map((category) => {
-    const filter = (row) => dimensionValue(row.category) === category,
-      m = metric(current, filter),
-      p = metric(previous, filter),
-      y = metric(year, filter);
-    return [
-      category,
-      value(m, '订单满足率'),
-      value(p, '订单满足率'),
-      metricDelta(m, p, '订单满足率'),
-      value(y, '订单满足率'),
-      metricDelta(m, y, '订单满足率'),
-      metricState('订单满足率', metricValue(m, '订单满足率')),
-    ];
-  });
-  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map((category) => {
-    const filter = (row) => dimensionValue(row.category) === category,
-      m = metric(current, filter),
-      stock = rows(current, 'stock').filter(filter);
-    const sum = (key) =>
-      stock.length && stock.every((row) => Number(row['missing_'+key]??0)===0 && row[key] !== null && Number.isFinite(Number(row[key])))
-        ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
-        : null;
-    const daily =
-      stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
-        ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
-        : null;
-    const sales = sum('sales_plan');
-    return [
-      category,
-      text(sum('inventory'), '件', 0),
-      text(sales, '件', 0),
-      text(daily, '件/天'),
-      text(metricValue(m, '周转天数'), '天'),
-      '—',
-      metricState('周转天数', metricValue(m, '周转天数')),
-    ];
-  });
+  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
+    (category) => {
+      const filter = (row) => dimensionValue(row.category) === category,
+        m = metric(current, filter),
+        p = metric(previous, filter),
+        y = metric(year, filter);
+      return [
+        category,
+        value(m, '订单满足率'),
+        value(p, '订单满足率'),
+        metricDelta(m, p, '订单满足率'),
+        value(y, '订单满足率'),
+        metricDelta(m, y, '订单满足率'),
+        m['订单满足率']?.sample
+          ? '可判定样本'
+          : metricState('订单满足率', metricValue(m, '订单满足率')),
+      ];
+    },
+  );
+  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map(
+    (category) => {
+      const filter = (row) => dimensionValue(row.category) === category,
+        m = metric(current, filter),
+        stock = rows(current, 'stock').filter(filter);
+      const sum = (key) =>
+        stock.length &&
+        stock.every(
+          (row) =>
+            Number(row['missing_' + key] ?? 0) === 0 &&
+            row[key] !== null &&
+            Number.isFinite(Number(row[key])),
+        )
+          ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
+          : null;
+      const daily =
+        stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
+          ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
+          : null;
+      const sales = sum('sales_plan');
+      return [
+        category,
+        text(sum('inventory'), '件', 0),
+        text(sales, '件', 0),
+        text(daily, '件/天'),
+        text(metricValue(m, '周转天数'), '天'),
+        '—',
+        metricState('周转天数', metricValue(m, '周转天数')),
+      ];
+    },
+  );
   const regions = distinct(
     rows(current, 'changes')
       .filter((row) => String(row.kind) === '2')
@@ -323,8 +377,11 @@ export function workbenchPresentation(facts, options = {}) {
         ),
       ),
     ]);
-  const skus = {}, skuPagination = {};
-  for (const category of (facts.sqlSummary?[]:categories).filter(category => !options.dimension || options.skuCategories?.includes(category))) {
+  const skus = {},
+    skuPagination = {};
+  for (const category of (facts.sqlSummary ? [] : categories).filter(
+    (category) => !options.dimension || options.skuCategories?.includes(category),
+  )) {
     const filtered = all.filter((row) => dimensionValue(row.category) === category);
     const allKeys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
     const page = Math.min(
@@ -413,7 +470,8 @@ export function workbenchEvidence(facts) {
               {
                 value: metric.value,
                 unit: metric.unit,
-                ...(metric.value === null ? { note: metric.note } : {}),
+                ...(metric.value === null || metric.sample ? { note: metric.note } : {}),
+                ...(metric.sample ? { sample: metric.sample } : {}),
               },
             ]),
           ),
@@ -492,7 +550,7 @@ export function workbenchMetricDetail(facts, name) {
       (part?.rows ?? []).map((row) => row.stock_date || row.snapshot_date).filter(Boolean),
     );
     lines.push(
-      `${label}（${period.start} 至 ${dayOffset(period.end, -1)}）：${text(metric?.value, metric?.unit ?? '%', name === '周转天数' ? 1 : 2)}${reason ? '；' + reason : ''}${dates.length ? '；快照 ' + dates.join('、') : ''}`,
+      `${label}（${period.start} 至 ${dayOffset(period.end, -1)}）：${text(metric?.value, metric?.unit ?? '%', name === '周转天数' ? 1 : 2)}${metric?.sample ? '；' + metric.coverageNote : ''}${reason ? '；' + reason : ''}${dates.length ? '；快照 ' + dates.join('、') : ''}`,
     );
   }
   return lines.join('\n');
