@@ -295,3 +295,39 @@ test('resubmission rejects missing customers with a validation result and preser
   complete.detail.currentVersion.dealerCode = '9223372036854775807';
   assert.equal(prepareSalesPlanResubmit(complete).request.dealerCode, '9223372036854775807');
 });
+
+test('missing service credentials are a non-retryable channel failure before generic HTTP status', () => {
+  const failure = classifySalesPlanSubmitError({
+    name: 'BackendHttpError',
+    status: 503,
+    code: 'GEA_HTTP_503',
+    details: { resubmitUnavailableReason: 'credential', retrySameIntent: true },
+  });
+  assert.equal(failure.kind, 'serviceCredential');
+  assert.equal(failure.retrySameIntent, false);
+});
+
+test('channel reasons preserve signed-out, configuration and tenant meaning without changing business denials', () => {
+  const failure = (status, details) =>
+    classifySalesPlanSubmitError({
+      name: 'BackendHttpError',
+      status,
+      code: 'GEA_HTTP_' + status,
+      details,
+    });
+  for (const [reason, kind, status] of [
+    ['signed-out', 'serviceSignedOut', 401],
+    ['configuration', 'serviceConfiguration', 503],
+    ['tenant', 'serviceTenant', 503],
+  ]) {
+    const error = failure(status, { resubmitUnavailableReason: reason });
+    assert.equal(error.kind, kind);
+    assert.equal(error.retrySameIntent, false);
+  }
+  assert.equal(failure(403, {}).kind, 'permission');
+  assert.equal(failure(401, { authentication: 'service' }).kind, 'serviceAuthentication');
+  assert.equal(
+    failure(503, { resubmitUnavailableReason: 'future-reason' }).kind,
+    'serviceUnavailable',
+  );
+});

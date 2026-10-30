@@ -72,6 +72,10 @@ export type SalesPlanSubmitErrorKind =
   | 'sourceMismatch'
   | 'authentication'
   | 'serviceAuthentication'
+  | 'serviceCredential'
+  | 'serviceSignedOut'
+  | 'serviceConfiguration'
+  | 'serviceTenant'
   | 'configuration'
   | 'permission'
   | 'conflict'
@@ -292,6 +296,24 @@ const retryAfterMsFromDetails = (details: unknown): number | undefined => {
 export const classifySalesPlanSubmitError = (error: unknown): SalesPlanSubmitError => {
   if (error instanceof SalesPlanSubmitError) return error;
   if (isBackendHttpError(error)) {
+    if (
+      error.details &&
+      typeof error.details === 'object' &&
+      'resubmitUnavailableReason' in error.details
+    ) {
+      const reason = error.details.resubmitUnavailableReason;
+      const kind =
+        reason === 'signed-out'
+          ? 'serviceSignedOut'
+          : reason === 'configuration'
+            ? 'serviceConfiguration'
+            : reason === 'tenant'
+              ? 'serviceTenant'
+              : reason === 'credential'
+                ? 'serviceCredential'
+                : undefined;
+      if (kind) return new SalesPlanSubmitError(kind, false, undefined, { cause: error });
+    }
     if (error.status === 400)
       return new SalesPlanSubmitError('validation', false, undefined, { cause: error });
     if (

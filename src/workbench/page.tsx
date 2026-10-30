@@ -567,6 +567,7 @@ export function WorkbenchPage({ t }: { t: Translate }) {
           onPendingChange={updateResubmitPending}
           client={resubmitClient}
           connected={status?.resubmitConnected === true}
+          unavailableReason={status?.resubmitUnavailableReason}
           t={locale.t.bind(locale)}
           onClose={(pending) =>
             setResubmit((current) =>
