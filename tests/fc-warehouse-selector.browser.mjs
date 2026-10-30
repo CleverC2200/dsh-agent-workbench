@@ -98,6 +98,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
           calculated_sku_count: 1,
           missing_calculation_count: 2,
         });
+      for (const key of ['age_weight_qty', 'weighted_age_sum'])
+        if (!q.resultColumns.includes(key)) delete row[key];
       rows = [row];
     }
     await route.fulfill({
@@ -161,6 +163,12 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await picker.click();
   await page.locator('[role=option][data-value="A170"]').click();
   await expect(firstCard).toContainText('123');
+  const ageCard = page
+    .locator('[data-overview-cards="fc"] article')
+    .filter({ hasText: '平均货龄' });
+  await expect(ageCard.locator('.kpi-value')).toContainText('20');
+  assert.ok(calls.some((c) => c.id === 'health.cards' && c.values.warehouse_code === 'A170'));
+  assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
     .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))

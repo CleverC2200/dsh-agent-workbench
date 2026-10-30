@@ -182,7 +182,7 @@ export async function buildInventory(id, sourceCommit) {
     'plugin.json',
     'page.json',
     ...(manifest.sqlConfig ? [manifest.sqlConfig] : []),
-    ...(id === 'aqkc' ? ['insight-prompt.md'] : []),
+    ...(['aqkc', 'fc'].includes(id) ? ['insight-prompt.md'] : []),
   ])
     await cp(resolve(resource, file), resolve(out, file));
   await assembleInventoryAgentResources(id);
@@ -205,7 +205,7 @@ export async function buildInventory(id, sourceCommit) {
       .update(await readFile(path))
       .digest('hex');
   }
-  if (id === 'aqkc')
+  if (['aqkc', 'fc'].includes(id))
     inputs['insight-prompt.md'] = createHash('sha256')
       .update(await readFile(resolve(resource, 'insight-prompt.md')))
       .digest('hex');

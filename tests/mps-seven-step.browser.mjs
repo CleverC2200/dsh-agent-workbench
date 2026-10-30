@@ -12,7 +12,7 @@ test('MPS seven steps share the selected evaluation without legacy simulation co
   const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-12');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '当前评估产品.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(
@@ -58,7 +58,7 @@ test('MPS shipment closing inventory feeds the same-version assessment and repor
   const dialog = frame.getByRole('dialog', { name: '新建评估版本' });
   await dialog.getByLabel('评估月份', { exact: true }).fill('2026-10');
   await dialog.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '当前评估产品.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(
@@ -103,7 +103,7 @@ test('MPS missing reasons remain readable in two-line rows at a 600px document w
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
   await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
   await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
-  await frame.getByLabel('选择产品关系CSV', { exact: true }).setInputFiles({
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
     name: '产品.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(

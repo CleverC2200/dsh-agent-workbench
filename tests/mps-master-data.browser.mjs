@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const product = Object.fromEntries(
   config.queries['products.detail'].columns.map((key) => [key, null]),
@@ -124,6 +125,25 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
     { ...annual, sub_category: '饼类', duplicate_rows: 2, demand_qty: 999 },
   ];
   const { page, frame } = await livePage(t, (query) => {
+    const exported = records
+      .filter((row) => row.belong_base === query.parameters.base)
+      .map((row) => ({
+        ...Object.fromEntries(
+          config.queries['annual.export'].columns.map((column) => [column, null]),
+        ),
+        ...row,
+        material_code: '001-' + row.sub_category,
+        material_name: '产品' + row.sub_category,
+        demand_qty: row.duplicate_rows ? null : row.demand_qty,
+      }));
+    if (query.queryId === 'annual.export.count')
+      return { ...fixture(query), rows: [{ total: exported.length }] };
+    if (query.queryId === 'annual.export')
+      return {
+        ...fixture(query),
+        rows: exported,
+        returnedColumns: config.queries['annual.export'].columns,
+      };
     if (query.queryId === 'annual.summary.count')
       return { ...fixture(query), rows: [{ total: records.length }] };
     if (query.queryId === 'annual.summary') return { ...fixture(query), rows: records };
@@ -149,11 +169,11 @@ test('MPS keeps national and base annual quantities separate, preserves zero and
   await duplicate.locator('details summary').first().click();
   await expect(duplicate).toContainText('源粒度重复');
   const downloaded = page.waitForEvent('download');
-  await section.getByRole('button', { name: '下载', exact: true }).click();
-  const csv = await readFile(await (await downloaded).path(), 'utf8');
-  assert.match(csv, /基地,月份,大类,数量,源月份,源记录数,缺失数量,重复记录数/);
-  assert.match(csv, /全国,2026-10,汤圆,100,2026年10月/);
-  assert.match(csv, /华东,2026-10,汤圆,200,Oct-26/);
+  await section.getByRole('button', { name: '下载年度SKU模板', exact: true }).click();
+  const csv = await mpsDownloadText(await (await downloaded).path());
+  assert.match(csv, /基地,大类,老大类,物料组编码,物料组名称,物料编码,物料名称,2026-07/);
+  assert.match(csv, /001-汤圆,产品汤圆/);
+  assert.doesNotMatch(csv, /华东/);
   await section.getByLabel('年度需求基地').selectOption('华东');
   await expect(section.locator('tbody tr')).toHaveCount(1);
   await expect(section).toContainText('200');
@@ -197,7 +217,7 @@ test('MPS product details start with ten rows and keep pagination aligned with f
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
 });
 
-test('annual plan starts collapsed and keeps sync beside its detail title without a template', async (t) => {
+test('annual plan starts collapsed and keeps sync beside its detail title and the annual SKU workbook download', async (t) => {
   const { frame } = await livePage(t, fixture);
   const section = frame.getByRole('region', { name: '年度销售计划', exact: true });
   await expect(section.getByRole('button', { name: '展开年度销售计划' })).toHaveAttribute(
@@ -211,7 +231,7 @@ test('annual plan starts collapsed and keeps sync beside its detail title withou
   await expect(section.getByRole('button', { name: 'CSV模板', exact: true })).toHaveCount(0);
   await section.getByRole('button', { name: '展开年度销售计划' }).click();
   await expect(section.locator('table')).toBeVisible();
-  await expect(section.getByRole('button', { name: '下载', exact: true })).toBeVisible();
+  await expect(section.getByRole('button', { name: '下载年度SKU模板', exact: true })).toBeVisible();
 });
 
 test('annual explanations show rounded results without numeric substitution and preserve source decimals', async (t) => {
@@ -256,6 +276,6 @@ test('annual explanations show rounded results without numeric substitution and 
     .toBe(3);
   const download = page.waitForEvent('download');
   await section.getByRole('button', { name: '下载', exact: true }).click();
-  const csv = await readFile(await (await download).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await download).path());
   assert.equal(csv.match(/12\.5/g)?.length, 3);
 });

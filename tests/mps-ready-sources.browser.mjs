@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
+import { mpsDownloadText } from './helpers/mps-download.mjs';
 
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const record = (id, values) => ({
@@ -103,7 +104,11 @@ test('product replacement fields populate old-product columns and the list omits
   const { frame } = await mpsPage(t, config, fixture);
   const section = frame.getByRole('region', { name: '产品明细', exact: true });
   await expect(section.getByRole('columnheader', { name: '基地名称', exact: true })).toHaveCount(0);
-  await expect(section).toContainText('源标签：汤圆');
+  await expect(section).not.toContainText('源标签：汤圆');
+  await expect(section.getByRole('button', { name: /^查看源字段/ })).toHaveCount(0);
+  await expect(
+    section.getByRole('columnheader', { name: '物料组名称', exact: true }),
+  ).toBeVisible();
   const parent = section.locator('tbody tr').filter({ hasText: '物料组甲' });
   await expect(parent).toContainText('汤圆');
   await section.getByRole('button', { name: '查看物料组 G 的2个SKU', exact: true }).click();
@@ -117,8 +122,8 @@ test('product replacement fields populate old-product columns and the list omits
   const child = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: 'A', exact: true }) });
-  await expect(child.locator('td').nth(5)).toHaveText('REPLACE');
-  await expect(child.locator('td').nth(6)).toHaveText('源替换品');
+  await expect(child.locator('td').nth(6)).toHaveText('REPLACE');
+  await expect(child.locator('td').nth(7)).toHaveText('源替换品');
 });
 
 test('first-step shares reuse the existing computation while final category demand remains unavailable', async (t) => {
@@ -136,7 +141,7 @@ test('first-step shares reuse the existing computation while final category dema
   await expect(dialog).toContainText('50%');
   const waiting = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
-  const csv = await readFile(await (await waiting).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /,0\.25,0\.5,/);
   assert.doesNotMatch(csv, /25%/);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
@@ -329,7 +334,7 @@ test('source-check displays round quantities but its download keeps monthly deci
   await expect(row.locator('td').nth(1)).toHaveText('41');
   const waiting = page.waitForEvent('download');
   await section.getByRole('button', { name: '下载源值核对', exact: true }).click();
-  const csv = await readFile(await (await waiting).path(), 'utf8');
+  const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /评估版本,评估月份,源月份/);
   assert.match(csv, /,汤圆,月初数量,40\.75,40,40\.75,40,/);
 });

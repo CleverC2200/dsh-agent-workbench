@@ -157,18 +157,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const entries = Object.entries(specs).filter(
     ([name]) => name !== 'selected' && name !== selected,
   );
-  let next = 0;
-  await Promise.all(
-    Array.from({ length: 2 }, async () => {
-      while (next < entries.length) {
-        const [name, spec] = entries[next++];
-        periods[name] = await load(spec, name);
-        progress();
-      }
-    }),
-  );
   const values = { start: specs[selected].start, end_exclusive: specs[selected].end };
-  await Promise.all(
+  const loadMetadata = async () => Promise.all(
     ['directors', 'customers', 'customerManagers'].map(async (id) => {
       metadata[id] = await section(id, () =>
         read(
@@ -178,7 +168,18 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
             : values,
         ),
       );
+      progress();
     }),
+  );
+  let next = 0;
+  await Promise.all(
+    [loadMetadata(), ...Array.from({ length: 2 }, async () => {
+      while (next < entries.length) {
+        const [name, spec] = entries[next++];
+        periods[name] = await load(spec, name);
+        progress();
+      }
+    })],
   );
   signal?.throwIfAborted();
   return snapshot(true);

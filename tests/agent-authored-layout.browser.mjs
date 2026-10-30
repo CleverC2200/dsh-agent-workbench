@@ -2219,3 +2219,59 @@ for (const width of [1280, 390])
     );
     assert.deepEqual(errors, []);
   });
+
+test('FC model insight stays independent of cards, tabs and list paging', async (t) => {
+  let finish;
+  const { frame, insightCalls, errors } = await mount(
+    t,
+    'fc',
+    1280,
+    fcWorkflowRows,
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  const insight = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(insight).toContainText('AI 洞察生成中');
+  await expect.poll(() => typeof finish).toBe('function');
+  const evidence = insightCalls.at(-1).evidence;
+  assert.equal(evidence.scope.warehouseCode, '全部分仓');
+  assert.equal(evidence.rankings.complete, false);
+  assert.equal(evidence.aging.days91PlusQty, null);
+  const before = insightCalls.length;
+  await list.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
+  ).toBeVisible();
+  await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
+  await expect(
+    frame.getByRole('region', { name: '分仓计划', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
+  assert.equal(insightCalls.length, before);
+  finish({
+    answer: '整体库存处于已核实范围。\n当前只确认分仓结构。建议今日复核缺口【待人工确认】。',
+  });
+  await expect(insight.locator('p')).toHaveText(
+    '整体库存处于已核实范围。 当前只确认分仓结构。建议今日复核缺口【待人工确认】。',
+  );
+  await expect(insight.getByText('经营洞察', { exact: true })).toHaveCount(0);
+  await expect(insight.getByRole('button')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('FC model failure leaves stock cards and ten-row list available', async (t) => {
+  const { frame, errors } = await mount(t, 'fc', 1280, fcWorkflowRows, async () => {
+    throw Error('MODEL_UNAVAILABLE');
+  });
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
+    'AI 洞察暂时生成失败',
+  );
+  await expect(frame.locator('[data-overview-cards="fc"] article')).toHaveCount(5);
+  await expect(
+    frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
+  assert.deepEqual(errors, []);
+});

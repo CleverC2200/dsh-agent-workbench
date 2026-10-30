@@ -115,7 +115,34 @@ export function computeWorkbenchMetrics(period, filter = () => true) {
       for (const name of names)
         Object.assign(result[name], { value: null, note: '所选周期及授权范围内无来源数据' });
   }
+  for (const name of metricNames) if (result[name]?.value == null)
+    result[name].missingReason = workbenchMetricMissingReason(period,name,filter,result[name].note);
   return result;
+}
+export function workbenchMetricMissingReason(period,name,filter=()=>true,note='') {
+  const id = ['作废率','改单率'].includes(name) ? 'changes' : name === '周转天数' ? 'stock' : name === '货龄（>60天库存占比）' ? 'ages' : 'orders';
+  const part=period?.sections?.find(section=>section.id===id);
+  if(!part||part.status==='loading')return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
+  if(part.status!=='ready')return `系统读取未成功：${part.code??part.status}；需核对查询或字段发布，不是0。`;
+  const source=part.rows.filter(filter);
+  if(!source.length)return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
+  const fields = name==='订单满足率'?['demand','shortage']:name==='准交率'?['judged','ontime']:name==='周转天数'?['available']:name==='货龄（>60天库存占比）'?['stock_qty','aged_qty']:['numerator','denominator'];
+  const absent=fields.filter(field=>source.some(row=>row[field]==null));
+  // Existing zero policies are retained; a known zero denominator is a calculation condition.
+  if(absent.length && !['作废率','改单率'].includes(name))return `源数据未提供：计算${name}需要的 ${absent.join('、')} 存在空值；${note}`;
+  if(source.some(row=>Number(row.source_rows)>1))return `系统未能计算：同一统计粒度存在重复记录，不能直接加总；${note}`;
+  const total=field=>source.reduce((sum,row)=>sum+Number(row[field]??0),0);
+  if(['作废率','改单率'].includes(name)) {
+    const selected=source.filter(row=>String(row.kind)===(name==='作废率'?'1':'2'));
+    if(!selected.length)return `源数据未提供：agents_order_cancel_change_di 在当前分组没有${name==='作废率'?'作废':'改单'}类型记录。`;
+    if(selected.reduce((sum,row)=>sum+Number(row.denominator??0),0)===0)return `系统未能计算：agents_order_cancel_change_di 当前分组下单量分母合计为0，不能计算${name}。`;
+  }
+  if(name==='订单满足率'&&total('demand')===0)return '系统未能计算：agents_order_execute_isontime_mi 当前分组需求量合计为0，订单满足率没有有效分母。';
+  if(name==='准交率'&&total('judged')===0)return `源数据未提供有效判定：agents_order_execute_isontime_mi.is_ontime 当前分组有效判定0条，空判定${total('unjudged')}条，不能计算准交率。`;
+  if(name==='周转天数'&&source.some(row=>stockDaily(row)===null))return '系统未能计算：滚动计划日期、日均需求或数量格式无效，无法按周期换算。';
+  if(name==='周转天数'&&source.reduce((sum,row)=>sum+Number(stockDaily(row)??0),0)<=0)return '系统未能计算：同范围滚动计划日均需求合计不大于0，可发货天数没有有效分母。';
+  if(name==='货龄（>60天库存占比）'&&total('stock_qty')<=0)return '系统未能计算：agents_scm_inventory_sku_data_d 当前分组有效批次库存合计不大于0，货龄占比没有有效分母。';
+  return `系统未能计算：${name}的有效分母、数量范围或判定条件不满足；${note||'缺失不补0，零分母不计算比率。'}`;
 }
 export function metricState(name, value) {
   if (value === null) return '数据不足';

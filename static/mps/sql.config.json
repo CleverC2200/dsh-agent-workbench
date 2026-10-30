@@ -349,7 +349,7 @@
         }
       },
       "request": {
-        "sql": "SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month ORDER BY belong_base, sub_category, stat_month LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "annual.summary.count"
@@ -368,7 +368,7 @@
     "annual.summary.count": {
       "parameterSpec": {},
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, stat_month, SUM(source_rows) AS source_rows, SUM(missing_qty) AS missing_qty, SUM(CASE WHEN quantity_variants > 1 THEN source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN quantity_variants = 1 AND missing_qty = 0 THEN raw_quantity ELSE 0 END) AS demand_qty, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_values GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month) AS mps_grains GROUP BY belong_base, sub_category, stat_month) AS mps_summary"
       }
     },
     "facts.report": {
@@ -615,24 +615,11 @@
     },
     "forecast.detail": {
       "title": "forecast",
-      "grain": [
-        "stat_month",
-        "belong_base",
-        "material_code",
-        "material_name",
-        "current_month_forecast_qty",
-        "next_month_forecast_qty"
-      ],
+      "grain": ["stat_month", "belong_base", "material_code"],
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         },
@@ -654,7 +641,7 @@
         }
       },
       "request": {
-        "sql": "SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty ORDER BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code ORDER BY stat_month, belong_base, material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "forecast.count"
@@ -672,20 +659,14 @@
     "forecast.count": {
       "parameterSpec": {
         "gea_p1": {
-          "name": "month",
-          "type": "string",
-          "required": true,
-          "nullable": false
-        },
-        "gea_p2": {
-          "name": "source_month",
-          "type": "string",
+          "name": "months",
+          "type": "array",
           "required": true,
           "nullable": false
         }
       },
       "request": {
-        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1, :gea_p2) GROUP BY stat_month, belong_base, material_code, material_name, current_month_forecast_qty, next_month_forecast_qty) AS mps_rows"
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT stat_month, belong_base, material_code, CASE WHEN COUNT(material_name) = COUNT(*) AND COUNT(DISTINCT material_name) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(current_month_forecast_qty) = COUNT(*) THEN SUM(current_month_forecast_qty) ELSE NULL END AS current_month_forecast_qty, CASE WHEN COUNT(next_month_forecast_qty) = COUNT(*) THEN SUM(next_month_forecast_qty) ELSE NULL END AS next_month_forecast_qty, COUNT(*) AS source_rows FROM agents_scm_sales_forecast_mi WHERE stat_month IN (:gea_p1) GROUP BY stat_month, belong_base, material_code) AS mps_rows"
       }
     },
     "delivery.detail": {
@@ -771,6 +752,88 @@
       },
       "request": {
         "sql": "SELECT COUNT(*) AS total FROM (SELECT dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate, COUNT(*) AS source_rows FROM agents_scm_base_dimension_delivery_mi WHERE stat_month IN (:gea_p1) GROUP BY dimension_type, stat_month, belong_base, dimension_value, product_name, dimension_act_dl_qty, fiscal_year, national_dimension_fiscal_act_dl_qty, dimension_act_dl_qty_rate, last_year_stat_month, last_year_dimension_act_dl_qty, year_on_year_act_dl_qty, year_on_year_rate, last_month_stat_month, last_month_dimension_act_dl_qty, month_on_month_act_dl_qty, month_on_month_rate) AS mps_rows"
+      }
+    },
+    "annual.export": {
+      "title": "年度SKU模板",
+      "grain": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty"
+      ],
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "gea_p2": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND belong_base = :gea_p2 GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty ORDER BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "annual.export.count"
+      },
+      "columns": [
+        "belong_base",
+        "sub_category",
+        "old_category",
+        "product_item",
+        "product_item_name",
+        "material_code",
+        "material_name",
+        "stat_month",
+        "demand_qty",
+        "update_time",
+        "source_rows"
+      ]
+    },
+    "annual.export.count": {
+      "parameterSpec": {
+        "gea_p1": {
+          "name": "months",
+          "type": "array",
+          "required": true,
+          "nullable": false
+        },
+        "gea_p2": {
+          "name": "base",
+          "type": "string",
+          "required": true,
+          "nullable": false
+        }
+      },
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty, MAX(update_time) AS update_time, COUNT(*) AS source_rows FROM agents_dim_demand_annual_mi WHERE stat_month IN (:gea_p1) AND belong_base = :gea_p2 GROUP BY belong_base, sub_category, old_category, product_item, product_item_name, material_code, material_name, stat_month, demand_qty) AS mps_rows"
       }
     }
   }

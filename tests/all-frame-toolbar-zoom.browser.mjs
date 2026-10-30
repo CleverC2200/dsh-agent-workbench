@@ -47,14 +47,22 @@ async function documentFixture(t, pageId = 'business') {
   await expect(page.getByRole('complementary', { name: 'AI对话' })).toBeVisible();
   return page;
 }
-for (const [id,threshold] of [['inventory-qll',800],['inventory-fc',800],['inventory-aqkc',800],['inventory-dealer',920],['gea-proof',960]]) {
- test(`${id} changes rows only below safe width`, async t=>{
-  const page=await documentFixture(t,id); await page.getByRole('button',{name:'中间区域最大，隐藏会话区'}).click();
-  for(const width of [threshold,threshold-1,1000]){
-   await page.setViewportSize({width:width+280,height:700});
-   const chrome=page.locator('.agent-workbench-document-chrome');
-   if(width>=threshold) await expect(chrome).toHaveClass(/agent-workbench-document-chrome-shared/);
-   else await expect(chrome).not.toHaveClass(/agent-workbench-document-chrome-shared/);
-  }
- });
+for (const [id, threshold] of [
+  ['inventory-qll', 800],
+  ['inventory-fc', 800],
+  ['inventory-aqkc', 800],
+  ['inventory-dealer', 920],
+  ['gea-proof', 960],
+]) {
+  test(`${id} changes rows only below safe width`, async (t) => {
+    const page = await documentFixture(t, id);
+    await page.getByRole('button', { name: '中间区域最大，隐藏会话区' }).click();
+    for (const width of [threshold, threshold - 1, 1000]) {
+      await page.setViewportSize({ width: width + 280, height: 700 });
+      const chrome = page.locator('.agent-workbench-document-chrome');
+      if (width >= threshold)
+        await expect(chrome).toHaveClass(/agent-workbench-document-chrome-shared/);
+      else await expect(chrome).not.toHaveClass(/agent-workbench-document-chrome-shared/);
+    }
+  });
 }

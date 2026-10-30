@@ -12,7 +12,7 @@ export const config = orderWorkbenchSourceConfig(
 const built = await build({
   stdin: {
     contents:
-      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js';",
+      "export * from './prototypes/inventory-orderworkbench/metric-model.mjs'; export * from './prototypes/inventory-orderworkbench/live-presentation.mjs'; export * from './prototypes/inventory-orderworkbench/report-source.js'; export * from './prototypes/inventory-orderworkbench/missing-reasons.mjs';",
     resolveDir: resolve('.'),
   },
   bundle: true,
@@ -34,6 +34,37 @@ const built = await build({
 export const model = await import(
   'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
 );
+
+test('missing metric reasons distinguish empty sources, rejected reads and zero denominators', () => {
+  const period = {
+    kind: 'month',
+    start: '2026-10-01',
+    end: '2026-10-29',
+    sections: [
+      { id: 'changes', status: 'ready', rows: [{ kind: '1', numerator: 0, denominator: 0 }] },
+    ],
+  };
+  const zero = model.computeWorkbenchMetrics(period)['作废率'];
+  assert.equal(zero.value, null);
+  assert.match(zero.missingReason, /系统未能计算/);
+  assert.match(
+    model.workbenchMetricMissingReason(
+      { ...period, sections: [{ id: 'changes', status: 'ready', rows: [] }] },
+      '作废率',
+    ),
+    /源数据未提供.*无记录/,
+  );
+  assert.match(
+    model.workbenchMetricMissingReason(
+      {
+        ...period,
+        sections: [{ id: 'changes', status: 'error', code: 'FIELD_NOT_PUBLISHED', rows: [] }],
+      },
+      '作废率',
+    ),
+    /系统读取未成功.*FIELD_NOT_PUBLISHED/,
+  );
+});
 export function fixturePeriod() {
   return {
     start: '2026-10-01',
@@ -171,6 +202,44 @@ test('progress publishes validated cards before slower sections and reuses compl
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages.count').length, 2);
   await run();
   assert.equal(calls.filter((c) => c.queryId === 'workbench.ages').length, 6);
+});
+
+test('metadata loads while comparisons are pending and final facts remain identical', async () => {
+  const source = progressiveSource();
+  const options = { now: new Date('2026-10-24T00:00:00Z') };
+  const expected = await model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
+    ...options,
+    execute: source.execute,
+  });
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const metadata = new Set();
+  let complete = false;
+  const running = model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
+    ...options,
+    execute: async (request, context) => {
+      if (
+        ['workbench.directors', 'workbench.customers', 'workbench.customermanagers'].includes(
+          context.queryId,
+        )
+      )
+        metadata.add(context.queryId);
+      else if (context.values.start === '2026-09-01') await held;
+      return source.execute(request, context);
+    },
+    onProgress: (facts) => {
+      complete ||= facts.complete;
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  assert.equal(metadata.size, 3, 'auxiliary queries must not wait for historical queries');
+  assert.equal(complete, false);
+  release();
+  const actual = await running;
+  const withoutReadAt = ({ readAt: _readAt, ...facts }) => facts;
+  assert.deepEqual(withoutReadAt(actual), withoutReadAt(expected));
 });
 
 test('lazy table presentation preserves card and selected-dimension results without building hidden SKU details', () => {

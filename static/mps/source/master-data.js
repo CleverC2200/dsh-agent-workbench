@@ -68,6 +68,7 @@ export function productRows(rows) {
     大类: text(row.sub_category),
     系列: text(row.series),
     物料组: text(row.product_item),
+    物料组名称: text(row.product_item_name),
     老品编码: text(row.replacement_material_code),
     老品名称: text(row.replacement_product),
   }));
@@ -150,4 +151,14 @@ export async function readAnnual(signal) {
     },
   );
   return annualRows(result.rows);
+}
+export async function readAnnualDetails(months, base, signal) {
+  const { config, query } = client();
+  const definition = config.queries['annual.export'];
+  const result = await query.readAll(
+    'annual.export',
+    { months: [...new Set(months.flatMap(sourceMonthValues))], base, page_size: 200, offset: 0 },
+    { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+  );
+  return result.rows;
 }

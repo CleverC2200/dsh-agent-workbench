@@ -2,7 +2,9 @@
 
 最新基础字段、指标计算与保留缺口以[2026-10-23完整核对](order-fulfillment-source-audit-20261023.md)为准。主表状态保留，追踪表仅补充指标事实；未匹配追踪不清空主表数据。
 
-批次货龄现按用户确认读取所选日期当天及之前的最新快照，不再强制昨日快照；货龄以该快照日减生产日期计算。缺生产日期、数量不完整、负库存和未来快照仍保持未知。
+批次货龄与 SKU 库存行的实际库存日精确对齐；货龄以该快照日减生产日期计算。数量完整且为零的批次不参与货龄分箱，不使其他正常批次变为未知；非零库存缺生产日期、数量不完整、负库存或错日仍保持未知。零库存批次归并生产日期分组只减少传输行数，不改变分箱数量。
+
+2026-10-29 补齐自产品标签的既有湖州/华东、广州/华南、四川/西南基地别名关联；五日排产从 `agents_prod_schedule_detail_d` 按当前订单范围的工厂与 SKU 读取，以所选日起连续五日的 `base_finish_day` 筛选，按 `measure_unit` 分列，不混加单位、不当作确认入库。基地、省区与承运商对比的完整指标校验保留，可计算明细的加权结果另标“部分”并提供覆盖数。
 
 ## 当前合同 / Current contract
 
@@ -101,3 +103,8 @@ The latest glossary replaces the corresponding historical formulas above. Quanti
 按用户本次要求，订单履约和客户库存移除顶部正常加载状态条，取消页面内部固定高度的纵向滚动层，保留单一页面滚动；业务卡片、筛选和表格结构不变。
 
 订单履约按已完成查询逐区显示，连接与视图恢复使用同一有效读取，身份或筛选变化仍取消旧读取。客户库存的后续分页并发读取，全部分页的总数、字段权限和行数通过检查后才使用；身份展示信息不阻塞数据展示。当前用户、同一受控查询的耗时记录见[加载验证](reports/inventory-loading-20261021.json)，不代表其他网络或数据规模下的固定时限。
+# Missing-value reasons / 空值原因
+
+Missing quantity tooltips retain provenance: absent source values, failed/unpublished reads, unmatched keys, ambiguous split/unit conversion, duplicate keys and invalid denominators are distinct. No missing value is filled with zero, and formulas/authorization remain unchanged. / 数量横线的悬浮提示区分源字段空值、查询或发布失败、关联未命中、拆单/单位不明、重复键及无效分母，不改变公式与权限。
+
+Shortage diagnosis reads existing governed `shortage.detail` only. `agents_scm_shortage_trace_f` rows with `source_flag='缺货供应匹配'` are joined by execution order plus `material_code`, then checked against customer; SKU-only fallback is forbidden. `final_short_qty=0` is known zero, NULL is missing. Duplicates stay unaggregated; a missing match in current results does not prove the source table lacks the order. / 终缺判断沿已授权明细，以执行单号＋物料匹配并核对客户；不得按SKU串单。真实0保留，NULL、缺键、未匹配与重复分别计数和提示。

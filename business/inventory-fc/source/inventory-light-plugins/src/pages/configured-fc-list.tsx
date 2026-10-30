@@ -179,6 +179,58 @@ export function FcConfiguredList(
     addressCode: '',
     pupCode: '',
   });
+  const scopeId = JSON.stringify([scope.viewId, scope.input]);
+  const [targetMessage, setTargetMessage] = useState('');
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [automaticTargetFields, setAutomaticTargetFields] = useState<string[]>([]);
+  const targetRequest = useRef<AbortController | null>(null);
+  const readDmsTarget = async (warehouse: string, addressCode = '') => {
+    targetRequest.current?.abort();
+    const task = new AbortController();
+    targetRequest.current = task;
+    setTargetLoading(true);
+    setTargetMessage('正在读取主数据…');
+    try {
+      const target = z
+        .object({
+          warehouseCode: z.string(),
+          fields: z.object({
+            customerCode: z.string(),
+            addressCode: z.string(),
+            pupCode: z.string(),
+          }),
+          message: z.string(),
+        })
+        .parse(
+          await call('branch-dms', {
+            operation: 'resolve-target',
+            warehouseCode: warehouse,
+            addressCode,
+          }),
+        );
+      if (task.signal.aborted) return;
+      if (target.warehouseCode !== warehouse) throw Error('主数据分仓范围不一致');
+      const matched = Object.entries(target.fields).filter(([, value]) => value.trim());
+      setDmsFields((current) => ({ ...current, ...Object.fromEntries(matched) }));
+      setAutomaticTargetFields(matched.map(([field]) => field));
+      setTargetMessage(target.message);
+      setConsumptionReviewed(false);
+    } catch (error) {
+      if (!task.signal.aborted) {
+        setTargetMessage(
+          `自动读取不可用，请核对后补填编码。${error instanceof Error ? error.message : ''}`,
+        );
+        setAutomaticTargetFields([]);
+      }
+    } finally {
+      if (!task.signal.aborted) setTargetLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (dialog !== 'export' || !exportWarehouse) return;
+    void readDmsTarget(exportWarehouse);
+    return () => targetRequest.current?.abort();
+  }, [dialog, exportWarehouse, scopeId]);
   const [dmsReceipt, setDmsReceipt] = useState<{
     orderCode: string;
     aiPreOrderCode: string;
@@ -192,13 +244,13 @@ export function FcConfiguredList(
   useEffect(() => setConsumptionReviewed(false), [exportRows, draft, exportWarehouse]);
   useEffect(() => {
     setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
+    setAutomaticTargetFields([]);
     setDmsReceipt(null);
   }, [exportWarehouse]);
   const [dialogPage, setDialogPage] = useState(1);
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
   const active = useRef<AbortController | null>(null);
-  const scopeId = JSON.stringify([scope.viewId, scope.input]);
   useEffect(() => {
     active.current?.abort();
     setBusy(false);
@@ -211,6 +263,9 @@ export function FcConfiguredList(
   useEffect(() => {
     const restore = () => {
       active.current?.abort();
+      targetRequest.current?.abort();
+      setTargetLoading(false);
+      setAutomaticTargetFields([]);
       setDmsReceipt(null);
       setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
       setBusy(false);
@@ -556,6 +611,7 @@ export function FcConfiguredList(
   const submitDms = () =>
     run(async (signal) => {
       if (!exportWarehouse) throw Error('请选择分仓');
+      if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
       if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
       const selected = previewRows.filter(
         (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
@@ -1053,8 +1109,8 @@ export function FcConfiguredList(
                   <legend>DMS 暂存信息</legend>
                   {(
                     [
-                      ['customerCode', '客户编码'],
                       ['addressCode', '收货地址编码'],
+                      ['customerCode', '客户编码'],
                       ['pupCode', '提货点编码'],
                     ] as const
                   ).map(([field, label]) => (
@@ -1064,15 +1120,50 @@ export function FcConfiguredList(
                         aria-label={label}
                         value={dmsFields[field]}
                         maxLength={500}
-                        onChange={(event) =>
-                          setDmsFields((current) => ({
-                            ...current,
-                            [field]: event.target.value,
-                          }))
-                        }
+                        readOnly={field !== 'addressCode' && automaticTargetFields.includes(field)}
+                        onBlur={() => {
+                          if (
+                            field === 'addressCode' &&
+                            dmsFields.addressCode.trim() &&
+                            !automaticTargetFields.includes('addressCode')
+                          )
+                            void readDmsTarget(exportWarehouse, dmsFields.addressCode.trim());
+                        }}
+                        onChange={(event) => {
+                          targetRequest.current?.abort();
+                          setTargetLoading(false);
+                          setAutomaticTargetFields([]);
+                          setConsumptionReviewed(false);
+                          const value = event.target.value;
+                          setDmsFields((current) =>
+                            field === 'addressCode'
+                              ? {
+                                  addressCode: value,
+                                  customerCode: automaticTargetFields.includes('customerCode')
+                                    ? ''
+                                    : current.customerCode,
+                                  pupCode: automaticTargetFields.includes('pupCode')
+                                    ? ''
+                                    : current.pupCode,
+                                }
+                              : { ...current, [field]: value },
+                          );
+                        }}
                       />
                     </label>
                   ))}
+                  <p role="status">{targetMessage}</p>
+                  {automaticTargetFields.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutomaticTargetFields([]);
+                        setConsumptionReviewed(false);
+                      }}
+                    >
+                      手动调整编码
+                    </button>
+                  )}
                   <p>
                     数量单位：件；默认速冻、配送、不拼车、同意缺货分批到货。请核对提货点与所选分仓。
                   </p>
