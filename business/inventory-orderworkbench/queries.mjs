@@ -89,22 +89,46 @@ export const workbenchQueries = {
       'transfer_plan',
       'daily_demand',
       'invalid',
+      'national_inventory',
+      'national_sales_plan',
+      'national_stock_records',
+      'national_plan_records',
+      'national_stock_invalid',
+      'national_plan_invalid',
     ],
-    sql: `SELECT s.belong_base AS base,s.material_code AS sku,MAX(d.category) AS category,MAX(s.product_item) AS item,
-      MAX(s.material_name) AS name,MAX(s.the_date) AS stock_date,COUNT(*) AS source_rows,
-      SUM(s.available_stock) AS available,SUM(s.current_stock) AS inventory,SUM(s.current_stock_60) AS aged,
-      SUM(CASE WHEN s.main_sales_plan_adj>0 THEN s.main_sales_plan_adj ELSE s.main_sales_plan_v1 END) AS sales_plan,
-      SUM(CASE WHEN s.transfer_out_plan_adj>0 THEN s.transfer_out_plan_adj ELSE s.transfer_out_plan_v1 END) AS transfer_plan,
+    sql: `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
+      d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
+      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
       NULL AS daily_demand,
-      SUM(CASE WHEN s.current_stock IS NULL THEN 1 ELSE 0 END) AS invalid
-      FROM agents_scm_stock_detail_d s LEFT JOIN (${dictionary}) d ON d.sku=s.material_code
-      WHERE s.the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
-      GROUP BY s.belong_base,s.material_code`,
+      b.inventory AS national_inventory,s.sales_plan AS national_sales_plan,
+      CASE WHEN b.stock_date IS NOT NULL THEN 1 ELSE 0 END AS national_stock_records,
+      CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
+      COALESCE(b.invalid,0) AS national_stock_invalid,
+      CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
+      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL THEN 1 ELSE 0 END AS invalid
+      FROM (SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
+        COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
+        SUM(CASE WHEN (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) IS NULL
+          OR (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END)<0 THEN 1 ELSE 0 END) AS sales_invalid,
+        SUM(CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) AS sales_plan,
+        SUM(CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END) AS transfer_plan
+        FROM agents_scm_stock_detail_d
+        WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
+        GROUP BY belong_base,material_code) s
+      FULL OUTER JOIN (SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
+        CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
+        SUM(available_qty) AS available,SUM(live_qty) AS inventory,
+        NULL AS aged,SUM(CASE WHEN live_qty IS NULL THEN 1 ELSE 0 END) AS invalid
+        FROM agents_scm_inventory_sku_data_d
+        WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')
+          AND month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
+        GROUP BY belong_base,material_code) b ON b.belong_base=s.belong_base AND b.material_code=s.material_code
+      LEFT JOIN (${dictionary}) d ON d.sku=COALESCE(s.material_code,b.material_code)`,
   },
   ageDate: {
     columns: ['day'],
     sql: `SELECT MAX(month_date) AS day FROM agents_scm_inventory_sku_data_d
-      WHERE month_date>=:gea_p1 AND month_date<:gea_p2`,
+      WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库') AND month_date>=:gea_p1 AND month_date<:gea_p2`,
   },
   ages: {
     scoped: true,
@@ -137,7 +161,7 @@ export const workbenchQueries = {
         CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
         FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
         GROUP BY new_material_code) m ON m.sku=b.material_code
-      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.month_date=:gea_p1
+      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.month_date=:gea_p1 AND b.warehouse_classify IN ('01','02') AND b.warehouse_classify_name IN ('工厂成品仓','工厂外租库')
       GROUP BY b.belong_base,b.material_code`,
     omitEnd: true,
     extra: {

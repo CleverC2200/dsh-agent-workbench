@@ -6,13 +6,17 @@ import { chromium, expect } from '@playwright/test';
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
 
+const dealerConfig = JSON.parse(
+  await readFile(new URL('../business/inventory-dealer/sql.config.json', import.meta.url)),
+);
+
 const html = await readFile(
   new URL('../lib/business/inventory-customer/index.html', import.meta.url),
   'utf8',
 );
 async function fixture(
   t,
-  { error, rows = [], connect = true, scripts = true, deferSql = false } = {},
+  { error, rows = [], connect = true, scripts = true, deferSql = false, skus = false } = {},
 ) {
   const server = createServer((request, response) => {
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -41,7 +45,7 @@ async function fixture(
   await expect(frame.locator('.metric-card')).toHaveCount(6);
   if (connect) {
     await page.evaluate(
-      ({ error, rows, deferSql }) => {
+      ({ error, rows, deferSql, skus, skuColumns }) => {
         const target = document.querySelector('iframe');
         const pair = new MessageChannel();
         window.receivedContexts = [];
@@ -50,6 +54,53 @@ async function fixture(
         pair.port1.onmessage = ({ data }) => {
           if (data.type !== 'request') return;
           if (data.method === 'context') window.receivedContexts.push(data.parameters);
+          let sqlRows = rows;
+          if (skus && data.method === 'sql') {
+            const sql = data.parameters.sql;
+            if (sql.startsWith('SELECT MAX(t.stat_date)')) sqlRows = [{ day: '2026-10-29' }];
+            else if (sql.includes('page_scope_total')) {
+              const scopedCustomers = Object.entries(data.parameters.parameters)
+                .filter(([key]) => key.startsWith('list_1_'))
+                .map(([, value]) => value);
+              // An unscoped stock subquery can return other regions even when its companion is scoped.
+              const customers = sql.includes('WHERE t.stat_date')
+                ? rows.map((row) => row.cust_code)
+                : scopedCustomers;
+              const offset = data.parameters.parameters.gea_p10;
+              const records = customers.flatMap((customer) =>
+                Array.from({ length: customer === 'A' ? 11 : 1 }, (_, index) => ({
+                  customer,
+                  index,
+                })),
+              );
+              const total = records.length;
+              sqlRows = records.slice(offset, offset + 10).map(({ customer, index }) => ({
+                ...Object.fromEntries(skuColumns.map((column) => [column, null])),
+                page_scope_total: total,
+                page_row_present: 1,
+                customer,
+                customer_name: `客户${customer}`,
+                sku: `${customer}-${index}`,
+                material_name: `商品${customer}-${index}`,
+                inventory: index === 0 ? -3 : 0,
+                sales30: null,
+                stat_date: '2026-10-29',
+              }));
+              if (window.denySkus) {
+                pair.port1.postMessage({
+                  type: 'response',
+                  id: data.id,
+                  error: { code: 'RETURN_PERMISSION_DENIED', message: '字段拒权' },
+                });
+                return;
+              }
+            } else if (sql.includes('cust_code IN')) {
+              const codes = Object.entries(data.parameters.parameters)
+                .filter(([key]) => key.startsWith('list_1_'))
+                .map(([, value]) => value);
+              sqlRows = rows.filter((row) => codes.includes(row.cust_code));
+            }
+          }
           const respond = () =>
             pair.port1.postMessage({
               type: 'response',
@@ -60,15 +111,20 @@ async function fixture(
                     result:
                       data.method === 'sql'
                         ? {
-                            rows,
-                            total: rows.length,
-                            returnedColumns: rows.length ? Object.keys(rows[0]) : [],
+                            rows: sqlRows,
+                            total: sqlRows.length,
+                            returnedColumns: sqlRows.length ? Object.keys(sqlRows[0]) : [],
                             rejectedColumns: [],
                           }
                         : { ok: true },
                   }),
             });
-          if (window.deferSql && data.method === 'sql') window.pendingSql.push(respond);
+          if (
+            (window.deferSql ||
+              (window.deferSku && data.parameters?.sql?.includes('page_scope_total'))) &&
+            data.method === 'sql'
+          )
+            window.pendingSql.push(respond);
           else respond();
         };
         target.contentWindow.postMessage(
@@ -84,11 +140,134 @@ async function fixture(
           [pair.port2],
         );
       },
-      { error, rows, deferSql },
+      {
+        error,
+        rows,
+        deferSql,
+        skus,
+        skuColumns: dealerConfig.queries['dealer.stock.detail.atomic'].resultColumns,
+      },
     );
   }
   return { page, frame, errors };
 }
+
+test('customer SKU tab has no extra toolbar and follows outer customer filters with server paging', async (t) => {
+  const rows = ['A', 'B'].map((code) => ({
+    snapshot_date: '2026-10-30',
+    cust_code: code,
+    cust_name: `客户${code}`,
+    stock_qty: 20,
+    sku_rows: 1,
+    stock_coverage: 1,
+  }));
+  const { page, frame, errors } = await fixture(t, { rows, skus: true });
+  await expect(frame.locator('.dealer-table-card')).toBeVisible();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  const panel = frame.getByRole('region', { name: '客户SKU库存明细' });
+  await expect(panel.getByText('商品A-0', { exact: true })).toBeVisible();
+  await expect(panel.locator('.arco-table-th')).toHaveCount(17);
+  await expect(panel.locator('.customer-sku-filters')).toHaveCount(0);
+  await expect(panel.locator('details')).toHaveCount(0);
+  await expect(panel.getByRole('button')).toHaveCount(0);
+  await expect(panel).not.toContainText('与经销商库存');
+  await expect(panel).toContainText('缺客户批次有效期及到期判定阈值');
+  await expect(panel).toContainText('2026-10-29');
+  if (process.env.CUSTOMER_SKU_SCREENSHOT)
+    await page.screenshot({ path: process.env.CUSTOMER_SKU_SCREENSHOT, fullPage: true });
+  await panel.locator('.arco-pagination-item').filter({ hasText: /^2$/ }).click();
+  await expect(panel.getByText('商品A-10', { exact: true })).toBeVisible();
+  await expect(panel.getByText('商品B-0', { exact: true })).toBeVisible();
+  await frame.getByPlaceholder('经销商筛选', { exact: true }).fill('客户B');
+  await expect(panel.getByText('商品B-0', { exact: true })).toBeVisible();
+  await expect(panel.getByText('商品A-10', { exact: true })).toHaveCount(0);
+  await page.evaluate(() => {
+    window.deferSku = true;
+  });
+  await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.pendingSql.length)).toBeGreaterThan(0);
+  await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await page.evaluate(() => {
+    window.deferSku = false;
+    window.pendingSql.splice(0).forEach((respond) => respond());
+  });
+  await expect(panel).toHaveCount(0);
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  await expect(panel.getByText('商品B-0', { exact: true })).toBeVisible();
+  await page.evaluate(() => {
+    window.denySkus = true;
+  });
+  await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('SKU库存读取失败');
+  await expect(panel.getByText('商品B-0', { exact: true })).toHaveCount(0);
+  await frame.getByRole('tab', { name: /经销商总览/ }).click();
+  await expect(frame.locator('.dealer-table-card .dealer-name').first()).toContainText('客户B');
+  assert.deepEqual(errors, []);
+});
+
+test('SKU scope changes across region, province and city without leaking customers or retaining old pages', async (t) => {
+  const rows = [
+    ['A', '大区一', '省区一', '郑州市'],
+    ['B', '大区二', '省区二', '成都市'],
+    ['C', '大区二', '省区三', '重庆市'],
+    ['D', '大区二', '省区三', '自贡市'],
+  ].map(([code, region, province, city]) => ({
+    snapshot_date: '2026-10-30',
+    cust_code: code,
+    cust_name: '客户' + code,
+    region_name: region,
+    province_name: province,
+    dealer_receive_addr: JSON.stringify([{ cust_name: '客户（' + city + '）卸货地' }]),
+    stock_qty: 20,
+    sku_rows: 1,
+    stock_coverage: 1,
+  }));
+  const { page, frame, errors } = await fixture(t, { rows, skus: true });
+  await expect(frame.locator('.dealer-table-card')).toBeVisible();
+  await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  const panel = frame.getByRole('region', { name: '客户SKU库存明细' });
+  await expect(panel.getByText('商品A-0', { exact: true })).toBeVisible();
+  await panel.locator('.arco-pagination-item').filter({ hasText: /^2$/ }).click();
+  await expect(panel.getByText('商品A-10', { exact: true })).toBeVisible();
+  const role = async (name) => {
+    await frame.locator('.inventory-context .arco-select').first().click();
+    await frame.getByRole('option', { name, exact: true }).click();
+    await expect(panel.getByText('商品A-0', { exact: true })).toBeVisible();
+    await expect(panel.getByText('商品A-10', { exact: true })).toHaveCount(0);
+  };
+  const path = async (names) => {
+    await frame.locator('.inventory-context .arco-cascader').click();
+    for (const name of names) await frame.getByRole('menuitem', { name, exact: true }).click();
+    await frame.getByRole('tab', { name: 'SKU库存', exact: true }).click();
+  };
+  await role('大区角色');
+  await path(['大区二']);
+  for (const code of ['B', 'C', 'D'])
+    await expect(panel.getByText('商品' + code + '-0', { exact: true })).toBeVisible();
+  await expect(panel.getByText('商品A-0', { exact: true })).toHaveCount(0);
+  await role('省区角色');
+  await path(['大区二', '省区三']);
+  for (const code of ['C', 'D'])
+    await expect(panel.getByText('商品' + code + '-0', { exact: true })).toBeVisible();
+  await expect(panel.getByText('商品B-0', { exact: true })).toHaveCount(0);
+  await role('城市经理角色');
+  await path(['大区二', '省区三', '自贡市']);
+  await expect(panel.getByText('商品D-0', { exact: true })).toBeVisible();
+  await expect(panel.getByText('商品C-0', { exact: true })).toHaveCount(0);
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          window.receivedContexts.at(-1)?.view?.skuInventory?.customerCount ??
+          window.receivedContexts.at(-1)?.skuInventory?.customerCount,
+      ),
+    )
+    .toBe(1);
+  assert.deepEqual(errors, []);
+});
 
 test('no connection shows loading and six cards without claiming inventory facts', async (t) => {
   const { frame, errors } = await fixture(t, { connect: false });

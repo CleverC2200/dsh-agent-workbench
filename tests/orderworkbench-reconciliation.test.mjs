@@ -46,13 +46,16 @@ test('unknown stock is never replaced with zero and a negative total is not a va
 
 test('all inventory is the numerator, never silently replaced with available stock', () => {
   assert.equal(computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].value, 10);
-  assert.match(computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].note, /current_stock/);
-  assert.match(workbenchQueries.stock.sql, /s.current_stock IS NULL/);
+  assert.match(
+    computeWorkbenchMetrics(stockPeriod([stock]))['周转天数'].note,
+    /工厂仓＋工厂外租仓/,
+  );
+  assert.match(workbenchQueries.stock.sql, /b.inventory IS NULL/);
 });
 
-test('all warehouse classes remain in age denominator and unknown production dates invalidate age', () => {
-  assert.doesNotMatch(workbenchQueries.ages.sql, /warehouse_classify IN/);
-  assert.doesNotMatch(workbenchQueries.ageDate.sql, /warehouse_classify IN/);
+test('factory and rented warehouses share the age scope and unknown production dates invalidate age', () => {
+  assert.match(workbenchQueries.ages.sql, /warehouse_classify IN \('01','02'\)/);
+  assert.match(workbenchQueries.ageDate.sql, /warehouse_classify IN \('01','02'\)/);
   assert.match(workbenchQueries.ages.sql, /SUM\(b.live_qty\) AS stock_qty/);
   assert.match(workbenchQueries.ages.sql, /CAST\(b.prod_date AS DATE\) IS NULL OR/);
   assert.match(
@@ -112,8 +115,12 @@ test('director historical comparisons use the matching period owner, not the lat
 });
 test('base and item formulas retain documented weights instead of fitting the screenshot', () => {
   const p = stockPeriod([{ ...stock, transfer_plan: 620 }]);
-  assert.equal(stockDaily(p.sections[0].rows[0]), 20);
-  assert.equal(computeWorkbenchMetrics(p)['周转天数'].value, 5);
+  assert.equal(stockDaily(p.sections[0].rows[0], 'base'), 20);
+  assert.equal(computeWorkbenchMetrics(p)['周转天数'].value, 10);
+  assert.equal(
+    computeWorkbenchMetrics(p, () => true, { turnoverScope: 'base' })['周转天数'].value,
+    5,
+  );
   assert.equal(
     computeWorkbenchMetrics(p, () => true, { turnoverScope: 'item' })['周转天数'].value,
     10,
@@ -135,17 +142,15 @@ test('historical cutoffs retain uncertainty rather than including later amendmen
   assert.doesNotMatch(changesSql, /COALESCE\(cancelled/);
 });
 
-test('safe original-order formatting fallback is exact-first, customer/SKU-bound and unique on both sides', () => {
+test('fulfillment uses the upstream original-order business period without a downstream SKU date join', () => {
   const sql = workbenchQueries.orders.sql;
-  assert.match(sql, /WHEN s.cust_order_no IS NOT NULL THEN s.shipped/);
-  assert.match(sql, /WHEN n.references_count=1 AND r.references_count=1 THEN n.shipped/);
-  assert.match(sql, /LIKE CONCAT\(m.cust_code,'-%'\)/);
-  assert.match(sql, /LENGTH\(m.fromorderno\)-LENGTH\(REPLACE\(m.fromorderno,'-',''\)\)=1/);
-  assert.match(sql, /n.cust_code=m.cust_code AND n.material_code=m.sku/);
-  assert.match(sql, /r.cust_code=m.cust_code AND r.new_material_code=m.sku/);
-  assert.match(sql, /AS unmatched_order/);
-  assert.match(sql, /AS missing_trace/);
-  assert.match(sql, /AS missing_ship_time/);
+  assert.match(sql, /MIN\(fromorderno_month\) AS period_start/);
+  assert.match(sql, /m.period_end>=:gea_p1 AND m.period_start<:gea_p2/);
+  assert.doesNotMatch(
+    sql,
+    /agents_scm_order_trace_final_di|agents_scm_execute_detail_hourly_d|complete_time/,
+  );
+  assert.match(sql, /GROUP BY fromorderno,cust_code,new_material_code/);
 });
 
 test('complete explicit shared responsibility survives multiple source names but truncated lists do not', () => {

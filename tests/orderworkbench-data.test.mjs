@@ -332,7 +332,7 @@ test('document metrics use order counts, distinct arrival orders and calendar-da
   const metrics = model.computeWorkbenchMetrics(fixturePeriod());
   assert.deepEqual(
     Object.values(metrics).map((metric) => metric.value),
-    [10, 5, 96, 90, 10, 15],
+    [10, 5, 96, 90, 10, 30],
   );
   assert.match(metrics['准交率'].note, /客户编码＋原订单号去重/);
   const period = fixturePeriod();
@@ -403,7 +403,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.cards.length, 6);
   assert.equal(presentation.cards[0].footer, '本周作废率 10.00%');
   assert.equal(presentation.cards[4].footer, '本周货龄占比 10.00%');
-  assert.equal(presentation.cards[5].footer, '本周可发货天数 15.0天');
+  assert.equal(presentation.cards[5].footer, '本周可发货天数 30.0天');
   assert.match(presentation.cards[0].formula, /订单数/);
   const differentWeek = {
     ...period,
@@ -421,7 +421,7 @@ test('presentation fills both period tables, actual categories and shared direct
   assert.equal(presentation.performance['item-performance'].week[0].length, 8);
   assert.equal(presentation.performance['director-performance'].month.length, 2);
   assert.equal(presentation.dimensions['category-fill'].rows[0][1], '96.00%');
-  assert.equal(presentation.skus['水饺'][0].shipDays, '15.00天');
+  assert.equal(presentation.skus['水饺'][0].shipDays, '30.00天');
   assert.equal(model.workbenchEvidence(facts).periods.month.sections[0].total, 1);
   const evidence = model.workbenchEvidence(facts);
   const compressed = JSON.parse(
@@ -512,13 +512,13 @@ test('an invalid SKU does not hide valid item comparisons; detail exposes source
   assert.equal(previous.metrics['周转天数'].value, null);
   assert.equal(
     model.computeWorkbenchMetrics(previous, (row) => row.item === '小水饺')['周转天数'].value,
-    15,
+    30,
   );
   const presentation = model.workbenchPresentation(facts);
   const row = presentation.performance['item-performance'].month.find((row) => row[0] === '小水饺');
   assert.equal(row[5], '+0.00天');
   const detail = model.workbenchMetricDetail(facts, '周转天数');
-  assert.match(detail, /本月.*15.0天/);
+  assert.match(detail, /本月.*30.0天/);
   assert.match(detail, /上月同期.*不能作为完整合计/);
   const absent = { ...previous, sections: [] };
   absent.metrics = model.computeWorkbenchMetrics(absent);
@@ -561,14 +561,22 @@ test('one arrival order with many SKUs counts once; incomplete orders leave an e
 
 test('base and item turnover use different transfer weights; missing transfer does not become zero', () => {
   const p = fixturePeriod();
-  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, 15);
+  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, 30);
+  assert.equal(
+    model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'base' })['周转天数'].value,
+    15,
+  );
   assert.equal(
     model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'item' })['周转天数'].value,
     30,
   );
   const stock = p.sections.find((s) => s.id === 'stock').rows[0];
   stock.transfer_plan = null;
-  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, null);
+  assert.equal(model.computeWorkbenchMetrics(p)['周转天数'].value, 30);
+  assert.equal(
+    model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'base' })['周转天数'].value,
+    null,
+  );
   assert.equal(
     model.computeWorkbenchMetrics(p, () => true, { turnoverScope: 'item' })['周转天数'].value,
     30,

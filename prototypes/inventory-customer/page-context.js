@@ -28,6 +28,7 @@ export function customerPageContext(value) {
     regionalCustomerCounts: '当前卡片角色/组织范围的大区客户数读取regionalInventoryValues.groupsByName各组customerCount；当前列表范围读取filteredRegionalInventoryValues，组数须与groupCount一致，互斥分组加总等于各自customerCount。无需切换区域筛选或用旧库存Cube代替计划表客户集合。',
     unknownOrganization: '分组名区域未知只表示组织归属缺失，不表示库存价值缺失。价值覆盖看coveredCount/missingCount；有覆盖时knownValue=0保留真实0或正负抵消，不得臆断为缺价，也不把组织未知转成金额null。',
     pageControls: '元素目录为页面显式登记的受控控件，不等于整棵DOM。可以通过登记的filter动作或可编辑customer-control元素调整region/status/tab/search/page；未登记的控件只能说当前工具无法操作，不能断言页面没有该控件，更不能把动作未注册等同数据未授权。',
+    skuInventory: 'tab=sku时，skuInventory单独记录当前上方客户筛选范围的日库存SKU明细及十行服务端分页；只在state=ready时可用。来源和字段口径与经销商库存SKU库存一致，snapshotDate是日库存日期；不与顶部计划库存卡片混算，rows不是客户汇总。customerCount记录明细范围客户数，完整客户集合沿用filteredCustomerCodes。',
     cubeMetadata: 'inspect_cube_model的members_truncated=true表示返回成员不完整，不表示字段未发布或没有权限。按工具实际schema的limit或单个keyword继续定位成员；不要把多个字段关键词拼成一个短语反复查询，也不猜aliasMember。页面已提供的大区客户数和价值优先用同次页面分组结果；计划表Cube没有已确认的组织维度或客户去重度量时，不用record_count替代客户数，也不换旧表客户集合冒充计划客户集合。',
     assessmentCompleteness: '综合状态保留已确认的结构及大日期风险；结构分或大日期占比缺失时，同格额外标明数据不足及原因，不能把需关注或高风险理解为完整风险已知，也不能因缺失抹掉已知风险。',
     sources: '六项指标统一来自agents_scm_cust_plan_order_analysis_d最新create_date的全部客户+SKU；近30日销量=daily_sales×30，大日期=big_final_qty。组织字段仍缺，仅组织维度使用旧表，日期单独说明。右侧独立Cube模型未更改。',

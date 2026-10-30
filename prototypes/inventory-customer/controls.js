@@ -3,7 +3,7 @@ import { action, reportElements } from '../../business/shared/channel.js';
 export function customerControls(state, setters, regions) {
   const choices = {
     region: ['all', ...regions], status: ['all', 'risk', 'attention', 'healthy'],
-    tab: ['overview', 'risk', 'largeDate'],
+    tab: ['overview', 'risk', 'largeDate', 'sku'],
   };
   const labels = { region: '列表区域筛选', status: '列表状态筛选', tab: '客户库存页签', search: '经销商名称或编码搜索', page: '列表页码' };
   const values = { region: state.region, status: state.status, tab: state.tab, search: state.search, page: state.page };
