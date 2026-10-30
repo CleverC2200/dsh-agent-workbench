@@ -19,8 +19,9 @@ const number = (value) =>
 const percent = (value) =>
   value == null || value === ''
     ? '-'
-    : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 }).format(Number(value) * 100) +
-      '%';
+    : new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+        Number(value) * 100,
+      ) + '%';
 
 export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart, categories }) {
   const h = react.createElement;

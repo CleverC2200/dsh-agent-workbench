@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import * as XLSX from 'xlsx-republish';
 import { expect } from '@playwright/test';
 import { mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
@@ -178,9 +179,9 @@ test('historical shares reuse the existing computation while final category dema
   await expect(card).toContainText('2 / 2 条可计算');
   await card.getByRole('button', { name: '预览', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '去年发运占比 · 源值核对', exact: true });
-  await expect(dialog).toContainText('25%');
-  await expect(dialog).toContainText('75%');
-  await expect(dialog).toContainText('50%');
+  await expect(dialog).toContainText('25.00%');
+  await expect(dialog).toContainText('75.00%');
+  await expect(dialog).toContainText('50.00%');
   const waiting = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
@@ -201,7 +202,7 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
   const row = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
-  await expect(row).toContainText('100%');
+  await expect(row).toContainText('100.00%');
   await expect(row.locator('td').nth(1)).toHaveText('40');
   await expect(row.locator('td').nth(2)).toHaveText('120');
   await expect(row.locator('td').nth(3)).toHaveText('120');
@@ -211,7 +212,7 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
     );
   await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
   await expect(row.locator('td').nth(3)).toHaveText('240');
-  await expect(row).toContainText('50%');
+  await expect(row).toContainText('50.00%');
   await section.getByLabel('源值核对截止月份').fill('2026-08');
   await expect(row.locator('td').nth(2)).toHaveText('-');
   await expect(section).toContainText('期初使用评估月前4至前2月');
@@ -250,11 +251,11 @@ test('failed source-check refresh retracts old comparisons instead of leaving an
   });
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
   await section.getByRole('button', { name: '读取三月源值', exact: true }).click();
-  await expect(section).toContainText('100%');
+  await expect(section).toContainText('100.00%');
   deny = true;
   await section.getByRole('button', { name: '读取三月源值', exact: true }).click();
   await expect(section.getByRole('alert')).toContainText('数据读取失败');
-  await expect(section).not.toContainText('100%');
+  await expect(section).not.toContainText('100.00%');
   const row = section
     .locator('tbody tr')
     .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
@@ -305,7 +306,7 @@ test('identity reset cancels pending source checks even when the replacement dra
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
   release();
   await expect.poll(() => completed).toBe(true);
-  await expect(section).toContainText('100%');
+  await expect(section).toContainText('100.00%');
   await expect(section).not.toContainText('尚未读取核对窗口');
 });
 
@@ -398,7 +399,7 @@ test('sales plan share card reads all three source dimensions and exports the ra
   await expect(card).toContainText('3 条源记录');
   await card.getByRole('button', { name: '预览', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '销售提报占比 · 计划源值', exact: true });
-  await expect(dialog).toContainText('25%');
+  await expect(dialog).toContainText('25.00%');
   for (const dimension of ['大类+物料组', '物料组+产品', '基地+产品']) {
     await dialog.getByLabel('计划占比维度').selectOption(dimension);
     await expect(dialog.locator('tbody')).toContainText(dimension);
@@ -407,7 +408,7 @@ test('sales plan share card reads all three source dimensions and exports the ra
   await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
   const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /0\.250000000000/);
-  assert(!csv.includes('25%'));
+  assert(!csv.includes('25.00%'));
   assert(
     calls.some(
       (call) =>
@@ -453,9 +454,25 @@ test('confirmed category computation reaches the monthly table and keeps raw dow
   await expect(result.locator('td').nth(2)).toHaveText('59');
   await expect(result.locator('td').nth(3)).toHaveText('89');
   await expect(result.locator('td').nth(4)).toHaveText('177');
+  const calculation = frame
+    .getByRole('region', { name: '逐月测算', exact: true })
+    .locator('tbody tr')
+    .first();
+  await expect(calculation.locator('td').nth(3)).toHaveText('156.25%');
+  await expect(calculation.locator('td').nth(4)).toHaveText('63');
+  await expect(calculation.locator('td').nth(5)).toHaveText('10.00%');
+  await expect(calculation.locator('td').nth(6)).toHaveText('40');
+  await expect(calculation.locator('td').nth(7)).toHaveText('51');
   const waiting = page.waitForEvent('download');
   await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
-  const csv = await mpsDownloadText(await (await waiting).path());
+  const downloadPath = await (await waiting).path();
+  const book = XLSX.read(await readFile(downloadPath), { type: 'buffer' });
+  const [raw] = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.equal(raw['① 环比法'], 62.5);
+  assert.equal(raw['加权'], 51.25);
+  assert.equal(raw['环比链'], 1.5625);
+  assert(Math.abs(raw['同期平均占比'] - 0.1) < 1e-12);
+  const csv = await mpsDownloadText(downloadPath);
   assert.match(csv, /51\.25/);
   assert.match(csv, /177\.1875/);
 });

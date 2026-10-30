@@ -317,9 +317,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   { key: column },
                   row[column] === '' || row[column] == null
                     ? '-'
-                    : /数量|收入|金额|合计/.test(column) && Number.isFinite(Number(row[column]))
+                    : (/数量|收入|金额|合计/.test(column) ||
+                          ['① 环比法', '② 占比法', '加权'].includes(column)) &&
+                        Number.isFinite(Number(row[column]))
                       ? integer(row[column])
-                      : row[column],
+                      : [
+                            '环比链',
+                            '同期平均占比',
+                            '三年月占比',
+                            '月发货占财年比例',
+                            '同比增长率',
+                            '环比增长率',
+                          ].includes(column) && Number.isFinite(Number(row[column]))
+                        ? new Intl.NumberFormat('zh-CN', {
+                            style: 'percent',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(Number(row[column]))
+                        : row[column],
                 ),
               ),
             ),
@@ -703,7 +718,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         after = quantity(current, '数量');
       if (!before) return '分母为0';
       const result = ((after / before - 1) * 100).toLocaleString('zh-CN', {
-        maximumFractionDigits: 6,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       });
       return h(
         'details',
@@ -712,7 +728,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：（本月数量÷上月数量－1）×100%；结果：${result}%。仅用于文件环比核对，显示最多六位小数。`,
+          `公式：（本月数量÷上月数量－1）×100%；结果：${result}%。仅用于文件环比核对，显示保留两位小数。`,
         ),
       );
     };
