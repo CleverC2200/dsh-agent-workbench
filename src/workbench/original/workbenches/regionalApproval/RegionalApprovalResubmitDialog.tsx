@@ -1,3 +1,4 @@
+import type { NativeBusinessStatus } from '../../../business-contract.ts';
 import { isBackendHttpError } from '../../http-error.ts';
 import {
   businessSafeErrorMessage,
@@ -91,6 +92,7 @@ export function RegionalApprovalResubmitDialog({
   items,
   client,
   connected,
+  unavailableReason,
   visible = true,
   onPendingChange,
   t,
@@ -101,6 +103,7 @@ export function RegionalApprovalResubmitDialog({
   items: readonly SalesPlanSubmissionItem[];
   client: SubmissionClient;
   connected: boolean;
+  unavailableReason?: NativeBusinessStatus['resubmitUnavailableReason'];
   visible?: boolean;
   onPendingChange?: (pending: boolean) => void;
   t: TFunction;
@@ -545,7 +548,22 @@ export function RegionalApprovalResubmitDialog({
             })}
           />
         )}
-        {serviceBlocked && <Alert type="warning" content={tr('disabled.serviceBoundary')} />}
+        {needsService && !connected && (
+          <Alert
+            type="warning"
+            content={tr(
+              unavailableReason === 'signed-out'
+                ? 'errors.serviceSignedOut'
+                : unavailableReason === 'configuration'
+                  ? 'errors.serviceConfiguration'
+                  : unavailableReason === 'tenant'
+                    ? 'errors.serviceTenant'
+                    : unavailableReason === 'credential'
+                      ? 'errors.serviceCredential'
+                      : 'disabled.serviceBoundary',
+            )}
+          />
+        )}
         {!rows ? <Spin /> : null}
         {rows?.map((row, index) => (
           <section
