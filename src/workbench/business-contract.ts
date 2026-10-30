@@ -5,6 +5,7 @@ export interface NativeBusinessStatus {
   authenticated: boolean;
   pageScope: string | null;
   resubmitConnected: boolean;
+  resubmitUnavailableReason?: 'signed-out' | 'configuration' | 'tenant' | 'credential';
   loginState: string;
   permissionCodes?: string[];
   roles?: any[];

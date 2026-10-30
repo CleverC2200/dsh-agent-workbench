@@ -1105,7 +1105,7 @@ export function FcConfiguredList(
                 </p>
               )}
               {dialog === 'export' && (
-                <fieldset disabled={busy || Boolean(dmsReceipt)}>
+                <fieldset className="fc-dms-fields" disabled={busy || Boolean(dmsReceipt)}>
                   <legend>DMS 暂存信息</legend>
                   {(
                     [

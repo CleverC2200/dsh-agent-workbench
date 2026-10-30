@@ -309,7 +309,7 @@ export function FcCurrentOrders({
         </button>
       </LocalQueryForm>
       {state.kind === 'loading' ? (
-        <DashboardTableSkeleton label="当前订单加载中" />
+        <DashboardTableSkeleton label="当前订单加载中" embedded />
       ) : state.kind === 'failed' ? (
         <p className={css.error} role="alert">
           {state.message}

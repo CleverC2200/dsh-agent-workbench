@@ -1322,6 +1322,18 @@ function fcWorkflowRows(query, result) {
   return { ...result, rows };
 }
 
+test('FC embedded loading replaces the table without a second rounded border', async (t) => {
+  const { frame } = await mount(t, 'fc', 1280, (query, result) => {
+    if (query.queryId === 'replenishment.detail.atomic') return new Promise(() => {});
+    return fcWorkflowRows(query, result);
+  });
+  const loading = frame.getByRole('status', { name: '补货确认加载中' });
+  await expect(loading).toBeVisible();
+  await expect(loading).toHaveCSS('border-top-width', '0px');
+  await expect(loading).toHaveCSS('border-radius', '0px');
+  await expect(loading.locator('table')).toHaveAttribute('aria-hidden', 'true');
+});
+
 test('FC restored quantity draft survives server paging and submits a real workbook', async (t) => {
   const { frame, page, calls, errors } = await mount(t, 'fc', 1280, fcWorkflowRows);
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
@@ -1331,7 +1343,10 @@ test('FC restored quantity draft survives server paging and submits a real workb
     10,
   );
   await list.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }).fill('13');
-  await list.getByRole('textbox', { name: 'sku-A-000调整原因', exact: true }).fill('补充订单');
+  const reason = list.getByRole('textbox', { name: 'sku-A-000调整原因', exact: true });
+  await reason.focus();
+  await expect(reason).toHaveCSS('outline-style', 'none');
+  await reason.fill('补充订单');
   await list.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(
     list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
@@ -1354,6 +1369,10 @@ test('FC restored quantity draft survives server paging and submits a real workb
   await expect(confirmation).toContainText('请先选择本次补货的分仓');
   await confirmation.getByLabel('导出补货分仓').selectOption('001');
   await expect(confirmation).toContainText('21个SKU');
+  const fields = confirmation.locator('.fc-dms-fields');
+  await expect(fields).toHaveCSS('display', 'grid');
+  await expect(fields.getByLabel('收货地址编码')).toHaveCSS('height', '36px');
+  await expect(confirmation.locator('.fc-workflow-actions')).toHaveCSS('border-top-style', 'solid');
   const downloaded = page.waitForEvent('download');
   await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
   const file = await downloaded;
@@ -2277,4 +2296,44 @@ test('FC model failure leaves stock cards and ten-row list available', async (t)
     frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
   ).toHaveCount(10);
   assert.deepEqual(errors, []);
+});
+
+test('FC current orders loading stays square within its panel', async (t) => {
+  const { frame } = await mount(t, 'fc', 1280, (query, result) =>
+    query.queryId === 'branch-current-orders.page' ? new Promise(() => {}) : result,
+  );
+  await frame
+    .getByRole('navigation', { name: '库存业务页签' })
+    .getByRole('button', { name: '当前订单', exact: true })
+    .click();
+  const loading = frame.getByRole('status', { name: '当前订单加载中' });
+  await expect(loading).toBeVisible();
+  await expect(loading).toHaveCSS('border-radius', '0px');
+  await expect(loading).toHaveCSS('border-top-width', '0px');
+});
+
+test('QLL category loading stays square within its panel', async (t) => {
+  const { frame } = await mount(t, 'qll', 1280, (query, result) =>
+    query.queryId.startsWith('category-tree.') ? new Promise(() => {}) : result,
+  );
+  const loading = frame.getByRole('status', { name: '品类结构加载中' });
+  await expect(loading).toBeVisible();
+  await expect(loading).toHaveCSS('border-radius', '0px');
+  await expect(loading).toHaveCSS('border-top-width', '0px');
+});
+
+test('dealer inventory tabs use square embedded loading', async (t) => {
+  const { frame } = await mount(t, 'dealer', 1280, (query, result) =>
+    query.queryId.startsWith('dealer.stock.') &&
+    (query.queryId.endsWith('.atomic') || query.queryId.endsWith('.count'))
+      ? new Promise(() => {})
+      : result,
+  );
+  for (const tab of ['客户库存', '品类库存', 'SKU库存', '缺货库存', '临期库存']) {
+    await frame.getByRole('tab', { name: tab, exact: true }).click();
+    const loading = frame.getByRole('status', { name: '表格加载中' });
+    await expect(loading).toBeVisible();
+    await expect(loading).toHaveCSS('border-radius', '0px');
+    await expect(loading).toHaveCSS('border-top-width', '0px');
+  }
 });

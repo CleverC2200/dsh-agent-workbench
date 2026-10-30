@@ -8,10 +8,13 @@ import { JSDOM } from 'jsdom';
 import { zh } from '../src/company/locales.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 const corePath = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
 verifyOfficialCore(corePath);
-const { SlotCore } = await import(resolve(corePath, 'packages/client/ui-slots/lib/index.js'));
+const { SlotCore } = await import(
+  pathToFileURL(resolve(corePath, 'packages/client/ui-slots/lib/index.js')).href
+);
 const require = createRequire(import.meta.url);
 const bundle = await build({
   stdin: {
@@ -2104,7 +2107,12 @@ async function mountNavigation(t, options = {}) {
       React.createElement(Sidebar, {
         collapsed: false,
         width: 280,
-        usePanelInfo: (select) => select({ activePanelId: 'gea-proof' }),
+        usePanelInfo: (select) =>
+          select({
+            activePanelId: Object.hasOwn(options, 'activePanelId')
+              ? options.activePanelId
+              : 'gea-proof',
+          }),
         renderSlot: result.renderSlot,
       }),
     );
@@ -2199,6 +2207,14 @@ test('desktop groups, original icons and short titles retain all confirmed page 
   assert.ok(groups[1].querySelector('svg path[d="M8 3v4M16 3v4M4 10h16M8 14h2M14 14h2M8 17h2"]'));
   assert.ok(groups[2].querySelector('svg path[d="m3 10 9-6 9 6v10H3z"]'));
   assert.equal(document.querySelector('[aria-label="刷新业务应用"]'), null);
+  for (const entry of document.querySelectorAll('.gea-shell-nav-child:disabled')) {
+    assert.equal(entry.hasAttribute('aria-current'), false, 'disabled entry must not be selected');
+    assert.equal(
+      entry.classList.contains('is-active'),
+      false,
+      'disabled entry must not be styled active',
+    );
+  }
   for (const [, page, title] of bindings) {
     const button = document.querySelector(`[data-gea-business-entry="${page}"]`);
     assert.equal(button.textContent, title);
@@ -2211,6 +2227,11 @@ test('desktop groups, original icons and short titles retain all confirmed page 
   );
   const stock = document.querySelector('[data-gea-business-entry="stock-only"]');
   assert.equal(stock.disabled, true);
+  assert.equal(stock.hasAttribute('aria-current'), false);
+  assert.equal(stock.classList.contains('is-active'), false);
+  const unconnected = document.querySelector('[data-gea-business-entry="numeric-only"]');
+  assert.equal(unconnected.hasAttribute('aria-current'), false);
+  assert.equal(unconnected.classList.contains('is-active'), false);
   assert.equal(stock.closest('[data-gea-menu-group]').dataset.geaMenuGroup, 'inventory');
   assert.equal(document.querySelector('[data-gea-business-entry="numeric-only"]').disabled, true);
   assert.doesNotMatch(document.body.textContent, /后台长名称|后台客户分类/);
@@ -2992,4 +3013,35 @@ test('menu Agent selection preserves Core injection and follows preset plugin re
   assert.equal(core.entries('conversation.hero.agentPreset').length, 1);
   releaseReplacement();
   assert.equal(core.entries('conversation.hero.agentPreset').length, 0);
+});
+
+test('business navigation never selects unavailable entries when no page is active', async (t) => {
+  await mountNavigation(t, {
+    activePanelId: null,
+    pages: ['inventory-fc'],
+    businessNavigation: {
+      read: async () => ({
+        agents: [
+          { id: 'planning', agentCode: '04', agentName: '计划管理工作台' },
+          { id: 'capacity', agentCode: '03', agentName: '产能评估' },
+          {
+            id: 'dealer',
+            agentCode: 'dealer-inventory-replenishment-stock',
+            agentName: '经销商库存',
+          },
+          { id: 'branch', agentCode: 'branch-inventory', agentName: '分仓库存' },
+        ],
+        domains: { kind: 'available', items: [] },
+      }),
+    },
+  });
+  const unavailable = ['planning', 'capacity', 'dealer'].map((id) =>
+    document.querySelector(`[data-gea-business-entry="${id}"]`),
+  );
+  assert.ok(unavailable.every((item) => item && item.disabled));
+  for (const item of unavailable) {
+    assert.equal(item.hasAttribute('aria-current'), false);
+    assert.equal(item.classList.contains('is-active'), false);
+  }
+  assert.equal(document.querySelectorAll('.gea-shell-nav-child[aria-current="page"]').length, 0);
 });
