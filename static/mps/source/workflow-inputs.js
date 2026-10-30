@@ -108,7 +108,7 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     categoryDemand: (draft.categoryDemand ?? buildCategoryDemand(draft, []).rows).map((row) => ({
       month: text(row.month),
       category: text(row.category),
-      quantity: number(row.quantity),
+      quantity: number(Object.hasOwn(row, 'systemQuantity') ? row.systemQuantity : row.quantity),
     })),
     report,
     history,
@@ -118,6 +118,36 @@ export function buildMpsWorkflow(draft, relations, shipmentSnapshot) {
     },
     openingInventory,
     capacities,
+    adjustments: {
+      categoryDemand: (draft.adjustments?.categoryDemand ?? []).map(
+        ({ month, category, quantity }) => ({ month, category, quantity }),
+      ),
+      shares: (draft.adjustments?.shares ?? []).map(({ rowId, share }) => ({ rowId, share })),
+    },
+    productionDays: (draft.productionDays ?? []).map((row) => ({
+      base: text(row.base),
+      month: text(row.month),
+      days: number(row.days),
+    })),
+    unitWeights: (draft.unitWeights ?? []).map((row) => ({
+      base: text(row.base),
+      code: text(row.code),
+      tonsPerPiece: number(row.tonsPerPiece),
+    })),
+    resources: (draft.resources ?? []).map((row) => ({
+      id: text(row.id),
+      base: text(row.base),
+      kind: row.kind,
+      name: text(row.name),
+      dailyTons: number(row.dailyTons),
+    })),
+    resourceAssignments: (draft.resourceAssignments ?? []).map((row) => ({
+      month: text(row.month),
+      base: text(row.base),
+      code: text(row.code),
+      resourceId: text(row.resourceId),
+      share: number(row.share),
+    })),
     constraints: {
       safetyDays: (draft.constraints?.safetyDays ?? []).map((row) => ({
         base: text(row.base),
