@@ -4,8 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { createQueryClient, makeRequest } from '../business/shared/configured-query-client.mjs';
 const savedWindow = globalThis.window;
 globalThis.window = { addEventListener() {}, parent: { postMessage() {} } };
-const { forecastRows, forecastDimensions, deliveryRows, deliveryColumns, sourceTableParameters } =
-  await import('../static/mps/source/source-tables.js');
+const {
+  forecastRows,
+  forecastDimensions,
+  deliveryRows,
+  deliveryColumns,
+  sourceTableParameters,
+  planRateRows,
+} = await import('../static/mps/source/source-tables.js');
 if (savedWindow === undefined) delete globalThis.window;
 else globalThis.window = savedWindow;
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
@@ -212,4 +218,29 @@ test('forecast classification explains missing and ambiguous group members witho
   assert.equal(ambiguous['数量'], 8);
   assert.equal(ambiguous['大类'], '');
   assert.match(ambiguous['缺项原因'], /多个源值/);
+});
+
+test('plan share parameters use natural current and next month across years', () => {
+  assert.deepEqual(sourceTableParameters('plan-rate', '2026-12'), { months: ['202612', '202701'] });
+});
+
+test('plan shares preserve nationwide null bases, zero and precise source ratios', () => {
+  const row = {
+    dimension_type: '大类+物料组',
+    stat_month: '202612',
+    belong_base: null,
+    category_name: '汤圆',
+    material_group_name: '物料组甲',
+    material_code: null,
+    product_name: null,
+    dimension_allnum: 0,
+    parent_allnum: 100,
+    dimension_rate: '0.000000000000',
+  };
+  const [result] = planRateRows([row], '2026-12');
+  assert.equal(result['基地'], '');
+  assert.equal(result['月份'], '2026-12');
+  assert.equal(result['当前维度计划量'], 0);
+  assert.equal(result['计划占比'], '0.000000000000');
+  assert.throws(() => planRateRows([{ ...row, stat_month: '202611' }], '2026-12'), /月份/);
 });

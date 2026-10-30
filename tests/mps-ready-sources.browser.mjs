@@ -34,13 +34,13 @@ const products = [
 function fixture({ queryId, parameters }) {
   let rows = [];
   if (queryId.startsWith('products.')) rows = products;
-  if (queryId === 'facts.report')
+  if (queryId.startsWith('facts.report'))
     rows = ['A', 'B'].map((code, index) =>
-      record(queryId, {
-        'agents_sales_plan_demand_m.belong_base': '郑州',
-        'agents_sales_plan_demand_m.material_code': code,
-        'agents_sales_plan_demand_m.plannum_total': index ? 30 : 10,
-        'agents_sales_plan_demand_m.allnum_total': index ? 60 : 20,
+      record('facts.report', {
+        belong_base: '郑州',
+        material_code: code,
+        plannum_total: index ? 30 : 10,
+        allnum_total: index ? 60 : 20,
       }),
     );
   if (queryId === 'facts.history')
@@ -53,6 +53,48 @@ function fixture({ queryId, parameters }) {
         'agents_scm_cust_deliv_daily_di.material_group_name': '物料组甲',
         'agents_scm_cust_deliv_daily_di.act_dl_qty_total': 20,
         'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': 21,
+      }),
+    );
+  if (queryId.startsWith('annual-pool.'))
+    rows = ['2026-11', '2026-12', '2027-01'].map((stat_month, index) =>
+      record('annual-pool.detail', {
+        belong_base: '全国',
+        sub_category: '汤圆',
+        stat_month,
+        source_rows: 1,
+        missing_qty: 0,
+        duplicate_rows: 0,
+        demand_qty: 100 * (index + 1),
+      }),
+    );
+  if (queryId.startsWith('plan-rate.'))
+    rows = ['大类+物料组', '物料组+产品', '基地+产品'].map((dimension_type, index) =>
+      record('plan-rate.detail', {
+        dimension_type,
+        stat_month: parameters.months[0],
+        belong_base: index === 2 ? '郑州' : null,
+        category_name: index === 0 ? '汤圆' : null,
+        material_group_name: index !== 2 ? '物料组甲' : null,
+        material_code: index ? 'A' : null,
+        product_name: index ? '产品A' : null,
+        dimension_allnum: 25,
+        parent_allnum: 100,
+        dimension_rate: '0.250000000000',
+      }),
+    );
+  if (queryId.startsWith('category-history.'))
+    rows = parameters.months.map((month) =>
+      record('category-history.detail', {
+        dimension_type: '基地+大类',
+        stat_month: month,
+        belong_base: '郑州',
+        dimension_value: '汤圆',
+        dimension_act_dl_qty: 100,
+        last_year_dimension_act_dl_qty: 90,
+        last_month_dimension_act_dl_qty: 80,
+        national_dimension_fiscal_act_dl_qty: 1000,
+        fiscal_year: month.slice(0, 4),
+        source_rows: 1,
       }),
     );
   if (queryId.startsWith('delivery.'))
@@ -126,16 +168,16 @@ test('product replacement fields populate old-product columns and the list omits
   await expect(child.locator('td').nth(7)).toHaveText('源替换品');
 });
 
-test('first-step shares reuse the existing computation while final category demand remains unavailable', async (t) => {
+test('historical shares reuse the existing computation while final category demand remains unavailable', async (t) => {
   const { page, frame } = await mpsPage(t, config, fixture);
   await version(frame);
   const region = frame.getByRole('region', { name: '系统派生口径参数' });
   const card = region
     .locator('section')
-    .filter({ has: frame.getByRole('heading', { name: '销售提报占比', exact: true }) });
+    .filter({ has: frame.getByRole('heading', { name: '去年发运占比', exact: true }) });
   await expect(card).toContainText('2 / 2 条可计算');
   await card.getByRole('button', { name: '预览', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '销售提报占比 · 源值核对', exact: true });
+  const dialog = frame.getByRole('dialog', { name: '去年发运占比 · 源值核对', exact: true });
   await expect(dialog).toContainText('25%');
   await expect(dialog).toContainText('75%');
   await expect(dialog).toContainText('50%');
@@ -146,7 +188,7 @@ test('first-step shares reuse the existing computation while final category dema
   assert.doesNotMatch(csv, /25%/);
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(frame.getByRole('region', { name: '大类预估需求数量', exact: true })).toContainText(
-    '待定',
+    'M+4只到大类',
   );
 });
 
@@ -172,7 +214,7 @@ test('source checks fetch explicit months and use DMS versions while an unrelate
   await expect(row).toContainText('50%');
   await section.getByLabel('源值核对截止月份').fill('2026-08');
   await expect(row.locator('td').nth(2)).toHaveText('-');
-  await expect(section).toContainText('不是已确认的预测基期');
+  await expect(section).toContainText('期初使用评估月前4至前2月');
 });
 
 test('three-year cards read complete historical source periods and display source ratios without computing an unconfirmed mean', async (t) => {
@@ -190,12 +232,14 @@ test('three-year cards read complete historical source periods and display sourc
     await expect(dialog).toContainText(year + '-10');
     assert(
       calls.some(
-        (call) => call.queryId === 'delivery.detail' && call.parameters.months[0] === year + '-10',
+        (call) =>
+          call.queryId === 'category-history.detail' &&
+          call.parameters.months.includes(year + '10'),
       ),
     );
   }
-  await expect(dialog).toContainText('0.111111111111');
-  await expect(dialog).toContainText('三年均值未确认');
+  await expect(dialog).toContainText('1.1111111111111112');
+  await expect(dialog).toContainText('等权平均');
 });
 
 test('failed source-check refresh retracts old comparisons instead of leaving an earlier ratio visible', async (t) => {
@@ -220,7 +264,7 @@ test('failed source-check refresh retracts old comparisons instead of leaving an
 
 test('a failed historical year does not hide the two successfully read years', async (t) => {
   const { frame } = await mpsPage(t, config, (query) => {
-    if (query.queryId.startsWith('delivery.') && query.parameters.months[0] === '2023-10')
+    if (query.queryId.startsWith('category-history.') && query.parameters.months.includes('202310'))
       throw Error('HISTORICAL_YEAR_UNAVAILABLE');
     return fixture(query);
   });
@@ -235,7 +279,7 @@ test('a failed historical year does not hide the two successfully read years', a
   const dialog = frame.getByRole('dialog', { name: '三年同比 · 源值核对', exact: true });
   await expect(dialog).toContainText('2024-10');
   await expect(dialog).toContainText('2025-10');
-  await expect(dialog).toContainText('共2条');
+  await expect(dialog).toContainText('共12条');
 });
 
 test('identity reset cancels pending source checks even when the replacement draft reuses local-1', async (t) => {
@@ -255,16 +299,14 @@ test('identity reset cancels pending source checks even when the replacement dra
     return fixture(query);
   });
   const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
-  await section.getByLabel('源值核对截止月份').fill('2026-09');
-  await section.getByRole('button', { name: '读取三月源值', exact: true }).click();
   await expect.poll(() => held).toBe(true);
   await frame
     .locator('body')
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
   release();
   await expect.poll(() => completed).toBe(true);
-  await expect(section).toContainText('尚未读取核对窗口');
-  await expect(section).not.toContainText('100%');
+  await expect(section).toContainText('100%');
+  await expect(section).not.toContainText('尚未读取核对窗口');
 });
 
 test('identity and page lifecycle resets reload first-page sources when the draft keeps the same id and month', async (t) => {
@@ -337,4 +379,124 @@ test('source-check displays round quantities but its download keeps monthly deci
   const csv = await mpsDownloadText(await (await waiting).path());
   assert.match(csv, /评估版本,评估月份,源月份/);
   assert.match(csv, /,汤圆,月初数量,40\.75,40,40\.75,40,/);
+});
+
+test('entering demand confirmation reads the three-month source check without a separate click', async (t) => {
+  const { frame } = await mpsPage(t, config, fixture);
+  await version(frame);
+  const section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  const row = section
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  await expect(row.locator('td').nth(2)).toHaveText('120');
+});
+
+test('sales plan share card reads all three source dimensions and exports the raw ratio', async (t) => {
+  const { page, frame, calls } = await mpsPage(t, config, fixture);
+  await version(frame);
+  const card = frame.getByRole('region', { name: '销售提报占比', exact: true });
+  await expect(card).toContainText('3 条源记录');
+  await card.getByRole('button', { name: '预览', exact: true }).click();
+  const dialog = frame.getByRole('dialog', { name: '销售提报占比 · 计划源值', exact: true });
+  await expect(dialog).toContainText('25%');
+  for (const dimension of ['大类+物料组', '物料组+产品', '基地+产品']) {
+    await dialog.getByLabel('计划占比维度').selectOption(dimension);
+    await expect(dialog.locator('tbody')).toContainText(dimension);
+  }
+  const waiting = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: '下载源值', exact: true }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /0\.250000000000/);
+  assert(!csv.includes('25%'));
+  assert(
+    calls.some(
+      (call) =>
+        call.queryId === 'plan-rate.detail' && call.parameters.months.join() === '202610,202611',
+    ),
+  );
+});
+
+test('confirmed category computation reaches the monthly table and keeps raw downloadable results', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('annual.summary') && !query.queryId.startsWith('annual-pool.'))
+      return fixture(query);
+    const rows = [
+      ['2026-10', 100],
+      ['2026-11', 100],
+      ['2026-12', 150],
+      ['2027-01', 300],
+    ].map(([stat_month, demand_qty]) =>
+      record('annual.summary', {
+        belong_base: '全国',
+        sub_category: '汤圆',
+        stat_month,
+        demand_qty,
+        source_rows: 1,
+        missing_qty: 0,
+        duplicate_rows: 0,
+      }),
+    );
+    return {
+      rows: query.queryId.endsWith('.count') ? [{ total: rows.length }] : rows,
+      returnedColumns: query.queryId.endsWith('.count')
+        ? ['total']
+        : config.queries[query.queryId].columns,
+      configVersion: 'category-fixture',
+    };
+  });
+  await version(frame);
+  const result = frame
+    .getByRole('region', { name: '大类预估需求数量', exact: true })
+    .locator('tbody tr')
+    .filter({ has: frame.getByRole('cell', { name: '汤圆', exact: true }) });
+  await expect(result.locator('td').nth(1)).toHaveText('51');
+  await expect(result.locator('td').nth(2)).toHaveText('59');
+  await expect(result.locator('td').nth(3)).toHaveText('89');
+  await expect(result.locator('td').nth(4)).toHaveText('177');
+  const waiting = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载测算明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /51\.25/);
+  assert.match(csv, /177\.1875/);
+});
+
+test('the opening plan reads June to August while the adjusted plan reads July to September', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, fixture);
+  await version(frame);
+  let section = frame.getByRole('region', { name: '大类基础指标源值核对', exact: true });
+  await expect(section.getByLabel('源值核对截止月份')).toHaveValue('2026-08');
+  await expect
+    .poll(() =>
+      ['2026-06-01', '2026-07-01', '2026-08-01'].every((month) =>
+        calls.some((call) => call.queryId === 'facts.history' && call.parameters.month === month),
+      ),
+    )
+    .toBe(true);
+  await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  await expect(section.getByLabel('源值核对截止月份')).toHaveValue('2026-09');
+  await expect
+    .poll(() =>
+      calls.some(
+        (call) => call.queryId === 'facts.history' && call.parameters.month === '2026-09-01',
+      ),
+    )
+    .toBe(true);
+});
+
+test('current pool category demand fills all four months and exports correction figures from the real page path', async (t) => {
+  const { page, frame } = await mpsPage(t, config, fixture);
+  await version(frame);
+  await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  const methods = frame.getByRole('region', { name: '逐月测算', exact: true });
+  await expect(methods).toContainText('4 / 4 项可计算');
+  const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await expect(summary.locator('tbody tr')).toHaveCount(1);
+  const cells = await summary.locator('tbody tr td').allTextContents();
+  assert(cells.slice(1, 5).every((value) => /^\d+$/.test(value)));
+  const waiting = page.waitForEvent('download');
+  await methods.getByRole('button', { name: '下载测算明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /2026-10（M\+1）/);
+  assert.match(csv, /2027-01（M\+4）/);
+  assert.doesNotMatch(csv, /NaN|Infinity/);
 });
