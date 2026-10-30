@@ -148,8 +148,8 @@ test('MPS forecast crosses the year and historical periods do not borrow other r
   );
   const forecast = frame.getByRole('region', { name: '模型双期预测' });
   const monthly = frame.getByRole('region', { name: '逐月测算', exact: true });
-  await expect(monthly.getByRole('cell', { name: '2026-12（M+1）', exact: true })).toHaveCount(8);
-  await expect(monthly.getByRole('cell', { name: '2027-01（M+2）', exact: true })).toHaveCount(8);
+  await expect(monthly.getByRole('cell', { name: '2026-12（M+1）', exact: true })).toHaveCount(0);
+  await expect(monthly.getByRole('cell', { name: '2027-01（M+2）', exact: true })).toHaveCount(0);
   await expect(forecast).toContainText('当前期间1条，数量合计7件');
   const download = page.waitForEvent('download');
   await forecast.getByRole('button', { name: '导出当前明细', exact: true }).click();
@@ -191,10 +191,15 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   await expect(
     frame.getByRole('region', { name: '系统派生口径参数' }).locator('section'),
   ).toHaveCount(5);
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,POOL,当前产品,汤圆,系列,组,,',
+  );
   const results = frame.getByRole('region', { name: '大类预估需求数量' });
-  await expect(results.getByRole('row')).toHaveCount(9);
+  await expect(results.getByRole('row')).toHaveCount(2);
   await expect(results).toContainText('人工调整尚未接入');
-  await expect(results.getByRole('cell', { name: '-', exact: true })).toHaveCount(32);
+  await expect(results.getByRole('cell', { name: '-', exact: true })).toHaveCount(4);
 });
 
 test('MPS bounds large previews without silently dropping rows and rejects an oversized replacement as a whole', async (t) => {

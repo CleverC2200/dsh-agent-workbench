@@ -59,6 +59,8 @@ async function readFacts(id, parameters, signal, type, month) {
           基地: base,
           产品编码: code,
           ...dimensions,
+          源月初数量: number(row.plannum_total),
+          源纠偏数量: number(row.allnum_total),
           月初数量: base && code ? number(row.plannum_total) : '',
           纠偏数量: base && code ? number(row.allnum_total) : '',
         };

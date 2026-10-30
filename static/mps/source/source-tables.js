@@ -1,6 +1,6 @@
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
-import { normalizedMonth, sourceMonthValues } from './master-data.js';
+import { annualRows, normalizedMonth, sourceMonthValues } from './master-data.js';
 
 const text = (value) => {
   if (value === null) return '';
@@ -68,6 +68,7 @@ export function sourceTableParameters(kind, month) {
         monthOffset(month, index - 4).replace('-', ''),
       ),
     };
+  if (kind === 'annual-pool') return {};
   if (kind === 'forecast')
     return {
       months: [
@@ -259,19 +260,23 @@ export async function readSourceTable(kind, month, signal) {
     rows:
       kind === 'forecast'
         ? forecastRows(result.rows, month)
-        : kind === 'category-history'
-          ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
-          : kind === 'plan-rate'
-            ? planRateRows(result.rows, month)
-            : deliveryRows(result.rows, month),
+        : kind === 'annual-pool'
+          ? annualRows(result.rows)
+          : kind === 'category-history'
+            ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+            : kind === 'plan-rate'
+              ? planRateRows(result.rows, month)
+              : deliveryRows(result.rows, month),
     metadata: {
       period: month,
       source:
         kind === 'forecast'
           ? 'agents_scm_sales_forecast_mi'
-          : kind === 'plan-rate'
-            ? 'agents_scm_dimension_plan_rate_mi'
-            : 'agents_scm_base_dimension_delivery_mi',
+          : kind === 'annual-pool'
+            ? 'agents_dim_demand_annual_mi'
+            : kind === 'plan-rate'
+              ? 'agents_scm_dimension_plan_rate_mi'
+              : 'agents_scm_base_dimension_delivery_mi',
       total: result.rows.length,
       configVersion: result.configVersion,
       units: 'unconfirmed',

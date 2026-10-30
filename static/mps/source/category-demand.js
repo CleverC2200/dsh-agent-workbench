@@ -7,16 +7,18 @@ const ready = (state, month) => state?.status === 'ready' && state.month === mon
 export function buildCategoryDemand(draft, categories) {
   const checks = sourceCheckRows(
     ready(draft.sourceChecksRead, draft.month) ? draft.sourceChecks : null,
-    draft.productRaw,
+    ['loading', 'failed'].includes(draft.productsRead?.status)
+      ? []
+      : (draft.products ?? draft.productRaw),
     draft.pull,
     categories,
   );
   const historical = ready(draft.historicalIndicatorsRead, draft.month)
     ? draft.historicalIndicators.periods.flatMap((period) => (period.error ? [] : period.rows))
     : [];
-  const annual = ['loading', 'failed'].includes(draft.annualRead?.status)
-    ? []
-    : (draft.annual ?? []);
+  const annual = ready(draft.historicalIndicatorsRead, draft.month)
+    ? (draft.historicalIndicators.annual?.rows ?? [])
+    : [];
   const nationwide = annual.some((row) => row['基地'] === '全国')
     ? annual.filter((row) => row['基地'] === '全国')
     : annual;
@@ -30,13 +32,7 @@ export function buildCategoryDemand(draft, categories) {
   return computeMpsCategoryDemand({
     month: draft.month,
     pull: draft.pull,
-    categories: [
-      ...new Set(
-        [...categories, ...checks.categories, ...historical.map((row) => row['维度值'])].filter(
-          Boolean,
-        ),
-      ),
-    ],
+    categories: checks.categories,
     historical: historical
       .filter((row) => row['维度类型'] === '基地+大类')
       .map((row) => ({

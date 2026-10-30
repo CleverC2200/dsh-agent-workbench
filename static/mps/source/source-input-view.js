@@ -76,6 +76,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                     };
                   }),
                 ),
+                annual: await read(() => readSourceTable('annual-pool', draft.month, stop.signal)),
               }
             : {
                 periods: await Promise.all(
@@ -99,6 +100,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                 ...(period.report.error ? [`${period.month} DMS：${period.report.error}`] : []),
               ],
         );
+        if (result.annual?.error) errors.push(`年度产品池：${result.annual.error}`);
         if (!stop.signal.aborted)
           update({
             [type]: result,
@@ -131,11 +133,11 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       () =>
         sourceCheckRows(
           current && kind === 'basic' ? draft.sourceChecks : null,
-          ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.productRaw,
+          ['loading', 'failed'].includes(draft.productsRead?.status) ? [] : draft.products,
           draft.pull,
           categories,
         ),
-      [current, draft.sourceChecks, draft.productRaw, draft.productsRead, draft.pull, kind],
+      [current, draft.sourceChecks, draft.products, draft.productsRead, draft.pull, kind],
     );
     const historical =
       current && kind === 'parameters'
@@ -228,8 +230,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           !issues.length && actual.quantity !== null && plan.quantity > 0
             ? percent(actual.quantity / plan.quantity)
             : '-',
-        核对说明:
-          issues.join('；') || (current ? '同名源分类，未用作正式预测输入' : '尚未读取核对窗口'),
+        核对说明: issues.join('；') || (current ? '按当前产品池SKU归类' : '尚未读取核对窗口'),
       };
     });
     useMpsPart(
@@ -324,11 +325,35 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
               },
               '下载源值核对',
             ),
+            h(
+              'button',
+              {
+                disabled: !current || !checks.excluded.length,
+                onClick: () =>
+                  downloadCsv(
+                    '产品池外待补清单.csv',
+                    [
+                      '月份',
+                      '来源',
+                      '基地',
+                      '产品编码',
+                      '产品名称',
+                      '大类',
+                      '月初数量',
+                      '纠偏数量',
+                      '数量',
+                      '原因',
+                    ],
+                    checks.excluded,
+                  ),
+              },
+              `下载池外待补清单（${checks.excluded.length}条）`,
+            ),
           ),
           h(
             'p',
             { className: 'dc-muted' },
-            'BI实绩与DMS计划按所示三个月核对，计划随月初／纠偏选择。源分类分别保留，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
+            'BI实绩与DMS计划按所示三个月核对，计划随月初／纠偏选择。各来源按当前产品池SKU重新归类，池外SKU另列清单，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
           ),
           state?.error && h('p', { role: 'alert' }, state.error),
         ),

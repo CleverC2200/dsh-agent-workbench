@@ -55,6 +55,18 @@ function fixture({ queryId, parameters }) {
         'agents_scm_cust_deliv_daily_di.act_dl_qty_all_total': 21,
       }),
     );
+  if (queryId.startsWith('annual-pool.'))
+    rows = ['2026-11', '2026-12', '2027-01'].map((stat_month, index) =>
+      record('annual-pool.detail', {
+        belong_base: '全国',
+        sub_category: '汤圆',
+        stat_month,
+        source_rows: 1,
+        missing_qty: 0,
+        duplicate_rows: 0,
+        demand_qty: 100 * (index + 1),
+      }),
+    );
   if (queryId.startsWith('plan-rate.'))
     rows = ['大类+物料组', '物料组+产品', '基地+产品'].map((dimension_type, index) =>
       record('plan-rate.detail', {
@@ -406,7 +418,8 @@ test('sales plan share card reads all three source dimensions and exports the ra
 
 test('confirmed category computation reaches the monthly table and keeps raw downloadable results', async (t) => {
   const { page, frame } = await mpsPage(t, config, (query) => {
-    if (!query.queryId.startsWith('annual.summary')) return fixture(query);
+    if (!query.queryId.startsWith('annual.summary') && !query.queryId.startsWith('annual-pool.'))
+      return fixture(query);
     const rows = [
       ['2026-10', 100],
       ['2026-11', 100],
@@ -468,4 +481,22 @@ test('the opening plan reads June to August while the adjusted plan reads July t
       ),
     )
     .toBe(true);
+});
+
+test('current pool category demand fills all four months and exports correction figures from the real page path', async (t) => {
+  const { page, frame } = await mpsPage(t, config, fixture);
+  await version(frame);
+  await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  const methods = frame.getByRole('region', { name: '逐月测算', exact: true });
+  await expect(methods).toContainText('4 / 4 项可计算');
+  const summary = frame.getByRole('region', { name: '大类预估需求数量', exact: true });
+  await expect(summary.locator('tbody tr')).toHaveCount(1);
+  const cells = await summary.locator('tbody tr td').allTextContents();
+  assert(cells.slice(1, 5).every((value) => /^\d+$/.test(value)));
+  const waiting = page.waitForEvent('download');
+  await methods.getByRole('button', { name: '下载测算明细', exact: true }).click();
+  const csv = await mpsDownloadText(await (await waiting).path());
+  assert.match(csv, /2026-10（M\+1）/);
+  assert.match(csv, /2027-01（M\+4）/);
+  assert.doesNotMatch(csv, /NaN|Infinity/);
 });

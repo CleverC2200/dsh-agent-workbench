@@ -78,8 +78,10 @@ const checks = (actual, plan) => ({
 
 test('source checks use BI actuals and the selected DMS full version, not annual plan or a sum of versions', () => {
   const input = checks([history(12)], [report(10, 20)]);
-  const monthly = sourceCheckRows(input, [raw('A')], 'monthly', ['汤圆']).rows[0];
-  const adjusted = sourceCheckRows(input, [raw('A')], 'adjust', ['汤圆']).rows[0];
+  const monthly = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'monthly', ['汤圆'])
+    .rows[0];
+  const adjusted = sourceCheckRows(input, [raw('A', { sub_category: '汤圆' })], 'adjust', ['汤圆'])
+    .rows[0];
   assert.equal(monthly.plan.quantity, 10);
   assert.equal(monthly.ratio, 1.2);
   assert.equal(adjusted.plan.quantity, 20);
@@ -87,66 +89,69 @@ test('source checks use BI actuals and the selected DMS full version, not annual
 });
 
 test('zero, absent periods and incomplete values remain distinct; partial known subtotals do not produce ratios', () => {
-  const zero = sourceCheckRows(checks([history(0)], [report(0, 0)]), [raw('A')], 'monthly', [
-    '汤圆',
-  ]).rows[0];
+  const zero = sourceCheckRows(
+    checks([history(0)], [report(0, 0)]),
+    [raw('A', { sub_category: '汤圆' })],
+    'monthly',
+    ['汤圆'],
+  ).rows[0];
   assert.equal(zero.actual.quantity, 0);
   assert.equal(zero.plan.quantity, 0);
   assert.equal(zero.ratio, null);
   const partial = sourceCheckRows(
     checks([history(4), history('')], [report(10, 10)]),
-    [raw('A')],
+    [raw('A', { sub_category: '汤圆' })],
     'monthly',
     ['汤圆'],
   ).rows[0];
   assert.equal(partial.actual.knownQuantity, 4);
   assert.equal(partial.actual.quantity, null);
   assert.equal(partial.ratio, null);
-  const absent = sourceCheckRows(checks([], []), [raw('A')], 'monthly', ['汤圆']).rows[0];
+  const absent = sourceCheckRows(checks([], []), [raw('A', { sub_category: '汤圆' })], 'monthly', [
+    '汤圆',
+  ]).rows[0];
   assert.equal(absent.actual.knownQuantity, null);
   assert.equal(absent.plan.quantity, null);
 });
 
-test('unmatched classifications and missing base keys expose reasons without discarding other known source quantities', () => {
+test('current pool remaps BI and DMS by SKU; excluded nonzero historical SKUs do not block pool demand', () => {
   const result = sourceCheckRows(
-    checks([history(8)], [report(10, 10), report(2, 2, { 产品编码: 'UNKNOWN' })]),
-    [raw('A')],
-    'monthly',
-    ['汤圆'],
-  ).rows[0];
-  assert.equal(result.plan.quantity, 10);
-  assert.equal(result.ratio, null);
-  assert(result.issues.some((reason) => reason.includes('未唯一匹配')));
-  const missing = sourceCheckRows(
-    checks([history(8, { 基地: '' })], [report(10, 10)]),
-    [raw('A')],
-    'monthly',
-    ['汤圆'],
-  ).rows[0];
-  assert.equal(missing.actual.quantity, 8);
-  assert.equal(missing.ratio, null);
-  assert(missing.issues.some((reason) => reason.includes('缺基地')));
-});
-
-test('source classification names are preserved without aliasing water dumplings into the page category', () => {
-  const result = sourceCheckRows(
-    checks([history(8, { 大类: '水饺' })], [report(10, 10)]),
-    [raw('A', { responsible_item: '水饺' })],
+    checks(
+      [history(8, { 大类: '饺子' }), history(4, { 产品编码: 'OLD' })],
+      [report(10, 10), report(2, 2, { 产品编码: 'OLD' })],
+    ),
+    [raw('A', { sub_category: '水饺' })],
     'monthly',
     ['饺子'],
   );
-  assert.deepEqual(result.categories, ['饺子', '水饺']);
-  assert.equal(result.rows.find((row) => row.category === '饺子').actual.quantity, null);
-  assert.equal(result.rows.find((row) => row.category === '水饺').actual.quantity, 8);
+  assert.deepEqual(result.categories, ['水饺']);
+  assert.equal(result.rows[0].actual.quantity, 8);
+  assert.equal(result.rows[0].plan.quantity, 10);
+  assert.equal(result.rows[0].ratio, 0.8);
+  assert.equal(result.excluded.length, 2);
+  assert.deepEqual(
+    result.excluded.map((r) => r['来源']),
+    ['BI', 'DMS'],
+  );
+  assert(result.excluded.every((r) => r['原因'] === '不在当前产品池'));
 });
 
-test('retired SKUs can use the unique BI classification for the same SKU in the current source window', () => {
+test('nationwide pool totals retain source quantities without a base; ambiguous current classifications are listed for completion', () => {
   const result = sourceCheckRows(
-    checks([history(8, { 产品编码: 'OLD', 大类: '水饺' })], [report(10, 10, { 产品编码: 'OLD' })]),
-    [],
+    checks(
+      [history(8, { 基地: '' })],
+      [report('', '', { 基地: '', 源月初数量: 10, 源纠偏数量: 20 })],
+    ),
+    [raw('A', { sub_category: '汤圆' })],
+    'adjust',
+  );
+  assert.equal(result.rows[0].ratio, 0.4);
+  const ambiguous = sourceCheckRows(
+    checks([history(8)], [report(10, 10)]),
+    [raw('A', { sub_category: '汤圆' }), raw('A', { sub_category: '水饺' })],
     'monthly',
-    ['水饺'],
-  ).rows[0];
-  assert.equal(result.plan.quantity, 10);
-  assert.equal(result.ratio, 0.8);
+  );
+  assert.equal(ambiguous.rows.length, 0);
+  assert.equal(ambiguous.excluded.length, 2);
+  assert(ambiguous.excluded.every((r) => r['原因'] === '当前产品池大类不唯一'));
 });
