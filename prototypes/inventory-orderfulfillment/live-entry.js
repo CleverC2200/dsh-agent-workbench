@@ -2,6 +2,7 @@ import { renderSummaryDetails } from './summary-details.mjs';
 import { fulfillmentMissingReason } from './missing-reasons.mjs';
 import { mountSalesConfirmation } from './sales-confirmation.mjs';
 import { mountSalesSimulation } from './sales-simulation.mjs';
+import { mountSalesConfirmationTransport } from './sales-confirmation-transport.mjs';
 import { fulfillmentCardQueries, readItemPage } from './paged-source.mjs';
 import { mountOrganizationFilter, organizationSelection } from './organization-filter.js';
 import { configuredQueryFreshAfter } from '../../business/shared/query-cache.ts';
@@ -70,7 +71,9 @@ let currentResults=null;
 let dimension = 'deliveryDimensionPanel';
 const $ = (id) => document.getElementById(id);
 const salesSimulation = mountSalesSimulation(document);
-const salesConfirmation = mountSalesConfirmation(document, salesSimulation);
+const salesFormal = mountSalesConfirmationTransport(document, payload=>call('workspace',payload));
+const salesConfirmation = mountSalesConfirmation(document, salesSimulation, salesFormal);
+let confirmationHistoryGeneration=0;
 const value = (row, key, result) => {
   const denied = result?.rejectedColumns?.some(
     (column) =>
@@ -155,6 +158,8 @@ function clear(message = '正在读取当前授权数据…') {
   currentDetailData=null;
   salesConfirmation.close();
   salesSimulation.clear();
+  salesFormal.clear();
+  confirmationHistoryGeneration++;
   $('salesConfirmOverlay').hidden=true;
   $('confirmationHistoryOverlay').hidden=true;
   for(const id of ['salesConfirmOrder','confirmationHistoryStatus','confirmationHistoryDetails'])$(id).textContent='';
@@ -467,18 +472,27 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
     if (body.id === 'deliveryOrderDetailRows') {
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
       const statusButton=document.createElement('button');statusButton.type='button';statusButton.className='confirmation-status';statusButton.textContent='未接入';
-      statusButton.title='查看确认状态与操作记录';statusButton.addEventListener('click',()=>{
+      statusButton.title='查看确认状态与操作记录';statusButton.addEventListener('click',async()=>{
+        const historyGeneration=++confirmationHistoryGeneration;
         const simulation=salesSimulation.resultFor(row);
         if(simulation){
           $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；${simulation.status}（仅模拟）`;
           $('confirmationHistoryDetails').textContent=simulation.records.length?simulation.records.map(record=>`${record.at} ${record.summary}`).join('\n'):'等待测试群中田庚操作卡片。模拟结果不代表正式确认状态，不触发发货或改单。';
           $('confirmationHistoryOverlay').hidden=false;return;
         }
-        $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；确认状态未接入`;
-        $('confirmationHistoryDetails').textContent='尚未接入真实确认状态和操作记录接口，无法查询历史记录。';
         $('confirmationHistoryOverlay').hidden=false;
+        $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；正在读取确认记录…`;
+        $('confirmationHistoryDetails').textContent='';
+        try{
+          const filters=selectedFilters();
+          const history=await salesFormal.history(row,{start:filters.start,endExclusive:filters.end_exclusive});
+          if(!statusButton.isConnected||historyGeneration!==confirmationHistoryGeneration||$('confirmationHistoryOverlay').hidden)return;
+          $('confirmationHistoryStatus').textContent=`订单号：${row.order_no}；${history.status}`;
+          $('confirmationHistoryDetails').textContent=history.details;
+        }catch(error){if(statusButton.isConnected&&historyGeneration===confirmationHistoryGeneration&&!$('confirmationHistoryOverlay').hidden)$('confirmationHistoryDetails').textContent=error.message;}
       });confirmation.append(statusButton);
       salesSimulation.watch(statusButton,row);
+      if(!salesSimulation.matches(row)){const filters=selectedFilters();salesFormal.watch(statusButton,row,{start:filters.start,endExclusive:filters.end_exclusive});}
       const operation=cell('');operation.className='confirmation-operation-cell';
       const confirmButton=document.createElement('button');confirmButton.type='button';confirmButton.className='sales-confirm-trigger';
       confirmButton.textContent='销售确认';confirmButton.title='发起飞书群销售确认通知';
@@ -488,6 +502,7 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
         salesConfirmation.open({
           orderNo:value(row,'order_no',orders), customer:value(row,'customer_name',orders),
           customerCode:value(row,'customer_code',orders), base:value(row,'base',orders),
+          start:filters.start,endExclusive:filters.end_exclusive,
           seller:value(q,'sales_person',quantities), rate:['—','无权限'].includes(rate)?null:rate,
           quantity:quantityText(q,'original_qty',quantities),
           period:`${filters.start} — ${filters.end_exclusive}（不含）`, readAt:new Date().toLocaleString('zh-CN'),
