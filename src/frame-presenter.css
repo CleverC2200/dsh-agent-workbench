@@ -283,3 +283,17 @@ html[data-platform='darwin'] .agent-workbench-document-chrome {
   color: var(--workbench-selected-text);
   font-weight: 600;
 }
+
+/* Share the FC toolbar row only when the complete controls fit. */
+.agent-workbench-document-chrome-shared {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 12;
+  width: 300px;
+  border: 0;
+  background: transparent;
+}
+.agent-workbench-document-chrome-shared .gea-conversation-toolbar {
+  background: transparent;
+}

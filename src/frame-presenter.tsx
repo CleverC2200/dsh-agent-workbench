@@ -303,6 +303,24 @@ export function mountFramePresentation(
       () => pageViews.get(page.id) ?? 'split',
     );
     const titleless = inventoryAgentPages.has(page.id);
+    const [apsToolbarAvailable, setApsToolbarAvailable] = useState(false);
+    const sharedToolbar =
+      [
+        'gea-proof',
+        'inventory-fc',
+        'inventory-qll',
+        'inventory-aqkc',
+        'inventory-dealer',
+        'inventory-apsplan',
+      ].includes(page.id) &&
+      view === 'center' &&
+      space.document >=
+        (['inventory-aqkc', 'inventory-qll', 'inventory-fc', 'inventory-apsplan'].includes(page.id)
+          ? 800
+          : page.id === 'inventory-dealer'
+            ? 920
+            : 960) &&
+      (page.id !== 'inventory-apsplan' || apsToolbarAvailable);
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
     const currentCwd = useSessions((value) => (sessionId ? value.byId[sessionId]?.cwd : undefined));
@@ -434,6 +452,31 @@ export function mountFramePresentation(
         '*',
       );
     }, [page.id, loaded, error, navigationError, identity.error]);
+    useEffect(() => {
+      const send = () =>
+        frame.current?.contentWindow?.postMessage(
+          { protocol: 'gea-toolbar-layout', shared: sharedToolbar },
+          '*',
+        );
+      const ready = (event: MessageEvent) => {
+        if (
+          event.source === frame.current?.contentWindow &&
+          event.data?.protocol === 'gea-toolbar-layout-ready'
+        ) {
+          if (page.id === 'inventory-apsplan') setApsToolbarAvailable(true);
+          send();
+        } else if (
+          event.source === frame.current?.contentWindow &&
+          event.data?.protocol === 'gea-toolbar-layout-gone' &&
+          page.id === 'inventory-apsplan'
+        ) {
+          setApsToolbarAvailable(false);
+        }
+      };
+      window.addEventListener('message', ready);
+      if (loaded) send();
+      return () => window.removeEventListener('message', ready);
+    }, [loaded, sharedToolbar, page.id]);
     const Body = page.kind === 'local' ? page.body : undefined;
     const visibleReceipt = useSyncExternalStore(
       page.visibleRequest?.subscribe ?? noSubscribe,
@@ -668,7 +711,8 @@ export function mountFramePresentation(
       <header
         className={
           'agent-workbench-document-chrome' +
-          (titleless ? ' agent-workbench-document-chrome-tools' : '')
+          (titleless ? ' agent-workbench-document-chrome-tools' : '') +
+          (sharedToolbar ? ' agent-workbench-document-chrome-shared' : '')
         }
         data-workbench-view={view}
         data-workbench-window-chrome
