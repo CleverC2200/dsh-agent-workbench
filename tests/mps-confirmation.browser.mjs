@@ -25,7 +25,7 @@ test('MPS keeps confirmed sources awaiting a Host, including forecast awaiting a
   const { page, frame } = await confirmation(t);
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
-    '刷新或切换对话会清除本页内存输入',
+    '通过工作台草稿恢复',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
@@ -198,7 +198,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   );
   const results = frame.getByRole('region', { name: '大类预估需求数量' });
   await expect(results.getByRole('row')).toHaveCount(2);
-  await expect(results).toContainText('人工调整尚未接入');
+  await expect(results).toContainText('本地调整不代表正式保存');
   await expect(results.getByRole('cell', { name: '-', exact: true })).toHaveCount(4);
 });
 
@@ -324,7 +324,7 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   await expect(frame.getByLabel('评估版本选择')).toHaveValue('local-2');
   await frame.getByRole('button', { name: '版本对比', exact: true }).click();
   const compare = frame.getByRole('dialog', { name: '版本对比', exact: true });
-  await expect(compare).toContainText('仅对比本地内存输入');
+  await expect(compare).toContainText('仅对比本地草稿输入');
   await expect(compare).toContainText('十二月核对');
   const count = compare.getByRole('row').filter({ hasText: '产品关系数量' });
   await expect(count.locator('td').nth(1)).toHaveText('0');
@@ -332,7 +332,7 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   await compare.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
-    '刷新或切换对话会清除',
+    '按身份、租户、对话和版本隔离',
   );
 });
 

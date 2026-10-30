@@ -31,6 +31,7 @@ export function buildCategoryDemand(draft, categories) {
   }
   return computeMpsCategoryDemand({
     month: draft.month,
+    adjustments: draft.adjustments?.categoryDemand,
     pull: draft.pull,
     categories: checks.categories,
     historical: historical

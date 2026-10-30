@@ -299,3 +299,138 @@ test('personal feedback fields persist in their Session and never accept returne
     /INVALID_HTML_VIEW_STATE/,
   );
 });
+
+test('MPS local input drafts recover only in their subject and Session with no credential or calculated facts', () => {
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const page = 'plan-category-production';
+  owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  const localDrafts = {
+    format: 1,
+    selected: 'local-2',
+    drafts: [
+      {
+        id: 'local-2',
+        name: '十二月评估',
+        month: '2026-12',
+        pull: 'monthly',
+        inputs: {
+          products: {
+            file: '产品.csv',
+            rows: [
+              {
+                基地: '甲',
+                产品编码: 'A',
+                产品名称: '甲产品',
+                大类: '汤圆',
+                系列: '系列',
+                物料组: '组',
+                物料组名称: '',
+                老品编码: '',
+                老品名称: '',
+              },
+            ],
+          },
+        },
+        adjustments: {
+          categoryDemand: [
+            {
+              month: '2026-12',
+              category: '汤圆',
+              quantity: 120,
+              systemValue: 100,
+              reason: '已确认增量',
+              at: '2026-10-30T00:00:00.000Z',
+            },
+          ],
+          shares: [],
+          history: [],
+        },
+      },
+    ],
+  };
+  const state = { version: 1, localDrafts };
+  owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', state);
+  assert.deepEqual(owner.readHtmlViewState(page, 'tenant-A/user-A/session-A'), state);
+  assert.equal(owner.readHtmlViewState(page, 'tenant-B/user-A/session-A'), undefined);
+  assert.equal(owner.readHtmlViewState(page, 'tenant-A/user-A/session-B'), undefined);
+  for (const field of ['credentials', 'accessToken', 'business', 'calculation']) {
+    const invalid = structuredClone(state);
+    invalid.localDrafts.drafts[0][field] = {};
+    assert.throws(
+      () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', invalid),
+      /INVALID_HTML_VIEW_STATE/,
+    );
+  }
+  const incompatible = structuredClone(state);
+  incompatible.localDrafts.format = 2;
+  assert.throws(
+    () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', incompatible),
+    /INVALID_HTML_VIEW_STATE/,
+  );
+});
+
+test('a rejected local view save reaches the page while retaining unsaved user input', async () => {
+  const listeners = new Map();
+  const parent = { postMessage() {} };
+  const savedWindow = globalThis.window;
+  globalThis.window = {
+    parent,
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    removeEventListener() {},
+  };
+  try {
+    const { createPageViewState } = await import('../business/shared/view-state.js');
+    const view = createPageViewState('plan-category-production');
+    const events = [];
+    view.subscribe((state, event) => events.push({ state, event }));
+    const receive = listeners.get('message');
+    receive({
+      source: parent,
+      data: {
+        protocol: 'dsh-workbench-view-v1',
+        type: 'restore',
+        page: 'plan-category-production',
+        version: 1,
+        channel: 'a',
+        generation: 1,
+        state: { version: 1 },
+      },
+    });
+    view.update({ assistantDraft: '尚未保存的本地输入' });
+    for (const [channel, generation] of [
+      ['old', 1],
+      ['a', 0],
+    ]) {
+      receive({
+        source: parent,
+        data: {
+          protocol: 'dsh-workbench-view-v1',
+          type: 'rejected',
+          page: 'plan-category-production',
+          version: 1,
+          channel,
+          generation,
+          error: 'STALE',
+        },
+      });
+      assert.equal(events.at(-1).event, 'restore');
+    }
+    receive({
+      source: parent,
+      data: {
+        protocol: 'dsh-workbench-view-v1',
+        type: 'rejected',
+        page: 'plan-category-production',
+        version: 1,
+        channel: 'a',
+        generation: 1,
+        error: 'STATE_TOO_LARGE',
+      },
+    });
+    assert.equal(events.at(-1).event, 'rejected');
+    assert.equal(view.get().assistantDraft, '尚未保存的本地输入');
+  } finally {
+    if (savedWindow === undefined) delete globalThis.window;
+    else globalThis.window = savedWindow;
+  }
+});
