@@ -156,7 +156,10 @@ test('FC renders base supply fulfillment and cross-month orders independently of
       (c) => c.id === 'branch-current-orders.page' && c.parameters.warehouse_code === 'A230',
     ),
   );
-  assert.ok(!calls.some((c) => c.id === 'orders.summary'));
+  assert.ok(
+    calls.some((c) => c.id === 'orders.summary'),
+    'dealer outbound remains a separate observation source',
+  );
   await expect(page.getByRole('button', { name: '客户订单', exact: true })).toHaveCount(0);
   assert.ok(calls.some((c) => c.id === 'current-shortage.summary'));
   assert.ok(!calls.some((c) => c.id === 'branch-supply.detail.atomic'));
