@@ -332,18 +332,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       type === 'forecast' && business
         ? ['月份', '基地', '物料组', '物料组名称', '大类', '系列']
         : type === 'report' && business
-          ? [
-              '月份',
-              '大区',
-              '基地',
-              '产品编码',
-              '产品名称',
-              '大类',
-              '系列',
-              '物料组',
-              '物料组名称',
-              '维度说明',
-            ]
+          ? ['月份', '大区', '基地', '产品编码', '产品名称', '大类', '系列', '物料组', '物料组名称']
           : sourceColumns;
     const detailColumns = business
       ? [
@@ -477,7 +466,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             'p',
             { className: 'dc-muted' },
             type === 'report'
-              ? '期初与纠偏为两个完整版本，分别使用，不相加。按大区×基地×SKU汇总；大区按客户与物料关系匹配，产品分类取产品清单，缺失或冲突见维度说明。缺基地或数量不可用时留空。'
+              ? '期初与纠偏为两个完整版本，分别使用，不相加。按大区×基地×SKU汇总；大区按客户与物料关系匹配，产品分类取产品清单。缺基地或数量不可用时留空。'
               : type === 'forecast'
                 ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料组汇总，缺数量时不以部分合计代替完整预测。分类按同物料组SKU的一致源值补充，单位待确认。`
                 : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',

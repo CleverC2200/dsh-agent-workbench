@@ -53,27 +53,12 @@ async function readFacts(id, parameters, signal, type, month) {
           物料组: text(row.product_item),
           物料组名称: text(row.product_item_name),
         };
-        const missing = Object.keys(dimensions).filter((field) => !dimensions[field]);
-        const issues = [];
-        if (!row.region_name)
-          issues.push(
-            Number(row.region_matches) === 0
-              ? '客户与物料未匹配大区关系'
-              : '客户与物料的大区缺失或不唯一',
-          );
-        if (missing.length)
-          issues.push(
-            Number(row.product_matches) === 0
-              ? '产品编码未匹配产品清单'
-              : '产品清单字段缺失或不唯一：' + missing.join('、'),
-          );
         return {
           月份: month,
           大区: text(row.region_name),
           基地: base,
           产品编码: code,
           ...dimensions,
-          维度说明: issues.join('；'),
           月初数量: base && code ? number(row.plannum_total) : '',
           纠偏数量: base && code ? number(row.allnum_total) : '',
         };

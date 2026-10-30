@@ -8,7 +8,7 @@ const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const plan = '';
 const shipment = 'agents_scm_cust_deliv_daily_di.';
 
-test('reported plan details include matched product dimensions, region and explicit unmatched reasons', async (t) => {
+test('reported plan details include matched product dimensions and region without a diagnostic column', async (t) => {
   const records = [
     {
       region_name: '直营渠道销售',
@@ -21,8 +21,6 @@ test('reported plan details include matched product dimensions, region and expli
       product_item_name: '小小汤圆组',
       plannum_total: 450,
       allnum_total: 450,
-      region_matches: 1,
-      product_matches: 1,
     },
     {
       region_name: null,
@@ -30,8 +28,6 @@ test('reported plan details include matched product dimensions, region and expli
       material_code: 'UNMATCHED',
       plannum_total: 0,
       allnum_total: 1,
-      region_matches: 0,
-      product_matches: 0,
     },
   ];
   const { page, frame } = await mpsPage(t, config, (query) =>
@@ -50,12 +46,16 @@ test('reported plan details include matched product dimensions, region and expli
   await expect(matched).toContainText('小小汤圆组');
   await expect(matched).toContainText('3.9g汤圆');
   const missing = preview.getByRole('row').filter({ hasText: 'UNMATCHED' });
-  await expect(missing).toContainText('客户与物料未匹配大区关系');
-  await expect(missing).toContainText('产品编码未匹配产品清单');
+  await expect(missing).toContainText('UNMATCHED');
+  await expect(preview.getByRole('columnheader', { name: '维度说明', exact: true })).toHaveCount(0);
   const pending = page.waitForEvent('download');
   await preview.getByRole('button', { name: '下载明细', exact: true }).click();
   const csv = await mpsDownloadText(await (await pending).path());
-  assert.match(csv, /月份,大区,基地,产品编码,产品名称,大类,系列,物料组,物料组名称/);
+  assert.match(
+    csv,
+    /月份,大区,基地,产品编码,产品名称,大类,系列,物料组,物料组名称,月初数量,纠偏数量/,
+  );
+  assert(!csv.includes('维度说明'));
   assert.match(csv, /直营渠道销售,华东,10000008,小小汤圆,汤圆,3.9g汤圆,102018,小小汤圆组/);
 });
 
