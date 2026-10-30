@@ -3,7 +3,7 @@ import {
   workbenchMetricMissingReason,
   metricComparisonNote,
 } from './metric-model.mjs';
-import { directorNames } from './live-presentation.mjs';
+import { directorNames, workbenchBaseIncluded } from './live-presentation.mjs';
 
 export function workbenchCellMissingReason(
   facts,
@@ -48,7 +48,7 @@ export function workbenchCellMissingReason(
         : 'previousMonth'
     : null;
   const makeFilter = (key) => {
-    let filter = () => true;
+    let filter = (item) => dimension !== 'base-performance' || workbenchBaseIncluded(item.base);
     if (row[0] !== '合计') {
       const field = dimension.startsWith('base')
         ? 'base'

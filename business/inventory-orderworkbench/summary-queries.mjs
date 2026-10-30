@@ -1,3 +1,4 @@
+import { ontimeSummarySql } from './document-queries.mjs';
 /** Derive summaries and bounded SKU pages from the same scoped, validated SKU queries. */
 export function addWorkbenchSummaryQueries(config) {
   const names = ['orders', 'stock', 'ages'];
@@ -42,6 +43,16 @@ export function addWorkbenchSummaryQueries(config) {
       pagination: { countQuery: id + '.count' },
     };
   }
+  // Keep every whole-order verdict and its dimensions, but transport them in
+  // a few packets instead of re-running the same arrival query for 200 orders per page.
+  if (config.queries['workbench.ontime'])
+    register(
+      'workbench.ontime.summary',
+      ontimeSummarySql,
+      config.queries['workbench.ontime'],
+      ['base', 'invalid', 'ontime', 'packed_orders'],
+      ['base', 'invalid', 'ontime'],
+    );
   for (const name of names) {
     const original = config.queries['workbench.' + name];
     const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';

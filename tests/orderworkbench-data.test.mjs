@@ -35,6 +35,101 @@ export const model = await import(
   'data:text/javascript;base64,' + Buffer.from(built.outputFiles[0].text).toString('base64')
 );
 
+test('arrival packets preserve whole-order counts, unknown verdicts and UTF-8 dimensions', async () => {
+  const tuple = (fields) => fields.map((value) => Buffer.byteLength(value) + ':' + value).join('');
+  const members = [
+    ['郑州', '水饺', '含:逗号,😀', 'sku-1'],
+    ['华南', '汤圆', '品项', 'sku-2'],
+  ];
+  const rows = [
+    {
+      order_no: 'order:1',
+      customer: '客户😀',
+      ontime: 1,
+      arrival_date: '2026-10-23',
+      invalid: 0,
+      members,
+    },
+    {
+      order_no: 'order:1',
+      customer: '另一客户',
+      ontime: 1,
+      arrival_date: '2026-10-23',
+      invalid: 0,
+      members: [members[0]],
+    },
+    {
+      order_no: 'late',
+      customer: '客户😀',
+      ontime: 0,
+      arrival_date: '2026-10-23',
+      invalid: 0,
+      members: [members[0]],
+    },
+    {
+      order_no: 'unknown',
+      customer: '客户😀',
+      ontime: null,
+      arrival_date: '2026-10-23',
+      invalid: 1,
+      members: [members[0]],
+    },
+  ];
+  const packets = rows.flatMap((row) =>
+    row.members.map((member) => ({
+      base: member[0],
+      invalid: row.invalid,
+      ontime: row.ontime,
+      packet: tuple([row.order_no, row.customer, row.arrival_date, ...member]),
+    })),
+  );
+  const groups = new Map();
+  for (const row of packets) {
+    const key = JSON.stringify([row.base, row.invalid, row.ontime]);
+    if (!groups.has(key))
+      groups.set(key, {
+        base: row.base,
+        invalid: String(row.invalid),
+        ontime: row.ontime == null ? null : String(row.ontime),
+        packed_orders: [],
+      });
+    groups.get(key).packed_orders.push(row.packet);
+  }
+  const run = async (summary, broken = false) =>
+    model.loadWorkbenchReport('2026-10-19', '2026-10-26', undefined, {
+      summary,
+      now: new Date('2026-10-30T00:00:00Z'),
+      execute: async (_request, { queryId }) => ({
+        rows:
+          queryId === 'workbench.ontime'
+            ? rows
+            : queryId === 'workbench.ontime.summary'
+              ? [...groups.values()].map((row) => ({
+                  ...row,
+                  packed_orders: JSON.stringify(broken ? ['bad'] : row.packed_orders),
+                }))
+              : [],
+      }),
+    });
+  const raw = await run(false),
+    packed = await run(true);
+  const metric = (facts) => facts.periods.week.metrics['准交率'];
+  assert.ok(Math.abs(metric(packed).value - 200 / 3) < 1e-10);
+  assert.deepEqual(metric(packed).sample, metric(raw).sample);
+  assert.equal(metric(packed).value, metric(raw).value);
+  const section = packed.periods.week.sections.find((part) => part.id === 'ontime');
+  assert.equal(section.status, 'ready');
+  assert.equal(section.rows.length, 5);
+  assert.equal(section.rows[0].item, '含:逗号,😀');
+  assert.equal(model.decodeWorkbenchTuple('3:中', 1)[0], '中');
+  assert.equal(model.decodeWorkbenchTuple('4:中', 1), null);
+  const broken = await run(true, true);
+  assert.equal(
+    broken.periods.week.sections.find((part) => part.id === 'ontime').code,
+    'INVALID_ORDER_PACKETS',
+  );
+});
+
 test('missing metric reasons distinguish empty sources, rejected reads and zero denominators', () => {
   const period = {
     kind: 'month',

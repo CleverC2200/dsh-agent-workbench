@@ -24,6 +24,8 @@ const rows = (period, id) =>
 const distinct = (values) =>
   [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), 'zh'));
 const dimensionValue = (value) => value || '未映射';
+export const workbenchBaseIncluded = (base) =>
+  !['濮阳', '濮阳基地'].includes(String(base ?? '').trim());
 export function directorNames(mappings, row) {
   const relevant =
     mappings instanceof Map
@@ -80,7 +82,7 @@ function summaryRows(periods, field, directorMap, loading = false) {
         Number(row.stock_qty) !== 0 ||
         Number(row.invalid) !== 0,
     ),
-  ];
+  ].filter((row) => field !== 'base' || workbenchBaseIncluded(row.base));
   let groups;
   const directors = (row, key = periods.month ? 'month' : 'week') => {
     const mapping =
@@ -125,7 +127,11 @@ function summaryRows(periods, field, directorMap, loading = false) {
       labels: [label],
       filter: (row) => dimensionValue(row[field]) === label,
     }));
-  if (field !== 'director') groups.push({ labels: ['合计'], filter: () => true });
+  if (field !== 'director')
+    groups.push({
+      labels: ['合计'],
+      filter: (row) => field !== 'base' || workbenchBaseIncluded(row.base),
+    });
   const tables = {};
   for (const [key, previous, year] of [
     ['month', 'previousMonth', 'yearMonth'],
@@ -226,9 +232,11 @@ export function workbenchPresentation(facts, options = {}) {
         : metricValue(metrics, name).toFixed(name === '周转天数' ? 1 : 2),
     status: metrics[name]?.loading
       ? '加载中'
-      : metrics[name]?.sample
-        ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
-        : metricState(name, metricValue(metrics, name)),
+      : metrics[name]?.value == null && metrics[name]?.missingReason?.startsWith('系统读取未成功')
+        ? '查询失败'
+        : metrics[name]?.sample
+          ? `样本 ${metrics[name].sample.coverage.toFixed(1)}%`
+          : metricState(name, metricValue(metrics, name)),
     coverageNote: metrics[name]?.coverageNote ?? '',
     comparisonNotes: [
       metricComparisonNote(periods.month?.metrics, periods.previousMonth?.metrics, name),
@@ -277,7 +285,9 @@ export function workbenchPresentation(facts, options = {}) {
     ),
   ];
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
-    bases = distinct(all.map((row) => dimensionValue(row.base)));
+    bases = distinct(
+      all.filter((row) => workbenchBaseIncluded(row.base)).map((row) => dimensionValue(row.base)),
+    );
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
   const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
     (category) => {

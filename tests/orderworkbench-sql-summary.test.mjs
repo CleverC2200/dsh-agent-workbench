@@ -5,6 +5,45 @@ import { addWorkbenchSummaryQueries } from '../business/inventory-orderworkbench
 import { workbenchQueries } from '../business/inventory-orderworkbench/queries.mjs';
 import { model } from './orderworkbench-data.test.mjs';
 
+test('gateway-compatible stock join preserves the full-join result including unmatched and NULL keys', () => {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec(`CREATE TABLE agents_scm_stock_detail_d (
+      belong_base,material_code,product_item,material_name,the_date,
+      main_sales_plan_adj,main_sales_plan_v1,transfer_out_plan_adj,transfer_out_plan_v1);
+      CREATE TABLE agents_scm_inventory_sku_data_d (
+      belong_base,material_code,material_name,month_date,available_qty,live_qty,
+      warehouse_classify,warehouse_classify_name);
+      CREATE TABLE agents_scm_material_in_out_summary_d (
+      material_code,product_categ_name,material_group_name);
+      INSERT INTO agents_scm_stock_detail_d VALUES
+      ('郑州','matched','item','a','2026-10-25',0,310,0,0),
+      ('郑州','plan-only','item','b','2026-10-25',0,620,0,0),
+      (NULL,'null-key','item','c','2026-10-25',0,31,0,0);
+      INSERT INTO agents_scm_inventory_sku_data_d VALUES
+      ('郑州','matched','a','20261025',100,100,'01','工厂成品仓'),
+      ('郑州','stock-only','b','20261025',50,50,'02','工厂外租库'),
+      (NULL,'null-key','c','20261025',10,10,'01','工厂成品仓'),
+      ('郑州','missing-quantity','d','20261025',0,NULL,'01','工厂成品仓');`);
+    const sql = workbenchQueries.stock.sql;
+    assert.doesNotMatch(sql, /FULL\s+(?:OUTER\s+)?JOIN|<=>/i);
+    const firstArm = sql.split(' UNION ALL ')[0];
+    const original = firstArm.replace(') s LEFT JOIN (', ') s FULL OUTER JOIN (');
+    assert.notEqual(firstArm, original);
+    const params = { gea_p1: '2026-10-19', gea_p2: '2026-10-26' };
+    const read = (query) =>
+      db
+        .prepare(query)
+        .all(params)
+        .map((row) => JSON.stringify(row))
+        .sort();
+    assert.deepEqual(read(sql), read(original));
+    assert.equal(read(sql).length, 6);
+  } finally {
+    db.close();
+  }
+});
+
 test('SQL summary keeps independent nationwide contributions from stock-only and plan-only SKUs', () => {
   const db = new DatabaseSync(':memory:');
   try {

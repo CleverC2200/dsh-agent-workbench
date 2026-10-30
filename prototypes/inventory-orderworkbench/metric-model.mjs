@@ -1,5 +1,23 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 5;
+export const metricCalculationVersion = 6;
+export function compatibleWorkbenchFacts(facts) {
+  return (
+    facts?.complete === true &&
+    facts.attributionVersion === 2 &&
+    facts.metricCalculationVersion === metricCalculationVersion &&
+    Object.values(facts.periods ?? {}).length > 0
+  );
+}
+export function reusableWorkbenchFacts(facts) {
+  return (
+    compatibleWorkbenchFacts(facts) &&
+    Object.values(facts.periods).every(
+      (period) =>
+        Array.isArray(period.sections) &&
+        period.sections.every((section) => section.status === 'ready'),
+    )
+  );
+}
 export const metricNames = [
   '作废率',
   '改单率',
@@ -278,7 +296,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   if (!part || part.status === 'loading')
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
   if (part.status !== 'ready')
-    return `系统读取未成功：${part.code ?? part.status}；需核对查询或字段发布，不是0。`;
+    return `系统读取未成功：${part.code ?? part.status}；${part.detail ? part.detail + '；' : ''}需核对查询或字段发布，不是0。`;
   const source = part.rows.filter(filter);
   if (!source.length)
     return `源数据未提供：所选周期及当前授权、分组范围的 ${id} 查询结果无记录；不代表整张表为空。`;
@@ -356,7 +374,7 @@ export function metricDelta(current, previous, name) {
     b = metricValue(previous, name);
   return a === null || b === null
     ? '—'
-    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : 'pp'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
+    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : '%'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
 }
 
 export function metricComparisonNote(current, previous, name) {

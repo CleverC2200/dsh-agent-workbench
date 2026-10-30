@@ -23,6 +23,76 @@ const stock = {
   invalid: 0,
 };
 
+test('base tables and cross comparisons omit Puyang and exclude it from current and historical base totals', () => {
+  const period = (shortage) => {
+    const value = {
+      sections: [
+        {
+          id: 'orders',
+          status: 'ready',
+          rows: [
+            {
+              base: '郑州',
+              category: '食品',
+              item: '水饺',
+              sku: 'A',
+              demand: 100,
+              shortage,
+              invalid: 0,
+            },
+            {
+              base: '濮阳',
+              category: '食品',
+              item: '水饺',
+              sku: 'B',
+              demand: 100,
+              shortage: 90,
+              invalid: 0,
+            },
+          ],
+        },
+      ],
+    };
+    value.metrics = computeWorkbenchMetrics(value);
+    return value;
+  };
+  const current = period(10),
+    previous = period(20);
+  const presentation = workbenchPresentation({
+    selected: 'month',
+    periods: {
+      month: current,
+      week: current,
+      previousMonth: previous,
+      previousWeek: previous,
+      yearMonth: previous,
+      yearWeek: previous,
+    },
+    directors: { rows: [] },
+    customers: { rows: [] },
+  });
+  for (const key of ['month', 'week']) {
+    const table = presentation.performance['base-performance'][key];
+    assert.deepEqual(
+      table.map((row) => row[0]),
+      ['郑州', '合计'],
+    );
+    const total = table.find((row) => row[0] === '合计');
+    assert.equal(total[1].raw, 90);
+    assert.equal(total[2], '+10.00%');
+  }
+  for (const key of ['base-category', 'base-category-days'])
+    assert.deepEqual(
+      presentation.dimensions[key].rows.map((row) => row[0]),
+      ['郑州'],
+    );
+  assert.equal(
+    presentation.cards[2].value,
+    '50.00',
+    'base-only exclusion does not change nationwide overview scope',
+  );
+});
+
 test('one negative stock row remains in the valid nationwide net quantity', () => {
   const p = stockPeriod([stock, { ...stock, inventory: -1, sales_plan: 0 }]);
   assert.equal(computeWorkbenchMetrics(p)['周转天数'].value, 9.9);
