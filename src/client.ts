@@ -42,6 +42,9 @@ export const inject = [
   'workspaces',
 ];
 const zh = {
+  pageReconnect: '重新连接页面能力',
+  pageReconnecting: '连接中…',
+  pageReconnected: '页面已重新连接',
   failed: '页面目录读取失败',
   retry: '重试',
   pageConnect: '连接页面与原生对话',
@@ -60,6 +63,9 @@ const zh = {
   pageIdentityFailed: '无法确认 GEA 身份，请稍后重试。',
 };
 const en = {
+  pageReconnect: 'Reconnect page',
+  pageReconnecting: 'Connecting…',
+  pageReconnected: 'Page reconnected',
   failed: 'Page directory unavailable',
   retry: 'Retry',
   pageConnect: 'Connect page and Conversation',

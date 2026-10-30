@@ -1,7 +1,13 @@
 import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
-import { hasMpsSource, readProducts, readAnnual, readAnnualDetails } from './master-data.js';
+import {
+  hasMpsSource,
+  readProducts,
+  readAnnual,
+  readAnnualDetails,
+  productRows,
+} from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
@@ -10,7 +16,7 @@ import { createWorkflow } from './workflow-view.js';
 import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 import { productProjections } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
-import { productFileText } from './product-file.js';
+import { productFileText, productReplacementErrors } from './product-file.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
 const productColumns = [
@@ -1043,6 +1049,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? annualColumns
               : sourceDefinitions[type].columns,
         );
+        if (type === 'products') {
+          const errors = productReplacementErrors(rows, [
+            ...draft.products,
+            ...productRows(draft.productRaw ?? []),
+          ]);
+          if (errors.length)
+            throw Error(
+              errors
+                .slice(0, 20)
+                .map(({ index, message }) => `第${index + 2}行${message}`)
+                .join('；') + '。未替换原输入。',
+            );
+        }
         if (!valid()) return;
         setDrafts((entries) =>
           entries.map((entry) =>
@@ -1232,12 +1251,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const normalized = Object.fromEntries(
         productColumns.map((column) => [column, product[column].trim()]),
       );
+      if (editing === null) normalized['基地'] = '';
       if (productColumns.slice(1, 6).some((column) => !normalized[column])) {
         setError('产品编码、产品名称、大类、系列和物料组不能为空；全国产品基地可留空。');
         return;
       }
-      if (!!normalized['老品编码'] !== !!normalized['老品名称']) {
-        setError('老品编码和老品名称须同时填写或同时留空。');
+      const replacementErrors = productReplacementErrors(
+        [normalized],
+        [...draft.products, ...productRows(draft.productRaw ?? [])],
+      );
+      if (replacementErrors.length) {
+        setError(replacementErrors[0].message + '。');
         return;
       }
       if (
@@ -1938,28 +1962,37 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'div',
                 { className: 'dc-product-form' },
-                productColumns.map((column) =>
-                  h(
-                    'label',
-                    { key: column },
-                    column === '基地'
-                      ? '基地名称'
-                      : column === '老品编码'
-                        ? '对应老品编码'
-                        : column,
-                    h('input', {
-                      'aria-label':
-                        column === '基地'
-                          ? '基地名称'
-                          : column === '老品编码'
-                            ? '对应老品编码'
-                            : column,
-                      value: product[column],
-                      onChange: (event) => setProduct({ ...product, [column]: event.target.value }),
-                    }),
+                productColumns
+                  .filter((column) => editing !== null || column !== '基地')
+                  .map((column) =>
+                    h(
+                      'label',
+                      { key: column },
+                      column === '基地'
+                        ? '基地名称'
+                        : column === '老品编码'
+                          ? '对应老品编码'
+                          : column,
+                      h('input', {
+                        'aria-label':
+                          column === '基地'
+                            ? '基地名称'
+                            : column === '老品编码'
+                              ? '对应老品编码'
+                              : column,
+                        value: product[column],
+                        onChange: (event) =>
+                          setProduct({ ...product, [column]: event.target.value }),
+                      }),
+                    ),
                   ),
-                ),
               ),
+              editing === null &&
+                h(
+                  'p',
+                  { className: 'dc-muted' },
+                  '默认适用五基地：郑州、遂平、华东、华南、西南。全国只保留一条产品关系，需求按现有基地数据分配。',
+                ),
               error && h('p', { role: 'alert' }, error),
               h(
                 'p',

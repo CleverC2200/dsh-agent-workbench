@@ -33,12 +33,50 @@ test('MPS processing shows current evaluation and missing split dependencies in 
   await expect(view).toBeVisible();
   await expect(view).toContainText('2026-10');
   await expect(view.getByRole('table', { name: '大类需求', exact: true })).toBeVisible();
+  for (const category of ['饺子', '调理肉制品', '饼类'])
+    await expect(view.getByRole('table', { name: '大类需求', exact: true })).not.toContainText(
+      category,
+    );
   await expect(view.getByRole('table', { name: '基地单品需求拆分', exact: true })).toBeVisible();
   await expect(view).toContainText('未评估');
   const csv = await download(page, view, '下载需求拆分');
   assert.match(csv, /2026-10/);
   assert.match(csv, /未评估|缺|待确认/);
   assert.doesNotMatch(csv, /40%|40\/40\/20|模拟/);
+});
+
+test('MPS processing applies category exclusions to source-derived rows and CSV without removing products or report categories', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await version(frame, '2026-10');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n' +
+      ['饺子', '调理肉制品', '饼类', '汤圆']
+        .map((category, index) => `郑州,P${index},产品${index},${category},系列,组,,`)
+        .join('\n'),
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  const csv = await download(page, view, '下载需求拆分');
+  for (const category of ['饺子', '调理肉制品', '饼类']) {
+    await expect(view.getByRole('table', { name: '大类需求', exact: true })).not.toContainText(
+      category,
+    );
+    await expect(
+      view.getByLabel('大类筛选').getByRole('option', { name: category, exact: true }),
+    ).toHaveCount(0);
+    assert.equal(csv.includes(category), false);
+  }
+  assert.match(csv, /汤圆/);
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  await expect(frame.getByRole('region', { name: '产销存报告', exact: true })).toContainText(
+    '饺子',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await expect(
+    frame.getByRole('region', { name: '产品明细', exact: true }).locator('tbody tr'),
+  ).toHaveCount(4);
 });
 
 async function upload(frame, label, text) {
