@@ -1,6 +1,4 @@
 import test from 'node:test';
-import assert from 'node:assert/strict';
-import { resolve } from 'node:path';
 import { readFile } from './helpers/prepared-assets.mjs';
 import { build } from 'esbuild';
 import { chromium, expect } from '@playwright/test';
