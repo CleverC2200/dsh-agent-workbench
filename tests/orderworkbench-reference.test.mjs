@@ -16,12 +16,30 @@ test('order workbench reference interactions', async () => {
   window.createReportPersistence = createReportPersistence;
   window.encodeReportRequest = async (request) => request;
   window.savedReports = new Map();
+  window.savedEdits = new Map();
   window.call = async (method, request) => {
     assert.equal(method, 'workspace');
     const key = JSON.stringify(request.period);
-    if (request.operation === 'load')
-      return window.savedReports.get(key) ?? { version: 0, report: null };
+    if (request.operation === 'load') {
+      window.reportLoads = (window.reportLoads ?? 0) + 1;
+      const snapshot = window.savedReports.get(key) ?? { version: 0, report: null };
+      const edited = window.savedEdits.get(key);
+      return {
+        ...snapshot,
+        editVersion: edited?.version ?? 0,
+        report: edited
+          ? { ...(snapshot.report ?? { schemaVersion: 1, facts: null }), edits: edited.edits }
+          : snapshot.report,
+      };
+    }
     if (window.rejectReportSaves) throw Error('WRITE_CONFIRMATION');
+    if (request.operation === 'save-edits') {
+      window.savedEdits.set(key, {
+        version: request.expectedVersion + 1,
+        edits: structuredClone(request.report.edits),
+      });
+      return { saved: true, version: request.expectedVersion + 1, requestId: request.requestId };
+    }
     window.savedReports.set(key, {
       version: request.expectedVersion + 1,
       report: structuredClone(request.report),
@@ -52,7 +70,7 @@ test('order workbench reference interactions', async () => {
       super(...(args.length ? args : ['2026-09-18T00:00:00Z']));
     }
     static now() {
-      return Date.parse('2026-09-18T00:00:00Z');
+      return Date.parse('2026-09-18T00:00:00Z') + (window.cacheClockOffset ?? 0);
     }
   };
   window.HTMLElement.prototype.scrollIntoView = () => {};
@@ -115,8 +133,8 @@ test('order workbench reference interactions', async () => {
     );
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.ok(
-      [...window.savedReports.values()].some(
-        (value) => value.report.edits.summary.positive === '测试正向结论',
+      [...window.savedEdits.values()].some(
+        (value) => value.edits.summary.positive === '测试正向结论',
       ),
     );
     assert.equal(window.pageSnapshot.summary.positive, '测试正向结论');
@@ -128,6 +146,20 @@ test('order workbench reference interactions', async () => {
     document.getElementById('wbUnmetMeasureInput').value = '测试措施';
     submit('wbUnmetAddForm');
     assert.match(document.getElementById('wbDimensionPanel').textContent, /测试未达成/);
+    click('[data-wb-dimension-tab="item-performance"]');
+    click('[data-wb-add-unmet="item"]');
+    const itemEntity = document.getElementById('wbUnmetEntity');
+    assert.deepEqual([...itemEntity.options].map(option => option.value).filter(Boolean), ['小水饺']);
+    assert.equal(document.getElementById('wbUnmetAddTitle').textContent, '添加品项未达成项');
+    itemEntity.value = '小水饺';
+    document.getElementById('wbUnmetTitleInput').value = '品项选择验证';
+    document.getElementById('wbUnmetReasonInput').value = '品项原因';
+    document.getElementById('wbUnmetMeasureInput').value = '品项措施';
+    submit('wbUnmetAddForm');
+    assert.match(document.getElementById('wbDimensionPanel').textContent, /小水饺｜品项选择验证/);
+    click('[data-wb-edit-unmet]');
+    assert.equal(document.getElementById('wbUnmetEntity').value, '小水饺');
+    click('#wbUnmetAddCancel');
     for (const button of document.querySelectorAll('[data-wb-dimension-tab]')) button.click();
     click('[data-wb-reference-add]');
     document.getElementById('wbReferenceName').value = '月度报告';
@@ -143,8 +175,8 @@ test('order workbench reference interactions', async () => {
     assert.match(document.querySelector('.wb-improvement-table').textContent, /测试改善/);
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.ok(
-      [...window.savedReports.values()].some((value) =>
-        value.report.edits.improvements.flat(2).some((cell) => cell.text === '测试改善'),
+      [...window.savedEdits.values()].some((value) =>
+        value.edits.improvements.flat(2).some((cell) => cell.text === '测试改善'),
       ),
     );
     click('#periodPickerTrigger');
@@ -171,10 +203,14 @@ test('order workbench reference interactions', async () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.match(document.getElementById('periodPickerValue').textContent, /2026年9月/);
     window.rejectReportSaves = false;
+    window.dispatchEvent(new window.Event('gea-identity-changed'));
+    window.savedReports.clear();
+    window.savedEdits.clear();
     window.deferLoad = true;
     window.pendingReads = [];
     click('#periodPickerTrigger');
     click('[data-period-month="2026-08"]');
+    window.dispatchEvent(new window.Event('gea-session-changed'));
     assert.deepEqual(
       [...document.querySelectorAll('[data-period-month]')].map((node) => node.dataset.periodMonth),
       ['2026-09', '2026-08', '2026-07'],
@@ -200,7 +236,7 @@ test('order workbench reference interactions', async () => {
     document.getElementById('wbSummaryPositiveInput').value = '对比加载时编辑的摘要';
     submit('wbSummaryEditForm');
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'waiting');
+    assert.equal(document.getElementById('reportPersistenceStatus').dataset.state, 'saved');
     assert.equal(
       JSON.stringify([...window.savedReports]),
       savesBeforeEdit,
@@ -208,8 +244,24 @@ test('order workbench reference interactions', async () => {
     );
     const leave = new window.Event('beforeunload', { cancelable: true });
     window.dispatchEvent(leave);
-    assert.equal(leave.defaultPrevented, true);
+    assert.equal(leave.defaultPrevented, false);
     click('[data-period-month="2026-07"]');
+    assert.match(document.getElementById('periodPickerValue').textContent, /2026年7月/);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    window.pendingReads[0].resolve(window.liveFixture);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.match(
+      document.getElementById('periodPickerValue').textContent,
+      /2026年7月/,
+      'background save must not change selected period',
+    );
+    assert.ok(
+      [...window.savedReports.values()].some(
+        (value) => value.report.edits.summary.positive === '对比加载时编辑的摘要',
+      ),
+      'inactive period edits save after its complete data arrives',
+    );
+    click('[data-period-month="2026-08"]');
     assert.match(document.getElementById('periodPickerValue').textContent, /2026年8月/);
     window.pendingReads[0].progress(partial);
     assert.equal(
@@ -231,6 +283,35 @@ test('order workbench reference interactions', async () => {
       document.querySelector('[data-period-month="2026-09"]'),
       'the current month remains available after selecting older months',
     );
+    const readCount = window.pendingReads.length;
+    const loadsBeforeCache = window.reportLoads;
+    window.cacheClockOffset = 19 * 60 * 1000;
+    click('[data-period-month="2026-08"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      window.pendingReads.length,
+      readCount,
+      'returning to a completed period must reuse the scoped cache',
+    );
+    assert.equal(
+      document.querySelector('[data-wb-summary-content="positive"]').textContent,
+      '对比加载时编辑的摘要',
+    );
+    assert.equal(
+      window.reportLoads,
+      loadsBeforeCache,
+      '19-minute cache avoids database report reload',
+    );
+    click('[data-period-month="2026-07"]');
+    window.cacheClockOffset = 21 * 60 * 1000;
+    click('[data-period-month="2026-08"]');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(
+      window.reportLoads,
+      loadsBeforeCache + 1,
+      'expired cache revalidates through the governed report channel',
+    );
+    click('[data-period-month="2026-07"]');
     window.pendingReads[0].progress(window.liveFixture);
     assert.equal(document.querySelector('.wb-kpi-main strong').textContent, '—');
     await new Promise((resolve) => setTimeout(resolve, 0));

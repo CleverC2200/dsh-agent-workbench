@@ -1,1 +1,1 @@
-export { loadWorkbenchReport as loadWorkbenchFacts } from './report-source.js';
+export { loadWorkbenchReport as loadWorkbenchFacts, loadWorkbenchSkuPage } from './report-source.js';

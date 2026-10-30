@@ -21,12 +21,12 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ...rows(selected, 'orders'),
     ...rows(selected, 'stock'),
     ...rows(selected, 'ages').filter(
-      (row) => Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
     ),
   ];
   let groups;
   const directors = (row) => {
-    const mapping = directorMap?.get(JSON.stringify([row.base, row.sku]));
+    const mapping = (Number(row.summary)===1 || row.periodAttribution===true)?row:directorMap?.get(JSON.stringify([row.base, row.sku]));
     return mapping?.names === 1 && mapping.director
       ? mapping.director
           .split(/[,，、]/)
@@ -149,7 +149,7 @@ export function workbenchPresentation(facts, options = {}) {
     ...rows(current, 'orders'),
     ...rows(current, 'stock'),
     ...rows(current, 'ages').filter(
-      (row) => Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
     ),
   ];
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
@@ -175,7 +175,7 @@ export function workbenchPresentation(facts, options = {}) {
       m = metric(current, filter),
       stock = rows(current, 'stock').filter(filter);
     const sum = (key) =>
-      stock.length && stock.every((row) => row[key] !== null && Number.isFinite(Number(row[key])))
+      stock.length && stock.every((row) => Number(row['missing_'+key]??0)===0 && row[key] !== null && Number.isFinite(Number(row[key])))
         ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
         : null;
     const daily =
@@ -240,7 +240,7 @@ export function workbenchPresentation(facts, options = {}) {
       ),
     ]);
   const skus = {}, skuPagination = {};
-  for (const category of categories.filter(category => !options.dimension || options.skuCategories?.includes(category))) {
+  for (const category of (facts.sqlSummary?[]:categories).filter(category => !options.dimension || options.skuCategories?.includes(category))) {
     const filtered = all.filter((row) => dimensionValue(row.category) === category);
     const allKeys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
     const page=Math.min(Math.max(0,options.skuPages?.[category]??0),Math.max(0,Math.ceil(allKeys.length/20)-1));

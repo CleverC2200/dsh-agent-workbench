@@ -3,7 +3,7 @@ import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { draft, ready, call } from '../../business/shared/channel.js';
-import { loadWorkbenchFacts } from './live-source.js';
+import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
 import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
@@ -22,6 +22,9 @@ let liveSkuPagination = {};
 const workbenchSkuPages = new Map();
 let applyLiveFacts = () => {};
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
+const periodCacheMaxAge = 20 * 60 * 1000;
+const periodReports = new Map();
+let activePeriodReport;
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -58,7 +61,7 @@ persistenceStatus.id = 'reportPersistenceStatus';
 persistenceStatus.setAttribute('role', 'status');
 persistenceStatus.hidden = true;
 document.getElementById('periodMeta').after(persistenceStatus);
-const persistence = createReportPersistence(
+let persistence = createReportPersistence(
   async (request, signal) => { const encoded = await encodeReportRequest(request); signal.throwIfAborted(); return call('workspace', encoded, { signal }); },
   (state, message) => {
     persistenceStatus.textContent = ' · ' + message;
@@ -91,31 +94,20 @@ function restoreReportEdits(edits = {}) {
   });
   deletedWorkbenchUnmetKeys.clear(); for (const key of edits.deleted ?? []) deletedWorkbenchUnmetKeys.add(key);
 }
-function saveDatabaseReport() {
-  if (!liveFacts || liveFacts.complete !== true) {
-    persistenceStatus.dataset.state = 'waiting';
-    persistenceStatus.textContent = ' · 摘要已暂存于当前页面，完整数据加载后自动保存';
-    return false;
-  }
-  return persistence.save({ schemaVersion: 1, facts: liveFacts, presentation: savedPresentation ?? workbenchPresentation(liveFacts), edits: reportEdits() });
-}
-function saveEditedReport() { reportEdited = true; return saveDatabaseReport(); }
+function saveEditedReport() { reportEdited = true; if(activePeriodReport){activePeriodReport.edits=structuredClone(reportEdits());activePeriodReport.dirty=true;} return persistence.saveEdits(reportEdits()); }
 function saveWorkbenchSummary() { return saveEditedReport(); }
 function saveWorkbenchDirectorNotes() { return saveEditedReport(); }
 function saveWorkbenchReferenceLinks() { return saveEditedReport(); }
 function saveWorkbenchUnmetState() { return saveEditedReport(); }
 function saveWorkbenchLocalState() { return saveEditedReport(); }
-window.addEventListener('beforeunload', event => { if (reportEdited) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (reportEdited || [...periodReports.values()].some(entry=>entry.dirty || entry.persistence.pending())) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
-  if ((!reportLoaded || (liveFacts?.complete !== true && !button?.hasAttribute('data-wb-summary-edit'))) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
+  if (!reportLoaded && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
   }
-  if (reportEdited && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
-    event.preventDefault(); event.stopImmediatePropagation();
-    showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
-  }
+
 }, true);
 // Hosted pages keep native form navigation disabled; submit only the page-owned action.
 document.addEventListener('click', event => {
@@ -2273,13 +2265,41 @@ function clearLiveMetrics() {
     if (metric.key==='准交率') metric.target='>98.5%';
   }
 }
+async function loadServerSku(category,page=0){
+ const entry=activePeriodReport,facts=liveFacts;
+ if(!entry||!facts?.sqlSummary)return;
+ entry.skuPages??=new Map();const key=category+':'+page;
+ if(!entry.skuPages.has(key)){
+  const selected=facts.periods[facts.selected];
+  const pending=loadWorkbenchSkuPage(selected.start,selected.end,category,page,entry.controller.signal,entry.persistence.scope()?.base??'').then(result=>{
+    const detailFacts={...facts,sqlSummary:false,periods:{...facts.periods,[facts.selected]:result.period}};
+    const presentation=workbenchPresentation(detailFacts);
+    return {rows:presentation.skus[category]??[],pagination:{page,total:result.total,size:20}};
+  });
+  entry.skuPages.set(key,pending);pending.catch(()=>entry.skuPages.delete(key));
+ }
+ try{const result=await entry.skuPages.get(key);if(activePeriodReport!==entry||entry.controller.signal.aborted)return;entry.skuStates?.set(category,'ready');liveSkuDetails[category]=result.rows;liveSkuPagination[category]=result.pagination;renderWorkbenchDimensions();}
+ catch(error){if(activePeriodReport===entry&&!entry.controller.signal.aborted)showWorkbenchToast('SKU明细读取失败，未用不完整数据替代。');}
+}
 async function readCurrentPeriod() {
   if (!liveConnected) return;
-  const key=periodMode+':'+selectedMonth+':'+selectedWeek;
+  const key=periodMode+':'+selectedMonth+(periodMode==='week'?':'+selectedWeek:'');
   if (key===liveReadKey) return;
+  if(activePeriodReport && reportLoaded) activePeriodReport.edits=structuredClone(reportEdits());
   liveReadKey=key;
-  liveController?.abort();
-  const controller=liveController=new AbortController();
+  let entry=periodReports.get(key);
+  if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
+  if(!entry){
+    entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
+    entry.persistence=createReportPersistence(async(request,signal)=>{const encoded=await encodeReportRequest(request);signal.throwIfAborted();return call('workspace',encoded,{signal});},(state,message)=>{
+      if(state==='saved')entry.dirty=false;
+      entry.status={state,message};
+      if(activePeriodReport===entry){persistenceStatus.textContent=' · '+message;persistenceStatus.dataset.state=state;if(state==='saved')reportEdited=false;}
+    });
+    periodReports.set(key,entry);
+  }
+  activePeriodReport=entry;persistence=entry.persistence;
+  const controller=liveController=entry.controller;
   liveFacts=null;
   reportLoaded=false; savedPresentation=null; reportEdited=false;
   restoreReportEdits();
@@ -2295,7 +2315,9 @@ async function readCurrentPeriod() {
   const weekEnd=addDays(selectedWeek,7);
   const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
   const applyFacts = (facts, storedPresentation) => {
-    if (controller.signal.aborted || liveReadKey!==key) return;
+    if (controller.signal.aborted) return;
+    entry.facts=facts;
+    if (liveReadKey!==key) return;
     liveFacts=facts;
     const presentation=storedPresentation&&!storedPresentation.lazy?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
@@ -2312,30 +2334,47 @@ async function readCurrentPeriod() {
       workbenchPerformance[name].weekly.loading=facts.complete===false&&(!facts.periods.week||(name==='director-performance'&&facts.directors?.status==='loading'));
     }
     for(const [name,dimension] of Object.entries(presentation.dimensions)) Object.assign(workbenchDimensions[name],dimension);
-    liveSkuDetails=presentation.skus;
+    liveSkuDetails=facts.sqlSummary?{}:presentation.skus;
+    if(facts.sqlSummary)for(const expanded of expandedSkuCategories){const category=expanded.slice(expanded.indexOf(':')+1);void loadServerSku(category,workbenchSkuPages.get(category)??0);}
     liveSkuPagination=presentation.skuPagination??{};
     renderSelectedPeriod();
     updateReport();
   };
   applyLiveFacts = applyFacts;
+  entry.apply=applyFacts;
+  if(entry.started){
+    reportLoaded=entry.loaded;reportEdited=entry.dirty;restoreReportEdits(entry.edits??{});
+    if(entry.facts)applyFacts(entry.facts);
+    if(entry.status){persistenceStatus.dataset.state=entry.status.state;persistenceStatus.textContent=' · '+entry.status.message;}
+    return;
+  }
+  entry.started=true;
   try {
     let saved;
     try {
-      saved = await persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
-      reportLoaded = true;
+      saved = await entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      entry.loaded=true;if(!entry.dirty)entry.edits=saved?.edits??{};
+      if(activePeriodReport===entry){reportLoaded=true;restoreReportEdits(entry.edits);}
     } catch (error) { controller.signal.throwIfAborted(); }
 
-    if (controller.signal.aborted || liveReadKey !== key) return;
-    restoreReportEdits(saved?.edits);
-    if (saved && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
-      applyFacts(saved.facts, saved.presentation);
+    controller.signal.throwIfAborted();
+    if(saved?.facts?.complete && saved.facts.attributionVersion === 2) entry.apply(saved.facts,saved.presentation);
+    if (saved?.facts?.complete && saved.facts.attributionVersion === 2 && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
+      entry.apply(saved.facts, saved.presentation);entry.finished=Date.now();
       return;
     }
-    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:applyFacts,base:persistence.scope()?.base});
-    applyFacts(facts);
-    if (reportLoaded) saveDatabaseReport();
+    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:(facts)=>{if(!entry.facts?.complete)entry.apply(facts);},base:entry.persistence.scope()?.base,summary:true});
+    entry.apply(facts);entry.finished=Date.now();
+    if(entry.loaded){
+      if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
+      entry.persistence.save({schemaVersion:1,facts,presentation:workbenchPresentation(facts),edits:entry.edits});
+    }
+    for(const [cachedKey,cached] of periodReports)if(periodReports.size>6&&cached!==activePeriodReport&&cached.finished&&!cached.dirty&&!cached.persistence.pending()){cached.controller.abort();periodReports.delete(cachedKey);}
   } catch (error) {
-    if (!controller.signal.aborted) {
+    entry.started=false;entry.facts=null;entry.loaded=false;
+    if(!entry.dirty)periodReports.delete(key);
+    if (!controller.signal.aborted && activePeriodReport===entry) {
+      reportLoaded=false;
       clearLiveMetrics();
       document.getElementById('periodMeta').textContent='数据读取失败或未获授权';
       renderWorkbench();
@@ -2346,6 +2385,7 @@ async function readCurrentPeriod() {
 clearLiveMetrics();
 void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
+  for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
   liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
 });
 window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
@@ -2453,6 +2493,8 @@ function renderWorkbenchDimensionIssues(risk, base, dimensionKey, rowIndex) {
 }
 function renderWorkbenchSkuDetail(category) {
   const samples = liveSkuDetails[category] || [];
+  if(liveFacts?.sqlSummary&&activePeriodReport?.skuStates?.get(category)==='loading')return '<div class="wb-sku-detail"><p>正在读取当前页 SKU 明细…</p></div>';
+  if(liveFacts?.sqlSummary&&activePeriodReport?.skuStates?.get(category)==='error')return '<div class="wb-sku-detail"><p>当前页读取失败，未使用不完整数据。</p></div>';
   if (!samples.length)
     return `<div class="wb-sku-detail"><p>${escapeHtml(category)}当前范围暂无已授权 SKU 数据。</p></div>`;
   const rows = samples
@@ -2690,6 +2732,7 @@ function renderWorkbenchDimensions() {
   panel.innerHTML = `<div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === 'region-change' ? 'region-change-table' : ''}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
   panel.querySelectorAll('[data-wb-sku-page]').forEach(button=>button.addEventListener('click',()=>{
     workbenchSkuPages.set(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));
+    if(liveFacts?.sqlSummary){void loadServerSku(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));return;}
     if(liveFacts)applyLiveFacts(liveFacts);
     renderWorkbenchDimensions();
   }));
@@ -2698,6 +2741,7 @@ function renderWorkbenchDimensions() {
       const key = `${dimensionTab}:${button.dataset.wbSkuToggle}`;
       if (expandedSkuCategories.has(key)) expandedSkuCategories.delete(key);
       else expandedSkuCategories.add(key);
+      if(liveFacts?.sqlSummary){void loadServerSku(button.dataset.wbSkuToggle,workbenchSkuPages.get(button.dataset.wbSkuToggle)??0);renderWorkbenchDimensions();return;}
       if(liveFacts)applyLiveFacts(liveFacts);
       renderWorkbenchDimensions();
     }),
@@ -2822,22 +2866,23 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
     ? workbenchPerformance['base-performance'].monthly.rows
         .map((row) => row[0])
         .filter((base) => base !== '合计')
-    : workbenchIssueCategories();
+    : [...new Set(workbenchPerformance['item-performance'][periodMode === 'week' ? 'weekly' : 'monthly'].rows
+        .map((row) => row[0]))].filter((name) => name && !['合计', '未映射', '—'].includes(name));
   document.getElementById('wbUnmetAddForm').reset();
   document.getElementById('wbUnmetAddTitle').textContent = item
     ? isBase
       ? '编辑基地未达成项'
-      : '编辑品类未达成项'
+      : '编辑品项未达成项'
     : isBase
       ? '添加基地未达成项'
-      : '添加品类未达成项';
+      : '添加品项未达成项';
   document.getElementById('wbUnmetAddSubtitle').textContent = item
     ? '修改未达成项的原因分析与改善措施'
     : isBase
       ? '补充基地未达成原因与改善措施'
-      : '补充品类未达成原因与改善措施';
-  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品类';
-  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品类'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
+      : '补充品项未达成原因与改善措施';
+  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品项';
+  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品项'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
   document.getElementById('wbUnmetTitleInput').value = item?.formTitle || '';
   document.getElementById('wbUnmetReasonInput').value = item?.formReason || '';
   document.getElementById('wbUnmetMeasureInput').value = item?.formMeasure || '';
@@ -3157,7 +3202,7 @@ improvementAddForm.addEventListener('submit', (event) => {
   table?.tBodies[0]?.append(row);
   closeImprovementAdd();
   if (!table) trigger?.focus();
-  saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…');
+  saveEditedReport(); showWorkbenchToast('正在保存改善措施…');
 });
 document.getElementById('wbImprovementAddClose').addEventListener('click', closeImprovementAdd);
 document.getElementById('wbImprovementAddCancel').addEventListener('click', closeImprovementAdd);
@@ -3350,14 +3395,14 @@ workbenchView.addEventListener('click', (event) => {
     improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
     improvementEdit.title = isEditing ? '编辑' : '保存';
     if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
-    else { saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…'); }
+    else { saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
     return;
   }
   const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
   if (improvementDelete) {
     if (!window.confirm('确认删除这条改善措施吗？删除将保存到当前周期报告。')) return;
     improvementDelete.closest('tr')?.remove();
-    saveDatabaseReport(); showWorkbenchToast('正在保存删除结果…');
+    saveEditedReport(); showWorkbenchToast('正在保存删除结果…');
     return;
   }
   const editUnmet = event.target.closest('[data-wb-edit-unmet]');
@@ -3542,7 +3587,7 @@ workbenchView.addEventListener('submit', (event) => {
     saveWorkbenchLocalState();
   } else {
     createdWorkbenchTasks.set(workbenchTaskKey(taskId), updated);
-    saveDatabaseReport();
+    saveEditedReport();
   }
   editingWorkbenchTaskId = '';
   renderWorkbenchTasks();
@@ -3635,7 +3680,7 @@ wbAdoptForm.addEventListener('submit', (event) => {
     status: '待跟进',
   });
   closeAdoptDialog();
-  saveDatabaseReport();
+  saveEditedReport();
   renderWorkbench();
   focusCreatedTask(template.id);
   const toast = document.getElementById('toast');
