@@ -474,7 +474,7 @@ export function OriginalBusinessList({
           )}
         </div>
       ) : loading && (aqkc || fc) ? (
-        <DashboardTableSkeleton label={`${view.title}加载中`} />
+        <DashboardTableSkeleton label={`${view.title}加载中`} embedded />
       ) : (
         renderTable
       )}

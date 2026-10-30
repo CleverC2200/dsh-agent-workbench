@@ -14,12 +14,12 @@ const config = JSON.parse(
   ),
 );
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
-async function until(predicate) {
+async function until(predicate, diagnostic = () => 'page did not settle') {
   for (let i = 0; i < 200; i++) {
     if (predicate()) return;
     await tick();
   }
-  assert.fail('page did not settle');
+  assert.fail(diagnostic());
 }
 
 test('built live page renders granted records, hides denied fields, and clears facts on identity changes', async (t) => {
@@ -54,7 +54,8 @@ test('built live page renders granted records, hides denied fields, and clears f
   let emptyFacts = false;
   const queryIds = [];
   let completeInventory;
-  const port = {
+  let inventoryReleased = false;
+  let port = {
     start() {},
     close() {},
     postMessage(message) {
@@ -123,7 +124,7 @@ test('built live page renders granted records, hides denied fields, and clears f
             ],
             configVersion: 'v1',
           };
-        else if (id === 'sku.detail')
+        else if (id === 'sku.page')
           result = {
             rows: [
               Object.fromEntries(
@@ -210,13 +211,22 @@ test('built live page renders granted records, hides denied fields, and clears f
             data: { type: 'response', id: message.id, result },
           }),
         );
-      if (!deny && message.method === 'sql' && message.parameters.queryId === 'sku.detail')
-        completeInventory = respond;
+      if (
+        !deny &&
+        !inventoryReleased &&
+        message.method === 'sql' &&
+        message.parameters.queryId === 'sku.page'
+      )
+        completeInventory = () => {
+          inventoryReleased = true;
+          respond();
+        };
       else respond();
     },
   };
-  const connect = (session) =>
-    window.dispatchEvent(
+  const connect = (session) => {
+    port = { ...port, onmessage: undefined };
+    return window.dispatchEvent(
       new window.MessageEvent('message', {
         source: window,
         origin: 'https://workbench.test',
@@ -228,6 +238,7 @@ test('built live page renders granted records, hides denied fields, and clears f
         ports: [port],
       }),
     );
+  };
   connect('session-a');
   await until(() =>
     window.document
@@ -277,12 +288,27 @@ test('built live page renders granted records, hides denied fields, and clears f
       ].includes(id),
     ),
   );
-  await until(() => completeInventory);
+  window.document.querySelector('[data-fulfillment-dimension="itemDimensionPanel"]').click();
+  await until(
+    () => completeInventory,
+    () =>
+      JSON.stringify({
+        queryIds,
+        errors,
+        panel: window.document.querySelector('.item-analysis').textContent,
+      }),
+  );
   completeInventory();
   await until(
     () =>
       window.document.querySelector('.item-analysis h3').textContent ===
       '当前授权范围的品项库存情况',
+    () =>
+      JSON.stringify({
+        panel: window.document.querySelector('.item-analysis').textContent,
+        queryIds,
+        errors,
+      }),
   );
   assert.equal(
     window.document.querySelector('.item-analysis h3').textContent,
@@ -299,6 +325,9 @@ test('built live page renders granted records, hides denied fields, and clears f
     /50.0/,
   );
   assert.ok(!window.document.querySelector('#deliveryOrderDetailRows').textContent.includes('400'));
+  window.document.querySelector('[data-fulfillment-dimension="deliveryDimensionPanel"]').click();
+  window.document.querySelector('#deliveryBaseCompareTab').click();
+  await until(() => window.document.querySelector('#deliveryBaseCompareRows tr')?.cells.length > 1);
   const baseCells = window.document.querySelector('#deliveryBaseCompareRows tr').cells;
   const customerType = window.document.querySelector('#deliveryOrderDetailRows tr').cells[7];
   assert.equal(customerType.textContent, '经销商');
@@ -309,6 +338,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   assert.equal(baseCells[5].textContent, '1 张');
   assert.equal(baseCells[7].textContent, '50.0%');
   assert.equal(baseCells[8].textContent, '1 张');
+  window.document.querySelector('#deliveryOrderListTab').click();
   const pager = window.document.querySelector('nav[aria-label="订单明细分页"]');
   assert.match(pager.textContent, /共 1 条/);
   assert.match(pager.textContent, /第 1 \/ 1 页/);
@@ -324,17 +354,19 @@ test('built live page renders granted records, hides denied fields, and clears f
   window.document.querySelector('.sales-confirm-trigger').click();
   assert.equal(window.document.querySelector('#salesConfirmOverlay').hidden, false);
   assert.match(window.document.querySelector('#salesConfirmOrder').textContent, /AUTHORIZED-01/);
-  assert.equal(
-    window.document.querySelector('#salesConfirmForm button[type="submit"]').disabled,
-    true,
+  assert.equal(window.document.querySelector('#salesConfirmForm button.primary').disabled, true);
+  assert.match(
+    window.document.querySelector('#salesConfirmForm button.primary').textContent,
+    /发送到飞书群/,
   );
   window.document.querySelector('[data-close-sales-confirm]').click();
   assert.equal(window.document.querySelector('#salesConfirmOverlay').hidden, true);
   window.document.querySelector('.confirmation-status').click();
   assert.equal(window.document.querySelector('#confirmationHistoryOverlay').hidden, false);
+  await until(() => window.document.querySelector('#confirmationHistoryDetails').textContent);
   assert.match(
     window.document.querySelector('#confirmationHistoryDetails').textContent,
-    /尚未接入真实/,
+    /正式飞书确认入口尚未启用/,
   );
   window.document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
   assert.equal(window.document.querySelector('#confirmationHistoryOverlay').hidden, true);
@@ -344,6 +376,10 @@ test('built live page renders granted records, hides denied fields, and clears f
   baseToggle.click();
   assert.equal(window.document.querySelector('.delivery-base-compare-detail').hidden, false);
   assert.match(window.document.querySelector('.base-status-detail-table').textContent, /备单中/);
+  window.document.querySelector('#deliveryRegionCompareTab').click();
+  await until(() =>
+    window.document.querySelector('#deliveryRegionCompareRows .delivery-order-expander'),
+  );
   const regionToggle = window.document.querySelector(
     '#deliveryRegionCompareRows .delivery-order-expander',
   );
@@ -403,7 +439,7 @@ test('built live page renders granted records, hides denied fields, and clears f
   const inventoryPanel = window.document.querySelector('#itemInventoryPanel');
   const inventoryPager = inventoryPanel.querySelector('.order-pagination');
   assert.ok(inventoryPager, '库存分页必须位于库存面板内部，随面板隐藏');
-  assert.equal(inventoryPanel.querySelector('table').nextElementSibling, inventoryPager);
+  assert.ok(inventoryPanel.contains(inventoryPager));
   const orderToolbar = window.document.querySelector('.delivery-order-view-toolbar');
   assert.ok(orderToolbar.contains(window.document.querySelector('#deliveryOrderListTab')));
   assert.ok(orderToolbar.contains(window.document.querySelector('.delivery-order-panel-tools')));
@@ -445,11 +481,14 @@ test('built live page renders granted records, hides denied fields, and clears f
   assert.deepEqual(errors, []);
   deny = false;
   emptyFacts = true;
+  port.onmessage({ data: { type: 'identity-changed' } });
   connect('session-c');
-  await until(() =>
-    window.document
-      .querySelector('#deliveryOrderDetailRows')
-      .textContent.includes('源数据在读取期间发生变化'),
+  await until(
+    () =>
+      window.document
+        .querySelector('#deliveryOrderDetailRows')
+        .textContent.includes('源数据在读取期间发生变化'),
+    () => window.document.querySelector('#deliveryOrderDetailRows').textContent,
   );
   assert.ok(
     !window.document

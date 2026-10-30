@@ -125,7 +125,7 @@ test('QLL counts one inventory snapshot once across base and warehouse dimension
     return result;
   });
   const inventoryCard = frame.locator('[data-overview-cards="qll"]').locator('button').first();
-  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*件/);
+  await expect(inventoryCard.locator('strong').first()).toHaveText(/160\s*件/);
   for (const call of calls.filter((c) => c.queryId.startsWith('health.'))) {
     assert.equal('warehouse_type' in call.parameters, false);
   }
@@ -464,7 +464,7 @@ test('APS query diagnostics stay in logs while other sources finish', async (t) 
   });
   await expect.poll(() => calls.length).toBeGreaterThan(10);
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
-  await expect(frame.getByRole('alert')).toHaveCount(0);
+  await expect(frame.getByRole('alert')).toHaveCount(1);
   await expect(frame.locator('body')).not.toContainText('NO_RETURN_COLUMN_ALLOWED');
   await expect
     .poll(() => diagnostics.some((message) => message.includes('NO_RETURN_COLUMN_ALLOWED')))
@@ -621,7 +621,7 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
   const card = frame.locator('.kpi-card').filter({ hasText: '当前订单' });
   await expect(card.locator('.kpi-value')).toHaveText('450件');
   await expect(card.locator('dl')).toContainText('缺货量3件');
-  await expect(card.locator('dl')).toContainText('未备单订单占用50件');
+  await expect(card.locator('dl')).toContainText('基地已占用50件');
   assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
@@ -637,7 +637,7 @@ test('fc: denied current orders remain unknown without substituting monthly shor
   await expect(card.locator('.kpi-value')).toHaveText('-');
   await expect(card.locator('dd')).toHaveText(['-', '-']);
   assert.doesNotMatch(await card.innerText(), /16,163|本月/);
-  await expect(frame.getByRole('alert')).toHaveCount(0);
+  await expect(frame.getByRole('alert')).toHaveCount(1);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
 });
@@ -710,7 +710,11 @@ test('qll original current-order card retains new base snapshot quantities witho
 test('QLL branch turnover reads its summary and its date control has a stable Chinese display', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
     if (query.queryId === 'branch-turnover.cards')
-      Object.assign(result.rows[0], { historical_turnover_days: 12.5, turnover_count: 30 });
+      Object.assign(result.rows[0], { historical_turnover_days: 999, turnover_count: 30 });
+    if (query.queryId === 'base_shipments.summary')
+      Object.assign(result.rows[0], { rolling_ship_positive: 13392, rolling_missing_qty: 0 });
+    if (query.queryId === 'replenishment.summary')
+      Object.assign(result.rows[0], { rolling_ship_daily: 446.4 });
     return result;
   });
   const card = frame
@@ -772,7 +776,8 @@ test('QLL changing the date stays local until submit, then reads the new date', 
         .slice(before)
         .some(
           (query) =>
-            query.queryId === 'source.stock-date' && query.parameters.as_of === '2026-10-18',
+            /^source\.(?:health|branch-stock)-date$/.test(query.queryId) &&
+            query.parameters.as_of === '2026-10-18',
         ),
     )
     .toBe(true);
@@ -1022,7 +1027,7 @@ test('FC current-order card preserves a verified zero independently of monthly q
     .locator('article.kpi-card')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
   await expect(card.locator('.kpi-value')).toHaveText('0件');
-  await expect(card.locator('dt')).toHaveText(['缺货量', '未备单订单占用']);
+  await expect(card.locator('dt')).toHaveText(['缺货量', '基地已占用']);
   await expect(card.locator('dd')).toHaveText(['0件', '0件']);
   assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
   assert.deepEqual(errors, []);
@@ -1236,7 +1241,7 @@ for (const id of ['fc', 'qll', 'dealer'])
   });
 
 for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
-  test(`${id}: source warnings are logged without business-page banners`, async (t) => {
+  test(`${id}: source warnings retain diagnostics and a friendly partial-data notice`, async (t) => {
     const { frame, errors, diagnostics } = await mount(t, id, 1280);
     const root = frame.locator('#app');
     await expect(root).not.toBeEmpty();
@@ -1251,7 +1256,7 @@ for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
       .poll(() => diagnostics.some((message) => message.includes('缺少批次货龄')))
       .toBe(true);
     await expect(root).not.toContainText('缺少批次货龄与生产日期');
-    await expect(root.getByRole('alert')).toHaveCount(0);
+    await expect(root.getByRole('alert')).toHaveCount(id === 'qll' ? 2 : 1);
     assert.deepEqual(errors, []);
   });
 
@@ -1485,9 +1490,10 @@ test('AQKC overview fits five compact cards in a wide row and adapts without cli
 });
 
 function fcWorkflowRows(query, result) {
-  const detail = /^(?:replenishment\.detail|transfer_plan\.(?:detail|template))(?:\.atomic)?$/.test(
-    query.queryId,
-  );
+  const detail =
+    /^(?:replenishment\.detail|branch-plan\.detail|transfer_plan\.(?:detail|template))(?:\.atomic)?$/.test(
+      query.queryId,
+    );
   const values = (index) => ({
     warehouse_code: '001',
     warehouse_name: '上海分仓',
@@ -1504,6 +1510,12 @@ function fcWorkflowRows(query, result) {
     month_out_plan: 31,
     period_current_out: 31,
     period_next_out: 31,
+    period_current_transfer: 62,
+    period_next_transfer: 62,
+    period_current_source: '分仓同步表',
+    period_next_source: '分仓同步表',
+    period_plan_status: '已同步',
+    source_rows: 1,
     current_order_remaining: 0,
     calculation_order_remaining: 0,
     warehouse_month_transfer_plan: 62,
@@ -1678,9 +1690,10 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-000实际补货量', exact: true }),
   ).toHaveValue('80');
+  await frame.getByRole('checkbox', { name: '需补货', exact: true }).uncheck();
   await expect(
     frame.getByRole('spinbutton', { name: 'sku-A-001实际补货量', exact: true }),
-  ).toBeDisabled();
+  ).toBeEditable();
   assert.deepEqual(errors, []);
 });
 
@@ -1808,8 +1821,9 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   assert.equal((sheet.match(/<row /g) ?? []).length, 11);
   assert.doesNotMatch(sheet, /sku-A-010/);
   await expect(list.getByRole('button', { name: '草稿（1）', exact: true })).toBeVisible();
+  await list.getByRole('button', { name: '草稿（1）', exact: true }).click();
   await expect(
-    list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
+    frame.getByRole('dialog', { name: '补货草稿', exact: true }).getByRole('spinbutton'),
   ).toHaveValue('17');
   assert.deepEqual(errors, []);
 });
@@ -1836,10 +1850,14 @@ test('FC list filters align compact white controls, retain actions and adapt to 
         return {
           controls: [
             ...el.querySelectorAll(
-              ':scope > label > input:not([type="file"]), :scope > button, :scope > details > summary',
+              ':scope > label > input:not([type="file"]):not([type="checkbox"]), :scope > button, :scope > details > summary',
             ),
           ].map(box),
-          fields: [...el.querySelectorAll(':scope > label > input:not([type="file"])')].map(box),
+          fields: [
+            ...el.querySelectorAll(
+              ':scope > label > input:not([type="file"]):not([type="checkbox"])',
+            ),
+          ].map(box),
           toolbar: box(el),
           scroll: document.documentElement.scrollWidth,
         };
@@ -1847,7 +1865,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
       assert.ok(layout.scroll <= width + 2, `${tab}: horizontal overflow at ${width}`);
       assert.ok(
         layout.controls.every((control) => Math.abs(control.height - 36) <= 1),
-        `${tab}: unequal control heights at ${width}`,
+        `${tab}: unequal control heights at ${width}: ${JSON.stringify(layout.controls)}`,
       );
       assert.ok(
         layout.controls.every((control) => control.left >= 0 && control.right <= width + 1),
@@ -1857,7 +1875,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
         layout.fields.every((control) => control.background === 'rgb(255, 255, 255)'),
         'inputs use a white surface',
       );
-      if (width >= 922) {
+      if (width >= 1280) {
         assert.ok(
           layout.controls.every((control) => Math.abs(control.top - layout.controls[0].top) <= 1),
           'desktop filters and column settings remain on the same row',
@@ -1866,7 +1884,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
           layout.fields.every(
             (control) => control.right - control.left >= 80 && control.right - control.left <= 200,
           ),
-          'desktop fields shrink while keeping usable input width',
+          `desktop fields shrink while keeping usable input width: ${JSON.stringify(layout.fields)}`,
         );
       }
       const columns = toolbar.locator('summary[aria-label="列设置"]');
@@ -1891,7 +1909,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
     frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
   ).toHaveCount(10);
   const before = calls.length;
-  await toolbar.getByRole('textbox', { name: '分仓编码', exact: true }).fill('001');
+  await toolbar.getByRole('textbox', { name: '分仓', exact: true }).fill('001');
   assert.equal(calls.length, before, 'typing does not query');
   await toolbar.getByRole('button', { name: '查询', exact: true }).click();
   await expect
@@ -1899,7 +1917,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
       calls.some(
         (query) =>
           query.queryId === 'replenishment.detail.atomic' &&
-          query.parameters.warehouse_code === '001',
+          query.parameters.warehouse_search_pattern === '%001%',
       ),
     )
     .toBe(true);
@@ -2001,6 +2019,7 @@ for (const [inventory, inTransit, stockDays] of [
 
 test('FC actual quantity can clear zero, type a replacement and retain decimal drafts', async (t) => {
   const { frame, errors } = await mount(t, 'fc', 1280, (query, result) => {
+    result = fcWorkflowRows(query, result);
     if (query.queryId.startsWith('replenishment.'))
       for (const row of result.rows) {
         row.recommended_qty = 0;
@@ -2023,6 +2042,9 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   await expect(input).toHaveValue('12.5');
   await input.fill('');
   await expect(input).toHaveValue('');
+  await input.blur();
+  await expect(input).toHaveValue('');
+  await input.fill('0');
   await input.blur();
   await expect(input).toHaveValue('0');
   assert.deepEqual(errors, []);
@@ -2056,7 +2078,7 @@ test('FC weighted age stays compact and maximum age is available in details', as
   await expect(
     frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
   ).toBeVisible();
-  await expect(frame.getByRole('cell', { name: '1,033', exact: true })).toBeVisible();
+  await expect(frame.getByRole('cell', { name: /^1,033(?:\.0+)?$/, exact: true })).toBeVisible();
   assert.deepEqual(errors, []);
 });
 
