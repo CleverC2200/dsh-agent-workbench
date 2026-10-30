@@ -1,3 +1,6 @@
+import { buildCategoryDemand } from './category-demand.js';
+import { ready } from '../../../business/shared/channel.js';
+import { createPlanRates } from './plan-rate-view.js';
 import { hasMpsSource } from './master-data.js';
 import { readFactMonth } from './facts.js';
 import { readSourceTable } from './source-tables.js';
@@ -21,8 +24,11 @@ const percent = (value) =>
 
 export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPart, categories }) {
   const h = react.createElement;
+  const PlanRates = createPlanRates(react, { Dialog, table, downloadCsv });
   return function SourceInputs({ kind, draft, update, relations, active }) {
-    const [endMonth, setEndMonth] = react.useState(() => monthOffset(draft.month, -1));
+    const [endMonth, setEndMonth] = react.useState(() =>
+      monthOffset(draft.month, draft.pull === 'monthly' ? -2 : -1),
+    );
     const [preview, setPreview] = react.useState(null);
     const [page, setPage] = react.useState(0);
     const [dimension, setDimension] = react.useState('基地+大类');
@@ -64,7 +70,9 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                     const month = monthOffset(draft.month, -12 * year);
                     return {
                       month,
-                      ...(await read(() => readSourceTable('delivery', month, stop.signal))),
+                      ...(await read(() =>
+                        readSourceTable('category-history', month, stop.signal),
+                      )),
                     };
                   }),
                 ),
@@ -103,6 +111,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           });
       }
     };
+    react.useEffect(() => {
+      let current = true;
+      if (active && hasMpsSource())
+        ready.then(() => {
+          if (current) void load();
+        });
+      return () => {
+        current = false;
+        controller.current?.abort();
+      };
+    }, [active, draft.month]);
     const workflow = react.useMemo(
       () => (kind === 'parameters' ? buildMpsWorkflow(draft, relations, null) : null),
       [draft, relations, kind],
@@ -122,6 +141,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       current && kind === 'parameters'
         ? draft.historicalIndicators.periods.flatMap((period) => period.rows)
         : [];
+    const calculated = react.useMemo(() => buildCategoryDemand(draft, categories), [draft]);
     const historicalRows = historical.filter(
       (row) => (!dimension || row['维度类型'] === dimension) && (!base || row['基地'] === base),
     );
@@ -193,14 +213,18 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       const issues = [...new Set(rows.flatMap((row) => row.issues))];
       return {
         大类或源分类: category,
-        核对月实绩:
+        基期实绩:
           latest?.actual.knownQuantity == null
             ? '-'
             : number(latest.actual.knownQuantity) +
               (latest.actual.quantity === null ? '（已知小计）' : ''),
         三月实绩: actual.display,
         三月DMS计划: plan.display,
-        核对比值:
+        三月占比合计: percent(
+          calculated.bases.find((row) => row.category === category)?.recentShare,
+        ),
+        全年预估: number(calculated.bases.find((row) => row.category === category)?.annualEstimate),
+        计划达成率:
           !issues.length && actual.quantity !== null && plan.quantity > 0
             ? percent(actual.quantity / plan.quantity)
             : '-',
@@ -214,7 +238,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
       {
         evaluationMonth: draft.month,
         read: state ?? null,
-        purpose: 'source-check-only; does not produce categoryDemand',
+        purpose: 'confirmed category demand and source inputs',
         months:
           kind === 'basic'
             ? checks.months
@@ -304,12 +328,21 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
           h(
             'p',
             { className: 'dc-muted' },
-            'BI实绩与DMS计划按所示三个月核对，计划随月初／纠偏选择。源分类分别保留，缺值不补0。此窗口不是已确认的预测基期；不生成正式大类需求。',
+            'BI实绩与DMS计划按所示三个月核对，计划随月初／纠偏选择。源分类分别保留，缺值不补0。期初使用评估月前4至前2月，纠偏使用前3至前1月。基期取窗口最后一月，全年预估＝三月实绩÷三月历史平均占比之和。',
           ),
           state?.error && h('p', { role: 'alert' }, state.error),
         ),
         table(
-          ['大类或源分类', '核对月实绩', '三月实绩', '三月DMS计划', '核对比值', '核对说明'],
+          [
+            '大类或源分类',
+            '基期实绩',
+            '三月实绩',
+            '三月DMS计划',
+            '三月占比合计',
+            '全年预估',
+            '计划达成率',
+            '核对说明',
+          ],
           basicRows,
         ),
       );
@@ -321,6 +354,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
         { className: 'dc-parameter-grid', role: 'region', 'aria-label': '系统派生口径参数' },
         ...['三年同比', '三年环比', '三年该月占比', '去年发运占比', '销售提报占比'].map(
           (name, index) => {
+            if (index === 4) return h(PlanRates, { key: name, draft, update, active });
             const field = index === 3 ? 'historyShare' : 'reportShare';
             const available = shares.filter((row) => row[field] !== null).length;
             return h(
@@ -349,7 +383,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   'p',
                   {},
                   index < 3
-                    ? '可核对各年源数量和比值，三年平均规则尚未确认。'
+                    ? '每年全国同大类先汇总，再对三个完整年份等权平均；同比、环比为系数，月占比为月量÷对应财年全年。'
                     : `${draft.month}同大类基地SKU口径；复用第三步结果，缺分类、缺数或零分母逐项说明。`,
                 ),
               ),
@@ -395,7 +429,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
             { className: 'dc-muted' },
             isShare
               ? '与第三步使用同一计算函数。仅缺大类需求不会使已有占比消失；本页不改变拆分口径。'
-              : '源同比、环比和财年比例分别保留；月占财年比例的分母是全国同维度财年量。三年均值未确认，不拿源比例替代SKU占大类。',
+              : '源同比、环比和财年比例分别保留；三年系数从全国同大类的分子分母计算后等权平均，缺年或零分母不出结果。',
           ),
           !isShare &&
             h(
@@ -415,9 +449,7 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                       setPage(0);
                     },
                   },
-                  ['基地+大类', '基地+产品', '基地+物料组', '基地+系列'].map((value) =>
-                    h('option', { value, key: value }, value),
-                  ),
+                  ['基地+大类'].map((value) => h('option', { value, key: value }, value)),
                 ),
               ),
               h(
@@ -440,6 +472,17 @@ export function createSourceInputs(react, { Dialog, table, downloadCsv, useMpsPa
                   ),
                 ),
               ),
+            ),
+          !isShare &&
+            table(
+              ['大类', '目标月份', '三年同比系数', '三年环比系数', '三年月占比'],
+              calculated.historical.map((row) => ({
+                大类: row.category,
+                目标月份: row.month,
+                三年同比系数: row.yoy ?? '',
+                三年环比系数: row.mom ?? '',
+                三年月占比: row.share ?? '',
+              })),
             ),
           table(previewColumns, previewRows.slice(pageIndex * 25, (pageIndex + 1) * 25)),
           !previewRows.length &&

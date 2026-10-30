@@ -97,14 +97,24 @@ export function sourceCheckRows(checks, rawProducts, pull, categories = []) {
     current.add(label);
     labels.set(code, current);
   }
+  const historyLabels = new Map();
+  for (const row of (checks?.periods ?? []).flatMap((period) => period.history.rows)) {
+    const code = text(row['产品编码']),
+      category = text(row['大类']);
+    if (!code || !category) continue;
+    const current = historyLabels.get(code) ?? new Set();
+    current.add(category);
+    historyLabels.set(code, current);
+  }
   const periods = (checks?.periods ?? []).map((period) => ({
     ...period,
     historyError: period.history.error,
     reportError: period.report.error,
     history: period.history.rows,
     report: period.report.rows.map((row) => {
-      const matches = labels.get(row['产品编码']);
-      return { ...row, 源分类: matches?.size === 1 ? [...matches][0] : '' };
+      const historical = historyLabels.get(row['产品编码']);
+      const matches = historical?.size === 1 ? historical : labels.get(row['产品编码']);
+      return { ...row, 源分类: matches?.size === 1 ? [...matches][0] : text(row['大类']) };
     }),
   }));
   const classes = [

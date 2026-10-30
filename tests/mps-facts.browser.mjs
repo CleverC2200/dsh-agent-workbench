@@ -172,7 +172,9 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
     frame.getByRole('region', { name: '历史同期发货' }).getByRole('alert'),
   ).toContainText('当前账号暂无数据权限');
   assert.deepEqual(
-    calls.filter((call) => call.queryId === 'facts.report').map((call) => call.parameters.offset),
+    calls
+      .filter((call) => call.queryId === 'facts.report' && call.parameters.month === '2026-10-01')
+      .map((call) => call.parameters.offset),
     [0, 200],
   );
   await report.getByRole('button', { name: '预览当前明细' }).click();
@@ -206,7 +208,12 @@ test('truncated facts are rejected and a late historical period cannot overwrite
   let historyCalls = 0;
   const { frame } = await mpsPage(t, config, async (query) => {
     if (query.queryId === 'facts.report.count') return { ...fixture(query), rows: [{ total: 2 }] };
-    if (query.queryId === 'facts.history' && ++historyCalls === 1) await pending;
+    if (
+      query.queryId === 'facts.history' &&
+      query.parameters.month === '2025-10-01' &&
+      ++historyCalls === 1
+    )
+      await pending;
     return fixture(query);
   });
   await expect(

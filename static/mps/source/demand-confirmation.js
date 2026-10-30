@@ -1,3 +1,4 @@
+import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
 import { hasMpsSource, readProducts, readAnnual, readAnnualDetails } from './master-data.js';
@@ -234,6 +235,12 @@ function downloadFile(name, mime, text) {
 }
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
+  const CategoryDemand = createCategoryDemand(react, {
+    table: (...args) => table(...args),
+    downloadCsv,
+    categories,
+    useMpsPart,
+  });
   function Dialog({ title, children, footer, close, className = '' }) {
     const element = react.useRef();
     react.useEffect(() => {
@@ -2053,10 +2060,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           'div',
           { className: 'dc-section-title' },
           h('h2', {}, '大类预估需求数量 · 测算参考'),
-          h('span', {}, '（环比法＋占比法）÷2÷计划达成率，业务冲突保留待定'),
+          h('span', {}, '期初与纠偏按各自三月窗口计算，缺少输入时留空'),
         ),
         h(SourceInputs, {
-          key: draft.id + '-' + scopeGeneration + '-basic',
+          key: draft.id + '-' + scopeGeneration + '-basic-' + draft.pull,
           kind: 'basic',
           draft,
           update,
@@ -2066,72 +2073,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           active: active && step === 'check',
         }),
-        h(
-          'section',
-          { 'aria-label': '逐月测算', className: 'dc-card dc-results' },
-          h(
-            'div',
-            { className: 'dc-card-head' },
-            h('h3', {}, '逐月测算（到大类预估需求数量）'),
-            h(
-              'span',
-              { className: 'dc-card-note' },
-              '环比链、同期占比与年度延展口径待确认 · 单位：件',
-            ),
-          ),
-          table(
-            [
-              '大类',
-              '月份',
-              '历史平均环比',
-              '环比链',
-              '① 环比法',
-              '同期平均占比',
-              '② 占比法',
-              '加权',
-              '大类预估需求数量',
-            ],
-            categories.flatMap((category) =>
-              [1, 2, 3, 4].map((offset) => ({
-                大类: category,
-                月份: `${monthOffset(draft.month, offset - 1)}（M+${offset}）`,
-                历史平均环比: '待定',
-                环比链: '待定',
-                '① 环比法': '待定',
-                同期平均占比: '待定',
-                '② 占比法': '待定',
-                加权: '待定',
-                大类预估需求数量: '待定',
-              })),
-            ),
-          ),
-          h(
-            'div',
-            { className: 'dc-card-foot' },
-            '主公式：（环比法＋占比法）÷2÷计划达成率。代入输入未定，结果为空。M+4仅到大类，不生成单品需求。',
-          ),
-        ),
-        h(
-          'section',
-          { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results' },
-          h(
-            'div',
-            { className: 'dc-card-head' },
-            h('h3', {}, '大类预估需求数量'),
-            h('span', { className: 'dc-card-note' }, '测算口径待确认；调整权限与保存合同未接入'),
-          ),
-          table(
-            ['大类', 'M+1', 'M+2', 'M+3', 'M+4', '人工调整'],
-            categories.map((category) => ({
-              大类: category,
-              'M+1': '待定',
-              'M+2': '待定',
-              'M+3': '待定',
-              'M+4': '待定',
-              人工调整: '权限与调整合同待确认',
-            })),
-          ),
-        ),
+        h(CategoryDemand, { draft, active: active && step === 'check' }),
         step === 'check' &&
           h(
             'div',

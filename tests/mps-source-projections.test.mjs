@@ -139,3 +139,14 @@ test('source classification names are preserved without aliasing water dumplings
   assert.equal(result.rows.find((row) => row.category === '饺子').actual.quantity, null);
   assert.equal(result.rows.find((row) => row.category === '水饺').actual.quantity, 8);
 });
+
+test('retired SKUs can use the unique BI classification for the same SKU in the current source window', () => {
+  const result = sourceCheckRows(
+    checks([history(8, { 产品编码: 'OLD', 大类: '水饺' })], [report(10, 10, { 产品编码: 'OLD' })]),
+    [],
+    'monthly',
+    ['水饺'],
+  ).rows[0];
+  assert.equal(result.plan.quantity, 10);
+  assert.equal(result.ratio, 0.8);
+});

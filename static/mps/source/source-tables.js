@@ -62,6 +62,12 @@ const tableMonth = (value) => {
 };
 export function sourceTableParameters(kind, month) {
   const months = sourceMonthValues(month);
+  if (kind === 'category-history')
+    return {
+      months: Array.from({ length: 6 }, (_, index) =>
+        monthOffset(month, index - 4).replace('-', ''),
+      ),
+    };
   if (kind === 'forecast')
     return {
       months: [
@@ -71,6 +77,8 @@ export function sourceTableParameters(kind, month) {
         month.replace('-', ''),
       ],
     };
+  if (kind === 'plan-rate')
+    return { months: [month, monthOffset(month, 1)].map((value) => value.replace('-', '')) };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
 }
@@ -195,6 +203,36 @@ export function deliveryRows(rows, month) {
     };
   });
 }
+export const planRateColumns = {
+  dimension_type: '维度类型',
+  stat_month: '源月份',
+  belong_base: '基地',
+  category_name: '大类',
+  material_group_name: '物料组名称',
+  material_code: '产品编码',
+  product_name: '产品名称',
+  dimension_allnum: '当前维度计划量',
+  parent_allnum: '父级计划量',
+  dimension_rate: '计划占比',
+};
+export function planRateRows(rows, month) {
+  const months = [month, monthOffset(month, 1)];
+  return rows.map((row) => {
+    const period = tableMonth(row.stat_month);
+    if (!months.includes(period)) throw Error('计划占比来源月份与请求不一致');
+    return {
+      月份: period,
+      ...Object.fromEntries(
+        Object.entries(planRateColumns).map(([field, name]) => [
+          name,
+          ['dimension_allnum', 'parent_allnum', 'dimension_rate'].includes(field)
+            ? decimal(row[field])
+            : text(row[field]),
+        ]),
+      ),
+    };
+  });
+}
 export async function readSourceTable(kind, month, signal) {
   const parameters = sourceTableParameters(kind, month);
   const element = document.getElementById('agent-sql-config');
@@ -218,13 +256,22 @@ export async function readSourceTable(kind, month, signal) {
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
   );
   return {
-    rows: kind === 'forecast' ? forecastRows(result.rows, month) : deliveryRows(result.rows, month),
+    rows:
+      kind === 'forecast'
+        ? forecastRows(result.rows, month)
+        : kind === 'category-history'
+          ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+          : kind === 'plan-rate'
+            ? planRateRows(result.rows, month)
+            : deliveryRows(result.rows, month),
     metadata: {
       period: month,
       source:
         kind === 'forecast'
           ? 'agents_scm_sales_forecast_mi'
-          : 'agents_scm_base_dimension_delivery_mi',
+          : kind === 'plan-rate'
+            ? 'agents_scm_dimension_plan_rate_mi'
+            : 'agents_scm_base_dimension_delivery_mi',
       total: result.rows.length,
       configVersion: result.configVersion,
       units: 'unconfirmed',
