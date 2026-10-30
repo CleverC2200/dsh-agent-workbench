@@ -1,3 +1,4 @@
+import { unpackWorkbenchReport } from './report-transfer.mjs';
 /** One loaded period owns its revision and pending save; switching identity cancels that ownership. */
 export function createReportPersistence(execute, status) {
   let owner;
@@ -35,7 +36,8 @@ export function createReportPersistence(execute, status) {
       const current = owner = { period, signal, version: 0, editVersion:0, nextEdits:null, loaded: false, next: null, request: null, saving: false, failed: false };
       notify('loading', '正在读取已保存报告…');
       try {
-        const result = await execute({ operation: 'load', period }, signal);
+        const received = await execute({ operation: 'load', period }, signal);
+        const result = {...received,report:unpackWorkbenchReport(received.report)};
         signal.throwIfAborted();
         if (owner !== current) throw Error('报告周期已切换');
         current.version = result.version;

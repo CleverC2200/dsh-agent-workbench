@@ -10,6 +10,45 @@ const dictionary = `SELECT material_code AS sku,
   CASE WHEN COUNT(DISTINCT material_group_name)=1 THEN MAX(material_group_name) END AS item
   FROM agents_scm_material_in_out_summary_d GROUP BY material_code`;
 
+// Equivalent full join expressed with supported LEFT JOIN + UNION ALL.
+// The second arm retains inventory-only keys; it never drops unmatched national contributions.
+const stockProjection = `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
+      d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
+      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
+      NULL AS daily_demand,
+      b.inventory AS national_inventory,s.sales_plan AS national_sales_plan,
+      CASE WHEN b.stock_date IS NOT NULL THEN 1 ELSE 0 END AS national_stock_records,
+      CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
+      COALESCE(b.invalid,0) AS national_stock_invalid,
+      CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
+      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL THEN 1 ELSE 0 END AS invalid
+`;
+const stockPlans = `SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
+        COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
+        SUM(CASE WHEN (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) IS NULL
+          OR (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END)<0 THEN 1 ELSE 0 END) AS sales_invalid,
+        SUM(CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) AS sales_plan,
+        SUM(CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END) AS transfer_plan
+        FROM agents_scm_stock_detail_d
+        WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
+        GROUP BY belong_base,material_code`;
+const stockBatches = `SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
+        CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
+        SUM(available_qty) AS available,SUM(live_qty) AS inventory,
+        NULL AS aged,SUM(CASE WHEN live_qty IS NULL THEN 1 ELSE 0 END) AS invalid
+        FROM agents_scm_inventory_sku_data_d
+        WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')
+          AND month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
+        GROUP BY belong_base,material_code`;
+const stockJoin = (inventoryOnly = false) =>
+  stockProjection +
+  (inventoryOnly
+    ? ` FROM (${stockBatches}) b LEFT JOIN (${stockPlans}) s`
+    : ` FROM (${stockPlans}) s LEFT JOIN (${stockBatches}) b`) +
+  ` ON b.belong_base=s.belong_base AND b.material_code=s.material_code
+      LEFT JOIN (${dictionary}) d ON d.sku=COALESCE(s.material_code,b.material_code)` +
+  (inventoryOnly ? ' WHERE s.source_rows IS NULL' : '');
+
 export const workbenchQueries = {
   orders: {
     keys: ['base', 'category', 'item', 'sku'],
@@ -96,34 +135,7 @@ export const workbenchQueries = {
       'national_stock_invalid',
       'national_plan_invalid',
     ],
-    sql: `SELECT COALESCE(s.belong_base,b.belong_base) AS base,COALESCE(s.material_code,b.material_code) AS sku,
-      d.category,COALESCE(s.item,b.item) AS item,COALESCE(s.name,b.name) AS name,
-      COALESCE(b.stock_date,s.stock_date) AS stock_date,s.source_rows,b.available,b.inventory,b.aged,s.sales_plan,s.transfer_plan,
-      NULL AS daily_demand,
-      b.inventory AS national_inventory,s.sales_plan AS national_sales_plan,
-      CASE WHEN b.stock_date IS NOT NULL THEN 1 ELSE 0 END AS national_stock_records,
-      CASE WHEN s.source_rows IS NOT NULL THEN 1 ELSE 0 END AS national_plan_records,
-      COALESCE(b.invalid,0) AS national_stock_invalid,
-      CASE WHEN s.source_rows>1 THEN 1 ELSE COALESCE(s.sales_invalid,0) END AS national_plan_invalid,
-      CASE WHEN b.inventory IS NULL OR b.invalid>0 OR s.source_rows IS NULL THEN 1 ELSE 0 END AS invalid
-      FROM (SELECT belong_base,material_code,MAX(product_item) AS item,MAX(material_name) AS name,
-        COUNT(*) AS source_rows,CAST(MAX(the_date) AS CHAR) AS stock_date,
-        SUM(CASE WHEN (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) IS NULL
-          OR (CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END)<0 THEN 1 ELSE 0 END) AS sales_invalid,
-        SUM(CASE WHEN main_sales_plan_adj>0 THEN main_sales_plan_adj ELSE main_sales_plan_v1 END) AS sales_plan,
-        SUM(CASE WHEN transfer_out_plan_adj>0 THEN transfer_out_plan_adj ELSE transfer_out_plan_v1 END) AS transfer_plan
-        FROM agents_scm_stock_detail_d
-        WHERE the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
-        GROUP BY belong_base,material_code) s
-      FULL OUTER JOIN (SELECT belong_base,material_code,MAX(material_name) AS name,NULL AS item,
-        CONCAT(SUBSTRING(MAX(month_date),1,4),'-',SUBSTRING(MAX(month_date),5,2),'-',SUBSTRING(MAX(month_date),7,2)) AS stock_date,
-        SUM(available_qty) AS available,SUM(live_qty) AS inventory,
-        NULL AS aged,SUM(CASE WHEN live_qty IS NULL THEN 1 ELSE 0 END) AS invalid
-        FROM agents_scm_inventory_sku_data_d
-        WHERE warehouse_classify IN ('01','02') AND warehouse_classify_name IN ('工厂成品仓','工厂外租库')
-          AND month_date=REPLACE(CAST((SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2) AS CHAR),'-','')
-        GROUP BY belong_base,material_code) b ON b.belong_base=s.belong_base AND b.material_code=s.material_code
-      LEFT JOIN (${dictionary}) d ON d.sku=COALESCE(s.material_code,b.material_code)`,
+    sql: stockJoin() + ' UNION ALL ' + stockJoin(true),
   },
   ageDate: {
     columns: ['day'],

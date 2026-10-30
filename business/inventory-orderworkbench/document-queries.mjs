@@ -2,9 +2,16 @@
 // Prefer a whole hourly execution header, including cancelled/excluded rows, so
 // the daily snapshot cannot resurrect obsolete SKU membership or order status.
 const sameExecution = ['cust_code', 'cust_order_no', 'executeorderno', 'belong_base']
-  .map((key) => `h.${key}<=>d.${key}`)
+  .map(
+    (key) =>
+      `(CASE WHEN seen.${key} IS NULL THEN 'N' ELSE CONCAT('V',seen.${key}) END)=(CASE WHEN d.${key} IS NULL THEN 'N' ELSE CONCAT('V',d.${key}) END)`,
+  )
   .join(' AND ');
-const dailyOnly = `NOT EXISTS (SELECT 1 FROM agents_scm_execute_detail_hourly_d h WHERE ${sameExecution})`;
+// An uncorrelated anti join preserves NULL-safe header identity on the governed gateway.
+const dailySource = `agents_scm_execute_detail_d d LEFT JOIN
+  (SELECT DISTINCT cust_code,cust_order_no,executeorderno,belong_base,1 AS header_present
+   FROM agents_scm_execute_detail_hourly_d) seen ON ${sameExecution}`;
+const dailyOnly = 'seen.header_present IS NULL';
 
 // Source order counts must not be inferred from cancel_qty/order_qty.
 // Daily and hourly snapshots publish the same OMS event fields. Keep the newer
@@ -28,7 +35,7 @@ export const orderEventRowsSql = `SELECT h.cust_code,h.cust_order_no,h.belong_ba
   SELECT d.cust_code,d.cust_order_no,d.belong_base,
     d.region_name,d.province_region_name,d.cust_name,d.header_addtime,
     d.requireddeliverytime,d.orderstatus,d.canceltime,d.custchangetime
-  FROM agents_scm_execute_detail_d d
+  FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
 const orderHeaders = `SELECT cust_code,cust_order_no,
@@ -111,7 +118,7 @@ const executionRows = `SELECT cust_order_no,cust_code,material_code,executeorder
   belong_base,detailstatus,is_stat,product_item FROM agents_scm_execute_detail_hourly_d
   WHERE (:gea_p900='' OR belong_base=:gea_p900)
   UNION ALL SELECT d.cust_order_no,d.cust_code,d.material_code,d.executeorderno,
-    d.belong_base,d.detailstatus,d.is_stat,d.product_item FROM agents_scm_execute_detail_d d
+    d.belong_base,d.detailstatus,d.is_stat,d.product_item FROM ${dailySource}
   WHERE (:gea_p900='' OR d.belong_base=:gea_p900) AND ${dailyOnly}`;
 
 export const executionProductsSql = `SELECT cust_order_no,cust_code,material_code,executeorderno,
@@ -180,14 +187,20 @@ const arrivedOrders = `SELECT h.cust_order_no,h.cust_code,
   HAVING MAX(t.arrived)>=:gea_p1 AND MAX(t.arrived)<:gea_p2`;
 
 /** Repeat the whole-order verdict, never count one order once per SKU. */
-const memberTuple = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code']
-  .map((field) => `LENGTH(COALESCE(${field},'')),':',COALESCE(${field},'')`)
-  .join(',');
+const tupleSql = (fields) =>
+  fields.map((field) => `LENGTH(COALESCE(${field},'')),':',COALESCE(${field},'')`).join(',');
+const memberFields = ['h.belong_base', 'd.product_categ_name', 'h.product_item', 'h.material_code'];
+const memberTuple = tupleSql(memberFields);
+const ontimeSources = `FROM (${executionProductsSql}) h INNER JOIN (${arrivedOrders}) a
+    ON a.cust_order_no=h.cust_order_no AND a.cust_code=h.cust_code
+  LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS product_categ_name
+    FROM agents_scm_material_in_out_summary_d GROUP BY material_code) d ON d.material_code=h.material_code`;
 export const ontimeSql = `SELECT h.cust_order_no AS order_no,h.cust_code AS customer,
   MAX(a.ontime) AS ontime,MAX(a.arrival_date) AS arrival_date,MAX(a.invalid) AS invalid,
   ARRAY_AGG(CONCAT(${memberTuple})) AS members
-  FROM (${executionProductsSql}) h INNER JOIN (${arrivedOrders}) a
-    ON a.cust_order_no=h.cust_order_no AND a.cust_code=h.cust_code
-  LEFT JOIN (SELECT material_code,CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS product_categ_name
-    FROM agents_scm_material_in_out_summary_d GROUP BY material_code) d ON d.material_code=h.material_code
-  GROUP BY h.cust_order_no,h.cust_code`;
+  ${ontimeSources} GROUP BY h.cust_order_no,h.cust_code`;
+
+// Pack flat members without changing the whole-order verdict or its customer key.
+export const ontimeSummarySql = `SELECT h.belong_base AS base,a.invalid,a.ontime,
+  ARRAY_AGG(CONCAT(${tupleSql(['h.cust_order_no', 'h.cust_code', 'CAST(a.arrival_date AS CHAR)', ...memberFields])})) AS packed_orders
+  ${ontimeSources} GROUP BY h.belong_base,a.invalid,a.ontime`;

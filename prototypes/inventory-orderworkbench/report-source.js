@@ -39,13 +39,27 @@ const numbers = new Set([
   'names',
   'items',
 ]);
+// Doris LENGTH counts UTF-8 bytes; Chinese/emoji must not use JS string offsets.
+export function decodeWorkbenchTuple(value, count) {
+  const bytes = new TextEncoder().encode(String(value)), tuple = [];
+  let cursor = 0;
+  for (let field = 0; field < count; field++) {
+    const colon = bytes.indexOf(58, cursor);
+    const raw = new TextDecoder().decode(bytes.slice(cursor, colon));
+    if (colon < cursor || !/^\d+$/.test(raw) || Number(raw) > bytes.length-colon-1) return null;
+    const length = Number(raw);
+    tuple.push(new TextDecoder('utf-8', {fatal:true}).decode(bytes.slice(colon+1,colon+1+length)));
+    cursor = colon+1+length;
+  }
+  return cursor === bytes.length ? tuple : null;
+}
 export async function loadWorkbenchReport(start, end, signal, options = {}) {
   const client = createAgentQueries(config, options.execute);
   const specs = reportPeriods(start, end, options.now);
   const read = async (name, values) => {
     signal?.throwIfAborted();
     const definition = workbenchQueries[name],
-      id = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages'].includes(name)?'.summary':'');
+      id = 'workbench.' + name.toLowerCase()+(options.summary && ['orders','stock','ages','ontime'].includes(name)?'.summary':'');
     const summarized=id.endsWith('.summary');
     if(summarized)values={...values,period_start:values.period_start??values.start,period_end:values.period_end??values.end_exclusive,owner_start:values.period_start??values.start,owner_end:values.period_end??values.end_exclusive};
     const result = definition.keys
@@ -54,7 +68,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
           { ...values, report_base: options.base ?? '', page_size: 200, offset: 0 },
           {
             signal,
-            keyFields: summarized?['base','category','item','director','names']:definition.keys,
+            keyFields: summarized?(name==='ontime'?['base','invalid','ontime']:['base','category','item','director','names']):definition.keys,
             requiredColumns: summarized?config.queries[id].resultColumns:definition.columns,
             singlePageFirst: true,
           },
@@ -64,7 +78,17 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
           { ...values, report_base: options.base ?? '' },
           { signal, requiredColumns: definition.columns },
         );
-    const normalized = result.rows.map((row) =>
+    const rows = name === 'ontime' && summarized ? result.rows.flatMap((row) => {
+      const packed = typeof row.packed_orders === 'string' ? JSON.parse(row.packed_orders) : row.packed_orders;
+      if (!Array.isArray(packed)) throw Object.assign(Error('准交订单分组不完整'), {code:'INVALID_ORDER_PACKETS'});
+      return packed.map(order => {
+        const tuple = decodeWorkbenchTuple(order, 7);
+        if (!tuple) throw Object.assign(Error('准交订单分组字段不完整'), {code:'INVALID_ORDER_PACKETS'});
+        const [order_no,customer,arrival_date,...member] = tuple;
+        return {order_no,customer,arrival_date,invalid:row.invalid,ontime:row.ontime,members:[member]};
+      });
+    }) : result.rows;
+    const normalized = rows.map((row) =>
       Object.fromEntries(
         Object.entries(row).map(([key, value]) => [
           key,
@@ -88,24 +112,7 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       if (Array.isArray(members))
         members = members.map((member) => {
           if (Array.isArray(member)) return member;
-          // Doris LENGTH counts UTF-8 bytes; do not split Chinese/emoji using JS string offsets.
-          const characters = new TextEncoder().encode(String(member)),
-            tuple = [];
-          let cursor = 0;
-          for (let field = 0; field < 4; field++) {
-            const colon = characters.indexOf(58, cursor),
-              raw = new TextDecoder().decode(characters.slice(cursor, colon));
-            if (colon < cursor || !/^\d+$/.test(raw) || Number(raw) > characters.length - colon - 1)
-              return null;
-            const length = Number(raw);
-            tuple.push(
-              new TextDecoder('utf-8', { fatal: true }).decode(
-                characters.slice(colon + 1, colon + 1 + length),
-              ),
-            );
-            cursor = colon + 1 + length;
-          }
-          return cursor === characters.length ? tuple : null;
+          return decodeWorkbenchTuple(member, 4);
         });
       if (
         !Array.isArray(members) ||
@@ -113,7 +120,8 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
         members.some((tuple) => !Array.isArray(tuple) || tuple.length !== 4)
       )
         throw Object.assign(Error('准交订单维度不完整'), { code: 'INVALID_ORDER_DIMENSIONS' });
-      return members.map(([base, category, item, sku]) => ({ ...row, base, category, item, sku }));
+      const { members: _members, ...order } = row;
+      return members.map(([base, category, item, sku]) => ({ ...order, base, category, item, sku }));
     });
   };
   const section = async (id, action) => {
@@ -121,7 +129,9 @@ export async function loadWorkbenchReport(start, end, signal, options = {}) {
       return { id, status: 'ready', rows: await action() };
     } catch (error) {
       signal?.throwIfAborted();
-      return { id, status: 'error', rows: [], code: error.code ?? 'QUERY_FAILED' };
+      return { id, status: 'error', rows: [], code: error.code ?? 'QUERY_FAILED',
+        detail: typeof error.message === 'string' ? error.message.slice(0, 800) : '',
+        rejectedColumns: error.rejectedColumns ?? error.failure?.rejectedColumns ?? [] };
     }
   };
   // Share only a fully validated collection inside this one identity-bound load.
