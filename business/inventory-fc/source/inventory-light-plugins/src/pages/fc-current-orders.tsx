@@ -5,7 +5,9 @@ import { unpackAtomicPage } from '../../../../../shared/atomic-page';
 import type { AgentSqlConfig } from '../../../../../shared/sql-config';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { PlanPagination } from '../../../../../shared/plan-pagination';
+import { DashboardTableSkeleton } from '../dsh-ui/workbench-loading';
 import css from './fc-current-orders.module.css';
+import filtersCss from '../../../../../shared/original-business-list.module.css';
 
 const numeric = z
   .union([
@@ -110,7 +112,7 @@ function OrderLines({
     <section aria-label={`${order.order_no}订单明细`} className={css.details}>
       <b>订单明细</b>
       {state.kind === 'loading' ? (
-        <p role="status">订单明细加载中…</p>
+        <DashboardTableSkeleton label="订单明细加载中" />
       ) : state.kind === 'failed' ? (
         <p role="alert">{state.message}</p>
       ) : (
@@ -244,11 +246,14 @@ export function FcCurrentOrders({
     setFilters({ ...draft });
   };
   return (
-    <section aria-label="当前订单" className={css.list}>
-      <LocalQueryForm className={css.toolbar} onSubmit={submit}>
+    <section aria-label="当前订单" className={filtersCss.list}>
+      <LocalQueryForm
+        className={`panel-actions ${filtersCss.toolbar} ${filtersCss.fcToolbar}`}
+        onSubmit={submit}
+      >
         {!warehouseCode && (
-          <label>
-            分仓编码
+          <label className={filtersCss.filterField}>
+            <span>分仓编码</span>
             <input
               aria-label="分仓编码"
               placeholder="请输入分仓编码"
@@ -257,8 +262,8 @@ export function FcCurrentOrders({
             />
           </label>
         )}
-        <label>
-          客户编码
+        <label className={filtersCss.filterField}>
+          <span>客户编码</span>
           <input
             aria-label="客户编码"
             placeholder="全部客户"
@@ -266,8 +271,8 @@ export function FcCurrentOrders({
             onChange={(event) => setDraft({ ...draft, customer: event.target.value })}
           />
         </label>
-        <label>
-          订单号／客户
+        <label className={filtersCss.filterField}>
+          <span>订单号／客户</span>
           <input
             aria-label="订单号或客户名称"
             placeholder="订单号／客户搜索"
@@ -275,12 +280,12 @@ export function FcCurrentOrders({
             onChange={(event) => setDraft({ ...draft, search: event.target.value })}
           />
         </label>
-        <button type="submit" className="primary-button">
+        <button type="submit" className={filtersCss.filterQuery}>
           查询
         </button>
         <button
           type="button"
-          className="secondary-button"
+          className={filtersCss.filterReset}
           aria-pressed={filters.shortageOnly}
           onClick={() => {
             const next = { ...draft, shortageOnly: !filters.shortageOnly };
@@ -293,7 +298,7 @@ export function FcCurrentOrders({
         </button>
         <button
           type="button"
-          className="secondary-button"
+          className={filtersCss.filterReset}
           onClick={() => {
             setDraft(empty);
             setFilters(empty);
@@ -304,7 +309,7 @@ export function FcCurrentOrders({
         </button>
       </LocalQueryForm>
       {state.kind === 'loading' ? (
-        <p role="status">当前订单加载中…</p>
+        <DashboardTableSkeleton label="当前订单加载中" />
       ) : state.kind === 'failed' ? (
         <p className={css.error} role="alert">
           {state.message}

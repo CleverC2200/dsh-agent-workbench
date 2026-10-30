@@ -152,6 +152,9 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await expect(
     frame.locator('#base-dashboard, #base, #cross-analysis, #sales-region-dashboard'),
   ).toHaveCount(0);
+  await frame
+    .getByRole('tab', { name: '基地维度', exact: true })
+    .evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
   await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
@@ -2098,6 +2101,27 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
   assert.deepEqual(errors, []);
 });
 
+test('base daily report uses an accessible floating base selector', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280);
+  await frame.getByRole('button', { name: '查看日报' }).click();
+  const trigger = frame.getByRole('button', { name: '切换日报基地' });
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '日报基地' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: '暂无可见基地' })).toHaveCount(0);
+  await expect(menu.getByRole('option', { name: '华东基地' })).toBeVisible();
+  await menu.getByRole('option', { name: '华东基地' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toContainText('华东基地');
+  await trigger.click();
+  await menu.getByRole('option', { name: '华东基地' }).press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(frame.getByRole('dialog')).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
 test('base dashboard model insight does not block metrics and renders model text as plain paragraphs', async (t) => {
   let finish;
   const waiting = new Promise((resolve) => {
@@ -2134,6 +2158,70 @@ test('base dashboard model failure leaves cards and detail rows visible', async 
   await expect(frame.locator('tbody tr').first()).toBeVisible();
   assert.deepEqual(errors, []);
 });
+
+test('APS workspace tabs switch and align with the toolbar edge without a return button', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  const intelligent = frame.getByRole('button', { name: '智能工作台', exact: true });
+  const board = frame.getByRole('button', { name: '产销协同看板', exact: true });
+  await expect(intelligent).toBeVisible();
+  await expect(board).toBeVisible();
+  await board.click();
+  await expect(board).toHaveAttribute('aria-current', 'page');
+  await expect(frame.getByRole('button', { name: '返回智能工作台', exact: true })).toHaveCount(0);
+  const difference = await board.evaluate((element) =>
+    Math.abs(
+      element.getBoundingClientRect().bottom -
+        element.closest('[data-business-toolbar]').getBoundingClientRect().bottom,
+    ),
+  );
+  assert.ok(difference <= 2, `selected tab does not meet toolbar: ${difference}`);
+  await intelligent.click();
+  await expect(intelligent).toHaveAttribute('aria-current', 'page');
+  assert.deepEqual(errors, []);
+});
+
+for (const width of [1280, 390])
+  test(`APS board sticky rows remain usable at ${width}px`, async (t) => {
+    const { frame, errors } = await mount(t, 'apsplan', width);
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    const offsets = await frame.locator('.analysis-workspace').evaluate((element) => {
+      const tabs = element.querySelector(':scope > .scope-tabs');
+      const period = element.querySelector(':scope > .secondary-analysis-toolbar');
+      return {
+        tabs: parseFloat(getComputedStyle(tabs).top),
+        period: parseFloat(getComputedStyle(period).top),
+        toolbar: document.querySelector('[data-business-toolbar]').getBoundingClientRect().height,
+        tabsPosition: getComputedStyle(tabs).position,
+        periodPosition: getComputedStyle(period).position,
+      };
+    });
+    assert.ok(Math.abs(offsets.tabs - offsets.toolbar) <= 1, JSON.stringify(offsets));
+    assert.ok(Math.abs(offsets.period - offsets.toolbar - 48) <= 1, JSON.stringify(offsets));
+    assert.equal(offsets.tabsPosition, 'sticky');
+    assert.equal(offsets.periodPosition, 'sticky');
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    await frame
+      .locator('.analysis-workspace')
+      .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const geometry = await frame.locator('html').evaluate(() => {
+      const toolbar = document.querySelector('[data-business-toolbar]').getBoundingClientRect();
+      const tabs = document
+        .querySelector('.analysis-workspace > .scope-tabs')
+        .getBoundingClientRect();
+      return { toolbarBottom: toolbar.bottom, tabsTop: tabs.top, scroll: window.scrollY };
+    });
+    assert.ok(geometry.scroll > 0, 'page actually scrolled');
+    assert.ok(
+      geometry.tabsTop >= geometry.toolbarBottom - 1,
+      `sticky rows overlap: ${JSON.stringify(geometry)}`,
+    );
+    await frame.getByRole('tab', { name: '销售视角' }).click();
+    await expect(frame.getByRole('tab', { name: '销售视角' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    assert.deepEqual(errors, []);
+  });
 
 test('FC model insight stays independent of cards, tabs and list paging', async (t) => {
   let finish;

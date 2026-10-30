@@ -4,8 +4,7 @@ import { ready } from '../../../shared/channel.js';
 document.documentElement.classList.add('aps-plugin-host');
 const root = document.getElementById('root');
 if (!root) throw new Error('APS_PLUGIN_ROOT_MISSING');
-// The host keeps a single APS Agent entry. Open its intelligent workspace first;
-// the linked board remains a drill-down view inside the same plugin session.
+// Open the intelligent workspace first; the board remains available in the workspace tabs.
 void ready
   .then(() => {
     const renderer = createRoot(root);

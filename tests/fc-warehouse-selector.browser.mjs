@@ -117,6 +117,18 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await picker.click();
   await expect(page.getByRole('listbox', { name: '选择分仓' }).getByRole('option')).toHaveCount(3);
   await picker.click();
+  const wrapperBorder = await picker
+    .locator('..')
+    .evaluate((element) => getComputedStyle(element).borderTopWidth);
+  assert.equal(wrapperBorder, '0px');
+  await page.getByRole('button', { name: '补货周期配置' }).click();
+  const dialog = page.getByRole('dialog', { name: '补货周期配置' });
+  await dialog.getByRole('button', { name: '添加周期规则' }).click();
+  const status = dialog.getByRole('button', { name: '规则1状态' });
+  await status.click();
+  await dialog.getByRole('option', { name: '暂停' }).click();
+  await expect(status).toContainText('暂停');
+  await dialog.getByRole('button', { name: '取消' }).click();
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
   await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
@@ -308,11 +320,8 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
   await page.goto('http://127.0.0.1:19486/');
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   const list = page.getByRole('region', { name: '货龄结构', exact: true });
-  const quick = list.getByRole('group', { name: '风险快捷查询' });
-  await expect(quick.getByRole('button', { name: '全部', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  const quick = list.getByRole('button', { name: '风险快捷查询' });
+  await expect(quick).toContainText('全部');
   await expect(list.locator('th').first()).toHaveText('风险状态');
   await expect(list.locator('tbody tr')).toHaveCount(10);
   const pager = list.getByRole('navigation', { name: '货龄结构分页' });
@@ -329,17 +338,16 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
   );
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
   for (const risk of ['预警', '滞库', '正常']) {
-    await quick.getByRole('button', { name: risk, exact: true }).click();
-    await expect(quick.getByRole('button', { name: risk, exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await quick.click();
+    await page.getByRole('option', { name: risk, exact: true }).click();
+    await expect(quick).toContainText(risk);
     await expect(list.locator('tbody tr').first()).toContainText('TEST-SKU-0');
     await expect(list.locator('tbody tr').first().locator('td').first()).toHaveText(risk);
     await expect(pager).toContainText('共 13 条');
     assert.equal(calls.filter((c) => c.id === 'batch-age.atomic').at(-1).values.risk, risk);
   }
-  await quick.getByRole('button', { name: '全部', exact: true }).click();
+  await quick.click();
+  await page.getByRole('option', { name: '全部', exact: true }).click();
   await expect(pager).toContainText('共 235 条');
   assert.equal(calls.filter((c) => c.id === 'batch-age.atomic').at(-1).values.risk, null);
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
@@ -351,8 +359,9 @@ test('FC aging exposes immediate risk filters, leading risk column and ten-row s
     });
   }
   await page.setViewportSize({ width: 520, height: 900 });
+  await quick.click();
   for (const label of ['预警', '滞库', '正常', '全部'])
-    await expect(quick.getByRole('button', { name: label, exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible();
   if (process.env.FC_AGING_EVIDENCE)
     await page.screenshot({
       path: process.env.FC_AGING_EVIDENCE + '/aging-narrow.png',
@@ -466,7 +475,8 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     let rows;
     if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A020', warehouse_name: '长沙分仓', base: '遂平' }];
-    else if (id === 'branch-current-orders.page')
+    else if (id === 'branch-current-orders.page') {
+      await new Promise((resolve) => setTimeout(resolve, 500));
       rows = [
         {
           ...Object.fromEntries(query.resultColumns.map((key) => [key, null])),
@@ -489,7 +499,7 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
           page_scope_total: 1,
         },
       ];
-    else if (id === 'branch-current-orders.lines')
+    } else if (id === 'branch-current-orders.lines')
       rows = ['10006223', '10006224'].map((sku) => ({
         ...Object.fromEntries(query.resultColumns.map((key) => [key, null])),
         warehouse_code: 'A020',
@@ -524,12 +534,34 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     });
   });
   await page.goto('http://127.0.0.1:19486/');
+  const referenceInput = page
+    .getByRole('region', { name: '补货确认' })
+    .getByRole('textbox', { name: 'SKU' });
+  await referenceInput.focus();
+  await page.waitForTimeout(250);
+  const readFocusStyle = (element) => {
+    const style = getComputedStyle(element);
+    return {
+      outline: style.outlineStyle,
+      shadow: style.boxShadow,
+      background: style.backgroundColor,
+      border: style.borderColor,
+      height: style.height,
+      fontSize: style.fontSize,
+    };
+  };
+  const referenceStyle = await referenceInput.evaluate(readFocusStyle);
   const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
   await picker.click();
   await page.locator('[role=option][data-value="A020"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const list = page.getByRole('region', { name: '当前订单', exact: true });
+  await expect(list.getByRole('status', { name: '当前订单加载中' })).toBeVisible();
+  const search = list.getByRole('textbox', { name: '订单号或客户名称' });
+  await search.focus();
+  await page.waitForTimeout(250);
+  assert.deepEqual(await search.evaluate(readFocusStyle), referenceStyle);
   await expect(list.getByText('长沙直营', { exact: true })).toBeVisible();
   await expect(list.getByText('100.0%', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first()).toContainText('订单号');

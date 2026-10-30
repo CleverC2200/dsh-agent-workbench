@@ -148,3 +148,7 @@
     flex-basis: 100%;
   }
 }
+
+.header .sharedRow {
+  padding-right: 300px;
+}

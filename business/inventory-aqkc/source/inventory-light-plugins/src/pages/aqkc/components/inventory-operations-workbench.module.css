@@ -761,10 +761,12 @@
   cursor: pointer;
 }
 .skuFilters select:focus-visible,
-.skuFilters input:focus-visible,
 .skuFilters button:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+}
+.skuFilters input:focus-visible {
+  outline: none;
 }
 .demoResult {
   display: grid;

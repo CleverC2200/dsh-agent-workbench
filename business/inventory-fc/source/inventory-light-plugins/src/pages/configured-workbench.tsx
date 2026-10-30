@@ -579,22 +579,23 @@ function WorkbenchBody() {
             <fieldset key={index}>
               <legend>周期规则 {index + 1}</legend>
               <div className={common.cycleRuleFields}>
-                <select
-                  aria-label={`规则${index + 1}状态`}
+                <WarehouseSelect
+                  label={`规则${index + 1}状态`}
+                  compact
+                  disabled={false}
                   value={rule.status ?? 'effective'}
-                  onChange={(event) =>
+                  options={[
+                    { id: 'effective', name: '生效' },
+                    { id: 'paused', name: '暂停' },
+                  ]}
+                  onChange={(value) =>
                     setRuleDraft(
                       ruleDraft.map((r, i) =>
-                        i === index
-                          ? { ...r, status: event.target.value as 'effective' | 'paused' }
-                          : r,
+                        i === index ? { ...r, status: value as 'effective' | 'paused' } : r,
                       ),
                     )
                   }
-                >
-                  <option value="effective">生效</option>
-                  <option value="paused">暂停</option>
-                </select>
+                />
 
                 <WarehouseSelect
                   label={`规则${index + 1}层级`}

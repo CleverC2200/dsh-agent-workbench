@@ -1,6 +1,7 @@
 import { formatChainValue } from './full-chain-display';
 import { formatFactValue } from './fact-display';
 import { QueryErrors } from './query-errors';
+import { WarehouseSelect } from '../inventory-fc/source/inventory-light-plugins/src/pages/fc/components/warehouse-select';
 import React from 'react';
 import { LocalQueryForm } from './local-query-form';
 import { PlanPagination } from './plan-pagination';
@@ -171,20 +172,35 @@ export function OriginalBusinessList({
             ))}
           {view.filters
             .filter((f: any) => f.options)
-            .map((f: any) => (
-              <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
-                {f.options.map((option: any) => (
-                  <button
-                    type="button"
-                    key={option.value}
-                    aria-pressed={(appliedFilters?.[f.name] ?? '') === option.value}
-                    onClick={() => onQuickFilter(f.name, option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ))}
+            .map((f: any) =>
+              fc ? (
+                <WarehouseSelect
+                  key={f.name}
+                  label={f.label}
+                  compact
+                  disabled={false}
+                  value={String(appliedFilters?.[f.name] ?? '')}
+                  options={f.options.map((option: any) => ({
+                    id: String(option.value),
+                    name: option.label,
+                  }))}
+                  onChange={(value) => onQuickFilter(f.name, value)}
+                />
+              ) : (
+                <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
+                  {f.options.map((option: any) => (
+                    <button
+                      type="button"
+                      key={option.value}
+                      aria-pressed={(appliedFilters?.[f.name] ?? '') === option.value}
+                      onClick={() => onQuickFilter(f.name, option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ),
+            )}
           {view.filters.length > 0 && (
             <>
               <Button

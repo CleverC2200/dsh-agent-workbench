@@ -188,7 +188,30 @@ for (const id of [
       const toolbar = page.getByRole('toolbar', { name: '对话区视图与会话操作' });
       const toolbarBox = await toolbar.boundingBox();
       assert.equal(toolbarBox.y, 0, 'controls stay at the upper right');
-      assert.equal(businessBox.y, 58, 'expanded business content starts below controls');
+      assert.equal(
+        businessBox.y,
+        [
+          'gea-proof',
+          'inventory-fc',
+          'inventory-qll',
+          'inventory-aqkc',
+          'inventory-dealer',
+        ].includes(id) && width >= 1100
+          ? 0
+          : 58,
+        'expanded business content respects the toolbar layout',
+      );
+      if (
+        [
+          'gea-proof',
+          'inventory-fc',
+          'inventory-qll',
+          'inventory-aqkc',
+          'inventory-dealer',
+        ].includes(id) &&
+        width >= 1100
+      )
+        assert.ok(toolbarBox.width <= 300, 'shared controls occupy only the right-hand seat');
       assert.ok(toolbarBox.x + toolbarBox.width >= width - 1);
       await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
       await expect(business).toBeHidden();
