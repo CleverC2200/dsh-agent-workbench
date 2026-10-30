@@ -219,7 +219,9 @@ function WorkbenchBody() {
     revision,
     (value) => updateContext('overview', value),
     cycleDays,
-    config.overviewViewIds.filter((id) => id !== 'shipments'),
+    config.overviewViewIds.filter(
+      (id) => !['shipments', 'orders', 'branch-supply-current'].includes(id),
+    ),
     cycleRules,
     warehouse,
     cycleWarehouse,

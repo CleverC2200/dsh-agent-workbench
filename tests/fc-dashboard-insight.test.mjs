@@ -86,3 +86,17 @@ test('branch dashboard owns the supplied prompt without replacing Agent Skills',
   assert.match(prompt, /建议补货量已扣调拨中/);
   assert.match(prompt, /不另起小标题、不分点、不换行排版/);
 });
+
+test('current supply evidence uses the same ASN pool as cards, never the retired execution pool', () => {
+  const p = input();
+  p.parts['current-shortage'] = { rows: [{ demand: 70, allocated: 20, remaining: 50 }] };
+  p.parts['branch-supply-current'] = { summary: { demand: 9000, pending: 8000, in_transit: 7000 } };
+  p.parts.replenishment.summary.known_in_transit = 40;
+  const e = branchDashboardEvidence(p);
+  assert.equal(e.baseSupply.currentDemandQty, 70);
+  assert.equal(e.baseSupply.currentBaseAllocatedQty, 20);
+  assert.equal(e.baseSupply.pendingQty, 50);
+  assert.equal(e.baseSupply.inTransitQty, 40);
+  p.parts['current-shortage'].error = 'DENIED';
+  assert.equal(branchDashboardEvidence(p).baseSupply.currentDemandQty, null);
+});

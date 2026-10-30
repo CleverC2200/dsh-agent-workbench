@@ -129,6 +129,6 @@ for view_id, mode, title in [('branch-supply', 'month', '本月补货订单'), (
                       metrics=[{'field':name,'label':labels[name],'missing':'missing_'+name} for name in ['demand','shipped','pending','in_transit']]))
 config['sourceViews']['views'] = views
 config['overviewViewIds'] = [id for id in config['overviewViewIds'] if id not in ['orders','branch-supply','branch-supply-current']]
-config['overviewViewIds'][:0] = ['branch-supply', 'branch-supply-current']
+config['overviewViewIds'][:0] = ['branch-supply']
 path.write_text(json.dumps(config, ensure_ascii=False, indent=2)+'\n')
 print('Added receiving-warehouse supply orders; existing customer demand and replenishment calculations retained.')

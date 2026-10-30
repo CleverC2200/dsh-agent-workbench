@@ -29,6 +29,13 @@ export function branchDashboardEvidence(input: {
   const plan = summary('replenishment');
   const stock = summary('branch-stock');
   const shortage = source('current-shortage');
+  const currentRows = Array.isArray(shortage.rows) ? shortage.rows.map(record) : [];
+  const currentSum = (field: string) => {
+    const values = currentRows.map((row) => number(row[field]));
+    return shortage.error || !values.length || values.some((value) => value === null)
+      ? null
+      : values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  };
   const available = number(plan.available_qty) ?? number(stock.available_qty);
   const totalRows = number(plan.row_count);
   const comparable = input.localPlanTrial ? null : number(plan.comparable_sku_count);
@@ -126,10 +133,12 @@ export function branchDashboardEvidence(input: {
       monthlyDemandQty: number(summary('branch-supply').demand),
       monthlyShippedQty: number(summary('branch-supply').shipped),
       monthlyFulfillmentRate: number(summary('branch-supply').fulfillment_rate),
-      currentDemandQty: number(summary('branch-supply-current').demand),
-      pendingQty: number(summary('branch-supply-current').pending),
-      inTransitQty: number(summary('branch-supply-current').in_transit),
-      coverage: '执行侧；不含尚未生成执行单的补货申请。当前池跨月保留未发或未收完成行。',
+      currentDemandQty: currentSum('demand'),
+      pendingQty: currentSum('remaining'),
+      inTransitQty: number(plan.known_in_transit),
+      currentBaseAllocatedQty: currentSum('allocated'),
+      coverage:
+        '月度履约取基地向分仓发货执行；当前订单取有效未收货完成ASN，需求为预期量减已收量，基地占用关联出库执行。调拨在途与页面同步汇总。',
     },
     sales: {
       last30DaysQty: number(plan.rolling_ship_positive),
