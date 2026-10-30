@@ -2,9 +2,9 @@
 
 ## 可判定样本展示 / Assessed samples
 
-全量计算条件不齐时，不再清空全部已知结果。作废、改单按逐单有效判定汇总独立样本分子分母；满足率只纳入需求、发货量及实际发货周期均可核验的原单产品组；准交率剔除任一拆单依据不完整的整张原单。卡片标注样本覆盖，六张表及样本环同比以“*”标识并提供悬浮覆盖说明。覆盖分母为当前查询候选记录，不声明已覆盖全部真实发货或到货订单。未知记录不补0，拒权或查询失败不发布样本。样本差不冒充全量同比环比；数据完整的指标及库存、货龄公式保持不变。 / Publish independently assessed samples with explicit candidate coverage, never imputed full-population rates.
+全量计算条件不齐时，不再清空全部已知结果。作废、改单按逐单有效判定汇总独立样本分子分母；满足率只纳入需求、发货量及实际发货周期均可核验的原单产品组；准交率剔除任一拆单依据不完整的整张原单。卡片标注样本覆盖，六张表及样本环同比以“*”标识并提供悬浮覆盖说明。覆盖分母为当前查询候选记录，不声明已覆盖全部真实发货或到货订单。未知记录不补0，拒权或查询失败不发布样本。样本差不冒充全量同比环比；库存、货龄按下述最新覆盖范围计算。 / Publish independently assessed samples with explicit candidate coverage, never imputed full-population rates.
 
-本页面采用[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)及其引用的[术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)。本次核对主文档 revision 3131；不修改订单履约模块、公共 APS 计算或 GEA 权限。 / This page follows the linked business definitions; fulfillment, shared APS calculations and GEA authorization remain unchanged.
+本页面采用[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)及其引用的[术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)。本次核对主文档 revision 3131、术语库 revision 1603（2026-10-30）；不修改订单履约模块、公共 APS 计算或 GEA 权限。 / This page follows the linked business definitions; fulfillment, shared APS calculations and GEA authorization remain unchanged.
 
 ## 公式与周期 / Formulas and periods
 
@@ -12,10 +12,10 @@
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 作废率 / Cancellation            | 小时执行表按客户＋原订单号去重；接单12小时后且进入锁定期的整单作废数，除以O接收订单数（排除12小时内作废）。按OMS新增日期选择订单。不能以作废数量÷下单数量替代。 / Distinct source-order counts, not product quantities; select by OMS creation date.                                                                                                                                                                                      |
 | 改单率 / Amendment               | 小时执行表按客户＋原订单号去重；锁定期内客户改单订单数÷全部有效订单数（排除整单作废）。交期距接单不超过7日时，接单12小时后锁定；否则在确认交期前7日锁定。 / Count customer amendments after the documented lock time; exclude cancelled orders from the denominator.                                                                                                                                                                      |
-| 订单满足率 / Shipped fulfillment | 使用 `agents_order_execute_isontime_mi` 的上游排除标志及归集产品，按来源单＋客户＋产品去重，需求不可重复累加，发货量按需求封顶；最后拆单实际发货日期通过小时明细的执行单＋客户关联穿透表获得。原始指标表有冲突粒度或缺最后发货日期时，不把接单月份、备单完成时间或加载时间当作发货时间。 / Use cleaned source-order/product demand and capped shipped quantities; select by the last split shipment, never ingestion/creation timestamps. |
+| 订单满足率 / Shipped fulfillment | 使用履约源表 `fromorderno_month` 的统一原订单发货业务归属周期；按来源单＋客户＋商品去重，发货量按需求封顶。源表已统一订单周期，不再按商品经物流表二次推算日期。缺需求、发货量或归并冲突仍不可计算。 / Use the upstream original-order business period, distinct demand and capped shipped quantities. |
 | 准交率 / On-time delivery        | 通过小时明细关联穿透表最新抬头，GPS到目的地围栏优先、人工到货确认备用；截止日为客户期望、确认交期、系统交期最大值＋12小时。整单所有执行单均准交才计准交；按整单最后到货日期选周期。SKU/品项/基地切片先确定订单集合，再按客户＋原订单号去重。 / Select whole orders by final arrival, then count distinct orders; do not average SKU verdicts.                                                                                             |
-| 周转天数 / Shippable days        | 文档“可用库存是用的全部库存”对应库存明细的 `current_stock`，不使用扣占用后的 `available_stock`，也不混用另一批次表来拟合截图。销售和调拨计划分别优先正数纠偏，否则取初版。基地日均需求=(月度需求＋0.5×调拨出库计划)÷当月天数；品项不含调拨。 / Total stock from the same snapshot and dataset divided by planned daily demand.                                                                                                            |
-| 货龄 / Stock age                 | 全部仓库批次按快照日期计算≥60天库存÷全部库存，不增加文档未要求的01/02限制。非零库存生产日期缺失或晚于快照时保留不可计算，不剔除后发布完整占比。业务大品项优先取同日库存计划的唯一product_item，缺失才用唯一pinxiang，不使用细物料组冒充大品项。 / All warehouse classes; missing production dates invalidate the ratio.                                                                                                                   |
+| 周转天数 / Shippable days | 使用同日批次表工厂仓01＋工厂外租仓02现存量，与库存计划表按基地＋商品全关联，保留明细未匹配状态。全国库存与计划分别按各自完整来源汇总，不要求商品集合一一对应；现有来源记录中的空值、重复计划和负计划仍阻断计算。全国及品项日均需求=销售需求计划÷当月天数；基地日均需求=(销售需求计划＋0.5×调拨出库计划)÷当月天数。 / Factory and rented stock; nationwide/item demand excludes transfers, base demand includes half the transfers. |
+| 货龄 / Stock age | 工厂仓01＋工厂外租仓02的≥60天批次库存÷同范围现存量；非零库存缺生产日期时不可计算。业务品项采用唯一product_item或pinxiang，不使用细物料组代替。 / Same factory/rented scope in numerator and denominator; retain missing-date uncertainty. |
 
 ## 缺值与完整性 / Missing inputs and completeness
 
@@ -24,6 +24,12 @@
 同一来源单/产品上游多行不能证明为同一份重复数据时，保持不可计算；不得任取最大需求或重复累加已合并发货。现有快照不代表历史每日固定快照。 / Conflicting merged rows remain unavailable; current observations do not establish immutable historical snapshots.
 
 原订单接单周期以全部子执行记录中最早OMS新增时间归属，先归并后筛选；不同子执行单创建时间不构成冲突。确认交期仅在确需判定锁定事件时参与完整性检查。 / Select cohorts after merging split orders by the earliest observed OMS creation time; differing child creation times are not conflicts.
+
+小时表的 OMS 作废、客户改单时间为空时，按客户＋原订单＋执行单＋基地从日表回补同名字段；仅接受该键下唯一非空时间，小时表已有值优先。不得用 DMS 作废时间、当前状态或加载时间替代 OMS 事件时间。 / Recover missing hourly OMS event times from unique exact daily headers without multiplying rows or overriding known hourly values.
+
+小时表刷新期间可能暂时为空，且不覆盖全部历史。日表补齐小时表缺失的客户＋原订单＋执行单＋基地；同一执行单只要小时表存在，就保留其完整状态和商品集合，不能把日表旧的有效商品并回已作废或排除的执行单。优先级判断必须在有效状态筛选前进行。 / Recover absent execution headers from daily history; prefer the entire hourly execution before filtering status so stale daily membership cannot resurrect cancelled rows.
+
+满足率不再依赖物流表是否保留完整历史来归属周期。源表的业务日期不是 `complete_time` 加载时间，也不再以商品各自的拆单时间代替原订单统一周期；同一原单商品的冲突数据仍保留为不可判定。 / The upstream business period is not ingestion time; incomplete trace retention does not remove otherwise valid fulfillment records.
 
 负库存按源值纳入净合计，不补0，也不因单条负数使全国指标不可计算；净库存合计为负、缺值或重复粒度仍不发布支撑天数。 / Keep negative stock in the source net sum; one negative line does not invalidate a non-negative national total.
 
@@ -35,6 +41,8 @@
 
 ## 维度对齐 / Dimension alignment
 
+准交率的品项采用同一执行单、客户、原单、基地及SKU上的唯一 `product_item`；物料字典的 `material_group_name` 仅为物料组，不能替代业务品项。重复执行行先归并，品项冲突或空值保持未知；整单判定和全国去重口径不变。该修正升级指标计算版本，以重新读取旧报告事实并保留人工编辑。 / On-time item dimensions use the execution's unique business product item rather than material groups; cached facts are versioned independently of edits.
+
 可发货天数目标按本次业务截图：全国（含品项及合计）<12.5天，郑州≤12.5天，其他基地<11天；总监按对应基地判定，不再使用8至12天区间。只调整目标和达标判定，不改变库存/计划计算公式。六张月周表以未舍入本期值判定满足率≤95%、准交率≤98.5%及可发货天数未达标为红色；货龄本期最高标黄，并列全部标黄，合计与缺值不参与最高比较，环同比不着色。 / Targets and current-value flags follow the supplied business screenshots.
 
 应责总监：郑州按基地＋产品，共同负责产品分别进入两人范围；其余基地按基地，缺当月订单的库存SKU不因缺产品映射而丢失。各比较周期独立读取该月归属，不拿当前责任映射倒套上月或去年；归属冲突显示待补全，全国合计不能加总重叠责任组。 / Match responsibility by the documented base/product grain and reporting month.
@@ -44,3 +52,5 @@
 原单关联先用原值精确匹配客户＋产品。仅允许移除客户编码后唯一的一个分隔符，且双方规范键均只对应一个原订单号，才使用格式补匹配；精确匹配有记录但缺发货日期时不挪用另一格式订单的日期。责任名单从当前周期小时表完整聚合，多人共同责任保留完整名单；名单不完整或归属冲突仍为横线。品项只接受同快照唯一库存归属或快照当月截至快照日的唯一指标归属，不用物料组推测大品项。 / Exact keys take precedence; normalization requires uniqueness on both sides and responsibility lists must be complete.
 
 六表缺失的维度标签显示“—”，悬浮注明来源字段、缺失或冲突原因；内部未映射分组保留参与全国合计，未因隐藏标签丢弃数量。 / Unknown dimension labels remain in totals and expose their source reason on hover.
+
+覆盖仓同时核对编码01/02与名称“工厂成品仓/工厂外租库”；编码02但名称为分仓成品仓的记录不纳入。渠道范围与计划版本作为独立对账依据记录，不因某个版本接近截图便自动切换，也不默认剔除出口、中试或无计划商品库存。 / Validate warehouse code and name; do not infer channel exclusions or switch plan sources to fit a reference rate.

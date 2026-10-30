@@ -149,7 +149,7 @@ test('cards, six tables, evidence and comparisons expose sample scope without gr
 test('SQL only includes complete period-assigned source product groups and individually valid source orders', () => {
   assert.match(
     workbenchQueries.orders.sql,
-    /m.invalid=0 AND m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN m.demand ELSE 0 END\) AS sample_demand/,
+    /m.invalid=0 THEN m.demand ELSE 0 END\) AS sample_demand/,
   );
   assert.match(workbenchQueries.changes.sql, /invalid_cancel=0 THEN cancel_numerator ELSE 0/);
   assert.match(workbenchQueries.changes.sql, /invalid_change=0 THEN change_denominator ELSE 0/);
