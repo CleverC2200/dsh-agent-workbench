@@ -6,8 +6,11 @@ export function addWorkbenchSummaryQueries(config) {
     .replace(/:gea_p1\b/g, ':gea_p703')
     .replace(/:gea_p2\b/g, ':gea_p704');
 
-  const sharedItems = raw('items').replace(/:gea_p1\b/g, ':gea_p703').replace(/:gea_p2\b/g, ':gea_p704');
-  const mappedItem = "CASE WHEN own.items=1 THEN own.item WHEN own.items>1 THEN NULL WHEN shared.names=1 THEN shared.item ELSE NULL END";
+  const sharedItems = raw('items')
+    .replace(/:gea_p1\b/g, ':gea_p703')
+    .replace(/:gea_p2\b/g, ':gea_p704');
+  const mappedItem =
+    'CASE WHEN own.items=1 THEN own.item WHEN own.items>1 THEN NULL WHEN shared.names=1 THEN shared.item ELSE NULL END';
   const grouped = {};
   const extras = {
     gea_p701: { name: 'period_start', type: 'string', required: true },
@@ -41,7 +44,7 @@ export function addWorkbenchSummaryQueries(config) {
   }
   for (const name of names) {
     const original = config.queries['workbench.' + name];
-    const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ")";
+    const item = name === 'ages' ? mappedItem : "COALESCE(NULLIF(q.item,'')," + mappedItem + ')';
     const director = 'CASE WHEN own.names=1 THEN own.director ELSE NULL END';
     const known = 'CASE WHEN own.names=1 THEN 1 ELSE 0 END';
     const group = ['q.base', 'q.category', item, director, known];
@@ -76,7 +79,9 @@ export function addWorkbenchSummaryQueries(config) {
       ') q ' +
       'LEFT JOIN (' +
       owner +
-      ') own ON own.base=q.base AND own.sku=q.sku LEFT JOIN (' + sharedItems + ') shared ON shared.sku=q.sku GROUP BY ' +
+      ') own ON own.base=q.base AND own.sku=q.sku LEFT JOIN (' +
+      sharedItems +
+      ') shared ON shared.sku=q.sku GROUP BY ' +
       group.join(',');
     grouped[name] = sql;
     register(
@@ -105,15 +110,24 @@ export function addWorkbenchSummaryQueries(config) {
     const original = config.queries['workbench.' + name];
     const sql =
       'SELECT ' +
-      original.resultColumns.map((field) => field === 'item'
-        ? (name === 'ages' ? mappedItem + ' AS item' : "COALESCE(NULLIF(q.item,'')," + mappedItem + ') AS item')
-        : 'q.' + field).join(',') +
+      original.resultColumns
+        .map((field) =>
+          field === 'item'
+            ? name === 'ages'
+              ? mappedItem + ' AS item'
+              : "COALESCE(NULLIF(q.item,'')," + mappedItem + ') AS item'
+            : 'q.' + field,
+        )
+        .join(',') +
       ' FROM (' +
       (name === 'ages' ? rawAges : raw(name)) +
       ') q JOIN (' +
       pageKeys +
-      ') selected ON selected.base=q.base AND selected.sku=q.sku LEFT JOIN (' + owner +
-      ') own ON own.base=q.base AND own.sku=q.sku LEFT JOIN (' + sharedItems + ') shared ON shared.sku=q.sku';
+      ') selected ON selected.base=q.base AND selected.sku=q.sku LEFT JOIN (' +
+      owner +
+      ') own ON own.base=q.base AND own.sku=q.sku LEFT JOIN (' +
+      sharedItems +
+      ') shared ON shared.sku=q.sku';
     const spec = {
       ...pageSpec,
       parameterSpec: {

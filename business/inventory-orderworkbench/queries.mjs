@@ -155,7 +155,14 @@ export const workbenchQueries = {
 export function addWorkbenchQueries(config) {
   for (const [name, original] of Object.entries(workbenchQueries)) {
     const definition = { ...original };
-    const alias = name === 'stock' ? 's.' : name === 'ages' ? 'b.' : ['directors', 'items'].includes(name) ? 'd.' : '';
+    const alias =
+      name === 'stock'
+        ? 's.'
+        : name === 'ages'
+          ? 'b.'
+          : ['directors', 'items'].includes(name)
+            ? 'd.'
+            : '';
     definition.sql = definition.sql.replace(
       name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',
       "WHERE (:gea_p900 = '' OR " +

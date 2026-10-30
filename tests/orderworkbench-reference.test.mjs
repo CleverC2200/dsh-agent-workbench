@@ -149,7 +149,9 @@ test('order workbench reference interactions', async () => {
     click('[data-wb-dimension-tab="item-performance"]');
     click('[data-wb-add-unmet="item"]');
     const itemEntity = document.getElementById('wbUnmetEntity');
-    assert.deepEqual([...itemEntity.options].map(option => option.value).filter(Boolean), ['小水饺']);
+    assert.deepEqual([...itemEntity.options].map((option) => option.value).filter(Boolean), [
+      '小水饺',
+    ]);
     assert.equal(document.getElementById('wbUnmetAddTitle').textContent, '添加品项未达成项');
     itemEntity.value = '小水饺';
     document.getElementById('wbUnmetTitleInput').value = '品项选择验证';
