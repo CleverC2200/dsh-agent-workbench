@@ -165,3 +165,54 @@ test('有效结存按原始基地和编码补齐产品对应，独立于提报�
   snapshot.status = 'failed';
   assert.equal(buildMpsWorkflow(source, null, snapshot).rows[0].base, '');
 });
+
+test('M+2调整后的大类有效链进入需求与M+3库存，系统基线和显式空值保留', () => {
+  const source = draft();
+  source.month = '2026-10';
+  source.products = [source.products[0]];
+  source.constraints.safetyDays = [{ base: '甲', days: 5 }];
+  source.report = ['2026-10', '2026-11', '2026-12'].map((month) => ({
+    月份: month,
+    基地: '甲',
+    产品编码: 'A',
+    月初数量: 100,
+  }));
+  source.history = ['2025-10', '2025-11', '2025-12'].map((month) => ({
+    月份: month,
+    基地: '甲',
+    产品编码: 'A',
+    数量: 100,
+  }));
+  source.categoryDemand = [
+    { month: '2026-10', category: '点心', quantity: 125, systemQuantity: 125 },
+    { month: '2026-11', category: '点心', quantity: 200, systemQuantity: 125 },
+    { month: '2026-12', category: '点心', quantity: 300, systemQuantity: 187.5 },
+    { month: '2027-01', category: '点心', quantity: 600, systemQuantity: 375 },
+  ];
+  source.adjustments = { categoryDemand: [{ month: '2026-11', category: '点心', quantity: 200 }] };
+  const result = buildMpsWorkflow(source);
+  const categories = result.categoryRows.filter((row) => row.category === '点心');
+  assert.deepEqual(
+    categories.map((row) => row.quantity),
+    [125, 200, 300, 600],
+  );
+  assert.deepEqual(
+    categories.map((row) => row.systemQuantity),
+    [125, 125, 187.5, 375],
+  );
+  assert.deepEqual(
+    categories.map((row) => row.adjusted),
+    [false, true, true, true],
+  );
+  assert.deepEqual(
+    result.rows.map((row) => row.demand),
+    [125, 200, 300],
+  );
+  assert.equal(result.rows[2].nextMonthDemand, 600);
+  assert.equal(result.rows[2].targetInventory, 96.7741935483871);
+  source.categoryDemand[0].systemQuantity = null;
+  assert.equal(
+    buildMpsWorkflow(source).categoryRows.find((row) => row.category === '点心').systemQuantity,
+    null,
+  );
+});

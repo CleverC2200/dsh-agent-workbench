@@ -39,7 +39,29 @@ const adjustmentHistory = z.strictObject({
 });
 const list = <T extends z.ZodType>(item: T) => z.array(item).max(10000);
 const keyedNumbers = z.record(z.string().max(10000), numeric.nullable());
+const shipmentEdits = z.strictObject({
+  values: z
+    .record(
+      text,
+      z.strictObject({
+        value: numeric,
+        source: text,
+        previous: numeric.nullable(),
+        target: numeric.optional(),
+        weightTotal: numeric.optional(),
+      }),
+    )
+    .optional(),
+  remaining: z.record(text, z.strictObject({ values: keyedNumbers, source: text })).optional(),
+});
 const shipment = z.strictObject({
+  ...shipmentEdits.shape,
+  sourceEdits: z
+    .strictObject({
+      'local-file': shipmentEdits.optional(),
+      business: shipmentEdits.optional(),
+    })
+    .optional(),
   cutoff: text.optional(),
   file: text.optional(),
   activeSource: z.enum(['local-file', 'business']).optional(),
@@ -61,19 +83,6 @@ const shipment = z.strictObject({
       remaining: numeric.nullable(),
     }),
   ).optional(),
-  values: z
-    .record(
-      text,
-      z.strictObject({
-        value: numeric,
-        source: text,
-        previous: numeric.nullable(),
-        target: numeric.optional(),
-        weightTotal: numeric.optional(),
-      }),
-    )
-    .optional(),
-  remaining: z.record(text, z.strictObject({ values: keyedNumbers, source: text })).optional(),
 });
 export const mpsLocalDraftSchema = z.strictObject({
   id: text,

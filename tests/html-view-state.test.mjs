@@ -21,6 +21,17 @@ const channelBuild = await build({
 const { connectHtmlViewState } = await import(
   'data:text/javascript;base64,' + Buffer.from(channelBuild.outputFiles[0].text).toString('base64')
 );
+const localDraftBuild = await build({
+  entryPoints: ['static/mps/source/local-draft.js'],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+});
+const { encodeLocalDrafts, decodeLocalDrafts } = await import(
+  'data:text/javascript;base64,' +
+    Buffer.from(localDraftBuild.outputFiles[0].text).toString('base64')
+);
 test('the registered sample keeps only its explicit UI values across Document replacement without a login or Session', async () => {
   const workbench = new WorkbenchController({ panel: () => {}, document: () => {} });
   const off = workbench.registerFrame({ id: 'workbench-html-table', kind: 'html', src: '/sample' });
@@ -433,4 +444,60 @@ test('a rejected local view save reaches the page while retaining unsaved user i
     if (savedWindow === undefined) delete globalThis.window;
     else globalThis.window = savedWindow;
   }
+});
+
+test('MPS local and business shipment edits recover through the codec and Host without business source facts', () => {
+  const key = JSON.stringify(['郑州', 'A']);
+  const local = {
+    values: { [key]: { value: 301, source: '人工调整', previous: 300 } },
+    remaining: { 郑州: { values: { [key]: 11 }, source: '基地调整' } },
+  };
+  const business = {
+    values: { [key]: { value: 99, source: '人工调整', previous: null } },
+    remaining: {},
+  };
+  const draft = {
+    id: 'v1',
+    name: '试算',
+    month: '2026-10',
+    pull: 'monthly',
+    files: {},
+    shipment: {
+      activeSource: 'business',
+      values: business.values,
+      remaining: business.remaining,
+      sourceEdits: { 'local-file': local, business },
+      business: { rows: [{ secret: 'BUSINESS_FACT' }] },
+      businessAttempted: true,
+      granted: true,
+      credentials: 'CREDENTIAL',
+    },
+  };
+  const encoded = encodeLocalDrafts([draft], 'v1');
+  assert.deepEqual(encoded.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
+  assert.doesNotMatch(
+    JSON.stringify(encoded),
+    /BUSINESS_FACT|CREDENTIAL|businessAttempted|granted/,
+  );
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const page = 'plan-category-production';
+  owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  owner.saveHtmlViewState(page, 'tenant/user/session', { version: 1, localDrafts: encoded });
+  const recovered = decodeLocalDrafts(
+    owner.readHtmlViewState(page, 'tenant/user/session').localDrafts,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
+  assert.equal(recovered.drafts[0].shipment.business, undefined);
+  assert.equal(owner.readHtmlViewState(page, 'another-tenant/user/session'), undefined);
+  const invalid = structuredClone(encoded);
+  invalid.drafts[0].shipment.sourceEdits.business.credentials = 'CREDENTIAL';
+  assert.throws(
+    () =>
+      owner.saveHtmlViewState(page, 'tenant/user/session', { version: 1, localDrafts: invalid }),
+    /INVALID_HTML_VIEW_STATE/,
+  );
 });
