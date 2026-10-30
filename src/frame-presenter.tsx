@@ -314,7 +314,12 @@ export function mountFramePresentation(
         'inventory-apsplan',
       ].includes(page.id) &&
       view === 'center' &&
-      space.document >= 1100 &&
+      space.document >=
+        (['inventory-aqkc', 'inventory-qll', 'inventory-fc', 'inventory-apsplan'].includes(page.id)
+          ? 800
+          : page.id === 'inventory-dealer'
+            ? 920
+            : 960) &&
       (page.id !== 'inventory-apsplan' || apsToolbarAvailable);
     const session = useSession((value) => value);
     const currentPreset = useProjection('agentPreset');
