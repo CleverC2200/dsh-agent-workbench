@@ -1,4 +1,10 @@
 import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
+const attributionSources = `SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_d
+        UNION ALL SELECT belong_base,material_code,director,product_item,header_addtime AS attribution_date FROM agents_scm_execute_detail_hourly_d
+        UNION ALL SELECT belong_base,material_code,NULL AS director,product_item,the_date AS attribution_date FROM agents_scm_stock_detail_d
+        UNION ALL SELECT belong_base,new_material_code AS material_code,NULL AS director,pinxiang AS product_item,fromorderno_month AS attribution_date FROM agents_order_execute_isontime_mi`;
+
+// Field formulas confirmed in the shared metric register, 2026-10-23.
 const dictionary = `SELECT material_code AS sku,
   CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS category,
   CASE WHEN COUNT(DISTINCT material_group_name)=1 THEN MAX(material_group_name) END AS item
@@ -129,11 +135,28 @@ export const workbenchQueries = {
   },
   directors: {
     keys: ['base', 'sku'],
-    columns: ['base', 'sku', 'director', 'names', 'directors'],
-    sql: `SELECT belong_base AS base,material_code AS sku,MIN(NULLIF(director,'')) AS director,
-      COUNT(DISTINCT NULLIF(TRIM(director),'')) AS names,
-      ARRAY_AGG(DISTINCT NULLIF(TRIM(director),'')) AS directors FROM agents_scm_execute_detail_hourly_d
-      WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2 GROUP BY belong_base,material_code`,
+    columns: ['base', 'sku', 'director', 'names', 'item', 'items', 'directors'],
+    sql: `SELECT d.belong_base AS base,d.material_code AS sku,
+      MIN(NULLIF(TRIM(d.director),'')) AS director,
+      COUNT(DISTINCT NULLIF(TRIM(d.director),'')) AS names,
+      ARRAY_AGG(DISTINCT NULLIF(TRIM(d.director),'')) AS directors,
+      CASE WHEN COUNT(DISTINCT NULLIF(TRIM(d.product_item),''))=1 THEN MAX(NULLIF(TRIM(d.product_item),'')) END AS item,
+      COUNT(DISTINCT NULLIF(TRIM(d.product_item),'')) AS items
+      FROM (
+        ${attributionSources}
+      ) d WHERE NULLIF(TRIM(d.belong_base),'') IS NOT NULL AND NULLIF(TRIM(d.material_code),'') IS NOT NULL
+        AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
+      GROUP BY d.belong_base,d.material_code`,
+  },
+  items: {
+    keys: ['sku'],
+    columns: ['sku', 'item', 'names'],
+    sql: `SELECT d.material_code AS sku,
+      CASE WHEN COUNT(DISTINCT NULLIF(TRIM(d.product_item),''))=1 THEN MAX(NULLIF(TRIM(d.product_item),'')) END AS item,
+      COUNT(DISTINCT NULLIF(TRIM(d.product_item),'')) AS names
+      FROM (${attributionSources}) d WHERE NULLIF(TRIM(d.material_code),'') IS NOT NULL
+        AND d.attribution_date>=:gea_p1 AND d.attribution_date<:gea_p2
+      GROUP BY d.material_code`,
   },
   customerManagers: {
     keys: ['customer'],
@@ -147,7 +170,14 @@ export const workbenchQueries = {
 export function addWorkbenchQueries(config) {
   for (const [name, original] of Object.entries(workbenchQueries)) {
     const definition = { ...original };
-    const alias = name === 'stock' ? 's.' : name === 'ages' ? 'b.' : '';
+    const alias =
+      name === 'stock'
+        ? 's.'
+        : name === 'ages'
+          ? 'b.'
+          : ['directors', 'items'].includes(name)
+            ? 'd.'
+            : '';
     if (!definition.scoped)
       definition.sql = definition.sql.replace(
         name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',

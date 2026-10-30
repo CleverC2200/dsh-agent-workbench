@@ -1,3 +1,4 @@
+import { addWorkbenchSummaryQueries } from './summary-queries.mjs';
 import { addWorkbenchQueries } from './queries.mjs';
 export function orderWorkbenchSourceConfig(source) {
   const names = ['orders', 'orders-month', 'shippable'];
@@ -9,14 +10,16 @@ export function orderWorkbenchSourceConfig(source) {
     ids.add(binding.queryId);
     ids.add(source.queries[binding.queryId].pagination.countQuery);
   }
-  return addWorkbenchQueries({
-    schemaVersion: source.schemaVersion,
-    agentId: 'inventory-orderworkbench',
-    label: '订单工作台',
-    source: source.source,
-    templates: {},
-    queries: Object.fromEntries([...ids].map((id) => [id, source.queries[id]])),
-    workspaceBindings: bindings,
-    workspaceSummaryBindings: bindings,
-  });
+  return addWorkbenchSummaryQueries(
+    addWorkbenchQueries({
+      schemaVersion: source.schemaVersion,
+      agentId: 'inventory-orderworkbench',
+      label: '订单工作台',
+      source: source.source,
+      templates: {},
+      queries: Object.fromEntries([...ids].map((id) => [id, source.queries[id]])),
+      workspaceBindings: bindings,
+      workspaceSummaryBindings: bindings,
+    }),
+  );
 }

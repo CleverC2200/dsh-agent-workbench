@@ -71,30 +71,22 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ...rows(selected, 'orders'),
     ...rows(selected, 'stock'),
     ...rows(selected, 'ages').filter(
-      (row) => Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
     ),
   ];
   let groups;
-  const mappingCache = new Map();
   const directors = (row, key = periods.month ? 'month' : 'week') => {
-    if (!mappingCache.has(key)) {
-      const part = periods[key]?.sections.find((section) => section.id === 'directors');
-      const mappings = part
-        ? part.status === 'ready'
-          ? part.rows
-          : []
-        : ['month', 'week'].includes(key)
-          ? [...directorMap.values()]
-          : [];
-      const index = new Map();
-      for (const mapping of mappings) {
-        const id = JSON.stringify([mapping.base, mapping.base === '郑州' ? mapping.sku : '']);
-        if (!index.has(id)) index.set(id, []);
-        index.get(id).push(mapping);
-      }
-      mappingCache.set(key, index);
+    const mapping = (Number(row.summary)===1 || row.periodAttribution===true)?row:directorMap?.get(JSON.stringify([row.base, row.sku]));
+    if (!row.periodAttribution && Number(row.summary)!==1) {
+      const part = periods[key]?.sections.find(section => section.id === 'directors');
+      return directorNames(part ? (part.status==='ready'?part.rows:[]) : ['month','week'].includes(key)?[...directorMap.values()]:[],row);
     }
-    return directorNames(mappingCache.get(key), row);
+    return mapping?.names === 1 && mapping.director
+      ? mapping.director
+          .split(/[,，、]/)
+          .map((name) => name.trim())
+          .filter(Boolean)
+      : ['归属待补全'];
   };
   if (field === 'director')
     groups = distinct(
@@ -239,54 +231,50 @@ export function workbenchPresentation(facts, options = {}) {
     ...rows(current, 'orders'),
     ...rows(current, 'stock'),
     ...rows(current, 'ages').filter(
-      (row) => Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
+      (row) => Number(row.active_records??0)>0 || Number(row.stock_qty) !== 0 || Number(row.invalid) !== 0,
     ),
   ];
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
     bases = distinct(all.map((row) => dimensionValue(row.base)));
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
-  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
-    (category) => {
-      const filter = (row) => dimensionValue(row.category) === category,
-        m = metric(current, filter),
-        p = metric(previous, filter),
-        y = metric(year, filter);
-      return [
-        category,
-        value(m, '订单满足率'),
-        value(p, '订单满足率'),
-        metricDelta(m, p, '订单满足率'),
-        value(y, '订单满足率'),
-        metricDelta(m, y, '订单满足率'),
-        metricState('订单满足率', metricValue(m, '订单满足率')),
-      ];
-    },
-  );
-  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map(
-    (category) => {
-      const filter = (row) => dimensionValue(row.category) === category,
-        m = computeWorkbenchMetrics(current, filter, { turnoverScope: 'item' }),
-        stock = rows(current, 'stock').filter(filter);
-      const sum = (key) =>
-        stock.length && stock.every((row) => row[key] !== null && Number.isFinite(Number(row[key])))
-          ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
-          : null;
-      const daily =
-        stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
-          ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
-          : null;
-      const sales = sum('sales_plan');
-      return [
-        category,
-        text(sum('inventory'), '件', 0),
-        text(sales, '件', 0),
-        text(daily, '件/天'),
-        text(metricValue(m, '周转天数'), '天'),
-        '—',
-        metricState('周转天数', metricValue(m, '周转天数')),
-      ];
-    },
-  );
+  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map((category) => {
+    const filter = (row) => dimensionValue(row.category) === category,
+      m = metric(current, filter),
+      p = metric(previous, filter),
+      y = metric(year, filter);
+    return [
+      category,
+      value(m, '订单满足率'),
+      value(p, '订单满足率'),
+      metricDelta(m, p, '订单满足率'),
+      value(y, '订单满足率'),
+      metricDelta(m, y, '订单满足率'),
+      metricState('订单满足率', metricValue(m, '订单满足率')),
+    ];
+  });
+  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map((category) => {
+    const filter = (row) => dimensionValue(row.category) === category,
+      m = metric(current, filter),
+      stock = rows(current, 'stock').filter(filter);
+    const sum = (key) =>
+      stock.length && stock.every((row) => Number(row['missing_'+key]??0)===0 && row[key] !== null && Number.isFinite(Number(row[key])))
+        ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
+        : null;
+    const daily =
+      stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
+        ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
+        : null;
+    const sales = sum('sales_plan');
+    return [
+      category,
+      text(sum('inventory'), '件', 0),
+      text(sales, '件', 0),
+      text(daily, '件/天'),
+      text(metricValue(m, '周转天数'), '天'),
+      '—',
+      metricState('周转天数', metricValue(m, '周转天数')),
+    ];
+  });
   const regions = distinct(
     rows(current, 'changes')
       .filter((row) => String(row.kind) === '2')
@@ -335,11 +323,8 @@ export function workbenchPresentation(facts, options = {}) {
         ),
       ),
     ]);
-  const skus = {},
-    skuPagination = {};
-  for (const category of categories.filter(
-    (category) => !options.dimension || options.skuCategories?.includes(category),
-  )) {
+  const skus = {}, skuPagination = {};
+  for (const category of (facts.sqlSummary?[]:categories).filter(category => !options.dimension || options.skuCategories?.includes(category))) {
     const filtered = all.filter((row) => dimensionValue(row.category) === category);
     const allKeys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
     const page = Math.min(
