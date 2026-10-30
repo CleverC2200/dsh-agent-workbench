@@ -95,25 +95,21 @@ test('attributions remain scoped to the period and base/SKU, reject ambiguity an
     assert.equal(previous[0].rows[1].item, null);
     const config = addWorkbenchQueries({ queries: {} });
     const scoped = config.queries['workbench.directors'].request.sql;
-    const rows = db
-      .prepare(scoped)
-      .all({
-        gea_p1: '2026-10-01',
-        gea_p2: '2026-11-01',
-        gea_p900: '华东',
-        gea_p1001: 200,
-        gea_p1002: 0,
-      });
+    const rows = db.prepare(scoped).all({
+      gea_p1: '2026-10-01',
+      gea_p2: '2026-11-01',
+      gea_p900: '华东',
+      gea_p1001: 200,
+      gea_p1002: 0,
+    });
     assert.ok(rows.every((r) => r.base === '华东'));
-    const scopedItems = db
-      .prepare(config.queries['workbench.items'].request.sql)
-      .all({
-        gea_p1: '2026-10-01',
-        gea_p2: '2026-11-01',
-        gea_p900: '华南',
-        gea_p1001: 200,
-        gea_p1002: 0,
-      });
+    const scopedItems = db.prepare(config.queries['workbench.items'].request.sql).all({
+      gea_p1: '2026-10-01',
+      gea_p2: '2026-11-01',
+      gea_p900: '华南',
+      gea_p1001: 200,
+      gea_p1002: 0,
+    });
     assert.ok(!scopedItems.some((r) => r.sku === 'D'));
   } finally {
     db.close();
