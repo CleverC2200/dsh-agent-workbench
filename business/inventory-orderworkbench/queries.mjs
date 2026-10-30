@@ -1,4 +1,4 @@
-// Field formulas confirmed in the shared metric register, 2026-10-23.
+import { changesSql, customersSql, ordersSql, ontimeSql } from './document-queries.mjs';
 const dictionary = `SELECT material_code AS sku,
   CASE WHEN COUNT(DISTINCT product_categ_name)=1 THEN MAX(product_categ_name) END AS category,
   CASE WHEN COUNT(DISTINCT material_group_name)=1 THEN MAX(material_group_name) END AS item
@@ -17,37 +17,40 @@ export const workbenchQueries = {
       'shortage',
       'records',
       'invalid',
-      'ontime',
-      'judged',
-      'unjudged',
-      'invalid_judgment',
+      'missing_ship_date',
+      'unmatched_order',
+      'missing_trace',
+      'missing_ship_time',
     ],
-    sql: `SELECT belong_base AS base,product_categ_name AS category,pinxiang AS item,new_material_code AS sku,
-      MAX(new_material_name) AS name,SUM(CASE WHEN exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0) THEN COALESCE(need_qty_origin,0) ELSE 0 END) AS demand,SUM(CASE WHEN exp_flag='否' AND (order_qty_origin>0 OR need_qty_origin>0) THEN COALESCE(outqty,0) ELSE 0 END) AS shortage,COUNT(*) AS records,
-      SUM(CASE WHEN need_qty_origin IS NULL OR outqty IS NULL OR need_qty_origin<0 OR outqty<0 OR outqty>need_qty_origin THEN 1 ELSE 0 END) AS invalid,
-      COALESCE(SUM(is_ontime),0) AS ontime,COUNT(is_ontime) AS judged,COUNT(*)-COUNT(is_ontime) AS unjudged,
-      SUM(CASE WHEN is_ontime IS NOT NULL AND is_ontime NOT IN (0,1) THEN 1 ELSE 0 END) AS invalid_judgment
-      FROM agents_order_execute_isontime_mi
-      WHERE fromorderno_month>=:gea_p1 AND fromorderno_month<:gea_p2
-      GROUP BY belong_base,product_categ_name,pinxiang,new_material_code`,
+    sql: ordersSql,
+    scoped: true,
+  },
+  ontime: {
+    keys: ['order_no', 'customer'],
+    columns: ['order_no', 'customer', 'ontime', 'arrival_date', 'invalid', 'members'],
+    sql: ontimeSql,
+    scoped: true,
   },
   changes: {
     keys: ['kind', 'region', 'province'],
-    columns: ['kind', 'region', 'province', 'numerator', 'denominator', 'records'],
-    sql: `SELECT order_typecode AS kind,region_name AS region,province_region_name AS province,
-      SUM(COALESCE(cancel_qty,0)) AS numerator,SUM(COALESCE(order_qty,0)) AS denominator,COUNT(*) AS records
-      FROM agents_order_cancel_change_di
-      WHERE order_create_date>=:gea_p1 AND order_create_date<:gea_p2 AND order_typecode IN ('1','2')
-      GROUP BY order_typecode,region_name,province_region_name`,
+    columns: ['kind', 'region', 'province', 'numerator', 'denominator', 'records', 'invalid'],
+    sql: changesSql,
+    scoped: true,
   },
   customers: {
     keys: ['region', 'province', 'customer'],
-    columns: ['region', 'province', 'customer', 'name', 'numerator', 'denominator', 'records'],
-    sql: `SELECT region_name AS region,province_region_name AS province,cust_code AS customer,MAX(cust_name) AS name,
-      SUM(COALESCE(cancel_qty,0)) AS numerator,SUM(COALESCE(order_qty,0)) AS denominator,COUNT(*) AS records
-      FROM agents_order_cancel_change_di
-      WHERE order_create_date>=:gea_p1 AND order_create_date<:gea_p2 AND order_typecode='2'
-      GROUP BY region_name,province_region_name,cust_code`,
+    columns: [
+      'region',
+      'province',
+      'customer',
+      'name',
+      'numerator',
+      'denominator',
+      'records',
+      'invalid',
+    ],
+    sql: customersSql,
+    scoped: true,
   },
   stock: {
     keys: ['base', 'sku'],
@@ -70,22 +73,21 @@ export const workbenchQueries = {
     sql: `SELECT s.belong_base AS base,s.material_code AS sku,MAX(d.category) AS category,MAX(s.product_item) AS item,
       MAX(s.material_name) AS name,MAX(s.the_date) AS stock_date,COUNT(*) AS source_rows,
       SUM(s.available_stock) AS available,SUM(s.current_stock) AS inventory,SUM(s.current_stock_60) AS aged,
-      SUM(s.roll_sales_plan) AS sales_plan,SUM(s.transfer_out_plan_roll) AS transfer_plan,MAX(t.daily_demand) AS daily_demand,
-      SUM(CASE WHEN s.available_stock IS NULL OR s.available_stock<0 OR s.roll_sales_plan IS NULL OR s.roll_sales_plan<0
-        OR s.transfer_out_plan_roll IS NULL OR s.transfer_out_plan_roll<0 THEN 1 ELSE 0 END) AS invalid
+      SUM(CASE WHEN s.main_sales_plan_adj>0 THEN s.main_sales_plan_adj ELSE s.main_sales_plan_v1 END) AS sales_plan,
+      SUM(CASE WHEN s.transfer_out_plan_adj>0 THEN s.transfer_out_plan_adj ELSE s.transfer_out_plan_v1 END) AS transfer_plan,
+      NULL AS daily_demand,
+      SUM(CASE WHEN s.current_stock IS NULL THEN 1 ELSE 0 END) AS invalid
       FROM agents_scm_stock_detail_d s LEFT JOIN (${dictionary}) d ON d.sku=s.material_code
-      LEFT JOIN (SELECT year_month,belong_base,material_code,CASE WHEN COUNT(*)=1 THEN MAX(avg_daily_planned_demand) END AS daily_demand
-        FROM agents_scm_goods_inventory_turnover_data_m WHERE inventory_version='滚动' GROUP BY year_month,belong_base,material_code) t
-        ON t.belong_base=s.belong_base AND t.material_code=s.material_code AND t.year_month=CAST(DATE_FORMAT(s.the_date,'%Y-%m-01') AS DATE)
       WHERE s.the_date=(SELECT MAX(the_date) FROM agents_scm_stock_detail_d WHERE the_date>=:gea_p1 AND the_date<:gea_p2)
       GROUP BY s.belong_base,s.material_code`,
   },
   ageDate: {
     columns: ['day'],
     sql: `SELECT MAX(month_date) AS day FROM agents_scm_inventory_sku_data_d
-      WHERE month_date>=:gea_p1 AND month_date<:gea_p2 AND warehouse_classify IN ('01','02')`,
+      WHERE month_date>=:gea_p1 AND month_date<:gea_p2`,
   },
   ages: {
+    scoped: true,
     keys: ['base', 'sku'],
     columns: [
       'base',
@@ -99,26 +101,38 @@ export const workbenchQueries = {
       'excluded',
       'invalid',
     ],
-    sql: `SELECT b.belong_base AS base,b.material_code AS sku,MAX(d.category) AS category,MAX(d.item) AS item,
+    sql: `SELECT b.belong_base AS base,b.material_code AS sku,MAX(d.category) AS category,
+        CASE WHEN MAX(s.names)>1 THEN NULL ELSE COALESCE(MAX(s.item),MAX(m.item)) END AS item,
       MAX(b.month_date) AS snapshot_date,
-      SUM(CASE WHEN CAST(b.prod_date AS DATE) IS NOT NULL AND b.live_qty<>0 THEN b.live_qty ELSE 0 END) AS stock_qty,
+      SUM(b.live_qty) AS stock_qty,
       SUM(CASE WHEN CAST(b.prod_date AS DATE)<=:gea_p3 AND b.live_qty<>0 THEN b.live_qty ELSE 0 END) AS aged_qty,
-      COUNT(*) AS records,SUM(CASE WHEN CAST(b.prod_date AS DATE) IS NULL OR b.live_qty=0 THEN 1 ELSE 0 END) AS excluded,
-      SUM(CASE WHEN b.live_qty IS NULL OR (b.live_qty<>0 AND CAST(b.prod_date AS DATE)>:gea_p4) THEN 1 ELSE 0 END) AS invalid
+      COUNT(*) AS records,SUM(CASE WHEN b.live_qty=0 THEN 1 ELSE 0 END) AS excluded,
+      SUM(CASE WHEN b.live_qty IS NULL OR (b.live_qty<>0 AND (CAST(b.prod_date AS DATE) IS NULL OR CAST(b.prod_date AS DATE)>:gea_p4)) THEN 1 ELSE 0 END) AS invalid
       FROM agents_scm_inventory_sku_data_d b LEFT JOIN (${dictionary}) d ON d.sku=b.material_code
-      WHERE b.month_date=:gea_p1 AND b.warehouse_classify IN ('01','02')
+      LEFT JOIN (SELECT material_code AS sku,
+        COUNT(DISTINCT NULLIF(TRIM(product_item),'')) AS names,
+        CASE WHEN COUNT(DISTINCT NULLIF(TRIM(product_item),''))=1 THEN MAX(NULLIF(TRIM(product_item),'')) END AS item
+        FROM agents_scm_stock_detail_d WHERE the_date=:gea_p4 GROUP BY material_code) s ON s.sku=b.material_code
+      LEFT JOIN (SELECT new_material_code AS sku,
+        CASE WHEN COUNT(DISTINCT NULLIF(TRIM(pinxiang),''))=1 THEN MAX(NULLIF(TRIM(pinxiang),'')) END AS item
+        FROM agents_order_execute_isontime_mi WHERE fromorderno_month>=:gea_p5 AND fromorderno_month<:gea_p6
+        GROUP BY new_material_code) m ON m.sku=b.material_code
+      WHERE (:gea_p900='' OR b.belong_base=:gea_p900) AND b.month_date=:gea_p1
       GROUP BY b.belong_base,b.material_code`,
     omitEnd: true,
     extra: {
       gea_p3: { name: 'age_cutoff', type: 'string', required: true, format: 'YYYY-MM-DD' },
       gea_p4: { name: 'snapshot', type: 'string', required: true, format: 'YYYY-MM-DD' },
+      gea_p5: { name: 'mapping_start', type: 'string', required: true, format: 'YYYY-MM-DD' },
+      gea_p6: { name: 'mapping_end', type: 'string', required: true, format: 'YYYY-MM-DD' },
     },
   },
   directors: {
     keys: ['base', 'sku'],
-    columns: ['base', 'sku', 'director', 'names'],
+    columns: ['base', 'sku', 'director', 'names', 'directors'],
     sql: `SELECT belong_base AS base,material_code AS sku,MIN(NULLIF(director,'')) AS director,
-      COUNT(DISTINCT NULLIF(director,'')) AS names FROM agents_scm_execute_detail_d
+      COUNT(DISTINCT NULLIF(TRIM(director),'')) AS names,
+      ARRAY_AGG(DISTINCT NULLIF(TRIM(director),'')) AS directors FROM agents_scm_execute_detail_hourly_d
       WHERE header_addtime>=:gea_p1 AND header_addtime<:gea_p2 GROUP BY belong_base,material_code`,
   },
   customerManagers: {
@@ -134,13 +148,14 @@ export function addWorkbenchQueries(config) {
   for (const [name, original] of Object.entries(workbenchQueries)) {
     const definition = { ...original };
     const alias = name === 'stock' ? 's.' : name === 'ages' ? 'b.' : '';
-    definition.sql = definition.sql.replace(
-      name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',
-      "WHERE (:gea_p900 = '' OR " +
-        alias +
-        'belong_base = :gea_p900) AND ' +
-        (name === 'stock' ? 's.the_date=' : ''),
-    );
+    if (!definition.scoped)
+      definition.sql = definition.sql.replace(
+        name === 'stock' ? 'WHERE s.the_date=' : 'WHERE ',
+        "WHERE (:gea_p900 = '' OR " +
+          alias +
+          'belong_base = :gea_p900) AND ' +
+          (name === 'stock' ? 's.the_date=' : ''),
+      );
     const id = 'workbench.' + name.toLowerCase();
     const parameterSpec = {
       gea_p900: { name: 'report_base', type: 'string', required: false },

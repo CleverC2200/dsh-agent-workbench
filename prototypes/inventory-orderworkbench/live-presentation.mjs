@@ -7,6 +7,11 @@ import {
   stockDaily,
   dayOffset,
 } from './metric-model.mjs';
+import {
+  performanceCurrentCell,
+  highlightAgePeak,
+  performanceStyleVersion,
+} from './performance-rules.mjs';
 const text = (value, unit = '%', digits = 2) =>
   value === null || value === undefined ? '—' : Number(value).toFixed(digits) + unit;
 const value = (metrics, name) => text(metricValue(metrics, name), name === '周转天数' ? '' : '%');
@@ -15,6 +20,51 @@ const rows = (period, id) =>
 const distinct = (values) =>
   [...new Set(values)].sort((a, b) => String(a).localeCompare(String(b), 'zh'));
 const dimensionValue = (value) => value || '未映射';
+export function directorNames(mappings, row) {
+  const relevant =
+    mappings instanceof Map
+      ? mappings.get(JSON.stringify([row.base, row.base === '郑州' ? row.sku : ''])) || []
+      : mappings.filter(
+          (mapping) =>
+            mapping.base === row.base && (row.base !== '郑州' || mapping.sku === row.sku),
+        );
+  const owners = (mapping) => {
+    let explicit = mapping.directors;
+    if (typeof explicit === 'string') {
+      try {
+        explicit = JSON.parse(explicit);
+      } catch {
+        explicit = null;
+      }
+    }
+    if (Array.isArray(explicit)) {
+      const values = [
+        ...new Set(
+          explicit
+            .filter((value) => typeof value === 'string' && value.trim())
+            .map((value) => value.trim()),
+        ),
+      ];
+      if (values.length === Number(mapping.names)) return values;
+    }
+    return Number(mapping.names) === 1 ? [String(mapping.director || '')] : null;
+  };
+  if (relevant.some((mapping) => Number(mapping.names) > 1 && !owners(mapping)))
+    return ['归属待补全'];
+  const names = distinct(
+    relevant.flatMap((mapping) =>
+      owners(mapping)
+        ? owners(mapping).flatMap((value) =>
+            value
+              .split(/[,，、]/)
+              .map((name) => name.trim())
+              .filter(Boolean),
+          )
+        : [],
+    ),
+  );
+  return names.length && (row.base === '郑州' || names.length === 1) ? names : ['归属待补全'];
+}
 function summaryRows(periods, field, directorMap, loading = false) {
   const selected = periods.month ?? periods.week;
   const source = [
@@ -25,14 +75,26 @@ function summaryRows(periods, field, directorMap, loading = false) {
     ),
   ];
   let groups;
-  const directors = (row) => {
-    const mapping = directorMap?.get(JSON.stringify([row.base, row.sku]));
-    return mapping?.names === 1 && mapping.director
-      ? mapping.director
-          .split(/[,，、]/)
-          .map((name) => name.trim())
-          .filter(Boolean)
-      : ['归属待补全'];
+  const mappingCache = new Map();
+  const directors = (row, key = periods.month ? 'month' : 'week') => {
+    if (!mappingCache.has(key)) {
+      const part = periods[key]?.sections.find((section) => section.id === 'directors');
+      const mappings = part
+        ? part.status === 'ready'
+          ? part.rows
+          : []
+        : ['month', 'week'].includes(key)
+          ? [...directorMap.values()]
+          : [];
+      const index = new Map();
+      for (const mapping of mappings) {
+        const id = JSON.stringify([mapping.base, mapping.base === '郑州' ? mapping.sku : '']);
+        if (!index.has(id)) index.set(id, []);
+        index.get(id).push(mapping);
+      }
+      mappingCache.set(key, index);
+    }
+    return directorNames(mappingCache.get(key), row);
   };
   if (field === 'director')
     groups = distinct(
@@ -43,7 +105,8 @@ function summaryRows(periods, field, directorMap, loading = false) {
       const [name, base] = JSON.parse(key);
       return {
         labels: [name, base],
-        filter: (row) => dimensionValue(row.base) === base && directors(row).includes(name),
+        filter: (row, key) =>
+          dimensionValue(row.base) === base && directors(row, key).includes(name),
       };
     });
   else
@@ -62,11 +125,29 @@ function summaryRows(periods, field, directorMap, loading = false) {
       continue;
     }
     tables[key] = groups.map((group) => {
-      const m = computeWorkbenchMetrics(periods[key], group.filter);
-      const p = periods[previous] ? computeWorkbenchMetrics(periods[previous], group.filter) : {};
-      const y = periods[year] ? computeWorkbenchMetrics(periods[year], group.filter) : {};
+      const formulaOptions = { turnoverScope: field === 'item' ? 'item' : 'base' };
+      const m = computeWorkbenchMetrics(
+        periods[key],
+        (row) => group.filter(row, key),
+        formulaOptions,
+      );
+      const p = periods[previous]
+        ? computeWorkbenchMetrics(
+            periods[previous],
+            (row) => group.filter(row, previous),
+            formulaOptions,
+          )
+        : {};
+      const y = periods[year]
+        ? computeWorkbenchMetrics(periods[year], (row) => group.filter(row, year), formulaOptions)
+        : {};
       const cells = (name) => [
-        value(m, name),
+        performanceCurrentCell(
+          name,
+          metricValue(m, name),
+          value(m, name),
+          field === 'director' ? group.labels[1] : field === 'base' ? group.labels[0] : '',
+        ),
         loading && !periods[previous] ? '加载中' : metricDelta(m, p, name),
         loading && !periods[year] ? '加载中' : metricDelta(m, y, name),
       ];
@@ -96,6 +177,10 @@ function summaryRows(periods, field, directorMap, loading = false) {
         ...cells('周转天数').slice(0, key === 'month' ? 3 : 2),
       ];
     });
+    highlightAgePeak(
+      tables[key],
+      field === 'item' ? (key === 'month' ? 7 : 6) : field === 'director' ? 7 : 6,
+    );
   }
   return tables;
 }
@@ -107,7 +192,11 @@ export function workbenchPresentation(facts, options = {}) {
   const metrics = current.metrics;
   const loading = facts.complete === false;
   const comparison = (a, b, name) =>
-    loading && (!periods[a] || !periods[b] || periods[a].metrics[name]?.loading || periods[b].metrics[name]?.loading)
+    loading &&
+    (!periods[a] ||
+      !periods[b] ||
+      periods[a].metrics[name]?.loading ||
+      periods[b].metrics[name]?.loading)
       ? '加载中'
       : metricDelta(periods[a]?.metrics, periods[b]?.metrics, name);
   const cards = metricNames.map((name) => ({
@@ -140,7 +229,8 @@ export function workbenchPresentation(facts, options = {}) {
       ['item-performance', 'item'],
     ].map(([key, field]) => [
       key,
-      (options.dimension && options.dimension !== key) || (field === 'director' && facts.directors?.status === 'loading')
+      (options.dimension && options.dimension !== key) ||
+      (field === 'director' && facts.directors?.status === 'loading')
         ? { month: [], week: [] }
         : summaryRows(periods, field, directorMap, loading),
     ]),
@@ -155,44 +245,48 @@ export function workbenchPresentation(facts, options = {}) {
   const categories = distinct(all.map((row) => dimensionValue(row.category))),
     bases = distinct(all.map((row) => dimensionValue(row.base)));
   const metric = (period, filter) => (period ? computeWorkbenchMetrics(period, filter) : {});
-  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map((category) => {
-    const filter = (row) => dimensionValue(row.category) === category,
-      m = metric(current, filter),
-      p = metric(previous, filter),
-      y = metric(year, filter);
-    return [
-      category,
-      value(m, '订单满足率'),
-      value(p, '订单满足率'),
-      metricDelta(m, p, '订单满足率'),
-      value(y, '订单满足率'),
-      metricDelta(m, y, '订单满足率'),
-      metricState('订单满足率', metricValue(m, '订单满足率')),
-    ];
-  });
-  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map((category) => {
-    const filter = (row) => dimensionValue(row.category) === category,
-      m = metric(current, filter),
-      stock = rows(current, 'stock').filter(filter);
-    const sum = (key) =>
-      stock.length && stock.every((row) => row[key] !== null && Number.isFinite(Number(row[key])))
-        ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
-        : null;
-    const daily =
-      stock.length && stock.every((row) => stockDaily(row) !== null)
-        ? stock.reduce((sum, row) => sum + stockDaily(row), 0)
-        : null;
-    const sales = sum('sales_plan');
-    return [
-      category,
-      text(sum('available'), '件', 0),
-      text(sales, '件', 0),
-      text(daily, '件/天'),
-      text(metricValue(m, '周转天数'), '天'),
-      '—',
-      metricState('周转天数', metricValue(m, '周转天数')),
-    ];
-  });
+  const fill = (options.dimension && options.dimension !== 'category-fill' ? [] : categories).map(
+    (category) => {
+      const filter = (row) => dimensionValue(row.category) === category,
+        m = metric(current, filter),
+        p = metric(previous, filter),
+        y = metric(year, filter);
+      return [
+        category,
+        value(m, '订单满足率'),
+        value(p, '订单满足率'),
+        metricDelta(m, p, '订单满足率'),
+        value(y, '订单满足率'),
+        metricDelta(m, y, '订单满足率'),
+        metricState('订单满足率', metricValue(m, '订单满足率')),
+      ];
+    },
+  );
+  const days = (options.dimension && options.dimension !== 'category-days' ? [] : categories).map(
+    (category) => {
+      const filter = (row) => dimensionValue(row.category) === category,
+        m = computeWorkbenchMetrics(current, filter, { turnoverScope: 'item' }),
+        stock = rows(current, 'stock').filter(filter);
+      const sum = (key) =>
+        stock.length && stock.every((row) => row[key] !== null && Number.isFinite(Number(row[key])))
+          ? stock.reduce((sum, row) => sum + Number(row[key]), 0)
+          : null;
+      const daily =
+        stock.length && stock.every((row) => stockDaily(row, 'item') !== null)
+          ? stock.reduce((sum, row) => sum + stockDaily(row, 'item'), 0)
+          : null;
+      const sales = sum('sales_plan');
+      return [
+        category,
+        text(sum('inventory'), '件', 0),
+        text(sales, '件', 0),
+        text(daily, '件/天'),
+        text(metricValue(m, '周转天数'), '天'),
+        '—',
+        metricState('周转天数', metricValue(m, '周转天数')),
+      ];
+    },
+  );
   const regions = distinct(
     rows(current, 'changes')
       .filter((row) => String(row.kind) === '2')
@@ -205,27 +299,29 @@ export function workbenchPresentation(facts, options = {}) {
       Number(row.names) === 1 ? row.manager : Number(row.names) > 1 ? '多位销售人员' : '—',
     ]),
   );
-  const changes = (options.dimension && options.dimension !== 'region-change' ? [] : regions).map((region) => {
-    const filter = (row) => dimensionValue(row.province || row.region) === region,
-      m = metric(current, filter),
-      p = metric(previous, filter);
-    customers.push(
-      (facts.customers?.rows ?? []).filter(filter).map((row) => ({
-        name: row.name || '未映射',
-        code: row.customer,
-        manager: managers.get(row.customer) || '—',
-        changedQuantity: row.numerator,
-        orderedQuantity: row.denominator,
-      })),
-    );
-    return [
-      region,
-      value(m, '改单率'),
-      value(p, '改单率'),
-      metricDelta(m, p, '改单率'),
-      metricState('改单率', metricValue(m, '改单率')),
-    ];
-  });
+  const changes = (options.dimension && options.dimension !== 'region-change' ? [] : regions).map(
+    (region) => {
+      const filter = (row) => dimensionValue(row.province || row.region) === region,
+        m = metric(current, filter),
+        p = metric(previous, filter);
+      customers.push(
+        (facts.customers?.rows ?? []).filter(filter).map((row) => ({
+          name: row.name || '未映射',
+          code: row.customer,
+          manager: managers.get(row.customer) || '—',
+          changedQuantity: row.numerator,
+          orderedQuantity: row.denominator,
+        })),
+      );
+      return [
+        region,
+        value(m, '改单率'),
+        value(p, '改单率'),
+        metricDelta(m, p, '改单率'),
+        metricState('改单率', metricValue(m, '改单率')),
+      ];
+    },
+  );
   const cross = (name) =>
     bases.map((base) => [
       base,
@@ -239,13 +335,19 @@ export function workbenchPresentation(facts, options = {}) {
         ),
       ),
     ]);
-  const skus = {}, skuPagination = {};
-  for (const category of categories.filter(category => !options.dimension || options.skuCategories?.includes(category))) {
+  const skus = {},
+    skuPagination = {};
+  for (const category of categories.filter(
+    (category) => !options.dimension || options.skuCategories?.includes(category),
+  )) {
     const filtered = all.filter((row) => dimensionValue(row.category) === category);
     const allKeys = distinct(filtered.map((row) => JSON.stringify([row.base, row.sku])));
-    const page=Math.min(Math.max(0,options.skuPages?.[category]??0),Math.max(0,Math.ceil(allKeys.length/20)-1));
-    const keys=options.dimension?allKeys.slice(page*20,page*20+20):allKeys;
-    skuPagination[category]={page,total:allKeys.length,size:20};
+    const page = Math.min(
+      Math.max(0, options.skuPages?.[category] ?? 0),
+      Math.max(0, Math.ceil(allKeys.length / 20) - 1),
+    );
+    const keys = options.dimension ? allKeys.slice(page * 20, page * 20 + 20) : allKeys;
+    skuPagination[category] = { page, total: allKeys.length, size: 20 };
     skus[category] = keys.map((key) => {
       const [base, sku] = JSON.parse(key),
         stock = rows(current, 'stock').find((row) => row.base === base && row.sku === sku);
@@ -253,12 +355,16 @@ export function workbenchPresentation(facts, options = {}) {
       return {
         name: (stock?.name || filtered.find((row) => row.sku === sku)?.name || sku) + ' · ' + base,
         code: sku,
-        inventory: text(stock?.available, '件', 0),
+        inventory: text(stock?.inventory, '件', 0),
         salesPlan: text(stock?.sales_plan, '件', 0),
         shipDays: text(metricValue(m, '周转天数'), '天'),
         missingReasons: {
-          inventory: stock ? '源数据未提供：当前基地SKU的可用库存 available 为空。' : '系统未匹配：当前基地SKU在所选库存快照中没有对应记录。',
-          salesPlan: stock ? '源数据未提供：当前基地SKU的滚动销售计划 sales_plan 为空。' : '系统未匹配：当前基地SKU没有对应滚动计划记录。',
+          inventory: stock
+            ? '源数据未提供：当前基地SKU的全部库存 current_stock 为空。'
+            : '系统未匹配：当前基地SKU在所选库存快照中没有对应记录。',
+          salesPlan: stock
+            ? '源数据未提供：当前基地SKU的月度需求计划（纠偏优先、月初备用）为空。'
+            : '系统未匹配：当前基地SKU没有对应计划记录。',
           shipDays: m['周转天数']?.missingReason ?? '',
         },
       };
@@ -266,6 +372,7 @@ export function workbenchPresentation(facts, options = {}) {
   }
   return {
     lazy: !!options.dimension,
+    performanceStyleVersion,
     cards,
     performance,
     skus,
@@ -277,7 +384,7 @@ export function workbenchPresentation(facts, options = {}) {
         columns: [
           '品类',
           '可用库存',
-          '滚动销售计划',
+          '月度需求计划',
           '计划日均',
           '可发货天数',
           '剔除大日期后',
@@ -285,8 +392,16 @@ export function workbenchPresentation(facts, options = {}) {
         ],
       },
       'region-change': { rows: changes, customerDetails: customers },
-      'base-category': { columns: ['基地 \\ 品类', ...categories], rows: !options.dimension || options.dimension === 'base-category' ? cross('订单满足率') : [] },
-      'base-category-days': { columns: ['基地 \\ 品类', ...categories], rows: !options.dimension || options.dimension === 'base-category-days' ? cross('周转天数') : [] },
+      'base-category': {
+        columns: ['基地 \\ 品类', ...categories],
+        rows:
+          !options.dimension || options.dimension === 'base-category' ? cross('订单满足率') : [],
+      },
+      'base-category-days': {
+        columns: ['基地 \\ 品类', ...categories],
+        rows:
+          !options.dimension || options.dimension === 'base-category-days' ? cross('周转天数') : [],
+      },
     },
   };
 }
@@ -351,7 +466,9 @@ export function workbenchMetricDetail(facts, name) {
         ? 'stock'
         : name === '货龄（>60天库存占比）'
           ? 'ages'
-          : 'orders';
+          : name === '准交率'
+            ? 'ontime'
+            : 'orders';
   const lines = [facts.periods[facts.selected]?.metrics[name]?.note ?? ''];
   for (const [key, label] of [
     ['month', '本月'],

@@ -5,6 +5,7 @@ import { createPageViewState } from '../../business/shared/view-state.js';
 import { draft, ready, call } from '../../business/shared/channel.js';
 import { loadWorkbenchFacts } from './live-source.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
+import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
 import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
@@ -286,8 +287,8 @@ const metricDefinitions = [
     same: '同期 10.3 天',
     sameChange: '↑ +1.3 天',
     sameTone: 'bad',
-    target: '<12 天',
-    targetLabel: '健康 < 12 天',
+    target: shippableDaysTarget,
+    targetLabel: shippableDaysTarget,
     gap: '低于上限 0.3 天',
     gapTone: 'good',
     trend: '较上期 -1.3 天',
@@ -549,8 +550,8 @@ const weeklyMetricDefinitions = [
     same: '同期 —',
     sameChange: '—',
     sameTone: '',
-    target: '<12 天',
-    targetLabel: '健康 < 12 天',
+    target: shippableDaysTarget,
+    targetLabel: shippableDaysTarget,
     gap: '低于上限 1.17 天',
     gapTone: 'good',
     trend: '周环比 +0.59 天',
@@ -1142,7 +1143,7 @@ const workbenchPerformance = {
         { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
         { label: '准交率 >98.5%', columns: ['本期', '环比'] },
         { label: '60天+占比', columns: ['本期', '环比'] },
-        { label: '可发货天数 8至12天（不含边界）', columns: ['本期', '环比', '同比'] },
+        { label: `可发货天数 ${shippableDaysTarget}`, columns: ['本期', '环比', '同比'] },
       ],
       rows: [
         [
@@ -2234,7 +2235,7 @@ const topMetricCards = [
   },
   {
     key: '货龄（>60天库存占比）',
-    label: '60天以上货龄占比',
+    label: '60天及以上货龄占比',
     value: '2.05',
     unit: '%',
     target: '越低越好',
@@ -2246,7 +2247,7 @@ const topMetricCards = [
     label: '可发货天数',
     value: '14.5',
     unit: '天',
-    target: '<12.5天（基地<11天）',
+    target: shippableDaysTarget,
     status: '达标',
     footer: '本周可发货天数 14.5天',
   },
@@ -2266,7 +2267,7 @@ function clearLiveMetrics() {
     dimension.weekly.loading=false;
   }
   for (const metric of topMetricCards) {
-    if (metric.label==='可发货天数') metric.target='8至12天（不含边界）';
+    if (metric.label==='可发货天数') metric.target=shippableDaysTarget;
     if (metric.key==='作废率') metric.target='<6%';
     if (metric.key==='改单率') metric.target='<2%';
     if (metric.key==='订单满足率') metric.target='>95%';
@@ -2297,7 +2298,7 @@ async function readCurrentPeriod() {
   const applyFacts = (facts, storedPresentation) => {
     if (controller.signal.aborted || liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
     for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     for(const metric of metricDefinitions) {
@@ -2463,22 +2464,25 @@ function renderWorkbenchSkuDetail(category) {
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为可用库存，计划为滚动销售计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为全部库存，月度需求计划有纠偏取纠偏，否则取月初计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
-  const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${escapeHtml(String(customer.changedQuantity))} 件</td><td>${escapeHtml(String(customer.orderedQuantity))} 件</td></tr>`).join('');
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>改单数量</th><th>下单数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户数量明细</td></tr>'}</tbody></table></div>`;
+  const count=value=>value==null?'—':escapeHtml(String(value))+' 张';
+  const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期改单订单数</th><th>有效订单数</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
-  const firstHeader = table.groups
+  const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
+    ? { ...group, label: `可发货天数 ${shippableDaysTarget}` } : group);
+  const firstHeader = groups
     .map((group) =>
       group.rowspan
         ? `<th scope="col" rowspan="2">${escapeHtml(group.label)}</th>`
         : `<th scope="colgroup" colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`,
     )
     .join('');
-  const secondHeader = table.groups
+  const secondHeader = groups
     .filter((group) => !group.rowspan)
     .flatMap((group) => group.columns)
     .map((label) => `<th scope="col">${escapeHtml(label)}</th>`)
@@ -2491,7 +2495,8 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
       const cells = row
         .map((value,columnIndex) => {
           const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
-          const missing=(value?.text??value)==='—';
+          const unmapped=['未映射','归属待补全'].includes(value);
+          const missing=unmapped||(value?.text??value)==='—';
           const title=missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
           if (value && typeof value === 'object' && 'text' in value) {
             const marker =
@@ -2500,7 +2505,7 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
                 : '';
             return `<td${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
           }
-          return `<td${title}>${escapeHtml(String(value))}</td>`;
+          return `<td${title}>${escapeHtml(unmapped?'—':String(value))}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
