@@ -263,7 +263,7 @@ test('annual explanations show rounded results without numeric substitution and 
   await august.locator('summary').last().click();
   await september.locator('summary').first().click();
   await total.locator('summary').click();
-  await expect(august).toContainText('结果：-50%');
+  await expect(august).toContainText('结果：-50.00%');
   await expect(september).toContainText('数量缺失');
   await expect(category).not.toContainText('代入：');
   await expect(category).not.toContainText('12.5');
