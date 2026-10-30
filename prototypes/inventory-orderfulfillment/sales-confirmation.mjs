@@ -73,7 +73,7 @@ export function salesConfirmationCard(input) {
 }
 
 /** The client only initiates notification; sales actions live in the Feishu card. */
-export function mountSalesConfirmation(document, simulation) {
+export function mountSalesConfirmation(document, simulation, formal) {
   const overlay = document.getElementById('salesConfirmOverlay');
   const dialog = overlay.querySelector('.confirmation-dialog');
   const form = document.getElementById('salesConfirmForm');
@@ -81,6 +81,7 @@ export function mountSalesConfirmation(document, simulation) {
   const orderLabel = document.getElementById('salesConfirmOrder');
   dialog.classList.add('sales-confirmation-preview');
   let opener;
+  let generation=0;
   const node = (tag, text, className) => {
     const element = document.createElement(tag);
     if (text != null) element.textContent = text;
@@ -88,6 +89,7 @@ export function mountSalesConfirmation(document, simulation) {
     return element;
   };
   function close() {
+    generation++;
     overlay.hidden = true;
     form.replaceChildren();
     orderLabel.textContent = '';
@@ -116,6 +118,7 @@ export function mountSalesConfirmation(document, simulation) {
   });
   return {
     open(input, trigger) {
+      const current=++generation;
       const draft = confirmationDraft(input);
       const simulated = simulation?.matches(draft) === true;
       opener = trigger;
@@ -132,7 +135,7 @@ export function mountSalesConfirmation(document, simulation) {
       const fields = node('dl', null, 'sales-preview-fields');
       for (const [label, value] of [
         ['对应销售', draft.seller],
-        ['接收群', simulated ? '订单履约机器人测试群 · 仅艾特田庚' : '待 GEA 解析'],
+        ['接收群', simulated ? '订单履约机器人测试群 · 仅艾特田庚' : '由后台按基地及销售确定'],
         ['订单满足率', draft.rate === null ? '—' : draft.rate.toFixed(1) + '%'],
         ['订货数量', draft.quantity],
         ['统计周期', draft.period],
@@ -143,7 +146,7 @@ export function mountSalesConfirmation(document, simulation) {
         'p',
         simulated
           ? '仅发送模拟卡片到测试群，不触发真实发货或改单。'
-          : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
+          : formal ? '正在核对正式飞书确认入口…' : '飞书群发送与人员映射接口尚未接入，当前未发送通知。',
         'sales-preview-notice',
       );
       status.role = 'status';
@@ -173,9 +176,32 @@ export function mountSalesConfirmation(document, simulation) {
             send.disabled = false;
           }
         });
+      if(!simulated&&formal){
+        void formal.available().then(available=>{
+          if(current!==generation||overlay.hidden)return;
+          status.textContent=available?'销售将在飞书中确认或暂缓；本次不执行真实发货和改单。':'正式飞书确认入口尚未启用，当前未发送通知。';
+          send.textContent=available?'发送销售确认卡片':'发送到飞书群（待启用）';
+          send.disabled=!available;
+          if(available)send.click();
+        });
+        send.addEventListener('click',async()=>{
+          if(send.disabled)return;
+          send.disabled=true;status.textContent='正在创建确认任务…';
+          try{
+            const result=await formal.notify(draft);
+            if(current!==generation||overlay.hidden)return;
+            status.textContent=result.status==='resolved'?'该订单快照已有处理记录，可在确认状态中查看。'
+              :result.delivery==='sent'?'确认卡片已发送，等待销售在飞书处理。'
+              :result.delivery==='failed'?'确认任务已保存，但飞书卡片发送失败，请核对后台配置。'
+              :result.delivery==='verification_required'?'发送结果待核实，请查看确认状态，不要重复发起。'
+              :'确认任务已创建，卡片正在发送，请在确认状态中查看结果。';
+            send.textContent='确认任务已登记';
+          }catch(error){if(current!==generation||overlay.hidden)return;status.textContent=error.message;send.disabled=false;}
+        });
+      }
       send.title = simulated
         ? '只向测试群发送模拟卡片并艾特田庚，不执行业务确认'
-        : '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
+        : formal ? '向对应销售发起飞书确认，客户端不处理订单' : '需 GEA 提供 order01 受控发送接口、接收群和销售账号映射；不在客户端确认订单';
       footer.append(cancel, send);
       form.append(footer);
       overlay.hidden = false;

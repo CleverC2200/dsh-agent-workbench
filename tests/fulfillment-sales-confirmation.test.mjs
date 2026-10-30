@@ -28,12 +28,12 @@ const order = {
     },
   ],
 };
-function fixture(simulation) {
+function fixture(simulation, formal) {
   const dom = new JSDOM(
     '<button id="open">销售确认</button><div id="salesConfirmOverlay" hidden><section class="confirmation-dialog" role="dialog" aria-modal="true"><header><h2 id="salesConfirmTitle"></h2><p id="salesConfirmOrder"></p><button data-close-sales-confirm>关闭</button></header><form id="salesConfirmForm"></form></section></div>',
   );
   const d = dom.window.document,
-    ui = mountSalesConfirmation(d, simulation);
+    ui = mountSalesConfirmation(d, simulation, formal);
   const click = (label) => {
     const b = [...d.querySelectorAll('#salesConfirmOverlay button')].find(
       (b) => b.textContent === label,
@@ -116,4 +116,45 @@ test('shortage handling stays in the Feishu card; closing or switching orders cl
   assert.equal(d.getElementById('salesConfirmOverlay').hidden, true);
   assert.equal(d.getElementById('salesConfirmOrder').textContent, '');
   dom.window.close();
+});
+
+test('formal dialog sends one scoped request and a closed dialog cannot send after capability discovery', async () => {
+  let sent = 0,
+    received;
+  const { dom, d, ui } = fixture(undefined, {
+    available: async () => true,
+    notify: async (input) => {
+      sent++;
+      received = input;
+      return { status: 'pending', delivery: 'sent' };
+    },
+  });
+  ui.open({ ...order, start: '2026-10-27', endExclusive: '2026-10-28' }, d.getElementById('open'));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(sent, 1);
+  assert.equal(received.orderNo, order.orderNo);
+  assert.equal(received.start, '2026-10-27');
+  assert.match(d.querySelector('[role="status"]').textContent, /已发送/);
+  assert.equal(
+    [...d.querySelectorAll('button')].find((button) => button.textContent === '确认任务已登记')
+      .disabled,
+    true,
+  );
+  dom.window.close();
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  const closed = fixture(undefined, {
+    available: () => pending,
+    notify: async () => {
+      throw Error('must not send');
+    },
+  });
+  closed.ui.open(order);
+  closed.ui.close();
+  release(true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(closed.d.getElementById('salesConfirmOverlay').hidden, true);
+  closed.dom.window.close();
 });
