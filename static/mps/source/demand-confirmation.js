@@ -938,7 +938,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     };
     const sourceRead = (entry, type, period, read) =>
       period
-        ? { ...entry[type + 'Read'], periods: { ...entry[type + 'Read']?.periods, [period]: read } }
+        ? {
+            ...entry[type + 'Read'],
+            periods: {
+              ...entry[type + 'Read']?.periods,
+              ...Object.fromEntries(
+                (Array.isArray(period) ? period : [period]).map((month) => [month, read]),
+              ),
+            },
+          }
         : read;
     const begin = (type, period) => {
       controllers.current[type]?.abort();
@@ -948,7 +956,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const request = (requests.current[type] ?? 0) + 1;
       requests.current[type] = request;
       setBusy((state) => ({ ...state, [type]: true }));
-      setErrors((state) => ({ ...state, [type]: '' }));
+      if (!Array.isArray(period)) setErrors((state) => ({ ...state, [type]: '' }));
       setDrafts((entries) =>
         entries.map((entry) =>
           entry.id === selected
@@ -982,7 +990,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         if (valid()) setBusy((state) => ({ ...state, annualExport: false }));
       }
     };
-    const sync = async (type) => {
+    const sync = async (type, requestedPeriods) => {
       const id = draft.id;
       const fact = ['report', 'history', 'delivery'].includes(type);
       const sourceTable = type === 'forecast' || type === 'delivery';
@@ -992,67 +1000,83 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           : fact
             ? sourceSelection(draft, type).period
             : undefined;
-      const { signal, valid } = begin(type, period);
-      try {
-        const result =
-          type === 'products'
-            ? await readProducts(signal)
-            : type === 'annual'
-              ? await readAnnual(signal)
-              : sourceTable
-                ? await readSourceTable(type, type === 'forecast' ? draft.month : period, signal)
-                : await readFactMonth(type, period, signal);
+      const periods = requestedPeriods ?? [period];
+      const { signal, valid } = begin(type, requestedPeriods ?? period);
+      for (const readPeriod of periods) {
         if (!valid()) return;
-        setDrafts((entries) =>
-          entries.map((entry) =>
-            entry.id === id
-              ? {
-                  ...entry,
-                  [type]: fact
-                    ? [
-                        ...(entry[type + 'Source'] === 'business'
-                          ? entry[type].filter((row) => row['月份'] !== period)
-                          : []),
-                        ...result.rows,
-                      ]
-                    : type === 'products' || type === 'forecast'
-                      ? result.rows
-                      : result,
-                  ...(fact || sourceTable
-                    ? { [type + 'Source']: 'business', [type + 'Metadata']: result.metadata }
-                    : {}),
-                  ...(type === 'products'
-                    ? { productSource: 'business', productRaw: result.raw }
-                    : type === 'annual'
-                      ? { annualSource: 'business' }
-                      : {}),
-                  files: { ...entry.files, [type]: null },
-                  [type + 'Read']: sourceRead(entry, type, period, { status: 'ready' }),
-                }
-              : entry,
-          ),
-        );
-        if (type === 'products') resetEditor();
-      } catch (failure) {
-        if (valid()) {
-          setErrors((state) => ({ ...state, [type]: failure.message }));
+        try {
+          const result =
+            type === 'products'
+              ? await readProducts(signal)
+              : type === 'annual'
+                ? await readAnnual(signal)
+                : sourceTable
+                  ? await readSourceTable(
+                      type,
+                      type === 'forecast' ? draft.month : readPeriod,
+                      signal,
+                    )
+                  : await readFactMonth(type, readPeriod, signal);
+          if (!valid()) return;
           setDrafts((entries) =>
             entries.map((entry) =>
               entry.id === id
                 ? {
                     ...entry,
-                    [type + 'Read']: sourceRead(entry, type, period, {
-                      status: 'failed',
-                      error: failure.message,
+                    [type]: fact
+                      ? [
+                          ...(entry[type + 'Source'] === 'business'
+                            ? entry[type].filter((row) => row['月份'] !== readPeriod)
+                            : []),
+                          ...result.rows,
+                        ]
+                      : type === 'products' || type === 'forecast'
+                        ? result.rows
+                        : result,
+                    ...(fact || sourceTable
+                      ? {
+                          [type + 'Source']: 'business',
+                          ...(readPeriod === period || !fact
+                            ? { [type + 'Metadata']: result.metadata }
+                            : {}),
+                        }
+                      : {}),
+                    ...(type === 'products'
+                      ? { productSource: 'business', productRaw: result.raw }
+                      : type === 'annual'
+                        ? { annualSource: 'business' }
+                        : {}),
+                    files: { ...entry.files, [type]: null },
+                    [type + 'Read']: sourceRead(entry, type, readPeriod, {
+                      status: 'ready',
+                      metadata: result.metadata,
                     }),
                   }
                 : entry,
             ),
           );
+          if (type === 'products') resetEditor();
+        } catch (failure) {
+          if (valid()) {
+            if (readPeriod === period)
+              setErrors((state) => ({ ...state, [type]: failure.message }));
+            setDrafts((entries) =>
+              entries.map((entry) =>
+                entry.id === id
+                  ? {
+                      ...entry,
+                      [type + 'Read']: sourceRead(entry, type, readPeriod, {
+                        status: 'failed',
+                        error: failure.message,
+                      }),
+                    }
+                  : entry,
+              ),
+            );
+          }
         }
-      } finally {
-        if (valid()) setBusy((state) => ({ ...state, [type]: false }));
       }
+      if (valid()) setBusy((state) => ({ ...state, [type]: false }));
     };
     const read = async (type, file) => {
       const id = draft.id;
@@ -1204,6 +1228,33 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         current = false;
       };
     }, [draft.id, draft.month, draft.historyYears, active, scopeGeneration]);
+    react.useEffect(() => {
+      let current = true;
+      if (
+        active &&
+        hasMpsSource() &&
+        ['process', 'constraints', 'capacity', 'report'].includes(step)
+      )
+        ready.then(() => {
+          if (!current) return;
+          const latest = localRef.current.drafts.find((entry) => entry.id === draft.id);
+          for (const type of ['report', 'history']) {
+            if (!latest || latest.files[type]) continue;
+            const periods = Array.from({ length: 3 }, (_, offset) =>
+              monthOffset(draft.month, offset - (type === 'history' ? 12 : 0)),
+            ).filter(
+              (period) =>
+                !['ready', 'failed', 'denied', 'error'].includes(
+                  latest[type + 'Read']?.periods?.[period]?.status,
+                ),
+            );
+            if (periods.length) void sync(type, periods);
+          }
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, step, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())

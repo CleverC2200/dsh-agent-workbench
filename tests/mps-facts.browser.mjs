@@ -327,3 +327,126 @@ test('source previews omit missing-count columns while downloads preserve decima
     assert(csv.includes(title === '计划提报数据' ? '12.5' : '7.5,0,10.5'));
   }
 });
+
+test('processing fetches every SKU month through governed paging and keeps the first-step period separate', async (t) => {
+  const { page, frame, calls } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('facts.')) return fixture(query);
+    const report = query.queryId.startsWith('facts.report');
+    const month = Number(query.parameters.month.slice(5, 7));
+    return fixture(
+      query,
+      Array.from({ length: 201 }, (_, index) => ({
+        [(report ? '' : shipment) + 'belong_base']: '基地甲',
+        [(report ? '' : shipment) + 'material_code']: index === 0 ? '001' : 'other-' + index,
+        ...(report
+          ? { plannum_total: month === 11 ? 37.5 : 10, allnum_total: month === 11 ? 42.5 : 20 }
+          : { [shipment + 'act_dl_qty_total']: month === 11 ? 12.25 : 7 }),
+      })),
+    );
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '期间核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await expect(
+    frame.getByRole('button', {
+      name: '基地甲 001 2026-11 提报数量 计算过程',
+      exact: true,
+    }),
+  ).toHaveText('38');
+  await expect(
+    frame.getByRole('button', {
+      name: '基地甲 001 2026-11 历史发货数量 计算过程',
+      exact: true,
+    }),
+  ).toHaveText('12');
+  await expect(
+    frame.getByRole('button', {
+      name: '基地甲 001 2026-12 历史发货数量 计算过程',
+      exact: true,
+    }),
+  ).toHaveText('7');
+  for (const [source, year] of [
+    ['report', '2026'],
+    ['history', '2025'],
+  ]) {
+    for (const month of ['10', '11', '12']) {
+      const reads = calls.filter(
+        (call) =>
+          call.queryId === 'facts.' + source && call.parameters.month === `${year}-${month}-01`,
+      );
+      assert(reads.some((call) => call.parameters.offset === 0));
+      assert(reads.some((call) => call.parameters.offset === 200));
+      assert(reads.every((call) => call.parameters.page_size === 200));
+      if (month !== '10')
+        assert.deepEqual(
+          reads.map((call) => call.parameters.offset),
+          [0, 200],
+        );
+    }
+  }
+  const pending = page.waitForEvent('download');
+  await frame.getByRole('button', { name: '下载需求拆分', exact: true }).click();
+  const csv = await mpsDownloadText(await (await pending).path());
+  const [header, ...rows] = csv
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => line.split(','));
+  const november = rows.find(
+    (row) => row[header.indexOf('月份')] === '2026-11' && row[header.indexOf('产品编码')] === '001',
+  );
+  assert(november, csv);
+  assert(november.includes('37.5'), csv);
+  assert(november.includes('12.25'), csv);
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  const report = frame.getByRole('region', { name: '计划提报数据', exact: true });
+  await report.getByText('口径与统计说明', { exact: true }).click();
+  await expect(report).toContainText('当前期间201条');
+  await expect(report).not.toContainText('当前期间603条');
+});
+
+test('a downstream history denial stays on its own month while other complete periods retain real quantities', async (t) => {
+  const { frame, calls } = await mpsPage(t, config, (query) => {
+    if (query.queryId === 'facts.history' && query.parameters.month === '2025-11-01')
+      throw Error('AGENT_ACCESS_DENIED');
+    if (query.queryId.startsWith('facts.report') && query.parameters.month === '2026-12-01')
+      return fixture(query, []);
+    return fixture(query);
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '期间核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const value = (month, column) =>
+    frame.getByRole('button', {
+      name: `基地甲 001 ${month} ${column} 计算过程`,
+      exact: true,
+    });
+  await expect(value('2026-12', '历史发货数量')).toHaveText('7');
+  await expect(value('2026-10', '提报数量')).toHaveText('10');
+  await expect(value('2026-10', '历史发货数量')).toHaveText('7');
+  await expect(value('2026-11', '提报数量')).toHaveText('10');
+  await expect(value('2026-11', '历史发货数量')).toHaveText('—');
+  await expect(value('2026-12', '提报数量')).toHaveText('—');
+  await value('2026-11', '历史发货数量').click();
+  await expect(frame.getByRole('dialog')).toContainText('暂无数据权限');
+  assert(
+    calls.some(
+      (call) => call.queryId === 'facts.report.count' && call.parameters.month === '2026-12-01',
+    ),
+  );
+});
