@@ -36,6 +36,44 @@ async function readFacts(id, parameters, signal, type, month) {
       { signal: options.signal },
     ),
   );
+  if (type === 'report') {
+    const result = await client.readAll(
+      id,
+      { ...parameters, page_size: 200, offset: 0 },
+      { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
+    );
+    return {
+      rows: result.rows.map((row) => {
+        const base = text(row.belong_base),
+          code = text(row.material_code);
+        const dimensions = {
+          产品名称: text(row.material_name),
+          大类: text(row.sub_category),
+          系列: text(row.series),
+          物料组: text(row.product_item),
+          物料组名称: text(row.product_item_name),
+        };
+        return {
+          月份: month,
+          大区: text(row.region_name),
+          基地: base,
+          产品编码: code,
+          ...dimensions,
+          源月初数量: number(row.plannum_total),
+          源纠偏数量: number(row.allnum_total),
+          月初数量: base && code ? number(row.plannum_total) : '',
+          纠偏数量: base && code ? number(row.allnum_total) : '',
+        };
+      }),
+      metadata: {
+        period: month,
+        partial: false,
+        warnings: [],
+        total: result.total,
+        configVersion: result.configVersion,
+      },
+    };
+  }
   const rows = [],
     seen = new Set(),
     warnings = [];
@@ -79,8 +117,7 @@ async function readFacts(id, parameters, signal, type, month) {
   }
   if (type === 'shipment')
     return { rows, metadata: { partial, warnings, total, configVersion: version, ...parameters } };
-  const prefix =
-    type === 'report' ? 'agents_sales_plan_demand_m.' : 'agents_scm_cust_deliv_daily_di.';
+  const prefix = 'agents_scm_cust_deliv_daily_di.';
   const records = rows.map((row) => {
     const value = (name) => row[prefix + name];
     const base = text(value('belong_base'));
@@ -89,20 +126,13 @@ async function readFacts(id, parameters, signal, type, month) {
       月份: month,
       基地: base,
       产品编码: code,
-      产品名称: type === 'history' ? text(value('material_name')) : '',
-      大类: type === 'history' ? text(value('product_categ_name')) : '',
+      产品名称: text(value('material_name')),
+      大类: text(value('product_categ_name')),
       系列: '',
-      物料组: type === 'history' ? text(value('material_group_name')) : '',
-      ...(type === 'report'
-        ? {
-            月初数量: base && code ? number(value('plannum_total')) : '',
-            纠偏数量: base && code ? number(value('allnum_total')) : '',
-          }
-        : {
-            数量: number(value('act_dl_qty_total')),
-            含赠品数量: number(value('act_dl_qty_all_total')),
-            不含税收入: number(value('income_excl_tax_local_total')),
-          }),
+      物料组: text(value('material_group_name')),
+      数量: number(value('act_dl_qty_total')),
+      含赠品数量: number(value('act_dl_qty_all_total')),
+      不含税收入: number(value('income_excl_tax_local_total')),
     };
   });
   return {
