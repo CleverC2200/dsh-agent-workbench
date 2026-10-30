@@ -152,6 +152,9 @@ test('APS mounts only the selected analysis cards and detail lists', async (t) =
   await expect(
     frame.locator('#base-dashboard, #base, #cross-analysis, #sales-region-dashboard'),
   ).toHaveCount(0);
+  await frame
+    .getByRole('tab', { name: '基地维度', exact: true })
+    .evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
   await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
   await expect(frame.locator('#base-dashboard')).toBeVisible();
   await expect(frame.locator('#base')).toBeVisible();
