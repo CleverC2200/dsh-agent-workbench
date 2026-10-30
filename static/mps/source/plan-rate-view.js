@@ -60,9 +60,10 @@ export function createPlanRates(react, { Dialog, table, downloadCsv }) {
       计划占比:
         row['计划占比'] === ''
           ? ''
-          : new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 6 }).format(
-              Number(row['计划占比']) * 100,
-            ) + '%',
+          : new Intl.NumberFormat('zh-CN', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            }).format(Number(row['计划占比']) * 100) + '%',
     });
     return h(
       'section',
