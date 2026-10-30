@@ -1,3 +1,4 @@
+import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
@@ -873,8 +874,32 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     relations,
     masterData,
   }) {
-    const [drafts, setDrafts] = react.useState(() => [makeDraft('local-1', currentMonth())]);
-    const [selected, setSelected] = react.useState('local-1');
+    const initialDrafts = () => ({
+      drafts: [makeDraft('local-1', currentMonth())],
+      selected: 'local-1',
+    });
+    const [localState, setLocalState] = react.useState(() =>
+      decodeLocalDrafts(view.get().localDrafts, makeDraft, initialDrafts),
+    );
+    const { drafts, selected } = localState;
+    const localRef = react.useRef(localState);
+    localRef.current = localState;
+    const [retentionError, setRetentionError] = react.useState('');
+    const saveLocal = (next) => {
+      localRef.current = next;
+      setLocalState(next);
+      try {
+        view.update({ localDrafts: encodeLocalDrafts(next.drafts, next.selected) });
+        setRetentionError('');
+      } catch {
+        setRetentionError('本地草稿尚未保存，请导出核对底稿后再离开页面。');
+      }
+    };
+    const setDrafts = (next) => {
+      const current = localRef.current;
+      saveLocal({ ...current, drafts: typeof next === 'function' ? next(current.drafts) : next });
+    };
+    const setSelected = (selected) => saveLocal({ ...localRef.current, selected });
     const [month, setMonth] = react.useState(currentMonth);
     const [product, setProduct] = react.useState(blankProduct);
     const [editing, setEditing] = react.useState(null);
@@ -1100,8 +1125,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const reset = () => {
         clearFiles();
         setScopeGeneration((value) => value + 1);
-        setDrafts([makeDraft('local-1', currentMonth())]);
-        setSelected('local-1');
+        const empty = initialDrafts();
+        localRef.current = empty;
+        setLocalState(empty);
         resetEditor();
         setVersionOpen(false);
         setCompareOpen(false);
@@ -1110,8 +1136,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setReference('');
         setVersionName('');
       };
-      const stop = view.subscribe((_snapshot, event) => {
+      const stop = view.subscribe((snapshot, event) => {
         if (event === 'released') reset();
+        else if (event === 'rejected')
+          setRetentionError('工作台未能保存本地草稿，请导出核对底稿后再离开页面。');
+        else {
+          clearFiles();
+          const restored = decodeLocalDrafts(snapshot.localDrafts, makeDraft, initialDrafts);
+          localRef.current = restored;
+          setLocalState(restored);
+          setScopeGeneration((value) => value + 1);
+        }
       });
       const reconnect = () => setScopeGeneration((value) => value + 1);
       window.addEventListener('gea-session-changing', reset);
@@ -1359,7 +1394,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           monthlyCalculation: 'derived-from-inputs-without-result-table',
         },
         businessSave: 'not-connected',
-        retention: 'memory-only',
+        retention: retentionError ? 'local-save-failed' : 'subject-session-scoped-local-draft',
       },
       '需求确认',
       active && step === 'check',
@@ -1367,6 +1402,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     return h(
       'div',
       { className: 'dc-page', hidden: !active },
+      retentionError && h('p', { role: 'alert' }, retentionError),
       h(
         'header',
         { className: 'dc-page-head' },
@@ -1483,6 +1519,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       month,
                       ...(base && base.month !== month
                         ? {
+                            adjustments: undefined,
                             shipment: {
                               rows: base.shipment?.rows ?? [],
                               file: base.shipment?.file,
@@ -1552,7 +1589,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             { className: 'dc-muted' },
-            '仅创建当前页面内存中的本地版本，不是业务评估版本落库。参考复制仅复制已读取输入，刷新或切换对话会清除。',
+            '本地版本通过工作台按当前身份、租户和对话隔离恢复。参考复制沿用本地输入；业务来源重新读取。正式业务保存尚未接入。',
           ),
         ),
       compareOpen &&
@@ -1567,7 +1604,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               '关闭',
             ),
           },
-          h('p', {}, '仅对比本地内存输入，不代表业务版本快照、已确认计划或测算结果。'),
+          h('p', {}, '仅对比本地草稿输入，不代表业务版本快照或已确认计划。'),
           h(
             'label',
             {},
@@ -1617,7 +1654,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            '当前版本仅在页面内存中核对。刷新或切换对话会清除本页内存输入，请先导出核对底稿。',
+            '本地输入、约束配置与需求调整通过工作台草稿恢复，并按身份、租户、对话和版本隔离。业务来源每次重新读取，正式保存尚未接入。未关联对话时仅在页面内核对，请先导出底稿。',
           ),
           h(
             'p',
@@ -1672,6 +1709,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           step,
           draft,
           update,
+          onShareAdjustment: (input) =>
+            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input) }),
+          onUndoShareAdjustment: (input) =>
+            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
           relations:
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
@@ -2090,7 +2131,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           active: active && step === 'check',
         }),
-        h(CategoryDemand, { draft, active: active && step === 'check' }),
+        h(CategoryDemand, { draft, update, active: active && step === 'check' }),
         step === 'check' &&
           h(
             'div',
