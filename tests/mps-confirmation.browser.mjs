@@ -187,7 +187,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
     '月份,大类,数量\n2026-07,汤圆,0\n2026-08,汤圆,20\n2026-09,汤圆,30',
   );
   await expect(annual).toContainText('分母为0');
-  await expect(annual).toContainText('50%');
+  await expect(annual).toContainText('50.00%');
   await expect(
     frame.getByRole('region', { name: '系统派生口径参数' }).locator('section'),
   ).toHaveCount(5);

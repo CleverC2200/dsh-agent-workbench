@@ -126,12 +126,12 @@ test('one forecast batch drives two selectable target months and delivery source
   });
   await delivery.getByRole('button', { name: '展开基地多维发货指标' }).click();
   await expect(delivery.getByText('业务来源', { exact: true })).toBeVisible();
-  await expect(delivery).toContainText('0.012000000000');
-  await expect(delivery).toContainText('-0.125000000000');
+  await expect(delivery).toContainText('1.20%');
+  await expect(delivery).toContainText('-12.50%');
   await delivery.getByLabel('发货指标维度').selectOption('业务产品值');
   await expect(delivery.locator('tbody tr')).toHaveCount(1);
-  await expect(delivery).toContainText('0.015000000000');
-  await expect(delivery).not.toContainText('0.012000000000');
+  await expect(delivery).toContainText('1.50%');
+  await expect(delivery).not.toContainText('1.20%');
   const checked = calls.filter(
     (c) => c.queryId === 'forecast.detail' && c.parameters.months.includes('2026-12'),
   );
@@ -303,7 +303,7 @@ test('delivery indicators start collapsed and paginate ten rows without changing
     '9007199254740993',
   );
   await expect(section.locator('tbody tr').nth(3).locator('td').nth(6)).toHaveText('-13');
-  await expect(section).toContainText('0.012000000000');
+  await expect(section).toContainText('1.20%');
   await section.getByLabel('每页发货指标条数').selectOption('25');
   await expect(section.locator('tbody tr')).toHaveCount(25);
   await section.getByRole('button', { name: '下一页', exact: true }).click();
