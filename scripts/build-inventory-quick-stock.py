@@ -24,5 +24,6 @@ for agent in ['qll','fc']:
  COUNT(*) AS row_count,SUM(p.total_qty) AS total_qty,SUM(p.available_qty) AS available_qty,SUM(p.pack_unit_qty) AS pack_unit_qty,SUM(p.freeze_qty) AS freeze_qty
  FROM pools AS p GROUP BY p.location_type,p.day_key ORDER BY p.location_type"""
  c['queries']['overview.quick-stock']={'title':'首页库存快读','priority':20,'parameterSpec':{'gea_p1':{'name':'as_of','type':'string','format':'YYYY-MM-DD','nullable':False}},'request':{'sql':sql,'parameters':{'gea_p1':'2026-10-23'},'includeTotal':False},'resultColumns':['location_type','snapshot_date','row_count','total_qty','available_qty','pack_unit_qty','freeze_qty']}
- c['overviewQuickStock']='overview.quick-stock'
+ if agent=='qll':c['overviewQuickStock']='overview.quick-stock'
+ else:c.pop('overviewQuickStock',None)
  p.write_text(json.dumps(c,ensure_ascii=False,indent=2)+'\n')

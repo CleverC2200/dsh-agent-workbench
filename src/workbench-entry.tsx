@@ -19,12 +19,29 @@ createRoot(root).render(
 
 window.addEventListener('message', (event) => {
   if (
+    event.source === window.parent &&
+    event.origin === window.location.origin &&
+    event.data?.protocol === 'gea-toolbar-layout'
+  ) {
+    document.documentElement.toggleAttribute(
+      'data-shared-workbench-toolbar',
+      event.data.shared === true,
+    );
+  }
+});
+window.parent.postMessage({ protocol: 'gea-toolbar-layout-ready' }, window.location.origin);
+
+window.addEventListener('message', (event) => {
+  if (
     event.source !== window.parent ||
     event.origin !== window.location.origin ||
     event.data?.protocol !== 'agent-workbench-theme'
   )
     return;
-  document.body.toggleAttribute('data-ds-dark-theme', event.data.dark === true);
+  const dark = event.data.dark === true;
+  document.body.toggleAttribute('data-ds-dark-theme', dark);
+  document.body.setAttribute('arco-theme', dark ? 'dark' : 'light');
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
   if (Number.isFinite(event.data.fontSize))
     document.documentElement.style.setProperty(
       '--dsh-content-font-size',

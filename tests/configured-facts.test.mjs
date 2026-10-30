@@ -549,7 +549,7 @@ for (const productionCase of ['ready', 'denied', 'changed'])
     }
   });
 
-test('FC aging pages reuse bounded Host query blocks and keep risk scopes separate', async () => {
+test('FC aging reads only the displayed page and keeps risk scopes separate', async () => {
   const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
   const calls = [],
     cache = new Map();
@@ -606,20 +606,20 @@ test('FC aging pages reuse bounded Host query blocks and keep risk scopes separa
     assert.equal(result.rows.length, 10);
     assert.equal(result.total, 235);
   }
-  assert.equal(scans, 1, 'five display pages share the same authorized Host cache key');
+  assert.equal(scans, 3, 'page changes request only their own offset; repeated page may hit cache');
   assert.equal(calls.filter((c) => c.queryId.startsWith('source.')).length, 1);
   const last = await read(24, {}, first.readContext);
   assert.equal(last.rows.length, 5);
   assert.equal(last.rows[0].material_code, 'S230');
-  assert.equal(scans, 2);
+  assert.equal(scans, 4);
   const warning = await read(2, { risk: '预警' });
   assert.equal(warning.rows.length, 3);
   assert.equal(warning.total, 13);
   assert.equal(warning.rows[0].warning, '预警');
   await read(1, {}, first.readContext);
-  assert.equal(scans, 3, 'returning to all reuses its independent block');
+  assert.equal(scans, 5, 'returning to all reuses its independent page');
   assert.ok(
-    calls.filter((c) => c.queryId === 'batch-age.atomic').every((c) => c.values.page_size === 50),
+    calls.filter((c) => c.queryId === 'batch-age.atomic').every((c) => c.values.page_size === 10),
   );
   const twenty = await readConfiguredFacts(
     config,
@@ -629,7 +629,11 @@ test('FC aging pages reuse bounded Host query blocks and keep risk scopes separa
   );
   assert.equal(twenty.rows.length, 20);
   assert.equal(twenty.rows[0].material_code, 'S20');
-  assert.equal(calls.at(-1).values.page_size, 40, 'read block fits the gateway 50-row response');
+  assert.equal(
+    calls.at(-1).values.page_size,
+    20,
+    'explicit page size does not prefetch adjacent rows',
+  );
   await assert.rejects(
     readConfiguredFacts(
       config,

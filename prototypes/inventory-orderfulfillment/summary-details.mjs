@@ -1,3 +1,4 @@
+import { shortageDiagnostics } from './missing-reasons.mjs';
 const validNumber=value=>value!==null&&value!==undefined&&value!==''&&Number.isFinite(Number(value));
 export function summaryDetails(computed,facts=[]) {
   const valid=computed?.quantities.filter(row=>row.valid_rows>0)??[];
@@ -45,7 +46,7 @@ export function renderSummaryDetails(document,computed,facts,selected,shortageSo
   document.querySelector('.author-questions')?.remove();
   const details=summaryDetails(computed,facts);
   const sourceShortage=kind=>partialShortage(facts,shortageSource,kind);
-  const quantity=value=>value===null?'—件':Number(value.toFixed(2)).toLocaleString('zh-CN')+'件';
+  const quantity=value=>value===null?'—':Number(value.toFixed(2)).toLocaleString('zh-CN')+'件';
   const percent=value=>value===null?'—':value.toFixed(1)+'%';
   const coverage=value=>`覆盖率 ${value.total?(100*value.covered/value.total).toFixed(1):'0.0'}%`;
   const coverageNode=value=>{const small=document.createElement('small');small.className='metric-coverage';small.textContent=coverage(value);small.title=`可计算明细 ${value.covered}/${value.total}。`+'仅汇总可计算的可靠明细，缺失和重复项排除，不补零；指标公式及范围见数值提示';return small;};
@@ -69,5 +70,15 @@ export function renderSummaryDetails(document,computed,facts,selected,shortageSo
     if(!warehouse){const foot=cards[3]?.querySelector('.metric-breakdown');if(foot){foot.replaceChildren();for(const[label,value]of [['已开缺货量',sourceShortage('opened')],['总缺货量',sourceShortage('total')]]){const span=document.createElement('span');span.textContent=label;append(span,quantity(value.value));span.title=`已确认缺货量，覆盖 ${value.covered}/${value.total} 项；未覆盖及重复项不补零，不代表全量`;foot.append(span);}}}
   }
   const item=document.querySelector('.item-summary .metric strong');append(item,quantity(details.pending));
-  const itemShortage=document.querySelectorAll('.item-summary .metric strong')[1];const final=partialShortage(facts,shortageSource,'pending','final_short_qty');if(itemShortage){itemShortage.textContent=quantity(final.value);itemShortage.title=`已确认源终缺，覆盖 ${final.covered}/${final.total} 项；未覆盖及重复项排除`;}
+  const itemShortage=document.querySelectorAll('.item-summary .metric strong')[1];const final=partialShortage(facts,shortageSource,'pending','final_short_qty');if(itemShortage){itemShortage.textContent=quantity(final.value);itemShortage.title=shortageDiagnostics(facts,shortageSource,'final_short_qty','pending').reason;}
+  for(const group of document.querySelectorAll('.summary.fulfillment-summary:not(.item-summary):not(.warehouse-summary)')) {
+    const target=group.querySelectorAll(':scope > .metric')[3]?.querySelector('.metric-head strong');
+    if(target)target.title=shortageDiagnostics(facts,shortageSource,'after_inventory_short_qty','pending').reason;
+  }
+  for(const target of document.querySelectorAll('.summary .metric strong,.metric-extra')) {
+    if(!/^—(?:\s*(?:件|箱|%|天|张))?$/.test(target.textContent.trim()))continue;
+    if(target.title.includes('源数据未提供')||target.title.includes('系统未'))continue;
+    const previous=target.title;
+    target.title=/未提供/.test(previous)?`源数据未提供：${previous}`:`系统未能计算：当前范围缺少完整数量、有效单位换算或明确的订单归并依据；不是0。${previous}`;
+  }
 }

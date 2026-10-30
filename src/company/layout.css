@@ -7,7 +7,8 @@
   box-sizing: border-box;
   padding: 12px;
   border-right: 1px solid var(--workbench-border);
-  background: #fafafa;
+  background: var(--workbench-subtle);
+  color: var(--workbench-text);
 }
 .gea-sidebar-owned[data-gea-narrow] {
   padding-inline: 0;
@@ -35,12 +36,12 @@ html[data-platform='darwin'] .gea-sidebar-brand-row > .gea-inbox-quick-action {
   align-items: center;
   flex: none;
 }
-.gea-sidebar-footer > div:first-child {
+.gea-sidebar-account {
   flex: 1;
   min-width: 0;
 }
 .gea-workspace-owned {
-  --dsw-alias-interactive-bg-hover: #fff1f4;
+  --dsw-alias-interactive-bg-hover: var(--workbench-brand-soft);
   position: relative;
   order: 4;
   flex: 0 0 auto;

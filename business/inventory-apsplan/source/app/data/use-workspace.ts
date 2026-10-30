@@ -11,6 +11,7 @@ type Result = {
   annual: Data | null;
   error: string;
   busy: boolean;
+  comparisonBusy: boolean;
 };
 export function useWorkspace(
   enabled: boolean,
@@ -28,6 +29,7 @@ export function useWorkspace(
     annual: null,
     error: '',
     busy: false,
+    comparisonBusy: false,
   });
   const generation = useRef(0);
   const lastData = useRef({ key: result.key, data: result.data });
@@ -68,7 +70,15 @@ export function useWorkspace(
               `${section.label || section.id}：${section.error?.message || '读取失败'}（${section.error?.code || 'QUERY_FAILED'}）`,
           )
           .join('；');
-        setResult({ key, data, previous: null, annual: null, error, busy });
+        setResult((old) => ({
+          key,
+          data,
+          error,
+          busy,
+          comparisonBusy: old.key === key && old.comparisonBusy,
+          previous: old.key === key ? old.previous : null,
+          annual: old.key === key ? old.annual : null,
+        }));
         setLiveContext(
           {
             realData: !APS_MOCK,
@@ -88,13 +98,21 @@ export function useWorkspace(
       }
       setResult((old) =>
         old.key === key
-          ? { ...old, error: '', busy: true }
-          : { key, data: null, previous: null, annual: null, error: '', busy: true },
+          ? { ...old, previous: null, annual: null, error: '', busy: true, comparisonBusy: true }
+          : {
+              key,
+              data: null,
+              previous: null,
+              annual: null,
+              error: '',
+              busy: true,
+              comparisonBusy: true,
+            },
       );
       setLiveContext({ realData: !!loaded, status: 'loading', period: input });
       try {
         // Core cards enter the bounded queue first without blocking other slots.
-        const data: Data = await workspace({
+        const dataRead = workspace({
           ...input,
           refresh,
           signal,
@@ -102,9 +120,7 @@ export function useWorkspace(
             if (current()) publish(data, true);
           },
         });
-        if (!current()) return;
-        publish(data, false);
-        const comparisonResult = await workspace({
+        const comparisonRead = workspace({
           ...input,
           comparison: true,
           refresh,
@@ -116,12 +132,17 @@ export function useWorkspace(
           (comparison) => ({ comparison }),
           (error) => ({ error }),
         );
+        const data: Data = await dataRead;
+        if (!current()) return;
+        publish(data, false);
+        const comparisonResult = await comparisonRead;
         if (!current()) return;
         if ('comparison' in comparisonResult)
-          setResult((r) => ({ ...r, ...comparisonResult.comparison }));
+          setResult((r) => ({ ...r, ...comparisonResult.comparison, comparisonBusy: false }));
         else
           setResult((r) => ({
             ...r,
+            comparisonBusy: false,
             error: [r.error, '对比期读取失败：' + String(comparisonResult.error)]
               .filter(Boolean)
               .join('；'),
@@ -135,6 +156,7 @@ export function useWorkspace(
             annual: null,
             error: '读取已取消',
             busy: false,
+            comparisonBusy: false,
           });
           setLiveContext({ realData: false, status: 'cancelled', period: input });
         } else if (current()) {
@@ -145,6 +167,7 @@ export function useWorkspace(
             annual: null,
             error: String(error),
             busy: false,
+            comparisonBusy: false,
           });
           setLiveContext({
             realData: !!loaded,
@@ -167,6 +190,7 @@ export function useWorkspace(
         annual: null,
         error: '登录状态变化，请重新打开工作台',
         busy: false,
+        comparisonBusy: false,
       });
     };
     window.addEventListener('aps-identity-changed', logout);
@@ -187,5 +211,13 @@ export function useWorkspace(
   }, [enabled, key, date, granularity, summary, detailMode]);
   return result.key === key
     ? result
-    : { key, data: null, previous: null, annual: null, error: '', busy: enabled };
+    : {
+        key,
+        data: null,
+        previous: null,
+        annual: null,
+        error: '',
+        busy: enabled,
+        comparisonBusy: enabled,
+      };
 }

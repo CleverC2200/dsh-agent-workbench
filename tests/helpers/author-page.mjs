@@ -64,12 +64,12 @@ export async function authorPage(t, options = {}) {
             { encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
           )
         : await readFile('lib/static/' + name + '/index.html', 'utf8');
+    const headEnd = html.lastIndexOf('</head>');
     const configured =
       name === 'mps' && options.mpsConfig
-        ? html.replace(
-            '</head>',
-            `<script id="agent-sql-config" type="application/json">${JSON.stringify(options.mpsConfig).replaceAll('<', '\\u003c')}</script></head>`,
-          )
+        ? html.slice(0, headEnd) +
+          `<script id="agent-sql-config" type="application/json">${JSON.stringify(options.mpsConfig).replaceAll('<', '\\u003c')}</script>` +
+          html.slice(headEnd)
         : html;
     assets[name] = injectPicker(configured, picker);
   }

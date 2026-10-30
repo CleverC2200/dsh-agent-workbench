@@ -972,9 +972,9 @@
                     <th
                       class="page-field"
                       data-col="1"
-                      data-search="基地名称 belong_base；关联键：material_code 在当前已读且读取成功的提报月、所选历史月中，按产品编码取非空基地并去重；物料组汇集子sku候选基地。显示“候选”。 不从名称猜基地，不认定唯一所属或责任基地。 p.material_code p.product_item d.material_code d.belong_base h.material_code h.belong_base agents_dim_product_list_mi agents_dim_product_list_mi agents_sales_plan_demand_m agents_sales_plan_demand_m agents_scm_cust_deliv_daily_di agents_scm_cust_deliv_daily_di"
+                      data-search="事实候选基地（源字段弹窗） belong_base；关联键：material_code 产品明细已移除基地名称列。源字段弹窗保留按精确SKU汇集的事实候选基地。 不从名称猜基地，不认定唯一所属或责任基地。 p.material_code p.product_item d.material_code d.belong_base h.material_code h.belong_base agents_dim_product_list_mi agents_dim_product_list_mi agents_sales_plan_demand_m agents_sales_plan_demand_m agents_scm_cust_deliv_daily_di agents_scm_cust_deliv_daily_di"
                     >
-                      <span>基地名称</span><small class="state calc">加工</small>
+                      <span>事实候选基地（源字段弹窗）</span><small class="state calc">加工</small>
                     </th>
                     <th
                       class="page-field"
@@ -1014,16 +1014,16 @@
                     <th
                       class="page-field"
                       data-col="7"
-                      data-search="对应老品编码 本地“老品编码”；源同步时为空 仅本地维护或上传关系后才可能有值。replacement_material_code另在源字段弹窗展示。 替换方向未确认，不将源替换编码解释为老品。 m.老品编码 不是业务来源表"
+                      data-search="对应老品编码 replacement_material_code 按产品清单精确行直接取替换物料编码。缺值留空，不任取同物料组另一个SKU。 p.replacement_material_code agents_dim_product_list_mi"
                     >
-                      <span>对应老品编码</span><small class="state local">本地</small>
+                      <span>对应老品编码</span><small class="state raw">源值</small>
                     </th>
                     <th
                       class="page-field"
                       data-col="8"
-                      data-search="老品名称 本地“老品名称”；源同步时为空 本地新增/编辑要求老品编码和名称同时有值或同时留空。 不执行老品历史继承，也不改历史发货数量。 m.老品名称 不是业务来源表"
+                      data-search="老品名称 replacement_product 按产品清单精确行直接取替换品名称。缺值留空。 p.replacement_product agents_dim_product_list_mi"
                     >
-                      <span>老品名称</span><small class="state local">本地</small>
+                      <span>老品名称</span><small class="state raw">源值</small>
                     </th>
                     <th
                       class="page-field"
@@ -1161,7 +1161,7 @@
                     <td data-col="11" class="unused"></td>
                     <td data-col="12" class="unused"></td>
                   </tr>
-                  <tr data-used="10">
+                  <tr data-used="7,10">
                     <th scope="row" class="source-field g-P">
                       <code>replacement_material_code</code>
                     </th>
@@ -1172,14 +1172,14 @@
                     <td data-col="4" class="unused"></td>
                     <td data-col="5" class="unused"></td>
                     <td data-col="6" class="unused"></td>
-                    <td data-col="7" class="unused"></td>
+                    <td data-col="7" class="used g-P">取值</td>
                     <td data-col="8" class="unused"></td>
                     <td data-col="9" class="unused"></td>
                     <td data-col="10" class="used g-P">取值</td>
                     <td data-col="11" class="unused"></td>
                     <td data-col="12" class="unused"></td>
                   </tr>
-                  <tr data-used="10">
+                  <tr data-used="8,10">
                     <th scope="row" class="source-field g-P"><code>replacement_product</code></th>
                     <td data-col="0" class="unused"></td>
                     <td data-col="1" class="unused"></td>
@@ -1189,7 +1189,7 @@
                     <td data-col="5" class="unused"></td>
                     <td data-col="6" class="unused"></td>
                     <td data-col="7" class="unused"></td>
-                    <td data-col="8" class="unused"></td>
+                    <td data-col="8" class="used g-P">取值</td>
                     <td data-col="9" class="unused"></td>
                     <td data-col="10" class="used g-P">取值</td>
                     <td data-col="11" class="unused"></td>
@@ -1368,14 +1368,14 @@
                   <tr class="formula-row">
                     <th colspan="2" scope="row" class="footer-axis">取值／计算公式</th>
                     <td data-col="0"><p>产品数量＝draft.products.length</p></td>
-                    <td data-col="1"><p>主表无基地，按精确SKU汇集事实候选基地。</p></td>
+                    <td data-col="1"><p>产品明细不显示基地列；源字段弹窗保留事实候选基地。</p></td>
                     <td data-col="2"><p>有编码显示编码，无编码的父组可展开子SKU。</p></td>
                     <td data-col="3"><p>直接显示源名称。</p></td>
                     <td data-col="4"><p>SKU显示源分类，父组仅补唯一子SKU分类。</p></td>
                     <td data-col="5"><p>SKU显示源系列，父组按唯一值补显示。</p></td>
                     <td data-col="6"><p>直接显示精确物料组编码。</p></td>
-                    <td data-col="7"><p>业务同步不自动写老品关系。</p></td>
-                    <td data-col="8"><p>与老品编码成对维护。</p></td>
+                    <td data-col="7"><p>对应老品编码直接取replacement_material_code。</p></td>
+                    <td data-col="8"><p>老品名称直接取replacement_product。</p></td>
                     <td data-col="9"><p>取源标签非空去重值。</p></td>
                     <td data-col="10"><p>分别显示源替换编码和源替换品名称。</p></td>
                     <td data-col="11"><p>列出源值集合及子SKU明细。</p></td>
@@ -1390,7 +1390,7 @@
                     <td data-col="4"><p>这里可能是细类，不等于最终八大类；多值不强行归一。</p></td>
                     <td data-col="5"><p>多个值列为多值；不把系列当物料组。</p></td>
                     <td data-col="6"><p>缺值不补0。</p></td>
-                    <td data-col="7"><p>替换方向未确认，不将源替换编码解释为老品。</p></td>
+                    <td data-col="7"><p>按已确认字段对应展示，不任取同组其他SKU关系。</p></td>
                     <td data-col="8"><p>不执行老品历史继承，也不改历史发货数量。</p></td>
                     <td data-col="9"><p>标签与sub_category是两个字段，不互换。</p></td>
                     <td data-col="10"><p>仅展示替换关系，不推断方向、生效期或继承量。</p></td>
@@ -1410,9 +1410,9 @@
                   <p>搜索前为全部明细数；搜索后显示命中行数／总行数。不是按material_code去重。</p>
                 </li>
                 <li>
-                  <strong>基地名称</strong>
+                  <strong>事实候选基地（源字段弹窗）</strong>
                   <p>
-                    在当前已读且读取成功的提报月、所选历史月中，按产品编码取非空基地并去重；物料组汇集子SKU候选基地。显示“候选”。
+                    在当前已读且读取成功的提报月、所选历史月中，按产品编码取非空基地并去重；物料组汇集子SKU候选基地，仅在源字段弹窗展示。
                   </p>
                 </li>
                 <li>
@@ -1439,9 +1439,7 @@
                 </li>
                 <li>
                   <strong>对应老品编码</strong>
-                  <p>
-                    仅本地维护或上传关系后才可能有值。replacement_material_code另在源字段弹窗展示。
-                  </p>
+                  <p>业务同步直接取replacement_material_code；本地维护或上传可覆盖当前版本。</p>
                 </li>
                 <li>
                   <strong>老品名称</strong>
@@ -1524,7 +1522,7 @@
                     <th
                       class="page-field"
                       data-col="3"
-                      data-search="每月绝对数量 demand_qty / missing_qty / duplicate_rows sql先按基地、分类、老分类、物料组及名称、sku及名称、月份检查粒度；再按基地＋分类＋月份汇总。任一缺数量或重复使该源汇总格无效。规范化后仍重复的键也置空。 无记录显示缺值。可显示有效部分及缺项，不将重复源量直接累计。 a.belong_base a.sub_category a.stat_month a.demand_qty q.missing_qty q.duplicate_rows agents_dim_demand_annual_mi agents_dim_demand_annual_mi agents_dim_demand_annual_mi agents_dim_demand_annual_mi sql／语义查询返回值 sql／语义查询返回值"
+                      data-search="每月绝对数量 demand_qty / missing_qty / duplicate_rows sql先按基地、分类、老分类、物料组及名称、sku及名称、月份和需求数量去重，相同维度且数量相同只计一次，更新时间不参与去重；再按基地＋分类＋月份汇总。同一维度数量冲突或缺数量使该源汇总格无效。月份支持2026-7及2026-07，规范化后仍重复的汇总键置空。 无记录显示缺值。可显示有效部分及缺项，不将重复源量直接累计。 a.belong_base a.sub_category a.stat_month a.demand_qty q.missing_qty q.duplicate_rows agents_dim_demand_annual_mi agents_dim_demand_annual_mi agents_dim_demand_annual_mi agents_dim_demand_annual_mi sql／语义查询返回值 sql／语义查询返回值"
                     >
                       <span>每月绝对数量</span><small class="state calc">加工</small>
                     </th>
@@ -1800,7 +1798,7 @@
                     <th
                       class="page-field"
                       data-col="9"
-                      data-search="四维分组预览 基地 / 大类 / 系列 / 产品编码 每个分组分别计算数量合计和缺失数量条数；空字段保留未提供分组。 任一组内数量缺失，则该组完整合计留空。 d.belong_base d.material_code d.plannum d.allnum agents_sales_plan_demand_m agents_sales_plan_demand_m agents_sales_plan_demand_m agents_sales_plan_demand_m"
+                      data-search="四维分组预览 基地 / 大类 / 系列 / 产品编码 每个分组展示名称和数量合计，已移除缺失数量条数列；空字段保留未提供分组。 任一组内数量缺失，则该组完整合计留空。 d.belong_base d.material_code d.plannum d.allnum agents_sales_plan_demand_m agents_sales_plan_demand_m agents_sales_plan_demand_m agents_sales_plan_demand_m"
                     >
                       <span>四维分组预览</span><small class="state calc">加工</small>
                     </th>
@@ -2081,7 +2079,7 @@
                 </li>
                 <li>
                   <strong>四维分组预览</strong>
-                  <p>每个分组分别计算数量合计和缺失数量条数；空字段保留未提供分组。</p>
+                  <p>每个分组展示名称和数量合计，已移除缺失数量条数列；空字段保留未提供分组。</p>
                 </li>
                 <li>
                   <strong>明细名称、分类及物料组</strong>

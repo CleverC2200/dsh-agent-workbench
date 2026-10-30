@@ -1,3 +1,4 @@
+import { DrillPage } from './drill-page';
 import { QueryErrors } from '../../../shared/query-errors';
 import { BusinessToolbar } from '../../../shared/business-toolbar';
 import { budgetPerformanceObservation } from 'dsh-agent-manage/aps-compute/budget-performance';
@@ -72,6 +73,7 @@ import {
 } from 'dsh-agent-manage/aps-compute/base-product-hierarchy';
 import { browserStorage } from './data/browser-storage';
 import { useWorkspace } from './data/use-workspace';
+import { comparisonEvidence } from './data/comparison-evidence';
 import { deriveMetrics } from 'dsh-agent-manage/aps-compute/metrics';
 import {
   metricValues as _metricValues,
@@ -5146,24 +5148,34 @@ export default function Home({
         : {},
     [live.data, selectedBase],
   );
-  const stockObservation = stockCoverageObservation(
-    live.data,
-    selectedBase === '全部基地' ? undefined : selectedBase,
+  const stockObservation = useMemo(
+    () =>
+      stockCoverageObservation(live.data, selectedBase === '全部基地' ? undefined : selectedBase),
+    [live.data, selectedBase],
   );
   const planProductionSection = live.data?.sections.find((section) => section.id === 'production');
-  const planProductionObservation =
-    live.data?.missingValuePolicy !== 'zero' && planProductionSection?.status === 'ready'
-      ? productionOutputObservation(
-          planProductionSection.rows.filter(
-            (row) => selectedBase === '全部基地' || row.base === selectedBase,
-          ),
-        )
-      : null;
+  const planProductionObservation = useMemo(
+    () =>
+      live.data?.missingValuePolicy !== 'zero' && planProductionSection?.status === 'ready'
+        ? productionOutputObservation(
+            planProductionSection.rows.filter(
+              (row) => selectedBase === '全部基地' || row.base === selectedBase,
+            ),
+          )
+        : null,
+    [live.data?.missingValuePolicy, planProductionSection, selectedBase],
+  );
   const liveScope = selectedBase === '全部基地' ? {} : { base: selectedBase };
-  const planBudgetObservation =
-    live.data?.missingValuePolicy === 'zero'
-      ? null
-      : budgetPerformanceObservation(live.data, liveScope);
+  const planBudgetObservation = useMemo(
+    () =>
+      live.data?.missingValuePolicy === 'zero'
+        ? null
+        : budgetPerformanceObservation(
+            live.data,
+            selectedBase === '全部基地' ? {} : { base: selectedBase },
+          ),
+    [live.data, selectedBase],
+  );
   const scopedLiveValues = useMemo(
     () => createMetricReader(live.data, live.previous, live.annual),
     [live.data, live.previous, live.annual],
@@ -5365,7 +5377,10 @@ export default function Home({
         };
       })
       .sort((a, b) => (mode === 'stock' || mode === 'inventory' ? b.gap - a.gap : a.gap - b.gap));
-  const matrixRiskRows = buildPeriodMatrixRiskRows(activeCrossMode);
+  const matrixRiskRows =
+    analysisScope === 'production' && productionDimension === 'cross'
+      ? buildPeriodMatrixRiskRows(activeCrossMode)
+      : [];
   const matrixAnalysis = matrixRiskRows.length
     ? analyzeProductionMatrix(
         activeMatrixListMeta.label,
@@ -5631,24 +5646,29 @@ export default function Home({
     setSelectedMetric(metric);
     scrollToDashboardList('overview-detail-list');
   };
-  const metricReadFailed = (name: string) => {
-    const sources: Record<string, string[]> = {
-      销售预算达成率: ['finance', 'sales-budget'],
-      销售提报准确率: ['sales-accuracy'],
-      销售提报达成率: ['sales-accuracy'],
-      需求预测准确率: ['demand-accuracy'],
-      需求预测达成率: ['demand-accuracy'],
-      生产计划达成率: ['production'],
-      库存量: ['stock'],
-      可发货天数: ['shippable'],
-      订单满足率: ['orders'],
-      订单缺货量: ['orders'],
-    };
-    return (
-      live.data?.sections.some(
-        (section) => sources[name]?.includes(section.id) && section.status === 'error',
-      ) ?? false
-    );
+  const metricSources: Record<string, string[]> = {
+    销售预算达成率: ['finance', 'sales-budget'],
+    销售提报准确率: ['sales-accuracy'],
+    销售提报达成率: ['sales-accuracy'],
+    需求预测准确率: ['demand-accuracy'],
+    需求预测达成率: ['demand-accuracy', 'plans'],
+    生产计划达成率: ['production'],
+    库存量: ['stock'],
+    可发货天数: ['shippable'],
+    订单满足率: ['orders'],
+    订单缺货量: ['orders'],
+  };
+  const metricReadFailed = (name: string) =>
+    live.data?.sections.some(
+      (section) => metricSources[name]?.includes(section.id) && section.status === 'error',
+    ) ?? false;
+  const metricMissingText = (name: string, data: typeof live.data, comparison = false) => {
+    const sources = data?.sections.filter((section) => metricSources[name]?.includes(section.id));
+    if (!data) return (comparison ? live.comparisonBusy : live.busy) ? '读取中' : '无数据';
+    if (sources?.some((section) => section.status === 'loading')) return '读取中';
+    if (sources?.some((section) => section.status === 'error')) return '读取失败';
+    if (sources?.some((section) => section.status === 'unavailable')) return '暂无同期口径';
+    return comparison ? '暂无同期数据' : '无数据';
   };
   const renderPeriodKpiCard = (kpi: (typeof periodKpis)[number]) => {
     // A usable subset is display-only; keep complete metrics, alerts and comparisons unchanged.
@@ -6594,6 +6614,13 @@ export default function Home({
       })) ?? [],
     missing: apsVisibleNames.filter((name) => apsViewMetrics[name]?.value == null),
     comparison: comparisonValues(live.data, live.previous, live.annual, viewScope),
+    comparisonEvidence: comparisonEvidence(
+      live.data,
+      live.previous,
+      live.annual,
+      viewScope,
+      live.comparisonBusy,
+    ),
   };
   apsViewRef.current = {
     current: apsCurrent,
@@ -6623,6 +6650,7 @@ export default function Home({
     live.data,
     live.previous,
     live.annual,
+    live.comparisonBusy,
     live.busy,
     live.error,
     liveDate,
@@ -7085,7 +7113,10 @@ export default function Home({
           activeRiskPerspective === 'sales' ? salesDiagnosticItems : productionDiagnosticItems,
         ).slice(0, analysisScope === 'overview' ? 6 : 12);
   const liveRiskDimension = analysisScope === 'overview' ? 'category' : productionDimension;
-  const liveOrderRisks = liveData ? deriveOrderRisks(live.data, liveRiskDimension) : [];
+  const liveOrderRisks = useMemo(
+    () => (liveData ? deriveOrderRisks(live.data, liveRiskDimension) : []),
+    [liveData, live.data, liveRiskDimension],
+  );
   const diagnosticItems: DiagnosticRiskItem[] =
     liveData && activeRiskPerspective === 'production'
       ? liveOrderRisks.map((item) => ({
@@ -7577,38 +7608,40 @@ export default function Home({
             <section
               className={`analysis-workspace panel scope-${analysisScope}${analysisScope === 'production' ? ` production-${productionDimension}` : ''}`}
             >
-              <div className="dashboard-module-toolbar" aria-label="看板工具栏">
-                <span className="dashboard-module-label">
-                  <LayoutGrid />
-                  {'产销协同看板'}
-                </span>
-                <button
-                  className="open-intelligent-tasks"
-                  onClick={() => {
-                    setActiveWorkspace('intelligent');
-                    requestAnimationFrame(() =>
+              {!embedMode && (
+                <div className="dashboard-module-toolbar" aria-label="看板工具栏">
+                  <span className="dashboard-module-label">
+                    <LayoutGrid />
+                    {'产销协同看板'}
+                  </span>
+                  <button
+                    className="open-intelligent-tasks"
+                    onClick={() => {
+                      setActiveWorkspace('intelligent');
                       requestAnimationFrame(() =>
-                        document
-                          .querySelector<HTMLElement>('.intelligent-workspace-page')
-                          ?.scrollTo({ top: 0 }),
-                      ),
-                    );
-                  }}
-                >
-                  {embedMode ? (
-                    <>
-                      <ArrowLeft />
-                      {'返回智能工作台'}
-                    </>
-                  ) : (
-                    <>
-                      <ClipboardCheck />
-                      {'任务统一到智能工作台管理'}
-                      <ArrowRight />
-                    </>
-                  )}
-                </button>
-              </div>
+                        requestAnimationFrame(() =>
+                          document
+                            .querySelector<HTMLElement>('.intelligent-workspace-page')
+                            ?.scrollTo({ top: 0 }),
+                        ),
+                      );
+                    }}
+                  >
+                    {embedMode ? (
+                      <>
+                        <ArrowLeft />
+                        {'返回智能工作台'}
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardCheck />
+                        {'任务统一到智能工作台管理'}
+                        <ArrowRight />
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="scope-tabs" role="tablist" aria-label="业务分析视角">
                 <button
                   role="tab"
@@ -7899,9 +7932,7 @@ export default function Home({
                           className={`achievement-status ${periodOk === null ? 'status-neutral' : periodOk ? 'status-ok' : 'status-bad'}`}
                         >
                           {!Number.isFinite(datum.current)
-                            ? metricReadFailed(meta.name)
-                              ? '读取失败'
-                              : '无数据'
+                            ? metricMissingText(meta.name, live.data)
                             : periodOk === null
                               ? '无目标'
                               : periodOk
@@ -7916,13 +7947,15 @@ export default function Home({
                         <span>
                           {Number.isFinite(datum.previous)
                             ? `${formatNumber(datum.previous, 2)}${meta.unit}`
-                            : '—'}
+                            : metricMissingText(meta.name, live.previous, true)}
                         </span>
                         <span className={improved === null ? 'neutral' : improved ? 'good' : 'bad'}>
                           {formatDelta(datum.change, meta.unit)}
                         </span>
                         <span>
-                          {datum.same === null ? '—' : `${formatNumber(datum.same, 2)}${meta.unit}`}
+                          {Number.isFinite(datum.same)
+                            ? `${formatNumber(datum.same!, 2)}${meta.unit}`
+                            : metricMissingText(meta.name, live.annual, true)}
                         </span>
                         <span>{datum.yoy === null ? '—' : formatDelta(datum.yoy, meta.unit)}</span>
                       </div>
@@ -7967,508 +8000,226 @@ export default function Home({
                 </div>
               )}
 
-              <section id="sales-region-dashboard" aria-labelledby="sales-region-title">
-                <div className="section-heading">
-                  <div>
-                    <span>{'销售组织维度'}</span>
-                    <h2 id="sales-region-title">{'大区 / 省区 / 销售组指标下钻'}</h2>
-                  </div>
-                  <p>
-                    {selectedPeriodLabel}
-                    {' · '}
-                    {salesOrgCounts.regions}
-                    {' 个大区 · '}
-                    {salesOrgCounts.provinces}
-                    {' 个省区 · '}
-                    {salesOrgCounts.teams}
-                    {' 个销售组'}
-                  </p>
-                </div>
-                <div className="sales-region-grid">
-                  {salesOrgHierarchy.map((region) => {
-                    const values = salesOrgMetrics(region.name);
-                    return (
-                      <article
-                        className={`panel sales-region-card ${selectedSalesOrg === region.name ? 'selected' : ''}`}
-                        key={region.name}
-                      >
-                        <button
-                          className="sales-region-card-title"
-                          aria-label={`查看${region.name}两指标总览`}
-                          onClick={() => selectSalesRegion(region.name)}
-                        >
-                          <strong>{region.name}</strong>
-                          <span>
-                            {region.children?.length || 0}
-                            {' 个下级组织'}
-                          </span>
-                        </button>
-                        <button
-                          className="sales-region-card-metric"
-                          aria-label={`查看${region.name}销售预算达成率明细`}
-                          onClick={() => selectSalesRegion(region.name, 'budget')}
-                        >
-                          <span>
-                            {'销售预算达成率'}
-                            <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
-                          </span>
-                          <b
-                            className={liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'}
-                          >
-                            {formatNumber(values.budget, 2)}
-                            {'%'}
-                            <small>
-                              {liveData
-                                ? '实际值'
-                                : `差距 ${formatDelta(values.budget - 100, '%')}`}
-                            </small>
-                          </b>
-                        </button>
-                        <button
-                          className="sales-region-card-metric"
-                          aria-label={`查看${region.name}销售提报准确率明细`}
-                          onClick={() => selectSalesRegion(region.name, 'reporting')}
-                        >
-                          <span>
-                            {'销售提报准确率'}
-                            <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
-                          </span>
-                          <b
-                            className={
-                              liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'
-                            }
-                          >
-                            {formatNumber(values.reporting, 2)}
-                            {'%'}
-                            <small>
-                              {liveData
-                                ? '实际值'
-                                : `差距 ${formatDelta(values.reporting - 100, '%')}`}
-                            </small>
-                          </b>
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
-                <div className="sales-metric-tabs" role="tablist" aria-label="销售视角指标">
-                  <button
-                    role="tab"
-                    aria-selected={salesMetricTab === 'overview'}
-                    className={salesMetricTab === 'overview' ? 'selected' : ''}
-                    onClick={() => setSalesMetricTab('overview')}
-                  >
-                    {'两指标总览'}
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={salesMetricTab === 'budget'}
-                    className={salesMetricTab === 'budget' ? 'selected' : ''}
-                    onClick={() => setSalesMetricTab('budget')}
-                  >
-                    {'销售预算达成率'}
-                  </button>
-                  <button
-                    role="tab"
-                    aria-selected={salesMetricTab === 'reporting'}
-                    className={salesMetricTab === 'reporting' ? 'selected' : ''}
-                    onClick={() => setSalesMetricTab('reporting')}
-                  >
-                    {'销售提报准确率'}
-                  </button>
-                </div>
-                <div
-                  className="panel sales-org-tree"
-                  role="treegrid"
-                  aria-label={`${salesMetricTab === 'overview' ? '两指标总览' : salesMetricTab === 'budget' ? '销售预算达成率' : '销售提报准确率'}组织下钻清单`}
-                >
-                  <div
-                    className={`sales-org-row sales-org-head ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
-                    role="row"
-                  >
-                    <span role="columnheader">{'组织名称'}</span>
-                    <span role="columnheader">{'层级'}</span>
-                    {salesMetricTab === 'overview' ? (
-                      <>
-                        <span role="columnheader">{'销售额'}</span>
-                        <span role="columnheader">{'预算达成率'}</span>
-                        <span role="columnheader">{'达成状态'}</span>
-                        <span role="columnheader">{'提报准确率'}</span>
-                        <span role="columnheader">{'达成状态'}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span role="columnheader">{'目标'}</span>
-                        <span role="columnheader">{'达成状态'}</span>
-                        <span role="columnheader">{periodMeta.current}</span>
-                        <span role="columnheader">{periodMeta.previous}</span>
-                        <span role="columnheader">{periodMeta.change}</span>
-                      </>
-                    )}
-                    <span role="columnheader">{'风险状态'}</span>
-                    <span role="columnheader">{'任务派发'}</span>
-                  </div>
-                  {salesOrgHierarchy.map((region) => {
-                    const regionOpen = expandedSalesRegions.includes(region.name);
-                    return (
-                      <div className="sales-org-group" role="rowgroup" key={region.name}>
-                        <div
-                          id={`sales-org-row-${stableMetricSeed(region.name)}`}
-                          className={`sales-org-row sales-org-region ${selectedSalesOrg === region.name ? 'is-selected' : ''} ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
-                          role="row"
-                          aria-expanded={regionOpen}
-                        >
-                          <button
-                            className="sales-org-toggle"
-                            role="gridcell"
-                            onClick={() => toggleSalesRegion(region.name)}
-                          >
-                            <ChevronDown />
-                            {region.name}
-                          </button>
-                          <span role="gridcell">
-                            <em>{'大区'}</em>
-                          </span>
-                          {renderSalesMetricCells(region.name)}
-                          {renderSalesWorkflowCells(region.name, region.name)}
-                        </div>
-                        {regionOpen &&
-                          region.children?.map((provinceNode) => {
-                            const provinceKey = `${region.name}::${provinceNode.name}`;
-                            const provinceScope = `${region.name} / ${provinceNode.name}`;
-                            const provinceOpen = expandedSalesProvinces.includes(provinceKey);
-                            const hasTeams = Boolean(provinceNode.children?.length);
-                            return (
-                              <div className="sales-org-group" role="rowgroup" key={provinceKey}>
-                                <div
-                                  className={`sales-org-row sales-org-province ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
-                                  role="row"
-                                  aria-expanded={hasTeams ? provinceOpen : undefined}
-                                >
-                                  {hasTeams ? (
-                                    <button
-                                      className="sales-org-toggle"
-                                      role="gridcell"
-                                      onClick={() =>
-                                        toggleSalesProvince(region.name, provinceNode.name)
-                                      }
-                                    >
-                                      <ChevronDown />
-                                      {provinceNode.name}
-                                    </button>
-                                  ) : (
-                                    <strong role="gridcell">{provinceNode.name}</strong>
-                                  )}
-                                  <span role="gridcell">
-                                    <em>{hasTeams ? '省区' : '销售组'}</em>
-                                  </span>
-                                  {renderSalesMetricCells(provinceScope)}
-                                  {renderSalesWorkflowCells(provinceScope, provinceScope)}
-                                </div>
-                                {hasTeams &&
-                                  provinceOpen &&
-                                  provinceNode.children?.map((team, index) => {
-                                    const teamScope = `${provinceScope} / ${team.name}`;
-                                    return (
-                                      <div
-                                        className={`sales-org-row sales-org-team ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
-                                        role="row"
-                                        key={`${provinceKey}::${team.name}::${index}`}
-                                      >
-                                        <strong role="gridcell">
-                                          <i />
-                                          {team.name}
-                                        </strong>
-                                        <span role="gridcell">
-                                          <em>{'销售组'}</em>
-                                        </span>
-                                        {renderSalesMetricCells(teamScope)}
-                                        {renderSalesWorkflowCells(teamScope, teamScope)}
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            );
-                          })}
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section id="category-operations" data-context-id="category">
-                <div className="section-heading">
-                  <div>
-                    <span>
-                      {'品类模块 · '}
-                      {activeAnalysisPeriod}
-                    </span>
-                    <h2>
-                      {'品类'}
-                      {activeProductionMetricNames.length}
-                      {'项指标达成看板'}
-                    </h2>
-                  </div>
-                  <p>
-                    {'数据范围：'}
-                    {periodMeta.range}
-                    {' · 库存快照截至'}
-                    {snapshotDateLabel('库存量')}
-                  </p>
-                </div>
-                <div className="category-health-grid">
-                  {(liveData ? activeProductHierarchy : categorySatisfaction830).map((item) => {
-                    const values = categoryDrillMetrics(item.name);
-                    const categoryMetrics = activeProductionMetricNames.map((name) =>
-                      productionMetricCardData(name, values),
-                    );
-                    const risk = drillRowRiskLevel(values);
-                    return (
-                      <article
-                        className={`panel category-health-card ${selectedCategory === item.name ? 'selected' : ''}`}
-                        key={item.name}
-                      >
-                        <button
-                          className="category-card-title"
-                          onClick={() => selectCategory(item.name)}
-                        >
-                          <strong>{item.name}</strong>
-                          <em
-                            className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
-                          >
-                            {liveData
-                              ? activeProductionMetricNames.some((name) =>
-                                  Number.isFinite(values[name]),
-                                )
-                                ? '已更新'
-                                : '数据不足'
-                              : risk}
-                          </em>
-                        </button>
-                        {categoryMetrics.map((metric) => (
-                          <button
-                            className="category-card-metric"
-                            data-context-id={`category-metric-${item.name}-${metric.name}`}
-                            data-context-scope="品类指标"
-                            data-context-label={`${item.name} · ${metric.name}`}
-                            data-context-summary={`${activeAnalysisPeriod}，${metric.statisticType}，当前值${metric.value}，${metric.gap}。`}
-                            aria-label={`查看${item.name}${metric.name}${activeAnalysisPeriod}明细`}
-                            key={metric.name}
-                            onClick={() => selectCategory(item.name, metric.name)}
-                          >
-                            <span className="category-card-label">
-                              {metric.name}
-                              <small>
-                                {metric.statisticType === '快照指标'
-                                  ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
-                                  : periodMeta.current}
-                              </small>
-                            </span>
-                            <span className="category-card-result">
-                              <b className={metric.state}>{metric.value}</b>
-                              <small className={metric.state}>{metric.gap}</small>
-                            </span>
-                          </button>
-                        ))}
-                      </article>
-                    );
-                  })}
-                </div>
-                <div
-                  className="panel category-detail-table category-list-visible"
-                  id="category-detail-list"
-                >
-                  <div className="category-table-tabs-scroll">
-                    <div
-                      className="category-table-tabs"
-                      style={
-                        {
-                          '--production-tab-count': activeProductionMetricTabs.length + 1,
-                        } as CSSProperties
-                      }
-                      role="tablist"
-                      aria-label={`品类${activeProductionMetricNames.length}项指标清单`}
-                    >
-                      {[
-                        {
-                          key: 'overview' as const,
-                          label: `${activeProductionMetricNames.length}项指标总览`,
-                        },
-                        ...activeProductionMetricTabs,
-                      ].map((item) => (
-                        <button
-                          role="tab"
-                          aria-selected={categoryTab === item.key}
-                          key={item.key}
-                          className={categoryTab === item.key ? 'selected' : ''}
-                          onClick={() => setCategoryTab(item.key as CategoryMetricTab)}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="category-period-heading">
+              {analysisScope === 'sales' && (
+                <section id="sales-region-dashboard" aria-labelledby="sales-region-title">
+                  <div className="section-heading">
                     <div>
-                      <span>
-                        {'生产视角 · 指标清单 · '}
-                        {activeAnalysisPeriod}
-                      </span>
-                      <h3>
-                        {categoryTab === 'overview'
-                          ? `${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
-                          : `${activeCategoryMetric}${periodMeta.shortLabel}明细`}
-                      </h3>
+                      <span>{'销售组织维度'}</span>
+                      <h2 id="sales-region-title">{'大区 / 省区 / 销售组指标下钻'}</h2>
                     </div>
                     <p>
-                      {'数据范围：'}
-                      {periodMeta.range}
-                      {' · 库存快照截至'}
-                      {snapshotDateLabel('库存量')}
+                      {selectedPeriodLabel}
+                      {' · '}
+                      {salesOrgCounts.regions}
+                      {' 个大区 · '}
+                      {salesOrgCounts.provinces}
+                      {' 个省区 · '}
+                      {salesOrgCounts.teams}
+                      {' 个销售组'}
                     </p>
                   </div>
-                  <div className="category-drill-note" role="note">
-                    {liveData
-                      ? '品项、物料组按来源字段与唯一SKU分类读取；分类缺失或有冲突时保留未知，不按比例拆分。'
-                      : '品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。'}
+                  <div className="sales-region-grid">
+                    {salesOrgHierarchy.map((region) => {
+                      const values = salesOrgMetrics(region.name);
+                      return (
+                        <article
+                          className={`panel sales-region-card ${selectedSalesOrg === region.name ? 'selected' : ''}`}
+                          key={region.name}
+                        >
+                          <button
+                            className="sales-region-card-title"
+                            aria-label={`查看${region.name}两指标总览`}
+                            onClick={() => selectSalesRegion(region.name)}
+                          >
+                            <strong>{region.name}</strong>
+                            <span>
+                              {region.children?.length || 0}
+                              {' 个下级组织'}
+                            </span>
+                          </button>
+                          <button
+                            className="sales-region-card-metric"
+                            aria-label={`查看${region.name}销售预算达成率明细`}
+                            onClick={() => selectSalesRegion(region.name, 'budget')}
+                          >
+                            <span>
+                              {'销售预算达成率'}
+                              <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                            </span>
+                            <b
+                              className={
+                                liveData ? 'neutral' : values.budget >= 100 ? 'good' : 'bad'
+                              }
+                            >
+                              {formatNumber(values.budget, 2)}
+                              {'%'}
+                              <small>
+                                {liveData
+                                  ? '实际值'
+                                  : `差距 ${formatDelta(values.budget - 100, '%')}`}
+                              </small>
+                            </b>
+                          </button>
+                          <button
+                            className="sales-region-card-metric"
+                            aria-label={`查看${region.name}销售提报准确率明细`}
+                            onClick={() => selectSalesRegion(region.name, 'reporting')}
+                          >
+                            <span>
+                              {'销售提报准确率'}
+                              <small>{liveData ? '目标待接入' : '目标 ≥ 100%'}</small>
+                            </span>
+                            <b
+                              className={
+                                liveData ? 'neutral' : values.reporting >= 100 ? 'good' : 'bad'
+                              }
+                            >
+                              {formatNumber(values.reporting, 2)}
+                              {'%'}
+                              <small>
+                                {liveData
+                                  ? '实际值'
+                                  : `差距 ${formatDelta(values.reporting - 100, '%')}`}
+                              </small>
+                            </b>
+                          </button>
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <div className="sales-metric-tabs" role="tablist" aria-label="销售视角指标">
+                    <button
+                      role="tab"
+                      aria-selected={salesMetricTab === 'overview'}
+                      className={salesMetricTab === 'overview' ? 'selected' : ''}
+                      onClick={() => setSalesMetricTab('overview')}
+                    >
+                      {'两指标总览'}
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={salesMetricTab === 'budget'}
+                      className={salesMetricTab === 'budget' ? 'selected' : ''}
+                      onClick={() => setSalesMetricTab('budget')}
+                    >
+                      {'销售预算达成率'}
+                    </button>
+                    <button
+                      role="tab"
+                      aria-selected={salesMetricTab === 'reporting'}
+                      className={salesMetricTab === 'reporting' ? 'selected' : ''}
+                      onClick={() => setSalesMetricTab('reporting')}
+                    >
+                      {'销售提报准确率'}
+                    </button>
                   </div>
                   <div
-                    className="category-table-content category-drill-table"
-                    style={categoryTab === 'overview' ? productionOverviewRowStyle : undefined}
+                    className="panel sales-org-tree"
                     role="treegrid"
-                    aria-label={
-                      categoryTab === 'overview'
-                        ? `品类品项物料组${activeProductionMetricNames.length}项指标下钻清单`
-                        : `品类品项物料组${activeCategoryMetric}${periodMeta.label}下钻清单`
-                    }
+                    aria-label={`${salesMetricTab === 'overview' ? '两指标总览' : salesMetricTab === 'budget' ? '销售预算达成率' : '销售提报准确率'}组织下钻清单`}
                   >
                     <div
-                      className={`category-drill-row category-drill-head ${categoryTab === 'overview' ? 'period-synced-overview' : 'period-metric'}`}
-                      style={categoryTab === 'overview' ? productionOverviewRowStyle : undefined}
+                      className={`sales-org-row sales-org-head ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
                       role="row"
                     >
-                      <strong role="columnheader">{'名称'}</strong>
+                      <span role="columnheader">{'组织名称'}</span>
                       <span role="columnheader">{'层级'}</span>
-                      {categoryTab === 'overview' ? (
-                        activeProductionMetricNames.map((name) => (
-                          <span role="columnheader" key={name}>
-                            {name}
-                            {drillStatisticType(name) === '快照指标' ? (
-                              <small>{'快照'}</small>
-                            ) : null}
-                          </span>
-                        ))
+                      {salesMetricTab === 'overview' ? (
+                        <>
+                          <span role="columnheader">{'销售额'}</span>
+                          <span role="columnheader">{'预算达成率'}</span>
+                          <span role="columnheader">{'达成状态'}</span>
+                          <span role="columnheader">{'提报准确率'}</span>
+                          <span role="columnheader">{'达成状态'}</span>
+                        </>
                       ) : (
                         <>
                           <span role="columnheader">{'目标'}</span>
                           <span role="columnheader">{'达成状态'}</span>
-                          <span role="columnheader">
-                            {drillStatisticType(activeCategoryMetric || '') === '快照指标'
-                              ? '当前值'
-                              : periodMeta.current}
-                          </span>
+                          <span role="columnheader">{periodMeta.current}</span>
                           <span role="columnheader">{periodMeta.previous}</span>
                           <span role="columnheader">{periodMeta.change}</span>
-                          <span role="columnheader">{periodMeta.same}</span>
-                          <span role="columnheader">{periodMeta.yoy}</span>
                         </>
                       )}
                       <span role="columnheader">{'风险状态'}</span>
                       <span role="columnheader">{'任务派发'}</span>
                     </div>
-                    {activeProductHierarchy.map((category) => {
-                      const categoryOpen = expandedCategoryListCategories.includes(category.name);
-                      const categoryValues = categoryDrillMetrics(category.name);
+                    {salesOrgHierarchy.map((region) => {
+                      const regionOpen = expandedSalesRegions.includes(region.name);
                       return (
-                        <div className="category-drill-group" role="rowgroup" key={category.name}>
+                        <div className="sales-org-group" role="rowgroup" key={region.name}>
                           <div
-                            id={`category-row-${stableMetricSeed(category.name)}`}
-                            className={`category-drill-row category-level ${selectedCategoryRowKey === category.name ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                            id={`sales-org-row-${stableMetricSeed(region.name)}`}
+                            className={`sales-org-row sales-org-region ${selectedSalesOrg === region.name ? 'is-selected' : ''} ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
                             role="row"
-                            aria-expanded={categoryOpen}
+                            aria-expanded={regionOpen}
                           >
                             <button
-                              className="category-drill-toggle"
+                              className="sales-org-toggle"
                               role="gridcell"
-                              onClick={() => toggleCategoryListCategory(category.name)}
+                              onClick={() => toggleSalesRegion(region.name)}
                             >
                               <ChevronDown />
-                              {category.name}
+                              {region.name}
                             </button>
                             <span role="gridcell">
-                              <em>{'品类'}</em>
+                              <em>{'大区'}</em>
                             </span>
-                            {renderCategoryMetricCells(categoryValues)}
-                            {renderDrillWorkflowCells(
-                              '品类',
-                              category.name,
-                              categoryValues,
-                              activeCategoryMetric,
-                            )}
+                            {renderSalesMetricCells(region.name)}
+                            {renderSalesWorkflowCells(region.name, region.name)}
                           </div>
-                          {categoryOpen &&
-                            category.items.map((item) => {
-                              const itemKey = `${category.name}::${item.name}`;
-                              const itemOpen = expandedCategoryListItems.includes(itemKey);
-                              const itemValues = categoryDrillMetrics(category.name, item.name);
-                              const itemScope = `${category.name} / ${item.name}`;
+                          {regionOpen &&
+                            region.children?.map((provinceNode) => {
+                              const provinceKey = `${region.name}::${provinceNode.name}`;
+                              const provinceScope = `${region.name} / ${provinceNode.name}`;
+                              const provinceOpen = expandedSalesProvinces.includes(provinceKey);
+                              const hasTeams = Boolean(provinceNode.children?.length);
                               return (
-                                <div className="category-drill-group" role="rowgroup" key={itemKey}>
+                                <div className="sales-org-group" role="rowgroup" key={provinceKey}>
                                   <div
-                                    id={`category-row-${stableMetricSeed(itemKey)}`}
-                                    className={`category-drill-row item-level ${selectedCategoryRowKey === itemKey ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                                    className={`sales-org-row sales-org-province ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
                                     role="row"
-                                    aria-expanded={itemOpen}
+                                    aria-expanded={hasTeams ? provinceOpen : undefined}
                                   >
-                                    <button
-                                      className="category-drill-toggle"
-                                      role="gridcell"
-                                      onClick={() =>
-                                        toggleCategoryListItem(category.name, item.name)
-                                      }
-                                    >
-                                      <ChevronDown />
-                                      {item.name}
-                                    </button>
-                                    <span role="gridcell">
-                                      <em>{'品项'}</em>
-                                    </span>
-                                    {renderCategoryMetricCells(itemValues)}
-                                    {renderDrillWorkflowCells(
-                                      '品类',
-                                      itemScope,
-                                      itemValues,
-                                      activeCategoryMetric,
+                                    {hasTeams ? (
+                                      <button
+                                        className="sales-org-toggle"
+                                        role="gridcell"
+                                        onClick={() =>
+                                          toggleSalesProvince(region.name, provinceNode.name)
+                                        }
+                                      >
+                                        <ChevronDown />
+                                        {provinceNode.name}
+                                      </button>
+                                    ) : (
+                                      <strong role="gridcell">{provinceNode.name}</strong>
                                     )}
+                                    <span role="gridcell">
+                                      <em>{hasTeams ? '省区' : '销售组'}</em>
+                                    </span>
+                                    {renderSalesMetricCells(provinceScope)}
+                                    {renderSalesWorkflowCells(provinceScope, provinceScope)}
                                   </div>
-                                  {itemOpen &&
-                                    item.materials.map((material, index) => {
-                                      const materialValues = categoryDrillMetrics(
-                                        category.name,
-                                        item.name,
-                                        material,
-                                      );
-                                      const materialScope = `${itemScope} / ${material}`;
+                                  {hasTeams &&
+                                    provinceOpen &&
+                                    provinceNode.children?.map((team, index) => {
+                                      const teamScope = `${provinceScope} / ${team.name}`;
                                       return (
                                         <div
-                                          className={`category-drill-row material-level ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                                          className={`sales-org-row sales-org-team ${salesMetricTab === 'overview' ? 'overview' : 'single'}`}
                                           role="row"
-                                          key={`${itemKey}::${material}::${index}`}
+                                          key={`${provinceKey}::${team.name}::${index}`}
                                         >
                                           <strong role="gridcell">
                                             <i />
-                                            {material}
+                                            {team.name}
                                           </strong>
                                           <span role="gridcell">
-                                            <em>{'物料组'}</em>
+                                            <em>{'销售组'}</em>
                                           </span>
-                                          {renderCategoryMetricCells(materialValues)}
-                                          {renderDrillWorkflowCells(
-                                            '品类',
-                                            materialScope,
-                                            materialValues,
-                                            activeCategoryMetric,
-                                          )}
+                                          {renderSalesMetricCells(teamScope)}
+                                          {renderSalesWorkflowCells(teamScope, teamScope)}
                                         </div>
                                       );
                                     })}
@@ -8479,367 +8230,22 @@ export default function Home({
                       );
                     })}
                   </div>
-                </div>
-              </section>
-
-              <section id="base-dashboard" data-context-id="base">
-                <div className="section-heading">
-                  <div>
-                    <span>
-                      {'基地模块 · '}
-                      {activeAnalysisPeriod}
-                    </span>
-                    <h2>
-                      {'基地'}
-                      {activeProductionMetricNames.length}
-                      {'项指标达成看板'}
-                    </h2>
-                  </div>
-                  <p>
-                    {'数据范围：'}
-                    {periodMeta.range}
-                    {' · 库存快照截至'}
-                    {snapshotDateLabel('库存量')}
-                  </p>
-                </div>
-                <div className="base-health-grid">
-                  {base830.map((base) => {
-                    const values = baseDrillMetrics(base.name);
-                    const baseMetrics = activeProductionMetricNames.map((name) =>
-                      productionMetricCardData(name, values),
-                    );
-                    const risk = drillRowRiskLevel(values);
-                    return (
-                      <article
-                        className={`panel base-health-card ${selectedBase === base.name ? 'selected' : ''}`}
-                        key={base.name}
-                      >
-                        <button
-                          className="base-card-title"
-                          onClick={() => selectBaseCard(base.name)}
-                        >
-                          <strong>{base.name}</strong>
-                          <em
-                            className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
-                          >
-                            {liveData ? '未判定' : risk}
-                          </em>
-                        </button>
-                        {baseMetrics.map((metric) => (
-                          <button
-                            className="base-card-metric"
-                            data-context-id={`base-metric-${base.name}-${metric.name}`}
-                            data-context-scope="基地指标"
-                            data-context-label={`${base.name} · ${metric.name}`}
-                            data-context-summary={`${activeAnalysisPeriod}，${metric.statisticType}，当前值${metric.value}，${metric.gap}。`}
-                            aria-label={`查看${base.name}${metric.name}${activeAnalysisPeriod}明细`}
-                            key={metric.name}
-                            onClick={() => selectBaseCard(base.name, metric.name)}
-                          >
-                            <span className="base-card-label">
-                              {metric.name}
-                              <small>
-                                {metric.statisticType === '快照指标'
-                                  ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
-                                  : periodMeta.current}
-                              </small>
-                            </span>
-                            <span className="base-card-result">
-                              <b className={metric.state}>{metric.value}</b>
-                              <small className={metric.state}>{metric.gap}</small>
-                            </span>
-                          </button>
-                        ))}
-                      </article>
-                    );
-                  })}
-                </div>
-              </section>
-
-              <section id="cross-analysis" data-context-id="cross">
-                <div className="matrix-heading cross-heading">
-                  <div>
-                    <span>
-                      {'交叉分析 · '}
-                      {activeAnalysisPeriod}
-                    </span>
-                    <h2>
-                      {'基地 × 品类'}
-                      {activeCrossMatrixModes.length}
-                      {'项指标矩阵'}
-                    </h2>
-                    <small>
-                      {'数据范围：'}
-                      {periodMeta.range}
-                      {' · 快照指标截至'}
-                      {dataCutoff}
-                    </small>
-                  </div>
-                  <div className="segmented cross-tabs" aria-label="矩阵指标切换">
-                    {activeCrossMatrixModes.map((mode) => (
-                      <button
-                        key={mode}
-                        className={activeCrossMode === mode ? 'selected' : ''}
-                        onClick={() => setMatrixMode(mode)}
-                      >
-                        {matrixListMeta[mode].label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="matrix-layout">
-                  <div className="matrix panel">
-                    {activeCrossMode === 'stock' && (
-                      <div className="matrix-format-note">
-                        {'格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · '}
-                        {periodMeta.label}
-                      </div>
-                    )}
-                    <div className="matrix-row matrix-header">
-                      <span>{'基地'}</span>
-                      {matrixCategoryNames.map((c) => (
-                        <span key={c}>{c}</span>
-                      ))}
-                    </div>
-                    {matrix
-                      ? matrix.map((row) => (
-                          <div className="matrix-row" key={row.base}>
-                            <strong>{row.base}</strong>
-                            {row.values.map((value, i) => {
-                              const displayValue = liveData
-                                ? productionMetricDisplay(
-                                    crossMetricByMode[
-                                      activeCrossMode as keyof typeof crossMetricByMode
-                                    ],
-                                    value,
-                                  )
-                                : activeCrossMode === 'stock'
-                                  ? `${formatNumber(value, 1)}天 / 剔除大日期 ${formatNumber(adjustedStockValue(row.base, i) * matrixPeriodRatio(activeCrossMode), 1)}天`
-                                  : `${formatNumber(value, 2)}%`;
-                              return (
-                                <button
-                                  data-context-id={`cross-metric-${activeCrossMode}-${row.base}-${matrixCategoryNames[i]}`}
-                                  data-context-scope="交叉分析单值"
-                                  data-context-label={`${row.base} × ${matrixCategoryNames[i]} · ${activeMatrixListMeta.label}`}
-                                  data-context-summary={`${activeAnalysisPeriod}，当前值${displayValue}，目标${activeMatrixListMeta.target}。`}
-                                  title={`${row.base} × ${matrixCategoryNames[i]} · ${activeAnalysisPeriod}`}
-                                  key={matrixCategoryNames[i]}
-                                  className={
-                                    liveData
-                                      ? 'matrix-unavailable'
-                                      : matrixClass(
-                                          value,
-                                          activeCrossMode === 'rate' ? 'rate' : 'stock',
-                                        )
-                                  }
-                                  onClick={() => {
-                                    setSelectedBase(row.base);
-                                    setToast(`已筛选 ${row.base} ${activeAnalysisPeriod}风险项`);
-                                  }}
-                                >
-                                  {liveData
-                                    ? displayValue
-                                    : activeCrossMode === 'stock'
-                                      ? formatNumber(value, 1) +
-                                        ' / ' +
-                                        formatNumber(
-                                          adjustedStockValue(row.base, i) *
-                                            matrixPeriodRatio(activeCrossMode),
-                                          1,
-                                        )
-                                      : formatNumber(value, 2) + '%'}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))
-                      : base830.map((row) => (
-                          <div className="matrix-row matrix-unavailable" key={row.name}>
-                            <strong>{row.name}</strong>
-                            {matrixCategoryNames.map((category) => (
-                              <span key={category}>{'—'}</span>
-                            ))}
-                          </div>
-                        ))}
-                  </div>
-                  <aside className="panel matrix-note">
-                    <EditableHelp
-                      key={activeMatrixHelp.storageKey}
-                      compact
-                      storageKey={activeMatrixHelp.storageKey}
-                      label={activeMatrixHelp.label}
-                      defaultText={activeMatrixHelp.defaultText}
-                    />
-                    <div className="ai-heading">
-                      <Sparkles />
-                      <span>{'AI 矩阵研判'}</span>
-                    </div>
-                    <h3>{matrixAnalysis.title}</h3>
-                    <p>{matrixAnalysis.copy}</p>
-                    <div className="matrix-thresholds">{matrixThresholdText[activeCrossMode]}</div>
-                    {matrixRiskRows.length > 0 && activeCrossMode !== 'inventory' && (
-                      <div className="legend">
-                        <span>
-                          <i className="heat-good" />
-                          {'健康'}
-                        </span>
-                        <span>
-                          <i className="heat-watch" />
-                          {'预警'}
-                        </span>
-                        <span>
-                          <i className="heat-critical" />
-                          {'严重'}
-                        </span>
-                      </div>
-                    )}
-                  </aside>
-                </div>
-                <section
-                  className="matrix-risk-list panel"
-                  id="matrix-risk-list"
-                  aria-labelledby="matrix-risk-list-title"
-                >
-                  <header>
-                    <div>
-                      <span>{'指标清单'}</span>
-                      <h3 id="matrix-risk-list-title">
-                        {activeMatrixListMeta.label}
-                        {matrix ? '风险状态排序' : '明细'}
-                      </h3>
-                    </div>
-                    <p>
-                      {matrixRiskRows.length}
-                      {' 项 · 目标 '}
-                      {activeMatrixListMeta.target}
-                      {' · '}
-                      {matrix ? '基地 × 品类明细' : '当前汇总视角'}
-                    </p>
-                  </header>
-                  <div
-                    className="matrix-risk-table"
-                    role="table"
-                    aria-label={`${activeMatrixListMeta.label}风险排序清单`}
-                  >
-                    <div className="matrix-risk-row matrix-risk-head" role="row">
-                      <span role="columnheader">{'排序'}</span>
-                      <span role="columnheader">{'分析范围'}</span>
-                      <span role="columnheader">{'当前值'}</span>
-                      <span role="columnheader">{'目标差距'}</span>
-                      <span role="columnheader">{'风险状态'}</span>
-                      <span role="columnheader">{'数据粒度'}</span>
-                      <span role="columnheader">{'任务派发'}</span>
-                    </div>
-                    <div className="matrix-risk-body">
-                      {matrixRiskRows.length ? (
-                        matrixRiskRows.map((item, index) => (
-                          <div
-                            className="matrix-risk-row"
-                            role="row"
-                            key={`${activeCrossMode}-${item.scope}`}
-                          >
-                            <strong role="cell">{String(index + 1).padStart(2, '0')}</strong>
-                            <b role="cell">{item.scope}</b>
-                            <span role="cell">
-                              {formatNumber(item.value, 2)}
-                              {activeMatrixListMeta.unit}
-                              {item.adjusted !== undefined ? (
-                                <small>
-                                  {'剔除大日期 '}
-                                  {formatNumber(item.adjusted, 2)}
-                                  {'天'}
-                                </small>
-                              ) : null}
-                            </span>
-                            <span
-                              role="cell"
-                              className={
-                                item.gap === 0
-                                  ? 'watch'
-                                  : activeCrossMode === 'stock'
-                                    ? item.gap > 0
-                                      ? 'bad'
-                                      : 'good'
-                                    : item.gap < 0
-                                      ? 'bad'
-                                      : 'good'
-                              }
-                            >
-                              {activeCrossMode === 'inventory'
-                                ? '—'
-                                : `${item.gap > 0 ? '+' : ''}${formatNumber(item.gap, 2)}${activeMatrixListMeta.unit === '%' ? 'pp' : activeMatrixListMeta.unit}`}
-                            </span>
-                            <em
-                              role="cell"
-                              className={`matrix-risk-level level-${riskLevelClass[item.level]}`}
-                            >
-                              {activeCrossMode === 'inventory' ? '观察' : item.level}
-                            </em>
-                            <span role="cell">{item.granularity}</span>
-                            {activeCrossMode === 'inventory'
-                              ? null
-                              : renderTaskDispatch(
-                                  '交叉分析',
-                                  item.scope,
-                                  [activeMatrixListMeta.label],
-                                  item.level,
-                                )}
-                          </div>
-                        ))
-                      ) : (
-                        <div className="matrix-risk-empty">{matrixAnalysis.copy}</div>
-                      )}
-                    </div>
-                  </div>
                 </section>
-              </section>
+              )}
 
-              <section id="base" data-context-id="base">
-                <div
-                  className="panel category-detail-table category-list-visible base-detail-table"
-                  id="base-detail-list"
-                >
-                  <div className="category-table-tabs-scroll">
-                    <div
-                      className="category-table-tabs"
-                      style={
-                        {
-                          '--production-tab-count': activeProductionMetricTabs.length + 1,
-                        } as CSSProperties
-                      }
-                      role="tablist"
-                      aria-label={`基地${activeProductionMetricNames.length}项指标清单`}
-                    >
-                      {[
-                        {
-                          key: 'overview' as const,
-                          label: `${activeProductionMetricNames.length}项指标总览`,
-                        },
-                        ...activeProductionMetricTabs,
-                      ].map((item) => (
-                        <button
-                          role="tab"
-                          aria-selected={baseTab === item.key}
-                          key={item.key}
-                          className={baseTab === item.key ? 'selected' : ''}
-                          onClick={() => setBaseTab(item.key as BaseMetricTab)}
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="category-period-heading">
+              {analysisScope === 'production' && productionDimension === 'category' && (
+                <section id="category-operations" data-context-id="category">
+                  <div className="section-heading">
                     <div>
                       <span>
-                        {'生产视角 · 基地指标清单 · '}
+                        {'品类模块 · '}
                         {activeAnalysisPeriod}
                       </span>
-                      <h3>
-                        {baseTab === 'overview'
-                          ? `基地${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
-                          : `基地${activeBaseMetric}${periodMeta.shortLabel}明细`}
-                      </h3>
+                      <h2>
+                        {'品类'}
+                        {activeProductionMetricNames.length}
+                        {'项指标达成看板'}
+                      </h2>
                     </div>
                     <p>
                       {'数据范围：'}
@@ -8848,209 +8254,866 @@ export default function Home({
                       {snapshotDateLabel('库存量')}
                     </p>
                   </div>
-                  <div className="category-drill-note" role="note">
-                    {liveData
-                      ? '按“基地 → 品类 → 品项 → 物料组”四层展开；仅使用已接来源的唯一分类，缺失分类不推算。'
-                      : '按“基地 → 品类 → 品项 → 物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。'}
-                  </div>
-                  <div
-                    className="category-table-content category-drill-table base-drill-table"
-                    style={baseTab === 'overview' ? productionOverviewRowStyle : undefined}
-                    role="treegrid"
-                    aria-label={
-                      baseTab === 'overview'
-                        ? `基地品类品项物料组${activeProductionMetricNames.length}项指标下钻清单`
-                        : `基地品类品项物料组${activeBaseMetric}${periodMeta.label}下钻清单`
-                    }
-                  >
-                    <div
-                      className={`category-drill-row category-drill-head ${baseTab === 'overview' ? 'period-synced-overview' : 'period-metric'}`}
-                      role="row"
-                    >
-                      <strong role="columnheader">{'基地 / 品类 / 品项 / 物料组'}</strong>
-                      <span role="columnheader">{'层级'}</span>
-                      {baseTab === 'overview' ? (
-                        activeProductionMetricNames.map((name) => (
-                          <span role="columnheader" key={name}>
-                            {name}
-                            {drillStatisticType(name) === '快照指标' ? (
-                              <small>{'快照'}</small>
-                            ) : null}
-                          </span>
-                        ))
-                      ) : (
-                        <>
-                          <span role="columnheader">{'目标'}</span>
-                          <span role="columnheader">{'达成状态'}</span>
-                          <span role="columnheader">
-                            {drillStatisticType(activeBaseMetric || '') === '快照指标'
-                              ? '当前值'
-                              : periodMeta.current}
-                          </span>
-                          <span role="columnheader">{periodMeta.previous}</span>
-                          <span role="columnheader">{periodMeta.change}</span>
-                          <span role="columnheader">{periodMeta.same}</span>
-                          <span role="columnheader">{periodMeta.yoy}</span>
-                        </>
-                      )}
-                      <span role="columnheader">{'风险状态'}</span>
-                      <span role="columnheader">{'任务派发'}</span>
-                    </div>
-                    {base830.map((base) => {
-                      const baseOpen = expandedBaseRows.includes(base.name);
-                      const baseValues = baseDrillMetrics(base.name);
+                  <div className="category-health-grid">
+                    {(liveData ? activeProductHierarchy : categorySatisfaction830).map((item) => {
+                      const values = categoryDrillMetrics(item.name);
+                      const categoryMetrics = activeProductionMetricNames.map((name) =>
+                        productionMetricCardData(name, values),
+                      );
+                      const risk = drillRowRiskLevel(values);
                       return (
-                        <div className="category-drill-group" role="rowgroup" key={base.name}>
-                          <div
-                            id={`base-row-${stableMetricSeed(base.name)}`}
-                            className={`category-drill-row category-level base-level ${selectedBaseRowKey === base.name ? 'is-selected' : ''} ${baseTab === 'overview' ? '' : 'period-metric'}`}
-                            role="row"
-                            aria-expanded={baseOpen}
+                        <article
+                          className={`panel category-health-card ${selectedCategory === item.name ? 'selected' : ''}`}
+                          key={item.name}
+                        >
+                          <button
+                            className="category-card-title"
+                            onClick={() => selectCategory(item.name)}
                           >
-                            <button
-                              className="category-drill-toggle"
-                              role="gridcell"
-                              onClick={() => toggleBaseRow(base.name)}
+                            <strong>{item.name}</strong>
+                            <em
+                              className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
                             >
-                              <ChevronDown />
-                              {base.name}
+                              {liveData
+                                ? activeProductionMetricNames.some((name) =>
+                                    Number.isFinite(values[name]),
+                                  )
+                                  ? '已更新'
+                                  : '数据不足'
+                                : risk}
+                            </em>
+                          </button>
+                          {categoryMetrics.map((metric) => (
+                            <button
+                              className="category-card-metric"
+                              data-context-id={`category-metric-${item.name}-${metric.name}`}
+                              data-context-scope="品类指标"
+                              data-context-label={`${item.name} · ${metric.name}`}
+                              data-context-summary={`${activeAnalysisPeriod}，${metric.statisticType}，当前值${metric.value}，${metric.gap}。`}
+                              aria-label={`查看${item.name}${metric.name}${activeAnalysisPeriod}明细`}
+                              key={metric.name}
+                              onClick={() => selectCategory(item.name, metric.name)}
+                            >
+                              <span className="category-card-label">
+                                {metric.name}
+                                <small>
+                                  {metric.statisticType === '快照指标'
+                                    ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
+                                    : periodMeta.current}
+                                </small>
+                              </span>
+                              <span className="category-card-result">
+                                <b className={metric.state}>{metric.value}</b>
+                                <small className={metric.state}>{metric.gap}</small>
+                              </span>
                             </button>
-                            <span role="gridcell">
-                              <em>{'基地'}</em>
-                            </span>
-                            {renderBaseMetricCells(baseValues)}
-                            {renderDrillWorkflowCells(
-                              '基地',
-                              base.name,
-                              baseValues,
-                              activeBaseMetric,
-                            )}
-                          </div>
-                          {baseOpen &&
-                            (liveData
-                              ? liveBaseHierarchies[base.name].map((item) => item.name)
-                              : categories
-                            ).map((category) => {
-                              const categoryKey = `${base.name}::${category}`;
-                              const categoryOpen = expandedBaseCategoryRows.includes(categoryKey);
-                              const categoryValues = baseDrillMetrics(base.name, category);
-                              const productItems = baseCategoryProductItems(category, base.name);
-                              return (
-                                <div
-                                  className="category-drill-group"
-                                  role="rowgroup"
-                                  key={categoryKey}
-                                >
-                                  <div
-                                    id={`base-row-${stableMetricSeed(categoryKey)}`}
-                                    className={`category-drill-row item-level base-category-level ${selectedBaseRowKey === categoryKey ? 'is-selected' : ''} ${baseTab === 'overview' ? '' : 'period-metric'}`}
-                                    role="row"
-                                    aria-expanded={categoryOpen}
-                                  >
-                                    <button
-                                      className="category-drill-toggle"
-                                      role="gridcell"
-                                      onClick={() => toggleBaseCategoryRow(base.name, category)}
-                                    >
-                                      <ChevronDown />
-                                      {category}
-                                    </button>
-                                    <span role="gridcell">
-                                      <em>{'品类'}</em>
-                                    </span>
-                                    {renderBaseMetricCells(categoryValues)}
-                                    {renderDrillWorkflowCells(
-                                      '基地',
-                                      categoryKey.replaceAll('::', ' / '),
-                                      categoryValues,
-                                      activeBaseMetric,
-                                    )}
-                                  </div>
-                                  {categoryOpen &&
-                                    productItems.map((item) => {
-                                      const itemKey = `${categoryKey}::${item.name}`;
-                                      const itemOpen = expandedBaseItemRows.includes(itemKey);
-                                      const itemValues = baseDrillMetrics(
-                                        base.name,
-                                        category,
-                                        item.name,
-                                      );
-                                      return (
-                                        <div
-                                          className="category-drill-group"
-                                          role="rowgroup"
-                                          key={itemKey}
-                                        >
-                                          <div
-                                            className={`category-drill-row base-item-level ${baseTab === 'overview' ? '' : 'period-metric'}`}
-                                            role="row"
-                                            aria-expanded={itemOpen}
-                                          >
-                                            <button
-                                              className="category-drill-toggle"
-                                              role="gridcell"
-                                              onClick={() =>
-                                                toggleBaseItemRow(base.name, category, item.name)
-                                              }
-                                            >
-                                              <ChevronDown />
-                                              {item.name}
-                                            </button>
-                                            <span role="gridcell">
-                                              <em>{'品项'}</em>
-                                            </span>
-                                            {renderBaseMetricCells(itemValues)}
-                                            {renderDrillWorkflowCells(
-                                              '基地',
-                                              itemKey.replaceAll('::', ' / '),
-                                              itemValues,
-                                              activeBaseMetric,
-                                            )}
-                                          </div>
-                                          {itemOpen &&
-                                            item.materials.map((material, index) => {
-                                              const materialValues = baseDrillMetrics(
-                                                base.name,
-                                                category,
-                                                item.name,
-                                                material,
-                                              );
-                                              const materialScope = `${itemKey.replaceAll('::', ' / ')} / ${material}`;
-                                              return (
-                                                <div
-                                                  className={`category-drill-row material-level base-material-level ${baseTab === 'overview' ? '' : 'period-metric'}`}
-                                                  role="row"
-                                                  key={`${itemKey}::${material}::${index}`}
-                                                >
-                                                  <strong role="gridcell">
-                                                    <i />
-                                                    {material}
-                                                  </strong>
-                                                  <span role="gridcell">
-                                                    <em>{'物料组'}</em>
-                                                  </span>
-                                                  {renderBaseMetricCells(materialValues)}
-                                                  {renderDrillWorkflowCells(
-                                                    '基地',
-                                                    materialScope,
-                                                    materialValues,
-                                                    activeBaseMetric,
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
-                                        </div>
-                                      );
-                                    })}
-                                </div>
-                              );
-                            })}
-                        </div>
+                          ))}
+                        </article>
                       );
                     })}
                   </div>
-                </div>
-              </section>
+                  <div
+                    className="panel category-detail-table category-list-visible"
+                    id="category-detail-list"
+                  >
+                    <div className="category-table-tabs-scroll">
+                      <div
+                        className="category-table-tabs"
+                        style={
+                          {
+                            '--production-tab-count': activeProductionMetricTabs.length + 1,
+                          } as CSSProperties
+                        }
+                        role="tablist"
+                        aria-label={`品类${activeProductionMetricNames.length}项指标清单`}
+                      >
+                        {[
+                          {
+                            key: 'overview' as const,
+                            label: `${activeProductionMetricNames.length}项指标总览`,
+                          },
+                          ...activeProductionMetricTabs,
+                        ].map((item) => (
+                          <button
+                            role="tab"
+                            aria-selected={categoryTab === item.key}
+                            key={item.key}
+                            className={categoryTab === item.key ? 'selected' : ''}
+                            onClick={() => setCategoryTab(item.key as CategoryMetricTab)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="category-period-heading">
+                      <div>
+                        <span>
+                          {'生产视角 · 指标清单 · '}
+                          {activeAnalysisPeriod}
+                        </span>
+                        <h3>
+                          {categoryTab === 'overview'
+                            ? `${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
+                            : `${activeCategoryMetric}${periodMeta.shortLabel}明细`}
+                        </h3>
+                      </div>
+                      <p>
+                        {'数据范围：'}
+                        {periodMeta.range}
+                        {' · 库存快照截至'}
+                        {snapshotDateLabel('库存量')}
+                      </p>
+                    </div>
+                    <div className="category-drill-note" role="note">
+                      {liveData
+                        ? '品项、物料组按来源字段与唯一SKU分类读取；分类缺失或有冲突时保留未知，不按比例拆分。'
+                        : '品项、物料组层级当前使用原型演示拆分值，待接业务明细接口后替换。'}
+                    </div>
+                    <div
+                      className="category-table-content category-drill-table"
+                      style={categoryTab === 'overview' ? productionOverviewRowStyle : undefined}
+                      role="treegrid"
+                      aria-label={
+                        categoryTab === 'overview'
+                          ? `品类品项物料组${activeProductionMetricNames.length}项指标下钻清单`
+                          : `品类品项物料组${activeCategoryMetric}${periodMeta.label}下钻清单`
+                      }
+                    >
+                      <div
+                        className={`category-drill-row category-drill-head ${categoryTab === 'overview' ? 'period-synced-overview' : 'period-metric'}`}
+                        style={categoryTab === 'overview' ? productionOverviewRowStyle : undefined}
+                        role="row"
+                      >
+                        <strong role="columnheader">{'名称'}</strong>
+                        <span role="columnheader">{'层级'}</span>
+                        {categoryTab === 'overview' ? (
+                          activeProductionMetricNames.map((name) => (
+                            <span role="columnheader" key={name}>
+                              {name}
+                              {drillStatisticType(name) === '快照指标' ? (
+                                <small>{'快照'}</small>
+                              ) : null}
+                            </span>
+                          ))
+                        ) : (
+                          <>
+                            <span role="columnheader">{'目标'}</span>
+                            <span role="columnheader">{'达成状态'}</span>
+                            <span role="columnheader">
+                              {drillStatisticType(activeCategoryMetric || '') === '快照指标'
+                                ? '当前值'
+                                : periodMeta.current}
+                            </span>
+                            <span role="columnheader">{periodMeta.previous}</span>
+                            <span role="columnheader">{periodMeta.change}</span>
+                            <span role="columnheader">{periodMeta.same}</span>
+                            <span role="columnheader">{periodMeta.yoy}</span>
+                          </>
+                        )}
+                        <span role="columnheader">{'风险状态'}</span>
+                        <span role="columnheader">{'任务派发'}</span>
+                      </div>
+                      {activeProductHierarchy.map((category) => {
+                        const categoryOpen = expandedCategoryListCategories.includes(category.name);
+                        const categoryValues = categoryDrillMetrics(category.name);
+                        return (
+                          <div className="category-drill-group" role="rowgroup" key={category.name}>
+                            <div
+                              id={`category-row-${stableMetricSeed(category.name)}`}
+                              className={`category-drill-row category-level ${selectedCategoryRowKey === category.name ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                              role="row"
+                              aria-expanded={categoryOpen}
+                            >
+                              <button
+                                className="category-drill-toggle"
+                                role="gridcell"
+                                onClick={() => toggleCategoryListCategory(category.name)}
+                              >
+                                <ChevronDown />
+                                {category.name}
+                              </button>
+                              <span role="gridcell">
+                                <em>{'品类'}</em>
+                              </span>
+                              {renderCategoryMetricCells(categoryValues)}
+                              {renderDrillWorkflowCells(
+                                '品类',
+                                category.name,
+                                categoryValues,
+                                activeCategoryMetric,
+                              )}
+                            </div>
+                            {categoryOpen &&
+                              category.items.map((item) => {
+                                const itemKey = `${category.name}::${item.name}`;
+                                const itemOpen = expandedCategoryListItems.includes(itemKey);
+                                const itemValues = categoryDrillMetrics(category.name, item.name);
+                                const itemScope = `${category.name} / ${item.name}`;
+                                return (
+                                  <div
+                                    className="category-drill-group"
+                                    role="rowgroup"
+                                    key={itemKey}
+                                  >
+                                    <div
+                                      id={`category-row-${stableMetricSeed(itemKey)}`}
+                                      className={`category-drill-row item-level ${selectedCategoryRowKey === itemKey ? 'is-selected' : ''} ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                                      role="row"
+                                      aria-expanded={itemOpen}
+                                    >
+                                      <button
+                                        className="category-drill-toggle"
+                                        role="gridcell"
+                                        onClick={() =>
+                                          toggleCategoryListItem(category.name, item.name)
+                                        }
+                                      >
+                                        <ChevronDown />
+                                        {item.name}
+                                      </button>
+                                      <span role="gridcell">
+                                        <em>{'品项'}</em>
+                                      </span>
+                                      {renderCategoryMetricCells(itemValues)}
+                                      {renderDrillWorkflowCells(
+                                        '品类',
+                                        itemScope,
+                                        itemValues,
+                                        activeCategoryMetric,
+                                      )}
+                                    </div>
+                                    {itemOpen && (
+                                      <DrillPage
+                                        key={`${liveDate}:${selectedBase}:${itemKey}`}
+                                        rows={item.materials}
+                                      >
+                                        {(material, index) => {
+                                          const materialValues = categoryDrillMetrics(
+                                            category.name,
+                                            item.name,
+                                            material,
+                                          );
+                                          const materialScope = `${itemScope} / ${material}`;
+                                          return (
+                                            <div
+                                              className={`category-drill-row material-level ${categoryTab === 'overview' ? '' : 'period-metric'}`}
+                                              role="row"
+                                              key={`${itemKey}::${material}::${index}`}
+                                            >
+                                              <strong role="gridcell">
+                                                <i />
+                                                {material}
+                                              </strong>
+                                              <span role="gridcell">
+                                                <em>{'物料组'}</em>
+                                              </span>
+                                              {renderCategoryMetricCells(materialValues)}
+                                              {renderDrillWorkflowCells(
+                                                '品类',
+                                                materialScope,
+                                                materialValues,
+                                                activeCategoryMetric,
+                                              )}
+                                            </div>
+                                          );
+                                        }}
+                                      </DrillPage>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {analysisScope === 'production' && productionDimension === 'base' && (
+                <section id="base-dashboard" data-context-id="base">
+                  <div className="section-heading">
+                    <div>
+                      <span>
+                        {'基地模块 · '}
+                        {activeAnalysisPeriod}
+                      </span>
+                      <h2>
+                        {'基地'}
+                        {activeProductionMetricNames.length}
+                        {'项指标达成看板'}
+                      </h2>
+                    </div>
+                    <p>
+                      {'数据范围：'}
+                      {periodMeta.range}
+                      {' · 库存快照截至'}
+                      {snapshotDateLabel('库存量')}
+                    </p>
+                  </div>
+                  <div className="base-health-grid">
+                    {base830.map((base) => {
+                      const values = baseDrillMetrics(base.name);
+                      const baseMetrics = activeProductionMetricNames.map((name) =>
+                        productionMetricCardData(name, values),
+                      );
+                      const risk = drillRowRiskLevel(values);
+                      return (
+                        <article
+                          className={`panel base-health-card ${selectedBase === base.name ? 'selected' : ''}`}
+                          key={base.name}
+                        >
+                          <button
+                            className="base-card-title"
+                            onClick={() => selectBaseCard(base.name)}
+                          >
+                            <strong>{base.name}</strong>
+                            <em
+                              className={`achievement-status ${liveData ? 'status-neutral' : risk === '健康' ? 'status-ok' : 'status-bad'}`}
+                            >
+                              {liveData ? '未判定' : risk}
+                            </em>
+                          </button>
+                          {baseMetrics.map((metric) => (
+                            <button
+                              className="base-card-metric"
+                              data-context-id={`base-metric-${base.name}-${metric.name}`}
+                              data-context-scope="基地指标"
+                              data-context-label={`${base.name} · ${metric.name}`}
+                              data-context-summary={`${activeAnalysisPeriod}，${metric.statisticType}，当前值${metric.value}，${metric.gap}。`}
+                              aria-label={`查看${base.name}${metric.name}${activeAnalysisPeriod}明细`}
+                              key={metric.name}
+                              onClick={() => selectBaseCard(base.name, metric.name)}
+                            >
+                              <span className="base-card-label">
+                                {metric.name}
+                                <small>
+                                  {metric.statisticType === '快照指标'
+                                    ? `最新快照 · 截至${snapshotDateLabel(metric.name)}`
+                                    : periodMeta.current}
+                                </small>
+                              </span>
+                              <span className="base-card-result">
+                                <b className={metric.state}>{metric.value}</b>
+                                <small className={metric.state}>{metric.gap}</small>
+                              </span>
+                            </button>
+                          ))}
+                        </article>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {analysisScope === 'production' && productionDimension === 'cross' && (
+                <section id="cross-analysis" data-context-id="cross">
+                  <div className="matrix-heading cross-heading">
+                    <div>
+                      <span>
+                        {'交叉分析 · '}
+                        {activeAnalysisPeriod}
+                      </span>
+                      <h2>
+                        {'基地 × 品类'}
+                        {activeCrossMatrixModes.length}
+                        {'项指标矩阵'}
+                      </h2>
+                      <small>
+                        {'数据范围：'}
+                        {periodMeta.range}
+                        {' · 快照指标截至'}
+                        {dataCutoff}
+                      </small>
+                    </div>
+                    <div className="segmented cross-tabs" aria-label="矩阵指标切换">
+                      {activeCrossMatrixModes.map((mode) => (
+                        <button
+                          key={mode}
+                          className={activeCrossMode === mode ? 'selected' : ''}
+                          onClick={() => setMatrixMode(mode)}
+                        >
+                          {matrixListMeta[mode].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="matrix-layout">
+                    <div className="matrix panel">
+                      {activeCrossMode === 'stock' && (
+                        <div className="matrix-format-note">
+                          {'格式：可发货天数 / 剔除大日期 · 目标 ≤12天，挑战 ≤10天 · '}
+                          {periodMeta.label}
+                        </div>
+                      )}
+                      <div className="matrix-row matrix-header">
+                        <span>{'基地'}</span>
+                        {matrixCategoryNames.map((c) => (
+                          <span key={c}>{c}</span>
+                        ))}
+                      </div>
+                      {matrix
+                        ? matrix.map((row) => (
+                            <div className="matrix-row" key={row.base}>
+                              <strong>{row.base}</strong>
+                              {row.values.map((value, i) => {
+                                const displayValue = liveData
+                                  ? productionMetricDisplay(
+                                      crossMetricByMode[
+                                        activeCrossMode as keyof typeof crossMetricByMode
+                                      ],
+                                      value,
+                                    )
+                                  : activeCrossMode === 'stock'
+                                    ? `${formatNumber(value, 1)}天 / 剔除大日期 ${formatNumber(adjustedStockValue(row.base, i) * matrixPeriodRatio(activeCrossMode), 1)}天`
+                                    : `${formatNumber(value, 2)}%`;
+                                return (
+                                  <button
+                                    data-context-id={`cross-metric-${activeCrossMode}-${row.base}-${matrixCategoryNames[i]}`}
+                                    data-context-scope="交叉分析单值"
+                                    data-context-label={`${row.base} × ${matrixCategoryNames[i]} · ${activeMatrixListMeta.label}`}
+                                    data-context-summary={`${activeAnalysisPeriod}，当前值${displayValue}，目标${activeMatrixListMeta.target}。`}
+                                    title={`${row.base} × ${matrixCategoryNames[i]} · ${activeAnalysisPeriod}`}
+                                    key={matrixCategoryNames[i]}
+                                    className={
+                                      liveData
+                                        ? 'matrix-unavailable'
+                                        : matrixClass(
+                                            value,
+                                            activeCrossMode === 'rate' ? 'rate' : 'stock',
+                                          )
+                                    }
+                                    onClick={() => {
+                                      setSelectedBase(row.base);
+                                      setToast(`已筛选 ${row.base} ${activeAnalysisPeriod}风险项`);
+                                    }}
+                                  >
+                                    {liveData
+                                      ? displayValue
+                                      : activeCrossMode === 'stock'
+                                        ? formatNumber(value, 1) +
+                                          ' / ' +
+                                          formatNumber(
+                                            adjustedStockValue(row.base, i) *
+                                              matrixPeriodRatio(activeCrossMode),
+                                            1,
+                                          )
+                                        : formatNumber(value, 2) + '%'}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))
+                        : base830.map((row) => (
+                            <div className="matrix-row matrix-unavailable" key={row.name}>
+                              <strong>{row.name}</strong>
+                              {matrixCategoryNames.map((category) => (
+                                <span key={category}>{'—'}</span>
+                              ))}
+                            </div>
+                          ))}
+                    </div>
+                    <aside className="panel matrix-note">
+                      <EditableHelp
+                        key={activeMatrixHelp.storageKey}
+                        compact
+                        storageKey={activeMatrixHelp.storageKey}
+                        label={activeMatrixHelp.label}
+                        defaultText={activeMatrixHelp.defaultText}
+                      />
+                      <div className="ai-heading">
+                        <Sparkles />
+                        <span>{'AI 矩阵研判'}</span>
+                      </div>
+                      <h3>{matrixAnalysis.title}</h3>
+                      <p>{matrixAnalysis.copy}</p>
+                      <div className="matrix-thresholds">
+                        {matrixThresholdText[activeCrossMode]}
+                      </div>
+                      {matrixRiskRows.length > 0 && activeCrossMode !== 'inventory' && (
+                        <div className="legend">
+                          <span>
+                            <i className="heat-good" />
+                            {'健康'}
+                          </span>
+                          <span>
+                            <i className="heat-watch" />
+                            {'预警'}
+                          </span>
+                          <span>
+                            <i className="heat-critical" />
+                            {'严重'}
+                          </span>
+                        </div>
+                      )}
+                    </aside>
+                  </div>
+                  <section
+                    className="matrix-risk-list panel"
+                    id="matrix-risk-list"
+                    aria-labelledby="matrix-risk-list-title"
+                  >
+                    <header>
+                      <div>
+                        <span>{'指标清单'}</span>
+                        <h3 id="matrix-risk-list-title">
+                          {activeMatrixListMeta.label}
+                          {matrix ? '风险状态排序' : '明细'}
+                        </h3>
+                      </div>
+                      <p>
+                        {matrixRiskRows.length}
+                        {' 项 · 目标 '}
+                        {activeMatrixListMeta.target}
+                        {' · '}
+                        {matrix ? '基地 × 品类明细' : '当前汇总视角'}
+                      </p>
+                    </header>
+                    <div
+                      className="matrix-risk-table"
+                      role="table"
+                      aria-label={`${activeMatrixListMeta.label}风险排序清单`}
+                    >
+                      <div className="matrix-risk-row matrix-risk-head" role="row">
+                        <span role="columnheader">{'排序'}</span>
+                        <span role="columnheader">{'分析范围'}</span>
+                        <span role="columnheader">{'当前值'}</span>
+                        <span role="columnheader">{'目标差距'}</span>
+                        <span role="columnheader">{'风险状态'}</span>
+                        <span role="columnheader">{'数据粒度'}</span>
+                        <span role="columnheader">{'任务派发'}</span>
+                      </div>
+                      <div className="matrix-risk-body">
+                        {matrixRiskRows.length ? (
+                          matrixRiskRows.map((item, index) => (
+                            <div
+                              className="matrix-risk-row"
+                              role="row"
+                              key={`${activeCrossMode}-${item.scope}`}
+                            >
+                              <strong role="cell">{String(index + 1).padStart(2, '0')}</strong>
+                              <b role="cell">{item.scope}</b>
+                              <span role="cell">
+                                {formatNumber(item.value, 2)}
+                                {activeMatrixListMeta.unit}
+                                {item.adjusted !== undefined ? (
+                                  <small>
+                                    {'剔除大日期 '}
+                                    {formatNumber(item.adjusted, 2)}
+                                    {'天'}
+                                  </small>
+                                ) : null}
+                              </span>
+                              <span
+                                role="cell"
+                                className={
+                                  item.gap === 0
+                                    ? 'watch'
+                                    : activeCrossMode === 'stock'
+                                      ? item.gap > 0
+                                        ? 'bad'
+                                        : 'good'
+                                      : item.gap < 0
+                                        ? 'bad'
+                                        : 'good'
+                                }
+                              >
+                                {activeCrossMode === 'inventory'
+                                  ? '—'
+                                  : `${item.gap > 0 ? '+' : ''}${formatNumber(item.gap, 2)}${activeMatrixListMeta.unit === '%' ? 'pp' : activeMatrixListMeta.unit}`}
+                              </span>
+                              <em
+                                role="cell"
+                                className={`matrix-risk-level level-${riskLevelClass[item.level]}`}
+                              >
+                                {activeCrossMode === 'inventory' ? '观察' : item.level}
+                              </em>
+                              <span role="cell">{item.granularity}</span>
+                              {activeCrossMode === 'inventory'
+                                ? null
+                                : renderTaskDispatch(
+                                    '交叉分析',
+                                    item.scope,
+                                    [activeMatrixListMeta.label],
+                                    item.level,
+                                  )}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="matrix-risk-empty">{matrixAnalysis.copy}</div>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+                </section>
+              )}
+
+              {analysisScope === 'production' && productionDimension === 'base' && (
+                <section id="base" data-context-id="base">
+                  <div
+                    className="panel category-detail-table category-list-visible base-detail-table"
+                    id="base-detail-list"
+                  >
+                    <div className="category-table-tabs-scroll">
+                      <div
+                        className="category-table-tabs"
+                        style={
+                          {
+                            '--production-tab-count': activeProductionMetricTabs.length + 1,
+                          } as CSSProperties
+                        }
+                        role="tablist"
+                        aria-label={`基地${activeProductionMetricNames.length}项指标清单`}
+                      >
+                        {[
+                          {
+                            key: 'overview' as const,
+                            label: `${activeProductionMetricNames.length}项指标总览`,
+                          },
+                          ...activeProductionMetricTabs,
+                        ].map((item) => (
+                          <button
+                            role="tab"
+                            aria-selected={baseTab === item.key}
+                            key={item.key}
+                            className={baseTab === item.key ? 'selected' : ''}
+                            onClick={() => setBaseTab(item.key as BaseMetricTab)}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="category-period-heading">
+                      <div>
+                        <span>
+                          {'生产视角 · 基地指标清单 · '}
+                          {activeAnalysisPeriod}
+                        </span>
+                        <h3>
+                          {baseTab === 'overview'
+                            ? `基地${activeProductionMetricNames.length}项指标${periodMeta.shortLabel}明细`
+                            : `基地${activeBaseMetric}${periodMeta.shortLabel}明细`}
+                        </h3>
+                      </div>
+                      <p>
+                        {'数据范围：'}
+                        {periodMeta.range}
+                        {' · 库存快照截至'}
+                        {snapshotDateLabel('库存量')}
+                      </p>
+                    </div>
+                    <div className="category-drill-note" role="note">
+                      {liveData
+                        ? '按“基地 → 品类 → 品项 → 物料组”四层展开；仅使用已接来源的唯一分类，缺失分类不推算。'
+                        : '按“基地 → 品类 → 品项 → 物料组”四层展开；品项、物料组当前使用原型演示拆分值，待接业务明细接口后替换。'}
+                    </div>
+                    <div
+                      className="category-table-content category-drill-table base-drill-table"
+                      style={baseTab === 'overview' ? productionOverviewRowStyle : undefined}
+                      role="treegrid"
+                      aria-label={
+                        baseTab === 'overview'
+                          ? `基地品类品项物料组${activeProductionMetricNames.length}项指标下钻清单`
+                          : `基地品类品项物料组${activeBaseMetric}${periodMeta.label}下钻清单`
+                      }
+                    >
+                      <div
+                        className={`category-drill-row category-drill-head ${baseTab === 'overview' ? 'period-synced-overview' : 'period-metric'}`}
+                        role="row"
+                      >
+                        <strong role="columnheader">{'基地 / 品类 / 品项 / 物料组'}</strong>
+                        <span role="columnheader">{'层级'}</span>
+                        {baseTab === 'overview' ? (
+                          activeProductionMetricNames.map((name) => (
+                            <span role="columnheader" key={name}>
+                              {name}
+                              {drillStatisticType(name) === '快照指标' ? (
+                                <small>{'快照'}</small>
+                              ) : null}
+                            </span>
+                          ))
+                        ) : (
+                          <>
+                            <span role="columnheader">{'目标'}</span>
+                            <span role="columnheader">{'达成状态'}</span>
+                            <span role="columnheader">
+                              {drillStatisticType(activeBaseMetric || '') === '快照指标'
+                                ? '当前值'
+                                : periodMeta.current}
+                            </span>
+                            <span role="columnheader">{periodMeta.previous}</span>
+                            <span role="columnheader">{periodMeta.change}</span>
+                            <span role="columnheader">{periodMeta.same}</span>
+                            <span role="columnheader">{periodMeta.yoy}</span>
+                          </>
+                        )}
+                        <span role="columnheader">{'风险状态'}</span>
+                        <span role="columnheader">{'任务派发'}</span>
+                      </div>
+                      {base830.map((base) => {
+                        const baseOpen = expandedBaseRows.includes(base.name);
+                        const baseValues = baseDrillMetrics(base.name);
+                        return (
+                          <div className="category-drill-group" role="rowgroup" key={base.name}>
+                            <div
+                              id={`base-row-${stableMetricSeed(base.name)}`}
+                              className={`category-drill-row category-level base-level ${selectedBaseRowKey === base.name ? 'is-selected' : ''} ${baseTab === 'overview' ? '' : 'period-metric'}`}
+                              role="row"
+                              aria-expanded={baseOpen}
+                            >
+                              <button
+                                className="category-drill-toggle"
+                                role="gridcell"
+                                onClick={() => toggleBaseRow(base.name)}
+                              >
+                                <ChevronDown />
+                                {base.name}
+                              </button>
+                              <span role="gridcell">
+                                <em>{'基地'}</em>
+                              </span>
+                              {renderBaseMetricCells(baseValues)}
+                              {renderDrillWorkflowCells(
+                                '基地',
+                                base.name,
+                                baseValues,
+                                activeBaseMetric,
+                              )}
+                            </div>
+                            {baseOpen &&
+                              (liveData
+                                ? liveBaseHierarchies[base.name].map((item) => item.name)
+                                : categories
+                              ).map((category) => {
+                                const categoryKey = `${base.name}::${category}`;
+                                const categoryOpen = expandedBaseCategoryRows.includes(categoryKey);
+                                const categoryValues = baseDrillMetrics(base.name, category);
+                                const productItems = baseCategoryProductItems(category, base.name);
+                                return (
+                                  <div
+                                    className="category-drill-group"
+                                    role="rowgroup"
+                                    key={categoryKey}
+                                  >
+                                    <div
+                                      id={`base-row-${stableMetricSeed(categoryKey)}`}
+                                      className={`category-drill-row item-level base-category-level ${selectedBaseRowKey === categoryKey ? 'is-selected' : ''} ${baseTab === 'overview' ? '' : 'period-metric'}`}
+                                      role="row"
+                                      aria-expanded={categoryOpen}
+                                    >
+                                      <button
+                                        className="category-drill-toggle"
+                                        role="gridcell"
+                                        onClick={() => toggleBaseCategoryRow(base.name, category)}
+                                      >
+                                        <ChevronDown />
+                                        {category}
+                                      </button>
+                                      <span role="gridcell">
+                                        <em>{'品类'}</em>
+                                      </span>
+                                      {renderBaseMetricCells(categoryValues)}
+                                      {renderDrillWorkflowCells(
+                                        '基地',
+                                        categoryKey.replaceAll('::', ' / '),
+                                        categoryValues,
+                                        activeBaseMetric,
+                                      )}
+                                    </div>
+                                    {categoryOpen &&
+                                      productItems.map((item) => {
+                                        const itemKey = `${categoryKey}::${item.name}`;
+                                        const itemOpen = expandedBaseItemRows.includes(itemKey);
+                                        const itemValues = baseDrillMetrics(
+                                          base.name,
+                                          category,
+                                          item.name,
+                                        );
+                                        return (
+                                          <div
+                                            className="category-drill-group"
+                                            role="rowgroup"
+                                            key={itemKey}
+                                          >
+                                            <div
+                                              className={`category-drill-row base-item-level ${baseTab === 'overview' ? '' : 'period-metric'}`}
+                                              role="row"
+                                              aria-expanded={itemOpen}
+                                            >
+                                              <button
+                                                className="category-drill-toggle"
+                                                role="gridcell"
+                                                onClick={() =>
+                                                  toggleBaseItemRow(base.name, category, item.name)
+                                                }
+                                              >
+                                                <ChevronDown />
+                                                {item.name}
+                                              </button>
+                                              <span role="gridcell">
+                                                <em>{'品项'}</em>
+                                              </span>
+                                              {renderBaseMetricCells(itemValues)}
+                                              {renderDrillWorkflowCells(
+                                                '基地',
+                                                itemKey.replaceAll('::', ' / '),
+                                                itemValues,
+                                                activeBaseMetric,
+                                              )}
+                                            </div>
+                                            {itemOpen && (
+                                              <DrillPage
+                                                key={`${liveDate}:${selectedBase}:${itemKey}`}
+                                                rows={item.materials}
+                                              >
+                                                {(material, index) => {
+                                                  const materialValues = baseDrillMetrics(
+                                                    base.name,
+                                                    category,
+                                                    item.name,
+                                                    material,
+                                                  );
+                                                  const materialScope = `${itemKey.replaceAll('::', ' / ')} / ${material}`;
+                                                  return (
+                                                    <div
+                                                      className={`category-drill-row material-level base-material-level ${baseTab === 'overview' ? '' : 'period-metric'}`}
+                                                      role="row"
+                                                      key={`${itemKey}::${material}::${index}`}
+                                                    >
+                                                      <strong role="gridcell">
+                                                        <i />
+                                                        {material}
+                                                      </strong>
+                                                      <span role="gridcell">
+                                                        <em>{'物料组'}</em>
+                                                      </span>
+                                                      {renderBaseMetricCells(materialValues)}
+                                                      {renderDrillWorkflowCells(
+                                                        '基地',
+                                                        materialScope,
+                                                        materialValues,
+                                                        activeBaseMetric,
+                                                      )}
+                                                    </div>
+                                                  );
+                                                }}
+                                              </DrillPage>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
 
               <section id="issues" data-context-id="risk">
                 <div className="section-heading issue-heading">

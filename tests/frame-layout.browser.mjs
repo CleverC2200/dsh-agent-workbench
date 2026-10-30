@@ -24,7 +24,10 @@ const bundle = await build({
   loader: { '.png': 'dataurl', '.css': 'text' },
 });
 async function documentFixture(t, pageId = 'business') {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1600, height: 700 } });
   const css = (
@@ -35,7 +38,7 @@ async function documentFixture(t, pageId = 'business') {
     )
   ).join('\n');
   await page.setContent(
-    `<style>${css} html,body{margin:0;height:100%} #root{height:100%;margin-left:280px}</style><div id="root"></div>`,
+    `<html data-platform="darwin"><style>${css} html,body{margin:0;height:100%} #root{height:100%;margin-left:280px}</style><div id="root"></div>`,
   );
   await page.evaluate((id) => {
     window.testPageId = id;
@@ -185,7 +188,30 @@ for (const id of [
       const toolbar = page.getByRole('toolbar', { name: '对话区视图与会话操作' });
       const toolbarBox = await toolbar.boundingBox();
       assert.equal(toolbarBox.y, 0, 'controls stay at the upper right');
-      assert.equal(businessBox.y, 58, 'expanded business content starts below controls');
+      assert.equal(
+        businessBox.y,
+        [
+          'gea-proof',
+          'inventory-fc',
+          'inventory-qll',
+          'inventory-aqkc',
+          'inventory-dealer',
+        ].includes(id) && width >= 1100
+          ? 0
+          : 58,
+        'expanded business content respects the toolbar layout',
+      );
+      if (
+        [
+          'gea-proof',
+          'inventory-fc',
+          'inventory-qll',
+          'inventory-aqkc',
+          'inventory-dealer',
+        ].includes(id) &&
+        width >= 1100
+      )
+        assert.ok(toolbarBox.width <= 300, 'shared controls occupy only the right-hand seat');
       assert.ok(toolbarBox.x + toolbarBox.width >= width - 1);
       await page.getByRole('button', { name: '会话区最大，隐藏中间区域' }).click();
       await expect(business).toBeHidden();
@@ -204,7 +230,10 @@ test('Document overlay preserves both Core resize hit strips and the native lead
       readFile('src/company/layout.css', 'utf8'),
     ])
   ).join('\n');
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    channel: process.env.DSH_TEST_BROWSER_CHANNEL,
+  });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1536, height: 920 } });
   await page.setContent(`<style>${css} html,body{margin:0;height:100%}</style>
@@ -229,4 +258,14 @@ test('Document overlay preserves both Core resize hit strips and the native lead
   assert.notEqual(await page.evaluate(() => document.elementFromPoint(320, 24)?.tagName), 'IFRAME');
   assert.equal(await page.evaluate(() => document.elementFromPoint(450, 24)?.tagName), 'IFRAME');
   assert.equal(await page.evaluate(() => document.elementFromPoint(320, 100)?.tagName), 'IFRAME');
+});
+
+test('Windows business chrome leaves modal clicks to the native titlebar contract', async (t) => {
+  const page = await documentFixture(t);
+  await page.evaluate(() => {
+    document.documentElement.dataset.platform = 'win32';
+  });
+  const chrome = page.locator('[data-workbench-window-chrome]');
+  await expect(chrome).toBeVisible();
+  await expect(chrome).not.toHaveCSS('-webkit-app-region', 'drag');
 });

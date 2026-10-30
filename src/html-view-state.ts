@@ -87,6 +87,13 @@ type FcCycleEdit = {
   overrides: FcCycleChange[];
 };
 export type FcViewState = {
+  fcStorageWarehouse?: string;
+  writeIntents?: Entry<{
+    request: string;
+    requestedAt?: string;
+    idempotencyKey?: string;
+    traceId?: string;
+  }>[];
   version: 1;
   filters: Entry<FcFilters>[];
   drafts: Entry<FcDraft>[];
@@ -95,7 +102,15 @@ export type FcViewState = {
   preferences: Entry<FcPreferences>[];
   cycleEdits?: Entry<FcCycleEdit>[];
   replenishmentCycleDays?: number;
-  fcCycleRules?: Array<{ level: string; object: string; days: number; from: string; to: string }>;
+  fcCycleWarehouse?: string;
+  fcCycleRules?: Array<{
+    level: string;
+    object: string;
+    days: number;
+    from: string;
+    to: string;
+    status?: string;
+  }>;
 };
 export type AqkcViewState = {
   version: 1;
@@ -757,6 +772,20 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
           cycles: entries('cycle-preview', cycle),
           preferences: entries('preferences', preferences),
           cycleEdits: entries('cycle-edit', cycleEdit),
+          writeIntents: entries('write-intent', (v) =>
+            shape(
+              v,
+              {
+                request: (s) => typeof s === 'string' && s.length <= 60000,
+                requestedAt: text,
+                idempotencyKey: text,
+                traceId: text,
+              },
+              ['request'],
+            ),
+          ),
+          fcCycleWarehouse: text,
+          fcStorageWarehouse: text,
           fcCycleRules: (v) =>
             Array.isArray(v) &&
             v.length <= 12 &&
@@ -770,6 +799,7 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
                   days: (x) => typeof x === 'number' && Number.isInteger(x) && x >= 1 && x <= 365,
                   from: text,
                   to: text,
+                  status: (v) => ['effective', 'paused'].includes(String(v)),
                 },
                 ['level', 'object', 'days', 'from', 'to'],
               ),

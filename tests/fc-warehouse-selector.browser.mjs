@@ -28,6 +28,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
   const calls = [],
     errors = [];
+  let releaseConfirmation;
   t.after(() => assert.deepEqual(errors, []));
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route('http://127.0.0.1:19486/**', async (route) => {
@@ -38,6 +39,10 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       });
     const { queryId: id, parameters: values } = route.request().postDataJSON();
     calls.push({ id, values });
+    if (id === 'replenishment.detail.atomic' && values.page_size === 200)
+      await new Promise((resolve) => {
+        releaseConfirmation = resolve;
+      });
     const q = config.queries[id];
     assert.ok(q, id);
     let rows;
@@ -65,13 +70,20 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       id.includes('atomic') ||
       id.startsWith('branch-current-orders.')
     )
-      rows = [{ page_scope_total: 0, page_row_present: null }];
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
+          page_scope_total: 0,
+          page_row_present: null,
+        },
+      ];
     else if (id.endsWith('.detail') || id.includes('batch-age.groups')) rows = [];
     else {
       const row = Object.fromEntries(q.resultColumns.map((k) => [k, 0]));
       Object.assign(row, {
         row_count: 1,
-        total_qty: values.warehouse_code ? 123 : 999,
+        total_qty: values.warehouse_code ? 123 : 210750.2,
+        known_in_transit: 1103569,
         fulfillment_rate: 0.95,
         demand: 100,
         shortage: 5,
@@ -86,6 +98,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
           calculated_sku_count: 1,
           missing_calculation_count: 2,
         });
+      for (const key of ['age_weight_qty', 'weighted_age_sum'])
+        if (!q.resultColumns.includes(key)) delete row[key];
       rows = [row];
     }
     await route.fulfill({
@@ -98,20 +112,63 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await expect(picker.locator('option')).toHaveCount(3);
+  await picker.click();
+  await expect(page.getByRole('listbox', { name: '选择分仓' }).getByRole('option')).toHaveCount(3);
+  await picker.click();
+  const wrapperBorder = await picker
+    .locator('..')
+    .evaluate((element) => getComputedStyle(element).borderTopWidth);
+  assert.equal(wrapperBorder, '0px');
+  await page.getByRole('button', { name: '补货周期配置' }).click();
+  const dialog = page.getByRole('dialog', { name: '补货周期配置' });
+  await dialog.getByRole('button', { name: '添加周期规则' }).click();
+  const status = dialog.getByRole('button', { name: '规则1状态' });
+  await status.click();
+  await dialog.getByRole('option', { name: '暂停' }).click();
+  await expect(status).toContainText('暂停');
+  await dialog.getByRole('button', { name: '取消' }).click();
   const firstCard = page.locator('[data-overview-cards="fc"] article').first();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
+  await expect(page.getByRole('region', { name: '分仓业务保存' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '保存人工计划', exact: true })).toHaveCount(0);
   const replenishmentCard = page
     .locator('[data-overview-cards="fc"] article')
     .filter({ hasText: '待补货量' });
   await expect(replenishmentCard).toContainText('70');
+  await expect(replenishmentCard).toContainText('110.36万件');
   await expect(replenishmentCard).toContainText('已测算部分；2 项待核实');
+  const toolbar = page.locator('form[data-business-filters="fc"]');
+  for (const width of [1280, 900, 640]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await toolbar.evaluate((form) => {
+      const controls = [...form.children].map((node) => node.getBoundingClientRect());
+      const bounds = form.getBoundingClientRect();
+      return {
+        sameLine: controls.every((rect) => Math.abs(rect.top - controls[0].top) < 2),
+        contained: controls.every((rect) => rect.left >= bounds.left && rect.right <= bounds.right),
+      };
+    });
+    assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
+    if (width >= 900)
+      assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
+  }
+  await page.setViewportSize({ width: 900, height: 900 });
+  await mkdir('.scratch', { recursive: true });
+  await toolbar.screenshot({ path: '.scratch/fc-toolbar-inline.png' });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const initialDirectoryReads = calls.filter((c) => c.id === 'branch-warehouse.directory').length;
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
-  await picker.selectOption('A170');
+  await picker.click();
+  await page.locator('[role=option][data-value="A170"]').click();
   await expect(firstCard).toContainText('123');
+  const ageCard = page
+    .locator('[data-overview-cards="fc"] article')
+    .filter({ hasText: '平均货龄' });
+  await expect(ageCard.locator('.kpi-value')).toContainText('20');
+  assert.ok(calls.some((c) => c.id === 'health.cards' && c.values.warehouse_code === 'A170'));
+  assert.ok(!calls.some((c) => c.id === 'health.summary'));
   await expect(page.locator('[data-overview-cards="fc"] article').last()).toContainText('23');
   await expect
     .poll(() => calls.some((c) => c.id === 'orders.summary' && c.values.warehouse_code === 'A170'))
@@ -135,7 +192,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     )
     .toBe(true);
   await page.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A170');
+  await expect(picker).toContainText('A170');
   const orderCalls = calls.filter((c) => c.id === 'branch-current-orders.page');
   assert.ok(orderCalls.every((c) => c.values.warehouse_code === 'A170'));
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
@@ -146,15 +203,16 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(true);
   await mkdir('.scratch', { recursive: true });
   await page.screenshot({ path: '.scratch/fc-warehouse-selector.png' });
-  await picker.selectOption('');
-  await expect(firstCard).toContainText('999');
+  await picker.click();
+  await page.locator('[role=option][data-value=""]').click();
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
     initialDirectoryReads,
   );
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
   await page.getByRole('button', { name: '刷新', exact: true }).click();
-  await expect(firstCard).toContainText('999');
+  await expect(firstCard.locator('.kpi-value')).toHaveText('21.08万件');
   await expect(picker).toBeEnabled();
   assert.equal(
     calls.filter((c) => c.id === 'branch-warehouse.directory').length,
@@ -164,7 +222,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   assert.deepEqual(errors, []);
   await page.setViewportSize({ width: 520, height: 900 });
   await expect(picker).toBeVisible();
-  await picker.selectOption('N417');
+  await picker.click();
+  await page.locator('[role=option][data-value="N417"]').click();
   await expect(firstCard).toContainText('123');
   await page.evaluate(() => {
     const now = Date.now();
@@ -179,10 +238,42 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect
     .poll(() => calls.filter((c) => c.id === 'branch-warehouse.directory').length)
     .toBe(initialDirectoryReads + 2);
-  await expect(picker).toHaveValue('');
+  await expect(picker).toContainText('全部分仓');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.getByRole('button', { name: '补货确认', exact: true }).click();
+  await page.getByRole('button', { name: '提交', exact: true }).click();
+  const confirmation = page.getByRole('dialog');
+  await expect(confirmation).toBeVisible();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  assert.equal(
+    releaseConfirmation,
+    undefined,
+    'opening all-warehouse confirmation must not scan every warehouse',
+  );
+  await confirmation.getByLabel('导出补货分仓').selectOption('N417');
+  await expect(confirmation).toContainText('正在读取补货清单，请稍候');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toHaveCount(0);
+  await expect.poll(() => typeof releaseConfirmation).toBe('function');
+  assert.equal(
+    calls.findLast((c) => c.id === 'replenishment.detail.atomic' && c.values.page_size === 200)
+      .values.warehouse_code,
+    'N417',
+  );
+  assert.equal(
+    calls.filter((c) => c.id === 'branch-warehouse.directory').length,
+    initialDirectoryReads + 2,
+    'confirmation reuses the authorized directory',
+  );
+  await confirmation.screenshot({ path: '.scratch/fc-confirmation-loading.png' });
+  releaseConfirmation();
+  await expect(confirmation).not.toContainText('正在读取补货清单');
+  await expect(confirmation.getByRole('button', { name: '确认暂存至DMS' })).toBeDisabled();
+  await expect(confirmation).toContainText('0个SKU');
+  await confirmation.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(confirmation).toHaveCount(0);
 });
 
-test('FC aging exposes immediate risk filters, leading risk column and cached page blocks', async (t) => {
+test('FC aging exposes immediate risk filters, leading risk column and ten-row server pages', async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -229,11 +320,8 @@ test('FC aging exposes immediate risk filters, leading risk column and cached pa
   await page.goto('http://127.0.0.1:19486/');
   await page.getByRole('button', { name: '货龄结构', exact: true }).click();
   const list = page.getByRole('region', { name: '货龄结构', exact: true });
-  const quick = list.getByRole('group', { name: '风险快捷查询' });
-  await expect(quick.getByRole('button', { name: '全部', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  const quick = list.getByRole('button', { name: '风险快捷查询' });
+  await expect(quick).toContainText('全部');
   await expect(list.locator('th').first()).toHaveText('风险状态');
   await expect(list.locator('tbody tr')).toHaveCount(10);
   const pager = list.getByRole('navigation', { name: '货龄结构分页' });
@@ -242,23 +330,24 @@ test('FC aging exposes immediate risk filters, leading risk column and cached pa
   const agingReads = calls.filter((c) => c.id === 'batch-age.atomic');
   assert.equal(agingReads.length, 2);
   assert.deepEqual(
-    agingReads[0].values,
-    agingReads[1].values,
-    'adjacent pages retain one Host cache key',
+    agingReads.map((call) => [call.values.page_size, call.values.offset]),
+    [
+      [10, 0],
+      [10, 10],
+    ],
   );
   const freshAfter = await page.evaluate(() => window.queryFreshAfter());
   for (const risk of ['预警', '滞库', '正常']) {
-    await quick.getByRole('button', { name: risk, exact: true }).click();
-    await expect(quick.getByRole('button', { name: risk, exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    await quick.click();
+    await page.getByRole('option', { name: risk, exact: true }).click();
+    await expect(quick).toContainText(risk);
     await expect(list.locator('tbody tr').first()).toContainText('TEST-SKU-0');
     await expect(list.locator('tbody tr').first().locator('td').first()).toHaveText(risk);
     await expect(pager).toContainText('共 13 条');
     assert.equal(calls.filter((c) => c.id === 'batch-age.atomic').at(-1).values.risk, risk);
   }
-  await quick.getByRole('button', { name: '全部', exact: true }).click();
+  await quick.click();
+  await page.getByRole('option', { name: '全部', exact: true }).click();
   await expect(pager).toContainText('共 235 条');
   assert.equal(calls.filter((c) => c.id === 'batch-age.atomic').at(-1).values.risk, null);
   assert.equal(await page.evaluate(() => window.queryFreshAfter()), freshAfter);
@@ -270,8 +359,9 @@ test('FC aging exposes immediate risk filters, leading risk column and cached pa
     });
   }
   await page.setViewportSize({ width: 520, height: 900 });
+  await quick.click();
   for (const label of ['预警', '滞库', '正常', '全部'])
-    await expect(quick.getByRole('button', { name: label, exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: label, exact: true })).toBeVisible();
   if (process.env.FC_AGING_EVIDENCE)
     await page.screenshot({
       path: process.env.FC_AGING_EVIDENCE + '/aging-narrow.png',
@@ -342,7 +432,8 @@ test('FC shows system plans before import and downloads every authorized row thr
   await expect(list.locator('tbody tr').first()).toContainText('分仓同步表');
   await list.getByRole('button', { name: '下载模板', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
-  await dialog.getByRole('combobox', { name: '模板计划月份', exact: true }).selectOption('2026-11');
+  await dialog.getByRole('button', { name: '模板计划月份', exact: true }).click();
+  await dialog.getByRole('option', { name: '2026年11月' }).click();
   const download = page.waitForEvent('download');
   await dialog.getByRole('button', { name: '下载模板', exact: true }).click();
   const file = await download;
@@ -384,7 +475,8 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     let rows;
     if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A020', warehouse_name: '长沙分仓', base: '遂平' }];
-    else if (id === 'branch-current-orders.page')
+    else if (id === 'branch-current-orders.page') {
+      await new Promise((resolve) => setTimeout(resolve, 500));
       rows = [
         {
           ...Object.fromEntries(query.resultColumns.map((key) => [key, null])),
@@ -407,7 +499,7 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
           page_scope_total: 1,
         },
       ];
-    else if (id === 'branch-current-orders.lines')
+    } else if (id === 'branch-current-orders.lines')
       rows = ['10006223', '10006224'].map((sku) => ({
         ...Object.fromEntries(query.resultColumns.map((key) => [key, null])),
         warehouse_code: 'A020',
@@ -442,11 +534,34 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     });
   });
   await page.goto('http://127.0.0.1:19486/');
-  const picker = page.getByRole('combobox', { name: '选择分仓' });
+  const referenceInput = page
+    .getByRole('region', { name: '补货确认' })
+    .getByRole('textbox', { name: 'SKU' });
+  await referenceInput.focus();
+  await page.waitForTimeout(250);
+  const readFocusStyle = (element) => {
+    const style = getComputedStyle(element);
+    return {
+      outline: style.outlineStyle,
+      shadow: style.boxShadow,
+      background: style.backgroundColor,
+      border: style.borderColor,
+      height: style.height,
+      fontSize: style.fontSize,
+    };
+  };
+  const referenceStyle = await referenceInput.evaluate(readFocusStyle);
+  const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
-  await picker.selectOption('A020');
+  await picker.click();
+  await page.locator('[role=option][data-value="A020"]').click();
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
   const list = page.getByRole('region', { name: '当前订单', exact: true });
+  await expect(list.getByRole('status', { name: '当前订单加载中' })).toBeVisible();
+  const search = list.getByRole('textbox', { name: '订单号或客户名称' });
+  await search.focus();
+  await page.waitForTimeout(250);
+  assert.deepEqual(await search.evaluate(readFocusStyle), referenceStyle);
   await expect(list.getByText('长沙直营', { exact: true })).toBeVisible();
   await expect(list.getByText('100.0%', { exact: true })).toBeVisible();
   await expect(list.locator('thead').first()).toContainText('订单号');
@@ -470,7 +585,7 @@ test('FC current orders shows customer orders, expands exact order SKUs and pres
     )
     .toBe('%CE2600000190%');
   await list.getByRole('button', { name: '清空筛选', exact: true }).click();
-  await expect(picker).toHaveValue('A020');
+  await expect(picker).toContainText('A020');
   assert.ok(
     calls
       .filter((call) => call.id.startsWith('branch-current-orders.'))

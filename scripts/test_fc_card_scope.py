@@ -9,7 +9,7 @@ import test_agent_sql as fixtures
 class BranchCardScope(unittest.TestCase):
  def setUp(self):
   self.f=fixtures.FcReplenishmentCoverageTests();self.f.setUp();self.addCleanup(self.f.doCleanups)
-  self.f.db.execute("UPDATE agents_scm_execute_detail_d SET qtyordered=1,delivery_qty=1")
+  self.f.db.execute("UPDATE agents_scm_execute_detail_d SET qtyordered=1,delivery_qty=1,qtyshipped=1")
   self.f.insert('agents_scm_material_in_out_summary_d',warehouseid='WH1',pickup_point='P1',material_code='S1',product_categ_name='面点')
  def add(self,order,**changes):
   data=dict(cust_order_no=order,cust_code='C',material_code='S1',material_name='商品1',pickup_point='P1',pickup_point_name='分仓1',belong_base='基地1',bizflowstatus='等待组波',adjust_order_qty=10,qtyordered=100,qtyallocated=20,delivery_qty=0,detailstatus=10)
@@ -21,7 +21,7 @@ class BranchCardScope(unittest.TestCase):
   row=self.f.read('replenishment.summary')[0]
   self.assertEqual((row['warehouse_count'],row['known_in_transit'],row['known_preparing']),(1,20,20))
   detail=self.f.read('replenishment.detail');self.assertEqual({r['warehouse_code'] for r in detail},{'WH1'})
- def test_unprepared_allocation_uses_only_valid_unshipped_branch_orders_in_ea(self):
+ def test_unprepared_allocation_uses_only_valid_unshipped_branch_orders_in_pieces(self):
   self.add('OPEN')
   for order,values in [('VOID',dict(detailstatus=20)),('CANCEL',dict(canceltime='2026-10-19')),('CLOSED',dict(order_close_time='2026-10-19')),('WMS',dict(wms_close_time='2026-10-19')),('SHIPPED',dict(delivery_qty=100)),('PREPARED',dict(bizflowstatus='OCP已下发',qtyallocated=100))]:self.add(order,**values)
   row=self.f.read('current-shortage.summary')[0]

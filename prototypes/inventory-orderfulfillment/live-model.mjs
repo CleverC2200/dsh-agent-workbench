@@ -25,8 +25,12 @@ export function batchAges(rows,asOf=null) {
     let valid=new Set(group.map(row=>row.batch_date)).size===1;
     for(const row of group){
       const snapshot=date(row.batch_date),production=date(row.production_date),quantity=row.quantity===null?NaN:Number(row.quantity);
-      const age=snapshot!==null&&production!==null?(snapshot-production)/86400000:null;
-      if(age===null||age<0||(asOf!==null&&(date(asOf)===null||snapshot>date(asOf)))||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
+      if(snapshot===null||(asOf!==null&&(date(asOf)===null||snapshot!==date(asOf)))||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.batch_rows)>0)||Number(row.batch_rows)!==Number(row.known_quantities)){valid=false;continue;}
+      // A fully known zero-stock batch contributes nothing to any age bucket.
+      // Its absent production date must not hide other, dated inventory.
+      if(quantity===0)continue;
+      const age=production!==null?(snapshot-production)/86400000:null;
+      if(age===null||age<0){valid=false;continue;}
       result[fields[age<40?0:age<60?1:age<90?2:age<120?3:4]]+=quantity;
     }
     if(!valid)for(const field of fields)result[field]=null;
@@ -57,6 +61,16 @@ export function plannedShippingDays(row) {
     return null;
   const daily = (sales + transfer * 0.5) / days;
   return daily > 0 ? available / daily : null;
+}
+export function futureProduction(rows) {
+  const units=new Map();
+  for(const row of rows){
+    const unit=typeof row.unit==='string'?row.unit.trim():'';
+    const quantity=row.quantity===null?NaN:Number(row.quantity);
+    if(!unit||units.has(unit)||!Number.isFinite(quantity)||quantity<0||row.minimum_quantity===null||!Number.isFinite(Number(row.minimum_quantity))||Number(row.minimum_quantity)<0||!(Number(row.records)>0)||Number(row.records)!==Number(row.known_quantities))return null;
+    units.set(unit,quantity);
+  }
+  return [...units].sort(([a],[b])=>a==='ST'?-1:b==='ST'?1:a.localeCompare(b));
 }
 const alias = (value) =>
   typeof value === 'string'

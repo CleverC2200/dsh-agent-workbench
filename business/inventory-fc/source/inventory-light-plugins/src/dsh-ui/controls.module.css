@@ -57,6 +57,7 @@
   color: var(--dsw-alias-label-secondary);
 }
 .modal {
+  overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 10px;
   padding: 20px;
@@ -64,6 +65,13 @@
   max-height: 90vh;
   color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-bg-base);
+}
+.modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+.modal :global(.dsh-modal-content) {
+  min-height: 0;
 }
 .modal::backdrop {
   background: #0006;
@@ -177,6 +185,9 @@
   padding: 3px 6px;
 }
 .modal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-radius: 10px;
   padding: 16px;
   box-shadow: var(--ui-shadow-floating);

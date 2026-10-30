@@ -1,13 +1,21 @@
+import type { FcWarehouse } from './fc-warehouse-directory';
+import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
+import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
+import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
+import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-persistence';
+import { fcPersistence } from './fc-storage-client';
+import type { FcStoreScope } from '../../../../../shared/fc-persistence';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
 import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import { knownNumber } from '../../../../../shared/configured-overview';
 import { call } from '../channel.js';
 import { dmsWorkbookRows } from '../fc-feedback';
 import { updateContext } from '../native/context';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { z } from 'zod';
 import { OriginalBusinessList } from '../../../../../shared/original-business-list';
 import { Modal, DataPagination } from '../dsh-ui/controls';
+import { WarehouseSelect } from './fc/components/warehouse-select';
 import { downloadWorkbook, readWorkbook } from '../dsh-ui/workbook';
 import { memoryStorage } from '../native/memory-storage';
 import {
@@ -65,12 +73,36 @@ type Trial = {
   missingCount: number;
   forwardTurnover: number | null;
 };
+export const FcConfirmationDirectory = createContext<{
+  rows: FcWarehouse[];
+  loading: boolean;
+  error: string;
+  retry: () => void;
+}>({ rows: [], loading: false, error: '', retry: () => {} });
 const WorkflowContext = createContext<{
   trial: Trial | null;
+  planningPlans: ImportedPlan[];
+  setPlanningPlans: (plans: ImportedPlan[]) => void;
+  storedVersions: FcStoredVersions;
+  recordVersion: (warehouse: string, kind: 'plans' | 'cycles', record: any) => void;
   setTrial: (trial: Trial | null) => void;
 } | null>(null);
 export function FcWorkflowProvider({ children }: { children: React.ReactNode }) {
-  const [trial, setTrial] = useState<Trial | null>(null);
+  const [trial, setTrialState] = useState<Trial | null>(null);
+  const [planningPlans, setPlanningPlans] = useState<ImportedPlan[]>([]);
+  const [storedVersions, setStoredVersions] = useState<FcStoredVersions>({});
+  const setTrial = useCallback((next: Trial | null) => {
+    setTrialState(next);
+    if (next) setPlanningPlans(next.plans);
+  }, []);
+  const recordVersion = useCallback(
+    (warehouse: string, kind: 'plans' | 'cycles', record: any) =>
+      setStoredVersions((previous) => ({
+        ...previous,
+        [warehouse]: { ...previous[warehouse], [kind]: record },
+      })),
+    [],
+  );
   useEffect(() => {
     updateContext(
       'localPlanning',
@@ -78,16 +110,26 @@ export function FcWorkflowProvider({ children }: { children: React.ReactNode }) 
     );
   }, [trial]);
   useEffect(() => {
-    const clear = () => setTrial(null);
+    const clear = () => {
+      setTrialState(null);
+      setPlanningPlans([]);
+      setStoredVersions({});
+    };
     window.addEventListener('workbench-fc-view-restored', clear);
     window.addEventListener('gea-identity-changed', clear);
+    window.addEventListener('gea-session-changing', clear);
     return () => {
       window.removeEventListener('workbench-fc-view-restored', clear);
       window.removeEventListener('gea-identity-changed', clear);
+      window.removeEventListener('gea-session-changing', clear);
     };
   }, []);
   return (
-    <WorkflowContext.Provider value={{ trial, setTrial }}>{children}</WorkflowContext.Provider>
+    <WorkflowContext.Provider
+      value={{ trial, setTrial, planningPlans, setPlanningPlans, storedVersions, recordVersion }}
+    >
+      {children}
+    </WorkflowContext.Provider>
   );
 }
 export const fcTrialScope = (asOf: string, days: number, warehouse = '') =>
@@ -105,7 +147,9 @@ export function FcConfiguredList(
   props: React.ComponentProps<typeof OriginalBusinessList> & { actionScope: FcReadScope },
 ) {
   const { actionScope: scope } = props;
-  const { trial, setTrial } = useFcWorkflow();
+  const directory = useContext(FcConfirmationDirectory);
+  const scopedWarehouse = String(scope.input.filters?.warehouse_code ?? '').trim();
+  const { planningPlans, setTrial, storedVersions } = useFcWorkflow();
   const month = scope.input.asOf.slice(0, 7),
     days = scope.input.cycleDays ?? 7;
   const draftKey = keyFor('order-draft', month),
@@ -122,22 +166,91 @@ export function FcConfiguredList(
   >([]);
   const [importPlans, setImportPlans] = useState<ImportedPlan[]>([]);
   const [exportRows, setExportRows] = useState<FcRow[]>([]);
+  const [previewState, setPreviewState] = useState<'selecting' | 'loading' | 'ready' | 'failed'>(
+    'ready',
+  );
+  const [incompletePreviewCount, setIncompletePreviewCount] = useState(0);
+  const [previewProgress, setPreviewProgress] = useState<{ loaded: number; total: number } | null>(
+    null,
+  );
   const [exportWarehouse, setExportWarehouse] = useState('');
   const [dmsFields, setDmsFields] = useState({
     customerCode: '',
     addressCode: '',
     pupCode: '',
   });
+  const scopeId = JSON.stringify([scope.viewId, scope.input]);
+  const [targetMessage, setTargetMessage] = useState('');
+  const [targetLoading, setTargetLoading] = useState(false);
+  const [automaticTargetFields, setAutomaticTargetFields] = useState<string[]>([]);
+  const targetRequest = useRef<AbortController | null>(null);
+  const readDmsTarget = async (warehouse: string, addressCode = '') => {
+    targetRequest.current?.abort();
+    const task = new AbortController();
+    targetRequest.current = task;
+    setTargetLoading(true);
+    setTargetMessage('正在读取主数据…');
+    try {
+      const target = z
+        .object({
+          warehouseCode: z.string(),
+          fields: z.object({
+            customerCode: z.string(),
+            addressCode: z.string(),
+            pupCode: z.string(),
+          }),
+          message: z.string(),
+        })
+        .parse(
+          await call('branch-dms', {
+            operation: 'resolve-target',
+            warehouseCode: warehouse,
+            addressCode,
+          }),
+        );
+      if (task.signal.aborted) return;
+      if (target.warehouseCode !== warehouse) throw Error('主数据分仓范围不一致');
+      const matched = Object.entries(target.fields).filter(([, value]) => value.trim());
+      setDmsFields((current) => ({ ...current, ...Object.fromEntries(matched) }));
+      setAutomaticTargetFields(matched.map(([field]) => field));
+      setTargetMessage(target.message);
+      setConsumptionReviewed(false);
+    } catch (error) {
+      if (!task.signal.aborted) {
+        setTargetMessage(
+          `自动读取不可用，请核对后补填编码。${error instanceof Error ? error.message : ''}`,
+        );
+        setAutomaticTargetFields([]);
+      }
+    } finally {
+      if (!task.signal.aborted) setTargetLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (dialog !== 'export' || !exportWarehouse) return;
+    void readDmsTarget(exportWarehouse);
+    return () => targetRequest.current?.abort();
+  }, [dialog, exportWarehouse, scopeId]);
   const [dmsReceipt, setDmsReceipt] = useState<{
     orderCode: string;
     aiPreOrderCode: string;
   } | null>(null);
-  const [dmsRedirect, setDmsRedirect] = useState('');
+  const [receiptArchived, setReceiptArchived] = useState(false);
+  const pendingReceipts = fcPersistence.pendingReceipts();
+  const warehouseReceiptPending = pendingReceipts.some(
+    (pending) => pending.warehouseCode === exportWarehouse,
+  );
+  const [consumptionReviewed, setConsumptionReviewed] = useState(false);
+  useEffect(() => setConsumptionReviewed(false), [exportRows, draft, exportWarehouse]);
+  useEffect(() => {
+    setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
+    setAutomaticTargetFields([]);
+    setDmsReceipt(null);
+  }, [exportWarehouse]);
   const [dialogPage, setDialogPage] = useState(1);
   const [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
   const active = useRef<AbortController | null>(null);
-  const scopeId = JSON.stringify([scope.viewId, scope.input]);
   useEffect(() => {
     active.current?.abort();
     setBusy(false);
@@ -145,14 +258,15 @@ export function FcConfiguredList(
     setDetailRow(null);
     setNotice('');
     setDmsReceipt(null);
-    setDmsRedirect('');
     return () => active.current?.abort();
   }, [scopeId]);
   useEffect(() => {
     const restore = () => {
       active.current?.abort();
+      targetRequest.current?.abort();
+      setTargetLoading(false);
+      setAutomaticTargetFields([]);
       setDmsReceipt(null);
-      setDmsRedirect('');
       setDmsFields({ customerCode: '', addressCode: '', pupCode: '' });
       setBusy(false);
       setDraft(loadDraft(draftKey));
@@ -163,15 +277,14 @@ export function FcConfiguredList(
     };
     window.addEventListener('workbench-fc-view-restored', restore);
     window.addEventListener('gea-identity-changed', restore);
+    window.addEventListener('gea-session-changing', restore);
     return () => {
       window.removeEventListener('workbench-fc-view-restored', restore);
       window.removeEventListener('gea-identity-changed', restore);
+      window.removeEventListener('gea-session-changing', restore);
     };
   }, [draftKey, planDraftKey]);
-  const plans =
-    trial?.scope === fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code)
-      ? trial.plans
-      : [];
+  const plans = planningPlans;
   const save = (next: Draft) => {
     setDraft(next);
     memoryStorage.setItem(draftKey, JSON.stringify(next));
@@ -232,7 +345,11 @@ export function FcConfiguredList(
             className="fc-quantity-input"
             type="number"
             aria-label={`${text(row.sku)}实际补货量`}
-            disabled={knownNumber(row.recommended_qty) === null}
+            disabled={
+              busy ||
+              (dialog === 'export' && Boolean(dmsReceipt)) ||
+              knownNumber(row.recommended_qty) === null
+            }
             min={0}
             max={1e9}
             step="any"
@@ -256,6 +373,7 @@ export function FcConfiguredList(
           <input
             className="fc-reason-input"
             aria-label={`${text(row.sku)}调整原因`}
+            disabled={busy || (dialog === 'export' && Boolean(dmsReceipt))}
             maxLength={500}
             value={draft.reasons[key] ?? ''}
             onChange={(event) =>
@@ -285,33 +403,60 @@ export function FcConfiguredList(
       setPlanDraft(next);
       if (!parsed.errors.length) memoryStorage.setItem(planDraftKey, JSON.stringify(next));
     });
-  const previewDraft = (mode: 'draft' | 'export') =>
-    run(async (signal) => {
-      const rows = (await readFcActionRows({ ...scope, viewId: 'replenishment' }, signal)).map(
-        (row) => applyFcPlan(row, plans, scope.input.asOf, days),
-      );
-      const selected = rows.filter((row) =>
-        mode === 'draft'
-          ? Object.hasOwn(draft.quantities, rowKey(row)) ||
-            Object.hasOwn(draft.reasons, rowKey(row))
-          : Object.hasOwn(draft.quantities, rowKey(row)) ||
-            knownNumber(row.recommended_qty) === null ||
-            quantity(row.recommended_qty) > 0,
-      );
-      if (
-        selected.some(
-          (row) => !String(row.warehouse_code ?? '').trim() || !String(row.sku ?? '').trim(),
-        )
-      )
-        throw Error('补货清单缺少分仓或商品编码，未导出');
-      const warehouses = [...new Set(selected.map((row) => String(row.warehouse_code)))];
-      setExportWarehouse(warehouses.length === 1 ? warehouses[0] : '');
-      setDmsReceipt(null);
-      setDmsRedirect('');
-      setExportRows(selected);
-      setDialogPage(1);
-      setDialog(mode);
+  const previewDraft = (
+    mode: 'draft' | 'export',
+    warehouse = scopedWarehouse || exportWarehouse,
+  ) => {
+    setDialog(mode);
+    active.current?.abort();
+    setBusy(false);
+    setNotice('');
+    setPreviewState(mode === 'export' && !warehouse ? 'selecting' : 'loading');
+    if (mode === 'export') setExportWarehouse(warehouse);
+    setIncompletePreviewCount(0);
+    setPreviewProgress(null);
+    setExportRows([]);
+    setDmsReceipt(null);
+    setDialogPage(1);
+    if (mode === 'export' && !warehouse) return;
+    const readScope = {
+      ...scope,
+      viewId: 'replenishment',
+      input:
+        mode === 'export'
+          ? { ...scope.input, filters: { ...scope.input.filters, warehouse_code: warehouse } }
+          : scope.input,
+    };
+    return run(async (signal) => {
+      try {
+        const rows = (
+          await readFcActionRows(readScope, signal, (loaded, total) => {
+            if (!signal.aborted) setPreviewProgress({ loaded, total });
+          })
+        ).map((row) => applyFcPlan(row, plans, scope.input.asOf, days));
+        signal.throwIfAborted();
+        const candidates = rows.filter((row) =>
+          mode === 'draft'
+            ? Object.hasOwn(draft.quantities, rowKey(row)) ||
+              Object.hasOwn(draft.reasons, rowKey(row))
+            : Object.hasOwn(draft.quantities, rowKey(row)) ||
+              knownNumber(row.recommended_qty) === null ||
+              quantity(row.recommended_qty) > 0,
+        );
+        const selected = candidates.filter(
+          (row) => String(row.warehouse_code ?? '').trim() && String(row.sku ?? '').trim(),
+        );
+        setIncompletePreviewCount(candidates.length - selected.length);
+        if (mode === 'export' && selected.some((row) => String(row.warehouse_code) !== warehouse))
+          throw Error('返回数据不属于所选分仓，请重新读取');
+        setExportRows(selected);
+        setPreviewState('ready');
+      } catch (error) {
+        if (!signal.aborted) setPreviewState('failed');
+        throw error;
+      }
     });
+  };
   const downloadTemplate = () =>
     run(async (signal) => {
       const rows = await readFcActionRows({ ...scope, viewId: 'plan' }, signal);
@@ -369,12 +514,13 @@ export function FcConfiguredList(
         },
         signal,
       );
-      const calculated = rows.map((row) => applyFcPlan(row, parsed.plans, scope.input.asOf, days));
+      const mergedPlans = mergeFcPlans(plans, parsed.plans);
+      const calculated = rows.map((row) => applyFcPlan(row, mergedPlans, scope.input.asOf, days));
       const summary = summarizeFcRows(calculated);
       signal.throwIfAborted();
       setTrial({
         scope: fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code),
-        plans: parsed.plans,
+        plans: mergedPlans,
         ...summary,
       });
       setDialog(null);
@@ -383,7 +529,7 @@ export function FcConfiguredList(
   const exportCsv = () =>
     run(async (signal) => {
       const rows = await readFcActionRows(scope, signal);
-      const columns: { field: string; label: string }[] = props.columns;
+      const columns: { field: string; label: string; valueField?: string }[] = props.columns;
       const escape = (value: unknown) => {
         const valueText = value == null ? '' : String(value);
         return (
@@ -465,6 +611,8 @@ export function FcConfiguredList(
   const submitDms = () =>
     run(async (signal) => {
       if (!exportWarehouse) throw Error('请选择分仓');
+      if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
+      if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
       const selected = previewRows.filter(
         (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
       );
@@ -486,7 +634,8 @@ export function FcConfiguredList(
         throw Error('请填写客户、收货地址和提货点编码');
       const order = {
         ...fields,
-        ...(remarks ? { remarks } : {}),
+        ...(remarks ? { orderRemarks: remarks } : {}),
+        orderModel: 'cg',
         itemList: selected
           .map((row) => ({
             productCode: String(row.sku),
@@ -494,38 +643,164 @@ export function FcConfiguredList(
           }))
           .sort((a, b) => a.productCode.localeCompare(b.productCode)),
       };
-      // Stable intent survives page reloads; DMS has no documented idempotency guarantee.
-      const digest = await crypto.subtle.digest(
-        'SHA-256',
-        new TextEncoder().encode(JSON.stringify([month, exportWarehouse, order])),
-      );
-      const aiPreOrderCode =
-        'AI' +
-        Array.from(new Uint8Array(digest))
-          .map((value) => value.toString(16).padStart(2, '0'))
-          .join('')
-          .slice(0, 30);
+      const provenance = await fcSubmissionProvenance({
+        warehouse: exportWarehouse,
+        asOf: scope.input.asOf,
+        plans,
+        days,
+        rules: scope.input.fcCycleRules ?? [],
+        cycleWarehouse: scope.input.fcCycleWarehouse,
+        stored: storedVersions,
+        rows: previewRows,
+      });
       signal.throwIfAborted();
-      const receipt = (await call(
+      if (
+        provenance.calculationContext.planSource === 'human-trial' ||
+        provenance.calculationContext.cycleSource === 'page-trial'
+      )
+        throw Error('请先保存当前人工计划或周期规则，再提交补货');
+      const currentRows = (
+        await readFcActionRows(
+          {
+            ...scope,
+            viewId: 'replenishment',
+            input: {
+              ...scope.input,
+              filters: { ...scope.input.filters, warehouse_code: exportWarehouse },
+            },
+          },
+          signal,
+        )
+      )
+        .map((row) => applyFcPlan(row, plans, scope.input.asOf, days))
+        .filter(
+          (row) =>
+            String(row.warehouse_code) === exportWarehouse &&
+            Boolean(String(row.sku ?? '').trim()) &&
+            (Object.hasOwn(draft.quantities, rowKey(row)) ||
+              knownNumber(row.recommended_qty) === null ||
+              quantity(row.recommended_qty) > 0),
+        );
+      const currentProvenance = await fcSubmissionProvenance({
+        warehouse: exportWarehouse,
+        asOf: scope.input.asOf,
+        plans,
+        days,
+        rules: scope.input.fcCycleRules ?? [],
+        cycleWarehouse: scope.input.fcCycleWarehouse,
+        stored: storedVersions,
+        rows: currentRows,
+      });
+      signal.throwIfAborted();
+      if (provenance.snapshotVersion !== currentProvenance.snapshotVersion)
+        throw Error('库存、订单或计划数据已变化，请重新打开确认清单复核后提交');
+      const confirmationRows = previewRows
+        .map((row) => ({
+          sku: String(row.sku),
+          productName: String(row.material_name ?? ''),
+          recommendedQty: Number(row.recommended_qty),
+          actualQty: draft.quantities[rowKey(row)] ?? Number(row.recommended_qty),
+          reason: draft.reasons[rowKey(row)] ?? '',
+        }))
+        .sort((a, b) => a.sku.localeCompare(b.sku));
+      const { aiPreOrderCode, legacyAiPreOrderCode } = await fcSubmissionIdentity({
+        warehouseCode: exportWarehouse,
+        month,
+        snapshotVersion: provenance.snapshotVersion,
+        planRevision: provenance.planRevision,
+        cycleRevision: provenance.cycleRevision,
+        consumptionReviewed,
+        rows: confirmationRows,
+        order,
+      });
+      signal.throwIfAborted();
+      const readiness = (await call(
         'branch-dms',
-        { operation: 'submit', order: { aiPreOrderCode, ...order } },
+        {
+          operation: 'preflight',
+          warehouseCode: exportWarehouse,
+          order: { aiPreOrderCode, ...order },
+        },
         { signal },
-      )) as { orderCode: string; aiPreOrderCode: string };
+      )) as { ready?: boolean; scope?: string };
+      signal.throwIfAborted();
+      if (readiness?.ready !== true || readiness.scope !== 'local-configuration')
+        throw Error('提交前配置检查未通过，请刷新页面并检查Host版本');
+      const receipt = await persistAndSubmitFc(
+        exportWarehouse,
+        {
+          stage: 'confirmed',
+          ...provenance,
+          month,
+          consumptionReviewed,
+          aiPreOrderCode,
+          rows: confirmationRows,
+        },
+        signal,
+        async () =>
+          call(
+            'branch-dms',
+            {
+              operation: 'submit',
+              warehouseCode: exportWarehouse,
+              order: { aiPreOrderCode, ...order },
+            },
+            { signal },
+          ),
+        (received) => {
+          signal.throwIfAborted();
+          setReceiptArchived(false);
+          setDmsReceipt(received);
+          setNotice(`DMS已返回订单号：${received.orderCode}；正在保存回执，请勿重复下单。`);
+        },
+        legacyAiPreOrderCode,
+      );
       signal.throwIfAborted();
       setDmsReceipt(receipt);
+      setReceiptArchived(true);
       setNotice(`已暂存至DMS，订单号：${receipt.orderCode}。尚未审核或推单。`);
+      try {
+        await call('branch-dms-open', {}, { signal });
+        signal.throwIfAborted();
+        setNotice(
+          `已暂存至DMS，订单号：${receipt.orderCode}；已请求打开订单管理。若未打开，请点击“进入DMS订单管理”，无需重新提交。`,
+        );
+      } catch {
+        if (!signal.aborted)
+          setNotice(
+            `已暂存至DMS，订单号：${receipt.orderCode}；跳转未完成，请点击“进入DMS订单管理”重试，无需重新提交。`,
+          );
+      }
+    });
+  const verifyReceiptArchive = (pending: FcStoreScope) =>
+    run(async (signal) => {
+      const receipt = await verifyFcReceiptArchive(pending, signal);
+      signal.throwIfAborted();
+      if (pending.warehouseCode === exportWarehouse && receipt.orderCode === dmsReceipt?.orderCode)
+        setReceiptArchived(true);
+      setNotice(`DMS订单 ${receipt.orderCode} 的回执归档已核实；未重新下单。`);
     });
   const loginDms = () =>
     run(async (signal) => {
-      const result = (await call('branch-dms', { operation: 'login' }, { signal })) as {
-        redirect: string;
-      };
+      await call('branch-dms-open', {}, { signal });
       signal.throwIfAborted();
-      setDmsRedirect(result.redirect);
+      setNotice('已请求打开DMS订单管理；此操作不会重复下单。');
     });
   const count = new Set([...Object.keys(draft.quantities), ...Object.keys(draft.reasons)]).size;
   const toolbar = (
     <>
+      {scope.viewId === 'replenishment' &&
+        pendingReceipts.map((pending) => (
+          <button
+            key={JSON.stringify(pending)}
+            type="button"
+            className="secondary-button"
+            disabled={busy}
+            onClick={() => void verifyReceiptArchive(pending)}
+          >
+            核对回执归档（{pending.warehouseCode}）
+          </button>
+        ))}
       {scope.viewId === 'plan' && (
         <>
           <button
@@ -598,7 +873,7 @@ export function FcConfiguredList(
       >
         CSV
       </button>
-      {busy && <span role="status">正在读取…</span>}
+      {busy && !dialog && <span role="status">正在读取…</span>}
     </>
   );
   const visibleRows = (dialog === 'import' ? importPlans : previewRows).slice(
@@ -701,20 +976,82 @@ export function FcConfiguredList(
         style={{ width: 'min(760px, calc(100vw - 32px))' }}
       >
         <div className="fc-workflow-dialog">
-          {dialog === 'template' ? (
+          {dialog === 'export' && (
             <label>
-              计划月份{' '}
+              分仓{' '}
               <select
-                aria-label="模板计划月份"
-                value={templateMonth}
-                onChange={(event) => setTemplateMonth(event.target.value)}
+                aria-label="导出补货分仓"
+                disabled={busy || directory.loading || Boolean(dmsReceipt)}
+                value={exportWarehouse}
+                onChange={(event) => void previewDraft('export', event.target.value)}
               >
-                {[currentPlanningMonth(), nextMonth(currentPlanningMonth())].map((value) => (
-                  <option key={value} value={value}>
-                    {value.slice(0, 4)}年{Number(value.slice(5, 7))}月
+                <option value="">请选择分仓</option>
+                {(scopedWarehouse
+                  ? [
+                      {
+                        warehouse_code: scopedWarehouse,
+                        warehouse_name: directory.rows.find(
+                          (row) => row.warehouse_code === scopedWarehouse,
+                        )?.warehouse_name,
+                      },
+                    ]
+                  : directory.rows
+                ).map((row) => (
+                  <option key={row.warehouse_code} value={row.warehouse_code}>
+                    {row.warehouse_name ?? row.warehouse_code}（{row.warehouse_code}）
                   </option>
                 ))}
               </select>
+            </label>
+          )}
+          {(dialog === 'draft' || dialog === 'export') && previewState !== 'ready' ? (
+            <div role="status" aria-live="polite">
+              {previewState === 'selecting' ? (
+                <>
+                  <p>
+                    {directory.loading
+                      ? '正在读取分仓列表…'
+                      : directory.error || '请先选择本次补货的分仓，读取该分仓的补货清单。'}
+                  </p>
+                  {directory.error && (
+                    <button type="button" className="secondary-button" onClick={directory.retry}>
+                      重试分仓列表
+                    </button>
+                  )}
+                </>
+              ) : previewState === 'loading' ? (
+                <p>
+                  {previewProgress
+                    ? `正在读取补货清单：${previewProgress.loaded} / ${previewProgress.total} 条…`
+                    : '正在读取补货清单，请稍候…'}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={busy}
+                  onClick={() => void previewDraft(dialog)}
+                >
+                  重新读取
+                </button>
+              )}
+            </div>
+          ) : dialog === 'template' ? (
+            <label>
+              计划月份{' '}
+              <WarehouseSelect
+                label="模板计划月份"
+                compact
+                disabled={busy}
+                value={templateMonth}
+                options={[currentPlanningMonth(), nextMonth(currentPlanningMonth())].map(
+                  (value) => ({
+                    id: value,
+                    name: `${value.slice(0, 4)}年${Number(value.slice(5, 7))}月`,
+                  }),
+                )}
+                onChange={setTemplateMonth}
+              />
             </label>
           ) : dialog === 'import' ? (
             <>
@@ -761,41 +1098,19 @@ export function FcConfiguredList(
             </>
           ) : (
             <>
-              {dialog === 'export' && (
-                <label>
-                  分仓{' '}
-                  <select
-                    aria-label="导出补货分仓"
-                    value={exportWarehouse}
-                    onChange={(event) => {
-                      setDmsReceipt(null);
-                      setExportWarehouse(event.target.value);
-                      setDialogPage(1);
-                    }}
-                  >
-                    <option value="">请选择分仓</option>
-                    {[
-                      ...new Map(
-                        exportRows.map((row) => [
-                          String(row.warehouse_code),
-                          String(row.warehouse_name ?? row.warehouse_code),
-                        ]),
-                      ).entries(),
-                    ].map(([code, name]) => (
-                      <option key={code} value={code}>
-                        {name}（{code}）
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              {incompletePreviewCount > 0 && (
+                <p role="alert">
+                  {incompletePreviewCount}
+                  条记录缺少分仓或商品编码，已排除出本次提交和导出，请核对源数据。
+                </p>
               )}
               {dialog === 'export' && (
                 <fieldset disabled={busy || Boolean(dmsReceipt)}>
                   <legend>DMS 暂存信息</legend>
                   {(
                     [
-                      ['customerCode', '客户编码'],
                       ['addressCode', '收货地址编码'],
+                      ['customerCode', '客户编码'],
                       ['pupCode', '提货点编码'],
                     ] as const
                   ).map(([field, label]) => (
@@ -805,30 +1120,77 @@ export function FcConfiguredList(
                         aria-label={label}
                         value={dmsFields[field]}
                         maxLength={500}
-                        onChange={(event) =>
-                          setDmsFields((current) => ({
-                            ...current,
-                            [field]: event.target.value,
-                          }))
-                        }
+                        readOnly={field !== 'addressCode' && automaticTargetFields.includes(field)}
+                        onBlur={() => {
+                          if (
+                            field === 'addressCode' &&
+                            dmsFields.addressCode.trim() &&
+                            !automaticTargetFields.includes('addressCode')
+                          )
+                            void readDmsTarget(exportWarehouse, dmsFields.addressCode.trim());
+                        }}
+                        onChange={(event) => {
+                          targetRequest.current?.abort();
+                          setTargetLoading(false);
+                          setAutomaticTargetFields([]);
+                          setConsumptionReviewed(false);
+                          const value = event.target.value;
+                          setDmsFields((current) =>
+                            field === 'addressCode'
+                              ? {
+                                  addressCode: value,
+                                  customerCode: automaticTargetFields.includes('customerCode')
+                                    ? ''
+                                    : current.customerCode,
+                                  pupCode: automaticTargetFields.includes('pupCode')
+                                    ? ''
+                                    : current.pupCode,
+                                }
+                              : { ...current, [field]: value },
+                          );
+                        }}
                       />
                     </label>
                   ))}
+                  <p role="status">{targetMessage}</p>
+                  {automaticTargetFields.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAutomaticTargetFields([]);
+                        setConsumptionReviewed(false);
+                      }}
+                    >
+                      手动调整编码
+                    </button>
+                  )}
                   <p>
                     数量单位：件；默认速冻、配送、不拼车、同意缺货分批到货。请核对提货点与所选分仓。
                   </p>
                 </fieldset>
               )}
               {dmsReceipt && dialog === 'export' && (
-                <p>
-                  预订单号：{dmsReceipt.aiPreOrderCode}；DMS订单号：{dmsReceipt.orderCode}
-                </p>
+                <div>
+                  <p>
+                    预订单号：{dmsReceipt.aiPreOrderCode}；DMS订单号：{dmsReceipt.orderCode}
+                  </p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    disabled={busy || !receiptArchived}
+                    onClick={() => void previewDraft('export')}
+                  >
+                    重新读取，准备下一批
+                  </button>
+                  {!receiptArchived && (
+                    <p role="alert">DMS已收单，回执归档待核对，请先核对归档再开始下一批。</p>
+                  )}
+                  <p>
+                    重新读取后请复核数量和保留的人工调整；相同快照和确认内容仍返回原批次，数据或确认内容变化后形成新批次。
+                  </p>
+                </div>
               )}
-              {dmsRedirect && dialog === 'export' && (
-                <a href={dmsRedirect} target="_blank" rel="noopener noreferrer">
-                  进入DMS继续处理（短时免登链接）
-                </a>
-              )}
+
               <p>
                 {previewRows.length}个SKU
                 {dialog === 'export'
@@ -882,7 +1244,7 @@ export function FcConfiguredList(
               </div>
             </>
           )}
-          {dialog !== 'template' && (
+          {dialog !== 'template' && (dialog === 'import' || previewState === 'ready') && (
             <DataPagination
               ariaLabel="操作预览分页"
               pageNumber={dialogPage}
@@ -924,12 +1286,23 @@ export function FcConfiguredList(
                 确认导入并重算
               </button>
             )}
-            {dialog === 'export' && (
+            {dialog === 'export' && previewState === 'ready' && (
               <>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={consumptionReviewed}
+                    disabled={busy || Boolean(dmsReceipt)}
+                    onChange={(e) => setConsumptionReviewed(e.target.checked)}
+                  />
+                  <span>已复核库存消化与本次补货数量</span>
+                </label>
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={busy || !previewRows.length || Boolean(dmsReceipt)}
+                  disabled={
+                    busy || !previewRows.length || Boolean(dmsReceipt) || warehouseReceiptPending
+                  }
                   onClick={() => void submitDms()}
                 >
                   确认暂存至DMS
@@ -940,7 +1313,7 @@ export function FcConfiguredList(
                   disabled={busy}
                   onClick={() => void loginDms()}
                 >
-                  获取DMS免登链接
+                  进入DMS订单管理
                 </button>
                 <button
                   type="button"

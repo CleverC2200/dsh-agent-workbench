@@ -41,7 +41,9 @@ export async function configuredWire(id) {
           const values = {
             the_date: index === 0 ? '2026-09-28' : '2026-09-30',
             current_stock: index === 0 ? 10 : 0,
-            day: payload.queryId === 'source.stock-date' ? p.as_of : '2026-09-30',
+            day: /^source\.(stock-date|health-date|branch-stock-date)$/.test(payload.queryId)
+              ? p.as_of
+              : '2026-09-30',
             total,
             page_scope_total: total,
             page_row_present: 1,
@@ -100,6 +102,37 @@ export async function configuredWire(id) {
         { length: Math.max(0, Math.min(p.page_size ?? 10, total - offset)) },
         (_, i) => makeRow(offset + i),
       );
+    if (payload.queryId.startsWith('category-tree.')) {
+      const organization = payload.queryId.endsWith('customer')
+        ? '河南省区'
+        : payload.queryId.endsWith('branch')
+          ? '分仓1'
+          : '华东';
+      const treeRow = (key, name) =>
+        Object.fromEntries(
+          columns.map((field) => [
+            field,
+            {
+              ...makeRow(0),
+              node_key: key,
+              node_name: name,
+              age_qty: 100,
+              age_sum: 2000,
+              risk_rank: 1,
+              source_date: date,
+              latest_date: date,
+            }[field] ?? 0,
+          ]),
+        );
+      rows =
+        p.level === 'category'
+          ? [treeRow('汤圆', '汤圆')]
+          : p.level === 'organization'
+            ? [treeRow(organization, organization)]
+            : Array.from({ length: Math.min(p.page_size, 12 - offset) }, (_, i) =>
+                treeRow(`sku-A-${String(offset + i).padStart(3, '0')}`, '测试商品'),
+              );
+    }
     if (payload.queryId === 'overview.quick-stock') {
       rows = ['基地', '分仓'].map((location_type) => ({
         ...makeRow(0),

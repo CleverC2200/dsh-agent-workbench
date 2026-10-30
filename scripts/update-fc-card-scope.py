@@ -1,4 +1,4 @@
-"""Keep branch-only replenishment and current unprepared EA quantities aligned."""
+"""Keep branch-only replenishment and current unprepared piece quantities aligned."""
 from pathlib import Path
 import json
 import re
@@ -49,7 +49,7 @@ def update(config):
     if e.alias not in names:tree.select(e,append=True,copy=False)
    q['resultColumns']=tree.named_selects
   q['request']['sql']=render(tree)
-  q['notes']='仅取所选库存快照中20类分仓编码，计划/库存/订单均按该编码范围；有效未备单且未发货完成订单取qtyordered/qtyallocated件，排除作废、取消和关闭；已知建议与缺失计算行分别统计，未知不当0。'
+  q['notes']='仅取所选库存快照中20类分仓编码，计划/库存/订单均按该编码范围；有效未备单且未发货完成订单需求与占用逐行除以bizunitconvertrate统一为件，排除作废、取消和关闭；已知建议与缺失计算行分别统计，未知不当0。'
  return config
 
 if __name__=='__main__':

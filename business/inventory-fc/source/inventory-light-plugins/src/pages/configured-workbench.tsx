@@ -1,14 +1,24 @@
+import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
+import { branchDashboardEvidence } from '../../../../../shared/fc-dashboard-insight';
+import {
+  formatChainValue as show,
+  formatChainValueParts,
+} from '../../../../../shared/full-chain-display';
 import { readFcWarehouseDirectory, type FcWarehouse } from './fc-warehouse-directory';
 import { inventoryAverageAge } from '../../../../../shared/inventory-age';
+import { FcPersistencePanel } from './fc-persistence-panel';
+import { readFcActionRows, applyFcPlan, summarizeFcRows } from './fc-workflow';
 import { validateFcCycleRules, type FcCycleRule } from '../../../../../shared/fc-cycle-rules';
 import {
   FcConfiguredList,
+  FcConfirmationDirectory,
   FcWorkflowProvider,
   fcTrialScope,
   useFcWorkflow,
 } from './configured-fc-list';
 import { configuredCycleState } from '../native/memory-storage';
 import { Modal } from '../dsh-ui/controls';
+import { WarehouseSelect } from './fc/components/warehouse-select';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
 import { QueryErrors } from '../../../../../shared/query-errors';
@@ -46,8 +56,6 @@ const views: Record<string, string[]> = {
   base: ['base-resources'],
   operations: ['cost'],
 };
-const show = (n: number | null, unit = '') =>
-  n == null ? '-' : n.toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + unit;
 export default function ConfiguredWorkbench() {
   return (
     <FcWorkflowProvider>
@@ -56,7 +64,7 @@ export default function ConfiguredWorkbench() {
   );
 }
 function WorkbenchBody() {
-  const { trial, setTrial } = useFcWorkflow();
+  const { trial, setTrial, planningPlans, setPlanningPlans, recordVersion } = useFcWorkflow();
   const [warehouse, setWarehouse] = useState('');
   const [warehouses, setWarehouses] = useState<FcWarehouse[]>([]);
   const directoryCache = useRef<{ key: string; at: number; rows: FcWarehouse[] } | null>(null);
@@ -72,18 +80,60 @@ function WorkbenchBody() {
     ),
     [cycleDraft, setCycleDraft] = useState(String(cycleDays)),
     [cycleOpen, setCycleOpen] = useState(false),
+    [cycleWarehouse, setCycleWarehouse] = useState(() => configuredCycleState.warehouse()),
     [cycleRules, setCycleRules] = useState<FcCycleRule[]>(() => configuredCycleState.rules()),
     [ruleDraft, setRuleDraft] = useState<FcCycleRule[]>([]),
-    [cycleError, setCycleError] = useState('');
-  useEffect(
-    () => setTrial(null),
-    [date, warehouse, cycleDays, JSON.stringify(cycleRules), revision, setTrial],
-  );
+    [cycleError, setCycleError] = useState(''),
+    [planningError, setPlanningError] = useState('');
+  useEffect(() => {
+    const plans = planningPlans;
+    setTrial(null);
+    setPlanningError('');
+    if (!plans?.length) return;
+    const controller = new AbortController();
+    void readFcActionRows(
+      {
+        config,
+        viewId: 'replenishment',
+        input: {
+          asOf: date,
+          filters: warehouse ? { warehouse_code: warehouse } : {},
+          cycleDays,
+          fcCycleRules: cycleRules,
+          fcCycleWarehouse: cycleWarehouse,
+        },
+      },
+      controller.signal,
+    )
+      .then((rows) => {
+        if (!controller.signal.aborted)
+          setTrial({
+            scope: fcTrialScope(date, cycleDays, warehouse),
+            plans,
+            ...summarizeFcRows(rows.map((row) => applyFcPlan(row, plans, date, cycleDays))),
+          });
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted)
+          setPlanningError('重新计算失败，请重新读取计划：' + error.message);
+      });
+    return () => controller.abort();
+  }, [
+    date,
+    warehouse,
+    cycleDays,
+    cycleWarehouse,
+    JSON.stringify(cycleRules),
+    revision,
+    planningPlans,
+    setTrial,
+  ]);
   useEffect(
     () =>
       configuredCycleState.subscribe(() => {
         setCycleDays(configuredCycleState.read() ?? config.replenishmentPolicy.defaultCycleDays);
         setCycleRules(configuredCycleState.rules());
+        setCycleWarehouse(configuredCycleState.warehouse());
       }),
     [],
   );
@@ -140,6 +190,7 @@ function WorkbenchBody() {
     config.overviewViewIds.filter((id) => id !== 'shipments'),
     cycleRules,
     warehouse,
+    cycleWarehouse,
   );
   const order = parts.orders?.summary,
     plan = parts.replenishment?.summary;
@@ -151,6 +202,27 @@ function WorkbenchBody() {
     ? trial.missingCount
     : (knownNumber(plan?.missing_calculation_count) ?? 0);
   const branchStock = parts['branch-stock']?.summary;
+  const insightEvidence = branchDashboardEvidence({
+    warehouseCode: warehouse,
+    warehouseName:
+      warehouses.find((item) => item.warehouse_code === warehouse)?.warehouse_name || '全部分仓',
+    asOf: date,
+    cycleDays,
+    parts,
+    localPlanTrial: !!trialActive,
+    recommendedQty: recommended,
+    missingCalculationCount: missingRecommendations,
+    currentOrderShortageQty: currentShortageSum(parts['current-shortage']?.rows, 'shortage'),
+  });
+  const modelInsight = useDashboardInsight(insightEvidence, !busy && Object.keys(parts).length > 0);
+  useEffect(() => {
+    updateContext('dashboardAIInsight', {
+      scope: warehouse || '全部分仓',
+      status: modelInsight.status,
+      source: 'model',
+      text: modelInsight.status === 'ready' ? modelInsight.answer : undefined,
+    });
+  }, [warehouse, modelInsight.status, modelInsight.answer]);
   const cards = [
     {
       title: '当前库存',
@@ -217,27 +289,27 @@ function WorkbenchBody() {
         <BusinessToolbar
           filters={
             <>
-              <label className="warehouse-switch">
-                <select
-                  aria-label="选择分仓"
+              <div className="warehouse-switch">
+                <WarehouseSelect
+                  label="选择分仓"
                   value={warehouse}
                   disabled={warehouseLoading}
-                  onChange={(event) => {
-                    setWarehouse(event.target.value);
+                  options={[
+                    { id: '', name: warehouseLoading ? '分仓加载中…' : '全部分仓' },
+                    ...(warehouse && !warehouses.some((item) => item.warehouse_code === warehouse)
+                      ? [{ id: warehouse, name: warehouse }]
+                      : []),
+                    ...warehouses.map((item) => ({
+                      id: item.warehouse_code,
+                      name: `${item.warehouse_name || item.warehouse_code}（${item.warehouse_code}）`,
+                    })),
+                  ]}
+                  onChange={(value) => {
+                    setWarehouse(value);
                     setTrial(null);
                   }}
-                >
-                  <option value="">{warehouseLoading ? '分仓加载中…' : '全部分仓'}</option>
-                  {warehouse && !warehouses.some((item) => item.warehouse_code === warehouse) && (
-                    <option value={warehouse}>{warehouse}</option>
-                  )}
-                  {warehouses.map((item) => (
-                    <option key={item.warehouse_code} value={item.warehouse_code}>
-                      {item.warehouse_name || item.warehouse_code}（{item.warehouse_code}）
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
               {warehouseError && <span role="status">{warehouseError}</span>}
               <button
                 type="button"
@@ -299,7 +371,30 @@ function WorkbenchBody() {
         />
         <div className="agent-layout without-ai workspace-only">
           <section className="workspace">
-            <QueryErrors errors={errors} />
+            <QueryErrors errors={[...errors, ...(planningError ? [planningError] : [])]} />
+            <FcPersistencePanel
+              showControls={false}
+              plans={planningPlans}
+              days={cycleDays}
+              rules={cycleRules}
+              cycleWarehouse={cycleWarehouse}
+              refreshKey={revision}
+              onCycles={(days, rules, warehouse, version) => {
+                configuredCycleState.save(days, rules, warehouse);
+                if (version)
+                  recordVersion(warehouse, 'cycles', { revision: version, value: { days, rules } });
+              }}
+              onPlans={async (plans, signal, version, warehouse) => {
+                signal.throwIfAborted();
+                setPlanningPlans([
+                  ...planningPlans.filter((p) => p.warehouseCode !== warehouse),
+                  ...plans,
+                ]);
+                if (version && warehouse)
+                  recordVersion(warehouse, 'plans', { revision: version, value: { plans } });
+              }}
+            />
+
             <div
               className={`kpi-grid safety-stock-kpis fc-compact-kpis ${common.kpis}`}
               data-overview-cards="fc"
@@ -319,8 +414,10 @@ function WorkbenchBody() {
                     <span>{c.title}</span>
                   </div>
                   <div className={`kpi-value ${c.color}`}>
-                    {show(c.value)}
-                    {c.value != null && <small>{c.unit}</small>}
+                    {formatChainValueParts(c.value, c.unit).value}
+                    {formatChainValueParts(c.value, c.unit).unit && (
+                      <small>{formatChainValueParts(c.value, c.unit).unit}</small>
+                    )}
                   </div>
                   {c.title === '待补货量' && missingRecommendations > 0 && (
                     <small>
@@ -339,19 +436,20 @@ function WorkbenchBody() {
                 </article>
               ))}
             </div>
-            <section className="priority-analysis" aria-label="AI 洞察">
+            <section
+              className="priority-analysis fc-dashboard-insight"
+              aria-label="AI 洞察"
+              aria-busy={modelInsight.status === 'loading'}
+            >
               <h3>
                 <span className="analysis-label">AI 洞察</span>
-                <small>经营洞察</small>
               </h3>
-              <p>
-                <b>核心判断：</b>当前库存 {show(knownNumber(branchStock?.total_qty), '件')}
-                ，建议补货 {show(recommended, '件')}。
-                {missingRecommendations > 0 && (
-                  <span>
-                    以上为可计算部分，另有 {missingRecommendations} 项要素待核实，未按0计入。
-                  </span>
-                )}
+              <p role={modelInsight.status === 'error' ? 'status' : undefined}>
+                {modelInsight.status === 'ready'
+                  ? modelInsight.answer?.replace(/\s*\n+\s*/g, ' ')
+                  : modelInsight.status === 'error'
+                    ? 'AI 洞察暂时生成失败，可刷新后重试。'
+                    : 'AI 洞察生成中…'}
               </p>
             </section>
             <section className="fc-list-panel" aria-label="库存业务列表">
@@ -391,32 +489,43 @@ function WorkbenchBody() {
                 ) : tab === 'base' && warehouse && !selectedBase ? (
                   <p role="status">当前分仓尚未关联基地。</p>
                 ) : (
-                  <ConfiguredFactsPage
-                    key={[
-                      tab,
-                      date,
-                      warehouse,
-                      revision,
-                      cycleDays,
-                      JSON.stringify(cycleRules),
-                    ].join(':')}
-                    config={config}
-                    embedded
-                    scopeFilters={
-                      tab === 'base'
-                        ? warehouse && selectedBase
-                          ? { base: selectedBase }
-                          : {}
-                        : scopeFilters
-                    }
-                    presentation={originalFcView(config, tab)}
-                    businessList={FcConfiguredList}
-                    viewIds={views[tab]}
-                    date={date}
-                    cycleDays={cycleDays}
-                    fcCycleRules={cycleRules}
-                    onRead={(v) => updateContext('data', v)}
-                  />
+                  <FcConfirmationDirectory.Provider
+                    value={{
+                      rows: warehouses,
+                      loading: warehouseLoading,
+                      error: warehouseError,
+                      retry: () => reloadWarehouses((value) => value + 1),
+                    }}
+                  >
+                    <ConfiguredFactsPage
+                      key={[
+                        tab,
+                        date,
+                        warehouse,
+                        revision,
+                        cycleDays,
+                        JSON.stringify(cycleRules),
+                        cycleWarehouse,
+                      ].join(':')}
+                      config={config}
+                      embedded
+                      scopeFilters={
+                        tab === 'base'
+                          ? warehouse && selectedBase
+                            ? { base: selectedBase }
+                            : {}
+                          : scopeFilters
+                      }
+                      presentation={originalFcView(config, tab)}
+                      businessList={FcConfiguredList}
+                      viewIds={views[tab]}
+                      date={date}
+                      cycleDays={cycleDays}
+                      fcCycleRules={cycleRules}
+                      fcCycleWarehouse={cycleWarehouse}
+                      onRead={(v) => updateContext('data', v)}
+                    />
+                  </FcConfirmationDirectory.Provider>
                 )}
               </div>
             </section>
@@ -470,24 +579,43 @@ function WorkbenchBody() {
             <fieldset key={index}>
               <legend>周期规则 {index + 1}</legend>
               <div className={common.cycleRuleFields}>
-                <select
-                  aria-label={`规则${index + 1}层级`}
-                  value={rule.level}
-                  onChange={(event) =>
+                <WarehouseSelect
+                  label={`规则${index + 1}状态`}
+                  compact
+                  disabled={false}
+                  value={rule.status ?? 'effective'}
+                  options={[
+                    { id: 'effective', name: '生效' },
+                    { id: 'paused', name: '暂停' },
+                  ]}
+                  onChange={(value) =>
                     setRuleDraft(
                       ruleDraft.map((r, i) =>
-                        i === index
-                          ? { ...r, level: event.target.value as FcCycleRule['level'] }
-                          : r,
+                        i === index ? { ...r, status: value as 'effective' | 'paused' } : r,
                       ),
                     )
                   }
-                >
-                  <option value="sku">SKU</option>
-                  <option value="material-group">物料组</option>
-                  <option value="category">品类</option>
-                  <option value="warehouse">分仓</option>
-                </select>
+                />
+
+                <WarehouseSelect
+                  label={`规则${index + 1}层级`}
+                  compact
+                  disabled={false}
+                  value={rule.level}
+                  options={[
+                    { id: 'sku', name: 'SKU' },
+                    { id: 'material-group', name: '物料组' },
+                    { id: 'category', name: '品类' },
+                    { id: 'warehouse', name: '分仓' },
+                  ]}
+                  onChange={(value) =>
+                    setRuleDraft(
+                      ruleDraft.map((r, i) =>
+                        i === index ? { ...r, level: value as FcCycleRule['level'] } : r,
+                      ),
+                    )
+                  }
+                />
                 <input
                   aria-label={`规则${index + 1}对象`}
                   placeholder="对象编码/分类名称"
@@ -519,29 +647,25 @@ function WorkbenchBody() {
                 />
                 <label>
                   生效日
-                  <input
-                    type="date"
+                  <BusinessDateInput
+                    aria-label={`规则${index + 1}生效日`}
+                    avoidTriggerOverlap
                     value={rule.from}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       setRuleDraft(
-                        ruleDraft.map((r, i) =>
-                          i === index ? { ...r, from: event.target.value } : r,
-                        ),
+                        ruleDraft.map((r, i) => (i === index ? { ...r, from: value } : r)),
                       )
                     }
                   />
                 </label>
                 <label>
                   失效日
-                  <input
-                    type="date"
+                  <BusinessDateInput
+                    aria-label={`规则${index + 1}失效日`}
+                    avoidTriggerOverlap
                     value={rule.to}
-                    onChange={(event) =>
-                      setRuleDraft(
-                        ruleDraft.map((r, i) =>
-                          i === index ? { ...r, to: event.target.value } : r,
-                        ),
-                      )
+                    onValueChange={(value) =>
+                      setRuleDraft(ruleDraft.map((r, i) => (i === index ? { ...r, to: value } : r)))
                     }
                   />
                 </label>

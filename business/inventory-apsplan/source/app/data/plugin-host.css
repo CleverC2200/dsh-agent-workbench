@@ -295,16 +295,22 @@ html.aps-plugin-host .analysis-workspace > .dashboard-module-toolbar .open-intel
   padding-bottom: 0;
 }
 
-/* Keep the board's view and period controls visible while its document scrolls. */
+/* Keep the shared toolbar and board controls on separate sticky rows. */
+html.aps-plugin-host .embed-mode .main-content > [data-business-toolbar] {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
 html.aps-plugin-host .analysis-workspace > .scope-tabs {
   position: sticky;
-  top: 50px;
+  top: var(--gea-business-toolbar-height, 56px);
   z-index: 11;
   background: #fff;
 }
 html.aps-plugin-host .analysis-workspace > .secondary-analysis-toolbar {
   position: sticky;
-  top: 98px;
+  top: calc(var(--gea-business-toolbar-height, 56px) + 48px);
   z-index: 10;
   background: #fff;
 }
@@ -640,4 +646,36 @@ html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card .kpi-foot {
   html.aps-plugin-host .intelligent-core-metric-group .period-kpi-card:nth-child(n + 2) {
     border-top: 1px solid var(--v02-border);
   }
+}
+
+.aps-drill-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  flex-wrap: wrap;
+}
+.aps-drill-pagination button {
+  padding: 6px 12px;
+  border: 1px solid var(--v02-border);
+  border-radius: 6px;
+  background: var(--v02-surface);
+  color: inherit;
+  cursor: pointer;
+}
+.aps-drill-pagination button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The workspace indicator meets the shared toolbar bottom border. */
+html.aps-plugin-host .plugin-workspace-tabs.scope-tabs {
+  align-self: stretch;
+  height: 56px;
+  margin-block: -9px;
+}
+html.aps-plugin-host .plugin-workspace-tabs.scope-tabs > button {
+  height: 56px;
+  min-height: 56px;
 }

@@ -11,7 +11,7 @@ def definition(dimensions,location_type,detail=False,sku_page=False,source=SOURC
  fixed=" AND r.location_type = '"+location_type+"'" if location_type else ''
  source_ctes, source_select = source.rsplit('\nSELECT',1)
  ctes=source_ctes+', shortage_source AS (SELECT'+source_select+'''), order_presence AS (
- SELECT COUNT(*) AS source_order_count FROM agents_scm_execute_detail_d
+ SELECT COUNT(*) AS source_order_count FROM (SELECT 1 AS present FROM agents_scm_execute_detail_d AS probe_order LIMIT 1) AS order_probe
  ), filtered AS (
  SELECT '''+', '.join('r.'+k+' AS '+v for k,v in DIMS.items())+', '+', '.join('r.'+k+' AS '+v for k,v in MEASURES.items())+''',
  CASE WHEN p.source_order_count=0 THEN 1 ELSE r.invalid_sku END AS invalid
@@ -52,7 +52,7 @@ def update_agents(agents):
   if agent=='aqkc':
    for value in data.values():
     value['title']='当前未发货完成订单三层缺货'
-    value['notes']='仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；按qtyordered和qtyallocated统一件数，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。'
+    value['notes']='仅统一GEA受控SQL。有效且未关闭、未取消、未发货完成订单，包含已备单和部分发货；qtyordered和qtyallocated逐行除以bizunitconvertrate统一为件，同一订单SKU先截零，基地SKU汇总后扣一次可用库存；缺失数量不按0，当前状态不可重建历史。'
   for key,value in data.items():
    match=re.search(r'"'+re.escape(key)+r'"\s*:\s*',text)
    if match:

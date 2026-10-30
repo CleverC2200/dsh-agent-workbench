@@ -1,3 +1,4 @@
+import { quantityMissingReasons } from './missing-reasons.mjs';
 const number=value=>value===null||value===undefined||value===''?null:Number.isFinite(Number(value))?Number(value):null;
 export function shanghaiTime(value) {
   if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}/.test(value)) return null;
@@ -116,6 +117,7 @@ export function computeOrderMetrics(rows,{now=Date.now()}={}) {
       sales_person:consistent('sales_person'),order_person:consistent('order_person'),carrier:consistent('logistics_provider'),
       sku_allocation_rate:q.skuRate??null,allocation_rate:q.allocationRate??null,
       business_stage:new Set(valid.map(row=>row.prapare_order_status)).size===1?valid[0]?.prapare_order_status:null,
+      missingReasons:quantityMissingReasons(valid),
       quantity_issue:valid.length===0?'无有效执行明细':valid.length===1&&q.original===null?'源原始数量缺失':q.original===null||q.adjusted===null?'拆单需求不一致或缺失，归并未确认':''});
   }
   const pending=facts.filter(row=>Number(row.detailstatus)===10&&String(row.is_stat)==='1'&&row.prapare_order_status==='备单中');
@@ -196,6 +198,9 @@ export function comparisonMetrics(facts,dimension,shortages=null,{now=Date.now()
     const complete=q.length>0&&q.every(row=>row.original_qty!==null&&row.source_short_qty!==null);
     const demand=complete?q.reduce((sum,row)=>sum+row.original_qty,0):0;
     const missing=complete?q.reduce((sum,row)=>sum+row.source_short_qty,0):0;
+    const known=q.filter(row=>row.original_qty!==null&&row.original_qty>0&&row.source_short_qty!==null&&row.source_short_qty>=0);
+    const knownDemand=known.reduce((sum,row)=>sum+row.original_qty,0);
+    const knownShort=known.reduce((sum,row)=>sum+row.source_short_qty,0);
     const orderRates=new Map();
     for(const order of orders) {
       const lines=q.filter(row=>row.order_no===order);
@@ -227,6 +232,8 @@ export function comparisonMetrics(facts,dimension,shortages=null,{now=Date.now()
       shortage_coverage:covered.size,shortage_total:pendingKeys.size,
       shortage_orders:shortages===null?null:new Set(linked.filter(row=>Number(row.source_rows)===1&&number(row.after_inventory_short_qty)>0).map(row=>row.order_no)).size,
       allocation_rate:complete&&demand>0?100*Math.abs(demand-missing)/demand:null,
+      known_allocation_rate:knownDemand>0?100*Math.abs(knownDemand-knownShort)/knownDemand:null,
+      quantity_coverage:known.length,quantity_total:q.length,
       buckets,rate_coverage:[...orderRates.values()].filter(rate=>rate!==null).length,rate_total:orders.size};
   }).sort((a,b)=>a.group_name.localeCompare(b.group_name,'zh-CN'));
 }

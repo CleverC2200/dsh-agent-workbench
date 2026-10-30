@@ -14,11 +14,13 @@ import { createRoot } from 'react-dom/client';
 import i18next from 'i18next';
 import '@arco-design/web-react/dist/css/arco.css';
 import zh from './src/workbench/original/zh-CN.json';
+import en from './src/workbench/original/en-US.json';
 import { RegionalApprovalResubmitDialog } from './src/workbench/original/workbenches/regionalApproval/RegionalApprovalResubmitDialog.tsx';
 import { salesPlanDraftSnapshot } from './src/workbench/original/workbenches/regionalApproval/models/salesPlanLocalDraftModel.ts';
 import { BackendHttpError } from './src/workbench/original/http-error.ts';
 const i18n=i18next.createInstance();
-await i18n.init({lng:'zh-CN',resources:{'zh-CN':{translation:{common:zh}}},interpolation:{escapeValue:false}});
+const query=new URL(location.href).searchParams;
+await i18n.init({lng:query.get('language')??'zh-CN',resources:{'zh-CN':{translation:{common:zh}},'en-US':{translation:{common:en}}},interpolation:{escapeValue:false}});
 const period={periodId:'20261001',periodMonth:'2026-10',planTypeCode:'Y',status:'OPEN'};
 const planId=(id)=>'p-jxs-2026-10-0000'+id;
 const version=(id,status)=>({id:'v'+id,planId:planId(id),periodId:period.periodId,planTypeCode:'Y',orderType:'M',status,effective:true,seq:1,dealerCode:'456',targetQty:'1.000',targetAmount:'12.34',submitter:'user'});
@@ -27,19 +29,19 @@ const sku=(v)=>({id:'s'+v.id,versionId:v.id,skuCode:'789',productCategName:'Cate
 const access=(v)=>({versionId:v.id,status:v.status,policy:'role-visible-v1',allowedActions:['APPROVE','REJECT'],roleActions:[{role:'region',allowedActions:['APPROVE','REJECT']}],snapshotHash:'a'.repeat(64),approvalRole:'region',roleContractSupported:true});
 const item=(id,kind)=>({kind,planId:planId(id),versionId:'v'+id,label:'组织'+id,period,row:{...versions[planId(id)],versionId:'v'+id,dealerName:'客户'+id},approvalRole:'region',...(kind==='approve'?{row:{...versions[planId(id)],versionId:'v'+id},access:access(versions[planId(id)])}:{})});
 const scenario=new URL(location.href).searchParams.get('scenario');
-const items=scenario==='approve'?[item('1','approve'),item('3','approve')]:scenario==='resubmit'?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
+const items=scenario==='approve'?[item('1','approve'),item('3','approve')]:['resubmit','channel','signed-out-source'].includes(scenario)?[item('2','resubmit')]:[item('1','approve'),item('2','resubmit')];
 if(['confirmation','stored','correction'].includes(scenario)) { const v=versions[planId('2')]; if(scenario==='correction') v.orderType='Z'; const current=item('2','resubmit'); if(scenario!=='stored') current.pendingValues={'789':scenario==='correction'?'5.000':'3.000'}; items.splice(0,items.length,current); }
 window.actions=[];window.submissions=[];window.outcomes=[];
 const skusFor=v=>[sku(v),{...sku(v),id:'unchanged',skuCode:'790'}];
 const client={
- currentUser:{invoke:async()=>({id:'user',username:'user',roles:[{code:'sales_plan_region_approver'}]})},
+ currentUser:{invoke:async()=>{if(scenario==='signed-out-source')throw new BackendHttpError({method:'GET',path:'/user',status:401,body:{}});return {id:'user',username:'user',roles:[{code:'sales_plan_region_approver'}]}}},
  detail:{invoke:async({planId})=>({currentVersion:versions[planId],skus:skusFor(versions[planId]),versions:[],logs:[],actionContext:access(versions[planId])})},
  versionSkus:{invoke:async({versionId})=>{const v=Object.values(versions).find(v=>v.id===versionId);return skusFor(v)}},
  draft:{invoke:async({planId})=>{const v=versions[planId];return {draft:scenario==='stored'?{planId,versionId:v.id,status:v.status,role:'region',sourceSnapshot:salesPlanDraftSnapshot({...v,versionId:v.id},{currentVersion:v,skus:skusFor(v)}),adjustments:[{skuCode:'789',adjustQty:'1.750'}],remark:''}:null}}},
  action:{invoke:async(request)=>{window.actions.push(request);if(scenario==='permission')throw new BackendHttpError({method:'POST',path:'/actions',status:403,body:{error:'denied'}});throw Error('fixture-refusal');}},
  submit:{invoke:async(request)=>{window.submissions.push(request);throw Error('fixture-refusal');}},
 };
-createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={true} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
+createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDialog items={items} client={client} connected={!['channel','signed-out-source'].includes(scenario)} unavailableReason={query.get('reason')??undefined} t={i18n.t.bind(i18n)} onClose={()=>{}} onSucceeded={()=>{}} onCompleted={(outcomes)=>window.outcomes.push(outcomes)} />);
 `,
   },
   bundle: true,
@@ -49,7 +51,7 @@ createRoot(document.getElementById('root')).render(<RegionalApprovalResubmitDial
   format: 'esm',
 });
 
-async function openConfirmation(t, scenario) {
+async function openConfirmation(t, scenario, { language = 'zh-CN', reason, blocked = false } = {}) {
   const server = createServer((request, response) => {
     const file = output.outputFiles.find(
       (file) => request.url?.split('?')[0] === '/' + file.path.split('/').at(-1),
@@ -74,16 +76,22 @@ async function openConfirmation(t, scenario) {
     await new Promise((done) => server.close(done));
   });
   const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1280, height: 900 } });
-  await page.goto('http://127.0.0.1:' + server.address().port + '/?scenario=' + scenario);
+  await page.goto(
+    'http://127.0.0.1:' +
+      server.address().port +
+      '/?' +
+      new URLSearchParams({ scenario, language, ...(reason ? { reason } : {}) }),
+  );
   const dialog = page.getByRole('dialog');
-  await expect(
-    dialog.getByRole('button', {
-      name: ['resubmit', 'confirmation', 'stored', 'correction'].includes(scenario)
-        ? '确认重提'
-        : '确认提交',
-      exact: true,
-    }),
-  ).toBeEnabled();
+  if (!blocked)
+    await expect(
+      dialog.getByRole('button', {
+        name: ['resubmit', 'confirmation', 'stored', 'correction'].includes(scenario)
+          ? '确认重提'
+          : '确认提交',
+        exact: true,
+      }),
+    ).toBeEnabled();
   return { page, dialog };
 }
 
@@ -190,3 +198,82 @@ for (const scenario of ['stored', 'correction'])
       } else assert.equal(changed.qty, '3.000');
     },
   );
+
+test(
+  'missing Host credentials explain the channel block without sending a submission',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, dialog } = await openConfirmation(t, 'channel', {
+      reason: 'credential',
+      blocked: true,
+    });
+    await expect(dialog).toContainText('服务提报凭据未配置，请联系管理员完成当前环境的服务接入。');
+    await expect(dialog.getByRole('button', { name: '确认重提', exact: true })).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.submissions.length), 0);
+  },
+);
+
+for (const [reason, zhText, enText] of [
+  [
+    'signed-out',
+    '请先登录 GEA，再重新打开重提确认。',
+    'Sign in to GEA, then reopen the resubmission confirmation.',
+  ],
+  [
+    'configuration',
+    '当前环境尚未配置服务提报通道，请联系管理员完成接入配置。',
+    'The service submission channel is not configured for this environment. Contact an administrator.',
+  ],
+  [
+    'tenant',
+    '当前租户与服务提报配置不匹配，请切换到正确租户或联系管理员。',
+    'The current tenant does not match the service submission configuration. Switch to the correct tenant or contact an administrator.',
+  ],
+  [
+    'credential',
+    '服务提报凭据未配置，请联系管理员完成当前环境的服务接入。',
+    'Service submission credentials are missing. Ask an administrator to set up this environment.',
+  ],
+  [
+    undefined,
+    '服务提报通道暂不可用，请稍后重试或联系管理员。',
+    'The service submission channel is unavailable. Try again later or contact an administrator.',
+  ],
+]) {
+  for (const [language, text, confirm] of [
+    ['zh-CN', zhText, '确认重提'],
+    ['en-US', enText, 'Confirm resubmission'],
+  ])
+    test(
+      'disconnected resubmit channel explains ' + (reason ?? 'older Host') + ' in ' + language,
+      { timeout: 30000 },
+      async (t) => {
+        const { page, dialog } = await openConfirmation(t, 'channel', {
+          reason,
+          language,
+          blocked: true,
+        });
+        await expect(dialog).toContainText(text);
+        await expect(dialog.getByRole('button', { name: confirm, exact: true })).toBeDisabled();
+        await expect(dialog).not.toContainText(
+          language === 'zh-CN' ? '权限不足' : 'lacks permission',
+        );
+        assert.equal(await page.evaluate(() => window.submissions.length), 0);
+      },
+    );
+}
+
+test(
+  'signed-out reason remains visible after current-user source loading fails',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, dialog } = await openConfirmation(t, 'signed-out-source', {
+      reason: 'signed-out',
+      blocked: true,
+    });
+    await expect(dialog).toContainText('来源读取失败，请关闭后重新打开；当前编辑尚未提交。');
+    await expect(dialog).toContainText('请先登录 GEA，再重新打开重提确认。');
+    await expect(dialog.getByRole('button', { name: '确认重提', exact: true })).toBeDisabled();
+    assert.equal(await page.evaluate(() => window.submissions.length), 0);
+  },
+);

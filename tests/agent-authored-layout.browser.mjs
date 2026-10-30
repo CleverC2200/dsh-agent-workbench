@@ -4,116 +4,60 @@ import { readFile, mkdir } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 import { configuredPageHtml, configuredWire } from './fixtures/configured-page.mjs';
 
-test('QLL 主列表分页使用计划管理样式并支持输入页码跳转', async (t) => {
-  let sampleGroup;
-  const { frame, page, calls } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId !== 'inventory.groups.atomic') return result;
-    sampleGroup ||= result.rows[0];
-    const offset = query.parameters.offset ?? 0;
-    result.rows = Array.from(
-      { length: Math.max(0, Math.min(query.parameters.page_size, 42 - offset)) },
-      (_, index) => ({
-        ...sampleGroup,
-        category: `测试品类${offset + index + 1}`,
-        page_scope_total: 42,
-      }),
-    );
-    return result;
+async function openCompanySku(frame, layer = '基地', organization = '华东') {
+  await frame.getByRole('button', { name: '汤圆', exact: true }).click();
+  await frame.getByRole('button', { name: layer, exact: true }).click();
+  await frame.getByRole('button', { name: organization, exact: true }).click();
+  return frame.getByRole('region', {
+    name: `汤圆 / ${layer} / ${organization} SKU 明细`,
+    exact: true,
   });
-  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
-  const pager = frame.getByRole('navigation', { name: '全链库存列表分页' });
-  const trigger = pager.getByRole('button', { name: '每页条数' });
-  await expect(trigger).toBeVisible();
-  await expect(pager.locator('select')).toHaveCount(0);
-  const [footerBox, totalBox, pagesBox] = await Promise.all([
-    pager.boundingBox(),
-    pager.getByText('共 42 条').boundingBox(),
-    pager.getByText('共 5 页').boundingBox(),
-  ]);
-  assert.ok(footerBox && totalBox && pagesBox);
-  assert.ok(Math.abs(totalBox.x - footerBox.x - 16) <= 1, '总条数应距左框 16px');
-  assert.ok(
-    Math.abs(footerBox.x + footerBox.width - pagesBox.x - pagesBox.width - 16) <= 1,
-    '总页数应距右框 16px',
+}
+test('QLL SKU 明细默认十条并按页读取，翻页不重复加载汇总', async (t) => {
+  const { frame, calls } = await mount(t, 'qll', 1280);
+  const leaf = await openCompanySku(frame);
+  await expect(leaf.locator('tbody tr')).toHaveCount(10);
+  const reads = () =>
+    calls.filter((q) => q.queryId === 'category-tree.base' && q.parameters.level === 'sku');
+  assert.equal(reads().length, 1);
+  assert.equal(reads()[0].parameters.page_size, 11);
+  await leaf.getByRole('button', { name: '下一页' }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(2);
+  assert.equal(reads().at(-1).parameters.offset, 10);
+  await expect(leaf.getByRole('button', { name: '下一页' })).toBeDisabled();
+  await leaf.getByRole('button', { name: '上一页' }).click();
+  await expect(leaf.locator('tbody tr')).toHaveCount(10);
+  assert.equal(reads().length, 3);
+  assert.equal(reads().at(-1).parameters.offset, 0);
+  assert.equal(
+    calls.filter((q) => q.queryId === 'category-tree.base' && q.parameters.level === 'category')
+      .length,
+    1,
   );
-  const heights = await Promise.all(
-    [
-      trigger,
-      pager.getByRole('button', { name: '上一页' }),
-      pager.getByRole('button', { name: '下一页' }),
-      pager.getByRole('button', { name: /当前第 1 页/ }),
-    ].map(async (control) => (await control.boundingBox())?.height),
-  );
-  assert.deepEqual(heights, [36, 36, 36, 36]);
-  await trigger.click();
-  const menu = frame.getByRole('listbox', { name: '每页条数' });
-  await expect(menu).toBeVisible();
-  if (process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE)
-    await page.screenshot({ path: process.env.GEA_QLL_MAIN_PAGINATION_EVIDENCE });
-  await menu.getByRole('option', { name: '20 条/页' }).click();
-  await expect(trigger).toContainText('20 条/页');
-  await pager.getByRole('button', { name: /当前第 1 页/ }).click();
-  const pageInput = pager.getByRole('textbox', { name: '输入页码' });
-  await expect(pageInput).toHaveValue('1');
-  await pageInput.fill('999');
-  await pageInput.press('Enter');
-  await expect(pager.getByRole('alert')).toContainText('请输入 1–');
-  await expect(pageInput).toBeVisible();
-  await pageInput.fill('3');
-  await pageInput.press('Enter');
-  await expect(pager.getByRole('button', { name: /当前第 3 页/ })).toBeVisible();
-  await expect
-    .poll(() =>
-      calls.some(
-        (query) =>
-          query.queryId === 'inventory.groups.atomic' &&
-          query.parameters.offset === 40 &&
-          query.parameters.page_size === 20,
-      ),
-    )
-    .toBe(true);
-  await expect(pager.getByRole('button', { name: '下一页' })).toBeDisabled();
-  await expect(pager.getByRole('button', { name: '上一页' })).toBeEnabled();
-  await pager.getByRole('button', { name: '上一页' }).click();
-  await expect(pager.getByRole('button', { name: /当前第 2 页/ })).toBeVisible();
 });
-
-test('QLL 列表查询按钮与筛选输入框等高', async (t) => {
+test('QLL SKU 查询按钮与筛选输入框等高', async (t) => {
   const { frame } = await mount(t, 'qll', 1280);
-  await frame.getByRole('tab', { name: '品类结构', exact: true }).click();
-  const input = frame.getByRole('textbox', { name: '品类', exact: true }).first();
-  const form = input.locator('xpath=ancestor::form[1]');
+  await expect(frame.getByRole('textbox', { name: 'SKU 编码或名称' })).toHaveCount(0);
+  const leaf = await openCompanySku(frame);
   const heights = await Promise.all(
     [
-      input,
-      form.getByRole('button', { name: '查询', exact: true }),
-      form.getByRole('button', { name: '清空筛选' }),
+      leaf.getByRole('textbox', { name: 'SKU 编码或名称' }),
+      leaf.getByRole('button', { name: '查询', exact: true }),
+      leaf.getByRole('button', { name: '重置' }),
     ].map(async (locator) => (await locator.boundingBox())?.height),
   );
-  assert.ok(heights.every(Number.isFinite), `筛选控件应可见：${heights}`);
+  assert.ok(heights.every(Number.isFinite));
   assert.ok(Math.max(...heights) - Math.min(...heights) <= 1, `按钮与输入框高度应一致：${heights}`);
 });
-
-test('QLL 趋势指标使用页面菜单而非系统原生下拉框', async (t) => {
-  const { frame } = await mount(t, 'qll', 1280);
-  const trigger = frame.getByRole('button', { name: '趋势指标' });
-  await trigger.click();
-  const menu = frame.getByRole('listbox', { name: '趋势指标' });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('option', { name: '库存趋势' })).toHaveAttribute(
-    'aria-selected',
-    'true',
+test('QLL 只保留品类与组织结构，不加载已移除的趋势与缺口', async (t) => {
+  const { frame, calls } = await mount(t, 'qll', 1280);
+  await expect(frame.getByRole('button', { name: '汤圆', exact: true })).toBeVisible();
+  await expect(frame.getByRole('tab')).toHaveText(['品类结构', '组织结构']);
+  await expect(frame.getByRole('region', { name: '全链库存趋势与缺口' })).toHaveCount(0);
+  assert.equal(
+    calls.some((q) => q.queryId.startsWith('stock_history.')),
+    false,
   );
-  await expect(menu.getByRole('option', { name: '订单缺口趋势' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await expect(menu.getByRole('option', { name: '货龄趋势' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await trigger.press('Escape');
-  await expect(menu).toHaveCount(0);
 });
 const styles = (
   await Promise.all(['theme/tokens.css', 'theme/html-defaults.css'].map((p) => readFile(p, 'utf8')))
@@ -181,7 +125,7 @@ test('QLL counts one inventory snapshot once across base and warehouse dimension
     return result;
   });
   const inventoryCard = frame.locator('[data-overview-cards="qll"]').locator('button').first();
-  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*箱/);
+  await expect(inventoryCard.locator('strong').first()).toHaveText(/100\s*件/);
   for (const call of calls.filter((c) => c.queryId.startsWith('health.'))) {
     assert.equal('warehouse_type' in call.parameters, false);
   }
@@ -192,6 +136,105 @@ test('APS source limitations do not masquerade as query failures', async (t) => 
   await expect.poll(() => calls.length).toBeGreaterThan(10);
   await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
   await expect(frame.getByRole('alert')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS mounts only the selected analysis cards and detail lists', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await expect(
+    frame.locator(
+      '#category-operations, #base-dashboard, #base, #cross-analysis, #sales-region-dashboard',
+    ),
+  ).toHaveCount(0);
+  await frame.getByRole('tab', { name: '生产视角', exact: true }).click();
+  await expect(frame.locator('#category-operations')).toBeVisible();
+  await expect(
+    frame.locator('#base-dashboard, #base, #cross-analysis, #sales-region-dashboard'),
+  ).toHaveCount(0);
+  await frame
+    .getByRole('tab', { name: '基地维度', exact: true })
+    .evaluate((element) => element.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  await frame.getByRole('tab', { name: '基地维度', exact: true }).click();
+  await expect(frame.locator('#base-dashboard')).toBeVisible();
+  await expect(frame.locator('#base')).toBeVisible();
+  await expect(frame.locator('#category-operations, #cross-analysis')).toHaveCount(0);
+  await frame
+    .locator('.analysis-workspace')
+    .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+  await frame.getByRole('tab', { name: '交叉分析', exact: true }).click();
+  await expect(frame.locator('#cross-analysis')).toBeVisible();
+  await expect(frame.locator('#base-dashboard, #base')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('APS demand attainment fills after matching plan data arrives', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (/^(overview|page|drill\.organization|drill\.product)\.demand-accuracy$/.test(query.queryId))
+      return {
+        ...result,
+        rows: [
+          {
+            ...result.rows[0],
+            month: '202610',
+            base: '华东',
+            initial_plan: 100,
+            adjusted_plan: 0,
+            actual: 21,
+            records: 1,
+            missing_actual: 0,
+            invalid: 0,
+          },
+        ],
+      };
+    if (/^(overview|page|drill\.organization|drill\.product)\.plans-source$/.test(query.queryId))
+      return {
+        ...result,
+        rows: [
+          {
+            ...result.rows[0],
+            month: '202610',
+            base: '华东',
+            demand_initial_plan: 100,
+            demand_adjusted_plan: 80,
+            records: 1,
+          },
+        ],
+      };
+    return result;
+  });
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+  const row = frame
+    .locator('.overview-list-row.active-period-list')
+    .filter({ has: frame.locator('strong').filter({ hasText: /^需求预测达成率$/ }) });
+  await expect(row.locator('b')).toHaveText('26.25%');
+  await expect(row).not.toContainText('无数据');
+  assert.deepEqual(errors, []);
+});
+
+test('APS monthly comparisons distinguish unavailable cutoff from empty history', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280, (query, result) => {
+    if (
+      /^(page|overview|drill\.organization|drill\.product)\.production$/.test(query.queryId) &&
+      query.parameters.start !== '20261001'
+    )
+      return { ...result, rows: [] };
+    return result;
+  });
+  await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+  await frame.getByRole('tab', { name: '月度视角', exact: true }).click();
+  const rows = frame
+    .locator('.overview-list-row.active-period-list')
+    .filter({ has: frame.locator('strong') });
+  const demand = rows.filter({
+    has: frame.locator('strong').filter({ hasText: /^需求预测达成率$/ }),
+  });
+  const production = rows.filter({
+    has: frame.locator('strong').filter({ hasText: /^生产计划达成率$/ }),
+  });
+  await expect(demand).toContainText('暂无同期口径');
+  await expect(production).toContainText('暂无同期数据');
   assert.deepEqual(errors, []);
 });
 
@@ -233,7 +276,8 @@ for (const id of ['fc', 'qll', 'dealer', 'aqkc', 'apsplan'])
       const summary = frame.locator('summary').filter({ hasText: '业务明细' });
       await expect(summary).toHaveCount(0);
     }
-    assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
+    if (id === 'qll') assert.doesNotMatch(await root.innerText(), /万箱|箱\/天/);
+    else assert.doesNotMatch(await root.innerText(), /万件|件\/天/);
     for (const width of [1280, 560]) {
       await page.setViewportSize({ width, height: 900 });
       const sizes = await root.evaluate((el) => ({
@@ -416,7 +460,8 @@ test('dealer top date refresh preserves the selected customer scope', async (t) 
 });
 test('qll original current-order card retains new base snapshot quantities without monthly substitutes', async (t) => {
   const { frame, calls, errors } = await mount(t, 'qll', 1280, (query, result) => {
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (query.queryId === 'current-shortage.summary')
       result.rows.forEach((row) =>
         Object.assign(row, { demand: row.location_type === '基地' ? 1049341 : 100000 }),
@@ -434,7 +479,7 @@ test('qll original current-order card retains new base snapshot quantities witho
   const card = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(card).toContainText('114.93万箱');
+  await expect(card).toContainText('114.93万件');
   await expect(card).toContainText('基地缺货量');
   await expect(card).toContainText('分仓缺货量');
   assert.doesNotMatch(await card.innerText(), /本月订单|范围|快照|源记录/);
@@ -488,13 +533,9 @@ test('QLL cards show batch-weighted average ages and independent current gaps, i
   const orders = frame
     .getByRole('button')
     .filter({ has: frame.getByText('当前订单', { exact: true }) });
-  await expect(orders).toContainText('基地缺货量1.23万箱');
-  await expect(orders).toContainText('分仓缺货量0箱');
-  await frame.getByRole('tab', { name: '库存库龄', exact: true }).click();
-  await expect(
-    frame.getByRole('columnheader', { name: '最大货龄（天）', exact: true }),
-  ).toBeVisible();
-  await expect(frame.getByRole('cell', { name: '1,033', exact: true })).toBeVisible();
+  await expect(orders).toContainText('基地缺货量1.23万件');
+  await expect(orders).toContainText('分仓缺货量0件');
+  await expect(frame.getByRole('tab', { name: '库存库龄', exact: true })).toHaveCount(0);
   assert.deepEqual(errors, []);
 });
 test('QLL changing the date stays local until submit, then reads the new date', async (t) => {
@@ -532,7 +573,7 @@ test('FC uses the same Chinese date display and retains explicit refresh', async
   assert.deepEqual(errors, []);
 });
 for (const [quantity, count, display] of [
-  [1033547, 190, '1,033,547件'],
+  [1033547, 190, '103.35万件'],
   [0, 201, '0件'],
   [null, 0, '-'],
 ])
@@ -540,7 +581,8 @@ for (const [quantity, count, display] of [
     const { frame, errors, calls } = await mount(t, 'aqkc', 1280, (query, result) => {
       if (query.queryId === 'calendar.target_versions')
         result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-      if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+      if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+        result.rows[0].day = '2026-10-19';
       if (query.queryId === 'current-shortage.locations')
         Object.assign(result.rows[0], {
           demand: quantity,
@@ -565,6 +607,7 @@ for (const [quantity, count, display] of [
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
       quantity === null ? '-' : '12件',
     );
+    assert.equal(calls.filter((q) => q.queryId === 'page.inventory-groups').length, 1);
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
   });
@@ -894,14 +937,18 @@ test('dealer original customer menu applies the new query scope and closes after
   assert.deepEqual(errors, []);
 });
 
-test('QLL category cells bind category names while retaining organization as the secondary line', async (t) => {
-  const { frame, errors } = await mount(t, 'qll', 1280);
-  const cell = frame.locator('tbody tr').first().locator('td').first();
-  await expect(cell.locator('strong')).toHaveText('汤圆');
-  await expect(cell.locator('small')).toHaveText(['华东', 'sku-A-000']);
-  await expect(frame.getByRole('tab', { name: '品类结构', exact: true })).toHaveAttribute(
-    'aria-selected',
-    'true',
+test('QLL 品类逐层展开到基地和 SKU，初始不请求 SKU 明细', async (t) => {
+  const { frame, errors, calls } = await mount(t, 'qll', 1280);
+  await expect(frame.getByRole('button', { name: '汤圆', exact: true })).toBeVisible();
+  assert.equal(
+    calls.some((q) => q.parameters.level === 'sku'),
+    false,
+  );
+  const leaf = await openCompanySku(frame);
+  await expect(leaf.locator('tbody tr').first()).toContainText('sku-A-000 测试商品');
+  assert.equal(
+    calls.filter((q) => q.parameters.level === 'sku').at(-1).parameters.parent_organization,
+    '华东',
   );
   assert.deepEqual(errors, []);
 });
@@ -1304,6 +1351,8 @@ test('FC restored quantity draft survives server paging and submits a real workb
   await draft.getByRole('button', { name: '取消', exact: true }).click();
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  await confirmation.getByLabel('导出补货分仓').selectOption('001');
   await expect(confirmation).toContainText('21个SKU');
   const downloaded = page.waitForEvent('download');
   await confirmation.getByRole('button', { name: '仅导出Excel', exact: true }).click();
@@ -1329,9 +1378,8 @@ test('FC restores real plan template, validates warehouse scope and applies an i
   await expect(list.locator('tbody tr')).toHaveCount(10);
   await list.getByRole('button', { name: '下载模板', exact: true }).click();
   const template = frame.getByRole('dialog', { name: '下载分仓计划模板', exact: true });
-  await template
-    .getByRole('combobox', { name: '模板计划月份', exact: true })
-    .selectOption('2026-10');
+  await template.getByRole('button', { name: '模板计划月份', exact: true }).click();
+  await template.getByRole('option', { name: '2026年10月', exact: true }).click();
   const downloaded = page.waitForEvent('download');
   await template.getByRole('button', { name: '下载模板', exact: true }).click();
   const file = await downloaded;
@@ -1489,6 +1537,12 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
           warehouse_name: second ? '北京分仓' : '上海分仓',
         };
       });
+    if (query.queryId.startsWith('replenishment.detail') && query.parameters.warehouse_code) {
+      const total = query.parameters.warehouse_code === '001' ? 10 : 11;
+      value.rows = value.rows
+        .filter((row) => row.warehouse_code === query.parameters.warehouse_code)
+        .map((row) => ({ ...row, page_scope_total: total, total, row_count: total }));
+    }
     return value;
   });
   const list = frame.getByRole('region', { name: '补货确认', exact: true });
@@ -1498,9 +1552,10 @@ test('FC DMS export keeps warehouses separate and preserves another warehouse dr
   await list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }).fill('17');
   await list.getByRole('button', { name: '提交', exact: true }).click();
   const confirmation = frame.getByRole('dialog', { name: '确认补货订单', exact: true });
-  await expect(
-    confirmation.getByRole('button', { name: '仅导出Excel', exact: true }),
-  ).toBeDisabled();
+  await expect(confirmation).toContainText('请先选择本次补货的分仓');
+  await expect(confirmation.getByRole('button', { name: '仅导出Excel', exact: true })).toHaveCount(
+    0,
+  );
   await confirmation
     .getByRole('combobox', { name: '导出补货分仓', exact: true })
     .selectOption('001');
@@ -1536,6 +1591,7 @@ test('FC list filters align compact white controls, retain actions and adapt to 
           return {
             left: r.left,
             right: r.right,
+            top: r.top,
             height: r.height,
             background: getComputedStyle(node).backgroundColor,
           };
@@ -1564,11 +1620,18 @@ test('FC list filters align compact white controls, retain actions and adapt to 
         layout.fields.every((control) => control.background === 'rgb(255, 255, 255)'),
         'inputs use a white surface',
       );
-      if (width >= 768)
+      if (width >= 922) {
         assert.ok(
-          layout.fields.every((control) => Math.abs(control.right - control.left - 170) <= 1),
-          'desktop fields use the reviewed 170px width',
+          layout.controls.every((control) => Math.abs(control.top - layout.controls[0].top) <= 1),
+          'desktop filters and column settings remain on the same row',
         );
+        assert.ok(
+          layout.fields.every(
+            (control) => control.right - control.left >= 80 && control.right - control.left <= 200,
+          ),
+          'desktop fields shrink while keeping usable input width',
+        );
+      }
       const columns = toolbar.locator('summary[aria-label="列设置"]');
       await columns.click();
       const menu = await toolbar.locator('details > div').boundingBox();
@@ -1645,23 +1708,17 @@ for (const [inventory, inTransit, stockDays] of [
         .filter({ has: frame.getByText(label, { exact: true }) })
         .locator('dd');
     await expect(value(stock, '客户在仓')).toHaveText(
-      inventory === null ? '-' : inventory === 0 ? '0箱' : '1.21万箱',
+      inventory === null ? '-' : inventory === 0 ? '0件' : '1.21万件',
     );
     await expect(value(stock, '客户在途')).toHaveText(
-      inTransit === null ? '-' : inTransit === 0 ? '0箱' : '2,412箱',
+      inTransit === null ? '-' : inTransit === 0 ? '0件' : '2,412件',
     );
     await expect(value(turnover, '客户库存支撑')).toHaveText(
       stockDays === null ? '-' : stockDays === 0 ? '0.0天' : '18.0天',
     );
-    const customerLayer = frame
-      .locator('section')
-      .filter({ has: frame.getByRole('button', { name: '渠道库存明细', exact: true }) })
-      .last();
-    await expect(
-      customerLayer.getByRole('button', { name: '渠道库存明细', exact: true }),
-    ).toHaveAttribute('aria-expanded', 'true');
+    const customerLayer = await openCompanySku(frame, '渠道', '河南省区');
     await expect(customerLayer.locator('tbody tr')).toHaveCount(10);
-    await expect(customerLayer.locator('tbody tr').first()).toContainText('客户A');
+    await expect(customerLayer.locator('tbody tr').first()).toContainText('测试商品');
     const before = calls.length;
     await customerLayer.getByRole('button', { name: '下一页', exact: true }).click();
     await expect
@@ -1670,9 +1727,10 @@ for (const [inventory, inTransit, stockDays] of [
           .slice(before)
           .some(
             (q) =>
-              q.queryId.startsWith('dealer.stock.detail') &&
+              q.queryId === 'category-tree.customer' &&
+              q.parameters.level === 'sku' &&
               q.parameters.offset === 10 &&
-              q.parameters.page_size === 10,
+              q.parameters.page_size === 11,
           ),
       )
       .toBe(true);
@@ -1700,7 +1758,7 @@ for (const [inventory, inTransit, stockDays] of [
     }
     await frame.getByRole('checkbox', { name: '含渠道', exact: true }).uncheck();
     await expect(stock.getByText('客户在仓', { exact: true })).toHaveCount(0);
-    await expect(frame.getByRole('button', { name: '渠道库存明细', exact: true })).toHaveCount(0);
+    await expect(frame.getByRole('button', { name: '渠道', exact: true })).toHaveCount(0);
     assert.deepEqual(errors, []);
   });
 
@@ -1807,7 +1865,8 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   const view = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (['page.dashboard-groups', 'page.inventory-groups'].includes(query.queryId))
       Object.assign(result.rows[0], {
         base: '濮阳',
@@ -1867,10 +1926,10 @@ test('base batch-only inventory reconciles and age drill keeps the same fields a
   const card = frame.locator('[data-overview-cards="aqkc"] article');
   await expect(
     card.filter({ has: frame.getByText('当前库存', { exact: true }) }).locator('strong'),
-  ).toHaveText('4,277');
+  ).toHaveText('4,277件');
   await expect(
     card.filter({ has: frame.getByText('当前订单', { exact: true }) }).locator('strong'),
-  ).toHaveText('25,765件');
+  ).toHaveText('2.58万件');
   await expect.poll(() => insightCalls.length).toBeGreaterThan(0);
   const evidence = insightCalls.at(-1).evidence.evidence;
   assert.equal(evidence.metrics.current, 4277);
@@ -1937,7 +1996,8 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
   const { frame, calls, errors } = await mount(t, 'aqkc', 1280, (query, result) => {
     if (query.queryId === 'calendar.target_versions')
       result.rows = [{ month: '2026-10-01', inventory_version: '月初' }];
-    if (query.queryId === 'source.stock-date') result.rows[0].day = '2026-10-19';
+    if (['source.stock-date', 'source.health-date'].includes(query.queryId))
+      result.rows[0].day = '2026-10-19';
     if (
       ['page.dashboard-groups', 'page.inventory-groups', 'page.structure-groups'].includes(
         query.queryId,
@@ -2017,16 +2077,20 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
     await expect(row.getByRole('cell', { name: value, exact: true })).toHaveCount(1);
   await expect(row).toContainText('缺货');
   await expect(row).toContainText('65.0天');
-  const menu = sku.locator('details');
-  await menu.locator('summary').click();
-  await menu.getByRole('checkbox', { name: '无目标', exact: true }).check();
-  await expect(menu).toHaveAttribute('open', '');
+  const trigger = sku.getByRole('button', { name: '库存风险', exact: true });
+  await trigger.click();
+  const menu = frame.getByRole('menu', { name: '库存风险多选' });
+  await expect(menu).toBeVisible();
+  await menu.getByRole('menuitemcheckbox', { name: '无目标', exact: true }).click();
+  await expect(menu).toBeVisible();
   await sku.getByPlaceholder('编码或名称').click();
-  await expect(menu).not.toHaveAttribute('open', '');
-  await menu.locator('summary').click();
-  await expect(menu.getByRole('checkbox', { name: '无目标', exact: true })).toBeChecked();
-  await menu.locator('summary').press('Escape');
-  await expect(menu).not.toHaveAttribute('open', '');
+  await expect(menu).toHaveCount(0);
+  await trigger.click();
+  await expect(
+    frame.getByRole('menuitemcheckbox', { name: '无目标', exact: true }),
+  ).toHaveAttribute('aria-checked', 'true');
+  await trigger.press('Escape');
+  await expect(menu).toHaveCount(0);
   assert.ok(
     calls.some(
       (call) =>
@@ -2034,6 +2098,27 @@ test('base and category warnings lead with shortage; SKU risk menu closes outsid
     ),
   );
   assert.ok(!calls.some((call) => call.queryId === 'current-shortage.skus'));
+  assert.deepEqual(errors, []);
+});
+
+test('base daily report uses an accessible floating base selector', async (t) => {
+  const { frame, errors } = await mount(t, 'aqkc', 1280);
+  await frame.getByRole('button', { name: '查看日报' }).click();
+  const trigger = frame.getByRole('button', { name: '切换日报基地' });
+  await expect(trigger).toBeEnabled();
+  await trigger.click();
+  const menu = frame.getByRole('listbox', { name: '日报基地' });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('option', { name: '暂无可见基地' })).toHaveCount(0);
+  await expect(menu.getByRole('option', { name: '华东基地' })).toBeVisible();
+  await menu.getByRole('option', { name: '华东基地' }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toContainText('华东基地');
+  await trigger.click();
+  await menu.getByRole('option', { name: '华东基地' }).press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(frame.getByRole('dialog')).toBeVisible();
   assert.deepEqual(errors, []);
 });
 
@@ -2071,5 +2156,125 @@ test('base dashboard model failure leaves cards and detail rows visible', async 
   );
   await expect(frame.locator('[data-overview-cards="aqkc"]')).toBeVisible();
   await expect(frame.locator('tbody tr').first()).toBeVisible();
+  assert.deepEqual(errors, []);
+});
+
+test('APS workspace tabs switch and align with the toolbar edge without a return button', async (t) => {
+  const { frame, errors } = await mount(t, 'apsplan', 1280);
+  const intelligent = frame.getByRole('button', { name: '智能工作台', exact: true });
+  const board = frame.getByRole('button', { name: '产销协同看板', exact: true });
+  await expect(intelligent).toBeVisible();
+  await expect(board).toBeVisible();
+  await board.click();
+  await expect(board).toHaveAttribute('aria-current', 'page');
+  await expect(frame.getByRole('button', { name: '返回智能工作台', exact: true })).toHaveCount(0);
+  const difference = await board.evaluate((element) =>
+    Math.abs(
+      element.getBoundingClientRect().bottom -
+        element.closest('[data-business-toolbar]').getBoundingClientRect().bottom,
+    ),
+  );
+  assert.ok(difference <= 2, `selected tab does not meet toolbar: ${difference}`);
+  await intelligent.click();
+  await expect(intelligent).toHaveAttribute('aria-current', 'page');
+  assert.deepEqual(errors, []);
+});
+
+for (const width of [1280, 390])
+  test(`APS board sticky rows remain usable at ${width}px`, async (t) => {
+    const { frame, errors } = await mount(t, 'apsplan', width);
+    await frame.getByRole('button', { name: '产销协同看板', exact: true }).click();
+    const offsets = await frame.locator('.analysis-workspace').evaluate((element) => {
+      const tabs = element.querySelector(':scope > .scope-tabs');
+      const period = element.querySelector(':scope > .secondary-analysis-toolbar');
+      return {
+        tabs: parseFloat(getComputedStyle(tabs).top),
+        period: parseFloat(getComputedStyle(period).top),
+        toolbar: document.querySelector('[data-business-toolbar]').getBoundingClientRect().height,
+        tabsPosition: getComputedStyle(tabs).position,
+        periodPosition: getComputedStyle(period).position,
+      };
+    });
+    assert.ok(Math.abs(offsets.tabs - offsets.toolbar) <= 1, JSON.stringify(offsets));
+    assert.ok(Math.abs(offsets.period - offsets.toolbar - 48) <= 1, JSON.stringify(offsets));
+    assert.equal(offsets.tabsPosition, 'sticky');
+    assert.equal(offsets.periodPosition, 'sticky');
+    await expect(frame.locator('main.main-content')).toHaveAttribute('aria-busy', 'false');
+    await frame
+      .locator('.analysis-workspace')
+      .evaluate((element) => element.scrollIntoView({ block: 'start', behavior: 'instant' }));
+    const geometry = await frame.locator('html').evaluate(() => {
+      const toolbar = document.querySelector('[data-business-toolbar]').getBoundingClientRect();
+      const tabs = document
+        .querySelector('.analysis-workspace > .scope-tabs')
+        .getBoundingClientRect();
+      return { toolbarBottom: toolbar.bottom, tabsTop: tabs.top, scroll: window.scrollY };
+    });
+    assert.ok(geometry.scroll > 0, 'page actually scrolled');
+    assert.ok(
+      geometry.tabsTop >= geometry.toolbarBottom - 1,
+      `sticky rows overlap: ${JSON.stringify(geometry)}`,
+    );
+    await frame.getByRole('tab', { name: '销售视角' }).click();
+    await expect(frame.getByRole('tab', { name: '销售视角' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    assert.deepEqual(errors, []);
+  });
+
+test('FC model insight stays independent of cards, tabs and list paging', async (t) => {
+  let finish;
+  const { frame, insightCalls, errors } = await mount(
+    t,
+    'fc',
+    1280,
+    fcWorkflowRows,
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const list = frame.getByRole('region', { name: '补货确认', exact: true });
+  await expect(list.locator('tbody tr')).toHaveCount(10);
+  const insight = frame.getByRole('region', { name: 'AI 洞察', exact: true });
+  await expect(insight).toContainText('AI 洞察生成中');
+  await expect.poll(() => typeof finish).toBe('function');
+  const evidence = insightCalls.at(-1).evidence;
+  assert.equal(evidence.scope.warehouseCode, '全部分仓');
+  assert.equal(evidence.rankings.complete, false);
+  assert.equal(evidence.aging.days91PlusQty, null);
+  const before = insightCalls.length;
+  await list.getByRole('button', { name: '下一页', exact: true }).click();
+  await expect(
+    list.getByRole('spinbutton', { name: 'sku-A-010实际补货量', exact: true }),
+  ).toBeVisible();
+  await frame.getByRole('button', { name: '分仓计划', exact: true }).click();
+  await expect(
+    frame.getByRole('region', { name: '分仓计划', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
+  assert.equal(insightCalls.length, before);
+  finish({
+    answer: '整体库存处于已核实范围。\n当前只确认分仓结构。建议今日复核缺口【待人工确认】。',
+  });
+  await expect(insight.locator('p')).toHaveText(
+    '整体库存处于已核实范围。 当前只确认分仓结构。建议今日复核缺口【待人工确认】。',
+  );
+  await expect(insight.getByText('经营洞察', { exact: true })).toHaveCount(0);
+  await expect(insight.getByRole('button')).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('FC model failure leaves stock cards and ten-row list available', async (t) => {
+  const { frame, errors } = await mount(t, 'fc', 1280, fcWorkflowRows, async () => {
+    throw Error('MODEL_UNAVAILABLE');
+  });
+  await expect(frame.getByRole('region', { name: 'AI 洞察', exact: true })).toContainText(
+    'AI 洞察暂时生成失败',
+  );
+  await expect(frame.locator('[data-overview-cards="fc"] article')).toHaveCount(5);
+  await expect(
+    frame.getByRole('region', { name: '补货确认', exact: true }).locator('tbody tr'),
+  ).toHaveCount(10);
   assert.deepEqual(errors, []);
 });

@@ -1,6 +1,7 @@
+import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
-import { hasMpsSource, readProducts, readAnnual } from './master-data.js';
+import { hasMpsSource, readProducts, readAnnual, readAnnualDetails } from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
@@ -9,6 +10,9 @@ import { createWorkflow } from './workflow-view.js';
 import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 import { productProjections } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
+import { productFileText } from './product-file.js';
+import { workbookBytes } from './workbook.js';
+import { annualWorkbookTables } from './annual-workbook.js';
 const productColumns = [
   '基地',
   '产品编码',
@@ -16,6 +20,7 @@ const productColumns = [
   '大类',
   '系列',
   '物料组',
+  '物料组名称',
   '老品编码',
   '老品名称',
 ];
@@ -77,6 +82,13 @@ function parseCsv(text, columns) {
   }
   if (quoted) throw Error('CSV引号未闭合。');
   if (cell || row.length) finish();
+  const legacyProductColumns = productColumns.filter((column) => column !== '物料组名称');
+  if (
+    columns === productColumns &&
+    table[0]?.join('\u0000') === legacyProductColumns.join('\u0000')
+  ) {
+    for (const row of table) row.splice(6, 0, row === table[0] ? '物料组名称' : '');
+  }
   if (!table.length || table[0].join('\u0000') !== columns.join('\u0000'))
     throw Error(`表头必须依模板排列：${columns.join('、')}。`);
   if (table.length - 1 > 10000) throw Error('超过10000条上限，未读取任何行，请拆分文件后核对。');
@@ -94,7 +106,13 @@ function parseCsv(text, columns) {
       } else if (column.includes('数量')) {
         if (value !== '' && (!/^[-+]?\d+(\.\d+)?$/.test(value) || !Number.isFinite(Number(value))))
           errors.push(`第${index + 2}行${column}须为有限数或留空`);
-      } else if (columns === productColumns && !column.startsWith('老品') && !value)
+      } else if (
+        columns === productColumns &&
+        column !== '基地' &&
+        column !== '物料组名称' &&
+        !column.startsWith('老品') &&
+        !value
+      )
         errors.push(`第${index + 2}行${column}不能为空`);
     }
     if (columns === productColumns && !!record['老品编码'] !== !!record['老品名称'])
@@ -120,7 +138,7 @@ function parseCsv(text, columns) {
     );
   return rows;
 }
-function downloadCsv(name, columns, rows) {
+function downloadCsvLegacy(name, columns, rows) {
   const cell = (value, column) => {
     let text = String(value ?? '');
     if (typeof value !== 'number' && !column?.includes('数量') && /^[\s]*[=+\-@\t\r\n]/.test(text))
@@ -133,6 +151,13 @@ function downloadCsv(name, columns, rows) {
       .map((row) => row.map((value, index) => cell(value, columns[index])).join(','))
       .join('\r\n');
   downloadFile(name, 'text/csv;charset=utf-8', csv);
+}
+async function downloadWorkbook(name, tables) {
+  const bytes = await workbookBytes(tables);
+  downloadFile(name, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', bytes);
+}
+function downloadCsv(name, columns, rows) {
+  return downloadWorkbook(name.replace(/\.csv$/i, '.xlsx'), [{ name: '数据', columns, rows }]);
 }
 const integer = new Intl.NumberFormat('zh-CN', {
   useGrouping: false,
@@ -210,6 +235,12 @@ function downloadFile(name, mime, text) {
 }
 export function createDemandConfirmation(react, useMpsPart, view) {
   const h = react.createElement;
+  const CategoryDemand = createCategoryDemand(react, {
+    table: (...args) => table(...args),
+    downloadCsv,
+    categories,
+    useMpsPart,
+  });
   function Dialog({ title, children, footer, close, className = '' }) {
     const element = react.useRef();
     react.useEffect(() => {
@@ -237,7 +268,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       h('div', { className: 'dc-dialog-footer' }, footer),
     );
   }
-  function Upload({ label, text = '上传', read }) {
+  function Upload({ label, text = '上传', read, accept = '.csv,text/csv' }) {
     const input = react.useRef();
     return h(
       react.Fragment,
@@ -247,7 +278,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ref: input,
         type: 'file',
         hidden: true,
-        accept: '.csv,text/csv',
+        accept,
         'aria-label': label,
         onChange: (event) => {
           const file = event.target.files[0];
@@ -286,9 +317,25 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   { key: column },
                   row[column] === '' || row[column] == null
                     ? '-'
-                    : /数量|收入|金额|合计/.test(column) && Number.isFinite(Number(row[column]))
+                    : (/数量|收入|金额|合计/.test(column) ||
+                          ['① 环比法', '② 占比法', '加权'].includes(column)) &&
+                        Number.isFinite(Number(row[column]))
                       ? integer(row[column])
-                      : row[column],
+                      : [
+                            '历史平均环比',
+                            '环比链',
+                            '同期平均占比',
+                            '三年月占比',
+                            '月发货占财年比例',
+                            '同比增长率',
+                            '环比增长率',
+                          ].includes(column) && Number.isFinite(Number(row[column]))
+                        ? new Intl.NumberFormat('zh-CN', {
+                            style: 'percent',
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          }).format(Number(row[column]))
+                        : row[column],
                 ),
               ),
             ),
@@ -302,9 +349,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     const [page, setPage] = react.useState(0);
     const { period, column, rows } = sourceSelection(draft, type);
     const business = draft[type + 'Source'] === 'business';
+    const sourceDimensions =
+      type === 'forecast' && business ? ['基地', '大类', '系列', '物料组'] : dimensions;
+    const visibleColumns =
+      type === 'forecast' && business
+        ? ['月份', '基地', '物料组', '物料组名称', '大类', '系列']
+        : type === 'report' && business
+          ? ['月份', '大区', '基地', '产品编码', '产品名称', '大类', '系列', '物料组', '物料组名称']
+          : sourceColumns;
     const detailColumns = business
       ? [
-          ...sourceColumns,
+          ...visibleColumns,
           ...(type === 'report'
             ? ['月初数量', '纠偏数量']
             : type === 'forecast'
@@ -334,7 +389,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       update(changes);
       setPage(0);
     };
-    const grouped = dimensions.includes(preview)
+    const grouped = sourceDimensions.includes(preview)
       ? [...new Set(rows.map((row) => row[preview]))].map((name) => {
           const records = rows.filter((row) => row[preview] === name);
           return {
@@ -345,12 +400,11 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               (!business || records.every((row) => row[column] !== ''))
                 ? quantity(records, column)
                 : '',
-            缺失数量条数: records.filter((row) => row[column] === '').length,
           };
         })
       : [];
     const displayed = preview === '明细' ? rows : grouped;
-    const columns = preview === '明细' ? detailColumns : ['名称', '数量合计', '缺失数量条数'];
+    const columns = preview === '明细' ? detailColumns : ['名称', '数量合计'];
     return h(
       'section',
       { 'aria-label': definition.title, className: 'dc-card dc-source' },
@@ -435,9 +489,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             'p',
             { className: 'dc-muted' },
             type === 'report'
-              ? '期初与纠偏为两个完整版本，分别使用，不相加；按基地×SKU汇总，源记录按客户×基地×SKU校验唯一性，缺基地或源值不可用时留空。'
+              ? '期初与纠偏为两个完整版本，分别使用，不相加。按大区×基地×SKU汇总；大区按客户与物料关系匹配，产品分类取产品清单。缺基地或数量不可用时留空。'
               : type === 'forecast'
-                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。基地×物料重复时不合计，单位待确认。产品分类只按精确编码的唯一关系补充。`
+                ? `预测批次 ${draft.month}：当月列对应${draft.month}，下一月列对应${monthOffset(draft.month, 1)}。按基地×物料组汇总，缺数量时不以部分合计代替完整预测。分类按同物料组SKU的一致源值补充，单位待确认。`
                 : '按实际发货日期汇总同一期间。发货数量与含赠品数量分别展示，不相加；不含税收入不替代含税销售额。',
           ),
         business &&
@@ -459,7 +513,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'div',
           { className: 'dc-coverage' },
-          dimensions.map((dimension) =>
+          sourceDimensions.map((dimension) =>
             h(
               'button',
               {
@@ -572,6 +626,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           Dialog,
           {
             title: `${definition.short} · ${period} · ${preview}核对`,
+            className: preview === '明细' ? 'dc-source-detail' : '',
             close: () => setPreview(null),
             footer: h(
               'button',
@@ -604,7 +659,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         ),
     );
   }
-  function Annual({ draft, read, sync, update, error, busy }) {
+  function Annual({
+    draft,
+    read,
+    sync,
+    update,
+    error,
+    busy,
+    exportAnnual,
+    exporting,
+    exportError,
+  }) {
     const [expanded, setExpanded] = react.useState(false);
     const live = draft.annualSource === 'business';
     const unit = live ? '源数量' : '件';
@@ -654,7 +719,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         after = quantity(current, '数量');
       if (!before) return '分母为0';
       const result = ((after / before - 1) * 100).toLocaleString('zh-CN', {
-        maximumFractionDigits: 6,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       });
       return h(
         'details',
@@ -663,7 +729,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(
           'p',
           {},
-          `公式：（本月数量÷上月数量－1）×100%；结果：${result}%。仅用于文件环比核对，显示最多六位小数。`,
+          `公式：（本月数量÷上月数量－1）×100%；结果：${result}%。仅用于文件环比核对，显示保留两位小数。`,
         ),
       );
     };
@@ -759,28 +825,31 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'button',
             {
-              disabled: !draft.annual.length,
+              disabled: !draft.annual.length || exporting || busy,
               onClick: () =>
-                downloadCsv(
-                  live ? '年度需求-源数量.csv' : '年度计划-全部已读.csv',
-                  live
-                    ? ['基地', ...annualColumns, '源月份', '源记录数', '缺失数量', '重复记录数']
-                    : annualColumns,
-                  draft.annual,
-                ),
+                live
+                  ? exportAnnual(months, base)
+                  : downloadCsvLegacy('年度计划-全部已读.csv', annualColumns, draft.annual),
             },
-            '下载',
+            exporting ? '正在导出…' : live ? '下载年度SKU模板' : '下载',
           ),
         ),
         busy && h('p', { role: 'status' }, '正在读取…'),
         error && h('p', { role: 'alert' }, error),
+        exportError && h('p', { role: 'alert' }, exportError),
+        live &&
+          h(
+            'p',
+            { className: 'dc-card-note' },
+            '下载当前基地全年SKU明细、大类汇总及物料组核对表。各表冻结首行；缺失月份不补零，物料组汇总不重复计入大类。',
+          ),
         h('div', { hidden: !expanded }, table(['大类', ...months, '全年合计'], rows)),
       ),
     );
   }
   const MasterData = createMasterData(react, { Dialog, table, downloadCsv, useMpsPart });
   const DeliveryMetrics = createDeliveryMetrics(react, { table, downloadCsv, useMpsPart });
-  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv });
+  const Workflow = createWorkflow(react, useMpsPart, { Dialog, downloadCsv: downloadCsvLegacy });
   const SourceInputs = createSourceInputs(react, {
     Dialog,
     table,
@@ -792,7 +861,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     Dialog,
     Upload,
     parseCsv,
-    downloadCsv,
+    downloadCsv: downloadCsvLegacy,
     monthOffset,
   });
   return function DemandConfirmation({
@@ -869,6 +938,24 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           epoch === generation.current &&
           requests.current[type] === request,
       };
+    };
+    const exportAnnual = async (months, base) => {
+      const { signal, valid } = begin('annualExport');
+      try {
+        const rows = await readAnnualDetails(months, base, signal);
+        const tables = annualWorkbookTables(rows, months, base);
+        const bytes = await workbookBytes(tables);
+        if (valid())
+          downloadFile(
+            `年度销售计划-${base}-${months[0]}至${months.at(-1)}.xlsx`,
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            bytes,
+          );
+      } catch (failure) {
+        if (valid()) setErrors((state) => ({ ...state, annualExport: failure.message }));
+      } finally {
+        if (valid()) setBusy((state) => ({ ...state, annualExport: false }));
+      }
     };
     const sync = async (type) => {
       const id = draft.id;
@@ -949,7 +1036,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       try {
         if (file.size > 5 * 1024 * 1024) throw Error('文件超过5 MiB上限，未读取任何行。');
         const rows = parseCsv(
-          await file.text(),
+          type === 'products' ? await productFileText(file) : await file.text(),
           type === 'products'
             ? productColumns
             : type === 'annual'
@@ -1145,8 +1232,8 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const normalized = Object.fromEntries(
         productColumns.map((column) => [column, product[column].trim()]),
       );
-      if (productColumns.slice(0, 6).some((column) => !normalized[column])) {
-        setError('基地、产品编码、产品名称、大类、系列和物料组不能为空。');
+      if (productColumns.slice(1, 6).some((column) => !normalized[column])) {
+        setError('产品编码、产品名称、大类、系列和物料组不能为空；全国产品基地可留空。');
         return;
       }
       if (!!normalized['老品编码'] !== !!normalized['老品名称']) {
@@ -1208,7 +1295,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 ? [...new Set(rows.map((row) => row['缺项原因']).filter(Boolean))]
                 : undefined,
             dimensions: Object.fromEntries(
-              dimensions.map((dimension) => [
+              (type === 'forecast' && draft.forecastSource === 'business'
+                ? ['基地', '大类', '系列', '物料组']
+                : dimensions
+              ).map((dimension) => [
                 dimension,
                 {
                   count: new Set(rows.map((row) => row[dimension]).filter(Boolean)).size,
@@ -1651,7 +1741,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               },
               '下载',
             ),
-            h(Upload, { label: '选择产品关系CSV', read: (file) => read('products', file) }),
+            h(Upload, {
+              label: '选择产品关系CSV或Excel',
+              accept:
+                '.csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              read: (file) => read('products', file),
+            }),
             h(
               'button',
               {
@@ -1674,7 +1769,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'colgroup',
                 {},
-                [7, 9, 21, 8, 12, 10, 8, 15, 10].map((width, index) =>
+                [9, 20, 7, 10, 8, 15, 9, 13, 9].map((width, index) =>
                   h('col', { key: index, style: { width: width + '%' } }),
                 ),
               ),
@@ -1685,12 +1780,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   'tr',
                   {},
                   [
-                    '基地名称',
-                    '产品编码',
-                    '产品名称',
+                    '物料编码',
+                    '物料名称',
                     '大类',
                     '系列',
-                    '物料组',
+                    '物料组编码',
+                    '物料组名称',
                     '对应老品编码',
                     '老品名称',
                     '操作',
@@ -1702,55 +1797,36 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 {},
                 filteredProducts
                   .slice(productPage * productPageSize, (productPage + 1) * productPageSize)
-                  .map(({ row, index, display, children, inherited, labels, candidateBases }) =>
+                  .map(({ row, index, display, children, inherited }) =>
                     h(
                       'tr',
                       { key: index },
-                      productColumns.map((column) =>
-                        h(
-                          'td',
-                          {
-                            key: column,
-                            'aria-label':
-                              column === '产品名称' ? display[column] || '-' : undefined,
-                            title: inherited.includes(column)
-                              ? '同物料组SKU的唯一源值，仅用于展示'
-                              : row[column] || '',
-                          },
-                          column === '产品编码' && children.length
-                            ? h(
-                                'button',
-                                {
-                                  className: 'dc-link',
-                                  onClick: () => setProductDetails(index),
-                                  'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
-                                },
-                                `物料组 · ${children.length} SKU`,
-                              )
-                            : column === '基地' && !row[column] && candidateBases.length
+                      productColumns
+                        .filter((column) => column !== '基地')
+                        .map((column) =>
+                          h(
+                            'td',
+                            {
+                              key: column,
+                              'aria-label':
+                                column === '产品名称' ? display[column] || '-' : undefined,
+                              title: inherited.includes(column)
+                                ? '同物料组SKU的唯一源值，仅用于展示'
+                                : row[column] || '',
+                            },
+                            column === '产品编码' && children.length
                               ? h(
-                                  'span',
-                                  { title: '来自已读取事实的候选基地，不代表产品唯一所属基地' },
-                                  candidateBases.join(' / ') + '（候选）',
+                                  'button',
+                                  {
+                                    className: 'dc-link',
+                                    onClick: () => setProductDetails(index),
+                                    'aria-label': `查看物料组 ${row['物料组']} 的${children.length}个SKU`,
+                                  },
+                                  `物料组 · ${children.length} SKU`,
                                 )
                               : display[column] || '-',
-                          column === '产品名称' &&
-                            h(
-                              'div',
-                              { className: 'dc-product-source' },
-                              labels.length > 0 && h('span', {}, '源标签：' + labels.join(' / ')),
-                              h(
-                                'button',
-                                {
-                                  className: 'dc-link',
-                                  onClick: () => setProductDetails(index),
-                                  'aria-label': `查看源字段 ${row['产品编码'] || row['物料组'] || index}`,
-                                },
-                                '源字段',
-                              ),
-                            ),
+                          ),
                         ),
-                      ),
                       h(
                         'td',
                         { className: 'dc-row-actions' },
@@ -1908,7 +1984,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
             h(
               'p',
               { className: 'dc-muted' },
-              '产品标签、替换品按源字段展示。替换方向尚未确认，不作为老品继承关系。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
+              '对应老品编码、老品名称分别取替换物料编码、替换品。物料组分类和系列只在子SKU源值唯一时展示，多值分别列出。',
             ),
             table(
               ['字段', '源值'],
@@ -1949,7 +2025,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                 }),
               ),
           ),
-        h(Annual, { draft, read, sync, update, error: errors.annual, busy: busy.annual }),
+        h(Annual, {
+          draft,
+          read,
+          sync,
+          update,
+          error: errors.annual,
+          busy: busy.annual,
+          exportAnnual,
+          exporting: busy.annualExport,
+          exportError: errors.annualExport,
+        }),
         h(
           'div',
           { className: 'dc-source-grid' },
@@ -1991,10 +2077,10 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           'div',
           { className: 'dc-section-title' },
           h('h2', {}, '大类预估需求数量 · 测算参考'),
-          h('span', {}, '（环比法＋占比法）÷2÷计划达成率，业务冲突保留待定'),
+          h('span', {}, '期初与纠偏按各自三月窗口计算，缺少输入时留空'),
         ),
         h(SourceInputs, {
-          key: draft.id + '-' + scopeGeneration + '-basic',
+          key: draft.id + '-' + scopeGeneration + '-basic-' + draft.pull,
           kind: 'basic',
           draft,
           update,
@@ -2004,72 +2090,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           active: active && step === 'check',
         }),
-        h(
-          'section',
-          { 'aria-label': '逐月测算', className: 'dc-card dc-results' },
-          h(
-            'div',
-            { className: 'dc-card-head' },
-            h('h3', {}, '逐月测算（到大类预估需求数量）'),
-            h(
-              'span',
-              { className: 'dc-card-note' },
-              '环比链、同期占比与年度延展口径待确认 · 单位：件',
-            ),
-          ),
-          table(
-            [
-              '大类',
-              '月份',
-              '历史平均环比',
-              '环比链',
-              '① 环比法',
-              '同期平均占比',
-              '② 占比法',
-              '加权',
-              '大类预估需求数量',
-            ],
-            categories.flatMap((category) =>
-              [1, 2, 3, 4].map((offset) => ({
-                大类: category,
-                月份: `${monthOffset(draft.month, offset - 1)}（M+${offset}）`,
-                历史平均环比: '待定',
-                环比链: '待定',
-                '① 环比法': '待定',
-                同期平均占比: '待定',
-                '② 占比法': '待定',
-                加权: '待定',
-                大类预估需求数量: '待定',
-              })),
-            ),
-          ),
-          h(
-            'div',
-            { className: 'dc-card-foot' },
-            '主公式：（环比法＋占比法）÷2÷计划达成率。代入输入未定，结果为空。M+4仅到大类，不生成单品需求。',
-          ),
-        ),
-        h(
-          'section',
-          { 'aria-label': '大类预估需求数量', className: 'dc-card dc-results' },
-          h(
-            'div',
-            { className: 'dc-card-head' },
-            h('h3', {}, '大类预估需求数量'),
-            h('span', { className: 'dc-card-note' }, '测算口径待确认；调整权限与保存合同未接入'),
-          ),
-          table(
-            ['大类', 'M+1', 'M+2', 'M+3', 'M+4', '人工调整'],
-            categories.map((category) => ({
-              大类: category,
-              'M+1': '待定',
-              'M+2': '待定',
-              'M+3': '待定',
-              'M+4': '待定',
-              人工调整: '权限与调整合同待确认',
-            })),
-          ),
-        ),
+        h(CategoryDemand, { draft, active: active && step === 'check' }),
         step === 'check' &&
           h(
             'div',

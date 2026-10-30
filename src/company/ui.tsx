@@ -1,3 +1,4 @@
+import { mountMenuAgentSelection } from './agent-menu-selection.tsx';
 import { PageUnsentHistory } from './unsent-history.tsx';
 import { createConversationStarter } from './new-conversation.ts';
 import {
@@ -170,6 +171,46 @@ export function mountCompanyUI(
       businessNavigation = undefined;
       for (const listener of navigationListeners) listener();
     });
+  });
+  let menuPresets: {
+    scope: string | null;
+    provider: BusinessNavigation | undefined;
+    ids: ReadonlySet<string>;
+  } = { scope: null, provider: undefined, ids: new Set() };
+  const menuListeners = new Set<() => void>();
+  mountMenuAgentSelection(ctx, () => {
+    const authority = useSyncExternalStore(
+      subscribeAccount,
+      () => account,
+      () => account,
+    );
+    const identity = useSyncExternalStore(
+      authority?.subscribe ?? noSubscribe,
+      authority?.getSnapshot ?? (() => unavailableAccount),
+      authority?.getSnapshot ?? (() => unavailableAccount),
+    );
+    const provider = useSyncExternalStore(
+      subscribeNavigation,
+      () => businessNavigation,
+      () => businessNavigation,
+    );
+    const menu = useSyncExternalStore(
+      (listener) => {
+        menuListeners.add(listener);
+        return () => {
+          menuListeners.delete(listener);
+        };
+      },
+      () => menuPresets,
+      () => menuPresets,
+    );
+    return identity.state === 'confirmed' &&
+      !identity.error &&
+      identity.status?.authenticated &&
+      identity.scope === menu.scope &&
+      provider === menu.provider
+      ? menu.ids
+      : new Set<string>();
   });
   const pageSessions = createPageSessionNavigation({
     workbench,
@@ -648,6 +689,33 @@ export function mountCompanyUI(
       identity.status?.environment === 'test'
     )
       menu.push(localPrototypeMenu(available, t));
+    const menuPresetIds = new Set<string>();
+    for (const group of menu)
+      for (const entry of group.entries) {
+        if (!entry.pageId) continue;
+        if (entry.pageId === 'gea-proof') menuPresetIds.add('gea-readonly');
+        const page = documentState.pages.find((page) => page.id === entry.pageId);
+        if (page && 'resourceId' in page && typeof page.resourceId === 'string')
+          menuPresetIds.add(page.resourceId);
+      }
+    useEffect(() => {
+      if (
+        menuPresets.scope === scope &&
+        menuPresets.provider === provider &&
+        menuPresets.ids.size === menuPresetIds.size &&
+        [...menuPresetIds].every((id) => menuPresets.ids.has(id))
+      )
+        return;
+      menuPresets = { scope, provider, ids: menuPresetIds };
+      for (const listener of menuListeners) listener();
+    });
+    useEffect(
+      () => () => {
+        menuPresets = { scope: null, provider: undefined, ids: new Set() };
+        for (const listener of menuListeners) listener();
+      },
+      [],
+    );
     const expandSidebar = () => {
       if (collapsed) ctx.layout.toggleSidebar();
     };
@@ -930,7 +998,9 @@ export function mountCompanyUI(
           </div>
         </div>
         <footer className="gea-sidebar-footer">
-          {renderSlot('sidebar.settings', { wide: !collapsed })}
+          <div className="gea-sidebar-account">
+            {renderSlot('sidebar.settings', { wide: !collapsed })}
+          </div>
           {renderSlot('sidebar.footer.action', { wide: !collapsed })}
         </footer>
       </aside>
@@ -1080,10 +1150,32 @@ export function mountCompanyUI(
     ctx.slots.register(
       { name: 'sidebar.brand.name', priority: -10, locale: 'companyWorkbench' },
       function BrandName() {
+        const authority = useSyncExternalStore(
+          subscribeAccount,
+          () => account,
+          () => account,
+        );
+        const identity = useSyncExternalStore(
+          authority?.subscribe ?? noSubscribe,
+          authority?.getSnapshot ?? (() => unavailableAccount),
+          authority?.getSnapshot ?? (() => unavailableAccount),
+        );
+        const testEnvironment =
+          identity.state === 'confirmed' &&
+          !identity.error &&
+          identity.status?.authenticated === true &&
+          identity.status.environment === 'test';
         return (
           <div className="gea-brand-copy" onClick={(event) => event.stopPropagation()}>
             <span className="gea-brand-title">{t('geaBusiness')}</span>
-            <div className="gea-brand-subtitle">{t('brandSubtitle')}</div>
+            <div className="gea-brand-subtitle">
+              {t('brandSubtitle')}
+              {testEnvironment && (
+                <small className="gea-test-environment-badge" title={t('testEnvironment')}>
+                  Test
+                </small>
+              )}
+            </div>
           </div>
         );
       },

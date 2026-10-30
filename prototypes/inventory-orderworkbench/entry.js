@@ -1,9 +1,12 @@
 import { encodeReportRequest } from './report-transfer.mjs';
+import { workbenchCellMissingReason } from './missing-reasons.mjs';
 import { createReportPersistence } from './report-persistence.mjs';
 import { createPageViewState } from '../../business/shared/view-state.js';
 import { draft, ready, call } from '../../business/shared/channel.js';
-import { loadWorkbenchFacts } from './live-source.js';
+import { loadWorkbenchFacts, loadWorkbenchSkuPage } from './live-source.js';
 import { workbenchPresentation, workbenchEvidence, workbenchMetricDetail } from './live-presentation.mjs';
+import { shippableDaysTarget, performanceStyleVersion } from './performance-rules.mjs';
+import { metricCalculationVersion } from './metric-model.mjs';
 import { publishReport } from './publication.js';
 const view = createPageViewState('inventory-orderworkbench');
 let restoringView = false;
@@ -21,6 +24,9 @@ let liveSkuPagination = {};
 const workbenchSkuPages = new Map();
 let applyLiveFacts = () => {};
 let reportLoaded = false, savedPresentation = null, reportEdited = false;
+const periodCacheMaxAge = 20 * 60 * 1000;
+const periodReports = new Map();
+let activePeriodReport;
 let eventFilter = 'focus';
 let taskFilter = 'all';
 let dimensionTab = 'base-performance';
@@ -57,7 +63,7 @@ persistenceStatus.id = 'reportPersistenceStatus';
 persistenceStatus.setAttribute('role', 'status');
 persistenceStatus.hidden = true;
 document.getElementById('periodMeta').after(persistenceStatus);
-const persistence = createReportPersistence(
+let persistence = createReportPersistence(
   async (request, signal) => { const encoded = await encodeReportRequest(request); signal.throwIfAborted(); return call('workspace', encoded, { signal }); },
   (state, message) => {
     persistenceStatus.textContent = ' · ' + message;
@@ -90,31 +96,36 @@ function restoreReportEdits(edits = {}) {
   });
   deletedWorkbenchUnmetKeys.clear(); for (const key of edits.deleted ?? []) deletedWorkbenchUnmetKeys.add(key);
 }
-function saveDatabaseReport() {
-  if (!liveFacts || liveFacts.complete !== true) {
-    persistenceStatus.textContent = ' · 数据未加载完整，暂不能保存';
-    return false;
-  }
-  return persistence.save({ schemaVersion: 1, facts: liveFacts, presentation: savedPresentation ?? workbenchPresentation(liveFacts), edits: reportEdits() });
-}
-function saveEditedReport() { reportEdited = true; return saveDatabaseReport(); }
+function saveEditedReport() { reportEdited = true; if(activePeriodReport){activePeriodReport.edits=structuredClone(reportEdits());activePeriodReport.dirty=true;} return persistence.saveEdits(reportEdits()); }
 function saveWorkbenchSummary() { return saveEditedReport(); }
 function saveWorkbenchDirectorNotes() { return saveEditedReport(); }
 function saveWorkbenchReferenceLinks() { return saveEditedReport(); }
 function saveWorkbenchUnmetState() { return saveEditedReport(); }
 function saveWorkbenchLocalState() { return saveEditedReport(); }
-window.addEventListener('beforeunload', event => { if (reportEdited && persistence.pending()) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (reportEdited || [...periodReports.values()].some(entry=>entry.dirty || entry.persistence.pending())) { event.preventDefault(); event.returnValue = ''; } });
 document.addEventListener('click', event => {
   const button = event.target.closest('button');
-  if ((!reportLoaded || liveFacts?.complete !== true) && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
+  if (!reportLoaded && button && [...button.attributes].some(attribute => /^data-wb-.*(add|edit|delete)$/.test(attribute.name))) {
     event.preventDefault(); event.stopImmediatePropagation();
     showWorkbenchToast('报告尚未读取完整或未获授权，暂不能编辑保存。'); return;
   }
-  if (reportEdited && persistence.pending() && event.target.closest('[data-period-month], [data-period-week], [data-period-all]')) {
-    event.preventDefault(); event.stopImmediatePropagation();
-    showWorkbenchToast('当前修改尚未保存，请等待保存完成或重试后再切换周期。');
-  }
+
 }, true);
+// Hosted pages keep native form navigation disabled; submit only the page-owned action.
+document.addEventListener('click', event => {
+  const button = event.target.closest('button[type="submit"]');
+  const form = button?.form;
+  if (!form?.matches('.wb-adopt-form, .wb-task-edit-form')) return;
+  event.preventDefault();
+  if (form.reportValidity()) form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'Enter' || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || event.target.tagName !== 'INPUT') return;
+  const form = event.target.form;
+  if (!form?.matches('.wb-adopt-form, .wb-task-edit-form')) return;
+  event.preventDefault();
+  form.querySelector('button[type="submit"]')?.click();
+});
 let pendingAdoption = null;
 let adoptReturnFocus = null;
 const metricDefinitions = [
@@ -269,8 +280,8 @@ const metricDefinitions = [
     same: '同期 10.3 天',
     sameChange: '↑ +1.3 天',
     sameTone: 'bad',
-    target: '<12 天',
-    targetLabel: '健康 < 12 天',
+    target: shippableDaysTarget,
+    targetLabel: shippableDaysTarget,
     gap: '低于上限 0.3 天',
     gapTone: 'good',
     trend: '较上期 -1.3 天',
@@ -532,8 +543,8 @@ const weeklyMetricDefinitions = [
     same: '同期 —',
     sameChange: '—',
     sameTone: '',
-    target: '<12 天',
-    targetLabel: '健康 < 12 天',
+    target: shippableDaysTarget,
+    targetLabel: shippableDaysTarget,
     gap: '低于上限 1.17 天',
     gapTone: 'good',
     trend: '周环比 +0.59 天',
@@ -1125,7 +1136,7 @@ const workbenchPerformance = {
         { label: '满足率 >95%', columns: ['本期', '环比', '同比'] },
         { label: '准交率 >98.5%', columns: ['本期', '环比'] },
         { label: '60天+占比', columns: ['本期', '环比'] },
-        { label: '可发货天数 8至12天（不含边界）', columns: ['本期', '环比', '同比'] },
+        { label: `可发货天数 ${shippableDaysTarget}`, columns: ['本期', '环比', '同比'] },
       ],
       rows: [
         [
@@ -2217,7 +2228,7 @@ const topMetricCards = [
   },
   {
     key: '货龄（>60天库存占比）',
-    label: '60天以上货龄占比',
+    label: '60天及以上货龄占比',
     value: '2.05',
     unit: '%',
     target: '越低越好',
@@ -2229,7 +2240,7 @@ const topMetricCards = [
     label: '可发货天数',
     value: '14.5',
     unit: '天',
-    target: '<12.5天（基地<11天）',
+    target: shippableDaysTarget,
     status: '达标',
     footer: '本周可发货天数 14.5天',
   },
@@ -2249,20 +2260,48 @@ function clearLiveMetrics() {
     dimension.weekly.loading=false;
   }
   for (const metric of topMetricCards) {
-    if (metric.label==='可发货天数') metric.target='8至12天（不含边界）';
+    if (metric.label==='可发货天数') metric.target=shippableDaysTarget;
     if (metric.key==='作废率') metric.target='<6%';
     if (metric.key==='改单率') metric.target='<2%';
     if (metric.key==='订单满足率') metric.target='>95%';
     if (metric.key==='准交率') metric.target='>98.5%';
   }
 }
+async function loadServerSku(category,page=0){
+ const entry=activePeriodReport,facts=liveFacts;
+ if(!entry||!facts?.sqlSummary)return;
+ entry.skuPages??=new Map();const key=category+':'+page;
+ if(!entry.skuPages.has(key)){
+  const selected=facts.periods[facts.selected];
+  const pending=loadWorkbenchSkuPage(selected.start,selected.end,category,page,entry.controller.signal,entry.persistence.scope()?.base??'').then(result=>{
+    const detailFacts={...facts,sqlSummary:false,periods:{...facts.periods,[facts.selected]:result.period}};
+    const presentation=workbenchPresentation(detailFacts);
+    return {rows:presentation.skus[category]??[],pagination:{page,total:result.total,size:20}};
+  });
+  entry.skuPages.set(key,pending);pending.catch(()=>entry.skuPages.delete(key));
+ }
+ try{const result=await entry.skuPages.get(key);if(activePeriodReport!==entry||entry.controller.signal.aborted)return;entry.skuStates?.set(category,'ready');liveSkuDetails[category]=result.rows;liveSkuPagination[category]=result.pagination;renderWorkbenchDimensions();}
+ catch(error){if(activePeriodReport===entry&&!entry.controller.signal.aborted)showWorkbenchToast('SKU明细读取失败，未用不完整数据替代。');}
+}
 async function readCurrentPeriod() {
   if (!liveConnected) return;
-  const key=periodMode+':'+selectedMonth+':'+selectedWeek;
+  const key=periodMode+':'+selectedMonth+(periodMode==='week'?':'+selectedWeek:'');
   if (key===liveReadKey) return;
+  if(activePeriodReport && reportLoaded) activePeriodReport.edits=structuredClone(reportEdits());
   liveReadKey=key;
-  liveController?.abort();
-  const controller=liveController=new AbortController();
+  let entry=periodReports.get(key);
+  if(entry && !entry.dirty && !entry.persistence.pending() && entry.finished && Date.now()-entry.finished>periodCacheMaxAge){entry.controller.abort();periodReports.delete(key);entry=null;}
+  if(!entry){
+    entry={controller:new AbortController(),edits:null,dirty:false,loaded:false,facts:null,started:false};
+    entry.persistence=createReportPersistence(async(request,signal)=>{const encoded=await encodeReportRequest(request);signal.throwIfAborted();return call('workspace',encoded,{signal});},(state,message)=>{
+      if(state==='saved')entry.dirty=false;
+      entry.status={state,message};
+      if(activePeriodReport===entry){persistenceStatus.textContent=' · '+message;persistenceStatus.dataset.state=state;if(state==='saved')reportEdited=false;}
+    });
+    periodReports.set(key,entry);
+  }
+  activePeriodReport=entry;persistence=entry.persistence;
+  const controller=liveController=entry.controller;
   liveFacts=null;
   reportLoaded=false; savedPresentation=null; reportEdited=false;
   restoreReportEdits();
@@ -2278,9 +2317,11 @@ async function readCurrentPeriod() {
   const weekEnd=addDays(selectedWeek,7);
   const end=periodMode==='week'&&weekEnd<monthEnd?weekEnd:monthEnd;
   const applyFacts = (facts, storedPresentation) => {
-    if (controller.signal.aborted || liveReadKey!==key) return;
+    if (controller.signal.aborted) return;
+    entry.facts=facts;
+    if (liveReadKey!==key) return;
     liveFacts=facts;
-    const presentation=storedPresentation&&!storedPresentation.lazy?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
+    const presentation=storedPresentation&&!storedPresentation.lazy&&storedPresentation.performanceStyleVersion===performanceStyleVersion?storedPresentation:workbenchPresentation(facts,{dimension:dimensionTab,skuCategories:[...expandedSkuCategories].map(key=>key.slice(key.indexOf(':')+1)),skuPages:Object.fromEntries(workbenchSkuPages)});
     savedPresentation=presentation;
     for(const metric of topMetricCards) Object.assign(metric,presentation.cards.find(card=>card.key===metric.key));
     for(const metric of metricDefinitions) {
@@ -2295,30 +2336,47 @@ async function readCurrentPeriod() {
       workbenchPerformance[name].weekly.loading=facts.complete===false&&(!facts.periods.week||(name==='director-performance'&&facts.directors?.status==='loading'));
     }
     for(const [name,dimension] of Object.entries(presentation.dimensions)) Object.assign(workbenchDimensions[name],dimension);
-    liveSkuDetails=presentation.skus;
+    liveSkuDetails=facts.sqlSummary?{}:presentation.skus;
+    if(facts.sqlSummary)for(const expanded of expandedSkuCategories){const category=expanded.slice(expanded.indexOf(':')+1);void loadServerSku(category,workbenchSkuPages.get(category)??0);}
     liveSkuPagination=presentation.skuPagination??{};
     renderSelectedPeriod();
     updateReport();
   };
   applyLiveFacts = applyFacts;
+  entry.apply=applyFacts;
+  if(entry.started){
+    reportLoaded=entry.loaded;reportEdited=entry.dirty;restoreReportEdits(entry.edits??{});
+    if(entry.facts)applyFacts(entry.facts);
+    if(entry.status){persistenceStatus.dataset.state=entry.status.state;persistenceStatus.textContent=' · '+entry.status.message;}
+    return;
+  }
+  entry.started=true;
   try {
     let saved;
     try {
-      saved = await persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
-      reportLoaded = true;
+      saved = await entry.persistence.open({type: periodMode.toUpperCase(), start, end}, controller.signal);
+      entry.loaded=true;if(!entry.dirty)entry.edits=saved?.edits??{};
+      if(activePeriodReport===entry){reportLoaded=true;restoreReportEdits(entry.edits);}
     } catch (error) { controller.signal.throwIfAborted(); }
 
-    if (controller.signal.aborted || liveReadKey !== key) return;
-    restoreReportEdits(saved?.edits);
-    if (saved && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
-      applyFacts(saved.facts, saved.presentation);
+    controller.signal.throwIfAborted();
+    if(saved?.facts?.complete && saved.facts.attributionVersion === 2 && saved.facts.metricCalculationVersion === metricCalculationVersion) entry.apply(saved.facts,saved.presentation);
+    if (saved?.facts?.complete && saved.facts.attributionVersion === 2 && saved.facts.metricCalculationVersion === metricCalculationVersion && end <= new Date(Date.now()+8*3600000).toISOString().slice(0,10)) {
+      entry.apply(saved.facts, saved.presentation);entry.finished=Date.now();
       return;
     }
-    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:applyFacts,base:persistence.scope()?.base});
-    applyFacts(facts);
-    if (reportLoaded) saveDatabaseReport();
+    const facts=await loadWorkbenchFacts(start,end,controller.signal,{onProgress:(facts)=>{if(!entry.facts?.complete)entry.apply(facts);},base:entry.persistence.scope()?.base,summary:true});
+    entry.apply(facts);entry.finished=Date.now();
+    if(entry.loaded){
+      if(activePeriodReport===entry)entry.edits=structuredClone(reportEdits());
+      entry.persistence.save({schemaVersion:1,facts,presentation:workbenchPresentation(facts),edits:entry.edits});
+    }
+    for(const [cachedKey,cached] of periodReports)if(periodReports.size>6&&cached!==activePeriodReport&&cached.finished&&!cached.dirty&&!cached.persistence.pending()){cached.controller.abort();periodReports.delete(cachedKey);}
   } catch (error) {
-    if (!controller.signal.aborted) {
+    entry.started=false;entry.facts=null;entry.loaded=false;
+    if(!entry.dirty)periodReports.delete(key);
+    if (!controller.signal.aborted && activePeriodReport===entry) {
+      reportLoaded=false;
       clearLiveMetrics();
       document.getElementById('periodMeta').textContent='数据读取失败或未获授权';
       renderWorkbench();
@@ -2329,6 +2387,7 @@ async function readCurrentPeriod() {
 clearLiveMetrics();
 void ready.then(()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
 for (const name of ['gea-identity-changed','gea-session-changing','pagehide']) window.addEventListener(name,()=>{
+  for(const entry of periodReports.values()){entry.controller.abort();entry.persistence.cancel();}periodReports.clear();activePeriodReport=null;
   liveConnected=false;liveController?.abort();persistence.cancel();reportEdited=false;reportLoaded=false;savedPresentation=null;restoreReportEdits();liveFacts=null;liveReadKey='';clearLiveMetrics();renderWorkbench();
 });
 window.addEventListener('gea-session-changed',()=>{liveConnected=true;liveReadKey='';renderSelectedPeriod();});
@@ -2341,9 +2400,15 @@ function renderWorkbench() {
   document.getElementById('wbKpis').innerHTML = topMetricCards
     .map((metric) => {
       const statusClass = ['未达', '严重'].includes(metric.status) ? 'bad' : metric.status === '预警' ? 'warn' : metric.status === '健康' ? '' : 'unknown';
-      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong>${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b>${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b>${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b>${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b>${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
+      return `<button class="wb-kpi" type="button" data-metric-question="${escapeHtml(metric.key)}" aria-label="查看${escapeHtml(metric.label)}口径"><span class="wb-kpi-head"><span class="wb-kpi-title">${escapeHtml(metric.label)}</span><span class="wb-kpi-state ${statusClass}">${escapeHtml(metric.status)}</span></span><span class="wb-kpi-value"><span class="wb-kpi-main"><strong title="${escapeHtml(metric.value==="—"?(metric.missingReason||workbenchCellMissingReason(liveFacts,{header:metric.key,period:liveFacts?.selected??"month"})): "")}">${escapeHtml(metric.value)}</strong><em>${escapeHtml(metric.unit)}</em></span><span class="wb-kpi-target">目标 ${escapeHtml(metric.target)}</span></span><span class="wb-kpi-compare"><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>本期环比</span><b title="${escapeHtml((metric.comparison?.[0]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[0]??"—")}</b></span><span class="wb-kpi-compare-row"><span>本期同比</span><b title="${escapeHtml((metric.comparison?.[1]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"month"}):"")}">${escapeHtml(metric.comparison?.[1]??"—")}</b></span></span><span class="wb-kpi-compare-group"><span class="wb-kpi-compare-row"><span>周环比</span><b title="${escapeHtml((metric.comparison?.[2]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"环比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[2]??"—")}</b></span><span class="wb-kpi-compare-row"><span>周同比</span><b title="${escapeHtml((metric.comparison?.[3]??"—")==="—"?workbenchCellMissingReason(liveFacts,{group:metric.key,header:"同比",period:"week"}):"")}">${escapeHtml(metric.comparison?.[3]??"—")}</b></span></span></span><span class="wb-kpi-foot"><span>${escapeHtml(metric.footer)}</span></span></button>`;
     })
     .join('');
+  document.querySelectorAll('#wbKpis .wb-kpi').forEach((card,index)=>{
+    const metric=topMetricCards[index];
+    if(metric.coverageNote)card.querySelector('strong').title=metric.coverageNote;
+    card.querySelectorAll('.wb-kpi-compare b').forEach((cell,i)=>{if(metric.comparisonNotes?.[i])cell.title=metric.comparisonNotes[i];});
+    if(metric.footerNote)card.querySelector('.wb-kpi-foot').title=metric.footerNote;
+  });
   renderWorkbenchTasks();
   renderWorkbenchDimensions();
   renderWorkbenchReferenceLinks();
@@ -2436,32 +2501,37 @@ function renderWorkbenchDimensionIssues(risk, base, dimensionKey, rowIndex) {
 }
 function renderWorkbenchSkuDetail(category) {
   const samples = liveSkuDetails[category] || [];
+  if(liveFacts?.sqlSummary&&activePeriodReport?.skuStates?.get(category)==='loading')return '<div class="wb-sku-detail"><p>正在读取当前页 SKU 明细…</p></div>';
+  if(liveFacts?.sqlSummary&&activePeriodReport?.skuStates?.get(category)==='error')return '<div class="wb-sku-detail"><p>当前页读取失败，未使用不完整数据。</p></div>';
   if (!samples.length)
     return `<div class="wb-sku-detail"><p>${escapeHtml(category)}当前范围暂无已授权 SKU 数据。</p></div>`;
   const rows = samples
     .map(
       (sku) =>
-        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td>${escapeHtml(sku.inventory)}</td><td>${escapeHtml(sku.salesPlan)}</td><td>${escapeHtml(sku.shipDays)}</td></tr>`,
+        `<tr><td>${escapeHtml(sku.name)}</td><td class="sku-code">${escapeHtml(sku.code)}</td><td title="${escapeHtml(sku.inventory==="—"?(sku.missingReasons?.inventory||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.inventory)}</td><td title="${escapeHtml(sku.salesPlan==="—"?(sku.missingReasons?.salesPlan||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.salesPlan)}</td><td title="${escapeHtml(sku.shipDays==="—"?(sku.missingReasons?.shipDays||"当前来源或计算条件不足，未补0"):"")}">${escapeHtml(sku.shipDays)}</td></tr>`,
     )
     .join('');
   const paging=liveSkuPagination[category];
   const nav=paging?`<nav class="wb-sku-pagination" aria-label="SKU明细分页"><span>共 ${paging.total} 条 · 第 ${paging.page+1} / ${Math.max(1,Math.ceil(paging.total/20))} 页</span><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page-1}" ${paging.page===0?'disabled':''}>上一页</button><button type="button" data-wb-sku-page="${encodeURIComponent(category)}" data-page="${paging.page+1}" ${(paging.page+1)*20>=paging.total?'disabled':''}>下一页</button></nav>`:'';
-  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为可用库存，计划为滚动销售计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
+  return `<div class="wb-sku-detail"><p>当前授权范围的 SKU 数据；库存为全部库存，月度需求计划有纠偏取纠偏，否则取月初计划。</p><table class="wb-sku-table"><thead><tr><th>SKU名称</th><th>编码</th><th>库存</th><th>销售计划</th><th>可发货天数</th></tr></thead><tbody>${rows}</tbody></table>${nav}</div>`;
 }
 function renderWorkbenchRegionCustomerDetail(regionIndex) {
   const customers=workbenchDimensions['region-change'].customerDetails?.[regionIndex]??[];
-  const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${escapeHtml(String(customer.changedQuantity))} 件</td><td>${escapeHtml(String(customer.orderedQuantity))} 件</td></tr>`).join('');
-  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>改单数量</th><th>下单数量</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户数量明细</td></tr>'}</tbody></table></div>`;
+  const count=value=>value==null?'—':escapeHtml(String(value))+' 张';
+  const rows=customers.map(customer=>`<tr><td>${escapeHtml(customer.name)}（${escapeHtml(customer.code)}）</td><td>${escapeHtml(customer.manager)}</td><td>${count(customer.changedQuantity)}</td><td>${count(customer.orderedQuantity)}</td></tr>`).join('');
+  return `<div class="wb-region-customer-detail"><table class="wb-region-customer-table"><thead><tr><th>客户名称（编码）</th><th>销售人员</th><th>锁定期改单订单数</th><th>有效订单数</th></tr></thead><tbody>${rows||'<tr><td colspan="4">当前范围暂无客户订单明细</td></tr>'}</tbody></table></div>`;
 }
 function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
-  const firstHeader = table.groups
+  const groups = table.groups.map(group => baseColumnIndex === 0 && group.label.startsWith('可发货天数')
+    ? { ...group, label: `可发货天数 ${shippableDaysTarget}` } : group);
+  const firstHeader = groups
     .map((group) =>
       group.rowspan
         ? `<th scope="col" rowspan="2">${escapeHtml(group.label)}</th>`
         : `<th scope="colgroup" colspan="${group.columns.length}">${escapeHtml(group.label)}</th>`,
     )
     .join('');
-  const secondHeader = table.groups
+  const secondHeader = groups
     .filter((group) => !group.rowspan)
     .flatMap((group) => group.columns)
     .map((label) => `<th scope="col">${escapeHtml(label)}</th>`)
@@ -2472,15 +2542,19 @@ function renderWorkbenchPerformanceTable(table, selectedBase, baseColumnIndex) {
   const body = rows
     .map((row) => {
       const cells = row
-        .map((value) => {
+        .map((value,columnIndex) => {
+          const headings=table.groups.flatMap(group=>group.rowspan?[{group:group.label,header:group.label}]:group.columns.map(header=>({group:group.label,header})));
+          const unmapped=['未映射','归属待补全'].includes(value);
+          const missing=unmapped||(value?.text??value)==='—';
+          const title=value?.title?` title="${escapeHtml(value.title)}"`:missing?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{...headings[columnIndex],row,dimension:dimensionTab,period:table.title.includes('周度')?'week':'month'}))}"`:'';
           if (value && typeof value === 'object' && 'text' in value) {
             const marker =
               value.state && value.state !== 'good'
                 ? `<span class="wb-performance-marker ${escapeHtml(value.state)}" aria-label="${value.state === 'warning' ? '关注' : '超出参考线'}">${value.state === 'warning' ? '!' : '●'}</span>`
                 : '';
-            return `<td class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
+            return `<td${title} class="${value.state ? `performance-${escapeHtml(value.state)}` : ''}">${marker}${escapeHtml(value.text)}</td>`;
           }
-          return `<td>${escapeHtml(String(value))}</td>`;
+          return `<td${title}>${escapeHtml(unmapped?'—':String(value))}</td>`;
         })
         .join('');
       return `<tr>${cells}</tr>`;
@@ -2607,7 +2681,7 @@ function renderWorkbenchPerformance(dimension) {
         : dimensionTab === 'director-performance'
           ? renderWorkbenchDirectorNotes()
           : '';
-  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。“—”表示该范围数据不足。共同责任分别展示，不相加。</p>`;
+  panel.innerHTML = `<section class="wb-performance-period"><h3>${escapeHtml(dimension.monthly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.monthly, '', dimension.baseColumnIndex)}</section><section class="wb-performance-period"><h3>${escapeHtml(dimension.weekly.title.replace(/^\d+(?:\.\d+)+\s*/, ''))}</h3>${renderWorkbenchPerformanceTable(dimension.weekly, '', dimension.baseColumnIndex)}</section>${bottomSection}<p class="wb-performance-note">当前授权范围；环比同比比较同长度已完成周期。*表示可判定样本或样本差，覆盖率见悬浮，不代表全量指标。“—”表示无有效计算依据。共同责任分别展示，不相加。</p>`;
 }
 function renderWorkbenchDimensions() {
   const panel = document.getElementById('wbDimensionPanel');
@@ -2652,7 +2726,8 @@ function renderWorkbenchDimensions() {
                 : escapeHtml(
                     workbenchDimensionCellText(dimensionTab, rowIndex, columnIndex, value),
                   );
-          return `<td class="${workbenchDimensionCellClass(dimensionTab, rowIndex, columnIndex, value)}">${content}</td>`;
+          const title=value==='—'||(typeof value==='string'&&value.includes('*'))?` title="${escapeHtml(workbenchCellMissingReason(liveFacts,{header:dimension.columns[columnIndex],row,dimension:dimensionTab,period:liveFacts?.selected??'month'}))}"`:'';
+          return `<td${title} class="${workbenchDimensionCellClass(dimensionTab, rowIndex, columnIndex, value)}">${content}</td>`;
         })
         .join('');
       const detail =
@@ -2669,6 +2744,7 @@ function renderWorkbenchDimensions() {
   panel.innerHTML = `<div class="wb-dimension-table-wrap"><table class="wb-dimension-table ${dimensionTab === 'region-change' ? 'region-change-table' : ''}"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>`;
   panel.querySelectorAll('[data-wb-sku-page]').forEach(button=>button.addEventListener('click',()=>{
     workbenchSkuPages.set(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));
+    if(liveFacts?.sqlSummary){void loadServerSku(decodeURIComponent(button.dataset.wbSkuPage),Number(button.dataset.page));return;}
     if(liveFacts)applyLiveFacts(liveFacts);
     renderWorkbenchDimensions();
   }));
@@ -2677,6 +2753,7 @@ function renderWorkbenchDimensions() {
       const key = `${dimensionTab}:${button.dataset.wbSkuToggle}`;
       if (expandedSkuCategories.has(key)) expandedSkuCategories.delete(key);
       else expandedSkuCategories.add(key);
+      if(liveFacts?.sqlSummary){void loadServerSku(button.dataset.wbSkuToggle,workbenchSkuPages.get(button.dataset.wbSkuToggle)??0);renderWorkbenchDimensions();return;}
       if(liveFacts)applyLiveFacts(liveFacts);
       renderWorkbenchDimensions();
     }),
@@ -2801,22 +2878,23 @@ function openWorkbenchUnmetAdd(kind, trigger, itemKey = '') {
     ? workbenchPerformance['base-performance'].monthly.rows
         .map((row) => row[0])
         .filter((base) => base !== '合计')
-    : workbenchIssueCategories();
+    : [...new Set(workbenchPerformance['item-performance'][periodMode === 'week' ? 'weekly' : 'monthly'].rows
+        .map((row) => row[0]))].filter((name) => name && !['合计', '未映射', '—'].includes(name));
   document.getElementById('wbUnmetAddForm').reset();
   document.getElementById('wbUnmetAddTitle').textContent = item
     ? isBase
       ? '编辑基地未达成项'
-      : '编辑品类未达成项'
+      : '编辑品项未达成项'
     : isBase
       ? '添加基地未达成项'
-      : '添加品类未达成项';
+      : '添加品项未达成项';
   document.getElementById('wbUnmetAddSubtitle').textContent = item
     ? '修改未达成项的原因分析与改善措施'
     : isBase
       ? '补充基地未达成原因与改善措施'
-      : '补充品类未达成原因与改善措施';
-  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品类';
-  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品类'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
+      : '补充品项未达成原因与改善措施';
+  document.getElementById('wbUnmetEntityLabel').textContent = isBase ? '选择基地' : '选择品项';
+  entitySelect.innerHTML = `<option value="">${isBase ? '请选择基地' : '请选择品项'}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${item?.entity === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}`;
   document.getElementById('wbUnmetTitleInput').value = item?.formTitle || '';
   document.getElementById('wbUnmetReasonInput').value = item?.formReason || '';
   document.getElementById('wbUnmetMeasureInput').value = item?.formMeasure || '';
@@ -3136,7 +3214,7 @@ improvementAddForm.addEventListener('submit', (event) => {
   table?.tBodies[0]?.append(row);
   closeImprovementAdd();
   if (!table) trigger?.focus();
-  saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…');
+  saveEditedReport(); showWorkbenchToast('正在保存改善措施…');
 });
 document.getElementById('wbImprovementAddClose').addEventListener('click', closeImprovementAdd);
 document.getElementById('wbImprovementAddCancel').addEventListener('click', closeImprovementAdd);
@@ -3254,7 +3332,7 @@ summaryEditForm.addEventListener('submit', (event) => {
   showWorkbenchToast(
     persisted
       ? '本期结论摘要已更新，正在保存到数据库…'
-      : '摘要已更新；数据库未保存，请查看页面保存状态。',
+      : '摘要已暂存于当前页面，完整数据加载后自动保存；请勿离开页面。',
   );
 });
 document.getElementById('wbSummaryEditClose').addEventListener('click', closeWorkbenchSummaryEdit);
@@ -3329,14 +3407,14 @@ workbenchView.addEventListener('click', (event) => {
     improvementEdit.setAttribute('aria-label', isEditing ? '编辑改善措施' : '保存改善措施');
     improvementEdit.title = isEditing ? '编辑' : '保存';
     if (!isEditing) row.querySelector('td:not(.actions)')?.focus();
-    else { saveDatabaseReport(); showWorkbenchToast('正在保存改善措施…'); }
+    else { saveEditedReport(); showWorkbenchToast('正在保存改善措施…'); }
     return;
   }
   const improvementDelete = event.target.closest('[data-wb-improvement-delete]');
   if (improvementDelete) {
     if (!window.confirm('确认删除这条改善措施吗？删除将保存到当前周期报告。')) return;
     improvementDelete.closest('tr')?.remove();
-    saveDatabaseReport(); showWorkbenchToast('正在保存删除结果…');
+    saveEditedReport(); showWorkbenchToast('正在保存删除结果…');
     return;
   }
   const editUnmet = event.target.closest('[data-wb-edit-unmet]');
@@ -3521,7 +3599,7 @@ workbenchView.addEventListener('submit', (event) => {
     saveWorkbenchLocalState();
   } else {
     createdWorkbenchTasks.set(workbenchTaskKey(taskId), updated);
-    saveDatabaseReport();
+    saveEditedReport();
   }
   editingWorkbenchTaskId = '';
   renderWorkbenchTasks();
@@ -3614,7 +3692,7 @@ wbAdoptForm.addEventListener('submit', (event) => {
     status: '待跟进',
   });
   closeAdoptDialog();
-  saveDatabaseReport();
+  saveEditedReport();
   renderWorkbench();
   focusCreatedTask(template.id);
   const toast = document.getElementById('toast');

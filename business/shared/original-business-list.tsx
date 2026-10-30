@@ -1,4 +1,7 @@
+import { formatChainValue } from './full-chain-display';
+import { formatFactValue } from './fact-display';
 import { QueryErrors } from './query-errors';
+import { WarehouseSelect } from '../inventory-fc/source/inventory-light-plugins/src/pages/fc/components/warehouse-select';
 import React from 'react';
 import { LocalQueryForm } from './local-query-form';
 import { PlanPagination } from './plan-pagination';
@@ -41,6 +44,22 @@ export function OriginalBusinessList({
   const fc = agentId === 'inventory-fc',
     qll = agentId === 'inventory-qll',
     aqkc = agentId === 'inventory-aqkc';
+  const displayCell = (row: any, column: any) => {
+    const unit = /[（(](件|箱)(?:[）)])/.exec(column.label ?? '')?.[1];
+    if (!qll || !unit || column.unavailable || column.secondary) return renderCell(row, column);
+    const raw =
+      column.context === 'literal' ? column.value : row[column.valueField ?? column.field];
+    const n = raw == null || raw === '' || typeof raw === 'boolean' ? null : Number(raw);
+    return (
+      <span
+        title={
+          n === null || !Number.isFinite(n) ? undefined : formatFactValue(raw, 'decimal') + unit
+        }
+      >
+        {formatChainValue(n, unit)}
+      </span>
+    );
+  };
   const rawTable = (
     <table
       className={
@@ -62,7 +81,7 @@ export function OriginalBusinessList({
         {result?.rows?.map((row: any, i: number) => (
           <tr key={i}>
             {columns.map((c: any) => (
-              <td key={c.field}>{renderCell(row, c)}</td>
+              <td key={c.field}>{displayCell(row, c)}</td>
             ))}
           </tr>
         ))}
@@ -120,7 +139,7 @@ export function OriginalBusinessList({
             ].includes(c.field)
               ? 'right'
               : undefined,
-          render: (_: any, row: any) => renderCell(row, c),
+          render: (_: any, row: any) => displayCell(row, c),
         }))}
         data={data}
         pagination={false}
@@ -133,8 +152,8 @@ export function OriginalBusinessList({
     <section className={css.list} aria-label={view.title} aria-busy={loading}>
       {(view.filters.length > 0 || fc) && (
         <LocalQueryForm
-          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : ''}`}
-          data-business-filters={fc ? 'fc' : undefined}
+          className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : qll ? css.qllToolbar : ''}`}
+          data-business-filters={fc ? 'fc' : qll ? 'qll' : undefined}
           onSubmit={submit}
         >
           {view.filters
@@ -153,20 +172,35 @@ export function OriginalBusinessList({
             ))}
           {view.filters
             .filter((f: any) => f.options)
-            .map((f: any) => (
-              <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
-                {f.options.map((option: any) => (
-                  <button
-                    type="button"
-                    key={option.value}
-                    aria-pressed={(appliedFilters?.[f.name] ?? '') === option.value}
-                    onClick={() => onQuickFilter(f.name, option.value)}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            ))}
+            .map((f: any) =>
+              fc ? (
+                <WarehouseSelect
+                  key={f.name}
+                  label={f.label}
+                  compact
+                  disabled={false}
+                  value={String(appliedFilters?.[f.name] ?? '')}
+                  options={f.options.map((option: any) => ({
+                    id: String(option.value),
+                    name: option.label,
+                  }))}
+                  onChange={(value) => onQuickFilter(f.name, value)}
+                />
+              ) : (
+                <div key={f.name} className={css.quickFilters} role="group" aria-label={f.label}>
+                  {f.options.map((option: any) => (
+                    <button
+                      type="button"
+                      key={option.value}
+                      aria-pressed={(appliedFilters?.[f.name] ?? '') === option.value}
+                      onClick={() => onQuickFilter(f.name, option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ),
+            )}
           {view.filters.length > 0 && (
             <>
               <Button
@@ -234,7 +268,7 @@ export function OriginalBusinessList({
         (qll || aqkc || fc || agentId === 'inventory-dealer' ? (
           <PlanPagination
             ariaLabel={qll ? undefined : `${view.title}分页`}
-            maxPageSize={view.pageReadSize}
+            maxPageSize={view.maxPageSize}
             totalCount={result.total}
             page={page}
             pageSize={pageSize}

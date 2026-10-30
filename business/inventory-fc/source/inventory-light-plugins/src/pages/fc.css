@@ -1426,7 +1426,6 @@ button {
   cursor: pointer;
 }
 button:focus-visible,
-input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgba(224, 45, 45, 0.16);
@@ -4289,6 +4288,13 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.warehouse-select-trigger .warehouse-select-chevron {
+  display: block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  align-self: center;
+}
 .warehouse-select-trigger:hover:not(:disabled),
 .warehouse-select-trigger[aria-expanded='true'] {
   border-color: var(--ui-accent-line);
@@ -4296,33 +4302,46 @@ body:has(.dsh-local-notice) [aria-label='历史对话'] {
 }
 .warehouse-select-list {
   position: fixed;
-  z-index: 50;
+  z-index: 150;
+  box-sizing: border-box;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 4px;
-  border: 1px solid var(--ui-border);
-  border-radius: 6px;
-  background: var(--ui-surface);
-  color: var(--ui-ink);
+  padding: 5px;
+  border: 1px solid #e7e9ee;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow:
+    0 14px 38px #18223024,
+    0 2px 8px #1822300a;
+  color: #343b46;
+  font:
+    700 12px/18px 'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    Arial,
+    sans-serif;
   outline: none;
 }
 .warehouse-select-list [role='option'] {
   display: flex;
+  align-items: center;
   justify-content: space-between;
+  box-sizing: border-box;
+  min-height: 34px;
   gap: 12px;
-  padding: 8px;
-  border-radius: 4px;
+  padding: 0 10px;
+  border-radius: 7px;
   cursor: pointer;
 }
 .warehouse-select-list [role='option'][data-active='true'] {
-  background: var(--ui-hover);
-  outline: 1px solid var(--ui-accent-line);
-  outline-offset: -1px;
+  background: #ffedf0;
 }
 .warehouse-select-list [aria-selected='true'] {
-  color: var(--ui-accent-ink);
-  background: var(--ui-selected);
-  font-weight: 600;
+  background: #fff5f6;
+  color: #343b46;
+}
+.warehouse-select-list [role='option'] > span:last-child {
+  color: #d61a35;
 }
 
 /* Client feedback: bounded shell, persistent title and one content scroller. */
@@ -4764,9 +4783,26 @@ body,
 }
 .fc-workflow-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
+}
+.fc-workflow-actions > button {
+  height: 36px;
+  flex: 0 0 auto;
+}
+.fc-workflow-actions > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  max-width: 100%;
+  line-height: 1.4;
+}
+.fc-workflow-actions > label > input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin: 0;
 }
 .fc-workflow-notice {
   margin: 8px 0;
@@ -4790,4 +4826,26 @@ body,
   .agent-root .workspace > .kpi-grid.fc-compact-kpis {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Text fields use the shared focus border and shadow without a second outline. */
+input:focus-visible,
+.dsh-modal-content div input:focus-visible {
+  outline: none;
+  border-color: var(--ui-accent);
+  box-shadow: var(--ui-focus);
+}
+
+.warehouse-switch:has(> .warehouse-select-trigger) {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.fc-dashboard-insight p {
+  min-height: 5.25em;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
 }

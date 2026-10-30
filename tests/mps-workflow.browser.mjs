@@ -52,7 +52,7 @@ test('MPS local constraints edit the current draft and leave formal writes disab
   await version(frame, '2026-10');
   await upload(
     frame,
-    '选择产品关系CSV',
+    '选择产品关系CSV或Excel',
     '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,组甲,,',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
@@ -85,7 +85,7 @@ test('MPS capacity and report keep unconfirmed formulas empty and export the cur
   await version(frame, '2026-10');
   await upload(
     frame,
-    '选择产品关系CSV',
+    '选择产品关系CSV或Excel',
     '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,=1+1,汤圆,系列甲,组甲,,',
   );
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
@@ -114,7 +114,7 @@ test('MPS processing rounds source quantities for display and preserves raw valu
   await version(frame, '2026-10');
   await upload(
     frame,
-    '选择产品关系CSV',
+    '选择产品关系CSV或Excel',
     '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列甲,组甲,,',
   );
   await upload(

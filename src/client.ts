@@ -14,6 +14,7 @@ import {
   type NativeResourceSelection,
 } from './resource-selection.ts';
 import { mountCompanyUI } from './company/ui.tsx';
+import { mountWorkspaceDirectoryPrompt } from './company/workspace-directory.tsx';
 import type {} from '@deepseek-ai/dsh-api-session-controller/client';
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client';
 import {
@@ -151,9 +152,14 @@ export function apply(ctx: Context): void {
   ctx.effect(() => () => workbench.dispose());
 
   let nativeResources: NativeResourceSelection | undefined;
-  mountNativeResourceSelection(ctx, (host) => {
-    nativeResources = host;
-  });
+  const pickDirectory = mountWorkspaceDirectoryPrompt(ctx);
+  mountNativeResourceSelection(
+    ctx,
+    (host) => {
+      nativeResources = host;
+    },
+    pickDirectory,
+  );
   const restorePageSession = mountFramePresentation(
     ctx,
     () => nativeResources,

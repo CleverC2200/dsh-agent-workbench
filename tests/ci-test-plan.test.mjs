@@ -1459,6 +1459,8 @@ test('SQL execution inputs select the existing Python contract owner without bro
     'scripts/test_agent_sql.py',
     'scripts/requirements-sql.txt',
     'scripts/build_deep_query_configs.py',
+    'scripts/scope-fc-cycle-rules.py',
+    'scripts/update-qll-overview-orders.py',
   ])
     await t.test(file, (t) => {
       const f = productionFixture(t);

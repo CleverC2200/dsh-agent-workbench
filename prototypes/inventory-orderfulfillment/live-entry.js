@@ -1,4 +1,5 @@
 import { renderSummaryDetails } from './summary-details.mjs';
+import { fulfillmentMissingReason } from './missing-reasons.mjs';
 import { mountSalesConfirmation } from './sales-confirmation.mjs';
 import { mountSalesSimulation } from './sales-simulation.mjs';
 import { mountSalesConfirmationTransport } from './sales-confirmation-transport.mjs';
@@ -19,6 +20,7 @@ import {
   nextDay,
   plannedShippingDays,
   batchAges,
+  futureProduction,
 } from './live-model.mjs';
 
 const configNode = document.getElementById('agent-sql-config');
@@ -387,6 +389,7 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
     const q=qs.some(Boolean)?{original_qty:demand,adjusted_qty:sum('adjusted_qty'),allocated_qty:sum('allocated_qty'),shipped_qty:sum('shipped_qty'),ordered_qty:sum('ordered_qty'),
       order_allocation_rate:demand>0&&short!==null?100*Math.abs(demand-short)/demand:null,
       business_stage:same('business_stage'),node_status:same('node_status')??'unknown',sales_person:same('sales_person'),order_person:same('order_person'),carrier:same('carrier'),
+      missingReasons:Object.fromEntries(['original_qty','adjusted_qty','ordered_qty','allocated_qty','shipped_qty','order_allocation_rate','sales_person','order_person','carrier'].map(field=>[field,[...new Set(qs.filter(item=>item?.[field]==null).map(item=>item?.missingReasons?.[field]).filter(Boolean))].join('；')])),
       quantity_issue:qs.map(q=>q?.quantity_issue).filter(Boolean).join('；')}:null;
     const trace = (traces?.rows ?? []).find(
       (t) =>
@@ -452,14 +455,20 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
       quantityText(q, 'shipped_qty', quantities),
       quantityText(q, 'ordered_qty', quantities),
     ];
-    for (const v of values) {
+    const fields=['order_no','created_at','customer_name','sales_group','province','region','channel','sales_person','order_person','base','carrier','business_stage','node_status','order_allocation_rate','original_qty','adjusted_qty','allocated_qty','shipped_qty','ordered_qty'];
+    for (const [index,v] of values.entries()) {
       const node=cell(v);
-      if(v==='—')node.title='当前授权结果缺少该字段，或完整计算条件不足；不是零';
+      if(v==='—') {
+        const calculated=index>=13;
+        const derived=[7,8,10,11,12].includes(index);
+        node.title=fulfillmentMissingReason(fields[index],calculated||derived?q:row,calculated||derived?quantities:orders,
+          calculated?q?.quantity_issue:index===12?'节点状态缺少有效时限、时间或状态依据':'');
+      }
       tr.append(node);
     }
     tr.cells[7].className='customer-type-cell';
     if(!['—','无权限'].includes(channelCode))tr.cells[7].title=`${channelLabel(channelCode)}；原始编码：${channelCode}`;
-    tr.cells[14].title=q?.quantity_issue||'整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
+    if(values[13]!=='—')tr.cells[14].title='整单满足率＝|原始数量－当前缺货量|÷原始数量×100%；当前缺货量＝|原始数量－实占数量|；整单全部SKU有有效数量才计算';
     if (body.id === 'deliveryOrderDetailRows') {
       const confirmation=cell('');confirmation.className='confirmation-status-cell';
       const statusButton=document.createElement('button');statusButton.type='button';statusButton.className='confirmation-status';statusButton.textContent='未接入';
@@ -530,7 +539,12 @@ function renderOrders(body, orders, quantities, traces, warehouse, resetPage=tru
         quantityText(skuQuantity, 'original_qty', quantities),
         quantityText(skuQuantity, 'source_short_qty', quantities),
         skuQuantity?.sku_allocation_rate===null||skuQuantity?.sku_allocation_rate===undefined?'—':Number(skuQuantity.sku_allocation_rate).toFixed(1)+'%',
-      ])line.append(cell(v));
+      ].entries()) {
+        const [index,valueText]=v;
+        const target=cell(valueText);
+        if(valueText==='—')target.title=fulfillmentMissingReason(['material_name','original_qty','source_short_qty','sku_allocation_rate'][index],skuQuantity,quantities,skuQuantity?.quantity_issue);
+        line.append(target);
+      }
     }
     content.append(table);
     button.addEventListener('click', () => {
@@ -551,14 +565,15 @@ function renderInventory(result, ages, owners=null, resetPage=true) {
     return;
   }
   body.replaceChildren();
-  const calculatedAges=ages?batchAges(ages.rows,selectedFilters().start):[];
   const pagination=orderPage(body,[result,ages,owners],resetPage,(_body,...args)=>renderInventory(...args));
   pagination.remote=result.serverPage?result:null;
   pagination.loadPage=result.serverPage?(page,size)=>loadItemPage('inventory',{page,size}):null;
   for (const row of pageRows(pagination,result.rows)) {
     const matching=(owners?.rows??[]).filter(owner=>owner.base===row.base&&owner.sku===row.sku);
     const ownerNames=[...new Set(matching.map(owner=>owner.director).filter(Boolean))];
-    const age = calculatedAges.find(item => item.base === row.base && item.sku === row.sku);
+    const age = ages&&row.stock_date&&Number(row.source_rows)===1
+      ? batchAges(ages.rows.filter(item=>item.base===row.base&&item.sku===row.sku),row.stock_date)[0]
+      : null;
     const tr = document.createElement('tr');
     for (const text of [
       value(row, 'material_name', result) + ' / ' + value(row, 'sku', result),
@@ -579,7 +594,18 @@ function renderInventory(result, ages, owners=null, resetPage=true) {
     ])
       tr.append(cell(text));
     body.append(tr);
-    tr.cells[1].title=owners?'执行明细中当前基地及SKU的应责总监；多个负责人并列展示':'应责总监字段未发布、未授权或源值缺失，未补值';
+    const inventoryFields=['material_name','director','product_item','series','product_tag','transfer_tag','base','stock_qty','oem_qty','ship_days','age_lt40','age_40_60','age_60_90','age_90_120','age_ge120'];
+    for(const [index,target] of [...tr.cells].entries())if(target.textContent==='—') {
+      target.title=index===1?fulfillmentMissingReason('director',matching[0],owners)
+        :index===8?'源数据未提供：尚无可确认的OEM库存来源，不能用基地库存替代。'
+        :index===9?'系统未能计算：可发货天数需要有效库存、计划数量及周期，缺值或零需求时不计算。'
+        :fulfillmentMissingReason(inventoryFields[index],index>=10?age:row,index>=10?ages:result,
+          index>=10&&age?'批次生产日期、库存日期或数量异常，不能完成货龄分箱':'');
+    }
+    if(ownerNames.length)tr.cells[1].title='执行明细中当前基地及SKU的应责总监；多个负责人并列展示';
+    tr.cells[7].title=`库存日期 ${row.stock_date??'—'}；基地库存沿用库存明细源值，货龄分箱沿用同日批次库存，不强行调平两个源口径`;
+    for(const node of [...tr.cells].slice(10))if(node.textContent!=='—')node.title=`货龄快照与库存日期 ${row.stock_date??'—'} 对齐；零库存批次不影响分箱，非零库存缺生产日期或数量异常时保持未知`;
+
   }
   if (!body.children.length) placeholder(body, '当前授权范围无库存记录');
   const note = $('itemDimensionPanel').querySelector(':scope > .dimension-note');
@@ -610,12 +636,13 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
   for (const row of pageRows(pagination,calculated??result.rows)) {
     const tr = document.createElement('tr');
     tr.dataset.compareGroup=row.group_name;
+    const rateText=!calculated?'—':row.allocation_rate!==null?row.allocation_rate.toFixed(1)+'%':row.known_allocation_rate!==null&&row.known_allocation_rate!==undefined?row.known_allocation_rate.toFixed(1)+'%（部分）':'—';
     for (const item of warehouse
       ? ['', value(row, 'group_name', result),
           calculated?row.overdue:'—',
           calculated?row.warning:'—',
           calculated?row.preparing:'—',
-          calculated&&row.allocation_rate!==null?row.allocation_rate.toFixed(1)+'%':'—',
+          rateText,
           calculated&&row.shortage_orders!==null?row.shortage_orders:'—']
       : [
           '',
@@ -625,13 +652,14 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
           calculated?row.warning:'—',
           calculated?row.preparing:'—',
           calculated&&row.shortage_qty!==null?row.shortage_qty:'—',
-          calculated&&row.allocation_rate!==null?row.allocation_rate.toFixed(1)+'%':'—',
+          rateText,
           ...(calculated?row.buckets:['—','—','—','—','—']),
         ])
       tr.append(cell(item));
     for(const index of warehouse?[2,3,4,6]:[2,3,4,5,8,9,10,11,12])tr.cells[index].textContent=withUnit(tr.cells[index].textContent,'张');
     if(!warehouse)tr.cells[6].textContent=withUnit(tr.cells[6].textContent,'件');
     if(calculated&&warehouse) {
+      tr.cells[5].title=`原始数量与当前缺货量加权；可计算明细${row.quantity_coverage}/${row.quantity_total}项，标注“部分”时仅代表可靠明细，不代表全量`;
       tr.cells[2].title=tr.cells[3].title=`已判定订单数；信息不完整${row.unknown}张，不计作正常`;
       tr.cells[6].title=`已关联缺货订单数；覆盖${row.shortage_coverage}/${row.shortage_total}项，未覆盖不补零`;
     }
@@ -639,9 +667,10 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
       tr.cells[2].title=`有效订单${row.source_orders}张；含作废及未纳统来源订单${row.source_order_count}张`;
       tr.cells[3].title=tr.cells[4].title=`按最末有效节点判断；信息不完整${row.unknown}张，不计作正常`;
       tr.cells[6].title=`减库存后缺货量，覆盖待备执行单SKU ${row.shortage_coverage}/${row.shortage_total}项；未覆盖不补零`;
-      tr.cells[7].title=`按本组完整原始数量与当前缺货量加权的占单满足率；可计算订单${row.rate_coverage}/${row.rate_total}张，缺数量或零分母不补零；不是SKU百分比平均，也不是发货满足率`;
+      tr.cells[7].title=`原始数量与当前缺货量加权；可计算明细${row.quantity_coverage}/${row.quantity_total}项，标注“部分”时不代表全量；完整可计算订单${row.rate_coverage}/${row.rate_total}张；缺数量或零分母不补零，不是SKU百分比平均或发货满足率`;
       for(let i=8;i<13;i++)tr.cells[i].title=`完整需求可计算订单${row.rate_coverage}/${row.rate_total}张；未知订单不分入任何区间`;
     }
+    for(const target of tr.cells)if(target.textContent==='—')target.title=`系统未能计算：当前分组缺少完整数量、有效分母或节点时限，不能归入0或正常。${target.title}`;
     body.append(tr);
     if(calculated) {
       const detail=document.createElement('tr');detail.hidden=!expanded.has(row.group_name);
@@ -674,7 +703,7 @@ function renderComparison(body, result, warehouse = false, calculated = null, re
     }
   }
   if (!body.children.length) placeholder(body, '当前授权范围无记录');
-  const note=body.closest('section')?.querySelector('.dimension-note');
+  const note=body.closest('section, .warehouse-detail-panel')?.querySelector('.dimension-note');
   if(note)note.textContent='按当前筛选及授权范围汇总；超时、预警、缺货及满足率区间展示已知部分，覆盖情况见数值提示；缺失数据不补零。';
 }
 function renderGrantedDetails(results) {
@@ -727,11 +756,13 @@ function renderSummary(results, selected) {
       const future=metrics[2]?.querySelector('strong');
       if(unopened)setMetric(unopened,value(open,'preparing_orders',get(results,'orders.open.summary')));
       if(missing){setMetric(missing,value(shortage,'final_short_qty',get(results,'shortage.summary')));missing.title=`已关联源终缺量；覆盖${shortage?.final_quantity_coverage??'—'}/${shortage?.matched_sku_rows??'—'}项，不代表未关联订单为零`;}
-      if(future){setMetric(future,'—');future.title='当前源生产计划未提供可确认的未来5日入库日期与数量，不能用月度生产计划代替';}
-      const notes=group.querySelectorAll('.metric > small');
+      const production=get(results,'production.future');
+      const units=production?futureProduction(production.rows):null;
+      if(future){future.textContent=units?.length?units[0][1].toLocaleString('zh-CN')+(units[0][0]==='ST'?'件':' '+units[0][0]):'—';future.title='当前筛选订单对应基地与SKU；从所选日开始连续5日排产，ST按件展示，其他源单位分列，不换算或混加KG、PAK；排产不等于已确认入库供应。';}
+      const notes=group.querySelectorAll(':scope > .metric > small:not(.metric-period)');
       if(notes[0])notes[0].textContent='当前授权范围有效待备订单';
       if(notes[1])notes[1].textContent='已关联源终缺，未覆盖订单不补零';
-      if(notes[2])notes[2].textContent='缺少可确认的未来5日排产明细';
+      if(notes[2])notes[2].textContent=units?.length?(units.slice(1).map(([unit,quantity])=>quantity.toLocaleString('zh-CN')+' '+unit).join('；')||'五日排产按件展示，不代表已确认入库'):production?'无完整可计算的五日排产明细':'正在读取五日排产明细';
       continue;
     }
     const isWarehouse=group.classList.contains('warehouse-summary');
@@ -905,7 +936,21 @@ async function loadItemPage(kind, patch={}) {
     if(!signal.aborted){itemPageKey='';placeholder(body,issue(error));}
   }
 }
-function ensureItemPage(){if(dimension==='itemDimensionPanel')return loadItemPage($('itemCoordinationPanel').hidden?'inventory':'coordination');}
+function ensureItemPage(){if(dimension==='itemDimensionPanel'){void loadFutureProduction();return loadItemPage($('itemCoordinationPanel').hidden?'inventory':'coordination');}}
+async function loadFutureProduction(){
+  if(!activeRead?.complete||!activeRead.current()||!currentResults||currentResults['production.future'])return;
+  const read=activeRead,results=currentResults,selected=selectedFilters();
+  results['production.future']={status:'pending'};
+  try{
+    const end=new Date(selected.start+'T00:00:00Z');end.setUTCDate(end.getUTCDate()+5);
+    const value=await reader.all('production.future',{...selected,plan_end_exclusive:end.toISOString().slice(0,10)},{signal:read.signal});
+    if(!read.current()||currentResults!==results)return;
+    if(value.configVersion!==read.version)throw Error('QUERY_CONFIG_CHANGED');
+    results['production.future']={status:'fulfilled',value};
+    renderSummary(results,selected);
+    if(snapshot){snapshot={...snapshot,productionFuture:{start:selected.start,end:end.toISOString().slice(0,10),rows:value.rows}};void publish(snapshot,{signal:read.signal}).catch(()=>{});}
+  }catch(reason){if(read.current()&&currentResults===results){results['production.future']={status:'rejected',reason};const node=document.querySelector('.item-summary .metric:last-child > small');if(node)node.textContent='五日排产读取失败或未获授权，未补零';}}
+}
 async function load() {
   const selected = selectedFilters();
   const key = JSON.stringify(selected);

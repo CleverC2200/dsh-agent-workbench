@@ -246,3 +246,13 @@ body[data-ds-dark-theme] .metric-card .metric-benchmark :is(span, small) {
 }
 
 .customer-list-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; color: var(--muted, #7b8696); font-size: 12px; }
+
+.dealer-table-card :is(.arco-table-th, .arco-table-td) { text-align: center !important; vertical-align: middle; }
+.dealer-table-card :is(.arco-table-th-item, .arco-table-cell-with-sorter) { position: relative; text-align: center; }
+.dealer-table-card .arco-table-sorter { position: absolute; right: 4px; top: 50%; margin: 0; transform: translateY(-50%); }
+.dealer-table-card .metric-cell { justify-content: center; }
+.customer-assessment-note { display: block; white-space: normal; color: #86909c; font-size: 12px; line-height: 1.5; }
+.customer-observation-notice { margin-top: 8px; padding: 0 2px; color: #86909c; font-size: 12px; line-height: 20px; }
+
+.customer-sku-cell { white-space: normal; overflow-wrap: anywhere; }
+.customer-sku-cell small { display: block; margin-top: 4px; color: var(--workbench-muted); font-size: 12px; }

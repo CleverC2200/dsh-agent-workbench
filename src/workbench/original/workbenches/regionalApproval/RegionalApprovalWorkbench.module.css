@@ -111,11 +111,11 @@
 
 /* V1.8 #14：差额正数红、负数绿，颜色只作用于差额数值本身。 */
 .queueMetrics .variancePositive {
-  color: #c8112a;
+  color: rgb(var(--danger-7));
 }
 
 .queueMetrics .varianceNegative {
-  color: #168e58;
+  color: rgb(var(--success-8));
 }
 
 .scope :global(.arco-select) {
@@ -438,7 +438,7 @@
 
 .dimensionTabs :global(.arco-btn)[data-active='true'] {
   box-shadow: inset 0 -2px #df1732;
-  color: #df1732;
+  color: var(--workbench-brand);
   font-weight: 600;
 }
 
@@ -757,7 +757,7 @@
 }
 
 .footerControls :global(.arco-pagination-item-active) {
-  border-color: #f4d2d8;
+  border-color: var(--workbench-border);
   background: var(--workbench-brand-soft, #fff0f2);
   color: var(--workbench-brand, #df1732);
 }
@@ -1608,12 +1608,12 @@
 }
 
 .monthSelect :global(.arco-select-view:hover) {
-  border-color: #e8a4ae;
+  border-color: var(--workbench-brand);
   background: var(--workbench-brand-soft, #fff7f8);
 }
 
 .monthSelect :global(.arco-select-view:focus-within) {
-  border-color: #e59ca8;
+  border-color: var(--workbench-brand);
   box-shadow: 0 0 0 3px #df17321a;
 }
 
@@ -1800,15 +1800,15 @@
 .header::-webkit-scrollbar-track,
 .header::-webkit-scrollbar-corner {
   border-radius: 999px;
-  background: #f5f6f8;
+  background: var(--workbench-muted-surface);
 }
 .header::-webkit-scrollbar-thumb {
-  border: 2px solid #f5f6f8;
+  border: 2px solid var(--workbench-muted-surface);
   border-radius: 999px;
   background: #b9bec7;
 }
 .header::-webkit-scrollbar-thumb:hover {
-  background: #a0a4ac;
+  background: var(--workbench-muted);
 }
 .header::-webkit-scrollbar-button {
   display: none;
@@ -1818,7 +1818,7 @@
 @supports not selector(::-webkit-scrollbar) {
   .header {
     scrollbar-width: thin;
-    scrollbar-color: #b9bec7 #f5f6f8;
+    scrollbar-color: #b9bec7 var(--workbench-muted-surface);
   }
 }
 
@@ -1882,11 +1882,11 @@
 }
 .approvalToolbarActions :global(.arco-btn-primary) {
   background: #df1732;
-  border-color: #df1732;
+  border-color: var(--workbench-brand);
 }
 .approvalToolbarActions :global(.arco-btn-primary:not(:disabled):hover) {
   background: #c91029;
-  border-color: #c91029;
+  border-color: var(--workbench-brand-hover);
 }
 .organizationTable :global(.arco-table-content-inner > table > thead > tr > th.arco-table-th) {
   background: var(--bg-2);
@@ -1916,7 +1916,7 @@
   font-weight: 600;
 }
 .versionComparisonField > span {
-  color: #667085;
+  color: var(--workbench-muted);
   font:
     600 12px/18px 'Microsoft YaHei UI',
     'PingFang SC',
@@ -1935,7 +1935,7 @@
   height: 36px !important;
   align-items: center;
   padding: 0 10px;
-  border: 1px solid #c9ced7;
+  border: 1px solid var(--workbench-control-border);
 }
 .returnReasons {
   white-space: normal;
@@ -1956,18 +1956,18 @@
   border-bottom: 2px solid transparent;
   background: transparent;
   box-shadow: none;
-  color: #555d68;
+  color: var(--workbench-body);
 }
 .root .dimensionTabs :global(.arco-btn[role='tab']:hover) {
-  background: #fff0f2;
-  color: #df1732;
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-brand);
 }
 .root .dimensionTabs :global(.arco-btn[role='tab'][data-active='true']),
 .root .dimensionTabs :global(.arco-btn[role='tab'][data-active='true']:hover) {
-  border-bottom-color: #df1732;
-  background: #fff0f2;
+  border-bottom-color: var(--workbench-brand);
+  background: var(--workbench-brand-soft);
   box-shadow: none;
-  color: #df1732;
+  color: var(--workbench-brand);
 }
 .root :global(.arco-btn:not([role='tab'])) {
   border-radius: 8px;
@@ -1984,20 +1984,20 @@
   min-height: 36px;
 }
 .root .toolbarActions > :global(.arco-btn:not(:disabled)) {
-  border: 1px solid #d9dde3;
-  background: #fff;
-  color: #555d68;
+  border: 1px solid var(--workbench-control-border);
+  background: var(--workbench-surface);
+  color: var(--workbench-body);
 }
 .root .toolbarActions > :global(.arco-btn:not(:disabled):hover),
 .root .toolbarActions > :global(.arco-btn:not(:disabled):focus-visible) {
-  border-color: #efabb4;
-  background: #fffafb;
-  color: #df1732;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-hover);
+  color: var(--workbench-brand);
 }
 .root .toolbarActions > .advancedToggle[data-active='true']:global(.arco-btn) {
-  border-color: #efabb4;
-  background: #fff0f2;
-  color: #df1732;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-brand);
 }
 .root .toolbarActions > :global(.arco-btn) {
   min-width: 32px;
@@ -2009,57 +2009,57 @@
   padding-inline: 12px;
 }
 .root .stageLaneToggle:global(.arco-btn-text) {
-  color: #555d68;
+  color: var(--workbench-body);
 }
 .root .stageLaneToggle:global(.arco-btn-text):hover,
 .root .stageLaneToggle:global(.arco-btn-text):focus-visible {
-  color: #df1732;
-  background: #fffafb;
+  color: var(--workbench-brand);
+  background: var(--workbench-hover);
 }
 .root
   .stageLane[data-live-status='true']
   .stageButton:global(.arco-btn-text)[data-selected='true'] {
-  background: #fff0f2;
-  color: #df1732;
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-brand);
 }
 .root .detailTrigger:global(.arco-btn-text),
 .root .categoryDetailTrigger:global(.arco-btn-text),
 .root .organizationCaret {
-  color: #df1732;
+  color: var(--workbench-brand);
 }
 .root .detailTrigger:global(.arco-btn-text):hover,
 .root .categoryDetailTrigger:global(.arco-btn-text):hover {
-  color: #c91029;
+  color: var(--workbench-brand-hover);
 }
 .root :global(.arco-btn-outline:not(.arco-btn-status-danger):not(:disabled)) {
-  border-color: #d9dde3;
-  background: #fff;
-  color: #555d68;
+  border-color: var(--workbench-control-border);
+  background: var(--workbench-surface);
+  color: var(--workbench-body);
 }
 .root :global(.arco-btn-outline:not(.arco-btn-status-danger):not(:disabled):hover) {
-  border-color: #efabb4;
-  background: #fffafb;
-  color: #df1732;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-hover);
+  color: var(--workbench-brand);
 }
 .root :global(.arco-btn-outline:disabled) {
-  border-color: #e3e6ea;
-  background: #f5f6f8;
-  color: #a0a4ac;
+  border-color: var(--workbench-border);
+  background: var(--workbench-muted-surface);
+  color: var(--workbench-muted);
 }
 .root :global(.arco-btn-primary:not(:disabled)) {
-  border-color: #df1732;
+  border-color: var(--workbench-brand);
   background: #df1732;
   color: #fff;
 }
 .root :global(.arco-btn-primary:not(:disabled):hover) {
-  border-color: #c91029;
+  border-color: var(--workbench-brand-hover);
   background: #c91029;
 }
 .root :global(.arco-btn-primary:disabled),
 .root .approvalToolbarActions :global(.arco-btn:disabled) {
-  border-color: #e3e6ea;
-  background: #f5f6f8;
-  color: #a0a4ac;
+  border-color: var(--workbench-border);
+  background: var(--workbench-muted-surface);
+  color: var(--workbench-muted);
 }
 .root :global(.arco-switch-checked) {
   background: #df1732;
@@ -2068,7 +2068,7 @@
   background: #c91029;
 }
 .root :global(.arco-switch-checked .arco-switch-dot) {
-  color: #df1732;
+  color: var(--workbench-brand);
 }
 .root :global(.arco-switch:focus-visible),
 .root :global(.arco-checkbox:focus-within),
@@ -2077,16 +2077,16 @@
   outline-offset: 2px;
 }
 .root :global(.arco-checkbox-checked .arco-checkbox-mask) {
-  border-color: #df1732;
+  border-color: var(--workbench-brand);
   background: #df1732;
 }
 .queueFooter :global(.arco-pagination-item-active) {
-  background: #fff0f2;
-  color: #df1732;
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-brand);
 }
 .approvalStatusTag[data-approval-tone='neutral'] {
-  background: #eef1f5;
-  color: #667085;
+  background: var(--workbench-muted-surface);
+  color: var(--workbench-muted);
 }
 
 /* The month trigger and its floating menu follow the shared date-control states. */
@@ -2094,23 +2094,23 @@
   gap: 8px;
 }
 .monthField > small {
-  color: #667085;
+  color: var(--workbench-muted);
   font-size: 12px;
   font-weight: 700;
   line-height: 18px;
 }
 .monthCalendarIcon {
-  color: #697386;
+  color: var(--workbench-muted);
 }
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select-view) {
-  border-color: #c9ced7;
+  border-color: var(--workbench-control-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--workbench-surface);
   box-shadow: 0 1px 2px #1822300a;
 }
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-value),
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select-view-input) {
-  color: #343b46;
+  color: var(--workbench-text);
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -2122,33 +2122,33 @@
   align-items: center;
 }
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select-suffix) {
-  color: #697386;
+  color: var(--workbench-muted);
 }
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select:hover .arco-select-view) {
-  border-color: #e8a4ae;
-  background: #fff7f8;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-hover);
   box-shadow: 0 2px 8px #df173214;
 }
 :is(.monthSelect, .versionComparisonBar)
   :global(.arco-select[aria-expanded='true'] .arco-select-view) {
-  border-color: #ce7280;
-  background: #fff;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-surface);
   box-shadow: 0 0 0 3px #df173212;
 }
 :is(.monthSelect, .versionComparisonBar) :global(.arco-select:focus-visible .arco-select-view) {
-  border-color: #e59ca8;
+  border-color: var(--workbench-brand);
   box-shadow: 0 0 0 3px #df17321a;
 }
 :is(.monthSelect, .versionComparisonBar)
   :global(.arco-select[aria-expanded='true'] .arco-select-suffix) {
-  color: #c91029;
+  color: var(--workbench-brand-hover);
   transform: rotate(180deg);
 }
 .brandSelectMenu {
   padding: 5px;
-  border: 1px solid #e7e9ee;
+  border: 1px solid var(--workbench-border);
   border-radius: 12px;
-  background: #fff;
+  background: var(--workbench-surface);
   box-shadow:
     0 14px 38px #18223024,
     0 2px 8px #1822300a;
@@ -2159,7 +2159,7 @@
   align-items: center;
   padding: 0 10px;
   border-radius: 7px;
-  color: #343b46;
+  color: var(--workbench-text);
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Noto Sans CJK SC', Arial, sans-serif;
   font-size: 12px;
   font-weight: 700;
@@ -2167,13 +2167,13 @@
 }
 .brandSelectMenu :global(.arco-select-option:hover),
 .brandSelectMenu :global(.arco-select-option-hover) {
-  background: #ffedf0;
-  color: #343b46;
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-text);
 }
 .brandSelectMenu :global(.arco-select-option-selected) {
   justify-content: space-between;
-  background: #fff5f6;
-  color: #343b46;
+  background: var(--workbench-brand-soft);
+  color: var(--workbench-text);
 }
 .brandSelectMenu :global(.arco-select-option-selected)::after {
   content: '✓';
@@ -2184,7 +2184,7 @@
 
 /* Match the production-sales page's white canvas and quiet list states. */
 .root {
-  --bg-1: #fff;
+  --bg-1: var(--workbench-surface);
   background: var(--bg-1);
 }
 .dashboardHeader {
@@ -2236,7 +2236,7 @@
 }
 .tableViewport {
   margin: 8px 12px 12px;
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--workbench-border);
   border-radius: 10px;
 }
 .tableViewport > .querySpin {
@@ -2247,7 +2247,7 @@
 }
 .tableViewport > .queueFooter {
   min-height: 68px;
-  border-top: 1px solid #eceef1;
+  border-top: 1px solid var(--workbench-border);
 }
 .organizationTable :global(.arco-table-th),
 .organizationTable :global(.arco-table-td) {
@@ -2257,16 +2257,16 @@
 .organizationTable :global(.arco-table-content-inner > table > thead > tr > th.arco-table-th) {
   height: 38px;
   padding-block: 4px;
-  background: #f5f6f8;
-  color: #747b86;
-  border-bottom: 1px solid #eceef1;
+  background: var(--workbench-muted-surface);
+  color: var(--workbench-muted);
+  border-bottom: 1px solid var(--workbench-border);
   font-size: 9px;
   font-weight: 800;
   line-height: 1.35;
 }
 .organizationTable :global(.arco-table-tr > .arco-table-td) {
   background: var(--bg-1);
-  border-bottom-color: #eceef1;
+  border-bottom-color: var(--workbench-border);
   transition: background 180ms ease;
 }
 .root .organizationTable :global(.arco-table-tr:hover > .arco-table-td),
@@ -2285,21 +2285,21 @@
   background: var(--workbench-hover, #fffafb);
 }
 .organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td) {
-  background: #fff2f4;
+  background: var(--workbench-brand-soft);
 }
 .organizationTable :global(.arco-table-tr.arco-table-tr-checked > .arco-table-td:first-child) {
   box-shadow: inset 3px 0 #df1732;
 }
 .progressTreeHeader {
-  background: #f7f8fa;
-  color: #747b86;
-  border-bottom-color: #eceef1;
+  background: var(--workbench-page);
+  color: var(--workbench-muted);
+  border-bottom-color: var(--workbench-border);
 }
 .progressTree :global(.arco-tree-node) {
-  border-bottom-color: #eceef1;
+  border-bottom-color: var(--workbench-border);
 }
 .progressTree :global(.arco-tree-node:hover) {
-  background: #fffafb;
+  background: var(--workbench-hover);
 }
 
 /* Keep the dimension toolbar and its expanded filters usable at the pane width. */
@@ -2323,8 +2323,8 @@
 .root .categorySwitch {
   flex: 0 0 auto;
   padding-right: 12px;
-  border-right: 1px solid #e3e6ea;
-  color: #555d68;
+  border-right: 1px solid var(--workbench-border);
+  color: var(--workbench-body);
   font-size: 12px;
 }
 .root .dimensionTabs {
@@ -2375,7 +2375,7 @@
 .root .controls {
   padding: 12px;
   overflow: visible;
-  background: #fff;
+  background: var(--workbench-surface);
 }
 .root .advancedControls {
   min-width: 0;
@@ -2394,7 +2394,7 @@
 }
 .root .liveFilterRow .fieldControl > span {
   display: block;
-  color: #667085;
+  color: var(--workbench-muted);
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
@@ -2408,30 +2408,30 @@
   height: 36px;
   align-items: center;
   padding: 0 10px;
-  border: 1px solid #c9ced7;
+  border: 1px solid var(--workbench-control-border);
   border-radius: 8px;
-  background: #fff;
+  background: var(--workbench-surface);
   box-shadow: 0 1px 2px #1822300a;
 }
 .root .liveFilterRow :global(.arco-select-view-value),
 .root .liveFilterRow :global(.arco-select-view-input) {
   display: flex;
   align-items: center;
-  color: #343b46;
+  color: var(--workbench-text);
   font-size: 12px;
   line-height: 18px;
 }
 .root .liveFilterRow :global(.arco-select:hover .arco-select-view) {
-  border-color: #e8a4ae;
-  background: #fff7f8;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-hover);
 }
 .root .liveFilterRow :global(.arco-select:focus-within .arco-select-view) {
-  border-color: #e59ca8;
+  border-color: var(--workbench-brand);
   box-shadow: 0 0 0 3px #df17321a;
 }
 .root .liveFilterRow :global(.arco-select-popup-visible .arco-select-view) {
-  border-color: #ce7280;
-  background: #fff;
+  border-color: var(--workbench-brand);
+  background: var(--workbench-surface);
   box-shadow: 0 0 0 3px #df173212;
 }
 .root .liveFilterRow .filterActions {
@@ -2466,4 +2466,8 @@
   .root .liveFilterRow .filterActions {
     flex-wrap: wrap;
   }
+}
+
+:global(html[data-shared-workbench-toolbar]) .header {
+  padding-right: 300px;
 }

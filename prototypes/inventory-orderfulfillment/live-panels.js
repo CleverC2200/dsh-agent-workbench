@@ -77,7 +77,7 @@ export function renderCoordination(result,{reset=true}={}) {
   const pages=Math.max(1,Math.ceil(total/coordinationLimit));coordinationPage=Math.min(Math.max(0,coordinationPage),pages-1);
   const body=table.tBodies[0];body.replaceChildren();
   for(const row of coordinationServer?rows:rows.slice(coordinationPage*coordinationLimit,(coordinationPage+1)*coordinationLimit)){
-    const line=body.insertRow();for(const [group,key] of columns){const td=line.insertCell();td.textContent=text(row[key]);td.className=`coord-group-${['基本信息','销售信息','生产信息','库存信息'].indexOf(group)+1}`;if(td.textContent==='—')td.title='当前源字段缺失或存在重复记录，未补零';}
+    const line=body.insertRow();for(const [group,key,label] of columns){const td=line.insertCell();td.textContent=text(row[key]);td.className=`coord-group-${['基本信息','销售信息','生产信息','库存信息'].indexOf(group)+1}`;if(td.textContent==='—')td.title=Number(row.source_rows)>1?`系统未能计算：${label}同基地、SKU、日期粒度重复，未直接加总。`:`源数据未提供或未匹配：当前返回记录 ${key}（${label}）为空；需核对对应计划与库存快照，未补0。`;}
   }
   if(!body.rows.length){const td=body.insertRow().insertCell();td.colSpan=columns.length;td.textContent='当前授权和筛选范围无产销协同记录';}
   document.getElementById('itemCoordinationCount').textContent=coordinationServer?`共${total}条`:`共${rows.length}条（当前授权${coordinationRows.length}条）`;

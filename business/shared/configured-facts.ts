@@ -8,6 +8,7 @@ export type FactInput = {
   asOf: string;
   cycleDays?: number;
   fcCycleRules?: FcCycleRule[];
+  fcCycleWarehouse?: string;
   page?: number;
   pageSize?: number;
   filters?: Record<string, string>;
@@ -90,7 +91,9 @@ export async function readConfiguredFacts(
   const view =
     options.summaryOnly &&
     configuredView?.overviewSummaryId &&
-    Object.values(input.filters ?? {}).every((value) => !value.trim()) &&
+    Object.entries(input.filters ?? {}).every(
+      ([name, value]) => !value.trim() || configuredView.overviewFilterNames?.includes(name),
+    ) &&
     !input.customer?.trim()
       ? {
           ...configuredView,
@@ -108,7 +111,11 @@ export async function readConfiguredFacts(
     return { status: 'select_customer', rows: [], total: null, viewId };
   const page = input.page ?? 1,
     pageSize = input.pageSize ?? 10;
-  if (!Number.isSafeInteger(page) || page < 1 || ![10, 20, 50, 100].includes(pageSize))
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    !([10, 20, 50, 100].includes(pageSize) || (options.detailsOnly && pageSize === 200))
+  )
     return fail('INVALID_PAGE', '分页参数无效');
   for (const [name, value] of Object.entries(input.filters ?? {}))
     if (
@@ -119,21 +126,11 @@ export async function readConfiguredFacts(
       return fail('INVALID_FILTER', '筛选字段或值无效');
   const client = createAgentQueries(config, options.execute),
     q = config.queries[view.queryId];
-  // Adjacent display pages share one bounded Host-cached block. Every read still
-  // crosses the owned channel, preserving identity, refresh and permission checks.
-  const readSize =
-    options.detailsOnly && q.pagination?.atomicQuery
-      ? Math.floor((view.pageReadSize ?? pageSize) / pageSize) * pageSize
-      : pageSize;
-  if (
-    !Number.isSafeInteger(readSize) ||
-    readSize < pageSize ||
-    readSize > 200 ||
-    readSize % pageSize !== 0
-  )
-    return fail('INVALID_PAGE', '分页读取块配置无效');
+  // Display reads fetch only the requested page; full-scope totals and explicit
+  // export/submission reads retain their independent contracts.
+  const readSize = pageSize;
   const displayOffset = (page - 1) * pageSize;
-  const readOffset = Math.floor(displayOffset / readSize) * readSize;
+  const readOffset = displayOffset;
   let version: any,
     versionSeen = false;
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
@@ -165,6 +162,7 @@ export async function readConfiguredFacts(
     input.customer?.trim() ?? '',
     input.cycleDays,
     input.fcCycleRules,
+    input.fcCycleWarehouse,
     Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
   ]);
   let snapshotDate: string | null = null;
@@ -254,6 +252,7 @@ export async function readConfiguredFacts(
       ).getUTCDate();
     }
     if (name === 'stock_date' || name === 'stat_date') value = snapshotDate;
+    if (name === 'fc_cycle_warehouse') value = input.fcCycleWarehouse ?? '';
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = readSize;
     if (name === 'offset') value = readOffset;

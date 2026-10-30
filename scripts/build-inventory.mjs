@@ -60,7 +60,7 @@ export async function buildInventory(id, sourceCommit) {
                   /(^|\/)(data|database|business-database|gea-sql|planning-store|workbench-sql-client|workbench-sql-executor|gea-sql-client)(\.ts)?$/,
               },
               (a) => {
-                if (/inventory-(aqkc|fc)\/source\//.test(a.importer))
+                if (/inventory-(aqkc|fc)\/source\//.test(a.importer.replaceAll('\\', '/')))
                   return { path: resolve(ui, 'src/personal/sql-data.ts') };
               },
             );
@@ -124,9 +124,9 @@ export async function buildInventory(id, sourceCommit) {
             api.resolve(
               resolve(
                 source,
-                id === 'personal' && a.importer.includes('/inventory-aqkc/')
+                id === 'personal' && a.importer.replaceAll('\\', '/').includes('/inventory-aqkc/')
                   ? '../../inventory-aqkc/source/aqkc/web/src'
-                  : id === 'personal' && a.importer.includes('/inventory-fc/')
+                  : id === 'personal' && a.importer.replaceAll('\\', '/').includes('/inventory-fc/')
                     ? '../../inventory-fc/source/fc/src'
                     : id === 'fc'
                       ? 'fc/src'
@@ -182,7 +182,7 @@ export async function buildInventory(id, sourceCommit) {
     'plugin.json',
     'page.json',
     ...(manifest.sqlConfig ? [manifest.sqlConfig] : []),
-    ...(id === 'aqkc' ? ['insight-prompt.md'] : []),
+    ...(['aqkc', 'fc'].includes(id) ? ['insight-prompt.md'] : []),
   ])
     await cp(resolve(resource, file), resolve(out, file));
   await assembleInventoryAgentResources(id);
@@ -205,7 +205,7 @@ export async function buildInventory(id, sourceCommit) {
       .update(await readFile(path))
       .digest('hex');
   }
-  if (id === 'aqkc')
+  if (['aqkc', 'fc'].includes(id))
     inputs['insight-prompt.md'] = createHash('sha256')
       .update(await readFile(resolve(resource, 'insight-prompt.md')))
       .digest('hex');

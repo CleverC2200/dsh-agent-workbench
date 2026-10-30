@@ -1,6 +1,6 @@
 import { call } from '../../../business/shared/channel.js';
 import { createQueryClient } from '../../../business/shared/configured-query-client.mjs';
-import { normalizedMonth, sourceMonthValues } from './master-data.js';
+import { annualRows, normalizedMonth, sourceMonthValues } from './master-data.js';
 
 const text = (value) => {
   if (value === null) return '';
@@ -50,7 +50,7 @@ const countsBy = (rows, key) => {
 const tableMonth = (value) => {
   const source = text(value);
   const compact = /^(\d{4})(0[1-9]|1[0-2])$/.exec(source);
-  const slash = /^(\d{4})\/(0?[1-9]|1[0-2])\/0?1$/.exec(source);
+  const slash = /^(\d{4})\/(0?[1-9]|1[0-2])(?:\/0?1)?$/.exec(source);
   return (
     normalizedMonth(source) ??
     (compact
@@ -62,8 +62,24 @@ const tableMonth = (value) => {
 };
 export function sourceTableParameters(kind, month) {
   const months = sourceMonthValues(month);
+  if (kind === 'category-history')
+    return {
+      months: Array.from({ length: 6 }, (_, index) =>
+        monthOffset(month, index - 4).replace('-', ''),
+      ),
+    };
+  if (kind === 'annual-pool') return {};
   if (kind === 'forecast')
-    return { month, source_month: `${month.slice(0, 4)}/${Number(month.slice(5))}/1` };
+    return {
+      months: [
+        ...months,
+        `${month.slice(0, 4)}/${Number(month.slice(5))}`,
+        `${month.slice(0, 4)}/${Number(month.slice(5))}/1`,
+        month.replace('-', ''),
+      ],
+    };
+  if (kind === 'plan-rate')
+    return { months: [month, monthOffset(month, 1)].map((value) => value.replace('-', '')) };
   if (kind === 'delivery') return { months: [...months, month.replace('-', '')] };
   throw Error('未知月主计划来源');
 }
@@ -71,7 +87,8 @@ export function forecastRows(rows, month) {
   sourceMonthValues(month);
   const key = (row) =>
     JSON.stringify([tableMonth(row.stat_month), row.belong_base, row.material_code]);
-  const counts = countsBy(rows, key);
+  const counts = new Map();
+  for (const row of rows) counts.set(key(row), (counts.get(key(row)) ?? 0) + 1);
   return rows.flatMap((row) => {
     if (tableMonth(row.stat_month) !== month) throw Error('预测来源批次与请求月份不一致');
     const base = text(row.belong_base),
@@ -79,20 +96,21 @@ export function forecastRows(rows, month) {
     const count = counts.get(key(row));
     const issue =
       !base.trim() || !code.trim()
-        ? '缺基地或物料编码'
+        ? '缺基地或物料组编码'
         : count > 1
-          ? '同批次基地物料重复，未合计'
+          ? '同批次基地物料组汇总重复，未合计'
           : '';
     const current = quantity(row.current_month_forecast_qty),
       next = quantity(row.next_month_forecast_qty);
     return [current, next].map((value, offset) => ({
       月份: monthOffset(month, offset),
       基地: base,
-      产品编码: code,
-      产品名称: text(row.material_name),
+      产品编码: '',
+      产品名称: '',
       大类: '',
       系列: '',
-      物料组: '',
+      物料组: code,
+      物料组名称: text(row.material_name),
       数量: issue ? '' : value,
       预测批次: month,
       源批次月份: text(row.stat_month),
@@ -107,24 +125,22 @@ export function forecastDimensions(rows, products) {
   return rows.map((row) => {
     const matches = products.filter(
       (p) =>
-        p['产品编码'] &&
-        p['产品编码'] === row['产品编码'] &&
-        (!p['基地'] || p['基地'] === row['基地']),
+        p['物料组'] && p['物料组'] === row['物料组'] && (!p['基地'] || p['基地'] === row['基地']),
     );
-    if (matches.length !== 1)
+    if (!matches.length)
       return {
         ...row,
-        缺项原因: [
-          row['缺项原因'],
-          matches.length ? '产品编码对应多条主数据，分类留空' : '产品编码未匹配主数据，分类留空',
-        ]
-          .filter(Boolean)
-          .join('；'),
+        缺项原因: [row['缺项原因'], '物料组未匹配主数据，分类留空'].filter(Boolean).join('；'),
       };
-    return {
-      ...row,
-      ...Object.fromEntries(['大类', '系列', '物料组'].map((name) => [name, matches[0][name]])),
-    };
+    const fields = {},
+      issues = [];
+    for (const name of ['大类', '系列', '物料组名称']) {
+      const values = [...new Set(matches.map((product) => product[name]).filter(Boolean))];
+      fields[name] =
+        matches.every((product) => product[name]) && values.length === 1 ? values[0] : '';
+      if (values.length > 1) issues.push(`物料组${name}存在多个源值，未选择`);
+    }
+    return { ...row, ...fields, 缺项原因: [row['缺项原因'], ...issues].filter(Boolean).join('；') };
   });
 }
 export const deliveryColumns = {
@@ -188,6 +204,36 @@ export function deliveryRows(rows, month) {
     };
   });
 }
+export const planRateColumns = {
+  dimension_type: '维度类型',
+  stat_month: '源月份',
+  belong_base: '基地',
+  category_name: '大类',
+  material_group_name: '物料组名称',
+  material_code: '产品编码',
+  product_name: '产品名称',
+  dimension_allnum: '当前维度计划量',
+  parent_allnum: '父级计划量',
+  dimension_rate: '计划占比',
+};
+export function planRateRows(rows, month) {
+  const months = [month, monthOffset(month, 1)];
+  return rows.map((row) => {
+    const period = tableMonth(row.stat_month);
+    if (!months.includes(period)) throw Error('计划占比来源月份与请求不一致');
+    return {
+      月份: period,
+      ...Object.fromEntries(
+        Object.entries(planRateColumns).map(([field, name]) => [
+          name,
+          ['dimension_allnum', 'parent_allnum', 'dimension_rate'].includes(field)
+            ? decimal(row[field])
+            : text(row[field]),
+        ]),
+      ),
+    };
+  });
+}
 export async function readSourceTable(kind, month, signal) {
   const parameters = sourceTableParameters(kind, month);
   const element = document.getElementById('agent-sql-config');
@@ -211,13 +257,26 @@ export async function readSourceTable(kind, month, signal) {
     { signal, keyFields: definition.grain, requiredColumns: definition.columns, maxRows: 100000 },
   );
   return {
-    rows: kind === 'forecast' ? forecastRows(result.rows, month) : deliveryRows(result.rows, month),
+    rows:
+      kind === 'forecast'
+        ? forecastRows(result.rows, month)
+        : kind === 'annual-pool'
+          ? annualRows(result.rows)
+          : kind === 'category-history'
+            ? result.rows.map((row) => deliveryRows([row], tableMonth(row.stat_month))[0])
+            : kind === 'plan-rate'
+              ? planRateRows(result.rows, month)
+              : deliveryRows(result.rows, month),
     metadata: {
       period: month,
       source:
         kind === 'forecast'
           ? 'agents_scm_sales_forecast_mi'
-          : 'agents_scm_base_dimension_delivery_mi',
+          : kind === 'annual-pool'
+            ? 'agents_dim_demand_annual_mi'
+            : kind === 'plan-rate'
+              ? 'agents_scm_dimension_plan_rate_mi'
+              : 'agents_scm_base_dimension_delivery_mi',
       total: result.rows.length,
       configVersion: result.configVersion,
       units: 'unconfirmed',

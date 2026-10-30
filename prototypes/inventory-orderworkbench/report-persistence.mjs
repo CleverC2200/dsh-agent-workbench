@@ -6,19 +6,21 @@ export function createReportPersistence(execute, status) {
     if (current.saving || current.failed || owner !== current) return;
     current.saving = true;
     try {
-      while (current.next && owner === current) {
+      while ((current.next || current.nextEdits) && owner === current) {
         current.request ??= {
-          operation: 'save', period: current.period, expectedVersion: current.version,
-          requestId: crypto.randomUUID(), report: current.next,
+          operation: current.nextEdits?'save-edits':'save', period: current.period, expectedVersion: current.nextEdits?current.editVersion:current.version,
+          requestId: crypto.randomUUID(), report: current.nextEdits?{edits:current.nextEdits}:current.next,
         };
         notify('saving', '正在保存…');
         const result = await execute(current.request, current.signal);
         current.signal.throwIfAborted();
         if (owner !== current) return;
-        if (result.saved !== true || result.requestId !== current.request.requestId || result.version !== current.version + 1)
+        const revision=current.request.operation==='save-edits'?'editVersion':'version';
+        if (result.saved !== true || result.requestId !== current.request.requestId || result.version !== current[revision] + 1)
           throw Error('保存回执不完整');
-        current.version = result.version;
-        if (current.next === current.request.report) current.next = null;
+        current[revision] = result.version;
+        if(revision==='editVersion'){if(current.nextEdits===current.request.report.edits)current.nextEdits=null;}
+        else if (current.next === current.request.report) current.next = null;
         current.request = null;
       }
       if (owner === current) notify('saved', '已保存到数据库');
@@ -30,13 +32,14 @@ export function createReportPersistence(execute, status) {
   }
   return {
     async open(period, signal) {
-      const current = owner = { period, signal, version: 0, loaded: false, next: null, request: null, saving: false, failed: false };
+      const current = owner = { period, signal, version: 0, editVersion:0, nextEdits:null, loaded: false, next: null, request: null, saving: false, failed: false };
       notify('loading', '正在读取已保存报告…');
       try {
         const result = await execute({ operation: 'load', period }, signal);
         signal.throwIfAborted();
         if (owner !== current) throw Error('报告周期已切换');
         current.version = result.version;
+        current.editVersion=result.editVersion??0;
         current.scope = result.scope;
         current.loaded = true;
         notify('loaded', result.report ? '已读取数据库报告' : '当前周期尚未保存');
@@ -55,9 +58,13 @@ export function createReportPersistence(execute, status) {
       void drain(owner);
       return true;
     },
+    saveEdits(edits) {
+      if(!owner?.loaded || owner.signal.aborted)return false;
+      owner.nextEdits=structuredClone(edits);void drain(owner);return true;
+    },
     retry() { if (owner?.loaded) { owner.failed = false; void drain(owner); } },
     scope() { return owner?.scope; },
-    pending() { return !!owner?.next; },
+    pending() { return !!(owner?.next || owner?.nextEdits); },
     cancel() { owner = undefined; },
   };
 }

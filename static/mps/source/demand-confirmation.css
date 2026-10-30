@@ -141,14 +141,6 @@
   color: var(--dc-muted);
   font-size: 11.5px;
 }
-.dc-product-source {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 4px;
-  font-size: 11.5px;
-}
 .dc-page-head {
   margin: 0 -24px 18px;
   padding: 0 24px;
@@ -521,6 +513,15 @@
 .dc-dialog::backdrop {
   background: #11182766;
 }
+.dc-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dc-dialog-head,
+.dc-dialog-footer {
+  flex-shrink: 0;
+}
 .dc-dialog-head {
   display: flex;
   align-items: center;
@@ -534,6 +535,8 @@
   margin: 0;
 }
 .dc-dialog-body {
+  min-height: 0;
+  overflow: auto;
   padding: 20px;
 }
 .dc-dialog-footer {
@@ -557,6 +560,22 @@
 }
 .dc-dialog table {
   min-width: 700px;
+}
+.dc-source-detail .dc-table-scroll {
+  max-height: calc(100vh - 240px);
+  overflow: auto;
+}
+.dc-source-detail thead {
+  position: sticky;
+  top: 0;
+}
+.dc-dialog.dc-source-detail table {
+  width: max-content;
+  min-width: 100%;
+}
+.dc-source-detail th,
+.dc-source-detail td {
+  white-space: nowrap;
 }
 @media (max-width: 720px) {
   .ap-app:is([data-step='check'], [data-step='ship']) .ap-board-head {
@@ -862,18 +881,6 @@
   background: #f0f5ff;
 }
 
-.dc-master-dialog[open] {
-  display: flex;
-  flex-direction: column;
-}
-.dc-master-dialog .dc-dialog-head,
-.dc-master-dialog .dc-dialog-footer {
-  flex-shrink: 0;
-}
-.dc-master-dialog .dc-dialog-body {
-  min-height: 0;
-  overflow: auto;
-}
 .dc-master-dialog .dc-table-scroll {
   max-height: min(420px, calc(100vh - 340px));
   overflow: auto;

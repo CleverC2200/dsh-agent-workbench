@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { assertPageRequestSize } from './order-report-request-limit.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import type { SessionId } from '@deepseek-ai/dsh-session';
 import type {} from '@deepseek-ai/dsh-api-session-controller';
@@ -99,6 +100,7 @@ export interface PageBusinessGrant {
   readonly referenceScope: string;
   readonly access: unknown;
   /** Optional dedicated DMS grant, provided only by the authorized branch adapter. */
+  branchStorage?(input: any, signal: AbortSignal): Promise<unknown>;
   branchDms?(input: any, signal: AbortSignal): Promise<unknown>;
   readSql?(input: any, signal: AbortSignal): Promise<unknown>;
   /** Read-only model interpretation, executed under this page's business identity. */
@@ -366,7 +368,7 @@ export class PageRuntime {
   private async fetchOperation(request: Request): Promise<Response> {
     try {
       const input = await request.json();
-      if (JSON.stringify(input).length > 500000) throw Error('REQUEST_TOO_LARGE');
+      assertPageRequestSize(input, () => this.assert(input.owner));
       if (input.operation === 'open')
         return Response.json(
           await this.open(input.pageId, input.sessionId, input.resourceId, request.signal),
@@ -390,6 +392,10 @@ export class PageRuntime {
           if (!owner.grant.insight || !owner.grant.allowsEffect('view'))
             throw Error('METHOD_NOT_ALLOWED');
           value = await owner.grant.insight(input.parameters, signal);
+          break;
+        case 'branch-storage':
+          if (!owner.grant.branchStorage) throw Error('METHOD_NOT_ALLOWED');
+          value = await owner.grant.branchStorage(input.parameters, signal);
           break;
         case 'branch-dms':
           if (!owner.grant.branchDms) throw Error('METHOD_NOT_ALLOWED');

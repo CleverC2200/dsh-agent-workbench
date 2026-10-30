@@ -87,36 +87,58 @@ function aggregate(rows, column) {
   };
 }
 
-export function sourceCheckRows(checks, rawProducts, pull, categories = []) {
+export function sourceCheckRows(checks, rawProducts, pull) {
   const labels = new Map();
   for (const row of rawProducts ?? []) {
-    const code = text(row.material_code),
-      label = text(row.responsible_item);
-    if (!code || !label) continue;
+    const code = text(row.material_code) || text(row['产品编码']),
+      label = text(row.sub_category) || text(row['大类']) || text(row.responsible_item);
+    if (!code) continue;
     const current = labels.get(code) ?? new Set();
     current.add(label);
     labels.set(code, current);
   }
+  const excluded = [];
+  const classify = (rows, month, source) =>
+    rows.flatMap((row) => {
+      const code = text(row['产品编码']);
+      const candidates = labels.get(code);
+      if (!candidates || candidates.size !== 1 || candidates.has('')) {
+        excluded.push({
+          ...row,
+          月份: month,
+          来源: source,
+          原因: candidates ? '当前产品池大类不唯一' : '不在当前产品池',
+        });
+        return [];
+      }
+      const category = [...candidates][0];
+      return [
+        {
+          ...row,
+          大类: category,
+          源分类: category,
+          ...(source === 'DMS'
+            ? {
+                月初数量: row['源月初数量'] ?? row['月初数量'],
+                纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
+              }
+            : {}),
+        },
+      ];
+    });
   const periods = (checks?.periods ?? []).map((period) => ({
     ...period,
     historyError: period.history.error,
     reportError: period.report.error,
-    history: period.history.rows,
-    report: period.report.rows.map((row) => {
-      const matches = labels.get(row['产品编码']);
-      return { ...row, 源分类: matches?.size === 1 ? [...matches][0] : '' };
-    }),
+    history: classify(period.history.rows, period.month, 'BI'),
+    report: classify(period.report.rows, period.month, 'DMS'),
   }));
   const classes = [
-    ...new Set([
-      ...categories,
-      ...periods
-        .flatMap((period) => [
-          ...period.history.map((row) => row['大类']),
-          ...period.report.map((row) => row['源分类']),
-        ])
-        .filter(Boolean),
-    ]),
+    ...new Set(
+      [...labels.values()]
+        .filter((labels) => labels.size === 1 && !labels.has(''))
+        .flatMap((labels) => [...labels]),
+    ),
   ];
   const column = pull === 'monthly' ? '月初数量' : '纠偏数量';
   const rows = periods.flatMap((period) =>
@@ -125,27 +147,21 @@ export function sourceCheckRows(checks, rawProducts, pull, categories = []) {
       const report = period.report.filter((row) => row['源分类'] === category);
       const actual = aggregate(history, '数量');
       const plan = aggregate(report, column);
-      const unclassified = period.report.filter((row) => !row['源分类']).length;
-      const missingKeys = [...history, ...report].filter(
-        (row) => !row['基地'] || !row['产品编码'],
-      ).length;
-      const missingHistoryClass = period.history.filter((row) => !row['大类']).length;
+      const missingKeys = [...history, ...report].filter((row) => !row['产品编码']).length;
       const issues = [
         ...(period.historyError
           ? [`BI读取失败：${period.historyError}`]
           : !history.length
-            ? ['本月BI无同名分类记录']
+            ? ['本月BI无当前产品池分类记录']
             : []),
         ...(period.reportError
           ? [`DMS读取失败：${period.reportError}`]
           : !report.length
-            ? ['本月DMS无同名源标签记录']
+            ? ['本月DMS无当前产品池分类记录']
             : []),
         ...(actual.missing ? [`BI缺数量${actual.missing}条，显示已知小计`] : []),
         ...(plan.missing ? [`DMS缺数量${plan.missing}条，显示已知小计`] : []),
-        ...(missingKeys ? [`缺基地或SKU ${missingKeys}条`] : []),
-        ...(unclassified ? [`DMS ${unclassified}条未唯一匹配源产品标签`] : []),
-        ...(missingHistoryClass ? [`BI ${missingHistoryClass}条缺源分类`] : []),
+        ...(missingKeys ? [`缺SKU ${missingKeys}条`] : []),
         ...(plan.quantity === 0 ? ['DMS计划为0，比值不可用'] : []),
       ];
       const ratio =
@@ -155,5 +171,11 @@ export function sourceCheckRows(checks, rawProducts, pull, categories = []) {
       return { month: period.month, category, actual, plan, ratio, issues };
     }),
   );
-  return { rows, categories: classes, months: periods.map((period) => period.month), column };
+  return {
+    rows,
+    excluded,
+    categories: classes,
+    months: periods.map((period) => period.month),
+    column,
+  };
 }
