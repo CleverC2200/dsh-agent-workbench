@@ -514,6 +514,35 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         '下一页',
       ),
     );
+    const undoShare = (rowId) => {
+      const shares = (draft.adjustments?.shares ?? []).filter((item) => item.rowId !== rowId);
+      const candidate = buildMpsWorkflow(
+        { ...draft, adjustments: { ...draft.adjustments, shares } },
+        relations,
+        shipmentSnapshot,
+      );
+      const introduced = (candidate.adjustmentIssues ?? []).filter(
+        (issue) => !(result.adjustmentIssues ?? []).includes(issue),
+      );
+      if (introduced.length) {
+        setShareError(`此次撤销会破坏组内占比对平，请先撤销关联调整。${introduced.join('；')}`);
+        return;
+      }
+      onUndoShareAdjustment?.({ rowId });
+      setShareError('');
+    };
+    const shareIdentity = (rowId) => {
+      try {
+        const parts = JSON.parse(rowId);
+        return Array.isArray(parts) &&
+          parts.length === 4 &&
+          parts.every((item) => typeof item === 'string')
+          ? [parts[1], parts[3], parts[0]].join(' ')
+          : rowId;
+      } catch {
+        return rowId;
+      }
+    };
     const shareControls = (row) => {
       const saved = draft.adjustments?.shares?.find((item) => item.rowId === row.id);
       const editing = editingShare?.rowId === row.id;
@@ -635,7 +664,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                     {
                       disabled: !onUndoShareAdjustment,
                       'aria-label': `${row.base} ${row.code} ${row.month} 撤销占比调整`,
-                      onClick: () => onUndoShareAdjustment?.({ rowId: row.id }),
+                      onClick: () => undoShare(row.id),
                     },
                     '撤销调整',
                   )
@@ -983,6 +1012,44 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               { className: 'wf-note' },
               'M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按去年同月全国组内销量选择；其未调整基地承接组内剩余占比。',
             ),
+            shareError && !editingShare
+              ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
+              : null,
+            result.adjustmentIssues?.length
+              ? h(
+                  'p',
+                  { role: 'status', className: 'wf-note wf-unavailable' },
+                  `以下调整未生效：${result.adjustmentIssues.join('；')}。可从当前占比调整中撤销失效记录。`,
+                )
+              : null,
+            card(
+              '当前占比调整',
+              table(
+                '当前占比调整',
+                ['对象', '系统值', '输入占比', '有效占比', '原因', '时间', '状态', '操作'],
+                (draft.adjustments?.shares ?? []).map((item) => {
+                  const row = result.rows.find((row) => row.id === item.rowId);
+                  return [
+                    shareIdentity(item.rowId),
+                    numberText(row?.systemShare, true),
+                    numberText(item.share, true),
+                    numberText(row?.share, true),
+                    item.reason,
+                    item.at,
+                    row ? '当前范围，核对有效值与未生效原因' : '不在当前产品范围，未生效',
+                    h(
+                      'button',
+                      {
+                        disabled: !onUndoShareAdjustment,
+                        'aria-label': `撤销当前占比调整 ${shareIdentity(item.rowId)}`,
+                        onClick: () => undoShare(item.rowId),
+                      },
+                      '撤销',
+                    ),
+                  ];
+                }),
+              ),
+            ),
             card(
               '两路三层占比',
               table(
@@ -1315,7 +1382,11 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                       row.month,
                       row.base,
                       ...resourceValues(row).map((value, index) =>
-                        index === 7 ? numberText(value, true) : display(value),
+                        index === 7
+                          ? numberText(value, true)
+                          : index >= 3 && index <= 9
+                            ? numberText(value, false, 6)
+                            : display(value),
                       ),
                       row.missing.join('、') || '已评估',
                     ]),
