@@ -43,6 +43,9 @@ export const changesSql = [
     ([kind, field]) => `SELECT '${kind}' AS kind,region,province,
   CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_numerator) END AS numerator,
   CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_denominator) END AS denominator,
+  SUM(CASE WHEN invalid_${field}=0 THEN ${field}_numerator ELSE 0 END) AS sample_numerator,
+  SUM(CASE WHEN invalid_${field}=0 THEN ${field}_denominator ELSE 0 END) AS sample_denominator,
+  SUM(CASE WHEN invalid_${field}=0 THEN 1 ELSE 0 END) AS sample_records,
   COUNT(*) AS records,SUM(invalid_${field}) AS invalid
   FROM (${events}) order_events GROUP BY region,province`,
   )
@@ -131,6 +134,9 @@ const matchedProducts = `SELECT m.base,m.category,m.item,m.sku,m.name,m.demand,m
 export const ordersSql = `SELECT m.base,m.category,m.item,m.sku,MAX(m.name) AS name,
   SUM(CASE WHEN m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN m.demand END) AS demand,
   SUM(CASE WHEN m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN GREATEST(m.demand-LEAST(m.sent,m.demand),0) END) AS shortage,
+  SUM(CASE WHEN m.invalid=0 AND m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN m.demand ELSE 0 END) AS sample_demand,
+  SUM(CASE WHEN m.invalid=0 AND m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN GREATEST(m.demand-LEAST(m.sent,m.demand),0) ELSE 0 END) AS sample_shortage,
+  SUM(CASE WHEN m.invalid=0 AND m.shipped>=:gea_p1 AND m.shipped<:gea_p2 THEN 1 ELSE 0 END) AS sample_records,
   COUNT(*) AS records,SUM(m.invalid)+SUM(CASE WHEN m.shipped IS NULL THEN 1 ELSE 0 END) AS invalid,
   SUM(CASE WHEN m.shipped IS NULL THEN 1 ELSE 0 END) AS missing_ship_date,
   SUM(CASE WHEN m.shipped IS NULL AND m.order_linked=0 THEN 1 ELSE 0 END) AS unmatched_order,

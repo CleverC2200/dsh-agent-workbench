@@ -1,4 +1,8 @@
-import { computeWorkbenchMetrics, workbenchMetricMissingReason } from './metric-model.mjs';
+import {
+  computeWorkbenchMetrics,
+  workbenchMetricMissingReason,
+  metricComparisonNote,
+} from './metric-model.mjs';
 import { directorNames } from './live-presentation.mjs';
 
 export function workbenchCellMissingReason(
@@ -90,7 +94,10 @@ export function workbenchCellMissingReason(
     const compared = other
       ? computeWorkbenchMetrics(other, makeFilter(comparedKey), formulaOptions)
       : null;
+    if (compared?.[name]?.value != null && (current?.[name]?.sample || compared?.[name]?.sample))
+      return metricComparisonNote(current, compared, name);
     return `比较期缺少可计算指标：${compared?.[name]?.missingReason ?? workbenchMetricMissingReason(other, name, filter)} 本期有值不代表环比、同比可计算。`;
   }
+  if (current?.[name]?.sample) return current[name].coverageNote;
   return `系统未能生成当前单元格：${name}已有可计算来源，请核对展示映射；未用0掩盖。`;
 }

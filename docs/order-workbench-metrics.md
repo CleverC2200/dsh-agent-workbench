@@ -1,5 +1,9 @@
 # 订单工作台指标口径 / Order workbench metric basis
 
+## 可判定样本展示 / Assessed samples
+
+全量计算条件不齐时，不再清空全部已知结果。作废、改单按逐单有效判定汇总独立样本分子分母；满足率只纳入需求、发货量及实际发货周期均可核验的原单产品组；准交率剔除任一拆单依据不完整的整张原单。卡片标注样本覆盖，六张表及样本环同比以“*”标识并提供悬浮覆盖说明。覆盖分母为当前查询候选记录，不声明已覆盖全部真实发货或到货订单。未知记录不补0，拒权或查询失败不发布样本。样本差不冒充全量同比环比；数据完整的指标及库存、货龄公式保持不变。 / Publish independently assessed samples with explicit candidate coverage, never imputed full-population rates.
+
 本页面采用[订单工作台及订单履约语义](https://klvcodtump.feishu.cn/docx/S7zwdltIaoKfZ0x8oqHcStqQnGg)及其引用的[术语库](https://klvcodtump.feishu.cn/wiki/DfoBw71VNivaOLkHU2mc2OB2nyd)。本次核对主文档 revision 3131；不修改订单履约模块、公共 APS 计算或 GEA 权限。 / This page follows the linked business definitions; fulfillment, shared APS calculations and GEA authorization remain unchanged.
 
 ## 公式与周期 / Formulas and periods

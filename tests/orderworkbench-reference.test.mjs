@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
 import { validHtmlViewState } from '../src/html-view-state.ts';
 import { model, fixturePeriod } from './orderworkbench-data.test.mjs';
+import { metricCalculationVersion } from '../prototypes/inventory-orderworkbench/metric-model.mjs';
 import {
   shippableDaysTarget,
   performanceStyleVersion,
@@ -71,6 +72,7 @@ test('order workbench reference interactions', async () => {
   window.workbenchCellMissingReason = model.workbenchCellMissingReason;
   window.shippableDaysTarget = shippableDaysTarget;
   window.performanceStyleVersion = performanceStyleVersion;
+  window.metricCalculationVersion = metricCalculationVersion;
   window.Date = class extends Date {
     constructor(...args) {
       super(...(args.length ? args : ['2026-09-18T00:00:00Z']));

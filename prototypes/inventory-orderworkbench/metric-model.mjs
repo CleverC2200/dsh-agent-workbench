@@ -1,4 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
+export const metricCalculationVersion = 2;
 export const metricNames = [
   '作废率',
   '改单率',
@@ -126,6 +127,85 @@ export function computeWorkbenchMetrics(
       '；负库存按来源原值汇总，不补0；缺值、负计划、负库存合计或重复粒度不计算',
     '天',
   );
+  // A partial rate has its own proven numerator/denominator; never reinterpret missing rows as zero.
+  const sample = (name, numerator, denominator, known, total, unit) => {
+    if (
+      result[name].value !== null ||
+      !finite(numerator) ||
+      !finite(denominator) ||
+      denominator <= 0 ||
+      numerator < 0 ||
+      numerator > denominator ||
+      !finite(known) ||
+      !finite(total) ||
+      !Number.isSafeInteger(known) ||
+      !Number.isSafeInteger(total) ||
+      known <= 0 ||
+      known >= total
+    )
+      return;
+    const reason = workbenchMetricMissingReason(period, name, filter);
+    result[name].value = (numerator / denominator) * 100;
+    const coverage = (known / total) * 100;
+    result[name].sample = { known, total, unit, coverage, reason };
+    result[name].coverageNote =
+      `可判定样本：${known}/${total}${unit}，候选记录覆盖${coverage.toFixed(1)}%；不是全量指标。${reason}`;
+    result[name].note += '；' + result[name].coverageNote;
+  };
+  for (const [kind, name] of [
+    ['1', '作废率'],
+    ['2', '改单率'],
+  ]) {
+    const selected = changes.filter((row) => String(row.kind) === kind);
+    if (
+      selected.length &&
+      selected.every((row) =>
+        ['sample_numerator', 'sample_denominator', 'sample_records', 'records'].every((key) =>
+          finite(row[key]),
+        ),
+      )
+    )
+      sample(
+        name,
+        sum(selected, 'sample_numerator'),
+        sum(selected, 'sample_denominator'),
+        sum(selected, 'sample_records'),
+        sum(selected, 'records'),
+        '张候选订单',
+      );
+  }
+  if (
+    orders.length &&
+    orders.every((row) =>
+      ['sample_demand', 'sample_shortage', 'sample_records', 'records'].every((key) =>
+        finite(row[key]),
+      ),
+    )
+  ) {
+    const demand = sum(orders, 'sample_demand');
+    sample(
+      '订单满足率',
+      demand - sum(orders, 'sample_shortage'),
+      demand,
+      sum(orders, 'sample_records'),
+      sum(orders, 'records'),
+      '个候选原单产品组',
+    );
+  }
+  const judged = assessed.filter((lines) =>
+    lines.every(
+      (row) =>
+        row.customer && row.order_no && Number(row.invalid) === 0 && [0, 1].includes(row.ontime),
+    ),
+  );
+  sample(
+    '准交率',
+    judged.filter((lines) => lines.every((row) => row.ontime === 1)).length,
+    judged.length,
+    judged.length,
+    assessed.length,
+    '张候选到货订单',
+  );
   for (const [id, names] of [
     ['orders', ['订单满足率']],
     ['ontime', ['准交率']],
@@ -241,7 +321,21 @@ export function metricDelta(current, previous, name) {
     b = metricValue(previous, name);
   return a === null || b === null
     ? '—'
-    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : 'pp'}`;
+    : `${a - b >= 0 ? '+' : ''}${(a - b).toFixed(2)}${name === '周转天数' ? '天' : 'pp'}${current?.[name]?.sample || previous?.[name]?.sample ? '*' : ''}`;
+}
+
+export function metricComparisonNote(current, previous, name) {
+  if (!current?.[name]?.sample && !previous?.[name]?.sample) return '';
+  return `样本差，不代表全量同比或环比。本期：${metricCoverageSummary(current?.[name])}；比较期：${metricCoverageSummary(previous?.[name])}。`;
+}
+
+export function metricCoverageSummary(metric) {
+  const sample = metric?.sample;
+  return sample
+    ? `可判定样本${sample.known}/${sample.total}${sample.unit}，覆盖${sample.coverage.toFixed(1)}%`
+    : metric?.value == null
+      ? '无有效数据'
+      : '完整可判定范围';
 }
 export function reportPeriods(start, end, now = new Date()) {
   const today = new Date(now.getTime() + 8 * 3600000).toISOString().slice(0, 10);
