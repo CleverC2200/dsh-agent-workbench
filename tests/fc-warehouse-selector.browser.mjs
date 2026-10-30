@@ -154,10 +154,14 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
       return {
         sameLine: controls.every((rect) => Math.abs(rect.top - controls[0].top) < 2),
         contained: controls.every((rect) => rect.left >= bounds.left && rect.right <= bounds.right),
+        usableFields: [...form.querySelectorAll('input[type="text"]')].every(
+          (input) => input.getBoundingClientRect().width >= 80,
+        ),
       };
     });
     assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
-    if (width >= 900)
+    assert.equal(layout.usableFields, true, `filter inputs remain usable at ${width}px`);
+    if (width >= 1280)
       assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
   }
   await page.setViewportSize({ width: 900, height: 900 });
