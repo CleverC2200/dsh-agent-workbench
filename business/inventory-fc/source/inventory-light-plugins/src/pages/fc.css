@@ -4934,3 +4934,87 @@ input:focus-visible,
   padding-bottom: 4px;
   background: var(--ui-surface);
 }
+
+.fc-data-status {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color, #e5e6eb);
+  border-radius: 8px;
+  background: var(--surface-color, #fff);
+  color: var(--text-secondary, #4e5969);
+  font-size: 13px;
+}
+.fc-data-status p {
+  margin: 4px 0 0;
+}
+
+/* Confirmation identifiers and quantity remain visible while browsing the wide list. */
+.replenishment-table > thead > tr > [data-column='sku'],
+.replenishment-table > tbody > tr > [data-column='sku'] {
+  position: sticky;
+  left: 0;
+  width: 100px;
+  min-width: 100px;
+  max-width: 100px;
+  z-index: 3;
+  background: var(--surface);
+}
+.replenishment-table > thead > tr > [data-column='material_name'],
+.replenishment-table > tbody > tr > [data-column='material_name'] {
+  position: sticky;
+  left: 100px;
+  width: 200px;
+  min-width: 200px;
+  max-width: 200px;
+  z-index: 3;
+  background: var(--surface);
+}
+.replenishment-table > thead > tr > [data-column='missing_actualQty'],
+.replenishment-table > tbody > tr > [data-column='missing_actualQty'] {
+  position: sticky;
+  right: 0;
+  min-width: 120px;
+  z-index: 3;
+  background: var(--surface);
+  box-shadow: -2px 0 4px #20273308;
+}
+.replenishment-table > thead > tr > [data-column='sku'],
+.replenishment-table > thead > tr > [data-column='material_name'],
+.replenishment-table > thead > tr > [data-column='missing_actualQty'] {
+  z-index: 8;
+  background: var(--ui-soft);
+}
+.table-scroll:has(> .replenishment-table) {
+  container-type: inline-size;
+}
+.replenishment-table > tbody > .fc-expanded-row > td {
+  overflow: visible;
+  padding: 12px;
+}
+.fc-inline-resources {
+  position: sticky;
+  left: 12px;
+  width: min(1080px, calc(100cqw - 24px));
+  max-width: calc(100vw - 48px);
+  white-space: normal;
+}
+.fc-inline-resources .table-scroll {
+  overflow-x: auto;
+}
+.fc-inline-resources .data-table {
+  width: max-content;
+  min-width: 100%;
+}
+.sku-link:focus-visible {
+  outline: 2px solid #df1732;
+  outline-offset: 2px;
+}
+
+.panel-actions > .fc-quick-checkbox {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 36px;
+  gap: 4px;
+  white-space: nowrap;
+}

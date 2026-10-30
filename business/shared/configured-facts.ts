@@ -1,9 +1,15 @@
+export { readBaseInventoryMetrics } from './base-inventory-metrics';
 import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
+import { readConfiguredTargetScope } from './configured-target-scope';
 
-export type FactReadContext = { key: string; snapshotDate: string; configVersion: string };
+export type FactReadContext = {
+  key: string;
+  snapshotDate: string;
+  configVersion: string;
+};
 export type FactInput = {
   asOf: string;
   cycleDays?: number;
@@ -14,6 +20,14 @@ export type FactInput = {
   filters?: Record<string, string>;
   customer?: string;
   readContext?: FactReadContext;
+  replenishment?: {
+    neededOnly: boolean;
+    businessOnly: boolean;
+    positiveActualKeys: string[];
+    positivePlanKeys?: string[];
+    zeroPlanKeys?: string[];
+    businessPlanKeys?: string[];
+  };
 };
 const fail = (code: string, message: string): never => {
   throw Object.assign(Error(message), { code });
@@ -84,6 +98,7 @@ export async function readConfiguredFacts(
     detailsOnly?: boolean;
     snapshotReads?: Map<string, Promise<any>>;
     scopeReads?: Map<string, Promise<any>>;
+    freshAfter?: number;
   } = {},
 ): Promise<any> {
   const config = agentSqlConfig(fallback);
@@ -105,10 +120,18 @@ export async function readConfiguredFacts(
       : configuredView;
   if (!view) return fail('VIEW_NOT_CONFIGURED', '未配置的数据视图');
   if (!view.queryId)
-    return { status: 'unavailable', rows: [], total: null, viewId, description: view.description };
+    return {
+      status: 'unavailable',
+      rows: [],
+      total: null,
+      viewId,
+      description: view.description,
+    };
   dateOnly(input.asOf);
   if (view.requiresCustomer && !input.customer?.trim())
     return { status: 'select_customer', rows: [], total: null, viewId };
+  if (view.requiresSku && !input.filters?.sku?.trim())
+    return { status: 'select_sku', rows: [], total: null, viewId };
   const page = input.page ?? 1,
     pageSize = input.pageSize ?? 10;
   if (
@@ -124,7 +147,9 @@ export async function readConfiguredFacts(
       value.length > 100
     )
       return fail('INVALID_FILTER', '筛选字段或值无效');
-  const client = createAgentQueries(config, options.execute),
+  const client = createAgentQueries(config, options.execute, {
+      freshAfter: options.freshAfter,
+    }),
     q = config.queries[view.queryId];
   // Display reads fetch only the requested page; full-scope totals and explicit
   // export/submission reads retain their independent contracts.
@@ -155,12 +180,22 @@ export async function readConfiguredFacts(
     return result;
   };
   const month = input.asOf.slice(0, 7) + '-01';
+  const targetScope = Object.values<{ name: string }>(q.parameterSpec).some(
+    (spec) => spec.name === 'inventory_version',
+  )
+    ? await readConfiguredTargetScope(client, input.asOf, options.signal)
+    : null;
+  if (targetScope) {
+    version = targetScope.configVersion;
+    versionSeen = true;
+  }
   const contextKey = JSON.stringify([
     config.agentId,
     viewId,
     input.asOf,
     input.customer?.trim() ?? '',
     input.cycleDays,
+    input.replenishment,
     input.fcCycleRules,
     input.fcCycleWarehouse,
     Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
@@ -233,7 +268,9 @@ export async function readConfiguredFacts(
     if (name === 'shipment_end_exclusive') value = nextDay(input.asOf);
     if (name === 'end_exclusive')
       value = spec.format === 'YYYYMM' ? nextMonth(month) : nextDay(input.asOf);
-    if (name === 'month') value = month;
+    if (name === 'month') value = targetScope?.targetMonth ?? month;
+    if (name === 'stock_month') value = month;
+    if (name === 'inventory_version') value = targetScope?.inventoryVersion;
     if (name === 'next_month') value = nextMonth(month);
     if (name === 'days_in_month')
       value = new Date(
@@ -256,6 +293,25 @@ export async function readConfiguredFacts(
     if (name === 'cycle_days' && input.cycleDays !== undefined) value = input.cycleDays;
     if (name === 'page_size') value = readSize;
     if (name === 'offset') value = readOffset;
+    if (name === 'business_plan_months')
+      value = [month, nextMonth(month)].map((day) => day.slice(0, 7).replace('-', ''));
+    if (name === 'list_mode' && input.replenishment) value = 'all';
+    if (name === 'needed_only') value = input.replenishment?.neededOnly ?? false;
+    if (name === 'business_only') value = input.replenishment?.businessOnly ?? false;
+    if (name === 'positive_actual_keys')
+      value = input.replenishment?.positiveActualKeys.length
+        ? input.replenishment.positiveActualKeys
+        : [''];
+    if (name === 'positive_plan_keys')
+      value = input.replenishment?.positivePlanKeys?.length
+        ? input.replenishment.positivePlanKeys
+        : [''];
+    if (name === 'zero_plan_keys')
+      value = input.replenishment?.zeroPlanKeys?.length ? input.replenishment.zeroPlanKeys : [''];
+    if (name === 'business_plan_keys')
+      value = input.replenishment?.businessPlanKeys?.length
+        ? input.replenishment.businessPlanKeys
+        : [''];
     if (spec.format === 'YYYYMM' && typeof value === 'string')
       value = value.slice(0, 7).replace('-', '');
     if (spec.format === 'YYYYMMDD' && typeof value === 'string') value = value.replaceAll('-', '');
@@ -266,6 +322,8 @@ export async function readConfiguredFacts(
     const value = raw.trim();
     if (!value) continue;
     if (name === 'search') values.search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
+    else if (name === 'warehouse_search' && 'warehouse_search_pattern' in values)
+      values.warehouse_search_pattern = '%' + value.replace(/[\\%_]/g, '\\$&') + '%';
     else if (name === 'base') {
       values.bases_enabled = true;
       values.bases = value
@@ -278,6 +336,7 @@ export async function readConfiguredFacts(
     } else if (name in values) values[name] = value;
     else return fail('INVALID_FILTER', '该查询不支持此筛选：' + name);
   }
+  if (input.replenishment && values.list_mode === 'business') values.list_mode = 'all';
   if (view.requiresCustomer || (view.optionalCustomer && input.customer?.trim())) {
     values.customer = input.customer!.trim();
     if ('customer_mode' in values) values.customer_mode = 'equal';
@@ -295,7 +354,9 @@ export async function readConfiguredFacts(
     config.queries[view.summaryId].resultColumns.includes('row_count')
   ) {
     const aggregate = await read(view.summaryId, subset(view.summaryId));
-    const total = totalOf({ rows: aggregate.rows.map((row: any) => ({ total: row.row_count })) });
+    const total = totalOf({
+      rows: aggregate.rows.map((row: any) => ({ total: row.row_count })),
+    });
     return {
       status: total ? 'available' : 'empty',
       rows: [],
@@ -303,7 +364,7 @@ export async function readConfiguredFacts(
       page,
       pageSize,
       viewId,
-      summary: total ? aggregate.rows[0] : null,
+      summary: total || view.preserveEmptySummary ? aggregate.rows[0] : null,
       summaryError: null,
       snapshotDate,
       readContext,
@@ -356,7 +417,11 @@ export async function readConfiguredFacts(
         signal: options.signal,
         requiredColumns: config.queries[view.productionQueryId].resultColumns,
       });
-      return { rows: result.rows, error: null, configVersion: result.configVersion };
+      return {
+        rows: result.rows,
+        error: null,
+        configVersion: result.configVersion,
+      };
     } catch (error: any) {
       if (options.signal?.aborted) throw error;
       return { rows: [], error: errorInfo(error), configVersion: undefined };
@@ -364,21 +429,23 @@ export async function readConfiguredFacts(
   };
   if (!options.summaryOnly && q.pagination?.atomicQuery) {
     const id = q.pagination.atomicQuery;
-    const [result, { summary, summaryError }, production] = await Promise.all([
+    const [result, { summary, summaryError }, productionRead] = await Promise.all([
       read(id, subset(id)),
       readSummary(),
       readProduction(),
     ]);
-    if (
-      !production.error &&
-      production.configVersion &&
-      production.configVersion !== result.configVersion
-    ) {
-      production.rows = [];
-      production.error = errorInfo(
-        Object.assign(Error('排程配置版本发生变化'), { code: 'QUERY_CONFIG_CHANGED' }),
-      );
-    }
+    const production =
+      !productionRead.error &&
+      productionRead.configVersion &&
+      productionRead.configVersion !== result.configVersion
+        ? {
+            rows: [],
+            error: errorInfo(
+              Object.assign(Error('排程配置版本发生变化'), { code: 'QUERY_CONFIG_CHANGED' }),
+            ),
+            configVersion: undefined,
+          }
+        : productionRead;
     const block = unpackAtomicPage(result, readOffset / readSize + 1, readSize);
     const total = block.total;
     const rows = block.rows.slice(
@@ -430,7 +497,11 @@ export async function readConfiguredFacts(
   const [result, { summary, summaryError }] =
     total === 0
       ? [
-          { rows: [], source: before.source, authorization: before.authorization },
+          {
+            rows: [],
+            source: before.source,
+            authorization: before.authorization,
+          },
           { summary: null, summaryError: null },
         ]
       : await Promise.all([

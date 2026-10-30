@@ -13,12 +13,16 @@ export const rowKey = (row: FcRow) => JSON.stringify([row.warehouse_code, row.sk
 export const planKey = (plan: ImportedPlan) => JSON.stringify([plan.warehouseCode, plan.sku]);
 export const quantity = (value: unknown) => knownNumber(value) ?? 0;
 
-async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal) {
+async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal): Promise<FcRow[]> {
   const config = agentSqlConfig(scope.config);
   const queryId = 'transfer_plan.template';
   const query = config.queries[queryId];
   const filters = scope.input.filters ?? {};
-  if (Object.keys(filters).some((key) => !['warehouse_code', 'sku'].includes(key)))
+  if (
+    Object.keys(filters).some(
+      (key) => !['warehouse_code', 'warehouse_search', 'sku', 'search'].includes(key),
+    )
+  )
     throw Error('模板筛选范围无效');
   const month = scope.input.asOf.slice(0, 7) + '-01';
   const values: Record<string, unknown> = Object.fromEntries(
@@ -26,8 +30,21 @@ async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal) {
       const spec = raw as { name: string };
       const name = spec.name;
       if (name === 'month') return [name, month];
+      if (name === 'next_month')
+        return [
+          name,
+          new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1))
+            .toISOString()
+            .slice(0, 10),
+        ];
       if (name === 'page_size') return [name, 200];
       if (name === 'offset') return [name, 0];
+      if (name === 'search_pattern' || name === 'warehouse_search_pattern') {
+        const search = (
+          name === 'search_pattern' ? filters.search : filters.warehouse_search
+        )?.trim();
+        return [name, search ? '%' + search.replace(/[\\%_]/g, '\\$&') + '%' : null];
+      }
       for (const field of ['warehouse_code', 'sku']) {
         const value = filters[field]?.trim();
         if (name === field) return [name, value || null];
@@ -45,13 +62,13 @@ async function readFcPlanRows(scope: FcReadScope, signal: AbortSignal) {
       atomicPages: true,
     });
   try {
-    return (await read()).rows;
+    return z.array(rowSchema).parse((await read()).rows);
   } catch (error) {
     signal.throwIfAborted();
     // A cached prefix from an older source count cannot be mixed into an export.
     // Restart once with a fresh cohort; permissions/config/columns/cancellation still fail closed.
     if ((error as { code?: string }).code !== 'SOURCE_CHANGED') throw error;
-    return (await read(Date.now())).rows;
+    return z.array(rowSchema).parse((await read(Date.now())).rows);
   }
 }
 
@@ -60,15 +77,46 @@ export async function readFcActionRows(
   scope: FcReadScope,
   signal: AbortSignal,
   onProgress?: (loaded: number, total: number) => void,
+  freshAfter?: number,
 ) {
   if (scope.viewId === 'plan') return readFcPlanRows(scope, signal);
+  return (await readFcActionFacts(scope, signal, onProgress, freshAfter)).rows;
+}
+
+/** Retain the verified snapshot/config identity when projecting manual plans across pages. */
+export async function readFcActionFacts(
+  scope: FcReadScope,
+  signal: AbortSignal,
+  onProgress?: (loaded: number, total: number) => void,
+  freshAfter?: number,
+) {
+  try {
+    return await readFcActionAttempt(scope, signal, onProgress, freshAfter);
+  } catch (error) {
+    signal.throwIfAborted();
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      !['SOURCE_CHANGED', 'RESULT_INCOMPLETE'].includes(String(error.code))
+    )
+      throw error;
+    return readFcActionAttempt(scope, signal, onProgress, Date.now());
+  }
+}
+
+async function readFcActionAttempt(
+  scope: FcReadScope,
+  signal: AbortSignal,
+  onProgress?: (loaded: number, total: number) => void,
+  freshAfter?: number,
+) {
   const pageSize = 200;
   const read = (page: number, readContext?: FactInput['readContext']) =>
     readConfiguredFacts(
       scope.config,
       scope.viewId,
       { ...scope.input, page, pageSize, readContext },
-      { signal, detailsOnly: true },
+      { signal, detailsOnly: true, freshAfter },
     );
   const first = await read(1);
   if (!['available', 'empty'].includes(first.status) || first.total == null)
@@ -84,7 +132,9 @@ export async function readFcActionRows(
       result.total !== total ||
       result.rows.length !== Math.min(pageSize, total - (page - 1) * pageSize)
     )
-      throw Error('读取期间数据或配置已变化，请重新操作');
+      throw Object.assign(Error('读取期间数据或配置已变化，请重新操作'), {
+        code: 'SOURCE_CHANGED',
+      });
     signal.throwIfAborted();
     rows.push(...result.rows.map((row: unknown) => rowSchema.parse(row)));
     onProgress?.(rows.length, total);
@@ -104,7 +154,7 @@ export async function readFcActionRows(
             scope.config,
             scope.viewId,
             { ...scope.input, page: number, pageSize, readContext: first.readContext },
-            { signal: combined, detailsOnly: true },
+            { signal: combined, detailsOnly: true, freshAfter },
           ),
         ),
       );
@@ -115,7 +165,7 @@ export async function readFcActionRows(
     throw error;
   }
   signal.throwIfAborted();
-  return rows;
+  return { ...first, rows };
 }
 
 export function validateFcImport(rows: Record<string, string | number>[], source: FcRow[]) {
@@ -132,21 +182,6 @@ export function validateFcImport(rows: Record<string, string | number>[], source
         field: '分仓/SKU',
         message: '不在当前有权限的分仓计划范围内，请使用下载的模板',
       });
-      return;
-    }
-    const modern = '仓库编码' in row || '确认出货计划量' in row;
-    const quantityFields = modern
-      ? ['确认出货计划量', '确认调拨计划量']
-      : ['本月出货计划', '本月调拨计划'];
-    const missing = quantityFields.filter((field) => String(row[field] ?? '').trim() === '');
-    if (missing.length) {
-      errors.push(
-        ...missing.map((field) => ({
-          row: index + 2,
-          field,
-          message: '请输入明确数量；零计划填写0，空白表示未提供，不能当作0。',
-        })),
-      );
       return;
     }
     const group = byWarehouse.get(warehouse) ?? {
@@ -213,13 +248,10 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
     (remainingDays > 0 && daily === null) || (forecastDays > 0 && nextDaily === null)
       ? null
       : Math.ceil(((daily ?? 0) * remainingDays + (nextDaily ?? 0) * forecastDays) / 30);
-  const available = known(row.available_qty),
+  const available = knownNumber(row.available_qty),
     transfer = known(row.open_transfer_reported_qty);
-  const remainingOrders = known(
-    Object.hasOwn(row, 'calculation_order_remaining')
-      ? row.calculation_order_remaining
-      : row.current_order_remaining,
-  );
+  // Incoming base orders are supply, never branch outbound commitments.
+  const remainingOrders = known(row.calculation_order_remaining);
   const net = available === null || remainingOrders === null ? null : available - remainingOrders;
   const cycle = known(row.cycle_days) ?? cycleDays;
   const target = daily === null ? null : daily * (cycle + 3);
@@ -230,17 +262,22 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
       ? null
       : Math.ceil(Math.max(0, Math.max(gap, targetGap) - transfer));
   const shipped = known(row.month_ship_positive),
-    inventory = known(row.inventory_qty);
+    inventory = knownNumber(row.inventory_qty);
   const remaining =
     outbound === 0
       ? 0
       : outbound === null || shipped === null
         ? null
         : Math.max(0, outbound - shipped);
-  const source = (period: string) =>
-    warehousePlans.some((plan) => plan.month === period)
-      ? '人工导入试算（整月覆盖）'
-      : '分仓同步表';
+  const source = (period: string) => {
+    if (warehousePlans.some((plan) => plan.month === period))
+      return warehousePlans.some((plan) => plan.month === period && plan.sku === row.sku)
+        ? '人工导入'
+        : '计划未就绪';
+    return String(
+      (period === month ? row.period_current_source : row.period_next_source) ?? '分仓同步表',
+    );
+  };
   return {
     ...row,
     month_out_plan: outbound,
@@ -268,6 +305,12 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
       forecast === null || available === null
         ? null
         : Math.max(0, (cycle + 3) * forecast - available),
+    current_remaining_transfer_qty:
+      monthTransfer === 0
+        ? 0
+        : monthTransfer === null || known(row.transferred_qty) === null
+          ? null
+          : Math.max(0, monthTransfer - (known(row.transferred_qty) ?? 0)),
     expected_month_end_qty:
       available === null || monthTransfer === null || outbound === null
         ? null
@@ -277,7 +320,22 @@ export function applyFcPlan(row: FcRow, plans: ImportedPlan[], asOf: string, cyc
     cycle_days: cycle,
     safety_days: cycle + 3,
     plan_calculable: Number(outbound !== null),
-    calculation_status: recommended === null ? '试算要素不完整，待核实' : '人工导入试算',
+    calculation_status: [
+      outbound === null ? '本月出货计划' : '',
+      available === null ? '可用库存' : '',
+      remainingOrders === null ? '备单中需求或已占用量' : '',
+      transfer === null ? '调拨中量' : '',
+    ].filter(Boolean).length
+      ? '缺少：' +
+        [
+          outbound === null ? '本月出货计划' : '',
+          available === null ? '可用库存' : '',
+          remainingOrders === null ? '备单中需求或已占用量' : '',
+          transfer === null ? '调拨中量' : '',
+        ]
+          .filter(Boolean)
+          .join('、')
+      : '已计算',
     period_plan_status:
       outbound === null || nextOutbound === null || monthTransfer === null || nextTransfer === null
         ? '计划不完整'

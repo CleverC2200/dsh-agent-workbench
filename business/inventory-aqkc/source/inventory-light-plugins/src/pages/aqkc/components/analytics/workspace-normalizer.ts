@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   numeric,
   type InventoryRiskEvidence,
@@ -532,6 +533,16 @@ function normalizePresentation(value: unknown): WorkspacePresentation {
   return 'chart';
 }
 
+const dailyDemandCoverage = z
+  .object({
+    known: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    complete: z.boolean(),
+  })
+  .refine(
+    (value) => value.known <= value.total && value.complete === (value.known === value.total),
+  );
+
 function normalizeInventoryRiskEvidence(value: unknown): InventoryRiskEvidence | undefined {
   if (
     !isRecord(value) ||
@@ -542,6 +553,7 @@ function normalizeInventoryRiskEvidence(value: unknown): InventoryRiskEvidence |
     return undefined;
   const metrics = value.metrics,
     sources = value.sources;
+  const demandCoverage = dailyDemandCoverage.safeParse(metrics.dailyDemandCoverage);
   const strings = (items: unknown) =>
     Array.isArray(items) ? items.filter((item): item is string => typeof item === 'string') : [];
   const top = Array.isArray(value.top)
@@ -576,6 +588,7 @@ function normalizeInventoryRiskEvidence(value: unknown): InventoryRiskEvidence |
       future14: numeric(metrics.future14),
       fulfillment: numeric(metrics.fulfillment),
       dailyDemand: numeric(metrics.dailyDemand),
+      ...(demandCoverage.success ? { dailyDemandCoverage: demandCoverage.data } : {}),
       last30d: numeric(metrics.last30d),
     },
     sources: {

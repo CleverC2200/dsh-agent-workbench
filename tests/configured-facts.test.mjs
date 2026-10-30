@@ -36,6 +36,8 @@ function source(config, adapt = () => {}) {
       configVersion: 'one',
     };
     if (q.resultColumns.includes('total')) result.rows = [{ total: 1 }];
+    if (call.queryId === 'calendar.target_versions')
+      result.rows = [{ month: '2026-10-01', inventory_version: '纠偏' }];
     if (call.queryId === 'source.stock-date') result.rows = [{ day: '2026-10-14' }];
     if (['source.health-date', 'source.branch-stock-date'].includes(call.queryId))
       result.rows = [{ day: '2026-10-15' }];
@@ -108,6 +110,27 @@ test('FC planned daily demand uses the selected calendar month length, including
   }
 });
 
+test('next-month targets keep the actual current-month inventory snapshot', async () => {
+  for (const agent of ['fc', 'qll']) {
+    const io = source(configs[agent], (call, result) => {
+      if (call.queryId === 'calendar.target_versions')
+        result.rows = [
+          { month: '2026-10-01', inventory_version: '纠偏' },
+          { month: '2026-11-01', inventory_version: '滚动' },
+        ];
+    });
+    await readConfiguredFacts(configs[agent], 'base', { asOf: '2026-10-30' }, io);
+    const reads = io.calls.filter((call) => call.queryId.startsWith('inventory.'));
+    assert.ok(reads.length > 0);
+    for (const read of reads) {
+      assert.equal(read.values.month, '2026-11-01');
+      assert.equal(read.values.inventory_version, '滚动');
+      assert.equal(read.values.stock_month, '2026-10-01');
+      assert.equal(read.values.stock_date, '2026-10-14');
+    }
+  }
+});
+
 test('customer monthly plan binds selected customer and date on every ten-row page', async () => {
   const io = source(configs.dealer, (call, result) => {
     if (call.queryId === 'sales_plan.count') result.rows = [{ total: 25 }];
@@ -159,11 +182,13 @@ test('summary failure leaves the independently validated detail page available, 
 
 test('permission-rejected detail columns are not replaced with null-filled successful rows', async () => {
   const io = source(configs.fc, (call, r) => {
-    if (call.queryId === 'transfer_plan.detail') r.rejectedColumns = ['month_out_plan'];
+    if (call.queryId === configs.fc.sourceViews.views.find((view) => view.id === 'plan').queryId)
+      r.rejectedColumns = ['period_current_out'];
   });
   await assert.rejects(
     readConfiguredFacts(configs.fc, 'plan', input, io),
-    (e) => e.code === 'REQUIRED_COLUMN_UNAVAILABLE' && e.rejectedColumns.includes('month_out_plan'),
+    (e) =>
+      e.code === 'REQUIRED_COLUMN_UNAVAILABLE' && e.rejectedColumns.includes('period_current_out'),
   );
 });
 
@@ -172,7 +197,11 @@ test('changing counts or config version rejects inconsistent pages instead of sh
     const io = source(configs.fc, (call, r, calls) => {
       if (type === 'count' && calls.filter((c) => c.queryId === 'transfer_plan.count').length === 2)
         r.rows = [{ total: 2 }];
-      if (type === 'config' && call.queryId === 'transfer_plan.detail') r.configVersion = 'two';
+      if (
+        type === 'config' &&
+        call.queryId === configs.fc.sourceViews.views.find((view) => view.id === 'plan').queryId
+      )
+        r.configVersion = 'two';
     });
     await assert.rejects(readConfiguredFacts(configs.fc, 'plan', input, io), {
       code: type === 'count' ? 'SOURCE_CHANGED' : 'QUERY_CONFIG_CHANGED',
@@ -300,7 +329,7 @@ test('empty filters verify the count again without reading unnecessary detail or
     assert.deepEqual(result.rows, []);
     assert.deepEqual(
       io.calls.map((c) => c.queryId),
-      ['source.stock-date', 'inventory.count', 'inventory.count'],
+      ['calendar.target_versions', 'source.stock-date', 'inventory.count', 'inventory.count'],
     );
   }
 });
@@ -494,7 +523,7 @@ for (const productionCase of ['ready', 'denied', 'changed'])
     const result = await readConfiguredFacts(
       config,
       'base-resources',
-      { asOf: '2026-10-23' },
+      { asOf: '2026-10-23', filters: { sku: '10000034' } },
       {
         detailsOnly: true,
         execute: async (_request, options) => {
@@ -662,4 +691,79 @@ test('FC aging reads only the displayed page and keeps risk scopes separate', as
     ),
     /denied/,
   );
+});
+
+test('FC warehouse text search is literal contains and independent of exact parent scope', async () => {
+  for (const viewId of ['replenishment', 'plan']) {
+    for (const term of ['长沙', 'a02', 'A%_\\']) {
+      const io = source(configs.fc);
+      await readConfiguredFacts(
+        configs.fc,
+        viewId,
+        { ...input, filters: { warehouse_code: 'A020', warehouse_search: ' ' + term + ' ' } },
+        io,
+      );
+      const calls = io.calls.filter((call) => !call.queryId.startsWith('source.'));
+      assert.ok(calls.length > 0);
+      for (const call of calls) {
+        assert.equal(call.values.warehouse_code, 'A020');
+        assert.equal(call.values.warehouse_code_mode, 'equal');
+        assert.equal(
+          call.values.warehouse_search_pattern,
+          '%' + term.replace(/[\\%_]/g, '\\$&') + '%',
+        );
+      }
+    }
+  }
+});
+
+test('FC warehouse outbound binds inclusive selected day and actual warehouse independently of pickup point', async () => {
+  for (const [asOf, start, end] of [
+    ['2026-10-30', '2026-10-01', '2026-10-31'],
+    ['2024-02-29', '2024-02-01', '2024-03-01'],
+  ]) {
+    const io = source(configs.fc, (_call, result) => {
+      result.rows[0].row_count = 1;
+    });
+    await readConfiguredFacts(
+      configs.fc,
+      'warehouse-outbound',
+      { asOf, filters: { warehouse_code: 'Y204' } },
+      { ...io, summaryOnly: true },
+    );
+    const reads = io.calls.filter((c) => c.queryId === 'warehouse-outbound.summary');
+    assert.equal(reads.length, 1);
+    assert.deepEqual(reads[0].values, {
+      month: start,
+      end_exclusive: end,
+      as_of: asOf,
+      warehouse_code: 'Y204',
+    });
+  }
+});
+
+test('FC plan paging is independent of stock/shipments and binds the next calendar month', async () => {
+  const query = configs.fc.sourceViews.views.find((view) => view.id === 'plan').queryId;
+  for (const [asOf, month, next] of [
+    ['2026-12-31', '2026-12-01', '2027-01-01'],
+    ['2024-02-29', '2024-02-01', '2024-03-01'],
+  ]) {
+    const io = source(configs.fc);
+    await readConfiguredFacts(
+      configs.fc,
+      'plan',
+      { asOf, page: 1, pageSize: 10 },
+      { ...io, detailsOnly: true },
+    );
+    const call = io.calls.find((call) => call.queryId === query);
+    assert.equal(call.values.month, month);
+    assert.equal(call.values.next_month, next);
+    assert.equal(call.values.page_size, 10);
+    assert.ok(io.calls.every((call) => [query, 'transfer_plan.count'].includes(call.queryId)));
+    assert.ok(
+      !/agents_scm_inventory_sku_data_d|agents_scm_cust_deliv_daily_di/.test(
+        configs.fc.queries[query].request.sql,
+      ),
+    );
+  }
 });

@@ -44,3 +44,13 @@ test('full-chain combines only same-snapshot base and branch facts', () => {
   assert.equal(companyAverageAge(base, { ...branch, snapshotDate: '2026-10-25' }), null);
   assert.equal(companyAverageAge(base, { ...branch, summary: { total_qty: 100 } }), null);
 });
+test('accepts source weighted-average plus its matching batch weight without averaging averages', () => {
+  assert.equal(
+    inventoryAverageAge(
+      { weighted_age: 10, age_weight_qty: 90 },
+      { weighted_age: 50, age_weight_qty: 10 },
+    ),
+    14,
+  );
+  assert.equal(inventoryAverageAge({ weighted_age: 0, age_weight_qty: 100 }), 0);
+});

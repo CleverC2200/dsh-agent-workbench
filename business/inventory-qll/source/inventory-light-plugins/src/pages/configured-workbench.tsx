@@ -1,3 +1,4 @@
+import { formatChainValue as show } from '../../../../../shared/full-chain-display';
 import { inventoryAverageAge, companyAverageAge } from '../../../../../shared/inventory-age';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
@@ -18,7 +19,6 @@ import {
   fulfillmentPercent,
   knownNumber,
 } from '../../../../../shared/configured-overview';
-import { formatChainValue as show } from '../../../../../shared/full-chain-display';
 import { updateContext } from '../native/context';
 import styles from './qll/components/full-chain-workbench.module.css';
 import common from '../../../../../shared/restored-workbench.module.css';
@@ -46,7 +46,7 @@ export default function ConfiguredWorkbench() {
   }, [savedTab, tab, setTab]);
   useEffect(() => setDraft(date), [date]);
   const overviewViews = React.useMemo(
-    () => config.overviewViewIds.filter((id) => !['base-shipments', 'orders'].includes(id)),
+    () => config.overviewViewIds.filter((id) => id !== 'orders'),
     [],
   );
   const { parts, errors, busy } = useConfiguredOverview(
@@ -58,14 +58,30 @@ export default function ConfiguredWorkbench() {
     undefined,
     overviewViews,
   );
-  const stock = parts.base?.summary,
-    orders = parts['factory-overview']?.summary;
+  const orders = parts['factory-overview']?.summary;
   const branch = parts['branch-stock']?.summary;
   const customer = parts['channel-overview']?.summary;
   const baseQty = knownNumber(parts.health?.summary?.total_qty),
     branchAvailable = knownNumber(branch?.available_qty);
+  const branchCurrent = knownNumber(branch?.total_qty);
+  const sameInventoryDate =
+    !!parts.health?.snapshotDate &&
+    parts.health.snapshotDate === parts['branch-stock']?.snapshotDate;
   const companyQty =
-    baseQty === null || branchAvailable === null ? null : baseQty + branchAvailable;
+    !sameInventoryDate || baseQty === null || branchCurrent === null
+      ? null
+      : baseQty + branchCurrent;
+  const shipments = parts['base-shipments']?.summary;
+  const baseShipment30 = knownNumber(shipments?.rolling_ship_positive);
+  const baseDaily =
+    knownNumber(shipments?.rolling_missing_qty) === 0 && baseShipment30 !== null
+      ? baseShipment30 / 30
+      : null;
+  const branchDaily = knownNumber(parts['branch-replenishment']?.summary?.rolling_ship_daily);
+  const turnover = (inventory: number | null, daily: number | null) =>
+    inventory !== null && inventory >= 0 && daily !== null && daily > 0 ? inventory / daily : null;
+  const baseTurnover = turnover(baseQty, baseDaily);
+  const branchTurnover = turnover(branchCurrent, branchDaily);
   const workspace: any = {
     scope: channel ? 'all-channel' : 'company',
     customerObservationRisks: [],
@@ -85,11 +101,11 @@ export default function ConfiguredWorkbench() {
     agingDetails: [],
     layerMetrics: {
       base: {
-        turnoverDays: knownNumber(stock?.matched_stock_days),
+        turnoverDays: baseTurnover,
         averageAgeDays: inventoryAverageAge(parts.health?.summary),
       },
       branch: {
-        turnoverDays: knownNumber(parts['branch-replenishment']?.summary?.historical_turnover_days),
+        turnoverDays: branchTurnover,
         averageAgeDays: inventoryAverageAge(branch),
       },
     },
@@ -118,7 +134,7 @@ export default function ConfiguredWorkbench() {
         planCustomerDate: parts['channel-overview']?.snapshotDate,
         unit: '件',
       },
-      turnover: { current: knownNumber(stock?.matched_stock_days), unit: '天' },
+      turnover: { current: baseTurnover, unit: '天' },
       aging: {
         current: companyAverageAge(parts.health, parts['branch-stock']),
         unit: '天',
@@ -129,7 +145,8 @@ export default function ConfiguredWorkbench() {
       orderGap: {
         current: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
         unit: '件',
-        explanation: '当前未备单订单需求；基地与分仓各按独立库存池计算缺货，不使用月累计履约缺货。',
+        explanation:
+          '当前有效未发货完成订单量；包含未备单需求与已备单未发货占用，基地与分仓分池汇总，不使用月累计履约订单替代。',
       },
     },
   };

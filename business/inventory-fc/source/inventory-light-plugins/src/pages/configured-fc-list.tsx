@@ -1,4 +1,15 @@
 import type { FcWarehouse } from './fc-warehouse-directory';
+import { PlanningTable } from './fc/components/planning-settings';
+import { projectFcPlannedRows } from './fc-planned-page';
+import {
+  fcReplenishmentDisplay,
+  fcAgingDisplay,
+  fcPlanDisplay,
+  fcPlanStatus,
+} from './fc-list-presentation';
+import { FcBatchDetails } from './fc-batch-details';
+import { FcTransferDetails } from './fc-transfer-details';
+import { originalFcView } from '../../../../../shared/original-business-views';
 import { mergeFcPlans } from '../../../../../shared/fc-plan-merge';
 import { fcSubmissionIdentity } from '../../../../../shared/fc-submission-identity';
 import { fcSubmissionProvenance, type FcStoredVersions } from '../../../../../shared/fc-provenance';
@@ -6,7 +17,6 @@ import { persistAndSubmitFc, verifyFcReceiptArchive } from './fc-submission-pers
 import { fcPersistence } from './fc-storage-client';
 import type { FcStoreScope } from '../../../../../shared/fc-persistence';
 import { ConfiguredFactsPage } from '../../../../../shared/configured-facts-page';
-import { CurrentShortageList } from '../../../../../shared/current-shortage-list';
 import { knownNumber } from '../../../../../shared/configured-overview';
 import { call } from '../channel.js';
 import { dmsWorkbookRows } from '../fc-feedback';
@@ -71,6 +81,8 @@ type Trial = {
   plans: ImportedPlan[];
   recommended: number | null;
   missingCount: number;
+  positivePlanKeys?: string[];
+  zeroPlanKeys?: string[];
   forwardTurnover: number | null;
 };
 export const FcConfirmationDirectory = createContext<{
@@ -81,6 +93,8 @@ export const FcConfirmationDirectory = createContext<{
 }>({ rows: [], loading: false, error: '', retry: () => {} });
 const WorkflowContext = createContext<{
   trial: Trial | null;
+  listSearch: string;
+  setListSearch: (value: string) => void;
   planningPlans: ImportedPlan[];
   setPlanningPlans: (plans: ImportedPlan[]) => void;
   storedVersions: FcStoredVersions;
@@ -88,6 +102,7 @@ const WorkflowContext = createContext<{
   setTrial: (trial: Trial | null) => void;
 } | null>(null);
 export function FcWorkflowProvider({ children }: { children: React.ReactNode }) {
+  const [listSearch, setListSearch] = useState('');
   const [trial, setTrialState] = useState<Trial | null>(null);
   const [planningPlans, setPlanningPlans] = useState<ImportedPlan[]>([]);
   const [storedVersions, setStoredVersions] = useState<FcStoredVersions>({});
@@ -112,6 +127,7 @@ export function FcWorkflowProvider({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const clear = () => {
       setTrialState(null);
+      setListSearch('');
       setPlanningPlans([]);
       setStoredVersions({});
     };
@@ -126,7 +142,16 @@ export function FcWorkflowProvider({ children }: { children: React.ReactNode }) 
   }, []);
   return (
     <WorkflowContext.Provider
-      value={{ trial, setTrial, planningPlans, setPlanningPlans, storedVersions, recordVersion }}
+      value={{
+        trial,
+        setTrial,
+        listSearch,
+        setListSearch,
+        planningPlans,
+        setPlanningPlans,
+        storedVersions,
+        recordVersion,
+      }}
     >
       {children}
     </WorkflowContext.Provider>
@@ -149,7 +174,7 @@ export function FcConfiguredList(
   const { actionScope: scope } = props;
   const directory = useContext(FcConfirmationDirectory);
   const scopedWarehouse = String(scope.input.filters?.warehouse_code ?? '').trim();
-  const { planningPlans, setTrial, storedVersions } = useFcWorkflow();
+  const { trial, planningPlans, setTrial, storedVersions, setListSearch } = useFcWorkflow();
   const month = scope.input.asOf.slice(0, 7),
     days = scope.input.cycleDays ?? 7;
   const draftKey = keyFor('order-draft', month),
@@ -159,6 +184,8 @@ export function FcConfiguredList(
   useEffect(() => setQuantityInputs({}), [draftKey]);
   const [planDraft, setPlanDraft] = useState(() => loadPlan(planDraftKey));
   const [detailRow, setDetailRow] = useState<FcRow | null>(null);
+  const [transferRow, setTransferRow] = useState<FcRow | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
   const [dialog, setDialog] = useState<'template' | 'import' | 'draft' | 'export' | null>(null);
   const [templateMonth, setTemplateMonth] = useState(defaultPlanTemplateMonth);
   const [importErrors, setImportErrors] = useState<
@@ -179,7 +206,7 @@ export function FcConfiguredList(
     addressCode: '',
     pupCode: '',
   });
-  const scopeId = JSON.stringify([scope.viewId, scope.input]);
+  const scopeId = JSON.stringify([scope.viewId, { ...scope.input, replenishment: undefined }]);
   const [targetMessage, setTargetMessage] = useState('');
   const [targetLoading, setTargetLoading] = useState(false);
   const [automaticTargetFields, setAutomaticTargetFields] = useState<string[]>([]);
@@ -255,7 +282,7 @@ export function FcConfiguredList(
     active.current?.abort();
     setBusy(false);
     setDialog(null);
-    setDetailRow(null);
+    setExpandedKeys([]);
     setNotice('');
     setDmsReceipt(null);
     return () => active.current?.abort();
@@ -273,7 +300,7 @@ export function FcConfiguredList(
       setQuantityInputs({});
       setPlanDraft(loadPlan(planDraftKey));
       setDialog(null);
-      setDetailRow(null);
+      setExpandedKeys([]);
     };
     window.addEventListener('workbench-fc-view-restored', restore);
     window.addEventListener('gea-identity-changed', restore);
@@ -312,44 +339,151 @@ export function FcConfiguredList(
     setQuantityInputs((current) => ({ ...current, [key]: raw }));
     save({ ...draft, quantities: { ...draft.quantities, [key]: value }, dirty: true });
   };
-  const displayPlan = (row: FcRow, field: string) => {
-    const nextMonth = new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1);
-    const next = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}`;
-    const plan = plans.find(
-      (item) =>
-        planKey(item) === rowKey(row) && item.month === (field.includes('_next_') ? next : month),
-    );
-    if (!plan) return null;
-    if (field.endsWith('_out')) return numeric(plan.outboundQty);
-    if (field.endsWith('_transfer')) return numeric(plan.transferQty);
-    if (field.endsWith('_source')) return '人工导入';
-    if (field === 'missing_plan_status') return '已试算';
-    return null;
+  const filterKey = (warehouse: string, sku: string) => `${warehouse.length}:${warehouse}${sku}`;
+  const positiveActualKeys = Object.entries(draft.quantities)
+    .flatMap(([key, amount]) => {
+      if (amount <= 0) return [];
+      try {
+        const pair = z.tuple([z.string(), z.string()]).parse(JSON.parse(key));
+        return [`${pair[0].length}:${pair[0]}${pair[1]}`];
+      } catch {
+        return [];
+      }
+    })
+    .sort();
+  const selection = scope.input.replenishment ?? {
+    neededOnly: true,
+    businessOnly: false,
+    positiveActualKeys: [],
   };
-  const renderCell = (row: FcRow, column: { field: string }) => {
-    if (scope.viewId === 'plan') {
-      const value = displayPlan(row, column.field);
-      if (value !== null) return value;
+  const planSelection = {
+    positivePlanKeys: trial?.positivePlanKeys ?? [],
+    zeroPlanKeys: trial?.zeroPlanKeys ?? [],
+    businessPlanKeys: plans
+      .flatMap((plan) =>
+        plan.warehouseCode &&
+        [month, nextMonth(month)].includes(plan.month) &&
+        (plan.outboundQty > 0 || plan.transferQty > 0)
+          ? [filterKey(plan.warehouseCode, plan.sku)]
+          : [],
+      )
+      .sort(),
+  };
+  useEffect(() => {
+    if (
+      scope.viewId === 'replenishment' &&
+      JSON.stringify([
+        selection.positiveActualKeys,
+        selection.positivePlanKeys ?? [],
+        selection.zeroPlanKeys ?? [],
+        selection.businessPlanKeys ?? [],
+      ]) !==
+        JSON.stringify([
+          positiveActualKeys,
+          planSelection.positivePlanKeys,
+          planSelection.zeroPlanKeys,
+          planSelection.businessPlanKeys,
+        ])
+    )
+      props.onReplenishmentFilter?.({ ...selection, positiveActualKeys, ...planSelection });
+  }, [
+    JSON.stringify(positiveActualKeys),
+    JSON.stringify(selection),
+    JSON.stringify(planSelection),
+    scope.viewId,
+  ]);
+  const renderCell = (row: FcRow, column: { field: string; valueField?: string }) => {
+    if (
+      scope.viewId === 'base-resources' &&
+      column.field === 'known_available' &&
+      (knownNumber(row.known_available) ?? 0) > 0
+    )
+      return (
+        <button
+          type="button"
+          className="quantity-link"
+          aria-label={`查看${text(row.base)}可用库存批次`}
+          onClick={() => setDetailRow(detailRow?.base === row.base ? null : row)}
+        >
+          {numeric(row.known_available)}
+        </button>
+      );
+    if (scope.viewId === 'inventory' && column.field === 'material_code') {
+      const expanded =
+        detailRow?.warehouseid === row.warehouseid &&
+        detailRow?.material_code === row.material_code;
+      return (
+        <button
+          type="button"
+          className="sku-link"
+          aria-expanded={expanded}
+          onClick={() => setDetailRow(expanded ? null : row)}
+        >
+          {text(row.material_code)}
+        </button>
+      );
     }
+    if (scope.viewId === 'inventory') {
+      if (column.field === 'missing_age_10')
+        return (
+          <span
+            className={`status ${row.warning === '滞库' ? 'danger' : ['预警', '货龄待核实', '无库存'].includes(String(row.warning)) ? 'warning' : 'success'}`}
+          >
+            {text(row.warning)}
+          </span>
+        );
+      const value = fcAgingDisplay(row, column.valueField ?? column.field);
+      if (value !== undefined) return value;
+    }
+    if (scope.viewId === 'plan') {
+      const value = fcPlanDisplay(row, column.valueField ?? column.field);
+      if (value !== undefined) return value;
+    }
+    if (scope.viewId === 'plan' && column.field === 'missing_plan_status')
+      return (
+        <span
+          className={`status ${fcPlanStatus(row) === '已确认' ? 'success' : 'warning'}`}
+          title={String(row.period_plan_status ?? '')}
+        >
+          {fcPlanStatus(row)}
+        </span>
+      );
     if (scope.viewId === 'replenishment') {
       if (column.field === 'sku')
         return (
-          <button type="button" className="secondary-button" onClick={() => setDetailRow(row)}>
+          <button
+            type="button"
+            className="sku-link"
+            aria-label={text(row.sku)}
+            aria-expanded={expandedKeys.includes(rowKey(row))}
+            onClick={() =>
+              setExpandedKeys((keys) =>
+                keys.includes(rowKey(row))
+                  ? keys.filter((key) => key !== rowKey(row))
+                  : [...keys, rowKey(row)],
+              )
+            }
+          >
             {text(row.sku)}
           </button>
         );
       const key = rowKey(row);
+      if (
+        column.field === 'open_transfer_reported_qty' &&
+        (knownNumber(row.open_transfer_reported_qty) ?? 0) > 0
+      )
+        return (
+          <button type="button" className="transfer-quantity" onClick={() => setTransferRow(row)}>
+            {fcReplenishmentDisplay(row, 'open_transfer_reported_qty')}
+          </button>
+        );
       if (column.field === 'missing_actualQty')
         return (
           <input
             className="fc-quantity-input"
             type="number"
             aria-label={`${text(row.sku)}实际补货量`}
-            disabled={
-              busy ||
-              (dialog === 'export' && Boolean(dmsReceipt)) ||
-              knownNumber(row.recommended_qty) === null
-            }
+            disabled={busy || (dialog === 'export' && Boolean(dmsReceipt))}
             min={0}
             max={1e9}
             step="any"
@@ -385,6 +519,8 @@ export function FcConfiguredList(
             }
           />
         );
+      const value = fcReplenishmentDisplay(row, column.valueField ?? column.field);
+      if (value !== undefined) return value;
     }
     return props.renderCell(row, column);
   };
@@ -419,13 +555,18 @@ export function FcConfiguredList(
     setDmsReceipt(null);
     setDialogPage(1);
     if (mode === 'export' && !warehouse) return;
+    const confirmationFilters = Object.fromEntries(
+      Object.entries(scope.input.filters ?? {}).filter(
+        ([name]) => !['list_mode', 'sort_field', 'sort_direction'].includes(name),
+      ),
+    );
     const readScope = {
       ...scope,
       viewId: 'replenishment',
       input:
         mode === 'export'
-          ? { ...scope.input, filters: { ...scope.input.filters, warehouse_code: warehouse } }
-          : scope.input,
+          ? { ...scope.input, filters: { ...confirmationFilters, warehouse_code: warehouse } }
+          : { ...scope.input, filters: confirmationFilters },
     };
     return run(async (signal) => {
       try {
@@ -464,6 +605,9 @@ export function FcConfiguredList(
         const local = plans.find(
           (item) => planKey(item) === rowKey(row) && item.month === templateMonth,
         );
+        const manualMonth = plans.some(
+          (plan) => plan.warehouseCode === row.warehouse_code && plan.month === templateMonth,
+        );
         const sameMonth = String(row.stat_month ?? '') === templateMonth.replace('-', '');
         const planMonth = String(row.stat_month ?? '');
         const nextPeriod =
@@ -476,12 +620,21 @@ export function FcConfiguredList(
           text(row.sku),
           text(row.material_name),
           local?.outboundQty ??
-            (sameMonth
-              ? (row.month_out_plan ?? '')
-              : nextPeriod
-                ? (row.period_next_out ?? row.future30_qty ?? '')
-                : ''),
-          local?.transferQty ?? (sameMonth ? (row.warehouse_month_transfer_plan ?? '') : ''),
+            (manualMonth
+              ? ''
+              : sameMonth
+                ? (row.month_out_plan ?? '')
+                : nextPeriod
+                  ? (row.period_next_out ?? row.future30_qty ?? '')
+                  : ''),
+          local?.transferQty ??
+            (manualMonth
+              ? ''
+              : sameMonth
+                ? (row.warehouse_month_transfer_plan ?? '')
+                : nextPeriod
+                  ? (row.period_next_transfer ?? '')
+                  : ''),
         ];
       });
       signal.throwIfAborted();
@@ -507,6 +660,7 @@ export function FcConfiguredList(
           viewId: 'replenishment',
           input: {
             ...scope.input,
+            replenishment: undefined,
             filters: scope.input.filters?.warehouse_code
               ? { warehouse_code: scope.input.filters.warehouse_code }
               : {},
@@ -521,6 +675,15 @@ export function FcConfiguredList(
       setTrial({
         scope: fcTrialScope(scope.input.asOf, days, scope.input.filters?.warehouse_code),
         plans: mergedPlans,
+        positivePlanKeys: calculated
+          .filter((row) => quantity(row.recommended_qty) > 0)
+          .map((row) => filterKey(String(row.warehouse_code), String(row.sku))),
+        zeroPlanKeys: calculated
+          .filter(
+            (row) =>
+              knownNumber(row.recommended_qty) === null || quantity(row.recommended_qty) <= 0,
+          )
+          .map((row) => filterKey(String(row.warehouse_code), String(row.sku))),
         ...summary,
       });
       setDialog(null);
@@ -528,7 +691,18 @@ export function FcConfiguredList(
     });
   const exportCsv = () =>
     run(async (signal) => {
-      const rows = await readFcActionRows(scope, signal);
+      const readScope =
+        scope.viewId === 'replenishment' && plans.length
+          ? {
+              ...scope,
+              input: { ...scope.input, filters: { ...scope.input.filters, list_mode: 'all' } },
+            }
+          : scope;
+      const rows = await readFcActionRows(readScope, signal);
+      const projected =
+        scope.viewId === 'replenishment' && plans.length
+          ? projectFcPlannedRows(rows, plans, scope.input, scope.viewId)
+          : rows;
       const columns: { field: string; label: string; valueField?: string }[] = props.columns;
       const escape = (value: unknown) => {
         const valueText = value == null ? '' : String(value);
@@ -543,14 +717,22 @@ export function FcConfiguredList(
       };
       const content = [
         columns.map((column) => column.label),
-        ...rows.map((source) => {
+        ...projected.map((source) => {
           const row = applyFcPlan(source, plans, scope.input.asOf, days);
           return columns.map((column) =>
             column.field === 'missing_actualQty'
               ? (draft.quantities[rowKey(row)] ?? row.recommended_qty)
               : column.field === 'missing_reason'
                 ? (draft.reasons[rowKey(row)] ?? '')
-                : (displayPlan(row, column.field) ?? row[column.valueField ?? column.field]),
+                : column.field === 'missing_plan_status'
+                  ? fcPlanStatus(row)
+                  : ((scope.viewId === 'inventory'
+                      ? fcAgingDisplay(row, column.valueField ?? column.field)
+                      : scope.viewId === 'replenishment'
+                        ? fcReplenishmentDisplay(row, column.valueField ?? column.field)
+                        : scope.viewId === 'plan'
+                          ? fcPlanDisplay(row, column.valueField ?? column.field)
+                          : undefined) ?? row[column.valueField ?? column.field]),
           );
         }),
       ]
@@ -571,16 +753,29 @@ export function FcConfiguredList(
     dialog === 'export'
       ? exportRows.filter((row) => String(row.warehouse_code) === exportWarehouse)
       : exportRows;
+  const hasReplenishmentQuantity = (row: FcRow) =>
+    (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0;
+  const submissionRows = previewRows.filter(hasReplenishmentQuantity);
+  // Keep an active edit mounted while the user clears the field before typing.
+  const displayedPreviewRows =
+    dialog === 'export'
+      ? previewRows.filter(
+          (row) => hasReplenishmentQuantity(row) || Object.hasOwn(quantityInputs, rowKey(row)),
+        )
+      : previewRows;
+  useEffect(() => {
+    setDialogPage((page) =>
+      Math.min(page, Math.max(1, Math.ceil(displayedPreviewRows.length / 10))),
+    );
+  }, [displayedPreviewRows.length]);
   const confirmExport = () => {
     try {
-      validateFcSubmission(previewRows, draft.quantities, draft.reasons);
+      validateFcSubmission(submissionRows, draft.quantities, draft.reasons);
     } catch (error) {
       setNotice((error as Error).message);
       return;
     }
-    const selected = previewRows.filter(
-      (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
-    );
+    const selected = submissionRows;
     if (!exportWarehouse || !selected.length) {
       setNotice('请选择分仓，并填写大于0的补货量');
       return;
@@ -613,12 +808,10 @@ export function FcConfiguredList(
       if (!exportWarehouse) throw Error('请选择分仓');
       if (targetLoading) throw Error('主数据正在读取，请稍候复核编码');
       if (warehouseReceiptPending) throw Error('该分仓有待核对的回执归档，请先核对再开始下一批');
-      const selected = previewRows.filter(
-        (row) => (draft.quantities[rowKey(row)] ?? quantity(row.recommended_qty)) > 0,
-      );
-      validateFcSubmission(previewRows, draft.quantities, draft.reasons);
+      const selected = submissionRows;
+      validateFcSubmission(selected, draft.quantities, draft.reasons);
       if (!selected.length) throw Error('请填写大于0的补货量');
-      const remarks = previewRows
+      const remarks = selected
         .filter((row) => draft.reasons[rowKey(row)]?.trim())
         .map(
           (row) =>
@@ -694,7 +887,7 @@ export function FcConfiguredList(
       signal.throwIfAborted();
       if (provenance.snapshotVersion !== currentProvenance.snapshotVersion)
         throw Error('库存、订单或计划数据已变化，请重新打开确认清单复核后提交');
-      const confirmationRows = previewRows
+      const confirmationRows = selected
         .map((row) => ({
           sku: String(row.sku),
           productName: String(row.material_name ?? ''),
@@ -847,6 +1040,34 @@ export function FcConfiguredList(
       )}
       {scope.viewId === 'replenishment' && (
         <>
+          <label className="fc-quick-checkbox">
+            <input
+              type="checkbox"
+              checked={selection.neededOnly}
+              onChange={(event) =>
+                props.onReplenishmentFilter?.({
+                  ...selection,
+                  neededOnly: event.target.checked,
+                  positiveActualKeys,
+                })
+              }
+            />
+            需补货
+          </label>
+          <label className="fc-quick-checkbox">
+            <input
+              type="checkbox"
+              checked={selection.businessOnly}
+              onChange={(event) =>
+                props.onReplenishmentFilter?.({
+                  ...selection,
+                  businessOnly: event.target.checked,
+                  positiveActualKeys,
+                })
+              }
+            />
+            有业务
+          </label>
           <button
             type="button"
             className="secondary-button"
@@ -876,15 +1097,106 @@ export function FcConfiguredList(
       {busy && !dialog && <span role="status">正在读取…</span>}
     </>
   );
-  const visibleRows = (dialog === 'import' ? importPlans : previewRows).slice(
+  const visibleRows = (dialog === 'import' ? importPlans : displayedPreviewRows).slice(
     (dialogPage - 1) * 10,
     dialogPage * 10,
   );
+  // The atomic aggregate describes the whole filtered scope, not just this page.
+  const hideMaterialGroup =
+    scope.viewId === 'replenishment' &&
+    props.result?.rows?.[0]?.page_scope_has_material_group != null &&
+    Number(props.result.rows[0].page_scope_has_material_group) === 0;
   return (
     <>
+      {scope.viewId === 'plan' && (
+        <div className="inline-note">
+          同分仓、同月份以导入计划为准，缺行不自动补齐；未导入月份沿用原计划。出货、调拨计划留空按0处理；试算结果尚未保存。
+        </div>
+      )}
       <OriginalBusinessList
         {...props}
+        columns={props.columns.filter(
+          (c: { field: string }) => !hideMaterialGroup || c.field !== 'material_group',
+        )}
+        view={
+          hideMaterialGroup
+            ? {
+                ...props.view,
+                columns: props.view.columns.filter(
+                  (c: { field: string }) => c.field !== 'material_group',
+                ),
+              }
+            : scope.viewId === 'base-resources'
+              ? {
+                  ...props.view,
+                  filters: props.view.filters.map((filter: { name: string }) =>
+                    filter.name === 'base'
+                      ? {
+                          ...filter,
+                          selectOptions: [
+                            ...new Set(
+                              directory.rows.map((warehouse) => warehouse.base).filter(Boolean),
+                            ),
+                          ],
+                        }
+                      : filter,
+                  ),
+                }
+              : props.view
+        }
+        onFilter={(name: string, value: string) => {
+          if (name === 'search') setListSearch(value);
+          props.onFilter(name, value);
+        }}
+        reset={() => {
+          setListSearch('');
+          props.reset();
+        }}
         toolbarActions={toolbar}
+        renderRowDetails={(row: FcRow) => {
+          if (!detailRow && scope.viewId !== 'replenishment') return null;
+          if (scope.viewId === 'base-resources')
+            return detailRow?.base === row.base ? (
+              <FcBatchDetails
+                config={scope.config}
+                base={String(row.base)}
+                sku={String(scope.input.filters?.sku ?? '')}
+                snapshot={props.result?.snapshotDate ?? scope.input.asOf}
+              />
+            ) : null;
+          if (scope.viewId === 'inventory')
+            return detailRow?.warehouseid === row.warehouseid &&
+              detailRow?.material_code === row.material_code ? (
+              <FcBatchDetails
+                key={String(row.warehouseid) + String(row.material_code)}
+                config={scope.config}
+                warehouse={String(row.warehouseid)}
+                sku={String(row.material_code)}
+                snapshot={String(row.stat_date ?? props.result?.snapshotDate ?? scope.input.asOf)}
+              />
+            ) : null;
+          if (scope.viewId !== 'replenishment' || !expandedKeys.includes(rowKey(row))) return null;
+          return (
+            <section className="fc-inline-resources" aria-label={`${text(row.sku)}基地资源`}>
+              <ConfiguredFactsPage
+                key={rowKey(row)}
+                config={scope.config}
+                embedded
+                date={scope.input.asOf}
+                viewIds={['base-resources']}
+                initialFilters={{ sku: String(row.sku) }}
+                presentation={originalFcView(scope.config, 'base', scope.input.asOf)}
+                businessList={FcConfiguredList}
+              />
+            </section>
+          );
+        }}
+        getRowKey={rowKey}
+        emptyMessage={
+          scope.viewId === 'replenishment' && selection.neededOnly
+            ? '当前筛选没有匹配的需补货明细；可取消“需补货”查看全部明细及缺失要素。'
+            : '暂无数据。'
+        }
         renderCell={renderCell}
         result={
           props.result
@@ -897,63 +1209,37 @@ export function FcConfiguredList(
             : props.result
         }
       />
+      {scope.viewId === 'plan' && (
+        <details className="fc-manual-plan-records">
+          <summary>当前页 SKU 的人工计划记录</summary>
+          <PlanningTable
+            rows={plans.filter((plan) =>
+              props.result?.rows?.some((row: FcRow) => planKey(plan) === rowKey(row)),
+            )}
+            search=""
+          />
+        </details>
+      )}
       {notice && (
         <p role="status" className="fc-workflow-notice">
           {notice}
         </p>
       )}
       <Modal
-        visible={detailRow !== null}
-        title="SKU补货依据"
+        visible={transferRow !== null}
+        title="调拨订单明细"
         footer={null}
-        onCancel={() => setDetailRow(null)}
+        onCancel={() => setTransferRow(null)}
         style={{ width: 'min(1100px, calc(100vw - 32px))' }}
       >
-        {detailRow && (
-          <>
-            <p>
-              {text(detailRow.warehouse_name)} · {text(detailRow.sku)} ·{' '}
-              {text(detailRow.material_name)}
-            </p>
-            <p>
-              建议补货 {text(detailRow.recommended_qty)} 件；目标库存{' '}
-              {text(detailRow.target_inventory_qty)} 件；订单剩余需求{' '}
-              {text(detailRow.current_order_remaining)} 件；调拨中{' '}
-              {text(detailRow.open_transfer_reported_qty)} 件。
-            </p>
-            <p>
-              {text(detailRow.calculation_status)}
-              。目标按本月计划日均向上取整×（周期+3天），先扣订单尚未占用的需求，再扣调拨中量；缺项待核实。
-            </p>
-            <CurrentShortageList
-              key={rowKey(detailRow)}
-              config={scope.config}
-              initialFilters={{
-                warehouse_code: String(detailRow.warehouse_code),
-                sku: String(detailRow.sku),
-              }}
-            />
-            <ConfiguredFactsPage
-              key={'age' + rowKey(detailRow)}
-              config={scope.config}
-              embedded
-              date={scope.input.asOf}
-              viewIds={['inventory']}
-              initialFilters={{
-                warehouse_code: String(detailRow.warehouse_code),
-                material_code: String(detailRow.sku),
-              }}
-            />
-            <ConfiguredFactsPage
-              key={'base' + rowKey(detailRow)}
-              config={scope.config}
-              embedded
-              date={scope.input.asOf}
-              viewIds={['base-resources']}
-              initialFilters={{ sku: String(detailRow.sku) }}
-            />
-            <p>基地可用库存仅供参考；供货关系、在途和未来排产未齐时不作供货承诺。</p>
-          </>
+        {transferRow && (
+          <FcTransferDetails
+            key={rowKey(transferRow)}
+            config={scope.config}
+            warehouse={String(transferRow.warehouse_code)}
+            sku={String(transferRow.sku)}
+            expected={knownNumber(transferRow.open_transfer_reported_qty)}
+          />
         )}
       </Modal>
       <Modal
@@ -1192,7 +1478,7 @@ export function FcConfiguredList(
               )}
 
               <p>
-                {previewRows.length}个SKU
+                {displayedPreviewRows.length}个SKU
                 {dialog === 'export'
                   ? '，可暂存至DMS，或仅导出Excel。暂存成功前请保留草稿；结果未知时请先在DMS核查。'
                   : ''}
@@ -1209,38 +1495,43 @@ export function FcConfiguredList(
                     </tr>
                   </thead>
                   <tbody>
-                    {previewRows.slice((dialogPage - 1) * 10, dialogPage * 10).map((row) => (
-                      <tr key={rowKey(row)}>
-                        <td>
-                          {text(row.warehouse_name)} / {text(row.sku)}
-                        </td>
-                        <td>{numeric(row.recommended_qty)}</td>
-                        <td>{renderCell(row, { field: 'missing_actualQty' })}</td>
-                        <td>{renderCell(row, { field: 'missing_reason' })}</td>
-                        {dialog === 'draft' && (
+                    {displayedPreviewRows
+                      .slice((dialogPage - 1) * 10, dialogPage * 10)
+                      .map((row) => (
+                        <tr key={rowKey(row)}>
                           <td>
-                            <button
-                              type="button"
-                              className="text-button"
-                              onClick={() => {
-                                const quantities = { ...draft.quantities },
-                                  reasons = { ...draft.reasons };
-                                delete quantities[rowKey(row)];
-                                delete reasons[rowKey(row)];
-                                save({ quantities, reasons, dirty: true });
-                                setExportRows((rows) =>
-                                  rows.filter((item) => rowKey(item) !== rowKey(row)),
-                                );
-                              }}
-                            >
-                              撤销
-                            </button>
+                            {text(row.warehouse_name)} / {text(row.sku)}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td>{numeric(row.recommended_qty)}</td>
+                          <td>{renderCell(row, { field: 'missing_actualQty' })}</td>
+                          <td>{renderCell(row, { field: 'missing_reason' })}</td>
+                          {dialog === 'draft' && (
+                            <td>
+                              <button
+                                type="button"
+                                className="text-button"
+                                onClick={() => {
+                                  const quantities = { ...draft.quantities },
+                                    reasons = { ...draft.reasons };
+                                  delete quantities[rowKey(row)];
+                                  delete reasons[rowKey(row)];
+                                  save({ quantities, reasons, dirty: true });
+                                  setExportRows((rows) =>
+                                    rows.filter((item) => rowKey(item) !== rowKey(row)),
+                                  );
+                                }}
+                              >
+                                撤销
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
+                {dialog === 'export' && !displayedPreviewRows.length && (
+                  <p>没有补货量大于0的SKU。</p>
+                )}
               </div>
             </>
           )}
@@ -1249,7 +1540,7 @@ export function FcConfiguredList(
               ariaLabel="操作预览分页"
               pageNumber={dialogPage}
               pageSize={10}
-              totalCount={dialog === 'import' ? importPlans.length : previewRows.length}
+              totalCount={dialog === 'import' ? importPlans.length : displayedPreviewRows.length}
               onPageChange={setDialogPage}
             />
           )}
@@ -1301,7 +1592,7 @@ export function FcConfiguredList(
                   type="button"
                   className="primary-button"
                   disabled={
-                    busy || !previewRows.length || Boolean(dmsReceipt) || warehouseReceiptPending
+                    busy || !submissionRows.length || Boolean(dmsReceipt) || warehouseReceiptPending
                   }
                   onClick={() => void submitDms()}
                 >
@@ -1318,7 +1609,7 @@ export function FcConfiguredList(
                 <button
                   type="button"
                   className="primary-button"
-                  disabled={busy || !previewRows.length}
+                  disabled={busy || !submissionRows.length}
                   onClick={confirmExport}
                 >
                   仅导出Excel

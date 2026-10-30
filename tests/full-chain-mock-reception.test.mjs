@@ -56,7 +56,7 @@ test('default fixed input preserves company/customer units, zero/null, complete 
     filters: { month: '2026-09' },
   });
   assert.equal(company.dataMode, 'GEA_LIVE_READONLY');
-  assert.equal(company.kpis.inventoryLevel.companyCurrent, 5580);
+  assert.equal(company.kpis.inventoryLevel.companyCurrent, 5665);
   assert.equal(
     company.structure.some((row) => row.layer === 'customer'),
     false,
@@ -67,7 +67,7 @@ test('default fixed input preserves company/customer units, zero/null, complete 
     filters: { month: '2026-09' },
     now: new Date('2026-10-02T03:00:00Z'),
   });
-  assert.equal(channel.kpis.inventoryLevel.companyCurrent, 5580);
+  assert.equal(channel.kpis.inventoryLevel.companyCurrent, 5665);
   assert.equal(channel.kpis.inventoryLevel.planCustomerTotal, 0);
   assert.equal(channel.structure.find((row) => row.layer === 'customer').targetQty, null);
   const rows = [];
@@ -95,7 +95,7 @@ test('default fixed input preserves company/customer units, zero/null, complete 
     part: 'current',
     filters: { month: '2026-09', sku: 'MOCK-001' },
   });
-  assert.equal(filtered.kpis.inventoryLevel.companyCurrent, 16);
+  assert.equal(filtered.kpis.inventoryLevel.companyCurrent, 51);
   assert.equal(filtered.structure.filter((row) => row.layer === 'branch')[0].availableQty, 15);
   const zero = await engine.load({
     asOf: '2026-10-02',

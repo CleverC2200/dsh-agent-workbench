@@ -2,6 +2,7 @@ import { knownNumber } from './configured-overview';
 
 type AgeMeasures = {
   weighted_age_sum?: unknown;
+  weighted_age?: unknown;
   age_weight_qty?: unknown;
 };
 
@@ -11,8 +12,11 @@ export function inventoryAverageAge(...groups: (AgeMeasures | null | undefined)[
   let weighted = 0;
   let quantity = 0;
   for (const group of groups) {
-    const sum = knownNumber(group?.weighted_age_sum);
     const weight = knownNumber(group?.age_weight_qty);
+    const average = knownNumber(group?.weighted_age);
+    const sum =
+      knownNumber(group?.weighted_age_sum) ??
+      (average !== null && weight !== null ? average * weight : null);
     if (sum === null || weight === null || sum < 0 || weight < 0) return null;
     weighted += sum;
     quantity += weight;

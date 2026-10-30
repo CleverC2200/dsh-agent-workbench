@@ -59,20 +59,41 @@ const { Text } = Typography;
 
 type KpiKey = keyof FullChainWorkspace['kpis'];
 
-const KPI_COPY: Record<KpiKey, { title: string; eyebrow: string; target: string }> = {
+const KPI_COPY: Record<
+  KpiKey,
+  { title: string; eyebrow: string; target: string; definition: string }
+> = {
   inventoryLevel: {
     title: '当前库存',
+    definition: '当前库存＝基地库存＋分仓库存合计。',
     eyebrow: '公司系统 / 全渠道观察',
     target: '目标库存',
   },
-  turnover: { title: '库存周转', eyebrow: '去除内部流转', target: '参考口径' },
-  aging: { title: '平均货龄', eyebrow: '公司体系平均货龄', target: '分层规则' },
+  turnover: {
+    title: '库存周转',
+    eyebrow: '近30日动销',
+    target: '参考口径',
+    definition: '库存周转＝基地／分仓当前库存÷基地／分仓近30日日均动销；基地、分仓分别计算。',
+  },
+  aging: {
+    title: '平均货龄',
+    eyebrow: '公司体系平均货龄',
+    target: '分层规则',
+    definition: '当前货龄＝按批次库存加权的平均货龄：Σ(批次库存×批次货龄)÷Σ批次库存。',
+  },
   fulfillment: {
     title: '订单满足率',
+    definition: '订单满足率＝当月已发货订单满足率。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },
-  orderGap: { title: '当前订单', eyebrow: '当前备单量', target: '本月发货量' },
+  orderGap: {
+    title: '当前订单',
+    eyebrow: '当前有效未发货完成订单',
+    target: '本月发货量',
+    definition:
+      '当前订单＝基地／分仓当前有效未发货完成订单量（未备单完成订单需求量＋备单完成未发货占用量）。',
+  },
 };
 
 function formatMetric(value: number | null, unit: MetricValue['unit'], _compact = false) {
@@ -103,6 +124,7 @@ export function KpiCard({
   };
 }) {
   const copy = KPI_COPY[metricKey];
+  const definitionId = React.useId();
   const inventoryMetric =
     metricKey === 'inventoryLevel'
       ? (metric as FullChainWorkspace['kpis']['inventoryLevel'])
@@ -135,9 +157,9 @@ export function KpiCard({
         : null;
   const inventoryByLayer = (['base', 'branch'] as const).map((layer) => {
     const rows = workspace.structure.filter((row) => row.layer === layer);
-    const values = rows.map((row) => (layer === 'base' ? row.currentQty : row.availableQty));
+    const values = rows.map((row) => row.currentQty);
     return {
-      label: layer === 'base' ? '基地库存' : '分仓可用',
+      label: layer === 'base' ? '基地库存' : '分仓当前库存',
       value:
         values.length && values.every((value) => value != null)
           ? values.reduce<number>((sum, value) => sum + value!, 0)
@@ -208,11 +230,8 @@ export function KpiCard({
       {(['base', 'branch'] as const).map((layer) => {
         const rows = workspace.structure.filter((row) => row.layer === layer);
         const total =
-          rows.length && rows.every((row) => layer === 'base' || row.availableQty != null)
-            ? rows.reduce(
-                (sum, row) => sum + (layer === 'base' ? row.currentQty : row.availableQty!),
-                0,
-              )
+          rows.length && rows.every((row) => row.currentQty != null)
+            ? rows.reduce((sum, row) => sum + row.currentQty, 0)
             : null;
         const order = workspace.fulfillment[layer === 'base' ? 'factory' : 'branch'];
         const age = workspace.layerMetrics?.[layer].averageAgeDays ?? null;
@@ -236,12 +255,12 @@ export function KpiCard({
           metricKey === 'inventoryLevel'
             ? '占公司库存比例 / 库存量'
             : metricKey === 'turnover'
-              ? '基地按计划日均需求；分仓按可用库存及实际出库'
+              ? '当前库存÷近30日日均动销'
               : metricKey === 'aging'
                 ? '平均货龄 / >30天库存量；分层展示'
                 : metricKey === 'fulfillment'
-                  ? '基地按需求减缺口；分仓按运营事实发货÷订单'
-                  : '最新备单快照的当前订单量';
+                  ? '同月已发货订单池，逐行限额发货量÷同池订单量'
+                  : '未备单完成需求量＋备单完成未发货占用量';
         return (
           <div key={layer}>
             <span>{layer === 'base' ? '基地' : '分仓'}</span>
@@ -253,165 +272,174 @@ export function KpiCard({
     </div>
   );
   return (
-    <button
-      type="button"
-      className={`${styles.kpiButton} ${metric.state === 'risk' ? styles.kpiRisk : ''}`}
-      onClick={onOpen}
-    >
-      <div className={styles.kpiCard}>
-        <div className={styles.kpiTop}>
-          <span className={styles.kpiTitle}>{copy.title}</span>
-          {!unavailable && (
-            <b className={`${styles.kpiStatus} ${statusClass}`}>
-              {metric.state === 'risk' ? '需关注' : '当前值'}
-            </b>
+    <div className={styles.kpiItem}>
+      <button
+        type="button"
+        aria-describedby={definitionId}
+        className={`${styles.kpiButton} ${metric.state === 'risk' ? styles.kpiRisk : ''}`}
+        onClick={onOpen}
+      >
+        <div className={styles.kpiCard}>
+          <div className={styles.kpiTop}>
+            <span className={styles.kpiTitle}>
+              {copy.title}
+              <IconInfoCircle aria-hidden="true" className={styles.kpiInfo} />
+            </span>
+            {!unavailable && (
+              <b className={`${styles.kpiStatus} ${statusClass}`}>
+                {metric.state === 'risk' ? '需关注' : '当前值'}
+              </b>
+            )}
+          </div>
+          <Tooltip
+            content={
+              <>
+                {metric.explanation}
+                {metricKey === 'orderGap' && <div>{copy.definition}</div>}
+                {inventoryMetric && inventoryMetric.planCustomerDate && (
+                  <div>
+                    {'客户总量快照：'}
+                    {inventoryMetric.planCustomerDate}
+                    {'；在仓 + 在途'}
+                  </div>
+                )}
+                {inventoryMetric && inventoryMetric.observedCustomer > 0 && (
+                  <div>
+                    {'客户日快照观察：'}
+                    {cardValue(inventoryMetric.observedCustomer, '件')}
+                  </div>
+                )}
+                {layerSummary}
+                {customerHelper && <dl className={styles.kpiHelpers}>{customerHelper}</dl>}
+              </>
+            }
+          >
+            {splitValues ? (
+              <strong className={styles.kpiValue}>
+                {cardValue(splitValues[0].value, splitValues[0].unit)}
+                <small className={styles.kpiScopeLabel}>{'基地'}</small>
+              </strong>
+            ) : (
+              <strong
+                className={`${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`}
+              >
+                {valueText}
+              </strong>
+            )}
+          </Tooltip>
+          {splitValues && (
+            <dl className={styles.kpiHelpers}>
+              <div>
+                <dt>
+                  {'基地'}
+                  {metricKey === 'turnover' ? '周转' : '满足率'}
+                </dt>
+                <dd>{cardValue(splitValues[0].value, splitValues[0].unit)}</dd>
+              </div>
+              <div>
+                <dt>
+                  {'分仓'}
+                  {metricKey === 'turnover' ? '周转' : '满足率'}
+                </dt>
+                <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
+              </div>
+              {channelRows}
+            </dl>
+          )}
+          {!splitValues && (
+            <dl className={styles.kpiHelpers}>
+              {metricKey === 'inventoryLevel' ? (
+                inventoryByLayer.map(({ label, value }) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{cardValue(value, '件')}</dd>
+                  </div>
+                ))
+              ) : metricKey === 'aging' ? (
+                <>
+                  <div>
+                    <dt>{'基地货龄'}</dt>
+                    <dd>{cardValue(workspace.layerMetrics?.base.averageAgeDays ?? null, '天')}</dd>
+                  </div>
+                  <div>
+                    <dt>{'分仓货龄'}</dt>
+                    <dd>
+                      {cardValue(workspace.layerMetrics?.branch.averageAgeDays ?? null, '天')}
+                    </dd>
+                  </div>
+                </>
+              ) : metricKey === 'turnover' ? (
+                <>
+                  <div>
+                    <dt>{'基地周转'}</dt>
+                    <dd>{cardValue(workspace.layerMetrics?.base.turnoverDays ?? null, '天')}</dd>
+                  </div>
+                  <div>
+                    <dt>{'分仓周转'}</dt>
+                    <dd>{cardValue(workspace.layerMetrics?.branch.turnoverDays ?? null, '天')}</dd>
+                  </div>
+                </>
+              ) : metricKey === 'fulfillment' ? (
+                <>
+                  <div>
+                    <dt>{'基地满足率'}</dt>
+                    <dd>{cardValue(workspace.fulfillment.factory.rate, '%')}</dd>
+                  </div>
+                  <div>
+                    <dt>{'分仓满足率'}</dt>
+                    <dd>{cardValue(workspace.fulfillment.branch.rate, '%')}</dd>
+                  </div>
+                </>
+              ) : metricKey === 'orderGap' ? (
+                <>
+                  <div>
+                    <dt>{periodShortages ? '基地本月缺货量' : '基地缺货量'}</dt>
+                    <dd>
+                      {cardValue(
+                        periodShortages
+                          ? periodShortages.base
+                          : (workspace.orderExecution?.currentBaseShortageQty ?? null),
+                        '件',
+                      )}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>{periodShortages ? '分仓本月缺货量' : '分仓缺货量'}</dt>
+                    <dd>
+                      {cardValue(
+                        periodShortages
+                          ? periodShortages.branch
+                          : (workspace.orderExecution?.currentBranchShortageQty ?? null),
+                        '件',
+                      )}
+                    </dd>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <dt>{copy.target}</dt>
+                    <dd>{cardValue(metric.target, metric.unit)}</dd>
+                  </div>
+                  <div>
+                    <dt>{'较目标差异'}</dt>
+                    <dd>
+                      {metric.current == null || metric.target == null
+                        ? '-'
+                        : `${metric.current > metric.target ? '+' : ''}${metric.unit === '%' ? `${(metric.current - metric.target).toFixed(2)}个百分点` : cardValue(metric.current - metric.target, metric.unit)}`}
+                    </dd>
+                  </div>
+                </>
+              )}
+              {channelRows}
+            </dl>
           )}
         </div>
-        <Tooltip
-          content={
-            <>
-              {metric.explanation}
-              {metricKey === 'orderGap' && (
-                <div>{'当前备单量来自基地与分仓最新备单快照，不以月累计订单替代'}</div>
-              )}
-              {inventoryMetric && inventoryMetric.planCustomerDate && (
-                <div>
-                  {'客户总量快照：'}
-                  {inventoryMetric.planCustomerDate}
-                  {'；在仓 + 在途'}
-                </div>
-              )}
-              {inventoryMetric && inventoryMetric.observedCustomer > 0 && (
-                <div>
-                  {'客户日快照观察：'}
-                  {cardValue(inventoryMetric.observedCustomer, '件')}
-                </div>
-              )}
-              {layerSummary}
-              {customerHelper && <dl className={styles.kpiHelpers}>{customerHelper}</dl>}
-            </>
-          }
-        >
-          {splitValues ? (
-            <strong className={styles.kpiValue}>
-              {cardValue(splitValues[0].value, splitValues[0].unit)}
-              <small className={styles.kpiScopeLabel}>{'基地'}</small>
-            </strong>
-          ) : (
-            <strong
-              className={`${styles.kpiValue} ${unavailable ? styles.kpiUnavailable : metric.state === 'risk' ? styles.kpiValueRisk : ''}`}
-            >
-              {valueText}
-            </strong>
-          )}
-        </Tooltip>
-        {splitValues && (
-          <dl className={styles.kpiHelpers}>
-            <div>
-              <dt>
-                {'基地'}
-                {metricKey === 'turnover' ? '周转' : '满足率'}
-              </dt>
-              <dd>{cardValue(splitValues[0].value, splitValues[0].unit)}</dd>
-            </div>
-            <div>
-              <dt>
-                {'分仓'}
-                {metricKey === 'turnover' ? '周转' : '满足率'}
-              </dt>
-              <dd>{cardValue(splitValues[1].value, splitValues[1].unit)}</dd>
-            </div>
-            {channelRows}
-          </dl>
-        )}
-        {!splitValues && (
-          <dl className={styles.kpiHelpers}>
-            {metricKey === 'inventoryLevel' ? (
-              inventoryByLayer.map(({ label, value }) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>{cardValue(value, '件')}</dd>
-                </div>
-              ))
-            ) : metricKey === 'aging' ? (
-              <>
-                <div>
-                  <dt>{'基地货龄'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.base.averageAgeDays ?? null, '天')}</dd>
-                </div>
-                <div>
-                  <dt>{'分仓货龄'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.branch.averageAgeDays ?? null, '天')}</dd>
-                </div>
-              </>
-            ) : metricKey === 'turnover' ? (
-              <>
-                <div>
-                  <dt>{'基地周转'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.base.turnoverDays ?? null, '天')}</dd>
-                </div>
-                <div>
-                  <dt>{'分仓周转'}</dt>
-                  <dd>{cardValue(workspace.layerMetrics?.branch.turnoverDays ?? null, '天')}</dd>
-                </div>
-              </>
-            ) : metricKey === 'fulfillment' ? (
-              <>
-                <div>
-                  <dt>{'基地满足率'}</dt>
-                  <dd>{cardValue(workspace.fulfillment.factory.rate, '%')}</dd>
-                </div>
-                <div>
-                  <dt>{'分仓满足率'}</dt>
-                  <dd>{cardValue(workspace.fulfillment.branch.rate, '%')}</dd>
-                </div>
-              </>
-            ) : metricKey === 'orderGap' ? (
-              <>
-                <div>
-                  <dt>{periodShortages ? '基地本月缺货量' : '基地缺货量'}</dt>
-                  <dd>
-                    {cardValue(
-                      periodShortages
-                        ? periodShortages.base
-                        : (workspace.orderExecution?.currentBaseShortageQty ?? null),
-                      '件',
-                    )}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{periodShortages ? '分仓本月缺货量' : '分仓缺货量'}</dt>
-                  <dd>
-                    {cardValue(
-                      periodShortages
-                        ? periodShortages.branch
-                        : (workspace.orderExecution?.currentBranchShortageQty ?? null),
-                      '件',
-                    )}
-                  </dd>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <dt>{copy.target}</dt>
-                  <dd>{cardValue(metric.target, metric.unit)}</dd>
-                </div>
-                <div>
-                  <dt>{'较目标差异'}</dt>
-                  <dd>
-                    {metric.current == null || metric.target == null
-                      ? '-'
-                      : `${metric.current > metric.target ? '+' : ''}${metric.unit === '%' ? `${(metric.current - metric.target).toFixed(2)}个百分点` : cardValue(metric.current - metric.target, metric.unit)}`}
-                  </dd>
-                </div>
-              </>
-            )}
-            {channelRows}
-          </dl>
-        )}
+      </button>
+      <div id={definitionId} role="tooltip" className={styles.kpiDefinition}>
+        {copy.definition}
       </div>
-    </button>
+    </div>
   );
 }
 

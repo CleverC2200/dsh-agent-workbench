@@ -37,7 +37,7 @@ async function fixture(t, referrer, href) {
     close() {},
     postMessage: (value) => messages.push(value),
   };
-  const connect = (origin, source = parent) =>
+  const connect = (origin, source = parent, nextPort = port) =>
     listeners.get('message')({
       source,
       origin,
@@ -46,7 +46,7 @@ async function fixture(t, referrer, href) {
         type: 'connect',
         context: { plugin: 'inventory-fc', session: 'owned-session' },
       },
-      ports: [port],
+      ports: [nextPort],
     });
   return { channel, connect, port, messages };
 }
@@ -78,4 +78,78 @@ test('originless page URL cannot accept an opaque parent origin', async (t) => {
   const f = await fixture(t, '', 'data:text/html,fixture');
   assert.doesNotThrow(() => f.connect('null'));
   await assert.rejects(f.channel.call('access'), /请先登录并连接/);
+});
+
+test('returning to the same Session replaces a revoked port even when its final context reset was lost', async (t) => {
+  const f = await fixture(t, '', 'dsh-app://app/api/agent-workbench/html?id=inventory-fc');
+  f.connect('dsh-app://app');
+  const oldMessage = f.port.onmessage;
+  const waiting = f.channel.call('access').catch((error) => error.message);
+  const messages = [];
+  const replacement = {
+    onmessage: null,
+    start() {},
+    close() {},
+    postMessage: (value) => messages.push(value),
+  };
+  try {
+    // Host disposed its old MessagePort before the queued context:null reached
+    // the cached iframe. Its next valid lease still belongs to this Session.
+    f.connect('dsh-app://app', undefined, replacement);
+    assert.ok(
+      messages.some((message) => message.type === 'theme:subscribe'),
+      'the same Session must accept its new owned port',
+    );
+    assert.match(await waiting, /页面会话已切换/);
+    const current = f.channel.call('access');
+    const request = messages.findLast((message) => message.type === 'request');
+    assert.ok(request, 'the restored page must actually read through the replacement port');
+    oldMessage({ data: { type: 'context', context: null } });
+    assert.equal(
+      f.channel.currentSessionId(),
+      'owned-session',
+      'late old-port events cannot disconnect the new lease',
+    );
+    replacement.onmessage({
+      data: { type: 'response', id: request.id, result: { restored: true } },
+    });
+    assert.deepEqual(await current, { restored: true });
+  } finally {
+    (replacement.onmessage ?? f.port.onmessage)({ data: { type: 'identity-changed' } });
+    await waiting;
+  }
+});
+
+test('a cancelled old page action cannot publish its late completion on a renewed same-Session port', async (t) => {
+  const f = await fixture(t, '', 'dsh-app://app/api/agent-workbench/html?id=inventory-fc');
+  f.connect('dsh-app://app');
+  const gate = Promise.withResolvers();
+  const started = Promise.withResolvers();
+  f.channel.reportElements('fixture', [{ id: 'filter', actions: ['refresh'] }], async () => {
+    started.resolve();
+    await gate.promise;
+  });
+  f.port.onmessage({
+    data: {
+      type: 'apply',
+      session: 'owned-session',
+      toolCallId: 'old-action',
+      args: { kind: 'invoke', target: 'filter', action: 'refresh' },
+    },
+  });
+  await started.promise;
+  const messages = [];
+  const replacement = {
+    onmessage: null,
+    start() {},
+    close() {},
+    postMessage: (value) => messages.push(value),
+  };
+  f.connect('dsh-app://app', undefined, replacement);
+  gate.resolve();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    messages.some((message) => message.type === 'applied' && message.toolCallId === 'old-action'),
+    false,
+  );
 });

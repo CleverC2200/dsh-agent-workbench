@@ -87,6 +87,7 @@ test('same scoped engine facts drive shortage ranking and exact age metrics; fut
     future14: 3,
     fulfillment: null,
     dailyDemand: null,
+    dailyDemandCoverage: { known: 0, total: 3, complete: false },
     last30d: null,
   });
   assert.match(insight.text, /两者不相加/);
@@ -195,4 +196,37 @@ test('partial coverage reports matched stock gap and separates inventory coverag
   assert.match(covered.text, /同口径可比70个基地SKU，库存低于目标50件/);
   assert.match(covered.text, /未覆盖部分不计入高低库存判断/);
   assert.match(covered.text, /当前订单缺口12件/);
+});
+test('partial daily demand retains known values with explicit SKU coverage', () => {
+  const result = buildInventoryInsight({
+    skus: [
+      {
+        base: '郑州',
+        category: '水饺',
+        sku: 'A',
+        current: 20,
+        target: 30,
+        dailyDemand: 10,
+        last30d: 60,
+      },
+      {
+        base: '郑州',
+        category: '水饺',
+        sku: 'B',
+        current: 30,
+        target: 40,
+        dailyDemand: null,
+        last30d: 60,
+      },
+    ],
+    pending: null,
+    age: null,
+    bases: ['郑州'],
+    shortage: null,
+    fulfillment: null,
+  });
+  assert.equal(result.metrics.dailyDemand, 10);
+  assert.deepEqual(result.metrics.dailyDemandCoverage, { known: 1, total: 2, complete: false });
+  assert.match(result.text, /1\/2个基地\/SKU缺日均计划/);
+  assert.doesNotMatch(result.text, /低于计划/);
 });

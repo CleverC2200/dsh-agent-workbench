@@ -10,7 +10,7 @@ import { Simulate } from 'react-dom/test-utils';
 import { JSDOM } from 'jsdom';
 import { createCompanyWire } from './fixtures/full-chain-company-wire.mjs';
 
-test('actual distribution page restores scoped filters and re-queries trends after refresh without persisting historical facts', async () => {
+test('actual distribution page restores scoped filters without the removed trend and shortage section', async () => {
   const dom = new JSDOM('<main id="app"></main>', {
     url: 'https://html-plugin.local',
     pretendToBeVisual: true,
@@ -145,11 +145,6 @@ test('actual distribution page restores scoped filters and re-queries trends aft
       root.render(React.createElement(api.Page));
       await new Promise((r) => setTimeout(r, 5));
     });
-  const click = () =>
-    React.act(async () => {
-      [...document.querySelectorAll('button')].find((b) => b.textContent === '查询趋势').click();
-      await new Promise((r) => setTimeout(r, 5));
-    });
   try {
     await render();
     await React.act(async () => new Promise((r) => setTimeout(r, 5)));
@@ -186,7 +181,11 @@ test('actual distribution page restores scoped filters and re-queries trends aft
       document.querySelector('[aria-label="组织筛选"]').value,
       intent.structureFilters.org,
     );
-    assert.equal(api.pageContext().parts.trendView.state, 'idle');
+    assert.equal(api.pageContext().parts.trendView, undefined);
+    assert.equal(
+      [...document.querySelectorAll('button')].some((node) => node.textContent === '查询趋势'),
+      false,
+    );
     const dateInput = document.querySelector('[aria-label="读取时点"]');
     sourceDates.length = 0;
     await React.act(async () => {
@@ -223,13 +222,6 @@ test('actual distribution page restores scoped filters and re-queries trends aft
         .click();
       await new Promise((resolve) => setTimeout(resolve, 10));
     });
-    await click();
-    const first = api.pageContext().parts.trendView;
-    assert.equal(first.state, 'ready');
-    assert.equal(first.filters.base, '华东');
-    assert.equal(first.filters.category, '饺子');
-    assert.equal(first.data.find((row) => row.snapshotDate === '2026-09-30').base, 0);
-    const ref = globalThis.restoreCatalog.get('chain-trend')[0].id;
     await React.act(async () => root.unmount());
     api.clearBusinessCache();
     api.clearContext();
@@ -237,14 +229,12 @@ test('actual distribution page restores scoped filters and re-queries trends aft
     root = createRoot(document.getElementById('app'));
     await render();
     await React.act(async () => new Promise((r) => setTimeout(r, 5)));
-    const fresh = api.pageContext().parts.trendView;
-    assert.equal(fresh.state, 'idle');
-    assert.equal(fresh.data, undefined);
-    assert.notEqual(fresh.workspaceId, first.workspaceId);
-    assert.equal(fresh.filters.base, '华东');
-    await click();
-    assert.equal(api.pageContext().parts.trendView.state, 'ready');
-    assert.notEqual(globalThis.restoreCatalog.get('chain-trend')[0].id, ref);
+    assert.equal(api.pageContext().parts.trendView, undefined);
+    assert.equal(document.querySelector('[aria-label="SKU编码筛选"]').value, intent.sku);
+    assert.equal(
+      document.querySelector('[aria-label="组织筛选"]').value,
+      intent.structureFilters.org,
+    );
     assert.deepEqual(owner.readHtmlViewState('inventory-qll', 'subject/mock-session'), intent);
   } finally {
     await React.act(async () => root.unmount());

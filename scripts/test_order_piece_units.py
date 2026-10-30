@@ -34,20 +34,17 @@ class PieceUnits(unittest.TestCase):
     f.add('GOOD',pickup_point='PS',qtyordered=120,qtyallocated=60,bizunitconvertrate=12)
     r=f.base();self.assertIsNone(r['demand']);self.assertIsNone(r['shortage'])
     good=next(r for r in f.read() if r['base']=='遂平');self.assertEqual((good['demand'],good['allocated']),(10,5))
- def test_branch_list_and_expanded_lines_use_pieces_and_correct_shipping_filter(self):
+ def test_branch_list_and_expanded_lines_use_asn_pieces_and_convert_base_occupancy(self):
   f=self.branch_fixture()
-  f.add('DONE',qtyordered=1600,qtyallocated=1600,qtyshipped=1600,delivery_qty=100,bizunitconvertrate=16)
-  f.add('PART',qtyordered=1600,qtyallocated=800,qtyshipped=160,delivery_qty=10,bizunitconvertrate=16)
-  rows=f.read();self.assertEqual(rows[0]['page_scope_total'],1)
-  r=rows[0];self.assertEqual((r['ordered'],r['allocated'],r['shipped'],r['remaining']),(100,50,10,50))
-  line=f.read('branch-current-orders.lines',warehouse_code='W1',order_no='PART',customer_code='C1')[0]
-  self.assertEqual((line['demand'],line['allocated'],line['shipped']),(100,50,10))
- def test_branch_replenishment_uses_piece_orders_against_piece_inventory(self):
+  f.db.execute('UPDATE agents_scm_execute_detail_hourly_d SET qtyallocated=qtyallocated*16,qtyordered=qtyordered*16,bizunitconvertrate=bizunitconvertrate*16')
+  row=next(r for r in f.read() if r['order_no']=='O1')
+  self.assertEqual((row['ordered'],row['demand'],row['allocated']),(70,70,20))
+  line=f.read('branch-current-orders.lines',warehouse_code='BR1',order_no='O1',customer_code='基地甲')[0]
+  self.assertEqual((line['demand'],line['allocated']),(70,20))
+ def test_customer_orders_cannot_inflate_branch_incoming_supply_or_replenishment(self):
   f=BranchCardScope();f.setUp();self.addCleanup(f.doCleanups)
-  f.add('OPEN',qtyordered=1600,qtyallocated=800,bizunitconvertrate=16)
-  r=f.f.read('current-shortage.summary')[0]
-  self.assertEqual((r['demand'],r['allocated'],r['remaining'],r['shortage']),(100,50,50,25))
-  detail=next(r for r in f.f.read('replenishment.detail') if r['sku']=='S1')
-  self.assertEqual((detail['current_order_demand'],detail['current_order_allocated']),(100,50))
+  f.add('DEALER',qtyordered=1600,qtyallocated=800,bizunitconvertrate=16)
+  row=next(r for r in f.f.read('replenishment.detail') if r['sku']=='S1')
+  self.assertEqual((row['current_order_demand'],row['calculation_order_remaining'],row['recommended_qty']),(0,0,35))
 
 if __name__=='__main__':unittest.main()

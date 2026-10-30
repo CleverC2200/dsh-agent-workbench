@@ -40,11 +40,10 @@ export function resolveInitialSafetyStockScope(
     : selection.targetMonth !== selection.requestedTargetMonth
       ? `次月版本尚未发布，继续查看当月最新已发布目标库存`
       : `每月1-${selectionPolicy.nextMonthSwitchDay - 1}日默认查看当月目标库存`;
-  const versionRule = '同月份版本优先级：纠偏版、月初版、滚动版';
+  const versionRule = `按基地与月份整体选版：${selection.versionPriority.join('版、')}版，不按SKU或字段混用版本`;
   const fallbackRule =
-    selection.normalizedVersion &&
-    selection.normalizedVersion !== selectionPolicy.versionPriority[0]
-      ? `；${monthLabel(selection.targetMonth)}没有${selectionPolicy.versionPriority[0]}版，已按规则使用${selection.inventoryVersion}`
+    selection.normalizedVersion && selection.normalizedVersion !== selection.versionPriority[0]
+      ? `；${monthLabel(selection.targetMonth)}没有${selection.versionPriority[0]}版，已按规则使用${selection.inventoryVersion}`
       : '';
 
   return {

@@ -44,7 +44,7 @@ export function PlanningTable({
           </thead>
           <tbody>
             {pagination.rows.map((row) => (
-              <tr key={`${row.month}:${row.sku}`}>
+              <tr key={JSON.stringify([row.warehouseCode, row.month, row.sku])}>
                 <td>{row.warehouseCode ?? '—'}</td>
                 <td>{row.warehouseName}</td>
                 <td>{row.month}</td>
