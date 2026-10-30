@@ -143,7 +143,7 @@ export function changeAdjustment(adjustments, kind, input, undo = false) {
         key,
         action: undo ? 'undo' : 'set',
         systemValue: entry.systemValue ?? null,
-        value: undo ? (entry.systemValue ?? null) : value,
+        value: undo ? (input.effectiveValue ?? null) : value,
         reason: entry.reason,
         at: new Date().toISOString(),
       },
