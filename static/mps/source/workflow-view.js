@@ -1,5 +1,7 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
+import { createSourceDiagnostics } from './source-diagnostics.js';
 
+const excludedProcessCategories = new Set(['饺子', '调理肉制品', '饼类']);
 const titles = {
   process: '需求加工与收敛',
   constraints: '约束与配置',
@@ -75,6 +77,7 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
+  const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   return function Workflow({
     step,
     draft,
@@ -99,16 +102,19 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       [draft, relations, shipmentSnapshot],
     );
     const fields = step === 'process' ? processFields : planFields;
+    const inScope = (row) => step !== 'process' || !excludedProcessCategories.has(row.category);
+    const scopedRows = result.rows.filter(inScope);
+    const scopedCategories = result.categoryRows.filter(inScope);
     const bases = [
       ...new Set(
         [
-          ...result.rows.map((row) => row.base),
+          ...scopedRows.map((row) => row.base),
           ...result.constraints.safetyDays.map((row) => row.base),
         ].filter(Boolean),
       ),
     ];
-    const categories = [...new Set(result.categoryRows.map((row) => row.category))];
-    const filtered = result.rows.filter(
+    const categories = [...new Set(scopedCategories.map((row) => row.category))];
+    const filtered = scopedRows.filter(
       (row) =>
         (!base || row.base === base) &&
         (!category || row.category === category) &&
@@ -116,7 +122,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         (!onlyMissing || reasons(row, fields).length) &&
         (!search || identityColumns.some(([key]) => display(row[key]).includes(search))),
     );
-    const categoryRows = result.categoryRows.filter(
+    const categoryRows = scopedCategories.filter(
       (row) => (!category || row.category === category) && (!month || row.month === month),
     );
     const pageIndex = Math.min(page, Math.max(0, Math.ceil(filtered.length / 25) - 1));
@@ -145,7 +151,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         filter: { search, base, category, month, onlyMissing },
         categoryRows,
         rows: visible,
-        total: result.rows.length,
+        total: scopedRows.length,
         filteredTotal: filtered.length,
         page: pageIndex + 1,
         constraints: result.constraints,
@@ -992,6 +998,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('span', null, `发货所属月 ${result.shipmentMonth}`),
       ),
       filterBar,
+      step === 'process' && h(SourceDiagnostics, { draft, result, table }),
       step === 'process'
         ? h(
             react.Fragment,
