@@ -1,4 +1,5 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
+import { createSourceDiagnostics } from './source-diagnostics.js';
 
 const titles = {
   process: '需求加工与收敛',
@@ -75,6 +76,7 @@ const sourceText = '①大类需求；②月末结存；③两路占比；④源
 
 export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   const h = react.createElement;
+  const SourceDiagnostics = createSourceDiagnostics(react, { downloadCsv, Dialog });
   return function Workflow({
     step,
     draft,
@@ -992,6 +994,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('span', null, `发货所属月 ${result.shipmentMonth}`),
       ),
       filterBar,
+      step === 'process' && h(SourceDiagnostics, { draft, result, table }),
       step === 'process'
         ? h(
             react.Fragment,

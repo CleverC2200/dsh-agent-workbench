@@ -450,3 +450,164 @@ test('a downstream history denial stays on its own month while other complete pe
     ),
   );
 });
+
+test('period source diagnostics expose complete totals, current-basis coverage and unmatched evidence in the document and exports', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('facts.')) return fixture(query);
+    const report = query.queryId.startsWith('facts.report');
+    const records = report
+      ? [
+          {
+            belong_base: '基地甲',
+            material_code: '001',
+            material_name: '产品甲',
+            region_name: '大区甲',
+            plannum_total: 0,
+            allnum_total: null,
+          },
+          { belong_base: '基地甲', material_code: '002', plannum_total: null, allnum_total: 8 },
+          { belong_base: null, material_code: '001', plannum_total: 5, allnum_total: 5 },
+          { belong_base: '基地乙', material_code: 'OUTSIDE', plannum_total: 9, allnum_total: 9 },
+        ]
+      : [
+          {
+            [shipment + 'belong_base']: '基地甲',
+            [shipment + 'material_code']: '001',
+            [shipment + 'act_dl_qty_total']: 7,
+          },
+        ];
+    const response = fixture(
+      query,
+      query.parameters.month.endsWith('-12-01') && report ? [] : records,
+    );
+    response.dataStatus = 'ok';
+    response.warnings = [];
+    return response;
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '覆盖核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,\n基地甲,002,产品乙,汤圆,系列甲,组甲,,\n,003,产品丙,汤圆,系列甲,组甲,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
+  const row = (source, month) =>
+    diagnostics.getByRole('row').filter({ hasText: source }).filter({ hasText: month });
+  await expect(diagnostics.getByRole('row')).toHaveCount(7);
+  await expect(row('计划提报', '2026-10')).toContainText('成功有记录');
+  await expect(row('计划提报', '2026-10').getByRole('cell')).toHaveText([
+    '计划提报',
+    '2026-10',
+    '成功有记录',
+    '4',
+    '2',
+    '1/3',
+    '1',
+    '1',
+    '1',
+    '—',
+    '明细',
+  ]);
+  await expect(row('计划提报', '2026-12')).toContainText('成功空集');
+  await expect(row('历史发货', '2025-11').getByRole('cell')).toHaveText([
+    '历史发货',
+    '2025-11',
+    '成功有记录',
+    '1',
+    '1',
+    '1/3',
+    '0',
+    '0',
+    '0',
+    '—',
+    '明细',
+  ]);
+  const summary = page.waitForEvent('download');
+  await diagnostics.getByRole('button', { name: '导出来源诊断', exact: true }).click();
+  const csv = await mpsDownloadText(await (await summary).path());
+  assert.match(csv, /计划提报,2026-12,成功空集,0,0,0\/3,0,0,0/);
+  await row('计划提报', '2026-10').getByRole('button', { name: '明细', exact: true }).click();
+  const dialog = frame.getByRole('dialog');
+  await expect(dialog).toContainText('OUTSIDE');
+  await expect(dialog.getByRole('columnheader', { name: '产品池匹配', exact: true })).toBeVisible();
+  const detail = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: '下载明细', exact: true }).click();
+  const detailCsv = await mpsDownloadText(await (await detail).path());
+  assert.match(detailCsv, /产品池匹配/);
+  assert.match(detailCsv, /OUTSIDE/);
+  assert.match(detailCsv, /缺业务键/);
+  assert.match(detailCsv, /池外/);
+  await dialog.getByRole('button', { name: '关闭弹窗', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求确认' }).click();
+  await frame.getByLabel('提报口径', { exact: true }).selectOption('adjust');
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  await row('计划提报', '2026-10').getByRole('button', { name: '明细', exact: true }).click();
+  await expect(frame.getByRole('dialog')).toContainText('纠偏数量');
+  await expect(
+    frame.getByRole('dialog').getByRole('row').filter({ hasText: '产品甲' }),
+  ).toContainText('缺数量');
+});
+
+test('period source diagnostics keep loading, failed and partial months distinct from a complete empty result', async (t) => {
+  let release;
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
+  t.after(() => release());
+  const { page, frame } = await mpsPage(t, config, async (query) => {
+    if (query.queryId === 'facts.report' && query.parameters.month === '2026-11-01') await pending;
+    if (query.queryId === 'facts.history' && query.parameters.month === '2025-11-01')
+      throw Error('AGENT_ACCESS_DENIED');
+    if (query.queryId === 'facts.history' && query.parameters.month === '2025-12-01')
+      return fixture(query, []);
+    if (query.queryId.startsWith('facts.report') && query.parameters.month === '2026-12-01')
+      return fixture(query, []);
+    return fixture(query);
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
+  const row = (source, month) =>
+    diagnostics.getByRole('row').filter({ hasText: source }).filter({ hasText: month });
+  await expect(row('计划提报', '2026-11')).toContainText('读取中');
+  await expect(row('计划提报', '2026-11').getByRole('cell').nth(3)).toHaveText('—');
+  await expect(row('历史发货', '2025-11')).toContainText('失败');
+  await expect(row('历史发货', '2025-11')).toContainText('暂无数据权限');
+  await expect(row('历史发货', '2025-11').getByRole('cell').nth(3)).toHaveText('—');
+  await expect(row('历史发货', '2025-12')).toContainText('读取不完整');
+  await expect(row('历史发货', '2025-12').getByRole('cell').nth(3)).toHaveText('—');
+  await expect(row('历史发货', '2025-12')).not.toContainText('成功空集');
+  release();
+  await expect(row('计划提报', '2026-12')).toContainText('成功空集');
+  await expect(row('计划提报', '2026-12').getByRole('cell').nth(3)).toHaveText('0');
+  await expect(row('计划提报', '2026-11').getByRole('cell').nth(3)).toHaveText('1');
+  await expect(row('历史发货', '2025-11')).toContainText('失败');
+  const summary = page.waitForEvent('download');
+  await diagnostics.getByRole('button', { name: '导出来源诊断', exact: true }).click();
+  const csv = await mpsDownloadText(await (await summary).path());
+  assert.match(csv, /历史发货,2025-11,失败,,,,,,,.*暂无数据权限/);
+  assert.match(csv, /历史发货,2025-12,读取不完整,,0,,0,0,0/);
+});
+
+test('a document without configured sources shows six unread periods without inventing empty successes', async (t) => {
+  const { frame } = await mpsPage(t, null, () => {
+    throw Error('UNEXPECTED_SOURCE_READ');
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
+  await expect(diagnostics.getByRole('row')).toHaveCount(7);
+  await expect(diagnostics.getByRole('cell', { name: '未读取', exact: true })).toHaveCount(6);
+  for (const row of await diagnostics
+    .getByRole('row')
+    .all()
+    .then((rows) => rows.slice(1))) {
+    await expect(row.getByRole('cell').nth(3)).toHaveText('—');
+  }
+});
