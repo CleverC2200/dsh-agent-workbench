@@ -320,6 +320,61 @@ test('MPS processing exposes both three-layer sources and exports their intermed
   assert.match(csv, /Top1托底/);
 });
 
+test('MPS report and CSV keep missing monthly domains outside complete production tons', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,A,产品甲,汤圆,系列,组,100,100',
+  );
+  await upload(
+    frame,
+    '选择历史发货CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,郑州,A,产品甲,汤圆,系列,组,100',
+  );
+  for (const month of ['2026-12', '2027-01', '2027-02']) {
+    await frame.getByRole('button', { name: `调整 汤圆 ${month}`, exact: true }).click();
+    const form = frame.getByRole('group', { name: '大类需求调整', exact: true });
+    await form.getByLabel('调整需求数量', { exact: true }).fill('100');
+    await form.getByLabel('调整原因', { exact: true }).fill('核对缺月域汇总');
+    await form.getByRole('button', { name: '应用大类调整', exact: true }).click();
+  }
+  await frame.locator('.ap-page-tab').filter({ hasText: '本月预估发货' }).click();
+  await upload(
+    frame,
+    '选择发货输入CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,本月已发货,已备,未备,近三天日均发货量,月初库存,本月生产入库,剩余天数入库\n2026-11,郑州,A,产品甲,汤圆,系列,组,0,0,0,0,0,0,0',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '约束与配置' }).click();
+  const constraints = frame.getByRole('region', { name: '约束与配置', exact: true });
+  await constraints.getByLabel('郑州 安全天数', { exact: true }).fill('0');
+  await constraints.getByLabel('郑州 A 件吨系数', { exact: true }).fill('1');
+  await frame.locator('.ap-page-tab').filter({ hasText: '产销存报告' }).click();
+  const report = frame.getByRole('region', { name: '产销存报告', exact: true });
+  const summary = report
+    .getByRole('table', { name: '评估范围与汇总', exact: true })
+    .locator('tbody tr');
+  await expect(summary.locator('td').nth(1)).toHaveText('100');
+  await expect(summary.locator('td').nth(2)).toHaveText('—');
+  await expect(summary.locator('td').nth(4)).toHaveText('1');
+  await expect(summary).toContainText('2027-01 汤圆 缺月度SKU域');
+  await expect(summary).toContainText('2027-02 汤圆 缺月度SKU域');
+  const csv = await download(page, report, '下载产销存报告');
+  const book = XLSX.read(csv, { type: 'string', raw: true });
+  const exported = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]], { defval: '' });
+  const total = exported.find((row) => row['粒度'] === '全版本汇总，无约束参考');
+  assert.equal(total['已知生产吨数小计'], '100');
+  assert.equal(total['完整生产吨数'], '');
+  assert.equal(total['总行数'], '1');
+  assert.match(total['未评估原因'], /2027-01 汤圆.*2027-02 汤圆/);
+});
+
 test('MPS effective category and share edits drive the same unconstrained inventory and shared-resource report export', async (t) => {
   const { page, frame } = await mpsPage(t, config, emptySource);
   await version(frame, '2026-12');

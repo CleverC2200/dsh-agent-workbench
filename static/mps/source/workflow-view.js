@@ -83,6 +83,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
   return function Workflow({
     step,
     draft,
+    scopeGeneration,
     update,
     relations,
     shipmentSnapshot,
@@ -112,14 +113,25 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const weightCodes = [
       ...new Set((draft.products ?? []).map((row) => row['产品编码']).filter(Boolean)),
     ].sort();
-    const weightScope = JSON.stringify([draft.id, draft.month, weightCodes]);
+    const weightScope = JSON.stringify([draft.id, draft.month, weightCodes, scopeGeneration]);
     react.useEffect(() => {
-      weightGeneration.current++;
-      weightController.current?.abort();
-      setWeightRead(null);
-      setWeightError('');
-      setWeightBusy(false);
+      const invalidate = () => {
+        weightGeneration.current++;
+        weightController.current?.abort();
+        setWeightRead(null);
+        setWeightError('');
+        setWeightBusy(false);
+      };
+      invalidate();
+      const events = [
+        'gea-session-changing',
+        'gea-session-changed',
+        'gea-identity-changed',
+        'pagehide',
+      ];
+      events.forEach((event) => window.addEventListener(event, invalidate));
       return () => {
+        events.forEach((event) => window.removeEventListener(event, invalidate));
         weightGeneration.current++;
         weightController.current?.abort();
       };

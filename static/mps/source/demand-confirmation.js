@@ -1785,6 +1785,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(Workflow, {
           step,
           draft,
+          scopeGeneration,
           update,
           onShareAdjustment: (input) =>
             update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input) }),
