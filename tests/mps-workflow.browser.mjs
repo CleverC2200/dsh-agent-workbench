@@ -86,6 +86,45 @@ async function upload(frame, label, text) {
     .setInputFiles({ name: '本地核对.csv', mimeType: 'text/csv', buffer: Buffer.from(text) });
 }
 
+test('MPS 月度需求范围不跨月复制，池外源分类只阻断当月对应大类', async (t) => {
+  const { page, frame } = await mpsPage(t, config, emptySource);
+  await version(frame, '2026-12');
+  await upload(
+    frame,
+    '选择产品关系CSV或Excel',
+    '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n甲,A,产品甲,汤圆,系列,组甲,,\n乙,B,产品乙,面点,系列,组乙,,',
+  );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,甲,A,产品甲,汤圆,系列,组甲,30,30\n2027-01,乙,B,产品乙,面点,系列,组乙,80,80\n2026-12,丙,C,池外,面点,系列,组丙,500,500',
+  );
+  await upload(
+    frame,
+    '选择历史发货CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,数量\n2025-12,甲,A,产品甲,汤圆,系列,组甲,60\n2026-01,乙,B,产品乙,面点,系列,组乙,40',
+  );
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const view = frame.getByRole('region', { name: '需求加工与收敛', exact: true });
+  await view.getByLabel('月份筛选', { exact: true }).selectOption('2026-12');
+  await expect(
+    view.getByRole('button', { name: '甲 A 2026-12 系统占比 计算过程', exact: true }),
+  ).toHaveText('100.00%');
+  await expect(
+    view.getByRole('table', { name: '基地单品需求拆分', exact: true }).locator('tbody tr'),
+  ).toHaveCount(1);
+  const december = await download(page, view, '下载需求拆分');
+  assert.match(december, /产品甲/);
+  assert.doesNotMatch(december, /产品乙/);
+  await view.getByLabel('月份筛选', { exact: true }).selectOption('2027-01');
+  await expect(
+    view.getByRole('button', { name: '乙 B 2027-01 系统占比 计算过程', exact: true }),
+  ).toHaveText('100.00%');
+  await expect(
+    view.getByRole('table', { name: '基地单品需求拆分', exact: true }).locator('tbody tr'),
+  ).toHaveCount(1);
+});
+
 test('MPS local constraints edit the current draft and leave formal writes disabled across versions', async (t) => {
   const { page, frame } = await mpsPage(t, config, emptySource);
   await version(frame, '2026-10');
@@ -127,6 +166,11 @@ test('MPS capacity and report keep missing formula dependencies empty and export
     '选择产品关系CSV或Excel',
     '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,=1+1,汤圆,系列甲,组甲,,',
   );
+  await upload(
+    frame,
+    '选择计划提报CSV',
+    '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-10,郑州,A,=1+1,汤圆,系列甲,组甲,10,10',
+  );
   await frame.locator('.ap-page-tab').filter({ hasText: '产能评估与缺口' }).click();
   const capacity = frame.getByRole('region', { name: '产能评估与缺口', exact: true });
   await expect(capacity.getByRole('table', { name: '产能评估明细', exact: true })).toContainText(
@@ -146,7 +190,9 @@ test('MPS capacity and report keep missing formula dependencies empty and export
   await capacity.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
   const capacityCsv = await download(page, capacity, '下载产能评估');
   assert.match(capacityCsv, /'=1\+1/);
-  assert.doesNotMatch(capacityCsv, /2026-11/);
+  const book = XLSX.read(capacityCsv, { type: 'string', raw: true });
+  const exportedRows = XLSX.utils.sheet_to_json(book.Sheets[book.SheetNames[0]]);
+  assert.ok(exportedRows.every((row) => !row['月份'] || row['月份'] === '2026-10'));
   await capacity.getByRole('button', { name: '下一步：产销存报告', exact: true }).click();
   const report = frame.getByRole('region', { name: '产销存报告', exact: true });
   await report.getByLabel('月份筛选', { exact: true }).selectOption('2026-10');
