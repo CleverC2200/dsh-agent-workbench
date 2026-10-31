@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 async function load(entry, plugins = []) {
   const manage = {
@@ -168,7 +169,7 @@ const cube = await load('business/inventory-aqkc/source/aqkc/web/src/lib/cube-da
           : undefined,
       );
       api.onLoad({ filter: /.*/, namespace: 'batch-fixture' }, () => ({
-        contents: `export { batchAgeShare } from ${JSON.stringify(new URL('../business/shared/batch-age.ts', import.meta.url).pathname)}; export const readBatchAge=(...args)=>globalThis.__batchAge(...args);`,
+        contents: `export { batchAgeShare } from ${JSON.stringify(fileURLToPath(new URL('../business/shared/batch-age.ts', import.meta.url)))}; export const readBatchAge=(...args)=>globalThis.__batchAge(...args);`,
         loader: 'js',
         resolveDir: process.cwd(),
       }));

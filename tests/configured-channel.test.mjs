@@ -119,7 +119,7 @@ for (const agent of ['fc', 'aqkc', 'qll', 'dealer', 'apsplan'])
       port.onmessage({
         data: { type: 'response', id: r4.id, result: { rows: [{ fixture: 'late' }] } },
       });
-      await assert.rejects(client.read(id, values), /请先登录并连接/);
+      await assert.rejects(client.read(id, values), /页面能力尚未连接/);
       assert.equal(sent.filter((m) => m.type === 'request').length, 4);
       assert.ok(events.includes('gea-identity-changed'));
     },
