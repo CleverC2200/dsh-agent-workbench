@@ -54,9 +54,13 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           const id = key(row['基地'], row['产品编码']);
           groups.set(id, (groups.get(id) ?? true) && usable(quantity(row)));
         }
-        const warnings = (read?.metadata?.warnings ?? []).map((warning) =>
-          typeof warning === 'string' ? warning : JSON.stringify(warning),
-        );
+        const warnings = [
+          ...new Set(
+            (read?.metadata?.warnings ?? []).map((warning) =>
+              typeof warning === 'string' ? warning : JSON.stringify(warning),
+            ),
+          ),
+        ];
         const reason = [
           text(read?.error),
           ready && !counted ? '来源未完整返回，不能判定空集或完整覆盖' : '',
