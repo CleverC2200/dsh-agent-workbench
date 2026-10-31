@@ -1004,6 +1004,57 @@
         "sql": "SELECT COUNT(*) AS total FROM (SELECT a.belong_base, p.category AS sub_category, a.stat_month, SUM(a.source_rows) AS source_rows, SUM(a.missing_qty) AS missing_qty, SUM(CASE WHEN a.quantity_variants > 1 THEN a.source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN a.quantity_variants = 1 AND a.missing_qty = 0 THEN a.raw_quantity ELSE 0 END) AS demand_qty, MAX(a.update_time) AS update_time FROM (SELECT belong_base, material_code, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS a INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON a.material_code = p.material_code GROUP BY a.belong_base, p.category, a.stat_month) AS mps_rows"
       },
       "parameterSpec": {}
+    },
+    "unit-weights.detail": {
+      "title": "物料渠道件吨系数",
+      "grain": ["material_code", "channel_name", "ton_per_piece"],
+      "parameterSpec": {
+        "codes": {
+          "name": "codes",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 100
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "columns": ["material_code", "channel_name", "ton_per_piece"],
+      "request": {
+        "sql": "SELECT DISTINCT material_code, channel_name, ton_per_piece FROM agents_dim_material_prod_sales_info_d WHERE material_code IN (:codes) ORDER BY material_code, channel_name, ton_per_piece LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "unit-weights.count"
+      }
+    },
+    "unit-weights.count": {
+      "parameterSpec": {
+        "codes": {
+          "name": "codes",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 100
+        }
+      },
+      "columns": ["total"],
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT material_code, channel_name, ton_per_piece FROM agents_dim_material_prod_sales_info_d WHERE material_code IN (:codes)) AS unit_weights"
+      }
     }
   }
 }
