@@ -251,7 +251,7 @@ window.addEventListener('message', (event) => {
 window.parent.postMessage({ protocol: 'gea-html-v2', type: 'ready' }, '*');
 export async function call(method, parameters = {}, options = {}) {
   options.signal?.throwIfAborted();
-  if (!channel || !context?.session) throw Error('页面已显示，请先登录并连接页面能力。');
+  if (!channel || !context?.session) throw Error('页面能力尚未连接，请查看页面连接提示后重试。');
   const session = context.session;
   const id = String(++sequence);
   return new Promise((resolve, reject) => {
