@@ -632,7 +632,13 @@ test('history diagnostics retain complete quantity coverage when only income is 
         [shipment + 'act_dl_qty_total']: null,
       },
     ]);
-    response.warnings = [{ code: 'METRIC_VALUE_UNAVAILABLE', message: '不含税收入未提供' }];
+    response.warnings = [
+      ...Array.from({ length: 13 }, () => ({
+        code: 'METRIC_VALUE_UNAVAILABLE',
+        message: '不含税收入未提供',
+      })),
+      { code: 'SOURCE_WARNING', message: '来源字段缺项保留' },
+    ];
     return response;
   });
   await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
@@ -656,6 +662,9 @@ test('history diagnostics retain complete quantity coverage when only income is 
   await expect(october.getByRole('cell').nth(6)).toHaveText('1');
   await expect(october).toContainText('部分字段不可用');
   await expect(october).toContainText('不含税收入未提供');
+  const reason = await october.getByRole('cell').nth(9).innerText();
+  assert.equal([...reason.matchAll(/不含税收入未提供/g)].length, 1);
+  assert.equal([...reason.matchAll(/来源字段缺项保留/g)].length, 1);
   await expect(october).not.toContainText('读取不完整');
   await expect(october).not.toContainText('成功空集');
   const download = page.waitForEvent('download');
@@ -664,4 +673,7 @@ test('history diagnostics retain complete quantity coverage when only income is 
   assert.match(csv, /历史发货,2025-10,成功有记录,3,3,2\/3,1,0,0/);
   assert.match(csv, /METRIC_VALUE_UNAVAILABLE/);
   assert.match(csv, /不含税收入未提供/);
+  const exportedOctober = csv.split(/\r?\n/).find((row) => row.startsWith('历史发货,2025-10,'));
+  assert.equal([...exportedOctober.matchAll(/不含税收入未提供/g)].length, 1);
+  assert.equal([...exportedOctober.matchAll(/来源字段缺项保留/g)].length, 1);
 });
