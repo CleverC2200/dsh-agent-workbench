@@ -67,6 +67,15 @@
   max-width: 380px;
   white-space: normal;
 }
+.wf-source-diagnostics table[aria-label='逐期来源诊断'] td:nth-child(10) {
+  min-width: 180px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.wf-source-diagnostics table[aria-label='逐期来源诊断'] td:last-child {
+  min-width: 0;
+}
 .wf-page .wf-reasons {
   display: -webkit-box;
   -webkit-box-orient: vertical;

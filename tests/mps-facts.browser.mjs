@@ -583,7 +583,7 @@ test('period source diagnostics keep loading, failed and partial months distinct
   await expect(row('历史发货', '2025-11').getByRole('cell').nth(3)).toHaveText('—');
   await expect(row('历史发货', '2025-12')).toContainText('读取不完整');
   await expect(row('历史发货', '2025-12').getByRole('cell').nth(3)).toHaveText('—');
-  await expect(row('历史发货', '2025-12')).not.toContainText('成功空集');
+  await expect(row('历史发货', '2025-12').getByRole('cell').nth(2)).not.toHaveText('成功空集');
   release();
   await expect(row('计划提报', '2026-12')).toContainText('成功空集');
   await expect(row('计划提报', '2026-12').getByRole('cell').nth(3)).toHaveText('0');
@@ -610,4 +610,58 @@ test('a document without configured sources shows six unread periods without inv
     .then((rows) => rows.slice(1))) {
     await expect(row.getByRole('cell').nth(3)).toHaveText('—');
   }
+});
+
+test('history diagnostics retain complete quantity coverage when only income is unavailable and export the source warning', async (t) => {
+  const { page, frame } = await mpsPage(t, config, (query) => {
+    if (!query.queryId.startsWith('facts.history')) return fixture(query);
+    const response = fixture(query, [
+      {
+        [shipment + 'belong_base']: '基地甲',
+        [shipment + 'material_code']: '001',
+        [shipment + 'act_dl_qty_total']: 0,
+      },
+      {
+        [shipment + 'belong_base']: '基地甲',
+        [shipment + 'material_code']: '002',
+        [shipment + 'act_dl_qty_total']: 7,
+      },
+      {
+        [shipment + 'belong_base']: '基地甲',
+        [shipment + 'material_code']: '003',
+        [shipment + 'act_dl_qty_total']: null,
+      },
+    ]);
+    response.warnings = [{ code: 'METRIC_VALUE_UNAVAILABLE', message: '不含税收入未提供' }];
+    return response;
+  });
+  await frame.getByRole('button', { name: '新建评估版本', exact: true }).click();
+  await frame.getByRole('dialog').getByLabel('评估月份', { exact: true }).fill('2026-10');
+  await frame.getByRole('button', { name: '创建本地版本', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: '收入缺项核对.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n基地甲,001,产品甲,汤圆,系列甲,组甲,,\n基地甲,002,产品乙,汤圆,系列甲,组甲,,\n基地甲,003,产品丙,汤圆,系列甲,组甲,,',
+    ),
+  });
+  await frame.locator('.ap-page-tab').filter({ hasText: '需求加工与收敛' }).click();
+  const diagnostics = frame.getByRole('region', { name: '逐期来源诊断', exact: true });
+  const october = diagnostics
+    .getByRole('row')
+    .filter({ hasText: '历史发货' })
+    .filter({ hasText: '2025-10' });
+  await expect(october.getByRole('cell').nth(3)).toHaveText('3');
+  await expect(october.getByRole('cell').nth(5)).toHaveText('2/3');
+  await expect(october.getByRole('cell').nth(6)).toHaveText('1');
+  await expect(october).toContainText('部分字段不可用');
+  await expect(october).toContainText('不含税收入未提供');
+  await expect(october).not.toContainText('读取不完整');
+  await expect(october).not.toContainText('成功空集');
+  const download = page.waitForEvent('download');
+  await diagnostics.getByRole('button', { name: '导出来源诊断', exact: true }).click();
+  const csv = await mpsDownloadText(await (await download).path());
+  assert.match(csv, /历史发货,2025-10,成功有记录,3,3,2\/3,1,0,0/);
+  assert.match(csv, /METRIC_VALUE_UNAVAILABLE/);
+  assert.match(csv, /不含税收入未提供/);
 });

@@ -42,11 +42,9 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
         const matched = (row) => hasKey(row) && pool.has(key(row['基地'], row['产品编码']));
         const ready = read?.status === 'ready';
         const total = local ? records.length : read?.metadata?.total;
-        const complete =
-          ready &&
-          !read.metadata?.partial &&
-          Number.isSafeInteger(total) &&
-          total === records.length;
+        const counted = ready && Number.isSafeInteger(total) && total === records.length;
+        const partial = read?.metadata?.partial;
+        const complete = counted && (!partial || records.length > 0);
         let state =
           { loading: '读取中', failed: '失败', denied: '失败', error: '失败' }[read?.status] ??
           '未读取';
@@ -56,8 +54,21 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
           const id = key(row['基地'], row['产品编码']);
           groups.set(id, (groups.get(id) ?? true) && usable(quantity(row)));
         }
-        const reason =
-          text(read?.error) || (ready && !complete ? '来源未完整返回，不能判定空集或完整覆盖' : '');
+        const warnings = (read?.metadata?.warnings ?? []).map((warning) =>
+          typeof warning === 'string' ? warning : JSON.stringify(warning),
+        );
+        const reason = [
+          text(read?.error),
+          ready && !counted ? '来源未完整返回，不能判定空集或完整覆盖' : '',
+          partial
+            ? records.length
+              ? '部分字段不可用，数量按当前口径独立核对'
+              : '来源返回部分结果且无记录，不能判定成功空集'
+            : '',
+          ...warnings,
+        ]
+          .filter(Boolean)
+          .join('；');
         const summary = {
           来源: source === 'report' ? '计划提报' : '历史发货',
           期间: period,
@@ -116,7 +127,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       );
     return h(
       'section',
-      { className: 'dc-card', 'aria-label': '逐期来源诊断' },
+      { className: 'dc-card wf-source-diagnostics', 'aria-label': '逐期来源诊断' },
       h(
         'div',
         { className: 'dc-card-head' },
@@ -137,7 +148,7 @@ export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
       h(
         'p',
         { className: 'wf-note' },
-        `当前提报口径为${draft.pull === 'monthly' ? '月初数量' : '纠偏数量'}。数量覆盖按基地与产品编码去重，产品池缺键条目仍计入分母；同键全部源行数量可用才计入覆盖，真实0有效。缺业务键与池外行分别统计，缺数量含无效值，可与两者重叠。读取不完整、失败或未读取时，完整总条数及覆盖留空，保留明细仅供核对。`,
+        `当前提报口径为${draft.pull === 'monthly' ? '月初数量' : '纠偏数量'}。数量覆盖按基地与产品编码去重，产品池缺键条目仍计入分母；同键全部源行数量可用才计入覆盖，真实0有效。其他字段缺失单列警告，不影响当前数量核对；缺业务键与池外行分别统计，缺数量含无效值，可与两者重叠。未完整返回、失败、未读取或部分结果无记录时，完整总条数及覆盖留空，保留明细仅供核对。`,
       ),
       table(
         '逐期来源诊断',
