@@ -270,7 +270,7 @@ test('MPS processing exposes both three-layer sources and exports their intermed
   await frame.getByRole('dialog').getByRole('button', { name: '关闭弹窗', exact: true }).click();
   const csv = await download(page, view, '下载需求拆分');
   assert.match(csv, /提报物料组数量/);
-  assert.match(csv, /历史全国SKU数量/);
+  assert.match(csv, /历史范围内SKU数量/);
   assert.match(csv, /Top1托底/);
 });
 

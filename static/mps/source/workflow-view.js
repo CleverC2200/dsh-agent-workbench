@@ -1,5 +1,7 @@
 import { buildMpsWorkflow } from './workflow-inputs.js';
 import { createSourceDiagnostics } from './source-diagnostics.js';
+import { call } from '../../../business/shared/channel.js';
+import { readUnitWeights, unitWeightCandidate } from './unit-weights.js';
 
 const excludedProcessCategories = new Set(['饺子', '调理肉制品', '饼类']);
 const titles = {
@@ -101,14 +103,76 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       () => buildMpsWorkflow(draft, relations, shipmentSnapshot),
       [draft, relations, shipmentSnapshot],
     );
+    const coverage = result.scopeCoverage === 'national' ? '全国' : '范围内';
+    const [weightRead, setWeightRead] = react.useState(null);
+    const [weightError, setWeightError] = react.useState('');
+    const [weightBusy, setWeightBusy] = react.useState(false);
+    const weightController = react.useRef(null);
+    const weightGeneration = react.useRef(0);
+    const weightCodes = [
+      ...new Set((draft.products ?? []).map((row) => row['产品编码']).filter(Boolean)),
+    ].sort();
+    const weightScope = JSON.stringify([draft.id, draft.month, weightCodes]);
+    react.useEffect(() => {
+      weightGeneration.current++;
+      weightController.current?.abort();
+      setWeightRead(null);
+      setWeightError('');
+      setWeightBusy(false);
+      return () => {
+        weightGeneration.current++;
+        weightController.current?.abort();
+      };
+    }, [weightScope]);
+    const syncWeights = async () => {
+      const generation = ++weightGeneration.current;
+      weightController.current?.abort();
+      const controller = new AbortController();
+      weightController.current = controller;
+      setWeightBusy(true);
+      setWeightRead(null);
+      setWeightError('');
+      try {
+        const config = JSON.parse(document.getElementById('agent-sql-config').textContent);
+        const read = await readUnitWeights(
+          config,
+          (_request, options) =>
+            call(
+              'sql',
+              { queryId: options.queryId, parameters: options.values },
+              { signal: options.signal },
+            ),
+          weightCodes,
+          controller.signal,
+        );
+        if (generation === weightGeneration.current) setWeightRead(read);
+      } catch (error) {
+        if (generation === weightGeneration.current) setWeightError(error.message);
+      } finally {
+        if (generation === weightGeneration.current) setWeightBusy(false);
+      }
+    };
     const fields = step === 'process' ? processFields : planFields;
     const inScope = (row) => step !== 'process' || !excludedProcessCategories.has(row.category);
     const scopedRows = result.rows.filter(inScope);
     const scopedCategories = result.categoryRows.filter(inScope);
+    const configurationPairs = [
+      ...new Map(
+        [
+          ...result.rows,
+          ...(draft.products ?? [])
+            .filter((row) => row['基地'] && row['产品编码'])
+            .map((row) => ({ base: row['基地'], code: row['产品编码'], name: row['产品名称'] })),
+        ].map((row) => [JSON.stringify([row.base, row.code]), row]),
+      ).values(),
+    ];
     const bases = [
       ...new Set(
         [
           ...scopedRows.map((row) => row.base),
+          ...configurationPairs.map((row) => row.base),
+          ...(draft.resources ?? []).map((row) => row.base),
+          ...(draft.productionDays ?? []).map((row) => row.base),
           ...result.constraints.safetyDays.map((row) => row.base),
         ].filter(Boolean),
       ),
@@ -242,13 +306,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       if (field === 'reportShare' || field === 'historyShare') {
         const layer = row[field === 'reportShare' ? 'reportLayers' : 'historyLayers'];
         if (layer)
-          expression = `物料组 / 大类：${value(layer.groupQuantity)} ÷ ${value(layer.categoryQuantity)} = ${value(layer.groupShare)}；全国SKU / 物料组：${value(layer.skuQuantity)} ÷ ${value(layer.groupQuantity)} = ${value(layer.skuShare)}；基地SKU / 全国SKU：${value(layer.baseQuantity)} ÷ ${value(layer.skuQuantity)} = ${value(layer.baseShare)}；三层连乘：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
+          expression = `物料组 / 大类：${value(layer.groupQuantity)} ÷ ${value(layer.categoryQuantity)} = ${value(layer.groupShare)}；${coverage}SKU / 物料组：${value(layer.skuQuantity)} ÷ ${value(layer.groupQuantity)} = ${value(layer.skuShare)}；基地SKU / ${coverage}SKU：${value(layer.baseQuantity)} ÷ ${value(layer.skuQuantity)} = ${value(layer.baseShare)}；三层连乘：${value(layer.groupShare)} × ${value(layer.skuShare)} × ${value(layer.baseShare)} = ${value(layer.product)}`;
       }
       if ((field === 'reportShare' || field === 'historyShare') && row.layerMissing?.length)
         expression += `；${row.layerMissing.join('、')}`;
       if (field === 'systemShare')
         expression = row.fallback
-          ? `去年同月全国物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
+          ? `去年同月${coverage}物料组销量Top1托底SKU。物料组平均占比 ${value(row.groupShare)} 减去其余SKU有效占比，再按本SKU未调整基地的系统占比分配。系统值 ${value(row.systemShare)}`
           : `(${value(row.reportShare)} + ${value(row.historyShare)}) ÷ 2 = ${value(row.systemShare)}`;
       if (field === 'share')
         expression = `系统占比 ${value(row.systemShare)}；有效占比 ${value(row.share)}。${row.fallback ? '本SKU承接物料组剩余占比。' : ''}`;
@@ -307,21 +371,21 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
     const layerColumns = [
       '提报物料组/大类',
       '提报SKU/物料组',
-      '提报基地SKU/全国SKU',
+      `提报基地SKU/${coverage}SKU`,
       '提报三层连乘',
       '历史物料组/大类',
       '历史SKU/物料组',
-      '历史基地SKU/全国SKU',
+      `历史基地SKU/${coverage}SKU`,
       '历史三层连乘',
     ];
     const layerQuantityColumns = [
       '提报物料组数量',
       '提报大类数量',
-      '提报全国SKU数量',
+      `提报${coverage}SKU数量`,
       '提报基地SKU数量',
       '历史物料组数量',
       '历史大类数量',
-      '历史全国SKU数量',
+      `历史${coverage}SKU数量`,
       '历史基地SKU数量',
     ];
     const resourceColumns = [
@@ -383,6 +447,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           '总行数',
           '源产能候选',
           '来源',
+          '适用渠道',
+          '读取配置版本',
+          '读取时间',
           '未评估原因',
         ]),
       ];
@@ -407,7 +474,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             layerQuantityColumns.map((key, index) => [key, layerQuantities[index]]),
           ),
           分层缺项: row.layerMissing?.join('；'),
-          公式说明: '占比=(物料组/大类)×(全国SKU/物料组)×(基地SKU/全国SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；无约束期末=期初+所需生产-需求',
+          公式说明: `占比=(物料组/大类)×(${coverage}SKU/物料组)×(基地SKU/${coverage}SKU)；目标库存=安全天数×下一月需求/下一月自然日天数；所需生产=max(0,需求+目标库存-期初库存)；无约束期末=期初+所需生产-需求`,
           Top1托底: row.fallback ? '是' : '否',
           调整原因: adjustment?.reason,
           调整时间: adjustment?.at,
@@ -418,6 +485,15 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             )
             .join('；'),
           来源: sourceText,
+          适用渠道: (draft.unitWeights ?? []).find(
+            (item) => item.base === row.base && item.code === row.code,
+          )?.channels,
+          读取配置版本: (draft.unitWeights ?? []).find(
+            (item) => item.base === row.base && item.code === row.code,
+          )?.source?.configVersion,
+          读取时间: (draft.unitWeights ?? []).find(
+            (item) => item.base === row.base && item.code === row.code,
+          )?.source?.readAt,
           未评估原因: status(row, exportFields),
         };
       });
@@ -469,6 +545,18 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           来源: sourceText,
           未评估原因: result.missing.join('、') || '暂无输入，未评估',
         });
+      if (!includeCategory)
+        rows.push(
+          ...inputGaps
+            .filter(([, , period]) => !period || !month || period === month)
+            .map(([item, reason]) => ({
+              评估版本: draft.name,
+              评估月份: draft.month,
+              粒度: '实际输入缺项',
+              来源: item,
+              未评估原因: reason,
+            })),
+        );
       downloadCsv(`${draft.month}-${name}.csv`, columns, rows);
     };
     const filterBar = h(
@@ -558,7 +646,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       return h(
         'div',
         { className: 'wf-share-controls' },
-        h('span', null, row.fallback ? '去年同月全国组内Top1托底' : '按两路有效占比分配'),
+        h('span', null, row.fallback ? `去年同月${coverage}组内Top1托底` : '按两路有效占比分配'),
         saved ? h('span', null, `已调整：${saved.reason} · ${saved.at}`) : null,
         editing
           ? h(
@@ -806,7 +894,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
       );
     const skuPairs = [
       ...new Map(
-        result.rows
+        configurationPairs
           .filter(
             (row) =>
               (!base || row.base === base) &&
@@ -815,23 +903,123 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
           .map((row) => [JSON.stringify([row.base, row.code]), row]),
       ).values(),
     ];
-    const weightRows = skuPairs.map((row) => [
-      row.base,
-      row.code,
-      row.name,
-      numberInput(
-        `${row.base} ${row.code} 件吨系数`,
-        weights.find((item) => item.base === row.base && item.code === row.code)?.tonsPerPiece,
-        (tonsPerPiece) =>
-          update({
-            unitWeights: [
-              ...weights.filter((item) => item.base !== row.base || item.code !== row.code),
-              { base: row.base, code: row.code, tonsPerPiece },
-            ],
-          }),
+    const weightRows = skuPairs.map((row) => {
+      const current = weights.find((item) => item.base === row.base && item.code === row.code);
+      const candidate = unitWeightCandidate(
+        weightRead?.rows ?? [],
+        row.code,
+        current?.channels ?? '',
+      );
+      const setWeight = (patch) =>
+        update({
+          unitWeights: [
+            ...weights.filter((item) => item.base !== row.base || item.code !== row.code),
+            {
+              base: row.base,
+              code: row.code,
+              tonsPerPiece: current?.tonsPerPiece ?? null,
+              channels: current?.channels ?? '',
+              ...patch,
+            },
+          ],
+        });
+      return [
+        row.base,
+        row.code,
+        row.name,
+        numberInput(
+          `${row.base} ${row.code} 件吨系数`,
+          weights.find((item) => item.base === row.base && item.code === row.code)?.tonsPerPiece,
+          (tonsPerPiece) => setWeight({ tonsPerPiece }),
+        ),
+        h('input', {
+          'aria-label': `${row.base} ${row.code} 适用渠道`,
+          placeholder: '填写本基地SKU实际适用渠道，多个用逗号分隔',
+          value: current?.channels ?? '',
+          onChange: (event) =>
+            setWeight({
+              channels: event.target.value,
+              tonsPerPiece: current?.source ? null : (current?.tonsPerPiece ?? null),
+            }),
+        }),
+        h(
+          'span',
+          null,
+          weightRead
+            ? candidate.rows
+                .map((item) => `${display(item.channel_name)}：${display(item.ton_per_piece)}吨/件`)
+                .join('；') || '无来源记录'
+            : '尚未完整读取',
+        ),
+        h(
+          'button',
+          {
+            'aria-label': `${row.base} ${row.code} 使用来源系数`,
+            disabled: !weightRead || candidate.tonsPerPiece === null,
+            onClick: () =>
+              setWeight({
+                tonsPerPiece: candidate.tonsPerPiece,
+                channels: candidate.channels.join('、'),
+                source: {
+                  configVersion: weightRead.configVersion ?? '',
+                  readAt: weightRead.readAt,
+                },
+              }),
+          },
+          '使用来源系数',
+        ),
+        h(
+          'span',
+          null,
+          current?.source
+            ? `已按适用渠道采用；读取配置 ${current.source.configVersion}；${current.source.readAt}`
+            : candidate.missing.join('；') ||
+                '适用渠道已填写，尚未采用来源值；可按确认净重手工维护',
+        ),
+      ];
+    });
+    const inputGaps = [
+      ['B3 实际生产入库', '缺日发生或累计快照合同、正式业务类型及冲销规则；不跨日猜测累计'],
+      ['B3 剩余预计入库', '缺截至时点已批准生效排程、版本及单位映射；不以历史产量或能力估算'],
+      [
+        'B4 渠道适用与有效版本',
+        '来源可读不证明本轮全部渠道适用；读取配置版本不是主数据生效版本，实际适用范围与有效版本仍须维护人补齐',
+      ],
+      [
+        'B6 维护来源',
+        '正式安全天数和生产日历来源、负责人及生效版本尚未提供；本地值按当前评估版本保留',
+      ],
+      ...(!resources.some((row) => row.kind === 'tunnel')
+        ? [['B5 隧道台账', '缺正式物理ID与基地车间映射，不把SKU兼容行作为设备']]
+        : []),
+      ...(!resources.some((row) => row.kind === 'forming')
+        ? [['B5 成型机台账', '缺实际成型机资源数据']]
+        : []),
+      ...(!assignments.length
+        ? [['B5 月度分配', '缺基地SKU月份对隧道和成型机各自合计1的批准分配']]
+        : []),
+      ...bases
+        .filter(
+          (item) =>
+            !result.constraints.safetyDays.some((row) => row.base === item && row.days !== null),
+        )
+        .map((item) => [`B6 ${item}安全天数`, '缺真实值；0为有效值，空白不补0']),
+      ...bases.flatMap((item) =>
+        result.months
+          .slice(0, 3)
+          .filter(
+            (period) =>
+              !productionDays.some(
+                (row) => row.base === item && row.month === period && row.days !== null,
+              ),
+          )
+          .map((period) => [
+            `B6 ${item} ${period}生产日历`,
+            '缺实际可用生产天数；25天候选未自动采用',
+            period,
+          ]),
       ),
-      '吨/件，须用确认净重；不从日产吨/日产件推算',
-    ]);
+    ];
     const textEntry = (label, value, change) =>
       h('input', {
         'aria-label': label,
@@ -998,6 +1186,22 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
         h('span', null, `发货所属月 ${result.shipmentMonth}`),
       ),
       filterBar,
+      result.scopeCoverage !== 'national' &&
+        h('p', { className: 'wf-note' }, '产品池全国覆盖尚未取得实际证明，仅报告范围内结果'),
+      step !== 'process' &&
+        card(
+          '实际输入缺项',
+          h(
+            'details',
+            null,
+            h('summary', null, `待补实际数据或合同：${inputGaps.length}项`),
+            table(
+              '实际输入缺项',
+              ['项目', '尚缺实际数据或合同'],
+              inputGaps.map((row) => row.slice(0, 2)),
+            ),
+          ),
+        ),
       step === 'process' && h(SourceDiagnostics, { draft, result, table }),
       step === 'process'
         ? h(
@@ -1020,7 +1224,7 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
             h(
               'p',
               { className: 'wf-note' },
-              'M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按去年同月全国组内销量选择；其未调整基地承接组内剩余占比。',
+              `M+4只展示大类需求，供M+3目标库存参考，不生成第四个月SKU需求。Top1托底SKU按去年同月${coverage}组内销量选择；其未调整基地承接组内剩余占比。`,
             ),
             shareError && !editingShare
               ? h('p', { role: 'alert', className: 'wf-note wf-unavailable' }, shareError)
@@ -1071,8 +1275,8 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                   '产品编码',
                   '来源',
                   '物料组/大类',
-                  '全国SKU/物料组',
-                  '基地SKU/全国SKU',
+                  `${coverage}SKU/物料组`,
+                  `基地SKU/${coverage}SKU`,
                   '三层连乘',
                   '说明',
                 ],
@@ -1150,10 +1354,75 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
               ),
               card(
                 '件吨系数',
-                table(
-                  '件吨系数',
-                  ['基地', '产品编码', '产品名称', '吨/件', '来源要求'],
-                  weightRows,
+                h(
+                  react.Fragment,
+                  null,
+                  h(
+                    'p',
+                    { className: 'wf-note' },
+                    '来源值为候选。填写本基地SKU实际适用的全部渠道；相关渠道均有正数且相同系数才可采用。读取成功不证明全渠道适用，不从产能比推算。',
+                  ),
+                  h(
+                    'button',
+                    {
+                      onClick: syncWeights,
+                      disabled:
+                        weightBusy ||
+                        !weightCodes.length ||
+                        !document.getElementById('agent-sql-config'),
+                    },
+                    weightBusy ? '读取中' : '读取件吨系数',
+                  ),
+                  weightError && h('p', { role: 'alert' }, weightError),
+                  weightRead &&
+                    h(
+                      'p',
+                      { className: 'wf-note' },
+                      `已完整读取${weightRead.codes.length}个产品编码、${weightRead.rows.length}条渠道系数来源；读取配置${weightRead.configVersion}，${weightRead.readAt}。这不是主数据生效版本或全渠道覆盖证明。`,
+                    ),
+                  weightRead &&
+                    h(
+                      'button',
+                      {
+                        onClick: () =>
+                          downloadCsv(
+                            `${draft.month}-件吨系数来源.csv`,
+                            ['产品编码', '渠道', '吨/件', '读取配置版本', '读取时间', '来源说明'],
+                            weightRead.codes.flatMap((code) => {
+                              const records = weightRead.rows.filter(
+                                (row) => row.material_code === code,
+                              );
+                              return (records.length ? records : [{ material_code: code }]).map(
+                                (row) => ({
+                                  产品编码: code,
+                                  渠道: row.channel_name,
+                                  '吨/件': row.ton_per_piece,
+                                  读取配置版本: weightRead.configVersion,
+                                  读取时间: weightRead.readAt,
+                                  来源说明: records.length
+                                    ? '来源原值，适用渠道须按基地SKU维护；NULL不补0'
+                                    : '无来源记录',
+                                }),
+                              );
+                            }),
+                          ),
+                      },
+                      '下载系数来源',
+                    ),
+                  table(
+                    '件吨系数',
+                    [
+                      '基地',
+                      '产品编码',
+                      '产品名称',
+                      '吨/件',
+                      '适用渠道',
+                      '来源候选',
+                      '采用来源值',
+                      '来源与缺项',
+                    ],
+                    weightRows,
+                  ),
                 ),
               ),
               card(
@@ -1280,6 +1549,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                         '资源名称',
                         '日产吨数',
                         '分配比例',
+                        '适用渠道',
+                        '读取配置版本',
+                        '读取时间',
                       ],
                       [
                         ...result.constraints.safetyDays.map((row) => ({
@@ -1304,6 +1576,9 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                           基地: row.base,
                           产品编码: row.code,
                           件吨系数: row.tonsPerPiece,
+                          适用渠道: row.channels,
+                          读取配置版本: row.source?.configVersion,
+                          读取时间: row.source?.readAt,
                         })),
                         ...resources.map((row) => ({
                           评估版本: draft.name,
@@ -1324,6 +1599,13 @@ export function createWorkflow(react, useMpsPart, { downloadCsv, Dialog }) {
                           产品编码: row.code,
                           资源编号: row.resourceId,
                           分配比例: row.share,
+                        })),
+                        ...inputGaps.map(([item, reason]) => ({
+                          评估版本: draft.name,
+                          评估月份: draft.month,
+                          配置类型: '实际输入缺项',
+                          来源: item,
+                          状态: reason,
                         })),
                         ...localRules.map((rule) => ({
                           评估版本: draft.name,
