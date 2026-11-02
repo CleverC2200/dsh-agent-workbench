@@ -614,7 +614,7 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
     if (['health.cards', 'health.inventory'].includes(query.queryId))
       result.rows[0].pack_unit_qty = 86814.2;
     if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
-    if (query.queryId === 'current-shortage.summary')
+    if (query.queryId === 'current-shortage.overview')
       Object.assign(result.rows[0], { demand: 450, allocated: 50, shortage: 3 });
     return result;
   });
@@ -623,12 +623,12 @@ test('fc: current order card uses its own demand, allocation and three-stage gap
   await expect(card.locator('dl')).toContainText('缺货量3件');
   await expect(card.locator('dl')).toContainText('基地已占用50件');
   assert.doesNotMatch(await card.innerText(), /16,163|86,814|本月/);
-  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
 });
 test('fc: denied current orders remain unknown without substituting monthly shortage', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
-    if (query.queryId === 'current-shortage.summary')
+    if (query.queryId === 'current-shortage.overview')
       return { failure: { reasonCode: 'ROW_SCOPE_DENIED', message: '当前范围无权限' } };
     if (query.queryId === 'orders.summary') result.rows[0].shortage = 16163;
     return result;
@@ -638,7 +638,7 @@ test('fc: denied current orders remain unknown without substituting monthly shor
   await expect(card.locator('dd')).toHaveText(['-', '-']);
   assert.doesNotMatch(await card.innerText(), /16,163|本月/);
   await expect(frame.getByRole('alert')).toHaveCount(1);
-  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
 });
 test('dealer top date refresh preserves the selected customer scope', async (t) => {
@@ -783,15 +783,19 @@ test('QLL changing the date stays local until submit, then reads the new date', 
     .toBe(true);
   assert.deepEqual(errors, []);
 });
-test('FC uses the same Chinese date display and retains explicit refresh', async (t) => {
+test('FC reads the latest data without a date selector and retains explicit refresh', async (t) => {
   const { frame, calls, errors } = await mount(t, 'fc', 560);
-  await expect(frame.getByText('2026年10月20日', { exact: true })).toBeVisible();
-  await frame.getByLabel('读取时点').fill('2026-10-18');
-  await expect(frame.getByText('2026年10月18日', { exact: true })).toBeVisible();
-  const before = calls.length;
-  await frame.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(frame.getByLabel('读取时点')).toHaveCount(0);
+  await expect(frame.getByRole('button', { name: /^选择日期：/ })).toHaveCount(0);
+  const refresh = frame.getByRole('button', { name: '刷新', exact: true });
+  await expect(refresh).toBeEnabled();
   await expect
-    .poll(() => calls.slice(before).some((query) => query.parameters.as_of === '2026-10-18'))
+    .poll(() => calls.some((query) => query.queryId === 'source.branch-stock-date'))
+    .toBe(true);
+  const before = calls.length;
+  await refresh.click();
+  await expect
+    .poll(() => calls.slice(before).some((query) => query.queryId === 'source.branch-stock-date'))
     .toBe(true);
   assert.deepEqual(errors, []);
 });
@@ -830,7 +834,9 @@ for (const [quantity, count, display] of [
     await expect(card.locator('dl div').filter({ hasText: '缺货量' }).locator('dd')).toHaveText(
       quantity === null ? '-' : '12件',
     );
-    assert.equal(calls.filter((q) => q.queryId === 'page.inventory-groups').length, 1);
+    await expect
+      .poll(() => calls.filter((q) => q.queryId === 'page.inventory-groups').length)
+      .toBe(1);
     assert.equal(calls.filter((q) => q.queryId === 'page.dashboard-groups').length, 1);
     assert.deepEqual(errors, []);
   });
@@ -1019,7 +1025,7 @@ test('FC current-order card preserves a verified zero independently of monthly q
   const { frame, calls, errors } = await mount(t, 'fc', 1280, (query, result) => {
     if (query.queryId === 'orders.summary')
       Object.assign(result.rows[0], { ordered: 172005, shortage: 15675 });
-    if (query.queryId === 'current-shortage.summary')
+    if (query.queryId === 'current-shortage.overview')
       Object.assign(result.rows[0], { demand: 0, allocated: 0, remaining: 0, shortage: 0 });
     return result;
   });
@@ -1029,7 +1035,7 @@ test('FC current-order card preserves a verified zero independently of monthly q
   await expect(card.locator('.kpi-value')).toHaveText('0件');
   await expect(card.locator('dt')).toHaveText(['缺货量', '基地已占用']);
   await expect(card.locator('dd')).toHaveText(['0件', '0件']);
-  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.summary').length, 1);
+  assert.equal(calls.filter((q) => q.queryId === 'current-shortage.overview').length, 1);
   assert.deepEqual(errors, []);
 });
 for (const id of ['aqkc', 'qll', 'fc', 'apsplan'])
@@ -1176,7 +1182,7 @@ test('QLL 品类逐层展开到基地和 SKU，初始不请求 SKU 明细', asyn
   assert.deepEqual(errors, []);
 });
 
-for (const id of ['fc', 'qll', 'dealer'])
+for (const id of ['qll', 'dealer'])
   test(`${id}: Chinese calendar stays inside narrow panes and only applies on refresh`, async (t) => {
     const { page, frame, calls, errors } = await mount(t, id, 390);
     const header = frame.locator('[data-business-toolbar]');
@@ -1262,7 +1268,7 @@ for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
 
 test('FC cycle dialog applies one setting to its card and fresh ten-row pages', async (t) => {
   const { frame, calls, errors, page } = await mount(t, 'fc', 390, (query, result) => {
-    if (query.queryId === 'replenishment.summary')
+    if (['replenishment.summary', 'replenishment.overview'].includes(query.queryId))
       Object.assign(result.rows[0], {
         recommended_qty: 10 * (query.parameters.cycle_days + 3) - 20,
       });
@@ -1882,7 +1888,8 @@ test('FC list filters align compact white controls, retain actions and adapt to 
         );
         assert.ok(
           layout.fields.every(
-            (control) => control.right - control.left >= 80 && control.right - control.left <= 200,
+            (control) =>
+              control.right - control.left >= 80 && control.right - control.left <= width / 2,
           ),
           `desktop fields shrink while keeping usable input width: ${JSON.stringify(layout.fields)}`,
         );
@@ -2031,6 +2038,7 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   const input = frame.getByRole('spinbutton', { name: /实际补货量/ }).first();
   await expect(input).toHaveValue('0');
   await input.focus();
+  await input.press('End');
   await input.press('Backspace');
   await expect(input).toHaveValue('');
   await input.pressSequentially('100');

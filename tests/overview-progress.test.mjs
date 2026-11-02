@@ -1,3 +1,4 @@
+import { overviewReply, untilObserved } from './fixtures/overview-reply.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -14,14 +15,7 @@ const { readConfiguredOverview, completeCount } = await import(
 );
 const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
 config.overviewViewIds = ['branch-supply', 'replenishment', 'branch-stock'];
-const reply = (id, version = 'v1') => ({
-  configVersion: version,
-  rows: [
-    Object.fromEntries(
-      config.queries[id].resultColumns.map((k) => [k, k === 'day' ? '2026-10-18' : 1]),
-    ),
-  ],
-});
+const reply = (id, version = 'v1') => overviewReply(config, id, '2026-10-18', version);
 test('fast overview cards render while another source is pending; shared snapshot resolves only once', async () => {
   const calls = [],
     progress = [];
@@ -34,7 +28,9 @@ test('fast overview cards render while another source is pending; shared snapsho
       return reply(o.queryId);
     },
   });
-  await new Promise(setImmediate);
+  await untilObserved(
+    () => typeof finishSlow === 'function' && progress.some((p) => p.replenishment?.summary),
+  );
   const early = progress.some((p) => p.replenishment?.summary && !p['branch-supply']);
   finishSlow();
   const result = await promise;
@@ -102,8 +98,8 @@ test('aborted overview cannot publish late progress', async () => {
 for (const agent of ['qll', 'dealer'])
   test(`${agent}: a slow inventory source does not hold ready cards`, async () => {
     const c = JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'));
-    const slow = agent === 'qll' ? 'inventory.summary' : 'dealer.stock.summary';
-    const ready = agent === 'qll' ? 'orders' : 'customer';
+    const slow = agent === 'qll' ? 'overview.quick-stock' : 'dealer.stock.summary';
+    const ready = agent === 'qll' ? 'factory-overview' : 'customer';
     let finish;
     const progress = [];
     const job = readConfiguredOverview(c, '2026-10-19', '', {
@@ -115,17 +111,12 @@ for (const agent of ['qll', 'dealer'])
             rows: [{ month: '2026-10-01', inventory_version: '月初' }],
           };
         if (o.queryId === slow) await new Promise((r) => (finish = r));
-        return {
-          configVersion: 'v1',
-          rows: [
-            Object.fromEntries(
-              c.queries[o.queryId].resultColumns.map((k) => [k, k === 'day' ? '2026-10-18' : 1]),
-            ),
-          ],
-        };
+        return overviewReply(c, o.queryId);
       },
     });
-    await new Promise(setImmediate);
+    await untilObserved(
+      () => typeof finish === 'function' && progress.some((p) => p[ready]?.summary),
+    );
     const early = progress.some((p) => p[ready]?.summary);
     finish();
     const result = await job;
@@ -183,20 +174,12 @@ test('quantity cards publish before aging and survive an aging failure', async (
     onProgress: (p) => progress.push(p),
     execute: async (_, o) => {
       if (o.queryId === 'health.cards') return new Promise((_, reject) => (failAge = reject));
-      return {
-        configVersion: 'v1',
-        rows: [
-          Object.fromEntries(
-            c.queries[o.queryId].resultColumns.map((k) => [
-              k,
-              k === 'day' ? '2026-10-23' : k === 'invalid' ? 0 : 1,
-            ]),
-          ),
-        ],
-      };
+      return overviewReply(c, o.queryId, '2026-10-23');
     },
   });
-  await new Promise(setImmediate);
+  await untilObserved(
+    () => typeof failAge === 'function' && progress.some((p) => p.health?.summary?.total_qty === 1),
+  );
   assert.ok(progress.some((p) => p.health?.summary?.total_qty === 1));
   failAge(Error('AGE_FAILED'));
   const result = await promise;

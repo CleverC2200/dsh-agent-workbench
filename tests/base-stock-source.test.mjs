@@ -159,8 +159,12 @@ test('age structure aggregates current inventory through the dashboard tab', asy
         : [
             {
               'safety_stock.base_name': '遂平',
-              'safety_stock.target_month': '2026-10-01',
-              'safety_stock.inventory_version': '滚动',
+              'safety_stock.target_month': new Date(
+                new Date().getFullYear(),
+                new Date().getMonth() + (new Date().getDate() >= 21 ? 1 : 0),
+                1,
+              ).toLocaleDateString('en-CA'),
+              'safety_stock.inventory_version': new Date().getDate() >= 21 ? '滚动' : '月初',
             },
           ],
     };

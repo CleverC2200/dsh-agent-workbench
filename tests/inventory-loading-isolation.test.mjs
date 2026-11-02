@@ -1,3 +1,4 @@
+import { overviewReply, untilObserved } from './fixtures/overview-reply.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -19,6 +20,8 @@ for (const agent of ['fc', 'qll']) {
     const config = JSON.parse(
       await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
     );
+    const ready = agent === 'fc' ? 'branch-supply' : 'factory-overview';
+    const slow = config.overviewQuickStock ?? 'source.branch-stock-date';
     const calls = [],
       progress = [];
     let release;
@@ -26,29 +29,19 @@ for (const agent of ['fc', 'qll']) {
       release = resolve;
     });
     const load = readConfiguredOverview(config, '2026-10-28', '', {
-      viewIds: ['orders', 'branch-stock'],
+      viewIds: [ready, 'branch-stock'],
       onProgress: (value) => progress.push(value),
       execute: async (_, options) => {
         calls.push(options.queryId);
-        if (options.queryId === config.overviewQuickStock) {
+        if (options.queryId === slow) {
           await blocked;
           return { configVersion: 'v1', rows: [] };
         }
-        return {
-          configVersion: 'v1',
-          rows: [
-            Object.fromEntries(
-              config.queries[options.queryId].resultColumns.map((k) => [
-                k,
-                k === 'day' ? '2026-10-28' : 1,
-              ]),
-            ),
-          ],
-        };
+        return overviewReply(config, options.queryId, '2026-10-28');
       },
     });
-    await new Promise(setImmediate);
-    const ordersReady = progress.some((value) => value.orders?.summary);
+    await untilObserved(() => progress.some((value) => value[ready]?.summary));
+    const ordersReady = progress.some((value) => value[ready]?.summary);
     release();
     await load;
     assert.ok(ordersReady, `orders waited for quick stock; initial calls: ${calls.join(', ')}`);
@@ -81,23 +74,16 @@ for (const agent of ['fc', 'qll']) {
             ],
           };
         }
-        return {
-          configVersion: 'v1',
-          rows: [
-            Object.fromEntries(
-              config.queries[options.queryId].resultColumns.map((k) => [
-                k,
-                k === 'day' ? '2026-10-28' : k === 'invalid' ? 0 : 1,
-              ]),
-            ),
-          ],
-        };
+        return overviewReply(config, options.queryId, '2026-10-28');
       },
     });
     if (agent === 'fc') {
       assert.ok(!calls.includes('overview.quick-stock'));
       assert.equal(calls.filter((id) => id === 'source.branch-stock-date').length, 1);
-      assert.ok(calls.includes('health.inventory'));
+      assert.ok(
+        !calls.includes('health.inventory'),
+        'snapshot already contains inventory quantities',
+      );
       assert.ok(calls.includes('health.cards'));
     } else {
       assert.equal(calls.filter((id) => id === config.overviewQuickStock).length, 1);

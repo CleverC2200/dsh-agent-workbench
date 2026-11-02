@@ -12,20 +12,14 @@ test('ASN SQL links execution occupations once, excludes closed documents and al
   assert.match(result.stderr, /Ran 16 tests/);
 });
 
-// The reviewed source is shared by cards, drill-down, pagination, and replenishment.
-test('every current FC order consumer embeds the reviewed upstream allocation before local filters', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const source = await readFile('business/inventory-fc/upstream-orders-source.sql', 'utf8');
-  const prefix = source.slice(0, source.lastIndexOf('\nSELECT l.warehouse_code')).trim();
-  const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
-  for (const [id, definition] of Object.entries(config.queries)) {
-    if (
-      id.startsWith('current-shortage.') ||
-      id.startsWith('branch-current-orders.') ||
-      id.startsWith('replenishment')
-    )
-      assert.ok(definition.request.sql.includes(prefix.replace(/^WITH /, '')), id);
-  }
+test('optimized FC order cards preserve canonical FIFO and unknown quantities across warehouse scopes', () => {
+  const result = spawnSync('python3', ['scripts/test_fc_card_reads.py'], {
+    encoding: 'utf8',
+    timeout: 30000,
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stderr, /Ran 7 tests/);
 });
 
 test('all declared FC sorts preserve null ordering and ten-row pages after SQL compaction', () => {

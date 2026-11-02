@@ -89,7 +89,7 @@ WITH base_latest_inventory AS (
       CASE
         WHEN o.bizunitconvertrate > 0
         THEN CASE
-          WHEN NULLIF(TRIM(CAST(o.bdwctime AS TEXT)), '') IS NOT NULL
+          WHEN NOT NULLIF(TRIM(CAST(o.bdwctime AS TEXT)), '') IS NULL
           OR o.prapare_order_status IN ('备单完成', '备单完毕')
           THEN o.qtyallocated / o.bizunitconvertrate
           ELSE o.qtyordered / o.bizunitconvertrate
@@ -114,7 +114,7 @@ WITH base_latest_inventory AS (
     AND (
       o.prapare_order_status IS NULL OR NOT o.prapare_order_status IN ('作废', '已签收')
     )
-    AND NULLIF(TRIM(o.cust_order_no), '') IS NOT NULL
+    AND NOT NULLIF(TRIM(o.cust_order_no), '') IS NULL
 ), base_current_open_orders AS (
   SELECT
     l.cust_order_no AS cust_order_no,
@@ -689,7 +689,7 @@ WITH base_latest_inventory AS (
     a.expected AS expected_total,
     a.received AS received_total,
     CASE
-      WHEN e.allocated IS NOT NULL AND a.expected IS NOT NULL
+      WHEN NOT e.allocated IS NULL AND NOT a.expected IS NULL
       THEN CASE WHEN e.allocated > a.expected THEN a.expected ELSE e.allocated END
     END AS allocated_total,
     a.source_updated_at AS source_updated_at,
@@ -912,7 +912,7 @@ WITH base_latest_inventory AS (
       OR s.month_date IS NULL
       OR bs.base IS NULL
       OR (
-        b.sku IS NOT NULL AND b.available IS NULL
+        NOT b.sku IS NULL AND b.available IS NULL
       )
       THEN 1
       ELSE 0
@@ -922,10 +922,10 @@ WITH base_latest_inventory AS (
       THEN 0
       WHEN pr.source_count > 0
       AND q.invalid = 0
-      AND s.month_date IS NOT NULL
-      AND bs.base IS NOT NULL
+      AND NOT s.month_date IS NULL
+      AND NOT bs.base IS NULL
       AND (
-        b.sku IS NULL OR b.available IS NOT NULL
+        b.sku IS NULL OR NOT b.available IS NULL
       )
       THEN CASE
         WHEN COALESCE(b.available, 0) <= p.prior_remaining

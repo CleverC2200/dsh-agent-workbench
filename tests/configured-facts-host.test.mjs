@@ -31,7 +31,7 @@ test('independent Host reads use the current installed config rather than a prio
             call.queryId === 'source.branch-stock-date'
               ? { day: '2026-10-22' }
               : { row_count: 1, recommended_qty: 35 };
-          if (call.queryId === 'replenishment.summary') cycles.push(request.parameters.gea_p2303);
+          if (call.queryId === 'replenishment.overview') cycles.push(request.parameters.gea_p2303);
           return {
             rows: [
               Object.fromEntries(query.resultColumns.map((name) => [name, values[name] ?? 0])),

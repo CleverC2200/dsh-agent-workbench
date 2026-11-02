@@ -399,7 +399,7 @@
 .fcToolbar:has(.quickFilters) {
   flex-wrap: wrap;
 }
-@container fc-list (max-width: 720px) {
+@container fc-list (max-width: 960px) {
   .fcToolbar.toolbar {
     flex-wrap: wrap;
   }

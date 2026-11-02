@@ -6,6 +6,8 @@ import { mpsPage } from './helpers/mps-page.mjs';
 import { mpsDownloadText } from './helpers/mps-download.mjs';
 const config = JSON.parse(await readFile('static/mps/sql.config.json', 'utf8'));
 const plan = '';
+const currentMonth = new Date().toISOString().slice(0, 7) + '-01';
+const previousYearMonth = String(Number(currentMonth.slice(0, 4)) - 1) + currentMonth.slice(4);
 const shipment = 'agents_scm_cust_deliv_daily_di.';
 
 test('reported plan details include matched product dimensions and region without a diagnostic column', async (t) => {
@@ -173,7 +175,7 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   ).toContainText('当前账号暂无数据权限');
   assert.deepEqual(
     calls
-      .filter((call) => call.queryId === 'facts.report' && call.parameters.month === '2026-10-01')
+      .filter((call) => call.queryId === 'facts.report' && call.parameters.month === currentMonth)
       .map((call) => call.parameters.offset),
     [0, 200],
   );
@@ -210,7 +212,7 @@ test('truncated facts are rejected and a late historical period cannot overwrite
     if (query.queryId === 'facts.report.count') return { ...fixture(query), rows: [{ total: 2 }] };
     if (
       query.queryId === 'facts.history' &&
-      query.parameters.month === '2025-10-01' &&
+      query.parameters.month === previousYearMonth &&
       ++historyCalls === 1
     )
       await pending;

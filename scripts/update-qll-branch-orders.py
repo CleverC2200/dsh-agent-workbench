@@ -7,6 +7,8 @@ from pathlib import Path
 import sqlglot
 from sqlglot import exp
 
+WITH_KEY = 'with_' if 'with_' in exp.Select.arg_types else 'with'
+
 ROOT = Path(__file__).resolve().parents[1]
 FIELDS = ('snapshot_date location_type location_code location_name base warehouse_code '
           'sku material_name category material_group demand allocated remaining available shortage invalid').split()
@@ -60,7 +62,7 @@ def build(config, base, branch):
                 ctes.append(cte.copy())
             if cte.alias == 'filtered':
                 after = True
-        tree.set('with_', exp.With(expressions=ctes))
+        tree.set(WITH_KEY, exp.With(expressions=ctes))
         query['request']['sql'] = render(tree)
         query['plugins'] = ['qll']
         query['notes'] = ('基地保持基地有效未发货订单口径；分仓复用 ASN 未收货完成订单，'
@@ -120,5 +122,5 @@ if __name__ == '__main__':
                              'warehouseid material_code material_name product_categ_name material_group_name '
                              'demand_qty allocated_qty remaining_qty available_qty shortage_qty invalid_sku').split()))
     reference = parse('SELECT ' + ', '.join(f'f.{k} AS {v}' for k, v in names.items()) + ' FROM filtered AS f')
-    reference.set('with_', source.args['with_'].copy())
+    reference.set(WITH_KEY, source.args[WITH_KEY].copy())
     (path.parent / 'current-orders-source.sql').write_text(render(reference, pretty=True) + '\n')
