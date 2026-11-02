@@ -2042,6 +2042,7 @@ test('FC actual quantity can clear zero, type a replacement and retain decimal d
   await expect(input).toHaveValue('12.5');
   await input.fill('');
   await expect(input).toHaveValue('');
+  await input.focus();
   await input.blur();
   await expect(input).toHaveValue('');
   await input.fill('0');
