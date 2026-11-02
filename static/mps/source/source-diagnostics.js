@@ -1,0 +1,221 @@
+const text = (value) => (typeof value === 'string' ? value.trim() : '');
+const key = (base, code) => JSON.stringify([text(base), text(code)]);
+const hasKey = (row) => text(row['基地']) && text(row['产品编码']);
+const usable = (value) =>
+  ['number', 'string'].includes(typeof value) &&
+  String(value).trim() !== '' &&
+  Number.isFinite(Number(value)) &&
+  Number(value) >= 0 &&
+  Number(value) <= Number.MAX_SAFE_INTEGER;
+const columns = [
+  '来源',
+  '期间',
+  '读取状态',
+  '完整读取总条数',
+  '池内源行',
+  '可用数量键/产品池键',
+  '缺数量源行',
+  '缺业务键源行',
+  '池外源行',
+  '原因',
+];
+
+export function createSourceDiagnostics(react, { downloadCsv, Dialog }) {
+  const h = react.createElement;
+  return function SourceDiagnostics({ draft, result, table }) {
+    const [preview, setPreview] = react.useState(null);
+    const [page, setPage] = react.useState(0);
+    const diagnostics = ['report', 'history'].flatMap((source) =>
+      result.months.slice(0, 3).map((month) => {
+        const period =
+          source === 'report' ? month : `${Number(month.slice(0, 4)) - 1}${month.slice(4)}`;
+        const local = draft[source + 'Source'] === 'local-file';
+        const read =
+          draft[source + 'Read']?.periods?.[period] ?? (local ? draft[source + 'Read'] : undefined);
+        const records = (draft[source] ?? []).filter((row) => row['月份'] === period);
+        const pool = new Set(
+          result.rows.filter((row) => row.month === month).map((row) => key(row.base, row.code)),
+        );
+        const column =
+          source === 'report' ? (draft.pull === 'monthly' ? '月初数量' : '纠偏数量') : '数量';
+        const quantity = (row) => row[source === 'report' ? '源' + column : column] ?? row[column];
+        const matched = (row) => hasKey(row) && pool.has(key(row['基地'], row['产品编码']));
+        const ready = read?.status === 'ready';
+        const total = local ? records.length : read?.metadata?.total;
+        const counted = ready && Number.isSafeInteger(total) && total === records.length;
+        const partial = read?.metadata?.partial;
+        const complete = counted && (!partial || records.length > 0);
+        let state =
+          { loading: '读取中', failed: '失败', denied: '失败', error: '失败' }[read?.status] ??
+          '未读取';
+        if (ready) state = complete ? (records.length ? '成功有记录' : '成功空集') : '读取不完整';
+        const groups = new Map();
+        for (const row of records.filter(matched)) {
+          const id = key(row['基地'], row['产品编码']);
+          groups.set(id, (groups.get(id) ?? true) && usable(quantity(row)));
+        }
+        const warnings = [
+          ...new Set(
+            (read?.metadata?.warnings ?? []).map((warning) =>
+              typeof warning === 'string' ? warning : JSON.stringify(warning),
+            ),
+          ),
+        ];
+        const reason = [
+          text(read?.error),
+          ready && !counted ? '来源未完整返回，不能判定空集或完整覆盖' : '',
+          partial
+            ? records.length
+              ? '部分字段不可用，数量按当前口径独立核对'
+              : '来源返回部分结果且无记录，不能判定成功空集'
+            : '',
+          ...warnings,
+        ]
+          .filter(Boolean)
+          .join('；');
+        const summary = {
+          来源: source === 'report' ? '计划提报' : '历史发货',
+          期间: period,
+          读取状态: state,
+          完整读取总条数: complete ? total : null,
+          池内源行: ready ? records.filter(matched).length : null,
+          '可用数量键/产品池键': complete
+            ? `${[...groups.values()].filter(Boolean).length}/${pool.size}`
+            : null,
+          缺数量源行: ready ? records.filter((row) => !usable(quantity(row))).length : null,
+          缺业务键源行: ready ? records.filter((row) => !hasKey(row)).length : null,
+          池外源行: ready ? records.filter((row) => hasKey(row) && !matched(row)).length : null,
+          原因: reason,
+        };
+        const detailColumns = [
+          '月份',
+          ...(source === 'report' ? ['大区'] : []),
+          '基地',
+          '产品编码',
+          '产品名称',
+          '大类',
+          '系列',
+          '物料组',
+          ...(source === 'report' ? ['源月初数量', '源纠偏数量'] : ['数量']),
+          '当前口径',
+          '当前数量状态',
+          '产品池匹配',
+          '读取状态',
+        ];
+        return {
+          id: source + period,
+          summary,
+          detailColumns,
+          records: records.map((row) => ({
+            ...row,
+            ...(source === 'report'
+              ? {
+                  源月初数量: row['源月初数量'] ?? row['月初数量'],
+                  源纠偏数量: row['源纠偏数量'] ?? row['纠偏数量'],
+                }
+              : {}),
+            当前口径: column,
+            当前数量状态: usable(quantity(row)) ? '数量可用' : '缺数量',
+            产品池匹配: !hasKey(row) ? '缺业务键' : matched(row) ? '池内' : '池外',
+            读取状态: state,
+          })),
+        };
+      }),
+    );
+    const selected = diagnostics.find((entry) => entry.id === preview);
+    const download = (entry) =>
+      downloadCsv(
+        `${entry.summary['来源']}-${entry.summary['期间']}-来源明细.csv`,
+        entry.detailColumns,
+        entry.records,
+      );
+    return h(
+      'section',
+      { className: 'dc-card wf-source-diagnostics', 'aria-label': '逐期来源诊断' },
+      h(
+        'div',
+        { className: 'dc-card-head' },
+        h('h3', null, '逐期来源诊断'),
+        h(
+          'button',
+          {
+            onClick: () =>
+              downloadCsv(
+                '逐期来源诊断.csv',
+                columns,
+                diagnostics.map((entry) => entry.summary),
+              ),
+          },
+          '导出来源诊断',
+        ),
+      ),
+      h(
+        'p',
+        { className: 'wf-note' },
+        `当前提报口径为${draft.pull === 'monthly' ? '月初数量' : '纠偏数量'}。数量覆盖按基地与产品编码去重，产品池缺键条目仍计入分母；同键全部源行数量可用才计入覆盖，真实0有效。其他字段缺失单列警告，不影响当前数量核对；缺业务键与池外行分别统计，缺数量含无效值，可与两者重叠。未完整返回、失败、未读取或部分结果无记录时，完整总条数及覆盖留空，保留明细仅供核对。`,
+      ),
+      table(
+        '逐期来源诊断',
+        [...columns, '明细'],
+        diagnostics.map((entry) => [
+          ...columns.map((column) =>
+            entry.summary[column] == null || entry.summary[column] === ''
+              ? '—'
+              : String(entry.summary[column]),
+          ),
+          h(
+            'button',
+            {
+              disabled: !entry.records.length,
+              onClick: () => {
+                setPreview(entry.id);
+                setPage(0);
+              },
+            },
+            '明细',
+          ),
+        ]),
+      ),
+      selected &&
+        h(
+          Dialog,
+          {
+            title: `${selected.summary['来源']} · ${selected.summary['期间']} · 来源明细`,
+            className: 'dc-source-detail',
+            close: () => setPreview(null),
+            footer: h('button', { onClick: () => download(selected) }, '下载明细'),
+          },
+          h(
+            'p',
+            null,
+            `读取状态：${selected.summary['读取状态']}；${selected.summary['原因'] || '按当前产品池与口径核对'}。`,
+          ),
+          table(
+            '来源明细',
+            selected.detailColumns,
+            selected.records
+              .slice(page * 25, (page + 1) * 25)
+              .map((row) =>
+                selected.detailColumns.map((column) =>
+                  row[column] == null || row[column] === '' ? '—' : String(row[column]),
+                ),
+              ),
+          ),
+          h(
+            'div',
+            { className: 'dc-pagination' },
+            h('span', null, `共${selected.records.length}条，每页25条，第${page + 1}页`),
+            h('button', { disabled: !page, onClick: () => setPage(page - 1) }, '上一页'),
+            h(
+              'button',
+              {
+                disabled: (page + 1) * 25 >= selected.records.length,
+                onClick: () => setPage(page + 1),
+              },
+              '下一页',
+            ),
+          ),
+        ),
+    );
+  };
+}

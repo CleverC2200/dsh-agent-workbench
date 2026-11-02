@@ -1784,6 +1784,11 @@
   margin: 0;
 }
 
+.gea-conversation-toolbar .gea-conversation-toolbar-reconnect {
+  width: auto;
+  padding-inline: 8px;
+}
+
 .gea-conversation-toolbar-error {
   position: absolute;
   right: 10px;

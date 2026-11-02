@@ -21,6 +21,17 @@ const channelBuild = await build({
 const { connectHtmlViewState } = await import(
   'data:text/javascript;base64,' + Buffer.from(channelBuild.outputFiles[0].text).toString('base64')
 );
+const localDraftBuild = await build({
+  entryPoints: ['static/mps/source/local-draft.js'],
+  bundle: true,
+  write: false,
+  format: 'esm',
+  platform: 'node',
+});
+const { encodeLocalDrafts, decodeLocalDrafts } = await import(
+  'data:text/javascript;base64,' +
+    Buffer.from(localDraftBuild.outputFiles[0].text).toString('base64')
+);
 test('the registered sample keeps only its explicit UI values across Document replacement without a login or Session', async () => {
   const workbench = new WorkbenchController({ panel: () => {}, document: () => {} });
   const off = workbench.registerFrame({ id: 'workbench-html-table', kind: 'html', src: '/sample' });
@@ -296,6 +307,197 @@ test('personal feedback fields persist in their Session and never accept returne
   );
   assert.throws(
     () => owner.saveHtmlViewState(page, 'subject/session-A', { ...state, loggedIn: true }),
+    /INVALID_HTML_VIEW_STATE/,
+  );
+});
+
+test('MPS local input drafts recover only in their subject and Session with no credential or calculated facts', () => {
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const page = 'plan-category-production';
+  owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  const localDrafts = {
+    format: 1,
+    selected: 'local-2',
+    drafts: [
+      {
+        id: 'local-2',
+        name: '十二月评估',
+        month: '2026-12',
+        pull: 'monthly',
+        inputs: {
+          products: {
+            file: '产品.csv',
+            rows: [
+              {
+                基地: '甲',
+                产品编码: 'A',
+                产品名称: '甲产品',
+                大类: '汤圆',
+                系列: '系列',
+                物料组: '组',
+                物料组名称: '',
+                老品编码: '',
+                老品名称: '',
+              },
+            ],
+          },
+        },
+        adjustments: {
+          categoryDemand: [
+            {
+              month: '2026-12',
+              category: '汤圆',
+              quantity: 120,
+              systemValue: 100,
+              reason: '已确认增量',
+              at: '2026-10-30T00:00:00.000Z',
+            },
+          ],
+          shares: [],
+          history: [],
+        },
+      },
+    ],
+  };
+  const state = { version: 1, localDrafts };
+  owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', state);
+  assert.deepEqual(owner.readHtmlViewState(page, 'tenant-A/user-A/session-A'), state);
+  assert.equal(owner.readHtmlViewState(page, 'tenant-B/user-A/session-A'), undefined);
+  assert.equal(owner.readHtmlViewState(page, 'tenant-A/user-A/session-B'), undefined);
+  for (const field of ['credentials', 'accessToken', 'business', 'calculation']) {
+    const invalid = structuredClone(state);
+    invalid.localDrafts.drafts[0][field] = {};
+    assert.throws(
+      () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', invalid),
+      /INVALID_HTML_VIEW_STATE/,
+    );
+  }
+  const incompatible = structuredClone(state);
+  incompatible.localDrafts.format = 2;
+  assert.throws(
+    () => owner.saveHtmlViewState(page, 'tenant-A/user-A/session-A', incompatible),
+    /INVALID_HTML_VIEW_STATE/,
+  );
+});
+
+test('a rejected local view save reaches the page while retaining unsaved user input', async () => {
+  const listeners = new Map();
+  const parent = { postMessage() {} };
+  const savedWindow = globalThis.window;
+  globalThis.window = {
+    parent,
+    addEventListener: (name, listener) => listeners.set(name, listener),
+    removeEventListener() {},
+  };
+  try {
+    const { createPageViewState } = await import('../business/shared/view-state.js');
+    const view = createPageViewState('plan-category-production');
+    const events = [];
+    view.subscribe((state, event) => events.push({ state, event }));
+    const receive = listeners.get('message');
+    receive({
+      source: parent,
+      data: {
+        protocol: 'dsh-workbench-view-v1',
+        type: 'restore',
+        page: 'plan-category-production',
+        version: 1,
+        channel: 'a',
+        generation: 1,
+        state: { version: 1 },
+      },
+    });
+    view.update({ assistantDraft: '尚未保存的本地输入' });
+    for (const [channel, generation] of [
+      ['old', 1],
+      ['a', 0],
+    ]) {
+      receive({
+        source: parent,
+        data: {
+          protocol: 'dsh-workbench-view-v1',
+          type: 'rejected',
+          page: 'plan-category-production',
+          version: 1,
+          channel,
+          generation,
+          error: 'STALE',
+        },
+      });
+      assert.equal(events.at(-1).event, 'restore');
+    }
+    receive({
+      source: parent,
+      data: {
+        protocol: 'dsh-workbench-view-v1',
+        type: 'rejected',
+        page: 'plan-category-production',
+        version: 1,
+        channel: 'a',
+        generation: 1,
+        error: 'STATE_TOO_LARGE',
+      },
+    });
+    assert.equal(events.at(-1).event, 'rejected');
+    assert.equal(view.get().assistantDraft, '尚未保存的本地输入');
+  } finally {
+    if (savedWindow === undefined) delete globalThis.window;
+    else globalThis.window = savedWindow;
+  }
+});
+
+test('MPS local and business shipment edits recover through the codec and Host without business source facts', () => {
+  const key = JSON.stringify(['郑州', 'A']);
+  const local = {
+    values: { [key]: { value: 301, source: '人工调整', previous: 300 } },
+    remaining: { 郑州: { values: { [key]: 11 }, source: '基地调整' } },
+  };
+  const business = {
+    values: { [key]: { value: 99, source: '人工调整', previous: null } },
+    remaining: {},
+  };
+  const draft = {
+    id: 'v1',
+    name: '试算',
+    month: '2026-10',
+    pull: 'monthly',
+    files: {},
+    shipment: {
+      activeSource: 'business',
+      values: business.values,
+      remaining: business.remaining,
+      sourceEdits: { 'local-file': local, business },
+      business: { rows: [{ secret: 'BUSINESS_FACT' }] },
+      businessAttempted: true,
+      granted: true,
+      credentials: 'CREDENTIAL',
+    },
+  };
+  const encoded = encodeLocalDrafts([draft], 'v1');
+  assert.deepEqual(encoded.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
+  assert.doesNotMatch(
+    JSON.stringify(encoded),
+    /BUSINESS_FACT|CREDENTIAL|businessAttempted|granted/,
+  );
+  const owner = new WorkbenchController({ panel() {}, document() {} });
+  const page = 'plan-category-production';
+  owner.registerFrame({ id: page, kind: 'html', src: '/mps' });
+  owner.saveHtmlViewState(page, 'tenant/user/session', { version: 1, localDrafts: encoded });
+  const recovered = decodeLocalDrafts(
+    owner.readHtmlViewState(page, 'tenant/user/session').localDrafts,
+    (id, month) => ({ id, month, files: {} }),
+    () => {
+      throw Error('Unexpected fallback');
+    },
+  );
+  assert.deepEqual(recovered.drafts[0].shipment.sourceEdits, { 'local-file': local, business });
+  assert.equal(recovered.drafts[0].shipment.business, undefined);
+  assert.equal(owner.readHtmlViewState(page, 'another-tenant/user/session'), undefined);
+  const invalid = structuredClone(encoded);
+  invalid.drafts[0].shipment.sourceEdits.business.credentials = 'CREDENTIAL';
+  assert.throws(
+    () =>
+      owner.saveHtmlViewState(page, 'tenant/user/session', { version: 1, localDrafts: invalid }),
     /INVALID_HTML_VIEW_STATE/,
   );
 });

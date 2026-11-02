@@ -14,6 +14,7 @@ export function connectHtmlFrame(
   },
   signal: AbortSignal,
   failed: (error: unknown) => void,
+  onConnected?: () => void,
 ): { (): void; sendTheme(): void } {
   const lifetime = new AbortController();
   const channel = new MessageChannel();
@@ -110,6 +111,7 @@ export function connectHtmlFrame(
       )
         throw Error('PAGE_SESSION_CHANGED');
       if (message.type === 'theme:subscribe') {
+        if (!themeRequested) onConnected?.();
         themeRequested = true;
         sendTheme();
         return;

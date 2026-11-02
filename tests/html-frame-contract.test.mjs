@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { readFile } from 'node:fs/promises';
+import { readFile } from './helpers/prepared-assets.mjs';
 import { chromium, expect } from '@playwright/test';
 
 // Workbench owns the presentation; the fixture supplies only public Core and fetch contracts.
@@ -19,13 +19,16 @@ const identitySnapshot={state:'confirmed',scope:'principal-a',subject:'fixture-u
 window.calls=[];window.opens=[];window.releases=[];window.prompts=[];window.gates={};
 const gate=id=>window.gates[id]??=Promise.withResolvers();
 window.finishOpen=id=>gate(id).resolve();
+window.failOpen=id=>{gate(id).resolve({error:'无权访问此页面'});delete window.gates[id];};
 window.fetch=async(url,options)=>{
   if(url!=='/api/agent-workbench/page')throw Error('unexpected fetch '+url);
   const input=JSON.parse(options.body);window.calls.push(input);
   if(input.operation==='open'){
-    window.opens.push(input.sessionId);await gate(input.sessionId).promise;
+    window.opens.push(input.sessionId);const denial=await gate(input.sessionId).promise;
+    if(denial)return Response.json(denial,{status:403});
     return Response.json({owner:'owner-'+input.sessionId,binding:{surface:'gea-html-inventory-fixture',tool:'gea_plugin_page_apply'}});
   }
+  if(input.operation==='events'&&window.failEvents)return Response.json({error:'页面连接已断开'},{status:503});
   return Response.json(input.operation==='events'?[]:input.operation==='catalog'?{events:[]}:{});
 };
 const ctx={
@@ -40,7 +43,7 @@ const ctx={
   inject:(names,fn)=>{if(names.includes('businessAccount'))fn(ctx);},
 };
 const workbench=new WorkbenchController({panel:()=>{},document:()=>{}});
-const page={id:'inventory-fixture',kind:'html',src:'/html',label:'Fixture',pluginId:'inventory-fixture',resourceId:'original'};
+const page={id:window.testFramePageId??'inventory-fixture',kind:'html',src:'/html',label:'Fixture',pluginId:'inventory-fixture',resourceId:'original'};
 workbench.registerFrame(page);void workbench.open(page.id);
 window.bind=id=>{mainSession=id;workbench.associateSession(page.id,{sessionId:id,preset:'original',ownerScope:'principal-a',subject:'fixture-user-a'});for(const notify of sessionListeners)notify();};
 window.suspend=()=>workbench.forgetSession(page.id);
@@ -76,12 +79,13 @@ addEventListener('message',event=>{
  if(event.data?.type!=='connect')return;
  timeline.push({type:'connect',context:event.data.context});connects.push(event.data.context);window.context=event.data.context;window.port=event.ports[0];ports.push(port);
  port.onmessage=event=>{messages.push(event.data);timeline.push(event.data);if(event.data.type==='context')window.context=event.data.context;};port.start();
+ if(window.autoSubscribeTheme)port.postMessage({type:'theme:subscribe',session:context.session});
  port.postMessage({type:'register',session:context.session,name:'filter',description:'Filter rows'});
 });ready();
 window.request=(id,method,parameters={},session=context.session)=>port.postMessage({type:'request',id,method,parameters,session});
 </script>`;
 
-async function fixture(t) {
+async function fixture(t, pageId = 'inventory-fixture', frameHtml) {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -94,16 +98,103 @@ async function fixture(t) {
     if (path === '/html') loads++;
     return route.fulfill({
       contentType: 'text/html',
-      body: path === '/html' ? html : '<div id="app"></div>',
+      body:
+        path === '/html'
+          ? (frameHtml ??
+            `<script>window.autoSubscribeTheme=${pageId === 'plan-category-production'}</script>${html}`)
+          : '<div id="app"></div>',
     });
   });
   await page.goto('http://127.0.0.1:19481/');
+  await page.evaluate((id) => {
+    window.testFramePageId = id;
+  }, pageId);
   await page.addScriptTag({ content: outputFiles[0].text });
   await expect.poll(() => page.evaluate(() => opens)).toEqual(['session-1']);
   const child = page.frames().find((frame) => frame !== page.mainFrame());
-  await child.waitForFunction(() => readyCount > 0);
+  if (!frameHtml) await child.waitForFunction(() => readyCount > 0);
   return { page, child, errors, loads: () => loads };
 }
+
+test('MPS reconnect replaces the owned frame, releases the old connection and preserves the Conversation draft', async (t) => {
+  const { page, errors, loads } = await fixture(t, 'plan-category-production');
+  await page.evaluate(() => window.finishOpen('session-1'));
+  const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
+  await expect(retry).toBeEnabled();
+  await page.getByLabel('public draft fixture').fill('重连保留的会话草稿');
+  const before = loads();
+  await retry.click();
+  await expect(page.getByRole('status')).toContainText('pageReconnected');
+  await expect.poll(() => loads()).toBe(before + 1);
+  await expect.poll(() => page.evaluate(() => opens.length)).toBe(2);
+  await expect
+    .poll(() => page.evaluate(() => calls.filter((call) => call.operation === 'close').length))
+    .toBe(1);
+  await expect(page.getByLabel('public draft fixture')).toHaveValue('重连保留的会话草稿');
+  assert.deepEqual(errors, []);
+});
+
+test('MPS reconnect exposes an opening denial and retries through the same owned Session', async (t) => {
+  const { page, errors } = await fixture(t, 'plan-category-production');
+  await page.evaluate(() => window.failOpen('session-1'));
+  await expect(page.getByText('无权访问此页面', { exact: true })).toBeVisible();
+  const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
+  await expect(retry).toBeEnabled();
+  await retry.click();
+  await expect(retry).toBeDisabled();
+  await expect.poll(() => page.evaluate(() => opens)).toEqual(['session-1', 'session-1']);
+  await page.evaluate(() => window.finishOpen('session-1'));
+  await expect(page.getByRole('status')).toContainText('pageReconnected');
+  await expect(page.getByText('无权访问此页面', { exact: true })).toHaveCount(0);
+  assert.deepEqual(errors, []);
+});
+
+test('MPS reconnect reopens the owned Session after a lost channel', async (t) => {
+  const { page, errors } = await fixture(t, 'plan-category-production');
+  await page.evaluate(() => window.finishOpen('session-1'));
+  const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
+  await expect(retry).toBeEnabled();
+  await page.evaluate(() => {
+    window.failEvents = true;
+  });
+  await expect(page.getByRole('alert')).toContainText('页面连接已断开');
+  await page.evaluate(() => {
+    window.failEvents = false;
+  });
+  await retry.click();
+  await expect(page.getByRole('status')).toContainText('pageReconnected');
+  await expect.poll(() => page.evaluate(() => opens.length)).toBe(2);
+  assert.deepEqual(errors, []);
+});
+
+test('MPS reconnect restores the actual product input and the unsent Conversation draft', async (t) => {
+  const { page, errors } = await fixture(
+    t,
+    'plan-category-production',
+    await readFile('lib/static/mps/index.html', 'utf8'),
+  );
+  await page.evaluate(() => window.finishOpen('session-1'));
+  const retry = page.getByRole('button', { name: 'pageReconnect', exact: true });
+  await expect(retry).toBeEnabled();
+  const frame = page.frameLocator('iframe');
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: 'reconnect-products.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n,00123,重连保留产品,汤圆,系列,组,,',
+    ),
+  });
+  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(products.locator('tbody tr')).toHaveCount(1);
+  await page.getByLabel('public draft fixture').fill('实际MPS重连前未发送的草稿');
+  await retry.click();
+  await expect(page.getByRole('status')).toContainText('pageReconnected');
+  await expect(products.locator('tbody tr')).toHaveCount(1);
+  await expect(products).toContainText('00123');
+  await expect(products).toContainText('重连保留产品');
+  await expect(page.getByLabel('public draft fixture')).toHaveValue('实际MPS重连前未发送的草稿');
+  assert.deepEqual(errors, []);
+});
 
 test('ready before the current opening finishes connects once to the latest Session', async (t) => {
   const { page, child, errors } = await fixture(t);

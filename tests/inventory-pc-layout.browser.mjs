@@ -683,7 +683,7 @@ for (const theme of ['light', 'dark'])
     const strong = frame.locator('.dealer-name strong').first();
     await expect(strong).toContainText('郑州佳特商贸有限公司');
     const benchmarks = frame.locator('.metric-card .metric-benchmark');
-    await expect(benchmarks).toHaveCount(6);
+    await expect(benchmarks).toHaveCount(7);
     const parent = await readablePaint(frame.locator('.dealer-name').first());
     const name = await readablePaint(strong);
     const children = [];

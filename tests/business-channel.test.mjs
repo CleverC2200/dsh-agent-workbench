@@ -26,7 +26,7 @@ test('the visible business page refuses disconnected reads immediately and recon
   const channel = await import(
     'data:text/javascript;base64,' + Buffer.from(outputFiles[0].text).toString('base64')
   );
-  await assert.rejects(channel.call('sql', { query: 'read' }), /请先登录并连接/);
+  await assert.rejects(channel.call('sql', { query: 'read' }), /页面能力尚未连接/);
   const messages = [];
   const port = () => ({
     onmessage: null,
@@ -63,4 +63,10 @@ test('the visible business page refuses disconnected reads immediately and recon
   assert.equal(request.session, 'second-owned-session');
   second.onmessage({ data: { type: 'response', id: request.id, result: { verified: 'current' } } });
   assert.deepEqual(await current, { verified: 'current' });
+  const denied = channel.call('workspace');
+  const deniedRequest = messages.findLast((message) => message.type === 'request');
+  second.onmessage({
+    data: { type: 'response', id: deniedRequest.id, error: 'GEA_BUSINESS_TOOL_NOT_ALLOWED' },
+  });
+  await assert.rejects(denied, /GEA_BUSINESS_TOOL_NOT_ALLOWED/);
 });
