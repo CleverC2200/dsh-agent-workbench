@@ -26,6 +26,7 @@ const bundle = await build({
   format: 'cjs',
   jsx: 'automatic',
   platform: 'node',
+  nodePaths: [resolve(process.env.DSH_TEST_TOOLS ?? '.', 'node_modules')],
   external: ['react', 'react/jsx-runtime', 'react-dom'],
   loader: { '.png': 'dataurl', '.css': 'text' },
   plugins: [

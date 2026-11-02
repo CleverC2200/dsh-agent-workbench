@@ -7,6 +7,8 @@ import { chromium, expect } from '@playwright/test';
 import { verifyOfficialCore } from '../scripts/verify-official-input.mjs';
 
 const core = resolve(process.env.DSH_TEST_CORE ?? '../../official-latest-standard');
+const tools = resolve(process.env.DSH_TEST_TOOLS ?? '.');
+const gea = resolve(process.env.GEA_TEST_SOURCE ?? '../dsh-gea-plugin');
 verifyOfficialCore(core);
 
 // Real Cordis registration, official Renderer/AppFrame/store/controller and
@@ -24,6 +26,10 @@ const bundle = await build({
  import{createWorkspaceShortcutControls}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/shortcuts.ts'))};
  import{zh as workspaceCopy}from ${JSON.stringify(resolve(core, 'packages/client/ui-workspace/src/client/locales.ts'))};
  import{zh as commonCopy}from ${JSON.stringify(resolve(core, 'packages/client/locale/src/locales/zh.ts'))};
+ import{SettingsRoot}from ${JSON.stringify(resolve(core, 'packages/client/ui-settings-general/src/client/SettingsRoot.tsx'))};
+ import{createSettingsShellStore}from ${JSON.stringify(resolve(core, 'packages/client/ui-settings-general/src/client/shell-store.ts'))};
+ import{zh as settingsCopy}from ${JSON.stringify(resolve(core, 'packages/client/ui-settings-general/src/client/locales.ts'))};
+ import{mountPluginUpdatesClient}from ${JSON.stringify(resolve(gea, 'src/plugin-detail-updates.tsx'))};
  import{mountCompanyUI}from'./src/company/ui.tsx';import{WorkbenchController}from'./src/workbench.ts';
  import{mountFramePresentation}from'./src/frame-presenter.tsx';
  (async()=>{const source=value=>({getSnapshot:()=>value,subscribe:()=>()=>{}});
@@ -43,7 +49,7 @@ const bundle = await build({
  });
  ctx.slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},({renderSlot})=>renderSlot('main.conversation',{}));
  ctx.slots.register({name:'main.conversation',children:{'conversation.header':{kind:'single',scope:'session-maybe'}}},ConversationMainPanel);
- ctx.slots.register({name:'conversation.header',children:{'settings.launcher':{kind:'single',scope:'root'}}},({renderSlot})=><header data-core-header style={{height:48,flexShrink:0}}>{renderSlot('settings.launcher',{})}</header>);
+ ctx.slots.register({name:'conversation.header',children:window.fixtureUpdates?{}:{'settings.launcher':{kind:'single',scope:'root'}}},({renderSlot})=><header data-core-header style={{height:48,flexShrink:0}}>{window.fixtureUpdates?null:renderSlot('settings.launcher',{})}</header>);
  const workbench=new WorkbenchController({panel:id=>ctx.layout.selectPanel(id),document:()=>ctx.layout.selectPanel(null),hasPanel:id=>ctx.slots.entries('main').some(entry=>entry.options.key===id)});
  mountCompanyUI(ctx,workbench);
  const workspaceStore=createWorkspaceViewStore().create();workspaceStore.actions.setGroupBy('flat');
@@ -53,6 +59,17 @@ const bundle = await build({
  const workspaceSnapshot={items:[],archivedSessionIds:[],pinnedSessionIds:[],state:'idle',phase:'ready',error:null};
  const sessionSnapshot={ids:[session.id],byId:{[session.id]:session},phase:'ready',projectionsBySession:{}};
  const noPendingInteraction=new Map();
+ if(window.fixtureUpdates){
+ const shell=createSettingsShellStore().create();
+ const settings={useStore:useSnapshot(shell),actions:shell.actions,useShortcuts:select=>select([]),useSessions:select=>select(sessionSnapshot),useSessionStatus:()=>noPendingInteraction,
+ useOnboardingSteps:select=>select([]),useSections:select=>select([]),useConnectionState:select=>select('connected'),
+ useDesktopUpdate:select=>select({presentation:{phase:'available',version:'fixture-next-client'},failed:false,opening:false}),openDesktopUpdate:()=>{window.desktopUpdateClicks=(window.desktopUpdateClicks??0)+1},reconnect:()=>{},
+ t:(key,values={})=>(settingsCopy[key]??key).replace(/\\{(\\w+)\\}/g,(_,name)=>String(values[name]??''))};
+ ctx.slots.inject('sidebar.settings',()=>ctx.slots.register({name:'sidebar.settings',children:{'settings.launcher':{kind:'single',scope:'root'},'settings.trigger':{kind:'single',scope:'root'}}},props=><SettingsRoot {...props} {...settings}/>));
+ ctx.provide('modules',{entries:{state:source({syncing:true,failures:[]})}});
+ ctx.provide('pluginNavigation',{openBundle:()=>{window.pluginStatusClicks=(window.pluginStatusClicks??0)+1}});
+ await ctx.plugin({name:'fixture-plugin-updates',apply:scope=>{scope.effect(()=>mountPluginUpdatesClient(scope));}}).await();
+ }
  const workspaceProps={useShortcuts:select=>select([]),useWorkspaceShortcuts:useSnapshot(controls.state),requestSearch:controls.search,requestAddWorkspace:controls.add,closeAddWorkspace:controls.closeAdd,setDirectoryBusy:controls.directoryBusy,requestSessionRename:controls.rename,dismissForkError:controls.dismissForkError,
  useSessions:select=>select(sessionSnapshot),useSessionStatus:select=>select(noPendingInteraction),useSessionRetainInfo:()=>undefined,usePanelInfo:select=>select({activePanelId:null}),useResource:()=>({status:'none'}),
  useWorkspaces:select=>select(workspaceSnapshot),useStore:useSnapshot(workspaceStore),actions:workspaceStore.actions,startSession:()=>{},open:()=>{},searchSessions:async()=>({items:[],hasMore:false}),searchResultLimit:20,notifyArchivedNotOpenable:()=>{},renameWorkspace:async()=>{},deleteWorkspace:async()=>{},unarchiveSession:async()=>{},insertWorkspaceBefore:async()=>{},createWorkspace:async()=>{},useDirectoryFlow:select=>select(false),useHostInfo:select=>select({home:undefined,isLoopback:true})};
@@ -86,10 +103,11 @@ const bundle = await build({
     'process.env.NODE_ENV': '"test"',
   },
   alias: {
-    react: resolve('node_modules/react'),
-    'react-dom': resolve('node_modules/react-dom'),
+    react: resolve(tools, 'node_modules/react'),
+    'react-dom': resolve(tools, 'node_modules/react-dom'),
     '@deepseek-ai/cordis': resolve(core, 'vendor/cordis/lib/index.js'),
   },
+  nodePaths: [resolve(tools, 'node_modules')],
   loader: { '.png': 'dataurl', '.css': 'text' },
   plugins: [
     {
@@ -104,7 +122,7 @@ const bundle = await build({
   ],
 });
 
-async function fixture(t, platform = 'darwin', conversation = false, identity) {
+async function fixture(t, platform = 'darwin', conversation = false, identity, updates = false) {
   const browser = await chromium.launch({
     headless: true,
     channel: process.env.DSH_TEST_BROWSER_CHANNEL,
@@ -131,6 +149,45 @@ async function fixture(t, platform = 'darwin', conversation = false, identity) {
     viewport: { width: 1280, height: 720 },
     reducedMotion: 'reduce',
   });
+  if (updates) {
+    await page.route('**/*', (route) => route.abort('blockedbyclient'));
+    let phase = 'available',
+      revision = 0;
+    await page.route('**/api/gea/plugin-updates/*', async (route) => {
+      const action = route.request().url().split('/').at(-1);
+      if (action === 'update-all') {
+        phase = 'pending-restart';
+        await page.evaluate(() => {
+          window.pluginUpdateClicks = (window.pluginUpdateClicks ?? 0) + 1;
+        });
+      }
+      const status = {
+        revision: ++revision,
+        hostProcessIdentity: 'fixture-host',
+        challenge: 'fixture-nonce',
+        checkTimeoutMs: 30000,
+        pollIntervalMs: 1000,
+        items: [
+          '@cleverc2200/dsh-agent-workbench',
+          'dsh-agent-manage',
+          '@cleverc2200/gea-dsh-prototype',
+        ].map((packageName) => ({
+          packageName,
+          state: phase,
+          installedVersion: '1.0.0',
+          runningHostVersion: '1.0.0',
+          runningClientVersion: '1.0.0',
+          candidateVersion: '1.0.1',
+          planId: 'fixture-plan',
+          diagnostic: null,
+        })),
+      };
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, value: action === 'status' ? status : {} }),
+      });
+    });
+  }
   if (proof)
     await page.context().route('**/*', (route) => {
       requests.push({ url: route.request().url(), method: route.request().method() });
@@ -145,10 +202,11 @@ async function fixture(t, platform = 'darwin', conversation = false, identity) {
     '\n' +
     officialCss +
     '\nhtml,body,#root{margin:0;height:100%}</style><div id="root"></div>';
-  await page.route('http://client-ui.fixture.test/', (route) =>
+  const origin = updates ? 'http://localhost/' : 'http://client-ui.fixture.test/';
+  await page.route(origin, (route) =>
     route.fulfill({ contentType: 'text/html', body: documentHtml }),
   );
-  await page.goto('http://client-ui.fixture.test/');
+  await page.goto(origin);
   await page.evaluate((platform) => {
     document.documentElement.dataset.platform = platform;
     if (platform === 'win32') {
@@ -160,6 +218,10 @@ async function fixture(t, platform = 'darwin', conversation = false, identity) {
     await page.evaluate((value) => {
       window.fixtureIdentity = value;
     }, identity);
+  if (updates)
+    await page.evaluate(() => {
+      window.fixtureUpdates = true;
+    });
   await page.addScriptTag({
     content: bundle.outputFiles.find((file) => file.path.endsWith('.js')).text,
   });
@@ -170,6 +232,80 @@ async function fixture(t, platform = 'darwin', conversation = false, identity) {
   if (conversation) await page.evaluate(() => window.useConversationFixture());
   return page;
 }
+
+test('Windows client and plugin updates remain separate and clickable beside the account', async (t) => {
+  const page = await fixture(
+    t,
+    'win32',
+    false,
+    {
+      state: 'confirmed',
+      scope: 'fixture:user',
+      subject: 'user',
+      status: { authenticated: true, user: { name: '测试账户名称较长的员工' } },
+    },
+    true,
+  );
+  const client = page.getByRole('button', { name: '新版本', exact: true });
+  const plugins = page.locator('.gea-sidebar-update');
+  await expect(client).toBeVisible();
+  await expect(plugins).toBeVisible();
+  if (process.env.UPDATE_INDICATOR_EVIDENCE)
+    await page.screenshot({ path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'updates.png') });
+  const assertSeparate = async () => {
+    const a = await client.boundingBox(),
+      b = await plugins.boundingBox();
+    assert.ok(
+      a.x + a.width <= b.x ||
+        b.x + b.width <= a.x ||
+        a.y + a.height <= b.y ||
+        b.y + b.height <= a.y,
+      'client and plugin update buttons must not overlap',
+    );
+    for (const button of [client, plugins])
+      assert.ok(
+        await button.evaluate((node) => {
+          const r = node.getBoundingClientRect();
+          return node.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+        }),
+        'each update button must receive its own click',
+      );
+  };
+  for (const dark of [false, true]) {
+    await page.evaluate(
+      (value) => document.body.toggleAttribute('data-ds-dark-theme', value),
+      dark,
+    );
+    await assertSeparate();
+  }
+  await page.evaluate(() => document.body.removeAttribute('data-ds-dark-theme'));
+  await client.click();
+  assert.equal(await page.evaluate(() => window.desktopUpdateClicks), 1);
+  assert.equal(await page.evaluate(() => window.pluginUpdateClicks ?? 0), 0);
+  await plugins.click();
+  await expect.poll(() => page.evaluate(() => window.pluginUpdateClicks ?? 0)).toBe(1);
+  assert.equal(await page.evaluate(() => window.desktopUpdateClicks), 1);
+  await expect(plugins).toHaveAttribute('aria-label', /重启/);
+  await page.getByRole('button', { name: '收起侧边栏', exact: true }).click();
+  await expect(client).toHaveCount(0);
+  await page.setViewportSize({ width: 960, height: 720 });
+  await page.getByRole('button', { name: '展开业务菜单', exact: true }).click();
+  await expect(client).toBeVisible();
+  await expect(plugins).toBeVisible();
+  if (process.env.UPDATE_INDICATOR_EVIDENCE)
+    await page.screenshot({ path: resolve(process.env.UPDATE_INDICATOR_EVIDENCE, 'reopened.png') });
+  await expect
+    .poll(() =>
+      plugins.evaluate((node) => {
+        const r = node.getBoundingClientRect();
+        return node.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2));
+      }),
+    )
+    .toBe(true);
+  await plugins.click();
+  assert.equal(await page.evaluate(() => window.pluginStatusClicks), 1);
+  assert.equal(await page.evaluate(() => window.pluginUpdateClicks), 1);
+});
 
 test('Test environment badge stays beside the brand subtitle without covering the inbox in either theme', async (t) => {
   const page = await fixture(t, 'darwin', false, {
