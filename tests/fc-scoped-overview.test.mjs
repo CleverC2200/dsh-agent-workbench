@@ -78,7 +78,9 @@ test('all branches and a selected branch both use compact summaries and one shar
 
 test('slow or invalid age data cannot hide or replace ready single-warehouse inventory', async () => {
   let failAge, startedAge;
-  const ageStarted = new Promise((resolve) => { startedAge = resolve; });
+  const ageStarted = new Promise((resolve) => {
+    startedAge = resolve;
+  });
   const progress = [];
   const pending = readConfiguredOverview(config, '2026-10-29', '', {
     viewIds: ['branch-stock'],
@@ -130,18 +132,36 @@ test('a cropped snapshot quantity rejects the inventory card without blocking th
       };
     return {
       configVersion: 'v1',
-      rows: [Object.fromEntries(config.queries[o.queryId].resultColumns.map((k) => [
-        k, k === 'page_row_present' ? null : 0,
-      ]))],
+      rows: [
+        Object.fromEntries(
+          config.queries[o.queryId].resultColumns.map((k) => [
+            k,
+            k === 'page_row_present' ? null : 0,
+          ]),
+        ),
+      ],
     };
   };
   const results = await Promise.allSettled([
-    readConfiguredFacts(config, 'branch-stock', { asOf: '2026-10-29' }, {
-      execute, inventoryOnly: true, summaryOnly: true,
-    }),
-    readConfiguredFacts(config, 'replenishment', { asOf: '2026-10-29' }, {
-      execute, detailsOnly: true,
-    }),
+    readConfiguredFacts(
+      config,
+      'branch-stock',
+      { asOf: '2026-10-29' },
+      {
+        execute,
+        inventoryOnly: true,
+        summaryOnly: true,
+      },
+    ),
+    readConfiguredFacts(
+      config,
+      'replenishment',
+      { asOf: '2026-10-29' },
+      {
+        execute,
+        detailsOnly: true,
+      },
+    ),
   ]);
   assert.equal(results[0].status, 'rejected');
   assert.equal(results[0].reason.code, 'REQUIRED_COLUMN_UNAVAILABLE');
@@ -164,8 +184,10 @@ test('replenishment reuses order counts only from the same snapshot', async () =
         return value;
       },
     });
-    assert.equal(result.replenishment.summary.known_shortage_sku_count,
-      day === '2026-10-29' ? 7 : null);
+    assert.equal(
+      result.replenishment.summary.known_shortage_sku_count,
+      day === '2026-10-29' ? 7 : null,
+    );
     assert.equal(result.replenishment.summary.inventory_qty, 1);
   }
 });
@@ -188,8 +210,10 @@ test('missing count permission and denied orders cannot erase independent replen
     });
     assert.equal(result.replenishment.summary.known_shortage_sku_count, null);
     assert.equal(result.replenishment.summary.inventory_qty, 1);
-    assert.equal(result['current-shortage'].errorCode,
-      denied ? 'DATA_PERMISSION_DENIED' : undefined);
+    assert.equal(
+      result['current-shortage'].errorCode,
+      denied ? 'DATA_PERMISSION_DENIED' : undefined,
+    );
     assert.equal(calls.filter((id) => id === 'current-shortage.overview').length, 1);
     assert.ok(!calls.includes('current-shortage.summary'));
   }

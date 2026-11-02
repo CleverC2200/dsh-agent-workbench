@@ -352,7 +352,9 @@ for (const agentId of ['inventory-apsplan', 'inventory-aqkc', 'inventory-fc', 'i
       sent = [];
     const slots = 2;
     let startedSlots;
-    const firstSlotsStarted = new Promise((resolve) => { startedSlots = resolve; });
+    const firstSlotsStarted = new Promise((resolve) => {
+      startedSlots = resolve;
+    });
     const client = createQueryClient({ ...registry, agentId }, async (_, o) => {
       sent.push(o.values.offset);
       const result = new Promise((resolve) =>
@@ -386,16 +388,25 @@ for (const agentId of ['inventory-apsplan', 'inventory-aqkc', 'inventory-fc', 'i
   });
 
 test('FC first-screen queries start by priority without changing submission concurrency', async () => {
-  const sent = [], releases = [];
-  const queries = Object.fromEntries([
-    ['heavy', 0], ['stock', 40], ['fulfillment', 35],
-  ].map(([id, priority]) => [id, { ...registry.queries.list, priority, maxConcurrency: 1 }]));
-  const client = createQueryClient({ ...registry, agentId: 'inventory-fc', queries }, async (_, o) => {
-    sent.push(o.queryId);
-    return new Promise((resolve) => releases.push(() => resolve({ rows: [] })));
-  });
+  const sent = [],
+    releases = [];
+  const queries = Object.fromEntries(
+    [
+      ['heavy', 0],
+      ['stock', 40],
+      ['fulfillment', 35],
+    ].map(([id, priority]) => [id, { ...registry.queries.list, priority, maxConcurrency: 1 }]),
+  );
+  const client = createQueryClient(
+    { ...registry, agentId: 'inventory-fc', queries },
+    async (_, o) => {
+      sent.push(o.queryId);
+      return new Promise((resolve) => releases.push(() => resolve({ rows: [] })));
+    },
+  );
   const jobs = ['heavy', 'stock', 'fulfillment'].map((id) =>
-    client.read(id, { page_size: 10, offset: 0 }));
+    client.read(id, { page_size: 10, offset: 0 }),
+  );
   for (const expected of ['stock', 'fulfillment', 'heavy']) {
     while (!releases.length) await new Promise((resolve) => setTimeout(resolve, 1));
     assert.equal(releases.length, 1);

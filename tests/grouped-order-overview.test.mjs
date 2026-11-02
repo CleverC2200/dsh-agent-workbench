@@ -97,10 +97,18 @@ test('full-chain uses independent branch transfer fulfillment even when base ord
         }
         if (call.queryId === 'branch-supply.summary') {
           const fields = config.queries[call.queryId].resultColumns;
-          return { configVersion: 'v1', rows: [{
-            ...Object.fromEntries(fields.map((field) => [field, 0])),
-            row_count: 2, demand: 50, shipped: 40, fulfillment_rate: 0.8,
-          }] };
+          return {
+            configVersion: 'v1',
+            rows: [
+              {
+                ...Object.fromEntries(fields.map((field) => [field, 0])),
+                row_count: 2,
+                demand: 50,
+                shipped: 40,
+                fulfillment_rate: 0.8,
+              },
+            ],
+          };
         }
         return { configVersion: 'v1', rows: [] };
       },

@@ -86,10 +86,7 @@ export async function readConfiguredOverview(
     if (invalid) throw invalid;
     parts[id] = part;
     const replenishment = parts.replenishment;
-    if (
-      replenishment?.summary &&
-      config.queries[replenishment.queryId]?.orderCountFromOverview
-    ) {
+    if (replenishment?.summary && config.queries[replenishment.queryId]?.orderCountFromOverview) {
       const orders = parts['current-shortage'];
       const count = knownNumber(orders?.rows?.[0]?.replenishment_shortage_sku_count);
       const sameSnapshot =

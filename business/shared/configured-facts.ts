@@ -186,13 +186,10 @@ export async function readConfiguredFacts(
     if (!job) {
       job = client.read(id, values, {
         signal: options.signal,
-        requiredColumns: (
-          snapshot
-            ? (config.queries[id].snapshotRequiredColumns ?? config.queries[id].resultColumns)
-            : config.queries[id].resultColumns
-        ).filter(
-          (field: string) => id !== q.pagination?.atomicQuery || !optionalLabels.has(field),
-        ),
+        requiredColumns: (snapshot
+          ? (config.queries[id].snapshotRequiredColumns ?? config.queries[id].resultColumns)
+          : config.queries[id].resultColumns
+        ).filter((field: string) => id !== q.pagination?.atomicQuery || !optionalLabels.has(field)),
       });
       shared?.set(key, job);
     }

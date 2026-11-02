@@ -83,7 +83,8 @@ const KPI_COPY: Record<
   },
   fulfillment: {
     title: '订单满足率',
-    definition: '订单满足率：基地为当月已发货订单满足率；分仓为当月向基地下单的调拨订单履约满足率。',
+    definition:
+      '订单满足率：基地为当月已发货订单满足率；分仓为当月向基地下单的调拨订单履约满足率。',
     eyebrow: '本自然月',
     target: '目标满足率',
   },

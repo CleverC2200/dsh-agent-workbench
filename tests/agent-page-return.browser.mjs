@@ -285,8 +285,7 @@ test(
     await expect
       .poll(() =>
         page.evaluate(
-          (owner) =>
-            window.calls.some((call) => call.operation === 'sql' && call.owner !== owner),
+          (owner) => window.calls.some((call) => call.operation === 'sql' && call.owner !== owner),
           originalOwner,
         ),
       )
@@ -325,9 +324,7 @@ for (const id of ['apsplan', 'fc', 'aqkc', 'qll'])
         deferFirstOpen: true,
       });
       await expect
-        .poll(() =>
-          page.evaluate(() => window.calls.filter((c) => c.operation === 'open').length),
-        )
+        .poll(() => page.evaluate(() => window.calls.filter((c) => c.operation === 'open').length))
         .toBe(1);
       await expect(frame.locator(id === 'apsplan' ? '#root' : '#app')).not.toBeEmpty();
       await page.getByRole('button', { name: '左侧新建对话', exact: true }).click();

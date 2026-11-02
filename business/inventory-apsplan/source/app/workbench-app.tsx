@@ -4845,9 +4845,7 @@ export default function Home({
     'rate',
     undefined,
     (value) =>
-      ['rate', 'stock', 'plan', 'inventory', 'delivery', 'change', 'void'].includes(
-        value as string,
-      )
+      ['rate', 'stock', 'plan', 'inventory', 'delivery', 'change', 'void'].includes(value as string)
         ? (value as MatrixMode)
         : 'rate',
   );
@@ -4868,15 +4866,9 @@ export default function Home({
     'overview',
     undefined,
     (value) =>
-      [
-        'overview',
-        'forecast',
-        'plan',
-        'inventory',
-        'stock',
-        'shortage',
-        'satisfaction',
-      ].includes(value as string)
+      ['overview', 'forecast', 'plan', 'inventory', 'stock', 'shortage', 'satisfaction'].includes(
+        value as string,
+      )
         ? (value as BaseMetricTab)
         : 'overview',
   );
@@ -5028,15 +5020,9 @@ export default function Home({
     'overview',
     undefined,
     (value) =>
-      [
-        'overview',
-        'forecast',
-        'plan',
-        'inventory',
-        'stock',
-        'shortage',
-        'satisfaction',
-      ].includes(value as string)
+      ['overview', 'forecast', 'plan', 'inventory', 'stock', 'shortage', 'satisfaction'].includes(
+        value as string,
+      )
         ? (value as CategoryMetricTab)
         : 'overview',
   );

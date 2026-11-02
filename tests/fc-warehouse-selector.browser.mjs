@@ -69,9 +69,18 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
           month_ship_positive: 38116,
         },
       ];
+    else if (id === 'source.branch-stock-date')
+      rows = [
+        {
+          ...Object.fromEntries(q.resultColumns.map((k) => [k, 0])),
+          day: '2026-10-27',
+          row_count: 1,
+          total_qty: values.warehouse_code ? 123 : 210750.2,
+        },
+      ];
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-27' }];
     else if (id.endsWith('.count') || id.endsWith('_count')) rows = [{ total: 0 }];
-    else if (id === 'current-shortage.summary')
+    else if (['current-shortage.summary', 'current-shortage.overview'].includes(id))
       rows = [
         {
           ...Object.fromEntries(q.resultColumns.map((k) => [k, null])),
@@ -211,7 +220,11 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(true);
   await expect
     .poll(() =>
-      calls.some((c) => c.id === 'current-shortage.summary' && c.values.warehouse_code === 'A170'),
+      calls.some(
+        (c) =>
+          ['current-shortage.summary', 'current-shortage.overview'].includes(c.id) &&
+          c.values.warehouse_code === 'A170',
+      ),
     )
     .toBe(true);
   await page.getByRole('button', { name: '当前订单', exact: true }).click();
@@ -1080,7 +1093,15 @@ test('identity changes reload cards and lists even when both accounts select all
     const row = Object.fromEntries(q.resultColumns.map((field) => [field, null]));
     let rows = [];
     let rejectedColumns = [];
-    if (id.startsWith('source.')) rows = [{ day: '2026-11-02' }];
+    if (id === 'source.branch-stock-date') {
+      rows = [
+        { ...row, day: '2026-11-02', row_count: 1, total_qty: identity === 'full' ? 1000 : 10 },
+      ];
+      if (identity === 'scoped')
+        await new Promise((resolve) => {
+          resumeInventory = resolve;
+        });
+    } else if (id.startsWith('source.')) rows = [{ day: '2026-11-02' }];
     else if (id === 'branch-warehouse.directory') rows = [];
     else if (id.includes('atomic')) {
       rows = [

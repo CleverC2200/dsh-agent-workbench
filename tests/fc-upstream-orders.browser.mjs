@@ -45,7 +45,7 @@ async function openFixture(t, denied = false) {
       denied &&
       (id === 'branch-supply.summary' ||
         ['replenishment.summary', 'replenishment.overview'].includes(id) ||
-        id === 'current-shortage.summary')
+        ['current-shortage.summary', 'current-shortage.overview'].includes(id))
     )
       return route.fulfill({
         status: 403,
@@ -59,6 +59,8 @@ async function openFixture(t, denied = false) {
     let rows = [row];
     if (id === 'branch-warehouse.directory')
       rows = [{ warehouse_code: 'A230', warehouse_name: '杭州分仓', base: '华东' }];
+    else if (id === 'source.branch-stock-date')
+      Object.assign(row, { day: '2026-10-30', row_count: 1, total_qty: 13200 });
     else if (id.startsWith('source.')) rows = [{ day: '2026-10-30' }];
     else if (id === 'branch-supply.summary')
       Object.assign(row, {
@@ -69,7 +71,7 @@ async function openFixture(t, denied = false) {
         in_transit: 1644,
         fulfillment_rate: 26416 / 32124,
       });
-    else if (id === 'current-shortage.summary')
+    else if (['current-shortage.summary', 'current-shortage.overview'].includes(id))
       Object.assign(row, {
         location_type: '分仓',
         location_code: 'A230',
@@ -158,7 +160,9 @@ test('FC renders base supply fulfillment and cross-month orders independently of
   );
   assert.ok(!calls.some((c) => ['orders.summary', 'branch-supply-current.summary'].includes(c.id)));
   await expect(page.getByRole('button', { name: '客户订单', exact: true })).toHaveCount(0);
-  assert.ok(calls.some((c) => c.id === 'current-shortage.summary'));
+  assert.ok(
+    calls.some((c) => ['current-shortage.summary', 'current-shortage.overview'].includes(c.id)),
+  );
   assert.ok(!calls.some((c) => c.id === 'branch-supply.detail.atomic'));
 });
 test('FC exposes denied domains and preserves ready inventory without fabricating zero', async (t) => {
