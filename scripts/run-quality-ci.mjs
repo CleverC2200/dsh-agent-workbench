@@ -291,6 +291,7 @@ try {
     );
     const buildAllPages = [
       'tests/agent-authored-layout.browser.mjs',
+      'tests/html-view-restoration.browser.mjs',
       'tests/agent-page-return.browser.mjs',
     ].some((file) => plan.files.includes(file));
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
