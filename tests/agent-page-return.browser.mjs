@@ -10,7 +10,7 @@ import { configuredPageHtml, configuredWire } from './fixtures/configured-page.m
 
 // Actual cached Document, sidebar creation action, HTML bridge and built business
 // page. Only Core public services and the authorized external query are fixtures.
-async function fixture(t, id, { dropDisconnect = false } = {}) {
+async function fixture(t, id, { dropDisconnect = false, deferFirstOpen = false } = {}) {
   const output = await build({
     stdin: {
       resolveDir: process.cwd(),
@@ -57,7 +57,7 @@ const ctx={get:()=>undefined,provide(){},
 const observable=value=>{const subs=new Set();return {getSnapshot:()=>value,subscribe:fn=>{subs.add(fn);return()=>subs.delete(fn)},set:next=>{value=next;subs.forEach(fn=>fn())}}};
 const slots=new SlotCore();window.slotErrors=[];
 slots.register({name:'root',children:{'shell.overlay':{kind:'list',scope:'root'},'shell.leading':{kind:'single',scope:'root'},sidebar:{kind:'single',scope:'root'},main:{kind:'keyed',scope:'root'}}},Root);
-slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},()=>null);
+slots.register({name:'main',key:'conversation',children:{'main.conversation':{kind:'single',scope:'session-maybe'}}},({renderSlot})=>renderSlot('main.conversation',{}));
 slots.register({name:'main.conversation',children:{'conversation.header':{kind:'single',scope:'session-maybe'}}},()=>null);
 slots.register({name:'conversation.header',children:{'settings.launcher':{kind:'single',scope:'root'}}},()=>null);
 slots.registerFactory({name:'conversation.content',scope:'session-maybe',slots:{views:{scope:'session-maybe'}},children:{'conversation.hero.content':{kind:'single',scope:'root'},'conversation.hero.workspace':{kind:'single',scope:'root'},'conversation.hero.agentPreset':{kind:'single',scope:'session-maybe'}}},()=>null);
@@ -74,6 +74,7 @@ const host={subscribe:(key,fn)=>slots.subscribe(key,fn),getVersion:key=>slots.ge
 workbench=new WorkbenchController({panel:()=>{},document:id=>{if(id)ctx.uiWorkspace.openSession(id)}});
 window.suspendBusinessPage=()=>workbench.leaveDocument();
 window.resumeBusinessPage=()=>workbench.open('inventory-${id}');
+window.saveRecoveryView=state=>workbench.saveHtmlViewState('inventory-${id}',JSON.stringify([identity.subject,'original-session']),state);
 
 const page={id:'inventory-${id}',kind:'html',src:'/business',label:'Agent业务页面',pluginId:'inventory-${id}',resourceId:'original'};
 workbench.registerFrame(page);workbench.associateSession(page.id,{sessionId:mainSession,preset:'original',ownerScope:identity.scope,subject:identity.subject});void workbench.open(page.id);
@@ -91,6 +92,7 @@ function Root({renderSlot}){
  const sessionId=useSyncExternalStore(fn=>{listeners.add(fn);return()=>listeners.delete(fn)},()=>mainSession);
  const state=useSyncExternalStore(workbench.subscribe,workbench.getSnapshot);
  return <><nav><button onClick={()=>void starter.start()}>左侧新建对话</button><button onClick={()=>void workbench.open(page.id)}>返回Agent页面</button></nav>
+ <main style={{height:700,marginLeft:200}}>{renderSlot('main',{}, {entryKey:'conversation'})}</main>
  {renderSlot('shell.overlay',{},{only:'agent-workbench.documents'})}
  {!state.selectedDocument&&<form onSubmit={event=>{event.preventDefault();void ctx.remote.session.prompt({sessionId,content:[{type:'text',text:event.currentTarget.elements.question.value}]})}}><input name='question' aria-label='新对话问题'/><button>提问</button></form>}</>;
 }
@@ -147,7 +149,10 @@ createRoot(document.getElementById('root')).render(createSlotRenderer().renderRo
     const electronApp = await _electron.launch({
       executablePath,
       args: [main],
-      env: { ...process.env, D107_FIXTURE_ORIGIN: 'http://127.0.0.1:' + server.address().port },
+      env: {
+        ...process.env,
+        D107_FIXTURE_ORIGIN: 'http://127.0.0.1:' + server.address().port,
+      },
     });
     t.after(async () => {
       await electronApp.close();
@@ -175,12 +180,21 @@ createRoot(document.getElementById('root')).render(createSlotRenderer().renderRo
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(message.text());
   });
-  await page.exposeFunction('externalPageRequest', (input) => {
-    if (input.operation === 'open')
+  let releaseOpen;
+  const opening = new Promise((resolve) => {
+    releaseOpen = resolve;
+  });
+  await page.exposeFunction('externalPageRequest', async (input) => {
+    if (input.operation === 'open') {
+      if (deferFirstOpen && owner === 0) await opening;
       return {
         owner: 'owner-' + ++owner,
-        binding: { surface: 'gea-html-inventory-' + id, tool: 'gea_plugin_page_apply' },
+        binding: {
+          surface: 'gea-html-inventory-' + id,
+          tool: 'gea_plugin_page_apply',
+        },
       };
+    }
     if (input.operation === 'sql') return wire(input.parameters);
     if (input.operation === 'access') return { principalId: 'original-user', consumerCode: id };
     if (input.operation === 'events') return [];
@@ -190,16 +204,19 @@ createRoot(document.getElementById('root')).render(createSlotRenderer().renderRo
   });
   await page.addScriptTag({ content: output.outputFiles[0].text });
   const frame = page.frameLocator('iframe');
-  return { page, frame, errors, loads: () => loads };
+  return { page, frame, errors, loads: () => loads, releaseOpen };
 }
 
-for (const id of ['qll', 'fc', 'aqkc'])
+for (const id of ['qll', 'fc', 'aqkc', 'apsplan'])
   test(
     `${id}: Agent page → sidebar new conversation → ask → cached Agent page renders again`,
     { timeout: 30000 },
     async (t) => {
       const { page, frame, errors, loads } = await fixture(t, id);
-      const cards = frame.locator(`[data-overview-cards="${id}"]`);
+      const cards =
+        id === 'apsplan'
+          ? frame.getByText('智能协同运营状态', { exact: false }).first()
+          : frame.locator(`[data-overview-cards="${id}"]`);
       await expect(cards)
         .toBeVisible()
         .catch(async (error) => {
@@ -227,7 +244,10 @@ for (const id of ['qll', 'fc', 'aqkc'])
         await expect.poll(() => page.evaluate(() => window.prompts.length)).toBe(i + 1);
         await page.getByRole('button', { name: '返回Agent页面', exact: true }).click();
         await expect(cards).toBeVisible();
-        await expect(frame.locator('#app')).not.toBeEmpty();
+        await expect
+          .poll(async () => (await page.locator('iframe').boundingBox())?.height ?? 0)
+          .toBeGreaterThan(300);
+        await expect(frame.locator(id === 'apsplan' ? '#root' : '#app')).not.toBeEmpty();
       }
       assert.ok(loads() >= 1);
       assert.deepEqual(await page.evaluate(() => window.slotErrors), []);
@@ -245,7 +265,9 @@ test(
   'FC cached page renews its own Session after a lost disconnect notice and reads through its new owner',
   { timeout: 30000 },
   async (t) => {
-    const { page, frame, errors, loads } = await fixture(t, 'fc', { dropDisconnect: true });
+    const { page, frame, errors, loads } = await fixture(t, 'fc', {
+      dropDisconnect: true,
+    });
     await expect(frame.locator('[data-overview-cards="fc"]')).toBeVisible();
     await expect
       .poll(() =>
@@ -263,7 +285,8 @@ test(
     await expect
       .poll(() =>
         page.evaluate(
-          (owner) => window.calls.some((call) => call.operation === 'sql' && call.owner !== owner),
+          (owner) =>
+            window.calls.some((call) => call.operation === 'sql' && call.owner !== owner),
           originalOwner,
         ),
       )
@@ -272,3 +295,57 @@ test(
     assert.deepEqual(errors, []);
   },
 );
+
+test(
+  'APS restores a retired workspace selection without losing the entire dashboard',
+  { timeout: 30000 },
+  async (t) => {
+    const { page, frame } = await fixture(t, 'apsplan');
+    const cards = frame.getByText('智能协同运营状态', { exact: false }).first();
+    await expect(cards).toBeVisible();
+    await page.getByRole('button', { name: '左侧新建对话', exact: true }).click();
+    await page.evaluate(() =>
+      window.saveRecoveryView({
+        version: 1,
+        activeWorkspace: 'retired-workspace',
+      }),
+    );
+    await page.getByRole('button', { name: '返回Agent页面', exact: true }).click();
+    await expect(cards).toBeVisible();
+    await expect(frame.locator('#root')).not.toBeEmpty();
+  },
+);
+
+for (const id of ['apsplan', 'fc', 'aqkc', 'qll'])
+  test(
+    `${id}: return while the old connection is opening does not leave a blank page`,
+    { timeout: 30000 },
+    async (t) => {
+      const { page, frame, releaseOpen, errors } = await fixture(t, id, {
+        deferFirstOpen: true,
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(() => window.calls.filter((c) => c.operation === 'open').length),
+        )
+        .toBe(1);
+      await expect(frame.locator(id === 'apsplan' ? '#root' : '#app')).not.toBeEmpty();
+      await page.getByRole('button', { name: '左侧新建对话', exact: true }).click();
+      await page.getByRole('button', { name: '返回Agent页面', exact: true }).click();
+      releaseOpen();
+      const cards =
+        id === 'apsplan'
+          ? frame.getByText('智能协同运营状态', { exact: false }).first()
+          : frame.locator(`[data-overview-cards="${id}"]`);
+      await expect(cards).toBeVisible();
+      for (let i = 0; i < 3; i++) {
+        await page.getByRole('button', { name: '左侧新建对话', exact: true }).click();
+        await page.getByRole('button', { name: '返回Agent页面', exact: true }).click();
+        await expect(cards).toBeVisible();
+      }
+      await expect
+        .poll(async () => (await page.locator('iframe').boundingBox())?.height ?? 0)
+        .toBeGreaterThan(300);
+      assert.deepEqual(errors, []);
+    },
+  );

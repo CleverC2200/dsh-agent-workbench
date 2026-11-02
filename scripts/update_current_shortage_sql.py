@@ -43,6 +43,16 @@ def definition(dimensions,location_type,detail=False,sku_page=False,source=SOURC
 def update_agents(agents):
  for agent in agents:
   path=ROOT/f'business/inventory-{agent}/sql.config.json';text=path.read_text()
+  if agent=='qll':
+   # Full-chain combines the independent base and ASN contracts, including
+   # their own missing-source checks. The legacy shared order probe is invalid here.
+   import importlib.util
+   spec=importlib.util.spec_from_file_location('qll_branch_orders',ROOT/'scripts/update-qll-branch-orders.py')
+   module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+   config=json.loads(text)
+   module.build(config,json.loads((ROOT/'business/inventory-aqkc/sql.config.json').read_text()),json.loads((ROOT/'business/inventory-fc/sql.config.json').read_text()))
+   path.write_text(json.dumps(config,ensure_ascii=False,indent=2)+'\n')
+   continue
   if '"modelQueries"' in text:
    match=re.search(r',\n  "modelQueries": ',text);start=match.end();_,size=json.JSONDecoder().raw_decode(text[start:]);text=text[:match.start()]+text[start+size:]
   scoped_source=ROOT/f'business/inventory-{agent}'/('current-orders-source.sql' if agent in ['aqkc','qll'] else 'current-shortage-source.sql')

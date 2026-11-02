@@ -19,7 +19,9 @@ class BaseScopedQueries(unittest.TestCase):
                 self.assertEqual(tree.named_selects, query['resultColumns'])
                 for name in ['target_source', 'inventory_batch_dates']:
                     source = next(cte.this for cte in tree.find_all(exp.CTE) if cte.alias_or_name == name)
-                    self.assertTrue(any(node.name == 'belong_base' for node in source.args['where'].find_all(exp.Column)))
+                    self.assertTrue(any(node.name == 'belong_base'
+                        for where in source.find_all(exp.Where)
+                        for node in where.find_all(exp.Column)))
                 # The shared global snapshot date stays independent of a selected base.
                 for cte in tree.find_all(exp.CTE):
                     if cte.alias_or_name == 'base_daily_date':

@@ -186,6 +186,11 @@ export async function buildInventory(id, sourceCommit) {
   ])
     await cp(resolve(resource, file), resolve(out, file));
   await assembleInventoryAgentResources(id);
+  if (id === 'qll')
+    await cp(
+      resolve(computeRoot, 'business-resources/inventory-qll/skills/qll/insight-rules.md'),
+      resolve(out, 'insight-prompt.md'),
+    );
   const inputs = {};
   for (const input of Object.keys(result.metafile.inputs)) {
     if (input.includes('node_modules/')) continue;
@@ -209,6 +214,15 @@ export async function buildInventory(id, sourceCommit) {
     inputs['insight-prompt.md'] = createHash('sha256')
       .update(await readFile(resolve(resource, 'insight-prompt.md')))
       .digest('hex');
+  if (id === 'qll')
+    inputs['../dsh-agent-manage/business-resources/inventory-qll/skills/qll/insight-rules.md'] =
+      createHash('sha256')
+        .update(
+          await readFile(
+            resolve(computeRoot, 'business-resources/inventory-qll/skills/qll/insight-rules.md'),
+          ),
+        )
+        .digest('hex');
   if (computeExport)
     inputs['../dsh-agent-manage/package.json'] = createHash('sha256')
       .update(await readFile(resolve(computeRoot, 'package.json')))

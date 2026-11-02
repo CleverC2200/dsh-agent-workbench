@@ -85,6 +85,29 @@ export async function readConfiguredOverview(
       });
     if (invalid) throw invalid;
     parts[id] = part;
+    const replenishment = parts.replenishment;
+    if (
+      replenishment?.summary &&
+      config.queries[replenishment.queryId]?.orderCountFromOverview
+    ) {
+      const orders = parts['current-shortage'];
+      const count = knownNumber(orders?.rows?.[0]?.replenishment_shortage_sku_count);
+      const sameSnapshot =
+        !orders?.error &&
+        orders?.rows?.length === 1 &&
+        typeof replenishment.snapshotDate === 'string' &&
+        orders.snapshotDate === replenishment.snapshotDate;
+      parts.replenishment = {
+        ...replenishment,
+        summary: {
+          ...replenishment.summary,
+          known_shortage_sku_count:
+            sameSnapshot && count !== null && Number.isSafeInteger(count) && count >= 0
+              ? count
+              : null,
+        },
+      };
+    }
     options.onProgress?.({ ...parts });
   };
   const fromResult = (result: any) =>
@@ -96,6 +119,7 @@ export async function readConfiguredOverview(
           snapshotDate: result.snapshotDate,
           inventoryVersion: result.parameters?.inventory_version,
           configVersion: result.configVersion,
+          queryId: result.queryId,
         };
   let quickStockFailed = false;
   const quickStock = (async () => {
@@ -160,14 +184,16 @@ export async function readConfiguredOverview(
         ['health', 'branch-stock'].includes(id) ||
         ['source.health-date', 'source.branch-stock-date'].includes(view?.snapshotQuery)
       ) {
-        await quickStock;
+        if (config.overviewQuickStock) await quickStock;
         if (quickStockFailed && ['health', 'branch-stock'].includes(id)) return;
       }
       try {
         if (id === 'current-shortage') {
           const result = await readCurrentShortage(
             config,
-            id + '.summary',
+            config.agentId === 'inventory-fc' && config.queries['current-shortage.overview']
+              ? 'current-shortage.overview'
+              : id + '.summary',
             options.warehouseCode ? { warehouse_code: options.warehouseCode } : {},
             options,
           );

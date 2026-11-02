@@ -1,3 +1,4 @@
+import { inFlightQueries } from './in-flight-query';
 import { configuredQueryFreshAfter } from './query-cache';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { createQueryClient } from './configured-query-client.mjs';
@@ -8,6 +9,12 @@ export type ConfiguredExecution = (
   request: any,
   options: { signal?: AbortSignal; queryId: string; values: Record<string, unknown> },
 ) => Promise<any>;
+
+const pageReads = inFlightQueries<any>();
+let identityGeneration = 0;
+if (typeof window !== 'undefined')
+  window.addEventListener('gea-identity-changed', () => identityGeneration++);
+const suppliedReads = new WeakMap<ConfiguredExecution, ReturnType<typeof inFlightQueries<any>>>();
 
 /** Pages select a configured query; credentials and the physical database stay in the host. */
 export function createAgentQueries(
@@ -84,10 +91,38 @@ export function createAgentQueries(
       );
     });
   const client = createQueryClient(config, run);
+  const shared = execute
+    ? (suppliedReads.get(execute) ??
+      (() => {
+        const reads = inFlightQueries<any>();
+        suppliedReads.set(execute, reads);
+        return reads;
+      })())
+    : pageReads;
   return {
     config,
     read(id: string, values: Record<string, unknown>, options: any = {}) {
-      return client.read(id, values, options);
+      const generation = identityGeneration;
+      const key = JSON.stringify([
+        identityGeneration,
+        config.agentId,
+        id,
+        config.queries[id],
+        values,
+        options.requiredColumns,
+        freshness.freshAfter ?? configuredQueryFreshAfter(),
+      ]);
+      return shared(
+        key,
+        (signal) => client.read(id, values, { ...options, signal }),
+        options.signal,
+      ).then((result) => {
+        if (generation !== identityGeneration)
+          throw Object.assign(Error('身份已变化，请重新读取当前账号的数据'), {
+            code: 'IDENTITY_CHANGED',
+          });
+        return structuredClone(result);
+      });
     },
     readAll(id: string, values: Record<string, unknown>, options: any) {
       // Each count/page call retains its own query ID and business parameters.

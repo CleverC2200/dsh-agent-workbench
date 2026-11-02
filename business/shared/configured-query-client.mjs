@@ -18,7 +18,17 @@ export function immutableQueryConfig(config) {
 // multiplying collection concurrency by the number of independently loaded cards.
 let runningQueries = 0;
 const waitingQueries = [];
-function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
+let queueTimer;
+function drainQueries() {
+  if (queueTimer) return;
+  // Allow dependent reads to join the queue before choosing the next priority.
+  queueTimer = setTimeout(() => {
+    queueTimer = undefined;
+    while (waitingQueries.length && runningQueries < waitingQueries[0].concurrency)
+      waitingQueries.shift()();
+  }, 0);
+}
+function scheduledQuery(task, signal, priority = 0, concurrency = 4, batchStart = false) {
   return new Promise((resolve, reject) => {
     const abort = () => {
       const index = waitingQueries.indexOf(start);
@@ -36,18 +46,21 @@ function scheduledQuery(task, signal, priority = 0, concurrency = 4) {
         .then(resolve, reject)
         .finally(() => {
           runningQueries--;
-          waitingQueries.shift()?.();
+          drainQueries();
         });
     };
     if (signal?.aborted) return reject(signal.reason);
-    if (runningQueries < concurrency) start();
-    else {
-      start.priority = priority;
-      const index = waitingQueries.findIndex((job) => job.priority < priority);
-      if (index < 0) waitingQueries.push(start);
-      else waitingQueries.splice(index, 0, start);
-      signal?.addEventListener('abort', abort, { once: true });
+    if (!batchStart && runningQueries < concurrency && waitingQueries.length === 0) {
+      start();
+      return;
     }
+    start.priority = priority;
+    start.concurrency = concurrency;
+    const index = waitingQueries.findIndex((job) => job.priority < priority);
+    if (index < 0) waitingQueries.push(start);
+    else waitingQueries.splice(index, 0, start);
+    signal?.addEventListener('abort', abort, { once: true });
+    drainQueries();
   });
 }
 export class QueryContractError extends Error {
@@ -225,7 +238,10 @@ export function createQueryClient(config, execute) {
       () => execute(request, { signal, queryId: id, values: structuredClone(values) }),
       signal,
       query(config, id).priority ?? 0,
-      concurrency,
+      query(config, id).maxConcurrency === 1 ? 1 : concurrency,
+      // Collect the FC first-screen reads before selecting priority. Otherwise
+      // synchronous component order starts a heavy query ahead of ready cards.
+      config.agentId === 'inventory-fc',
     );
     signal?.throwIfAborted();
     const failure = result?.failure ?? result?.error;

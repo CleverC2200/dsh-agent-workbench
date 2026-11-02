@@ -49,7 +49,10 @@ export async function readCurrentShortage(
   );
   const result = await client.read(queryId, values, {
     signal: options.signal,
-    requiredColumns: definition.resultColumns,
+    requiredColumns: definition.resultColumns.filter(
+      (column: string) =>
+        queryId !== 'current-shortage.overview' || column !== 'replenishment_shortage_sku_count',
+    ),
   });
   if (queryId.endsWith('.detail')) {
     const total = Number(result.rows[0]?.page_scope_total);

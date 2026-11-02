@@ -28,11 +28,16 @@ class TargetVersions(unittest.TestCase):
                     checked += 1
                     ctes = [c.copy() for c in siblings if c.alias in (
                         'target_source', 'target_versions', 'target_keys', 'targets')]
-                    statement = sqlglot.parse_one('SELECT t.base AS base, t.sku AS sku, t.final_target_inventory AS target, t.avg_daily_planned_demand AS daily FROM targets AS t')
+                    priority = ['t.' + name for name in [
+                        'final_target_inventory', 'management_target_inventory', 'target_inventory']
+                        if name in targets.this.named_selects]
+                    target = ('COALESCE(' + ','.join(priority) + ')') if len(priority) > 1 else priority[0]
+                    statement = sqlglot.parse_one('SELECT t.base AS base, t.sku AS sku, ' + target + ' AS target, t.avg_daily_planned_demand AS daily FROM targets AS t')
                     statement.set(WITH_KEY, exp.With(expressions=ctes))
                     columns = {c.name for c in source.find_all(exp.Column) if c.table == 't'}
                     columns.update(['main_sales_plan_v1', 'main_sales_plan_adj', 'roll_sales_plan',
-                                    'transfer_out_plan_v1', 'transfer_out_plan_adj', 'transfer_out_plan_roll'])
+                                    'transfer_out_plan_v1', 'transfer_out_plan_adj', 'transfer_out_plan_roll',
+                                    'target_inventory', 'management_target_inventory'])
                     with self.subTest(agent=agent, query=query_id), sqlite3.connect(':memory:') as db:
                         db.execute('CREATE TABLE agents_scm_goods_inventory_turnover_data_m (' + ','.join(sorted(columns)) + ')')
 
@@ -51,6 +56,20 @@ class TargetVersions(unittest.TestCase):
                         insert('D', 'one', '纠偏', 99, 10)
                         insert('D', 'one', '月初', 500, 40)
                         insert('E', 'one', '滚动', 80, roll_sales_plan=600, transfer_out_plan_roll=0)
+                        insert('F', 'one', '纠偏', 77, 10)
+                        insert('F', 'one', '纠偏', 88, 10)
+                        insert('G', 'one', '纠偏', 77, 10)
+                        insert('G', 'one', '纠偏', None)
+                        insert('H', 'one', '纠偏', 0, 0)
+                        insert('H', 'one', '纠偏', 0, 0)
+                        insert('I', 'one', '纠偏', 99, 10, main_sales_plan_adj=330, transfer_out_plan_adj=0)
+                        insert('I', 'one', '纠偏', 99, 20, main_sales_plan_adj=330, transfer_out_plan_adj=0)
+                        insert('J', 'one', '纠偏', 99, main_sales_plan_adj=300, transfer_out_plan_adj=0)
+                        insert('J', 'one', '纠偏', 99, main_sales_plan_adj=300, transfer_out_plan_adj=0)
+                        insert('K', 'one', '纠偏', 99, 10, main_sales_plan_adj=330, transfer_out_plan_adj=0)
+                        insert('K', 'one', '纠偏', 99, main_sales_plan_adj=330, transfer_out_plan_adj=0)
+                        insert('L', 'one', '纠偏', 77, 10, target_inventory=10)
+                        insert('L', 'one', '纠偏', 88, 10, target_inventory=10)
                         params = dict(query['request']['parameters'])
                         for key, spec in query['parameterSpec'].items():
                             if spec['name'] == 'month': params[key] = '2026-11-01'
@@ -60,7 +79,11 @@ class TargetVersions(unittest.TestCase):
                         sql = statement.sql(dialect='sqlite')
                         self.assertEqual(sorted(db.execute(sql, params).fetchall()), [
                             ('A', 'one', None, None), ('B', 'one', 50, 11),
-                            ('C', 'one', 0, 0), ('D', 'one', None, None)])
+                            ('C', 'one', 0, 0), ('D', 'one', 99, 10),
+                            ('F', 'one', None, 10), ('G', 'one', None, None),
+                            ('H', 'one', 0, 0), ('I', 'one', 99, None),
+                            ('J', 'one', 99, 10), ('K', 'one', 99, None),
+                            ('L', 'one', None, 10)])
                         params[next(k for k, s in query['parameterSpec'].items() if s['name'] == 'inventory_version')] = '月初'
                         self.assertEqual(sorted(db.execute(sql, params).fetchall()), [
                             ('A', 'one', 100, 12), ('A', 'two', 200, 20),

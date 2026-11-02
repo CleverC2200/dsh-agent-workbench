@@ -17,6 +17,14 @@ import chain from '../inventory-qll/source/inventory-light-plugins/src/pages/qll
 import base from '../inventory-aqkc/source/inventory-light-plugins/src/pages/aqkc/components/inventory-operations-workbench.module.css';
 import css from './original-business-list.module.css';
 
+const optionalLabelNames: Record<string, string> = {
+  material_name: '产品名称',
+  warehouse_name: '分仓名称',
+  category: '品类',
+  material_group: '物料组',
+  page_scope_has_material_group: '物料组覆盖情况',
+};
+
 /** Only presentation: the caller owns governed reads, errors and server pagination. */
 export function OriginalBusinessList({
   agentId,
@@ -39,6 +47,7 @@ export function OriginalBusinessList({
   onPageSize,
   renderCell,
   toolbarActions,
+  quickFilterActions,
   emptyMessage = '暂无符合条件的数据。',
   getRowKey,
   retry,
@@ -324,7 +333,12 @@ export function OriginalBusinessList({
 
   return (
     <section className={css.list} aria-label={view.title} aria-busy={loading}>
-      {fc && <div className={css.quickBar}>{quickFilters}</div>}
+      {fc && (
+        <div className={css.quickBar}>
+          {quickFilters}
+          {quickFilterActions}
+        </div>
+      )}
       {(view.filters.length > 0 || fc) && (
         <LocalQueryForm
           className={`${fc ? 'panel-actions' : qll ? chain.referenceFilters : dealer.toolbar} ${css.toolbar} ${fc ? css.fcToolbar : qll ? css.qllToolbar : ''}`}
@@ -460,6 +474,15 @@ export function OriginalBusinessList({
         ].filter(Boolean)}
         scope={agentId}
       />
+      {result?.unavailableLabels?.length > 0 && (
+        <p role="status" className={css.empty}>
+          当前账号部分展示字段未获返回权限：
+          {result.unavailableLabels
+            .map((field: string) => optionalLabelNames[field] ?? field)
+            .join('、')}
+          。已授权的数据仍可查看，缺失字段不代表零值。
+        </p>
+      )}
       {result?.status === 'select_customer' ? (
         <p className={css.empty}>请选择客户。</p>
       ) : result?.status === 'select_sku' ? (

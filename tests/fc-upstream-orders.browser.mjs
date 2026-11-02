@@ -44,7 +44,7 @@ async function openFixture(t, denied = false) {
     if (
       denied &&
       (id === 'branch-supply.summary' ||
-        id === 'replenishment.summary' ||
+        ['replenishment.summary', 'replenishment.overview'].includes(id) ||
         id === 'current-shortage.summary')
     )
       return route.fulfill({
@@ -81,7 +81,7 @@ async function openFixture(t, denied = false) {
         shortage: 1000,
         invalid: 0,
       });
-    else if (id === 'replenishment.summary')
+    else if (['replenishment.summary', 'replenishment.overview'].includes(id))
       Object.assign(row, {
         row_count: 1,
         recommended_qty: 600,
@@ -172,5 +172,8 @@ test('FC exposes denied domains and preserves ready inventory without fabricatin
   await expect(cards.filter({ hasText: '待补货量' }).locator('.kpi-value')).toHaveText('-');
   await expect(cards.first().locator('.kpi-value')).toHaveText('1.32万件');
   assert.equal(calls.filter((c) => c.id === 'branch-supply.summary').length, 1);
-  assert.equal(calls.filter((c) => c.id === 'replenishment.summary').length, 1);
+  assert.equal(
+    calls.filter((c) => ['replenishment.summary', 'replenishment.overview'].includes(c.id)).length,
+    1,
+  );
 });

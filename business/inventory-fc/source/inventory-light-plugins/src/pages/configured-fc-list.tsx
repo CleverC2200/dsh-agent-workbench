@@ -352,7 +352,7 @@ export function FcConfiguredList(
     })
     .sort();
   const selection = scope.input.replenishment ?? {
-    neededOnly: true,
+    neededOnly: false,
     businessOnly: false,
     positiveActualKeys: [],
   };
@@ -980,6 +980,39 @@ export function FcConfiguredList(
       setNotice('已请求打开DMS订单管理；此操作不会重复下单。');
     });
   const count = new Set([...Object.keys(draft.quantities), ...Object.keys(draft.reasons)]).size;
+  const quickFilterActions =
+    scope.viewId === 'replenishment' ? (
+      <>
+        <label className="fc-quick-checkbox">
+          <input
+            type="checkbox"
+            checked={selection.neededOnly}
+            onChange={(event) =>
+              props.onReplenishmentFilter?.({
+                ...selection,
+                neededOnly: event.target.checked,
+                positiveActualKeys,
+              })
+            }
+          />
+          需补货
+        </label>
+        <label className="fc-quick-checkbox">
+          <input
+            type="checkbox"
+            checked={selection.businessOnly}
+            onChange={(event) =>
+              props.onReplenishmentFilter?.({
+                ...selection,
+                businessOnly: event.target.checked,
+                positiveActualKeys,
+              })
+            }
+          />
+          有业务
+        </label>
+      </>
+    ) : null;
   const toolbar = (
     <>
       {scope.viewId === 'replenishment' &&
@@ -1040,34 +1073,6 @@ export function FcConfiguredList(
       )}
       {scope.viewId === 'replenishment' && (
         <>
-          <label className="fc-quick-checkbox">
-            <input
-              type="checkbox"
-              checked={selection.neededOnly}
-              onChange={(event) =>
-                props.onReplenishmentFilter?.({
-                  ...selection,
-                  neededOnly: event.target.checked,
-                  positiveActualKeys,
-                })
-              }
-            />
-            需补货
-          </label>
-          <label className="fc-quick-checkbox">
-            <input
-              type="checkbox"
-              checked={selection.businessOnly}
-              onChange={(event) =>
-                props.onReplenishmentFilter?.({
-                  ...selection,
-                  businessOnly: event.target.checked,
-                  positiveActualKeys,
-                })
-              }
-            />
-            有业务
-          </label>
           <button
             type="button"
             className="secondary-button"
@@ -1153,6 +1158,7 @@ export function FcConfiguredList(
           props.reset();
         }}
         toolbarActions={toolbar}
+        quickFilterActions={quickFilterActions}
         renderRowDetails={(row: FcRow) => {
           if (!detailRow && scope.viewId !== 'replenishment') return null;
           if (scope.viewId === 'base-resources')

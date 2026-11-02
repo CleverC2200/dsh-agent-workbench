@@ -1,4 +1,5 @@
-import { formatChainValue as show } from '../../../../../shared/full-chain-display';
+import { useDashboardInsight } from '../../../../../shared/use-dashboard-insight';
+import { chainDashboardEvidence } from '../../../../../shared/qll-dashboard-insight';
 import { inventoryAverageAge, companyAverageAge } from '../../../../../shared/inventory-age';
 import { BusinessToolbar } from '../../../../../shared/business-toolbar';
 import { LocalQueryForm } from '../../../../../shared/local-query-form';
@@ -146,10 +147,20 @@ export default function ConfiguredWorkbench() {
         current: currentShortageSum(parts['current-shortage']?.rows, 'demand'),
         unit: '件',
         explanation:
-          '当前有效未发货完成订单量；包含未备单需求与已备单未发货占用，基地与分仓分池汇总，不使用月累计履约订单替代。',
+          '基地为有效未发货完成订单（未备单需求＋已备单未发货占用）；分仓为向基地下单的有效未收货完成ASN需求，扣除已收货数量。两类订单分别汇总。',
       },
     },
   };
+  const evidence = chainDashboardEvidence(parts, date, channel);
+  const modelInsight = useDashboardInsight(evidence, !busy && Object.keys(parts).length > 0);
+  const insightAnswer = modelInsight.status === 'ready' ? modelInsight.answer : undefined;
+  useEffect(() => {
+    updateContext('chainInsight', {
+      status: modelInsight.status,
+      evidence: !busy ? evidence : null,
+      answer: insightAnswer,
+    });
+  }, [modelInsight.status, insightAnswer, JSON.stringify(evidence), busy]);
   return (
     <main className={`${styles.shell} ${common.root}`}>
       <div className={styles.workspacePanels}>
@@ -215,15 +226,21 @@ export default function ConfiguredWorkbench() {
                 ),
               )}
             </div>
-            <section className={styles.aiInsight} aria-label="AI 洞察">
+            <section
+              className={styles.aiInsight}
+              aria-label="AI 洞察"
+              aria-busy={modelInsight.status === 'loading'}
+            >
               <div className={styles.aiInsightHeading}>
                 <span className={styles.aiInsightIcon} aria-hidden="true" />
                 <strong>AI 洞察</strong>
-                <span className={styles.aiInsightBadge}>经营洞察</span>
               </div>
               <p>
-                <b>核心判断：</b>公司库存 {show(companyQty, '件')}
-                。结合品类结构、组织结构和订单缺口安排库存协同。
+                {modelInsight.status === 'ready'
+                  ? modelInsight.answer
+                  : modelInsight.status === 'error'
+                    ? '洞察暂生成失败，可刷新后重试。'
+                    : '正在分析当前库存…'}
               </p>
             </section>
             <section className={styles.detailCard}>

@@ -1,6 +1,8 @@
 export { readBaseInventoryMetrics } from './base-inventory-metrics';
 import { fcCycleParameters, type FcCycleRule } from './fc-cycle-rules';
 import { unpackAtomicPage } from './atomic-page';
+import { configuredQueryFreshAfter, configuredQueryIdentity } from './query-cache';
+import { requireColumns } from './configured-query-client.mjs';
 import { createAgentQueries } from './agent-query';
 import { agentSqlConfig, type AgentSqlConfig } from './sql-config';
 import { readConfiguredTargetScope } from './configured-target-scope';
@@ -9,6 +11,7 @@ export type FactReadContext = {
   key: string;
   snapshotDate: string;
   configVersion: string;
+  readAt?: number;
 };
 export type FactInput = {
   asOf: string;
@@ -106,6 +109,10 @@ export async function readConfiguredFacts(
   const view =
     options.summaryOnly &&
     configuredView?.overviewSummaryId &&
+    !(
+      configuredView.overviewRequiresDefaultCycle &&
+      input.fcCycleRules?.some((rule) => rule.status !== 'paused')
+    ) &&
     Object.entries(input.filters ?? {}).every(
       ([name, value]) => !value.trim() || configuredView.overviewFilterNames?.includes(name),
     ) &&
@@ -158,6 +165,18 @@ export async function readConfiguredFacts(
   const readOffset = displayOffset;
   let version: any,
     versionSeen = false;
+  // Only non-calculating labels may be absent on a display page. Quantity,
+  // scope, sorting and pagination columns keep their complete read contract.
+  const optionalLabels =
+    config.agentId === 'inventory-fc' && viewId === 'replenishment' && options.detailsOnly
+      ? new Set([
+          'material_name',
+          'warehouse_name',
+          'category',
+          'material_group',
+          'page_scope_has_material_group',
+        ])
+      : new Set<string>();
   const read = async (id: string, values: Record<string, any>, snapshot = false) => {
     // Owned by one overview load, never reused across refreshes or identities.
     // Keep rejected promises too: a denied snapshot must not trigger a retry.
@@ -167,7 +186,13 @@ export async function readConfiguredFacts(
     if (!job) {
       job = client.read(id, values, {
         signal: options.signal,
-        requiredColumns: config.queries[id].resultColumns,
+        requiredColumns: (
+          snapshot
+            ? (config.queries[id].snapshotRequiredColumns ?? config.queries[id].resultColumns)
+            : config.queries[id].resultColumns
+        ).filter(
+          (field: string) => id !== q.pagination?.atomicQuery || !optionalLabels.has(field),
+        ),
       });
       shared?.set(key, job);
     }
@@ -189,27 +214,41 @@ export async function readConfiguredFacts(
     version = targetScope.configVersion;
     versionSeen = true;
   }
-  const contextKey = JSON.stringify([
-    config.agentId,
-    viewId,
-    input.asOf,
-    input.customer?.trim() ?? '',
-    input.cycleDays,
-    input.replenishment,
-    input.fcCycleRules,
-    input.fcCycleWarehouse,
-    Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
-  ]);
+  const fcSnapshot =
+    config.agentId === 'inventory-fc' && view.snapshotQuery === 'source.branch-stock-date';
+  const contextKey = fcSnapshot
+    ? JSON.stringify([
+        configuredQueryIdentity(),
+        config.agentId,
+        view.snapshotQuery,
+        input.asOf,
+        options.freshAfter ?? configuredQueryFreshAfter(),
+      ])
+    : JSON.stringify([
+        config.agentId,
+        viewId,
+        input.asOf,
+        input.customer?.trim() ?? '',
+        input.cycleDays,
+        input.replenishment,
+        input.fcCycleRules,
+        input.fcCycleWarehouse,
+        Object.entries(input.filters ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      ]);
   let snapshotDate: string | null = null;
+  let snapshotResult: any;
+  let snapshotReadAt = Date.now();
   if (view.snapshotQuery || view.timeMode === 'stock' || view.timeMode === 'health') {
     const stock = view.timeMode === 'stock';
     const previous = input.readContext;
     if (
       previous?.key === contextKey &&
       typeof previous.configVersion === 'string' &&
-      previous.configVersion
+      previous.configVersion &&
+      (!fcSnapshot || (previous.readAt != null && Date.now() - previous.readAt < 20 * 60 * 1000))
     ) {
       snapshotDate = previous.snapshotDate;
+      snapshotReadAt = previous.readAt ?? Date.now();
       version = previous.configVersion;
       versionSeen = true;
     } else {
@@ -218,6 +257,7 @@ export async function readConfiguredFacts(
         Object.entries(config.queries[snapshotId].parameterSpec).map(([key, spec]: any) => {
           let value = config.queries[snapshotId].request.parameters[key];
           if (spec.name === 'as_of') value = input.asOf;
+          if (spec.name === 'warehouse_code') value = input.filters?.warehouse_code || null;
           if (spec.name === 'month') value = month;
           if (spec.format === 'YYYYMM' && typeof value === 'string')
             value = value.slice(0, 7).replace('-', '');
@@ -225,6 +265,7 @@ export async function readConfiguredFacts(
         }),
       );
       const result = await read(snapshotId, snapshotValues, true);
+      snapshotResult = result;
       snapshotDate = result.rows[0]?.day ?? null;
     }
     if (!snapshotDate)
@@ -242,7 +283,7 @@ export async function readConfiguredFacts(
   }
   const readContext =
     snapshotDate && typeof version === 'string' && version
-      ? { key: contextKey, snapshotDate, configVersion: version }
+      ? { key: contextKey, snapshotDate, configVersion: version, readAt: snapshotReadAt }
       : undefined;
   const rollingDate = dateOnly(input.asOf);
   rollingDate.setUTCDate(rollingDate.getUTCDate() - 29);
@@ -336,7 +377,6 @@ export async function readConfiguredFacts(
     } else if (name in values) values[name] = value;
     else return fail('INVALID_FILTER', '该查询不支持此筛选：' + name);
   }
-  if (input.replenishment && values.list_mode === 'business') values.list_mode = 'all';
   if (view.requiresCustomer || (view.optionalCustomer && input.customer?.trim())) {
     values.customer = input.customer!.trim();
     if ('customer_mode' in values) values.customer_mode = 'equal';
@@ -353,7 +393,12 @@ export async function readConfiguredFacts(
     view.summaryId &&
     config.queries[view.summaryId].resultColumns.includes('row_count')
   ) {
-    const aggregate = await read(view.summaryId, subset(view.summaryId));
+    const useSnapshot =
+      options.inventoryOnly && view.inventorySummaryFromSnapshot && snapshotResult;
+    const aggregate = useSnapshot
+      ? snapshotResult
+      : await read(view.summaryId, subset(view.summaryId));
+    if (useSnapshot) requireColumns(aggregate, config.queries[view.summaryId].resultColumns);
     const total = totalOf({
       rows: aggregate.rows.map((row: any) => ({ total: row.row_count })),
     });
@@ -364,7 +409,17 @@ export async function readConfiguredFacts(
       page,
       pageSize,
       viewId,
-      summary: total || view.preserveEmptySummary ? aggregate.rows[0] : null,
+      summary:
+        total || view.preserveEmptySummary
+          ? useSnapshot
+            ? Object.fromEntries(
+                config.queries[view.summaryId].resultColumns.map((column: string) => [
+                  column,
+                  aggregate.rows[0][column],
+                ]),
+              )
+            : aggregate.rows[0]
+          : null,
       summaryError: null,
       snapshotDate,
       readContext,
@@ -447,6 +502,21 @@ export async function readConfiguredFacts(
           }
         : productionRead;
     const block = unpackAtomicPage(result, readOffset / readSize + 1, readSize);
+    const unavailableLabels = [...optionalLabels].filter((field) => {
+      const alias = (column: any) =>
+        typeof column === 'string'
+          ? column
+          : (column.outputAlias ?? column.alias ?? column.name ?? column.columnName);
+      return (
+        result.rejectedColumns?.some((column: any) => alias(column) === field) ||
+        (result.returnedColumns &&
+          !result.returnedColumns.some((column: any) => alias(column) === field))
+      );
+    });
+    requireColumns(
+      result,
+      [...optionalLabels].filter((field) => !unavailableLabels.includes(field)),
+    );
     const total = block.total;
     const rows = block.rows.slice(
       displayOffset - readOffset,
@@ -464,6 +534,8 @@ export async function readConfiguredFacts(
           })
         : rows,
       supplementaryError: production.error,
+      unavailableLabels,
+      partial: unavailableLabels.length > 0,
       total,
       page,
       pageSize,

@@ -109,7 +109,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
         age_weight_qty: 1,
         weighted_age_sum: 20,
       });
-      if (id === 'replenishment.summary' && !values.warehouse_code)
+      if (id === 'replenishment.overview' && !values.warehouse_code)
         Object.assign(row, {
           recommended_qty: null,
           known_recommended_qty: 70,
@@ -130,6 +130,8 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
   });
   await page.goto('http://127.0.0.1:19486/');
+  await expect(page.getByLabel('读取时点')).toHaveCount(0);
+  await expect(page.locator('input[type="date"]')).toHaveCount(0);
   const picker = page.getByRole('button', { name: '选择分仓' });
   await expect(picker).toBeEnabled();
   await picker.click();
@@ -161,7 +163,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     });
     assert.equal(layout.contained, true, `toolbar controls fit at ${width}px`);
     assert.equal(layout.usableFields, true, `filter inputs remain usable at ${width}px`);
-    if (width >= 1280)
+    if (width >= 900)
       assert.equal(layout.sameLine, true, `toolbar stays on one line at ${width}px`);
   }
   await page.setViewportSize({ width: 900, height: 900 });
@@ -204,7 +206,7 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
     .toBe(true);
   await expect
     .poll(() =>
-      calls.some((c) => c.id === 'replenishment.summary' && c.values.warehouse_code === 'A170'),
+      calls.some((c) => c.id === 'replenishment.overview' && c.values.warehouse_code === 'A170'),
     )
     .toBe(true);
   await expect
@@ -306,6 +308,15 @@ test('FC warehouse selector scopes cards, tabs and reset; returning to all does 
   await expect(confirmation).toContainText('0个SKU');
   await confirmation.getByRole('button', { name: '取消', exact: true }).click();
   await expect(confirmation).toHaveCount(0);
+  // A page left open overnight follows the current business day without a date picker.
+  await page.clock.setFixedTime(new Date('2026-11-03T01:00:00Z'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect
+    .poll(() =>
+      calls.some((c) => c.id === 'source.branch-stock-date' && c.values.as_of === '2026-11-03'),
+    )
+    .toBe(true);
+
   await page.getByRole('button', { name: '分仓计划', exact: true }).click();
   const planPanel = page.getByRole('region', { name: '分仓计划', exact: true });
   await planPanel.getByRole('textbox', { name: 'SKU／产品名称', exact: true }).fill('SHARED-SKU');
@@ -837,11 +848,12 @@ test('DSH replenishment filters, server sorting and reload recover an unavailabl
     2,
     'one clean cohort restart after invalid cached page',
   );
-  assert.ok(
-    recoveryReads.at(-1).values.positive_actual_keys.includes('4:N43610000034'),
-    'editing a positive draft updates the complete-scope filter once',
+  assert.equal(
+    recoveryReads.length,
+    2,
+    'editing a draft in the unfiltered list does not reload SQL',
   );
-  await expect(page.getByRole('button', { name: '有业务', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: '全部', exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -931,15 +943,17 @@ test('replenishment quick filters use server scope, product links expand inline 
           warehouse_code: 'W1',
           sku: 'SKU2',
           material_name: '产品二',
+          current_order_shortage: 5,
           inventory_qty: 2,
           recommended_qty: 0,
         },
       ];
       const matched = all.filter(
         (row) =>
-          !values.needed_only ||
-          row.recommended_qty > 0 ||
-          values.positive_actual_keys?.includes('2:W1' + row.sku),
+          (values.list_mode !== 'urgent' || row.current_order_shortage > 0) &&
+          (!values.needed_only ||
+            row.recommended_qty > 0 ||
+            values.positive_actual_keys?.includes('2:W1' + row.sku)),
       );
       rows = matched.map((row) => ({
         ...Object.fromEntries(q.resultColumns.map((key) => [key, null])),
@@ -981,14 +995,25 @@ test('replenishment quick filters use server scope, product links expand inline 
   });
   await page.goto('http://127.0.0.1:19488/');
   const needed = page.getByRole('checkbox', { name: '需补货', exact: true });
-  await expect(needed).toBeChecked();
+  await expect(needed).not.toBeChecked();
+  await expect(page.getByRole('button', { name: '全部', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page.getByRole('button', { name: 'SKU1', exact: true })).toBeVisible();
   assert.equal(
     calls.filter((c) => c.id === 'replenishment.detail.atomic').at(-1).values.needed_only,
-    true,
+    false,
   );
-  await needed.uncheck();
   await expect(page.getByRole('button', { name: 'SKU2', exact: true })).toBeVisible();
+  await needed.check();
+  await expect(page.getByRole('button', { name: 'SKU2', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '紧急 SKU', exact: true }).click();
+  await expect(needed).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'SKU2', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'SKU1', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '全部', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'SKU1', exact: true })).toBeVisible();
   await page.getByRole('spinbutton', { name: 'SKU2实际补货量' }).fill('5');
   await needed.check();
   await expect(page.getByRole('button', { name: 'SKU2', exact: true })).toBeVisible();
@@ -1033,4 +1058,84 @@ test('replenishment quick filters use server scope, product links expand inline 
   await expect(needed).toBeVisible();
   await page.screenshot({ path: '.scratch/fc-inline-narrow.png' });
   assert.deepEqual(errors, []);
+});
+
+test('identity changes reload cards and lists even when both accounts select all warehouses', async (t) => {
+  const browser = await chromium.launch({ headless: true });
+  t.after(() => browser.close());
+  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+  let account = 'full';
+  let resumeInventory;
+  const calls = [];
+  await page.route('http://127.0.0.1:19491/**', async (route) => {
+    if (route.request().method() !== 'POST')
+      return route.fulfill({
+        contentType: 'text/html',
+        body: `<style>${css}</style><main id="app"></main><script id="agent-sql-direct" type="application/json">{"path":"/api/agents/inventory-fc/query","token":"fixture-only"}</script><script>${js}</script>`,
+      });
+    const { queryId: id } = route.request().postDataJSON();
+    const identity = account;
+    calls.push({ id, identity });
+    const q = config.queries[id];
+    const row = Object.fromEntries(q.resultColumns.map((field) => [field, null]));
+    let rows = [];
+    let rejectedColumns = [];
+    if (id.startsWith('source.')) rows = [{ day: '2026-11-02' }];
+    else if (id === 'branch-warehouse.directory') rows = [];
+    else if (id.includes('atomic')) {
+      rows = [
+        {
+          ...row,
+          warehouse_code: 'A020',
+          sku: identity === 'full' ? 'FULL-SKU' : 'SCOPED-SKU',
+          inventory_qty: identity === 'full' ? 1000 : 10,
+          page_scope_total: 1,
+          page_row_present: 1,
+        },
+      ];
+      if (identity === 'scoped') {
+        delete rows[0].material_name;
+        rejectedColumns = [{ outputAlias: 'material_name', reasonCode: 'RETURN_DENIED' }];
+      }
+    } else {
+      rows = [
+        {
+          ...row,
+          row_count: 1,
+          total_qty: identity === 'full' ? 1000 : 10,
+          age_weight_qty: 1,
+          weighted_age_sum: 20,
+          invalid: 0,
+        },
+      ];
+      if (id === 'health.inventory' && identity === 'scoped')
+        await new Promise((resolve) => {
+          resumeInventory = resolve;
+        });
+    }
+    await route.fulfill({
+      json: {
+        rows,
+        returnedColumns: q.resultColumns.filter(
+          (field) => !rejectedColumns.some((c) => c.outputAlias === field),
+        ),
+        rejectedColumns,
+        configVersion: 'fixture',
+      },
+    });
+  });
+  await page.goto('http://127.0.0.1:19491/');
+  const card = page.locator('[data-overview-cards="fc"] article').first();
+  await expect(card.locator('.kpi-value')).toHaveText('1,000件');
+  await expect(page.getByRole('button', { name: 'FULL-SKU', exact: true })).toBeVisible();
+  account = 'scoped';
+  await page.evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
+  await expect(card.locator('.kpi-value')).not.toHaveText('1,000件');
+  await expect(page.getByRole('button', { name: 'FULL-SKU', exact: true })).toHaveCount(0);
+  await expect.poll(() => Boolean(resumeInventory)).toBe(true);
+  resumeInventory();
+  await expect(card.locator('.kpi-value')).toHaveText('10件');
+  await expect(page.getByRole('button', { name: 'SCOPED-SKU', exact: true })).toBeVisible();
+  await expect(page.getByText(/当前账号部分展示字段未获返回权限/)).toBeVisible();
+  assert.ok(calls.some((c) => c.id === 'source.branch-stock-date' && c.identity === 'scoped'));
 });

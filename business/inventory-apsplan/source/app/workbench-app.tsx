@@ -4843,6 +4843,13 @@ export default function Home({
     apsView,
     'matrixMode',
     'rate',
+    undefined,
+    (value) =>
+      ['rate', 'stock', 'plan', 'inventory', 'delivery', 'change', 'void'].includes(
+        value as string,
+      )
+        ? (value as MatrixMode)
+        : 'rate',
   );
   const [selectedBase, setSelectedBase] = usePageViewField(
     React,
@@ -4859,6 +4866,19 @@ export default function Home({
     apsView,
     'baseTab',
     'overview',
+    undefined,
+    (value) =>
+      [
+        'overview',
+        'forecast',
+        'plan',
+        'inventory',
+        'stock',
+        'shortage',
+        'satisfaction',
+      ].includes(value as string)
+        ? (value as BaseMetricTab)
+        : 'overview',
   );
   const [selectedBaseRowKey, setSelectedBaseRowKey] = usePageViewField(
     React,
@@ -4905,6 +4925,11 @@ export default function Home({
     apsView,
     'timeGranularity',
     'month',
+    undefined,
+    (value) =>
+      ['year', 'month', 'week', 'day'].includes(value as string)
+        ? (value as TimeGranularity)
+        : 'month',
   );
   const [toast, setToast] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -4932,6 +4957,19 @@ export default function Home({
     apsView,
     'activeWorkspace',
     initialWorkspace,
+    undefined,
+    (value) =>
+      [
+        'coordination',
+        'demand',
+        'plan',
+        'sales-plan',
+        'digital',
+        'intelligent',
+        'delivery',
+      ].includes(value as string)
+        ? (value as WorkspaceName)
+        : initialWorkspace,
   );
   const [salesPlanRunId, setSalesPlanRunId] = useState(0);
   const [analysisScope, setAnalysisScope] = usePageViewField<AnalysisScope>(
@@ -4939,18 +4977,33 @@ export default function Home({
     apsView,
     'analysisScope',
     'overview',
+    undefined,
+    (value) =>
+      ['overview', 'production', 'sales'].includes(value as string)
+        ? (value as AnalysisScope)
+        : 'overview',
   );
   const [productionDimension, setProductionDimension] = usePageViewField<ProductionDimension>(
     React,
     apsView,
     'productionDimension',
     'category',
+    undefined,
+    (value) =>
+      ['category', 'base', 'cross'].includes(value as string)
+        ? (value as ProductionDimension)
+        : 'category',
   );
   const [salesMetricTab, setSalesMetricTab] = usePageViewField<SalesMetricTab>(
     React,
     apsView,
     'salesMetricTab',
     'overview',
+    undefined,
+    (value) =>
+      ['overview', 'budget', 'reporting'].includes(value as string)
+        ? (value as SalesMetricTab)
+        : 'overview',
   );
   const [selectedSalesOrg, setSelectedSalesOrg] = usePageViewField(
     React,
@@ -4973,6 +5026,19 @@ export default function Home({
     apsView,
     'categoryTab',
     'overview',
+    undefined,
+    (value) =>
+      [
+        'overview',
+        'forecast',
+        'plan',
+        'inventory',
+        'stock',
+        'shortage',
+        'satisfaction',
+      ].includes(value as string)
+        ? (value as CategoryMetricTab)
+        : 'overview',
   );
   const [selectedCategory, setSelectedCategory] = usePageViewField(
     React,

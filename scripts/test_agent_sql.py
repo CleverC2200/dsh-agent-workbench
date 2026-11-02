@@ -395,7 +395,9 @@ class FcReplenishmentCoverageTests(unittest.TestCase):
         self.insert('agents_scm_inventory_sku_data_d',month_date='20261020',warehouseid='BASE-LATER',warehouse_classify='01',material_code='S1',live_qty=10,available_qty=10)
         self.assertEqual(self.read('health.summary')[0]['total_qty'],130)
         self.assertEqual(self.read('replenishment.summary')[0]['inventory_qty'],130)
-        self.assertEqual(self.read('source.branch-stock-date'),[{'day':'2026-10-19'}])
+        snapshot = self.read('source.branch-stock-date')[0]
+        self.assertEqual(snapshot['day'], '2026-10-19')
+        self.assertEqual(snapshot['total_qty'], 130)
 
     def test_suggestion_pages_filter_before_count_and_rank_without_scanning_zero_rows(self):
         first = self.read('replenishment-suggestions.detail.atomic',page_size=1,offset=0)
