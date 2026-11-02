@@ -1,8 +1,11 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
-const config = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8')),
+);
 const output = await build({
   entryPoints: ['business/shared/qll-category-tree.ts'],
   bundle: true,

@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +14,9 @@ const output = await build({
 const { readGroupedOrderOverview } = await import(
   'data:text/javascript;base64,' + Buffer.from(output.outputFiles[0].text).toString('base64')
 );
-const config = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8')),
+);
 const twoGroups = structuredClone(config);
 twoGroups.overviewOrderGroups.views['branch-overview'] = '分仓';
 const fields = config.queries[config.overviewOrderGroups.queryId].resultColumns;

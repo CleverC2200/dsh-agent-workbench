@@ -14,7 +14,7 @@ class PlanTemplate(unittest.TestCase):
         self.db = sqlite3.connect(':memory:')
         self.addCleanup(self.db.close)
         self.db.row_factory = sqlite3.Row
-        self.db.execute('CREATE TABLE agents_scm_warehouse_transfer_plan_data_d (warehouse_code TEXT, material_code TEXT, warehouse_name TEXT, material_name TEXT, product_categ_name TEXT, warehouse_month_out_plan REAL, warehouse_future30_qty REAL, stat_month TEXT)')
+        self.db.execute('CREATE TABLE agents_scm_warehouse_transfer_plan_data_d (warehouseid TEXT, material_code TEXT, warehouse_name TEXT, material_name TEXT, product_categ_name TEXT, warehouse_month_out_plan REAL, warehouse_future30_qty REAL, stat_month TEXT)')
         self.db.executemany('INSERT INTO agents_scm_warehouse_transfer_plan_data_d VALUES (?,?,?,?,?,?,?,?)', [
             ('A','1','仓A','商品1','点心',310,600,'202610'),
             ('A','2','仓A','商品2','点心',0,0,'202610'),

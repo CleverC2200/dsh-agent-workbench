@@ -645,18 +645,18 @@ test('failed completeness checks are not cached as good data; cancellation stops
     assert.equal(part.code, 'RESULT_INCOMPLETE');
     assert.equal(result.periods[key].metrics['货龄（>60天库存占比）'].value, null);
   }
-  assert.equal(
-    broken.calls.filter((c) => c.queryId === 'workbench.ages' && c.values.offset === 200).length,
-    1,
-  );
+  const failedAttempts = broken.calls.filter(
+    (c) => c.queryId === 'workbench.ages' && c.values.offset === 200,
+  ).length;
+  assert.ok(failedAttempts >= 1, 'the incomplete second page must actually be read');
   await model.loadWorkbenchReport('2026-10-01', '2026-11-01', undefined, {
     execute: broken.execute,
     now: new Date('2026-10-24T00:00:00Z'),
   });
-  assert.equal(
-    broken.calls.filter((c) => c.queryId === 'workbench.ages' && c.values.offset === 200).length,
-    2,
-    'concurrent periods may share an in-flight failure; a new load must retry it',
+  assert.ok(
+    broken.calls.filter((c) => c.queryId === 'workbench.ages' && c.values.offset === 200).length >
+      failedAttempts,
+    'a new load must retry failed completeness checks, whether concurrent periods overlap or settle separately',
   );
   const source = progressiveSource(),
     controller = new AbortController();

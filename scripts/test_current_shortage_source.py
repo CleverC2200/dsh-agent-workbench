@@ -21,7 +21,7 @@ class SourceFormula(unittest.TestCase):
    c.execute(fixture.db.execute("SELECT sql FROM sqlite_master WHERE name=?",(table,)).fetchone()[0])
   fixture.db.close()
   c.executemany('INSERT INTO agents_scm_material_in_out_summary_d (warehouseid,pickup_point) VALUES (?,?)',mapping)
-  for column,kind in [('cust_code',"TEXT DEFAULT 'FIXTURE'"),('qtyshipped','REAL DEFAULT 0'),('delivery_qty','REAL DEFAULT 0'),('detailstatus','INTEGER DEFAULT 10'),('order_close_time','TEXT'),('wms_close_time','TEXT'),('canceltime','TEXT'),('dmscanceltime','TEXT'),('bdwctime','TEXT'),('prapare_order_status','TEXT')]:
+  for column,kind in [('executeorderno','TEXT'),('executeorderlineno','TEXT'),('fromorderno','TEXT'),('load_time','TEXT'),('order_type','TEXT'),('receive_wh','TEXT'),('warehouseid','TEXT'),('header_addtime','TEXT'),('requireddeliverytime','TEXT'),('plant_flag','TEXT'),('cust_code',"TEXT DEFAULT 'FIXTURE'"),('qtyshipped','REAL DEFAULT 0'),('delivery_qty','REAL DEFAULT 0'),('detailstatus','INTEGER DEFAULT 10'),('order_close_time','TEXT'),('wms_close_time','TEXT'),('canceltime','TEXT'),('dmscanceltime','TEXT'),('bdwctime','TEXT'),('prapare_order_status','TEXT')]:
    c.execute('ALTER TABLE agents_scm_execute_detail_d ADD COLUMN '+column+' '+kind)
   c.execute("UPDATE agents_scm_execute_detail_d SET canceltime='2026-10-01' WHERE bizflowstatus='作废'")
   return [dict(r) for r in c.execute(statement,{'gea_p1':None,'gea_p2':None,'gea_p3':None,'gea_p6':None})]

@@ -46,7 +46,7 @@ def cohort(query, prefix, end='filtered'):
     return ctes
 
 
-def build(config, base, branch):
+def build_source(config, base, branch):
     for kind in ['summary', 'locations', 'categories', 'detail', 'skus']:
         key = 'current-shortage.' + kind
         query = copy.deepcopy(base['queries'][key])
@@ -113,6 +113,35 @@ def build(config, base, branch):
     optimized = loading.optimize(config)
     config.clear()
     config.update(optimized)
+
+
+def build(config, base, branch):
+    """Regenerate source formulas while retaining installed summary routes and collection envelopes."""
+    original = copy.deepcopy(config)
+    inputs = [copy.deepcopy(value) for value in (base, branch)]
+    for value in inputs:
+        for query in value['queries'].values():
+            tree = parse(query['request']['sql'])
+            if tree.ctes and tree.ctes[0].alias == 'collection_result':
+                query['request']['sql'] = render(tree.ctes[0].this)
+                query['resultColumns'] = [name for name in query['resultColumns']
+                                          if name not in ('page_scope_total', 'page_row_present')]
+    build_source(config, *inputs)
+    for key, query in config['queries'].items():
+        previous = original['queries'].get(key)
+        if not previous:
+            continue
+        if 'summaryRoute' in previous:
+            query['summaryRoute'] = copy.deepcopy(previous['summaryRoute'])
+        if query['request']['sql'] == previous['request']['sql']:
+            continue
+        template = parse(previous['request']['sql'])
+        if not template.ctes or template.ctes[0].alias != 'collection_result':
+            continue
+        template.ctes[0].set('this', parse(query['request']['sql']))
+        restored = copy.deepcopy(previous)
+        restored['request']['sql'] = render(template)
+        config['queries'][key] = restored
 
 
 if __name__ == '__main__':

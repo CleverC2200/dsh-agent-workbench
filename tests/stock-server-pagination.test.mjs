@@ -29,6 +29,7 @@ async function waitFor(predicate) {
 function source() {
   const calls = [];
   const execute = async (_, call) => {
+    if (call.queryId === 'summary.snapshot') return { rows: [] };
     calls.push(call);
     const columns = config.queries[call.queryId].resultColumns;
     let rows;
@@ -116,6 +117,7 @@ test('changed configuration between page turns cannot mix snapshot and page data
       {
         now,
         execute: async (...args) => {
+          if (args[1].queryId === 'summary.snapshot') return io.execute(...args);
           count++;
           return { ...(await io.execute(...args)), configVersion: 'v2' };
         },
@@ -164,6 +166,7 @@ test('independent target calendar and stock date start in the same gateway wave'
     {
       now,
       execute: async (...args) => {
+        if (args[1].queryId === 'summary.snapshot') return io.execute(...args);
         seen.push([args[1].queryId, wave]);
         await new Promise((resolve) => {
           pending.push(resolve);

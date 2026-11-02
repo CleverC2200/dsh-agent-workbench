@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import { overviewReply, untilObserved } from './fixtures/overview-reply.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -17,8 +18,8 @@ const { readConfiguredOverview } = await import(
 
 for (const agent of ['fc', 'qll']) {
   test(`${agent}: slow quick stock must not block independent order cards`, async () => {
-    const config = JSON.parse(
-      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
     );
     const ready = agent === 'fc' ? 'branch-supply' : 'factory-overview';
     const slow = config.overviewQuickStock ?? 'source.branch-stock-date';
@@ -48,8 +49,8 @@ for (const agent of ['fc', 'qll']) {
   });
 
   test(`${agent}: dependent summaries share one inventory snapshot read`, async () => {
-    const config = JSON.parse(
-      await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'),
+    const config = sourceDetailConfig(
+      JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
     );
     const calls = [];
     const replenishment = agent === 'fc' ? 'replenishment' : 'branch-replenishment';

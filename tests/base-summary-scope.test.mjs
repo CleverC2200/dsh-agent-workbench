@@ -1,9 +1,12 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-const config = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+);
 const bundle = await build({
   entryPoints: ['business/inventory-aqkc/source/aqkc/web/src/lib/cube-dashboard.ts'],
   bundle: true,
@@ -117,11 +120,15 @@ globalThis.baseSummaryHost = async (_, call) => {
           max_age: values[base].age,
         }),
       );
+  else if (id === 'current-shortage.locations.count') rows = [{ total: bases.length }];
   else if (id === 'current-shortage.locations')
     rows = bases.map((base) =>
       row({
         base,
         location_type: '基地',
+        location_code: base,
+        page_scope_total: bases.length,
+        page_row_present: 1,
         demand: values[base].demand,
         allocated: 0,
         remaining: values[base].demand,

@@ -9,7 +9,7 @@ test('ASN SQL links execution occupations once, excludes closed documents and al
   });
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stderr, /Ran 16 tests/);
+  assert.match(result.stderr, /Ran 22 tests/);
 });
 
 test('optimized FC order cards preserve canonical FIFO and unknown quantities across warehouse scopes', () => {

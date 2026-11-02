@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -13,7 +14,9 @@ const bundled = await build({
 const { readWorkspaceQuery } = await import(
   'data:text/javascript;base64,' + Buffer.from(bundled.outputFiles[0].text).toString('base64')
 );
-const config = JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-apsplan/sql.config.json', 'utf8')),
+);
 const [name, binding] = Object.entries(config.workspaceBindings).find(
   ([, b]) => b.queryId.includes('sales-accuracy') || b.queryId.includes('sales_accuracy'),
 );
@@ -359,7 +362,9 @@ test('expanded product stock uses same-statement counts and never downloads the 
 });
 
 test('base order helpers return complete base groups in one query without extra counts', async () => {
-  const base = JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8'));
+  const base = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-aqkc/sql.config.json', 'utf8')),
+  );
   const b = base.workspaceBindings['workbench-support-by-base'],
     q = base.queries[b.queryId],
     calls = [];
@@ -454,7 +459,9 @@ test('FC first-screen queries start by priority without changing submission conc
     releases.shift()();
   }
   await Promise.all(jobs);
-  const fc = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+  const fc = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+  );
   assert.equal(fc.queries['replenishment.detail.atomic'].maxConcurrency, 2);
   assert.equal(fc.queries['replenishment-suggestions.detail.atomic'].maxConcurrency, undefined);
 });

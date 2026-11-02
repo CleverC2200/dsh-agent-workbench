@@ -1,3 +1,4 @@
+import { sourceDetailConfig } from './fixtures/source-detail-config.mjs';
 import { overviewReply, untilObserved } from './fixtures/overview-reply.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -13,7 +14,9 @@ const out = await build({
 const { readConfiguredOverview, completeCount } = await import(
   'data:text/javascript;base64,' + Buffer.from(out.outputFiles[0].text).toString('base64')
 );
-const config = JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8'));
+const config = sourceDetailConfig(
+  JSON.parse(await readFile('business/inventory-fc/sql.config.json', 'utf8')),
+);
 config.overviewViewIds = ['branch-supply', 'replenishment', 'branch-stock'];
 const reply = (id, version = 'v1') => overviewReply(config, id, '2026-10-18', version);
 test('fast overview cards render while another source is pending; shared snapshot resolves only once', async () => {
@@ -97,7 +100,9 @@ test('aborted overview cannot publish late progress', async () => {
 
 for (const agent of ['qll', 'dealer'])
   test(`${agent}: a slow inventory source does not hold ready cards`, async () => {
-    const c = JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8'));
+    const c = sourceDetailConfig(
+      JSON.parse(await readFile(`business/inventory-${agent}/sql.config.json`, 'utf8')),
+    );
     const slow = agent === 'qll' ? 'overview.quick-stock' : 'dealer.stock.summary';
     const ready = agent === 'qll' ? 'factory-overview' : 'customer';
     let finish;
@@ -138,7 +143,9 @@ test('complete SQL counts preserve zero and reject incomplete identities or malf
 });
 
 test('full-chain company view skips customer facts and coalesces identical health summaries per load', async () => {
-  const c = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  const c = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8')),
+  );
   const calls = [];
   const viewIds = c.overviewViewIds.filter(
     (id) => !['channel-overview', 'base-shipments'].includes(id),
@@ -166,7 +173,9 @@ test('full-chain company view skips customer facts and coalesces identical healt
 });
 
 test('quantity cards publish before aging and survive an aging failure', async () => {
-  const c = JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8'));
+  const c = sourceDetailConfig(
+    JSON.parse(await readFile('business/inventory-qll/sql.config.json', 'utf8')),
+  );
   let failAge;
   const progress = [];
   const promise = readConfiguredOverview(c, '2026-10-23', '', {

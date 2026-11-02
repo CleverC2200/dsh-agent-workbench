@@ -21,7 +21,10 @@ class FullChainBranchOrders(unittest.TestCase):
         base = test_base_current_orders.BaseCurrentOrders()
         base.setUp()
         self.addCleanup(base.doCleanups)
-        self.db.execute(base.db.execute("SELECT sql FROM sqlite_master WHERE name='agents_scm_execute_detail_d'").fetchone()[0])
+        existing = {row[1] for row in self.db.execute('PRAGMA table_info(agents_scm_execute_detail_d)')}
+        for column in base.db.execute('PRAGMA table_info(agents_scm_execute_detail_d)'):
+            if column[1] not in existing:
+                self.db.execute(f'ALTER TABLE agents_scm_execute_detail_d ADD COLUMN {column[1]} {column[2]}')
         for table, columns in {
             'agents_scm_inventory_sku_data_d': ['material_name'],
             'agents_scm_material_in_out_summary_d': ['warehouseid', 'pickup_point'],
@@ -52,8 +55,13 @@ class FullChainBranchOrders(unittest.TestCase):
             for agent, location_type in [('fc', '分仓'), ('aqkc', '基地')]:
                 actual = [r for r in combined if r['location_type'] == location_type]
                 expected = self.read(agent, kind, **values)
-                fields = self.configs['qll']['queries']['current-shortage.' + kind]['resultColumns']
-                self.assertEqual(actual, [{k: r[k] for k in fields} for r in expected], kind)
+                fields = [field for field in self.configs['qll']['queries']['current-shortage.' + kind]['resultColumns']
+                          if field not in ('page_scope_total', 'page_row_present')]
+                self.assertEqual([{k: r[k] for k in fields} for r in actual],
+                                 [{k: r[k] for k in fields} for r in expected], kind)
+                if kind != 'summary':
+                    self.assertTrue(all(row['page_scope_total'] == len(combined) and row['page_row_present'] == 1 for row in actual))
+                    self.assertTrue(all(row['page_scope_total'] == len(expected) and row['page_row_present'] == 1 for row in expected))
 
     def test_selected_branch_preserves_global_fifo_allocation(self):
         row = self.read('qll', warehouse_code='BR2')[0]
@@ -96,9 +104,19 @@ class FullChainBranchOrders(unittest.TestCase):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         config = self.configs['qll']
-        before = json.dumps(config, sort_keys=True, ensure_ascii=False)
+        kinds = ['summary', 'locations', 'categories', 'detail', 'skus']
+        expected = {kind: self.read('qll', kind, **({'skus': ['SKU']} if kind == 'skus' else {})) for kind in kinds}
+        routes = {key: query.get('summaryRoute') for key, query in config['queries'].items()}
+        pagination = {key: query.get('pagination') for key, query in config['queries'].items()}
         module.build(config, self.configs['aqkc'], self.configs['fc'])
-        self.assertEqual(before, json.dumps(config, sort_keys=True, ensure_ascii=False))
+        for kind in kinds:
+            self.assertEqual(self.read('qll', kind, **({'skus': ['SKU']} if kind == 'skus' else {})), expected[kind], kind)
+        for key, query in config['queries'].items():
+            self.assertEqual(query.get('summaryRoute'), routes.get(key), key)
+            self.assertEqual(query.get('pagination'), pagination.get(key), key)
+        rendered = json.dumps(config, sort_keys=True, ensure_ascii=False)
+        module.build(config, self.configs['aqkc'], self.configs['fc'])
+        self.assertEqual(rendered, json.dumps(config, sort_keys=True, ensure_ascii=False))
 
 
 if __name__ == '__main__':
