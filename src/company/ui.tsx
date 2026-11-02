@@ -435,7 +435,7 @@ export function mountCompanyUI(
               name.slice(0, 1) || 'G'
             )}
           </span>
-          {wide && <span>{accountLabel}</span>}
+          {wide && <span className="gea-account-label">{accountLabel}</span>}
         </button>
         {position &&
           createPortal(
@@ -1001,10 +1001,12 @@ export function mountCompanyUI(
           </div>
         </div>
         <footer className="gea-sidebar-footer">
+          <div className="gea-sidebar-updates">
+            {renderSlot('sidebar.footer.action', { wide: !collapsed })}
+          </div>
           <div className="gea-sidebar-account">
             {renderSlot('sidebar.settings', { wide: !collapsed })}
           </div>
-          {renderSlot('sidebar.footer.action', { wide: !collapsed })}
         </footer>
       </aside>
     );
