@@ -8,6 +8,7 @@ test('customer card names, units and low coverage semantics cannot drift to simi
     summary: {
       totalValue: 123,
       quantity: 456,
+      stockedCustomerCount: 2,
       structureScore: 67,
       normalRatio: 89,
       turnover: 12,
@@ -19,6 +20,7 @@ test('customer card names, units and low coverage semantics cannot drift to simi
     [
       ['库存价值', 123, '万元'],
       ['库存数量', 456, '箱'],
+      ['有库存的客户数', 2, '个'],
       ['结构合理性', 67, '分'],
       ['库存新鲜度', 89, '%'],
       ['周转天数', 12, '天'],

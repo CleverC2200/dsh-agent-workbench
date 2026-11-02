@@ -42,7 +42,7 @@ async function fixture(
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   const frame = page.frameLocator('iframe');
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   if (connect) {
     await page.evaluate(
       ({ error, rows, deferSql, skus, skuColumns }) => {
@@ -298,11 +298,11 @@ test('SKU scope changes across region, province and city without leaking custome
   assert.deepEqual(errors, []);
 });
 
-test('no connection shows loading and six cards without claiming inventory facts', async (t) => {
+test('no connection shows loading and seven cards without claiming inventory facts', async (t) => {
   const { frame, errors } = await fixture(t, { connect: false });
   await expect(frame.locator('#customer-load-status')).toContainText('正在连接客户库存');
   await expect(frame.locator('#customer-load-status')).toBeVisible();
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   await expect(frame.locator('.dealer-table-card')).toBeHidden();
   assert.deepEqual(errors, []);
 });
@@ -320,7 +320,7 @@ test('Host Agent denial is displayed in the inventory pane without a query or bl
     ),
   );
   await expect(frame.locator('#customer-load-status')).toContainText('当前用户无权访问客户库存');
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   await page.screenshot({
     path: '.runtime/customer-inventory-access-denied.png',
     fullPage: true,
@@ -345,7 +345,7 @@ test('missing resources and expired sessions have distinct inventory-pane messag
       error,
     );
     await expect(frame.locator('#customer-load-status')).toContainText(text);
-    await expect(frame.locator('.metric-card')).toHaveCount(6);
+    await expect(frame.locator('.metric-card')).toHaveCount(7);
   }
   assert.deepEqual(errors, []);
 });
@@ -355,7 +355,7 @@ test('a connection that never arrives gets a finite diagnostic without removing 
   await expect(frame.locator('#customer-load-status')).toContainText('连接尚未就绪', {
     timeout: 18000,
   });
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   assert.deepEqual(errors, []);
 });
 
@@ -376,7 +376,7 @@ test('successful empty inventory is explicit rather than a loading or permission
   await expect(frame.locator('#customer-load-status')).toContainText(
     '当前授权范围暂无客户库存数据',
   );
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   assert.deepEqual(errors, []);
 });
 
@@ -388,7 +388,7 @@ test('inventory has no whole-document refresh button and retains its permission-
     '当前用户暂无客户库存数据权限',
   );
   await expect(frame.getByRole('button', { name: '刷新', exact: true })).toHaveCount(0);
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   await expect(frame.locator('#customer-load-status')).toContainText(
     '当前用户暂无客户库存数据权限',
   );
@@ -436,7 +436,7 @@ test('successful reads fill the same shell; identity changes remove previous inv
     .evaluate(() => window.dispatchEvent(new Event('gea-identity-changed')));
   await expect(frame.locator('#customer-load-status')).toContainText('已清除旧数据');
   await expect(frame.locator('.dealer-table-card')).not.toContainText('离线测试客户');
-  await expect(frame.locator('.metric-card')).toHaveCount(6);
+  await expect(frame.locator('.metric-card')).toHaveCount(7);
   assert.deepEqual(errors, []);
   assert.ok((await page.evaluate(() => window.receivedContexts)).length > 0);
 });
@@ -479,7 +479,7 @@ test('region, province and city choices rebuild after rows arrive, including a r
   assert.deepEqual(errors, []);
 });
 
-test('script failure retains a static six-card and table fallback', async (t) => {
+test('script failure retains a static seven-card and table fallback', async (t) => {
   // This separate fixture deliberately disables scripts before the React shell starts.
   const server = createServer((_request, response) =>
     response.end(html.replace(/<script>[\s\S]*?<\/script>/g, '')),
@@ -493,7 +493,7 @@ test('script failure retains a static six-card and table fallback', async (t) =>
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}`);
-  await expect(page.locator('.customer-static-metrics article')).toHaveCount(6);
+  await expect(page.locator('.customer-static-metrics article')).toHaveCount(7);
   await expect(page.locator('.customer-static-shell table')).toBeVisible();
 });
 
@@ -525,6 +525,6 @@ test('React component failures retain the static shell and expose a render diagn
   const page = await browser.newPage();
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   await expect(page.locator('#customer-load-status')).toContainText('客户库存界面加载失败');
-  await expect(page.locator('.customer-static-metrics article')).toHaveCount(6);
+  await expect(page.locator('.customer-static-metrics article')).toHaveCount(7);
   await expect(page.locator('.customer-static-shell table')).toBeVisible();
 });

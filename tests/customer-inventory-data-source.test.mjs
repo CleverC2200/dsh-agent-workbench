@@ -231,7 +231,7 @@ test('inventory loading copy distinguishes permission, resource, session and que
 });
 
 test('metric dialogs separate formulas, state rules and data caveats', () => {
-  assert.equal(Object.keys(customerMetricDefinitions).length, 6);
+  assert.equal(Object.keys(customerMetricDefinitions).length, 7);
   for (const metric of Object.values(customerMetricDefinitions)) {
     assert.ok(metric.formula.length > 0);
     assert.ok(metric.rules.length > 0);
