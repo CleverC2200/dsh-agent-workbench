@@ -34,12 +34,6 @@
   flex-direction: column;
   overflow: hidden;
 }
-.sourceScope {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  color: var(--body);
-}
 .workspaceToolbar {
   display: flex;
   min-height: 56px;
