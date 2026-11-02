@@ -1,7 +1,14 @@
+import { encodeLocalDrafts, decodeLocalDrafts, changeAdjustment } from './local-draft.js';
 import { createCategoryDemand } from './category-demand-view.js';
 import { ready } from '../../../business/shared/channel.js';
 import { createShipment } from './shipment.js';
-import { hasMpsSource, readProducts, readAnnual, readAnnualDetails } from './master-data.js';
+import {
+  hasMpsSource,
+  readProducts,
+  readAnnual,
+  readAnnualDetails,
+  productRows,
+} from './master-data.js';
 import { createMasterData } from './master-data-view.js';
 import { readFactMonth } from './facts.js';
 import { readSourceTable, forecastDimensions } from './source-tables.js';
@@ -10,7 +17,7 @@ import { createWorkflow } from './workflow-view.js';
 import { mpsCategories as categories } from 'dsh-agent-manage/mps-compute/workflow';
 import { productProjections } from './source-projections.js';
 import { createSourceInputs } from './source-input-view.js';
-import { productFileText } from './product-file.js';
+import { productFileText, productReplacementErrors } from './product-file.js';
 import { workbookBytes } from './workbook.js';
 import { annualWorkbookTables } from './annual-workbook.js';
 const productColumns = [
@@ -318,6 +325,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   row[column] === '' || row[column] == null
                     ? '-'
                     : (/数量|收入|金额|合计/.test(column) ||
+                          /^M\+\d$/.test(column) ||
                           ['① 环比法', '② 占比法', '加权'].includes(column)) &&
                         Number.isFinite(Number(row[column]))
                       ? integer(row[column])
@@ -873,8 +881,32 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     relations,
     masterData,
   }) {
-    const [drafts, setDrafts] = react.useState(() => [makeDraft('local-1', currentMonth())]);
-    const [selected, setSelected] = react.useState('local-1');
+    const initialDrafts = () => ({
+      drafts: [makeDraft('local-1', currentMonth())],
+      selected: 'local-1',
+    });
+    const [localState, setLocalState] = react.useState(() =>
+      decodeLocalDrafts(view.get().localDrafts, makeDraft, initialDrafts),
+    );
+    const { drafts, selected } = localState;
+    const localRef = react.useRef(localState);
+    localRef.current = localState;
+    const [retentionError, setRetentionError] = react.useState('');
+    const saveLocal = (next) => {
+      localRef.current = next;
+      setLocalState(next);
+      try {
+        view.update({ localDrafts: encodeLocalDrafts(next.drafts, next.selected) });
+        setRetentionError('');
+      } catch {
+        setRetentionError('本地草稿尚未保存，请导出核对底稿后再离开页面。');
+      }
+    };
+    const setDrafts = (next) => {
+      const current = localRef.current;
+      saveLocal({ ...current, drafts: typeof next === 'function' ? next(current.drafts) : next });
+    };
+    const setSelected = (selected) => saveLocal({ ...localRef.current, selected });
     const [month, setMonth] = react.useState(currentMonth);
     const [product, setProduct] = react.useState(blankProduct);
     const [editing, setEditing] = react.useState(null);
@@ -913,7 +945,15 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     };
     const sourceRead = (entry, type, period, read) =>
       period
-        ? { ...entry[type + 'Read'], periods: { ...entry[type + 'Read']?.periods, [period]: read } }
+        ? {
+            ...entry[type + 'Read'],
+            periods: {
+              ...entry[type + 'Read']?.periods,
+              ...Object.fromEntries(
+                (Array.isArray(period) ? period : [period]).map((month) => [month, read]),
+              ),
+            },
+          }
         : read;
     const begin = (type, period) => {
       controllers.current[type]?.abort();
@@ -923,7 +963,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const request = (requests.current[type] ?? 0) + 1;
       requests.current[type] = request;
       setBusy((state) => ({ ...state, [type]: true }));
-      setErrors((state) => ({ ...state, [type]: '' }));
+      if (!Array.isArray(period)) setErrors((state) => ({ ...state, [type]: '' }));
       setDrafts((entries) =>
         entries.map((entry) =>
           entry.id === selected
@@ -957,7 +997,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         if (valid()) setBusy((state) => ({ ...state, annualExport: false }));
       }
     };
-    const sync = async (type) => {
+    const sync = async (type, requestedPeriods) => {
       const id = draft.id;
       const fact = ['report', 'history', 'delivery'].includes(type);
       const sourceTable = type === 'forecast' || type === 'delivery';
@@ -967,67 +1007,83 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           : fact
             ? sourceSelection(draft, type).period
             : undefined;
-      const { signal, valid } = begin(type, period);
-      try {
-        const result =
-          type === 'products'
-            ? await readProducts(signal)
-            : type === 'annual'
-              ? await readAnnual(signal)
-              : sourceTable
-                ? await readSourceTable(type, type === 'forecast' ? draft.month : period, signal)
-                : await readFactMonth(type, period, signal);
+      const periods = requestedPeriods ?? [period];
+      const { signal, valid } = begin(type, requestedPeriods ?? period);
+      for (const readPeriod of periods) {
         if (!valid()) return;
-        setDrafts((entries) =>
-          entries.map((entry) =>
-            entry.id === id
-              ? {
-                  ...entry,
-                  [type]: fact
-                    ? [
-                        ...(entry[type + 'Source'] === 'business'
-                          ? entry[type].filter((row) => row['月份'] !== period)
-                          : []),
-                        ...result.rows,
-                      ]
-                    : type === 'products' || type === 'forecast'
-                      ? result.rows
-                      : result,
-                  ...(fact || sourceTable
-                    ? { [type + 'Source']: 'business', [type + 'Metadata']: result.metadata }
-                    : {}),
-                  ...(type === 'products'
-                    ? { productSource: 'business', productRaw: result.raw }
-                    : type === 'annual'
-                      ? { annualSource: 'business' }
-                      : {}),
-                  files: { ...entry.files, [type]: null },
-                  [type + 'Read']: sourceRead(entry, type, period, { status: 'ready' }),
-                }
-              : entry,
-          ),
-        );
-        if (type === 'products') resetEditor();
-      } catch (failure) {
-        if (valid()) {
-          setErrors((state) => ({ ...state, [type]: failure.message }));
+        try {
+          const result =
+            type === 'products'
+              ? await readProducts(signal)
+              : type === 'annual'
+                ? await readAnnual(signal)
+                : sourceTable
+                  ? await readSourceTable(
+                      type,
+                      type === 'forecast' ? draft.month : readPeriod,
+                      signal,
+                    )
+                  : await readFactMonth(type, readPeriod, signal);
+          if (!valid()) return;
           setDrafts((entries) =>
             entries.map((entry) =>
               entry.id === id
                 ? {
                     ...entry,
-                    [type + 'Read']: sourceRead(entry, type, period, {
-                      status: 'failed',
-                      error: failure.message,
+                    [type]: fact
+                      ? [
+                          ...(entry[type + 'Source'] === 'business'
+                            ? entry[type].filter((row) => row['月份'] !== readPeriod)
+                            : []),
+                          ...result.rows,
+                        ]
+                      : type === 'products' || type === 'forecast'
+                        ? result.rows
+                        : result,
+                    ...(fact || sourceTable
+                      ? {
+                          [type + 'Source']: 'business',
+                          ...(readPeriod === period || !fact
+                            ? { [type + 'Metadata']: result.metadata }
+                            : {}),
+                        }
+                      : {}),
+                    ...(type === 'products'
+                      ? { productSource: 'business', productRaw: result.raw }
+                      : type === 'annual'
+                        ? { annualSource: 'business' }
+                        : {}),
+                    files: { ...entry.files, [type]: null },
+                    [type + 'Read']: sourceRead(entry, type, readPeriod, {
+                      status: 'ready',
+                      metadata: result.metadata,
                     }),
                   }
                 : entry,
             ),
           );
+          if (type === 'products') resetEditor();
+        } catch (failure) {
+          if (valid()) {
+            if (readPeriod === period)
+              setErrors((state) => ({ ...state, [type]: failure.message }));
+            setDrafts((entries) =>
+              entries.map((entry) =>
+                entry.id === id
+                  ? {
+                      ...entry,
+                      [type + 'Read']: sourceRead(entry, type, readPeriod, {
+                        status: 'failed',
+                        error: failure.message,
+                      }),
+                    }
+                  : entry,
+              ),
+            );
+          }
         }
-      } finally {
-        if (valid()) setBusy((state) => ({ ...state, [type]: false }));
       }
+      if (valid()) setBusy((state) => ({ ...state, [type]: false }));
     };
     const read = async (type, file) => {
       const id = draft.id;
@@ -1043,6 +1099,19 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               ? annualColumns
               : sourceDefinitions[type].columns,
         );
+        if (type === 'products') {
+          const errors = productReplacementErrors(rows, [
+            ...draft.products,
+            ...productRows(draft.productRaw ?? []),
+          ]);
+          if (errors.length)
+            throw Error(
+              errors
+                .slice(0, 20)
+                .map(({ index, message }) => `第${index + 2}行${message}`)
+                .join('；') + '。未替换原输入。',
+            );
+        }
         if (!valid()) return;
         setDrafts((entries) =>
           entries.map((entry) =>
@@ -1100,8 +1169,9 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const reset = () => {
         clearFiles();
         setScopeGeneration((value) => value + 1);
-        setDrafts([makeDraft('local-1', currentMonth())]);
-        setSelected('local-1');
+        const empty = initialDrafts();
+        localRef.current = empty;
+        setLocalState(empty);
         resetEditor();
         setVersionOpen(false);
         setCompareOpen(false);
@@ -1110,9 +1180,20 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         setReference('');
         setVersionName('');
       };
-      const stop = view.subscribe((_snapshot, event) => {
+      const restore = (snapshot) => {
+        clearFiles();
+        const restored = decodeLocalDrafts(snapshot.localDrafts, makeDraft, initialDrafts);
+        localRef.current = restored;
+        setLocalState(restored);
+        setScopeGeneration((value) => value + 1);
+      };
+      const stop = view.subscribe((snapshot, event) => {
         if (event === 'released') reset();
+        else if (event === 'rejected')
+          setRetentionError('工作台未能保存本地草稿，请导出核对底稿后再离开页面。');
+        else restore(snapshot);
       });
+      if (view.get().localDrafts) restore(view.get());
       const reconnect = () => setScopeGeneration((value) => value + 1);
       window.addEventListener('gea-session-changing', reset);
       window.addEventListener('gea-session-changed', reconnect);
@@ -1167,6 +1248,33 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         current = false;
       };
     }, [draft.id, draft.month, draft.historyYears, active, scopeGeneration]);
+    react.useEffect(() => {
+      let current = true;
+      if (
+        active &&
+        hasMpsSource() &&
+        ['process', 'constraints', 'capacity', 'report'].includes(step)
+      )
+        ready.then(() => {
+          if (!current) return;
+          const latest = localRef.current.drafts.find((entry) => entry.id === draft.id);
+          for (const type of ['report', 'history']) {
+            if (!latest || latest.files[type]) continue;
+            const periods = Array.from({ length: 3 }, (_, offset) =>
+              monthOffset(draft.month, offset - (type === 'history' ? 12 : 0)),
+            ).filter(
+              (period) =>
+                !['ready', 'failed', 'denied', 'error'].includes(
+                  latest[type + 'Read']?.periods?.[period]?.status,
+                ),
+            );
+            if (periods.length) void sync(type, periods);
+          }
+        });
+      return () => {
+        current = false;
+      };
+    }, [draft.id, draft.month, step, active, scopeGeneration]);
     react.useEffect(() => {
       let current = true;
       if (active && hasMpsSource())
@@ -1232,12 +1340,17 @@ export function createDemandConfirmation(react, useMpsPart, view) {
       const normalized = Object.fromEntries(
         productColumns.map((column) => [column, product[column].trim()]),
       );
+      if (editing === null) normalized['基地'] = '';
       if (productColumns.slice(1, 6).some((column) => !normalized[column])) {
         setError('产品编码、产品名称、大类、系列和物料组不能为空；全国产品基地可留空。');
         return;
       }
-      if (!!normalized['老品编码'] !== !!normalized['老品名称']) {
-        setError('老品编码和老品名称须同时填写或同时留空。');
+      const replacementErrors = productReplacementErrors(
+        [normalized],
+        [...draft.products, ...productRows(draft.productRaw ?? [])],
+      );
+      if (replacementErrors.length) {
+        setError(replacementErrors[0].message + '。');
         return;
       }
       if (
@@ -1359,7 +1472,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           monthlyCalculation: 'derived-from-inputs-without-result-table',
         },
         businessSave: 'not-connected',
-        retention: 'memory-only',
+        retention: retentionError ? 'local-save-failed' : 'subject-session-scoped-local-draft',
       },
       '需求确认',
       active && step === 'check',
@@ -1367,6 +1480,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
     return h(
       'div',
       { className: 'dc-page', hidden: !active },
+      retentionError && h('p', { role: 'alert' }, retentionError),
       h(
         'header',
         { className: 'dc-page-head' },
@@ -1483,6 +1597,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                       month,
                       ...(base && base.month !== month
                         ? {
+                            adjustments: undefined,
                             shipment: {
                               rows: base.shipment?.rows ?? [],
                               file: base.shipment?.file,
@@ -1552,7 +1667,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             { className: 'dc-muted' },
-            '仅创建当前页面内存中的本地版本，不是业务评估版本落库。参考复制仅复制已读取输入，刷新或切换对话会清除。',
+            '本地版本通过工作台按当前身份、租户和对话隔离恢复。参考复制沿用本地输入；业务来源重新读取。正式业务保存尚未接入。',
           ),
         ),
       compareOpen &&
@@ -1567,7 +1682,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               '关闭',
             ),
           },
-          h('p', {}, '仅对比本地内存输入，不代表业务版本快照、已确认计划或测算结果。'),
+          h('p', {}, '仅对比本地草稿输入，不代表业务版本快照或已确认计划。'),
           h(
             'label',
             {},
@@ -1617,7 +1732,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
           h(
             'p',
             {},
-            '当前版本仅在页面内存中核对。刷新或切换对话会清除本页内存输入，请先导出核对底稿。',
+            '本地输入、约束配置与需求调整通过工作台草稿恢复，并按身份、租户、对话和版本隔离。业务来源每次重新读取，正式保存尚未接入。未关联对话时仅在页面内核对，请先导出底稿。',
           ),
           h(
             'p',
@@ -1671,7 +1786,12 @@ export function createDemandConfirmation(react, useMpsPart, view) {
         h(Workflow, {
           step,
           draft,
+          scopeGeneration,
           update,
+          onShareAdjustment: (input) =>
+            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input) }),
+          onUndoShareAdjustment: (input) =>
+            update({ adjustments: changeAdjustment(draft.adjustments, 'shares', input, true) }),
           relations:
             relations?.scopeKey === JSON.stringify([draft.id, draft.month, scopeGeneration])
               ? relations
@@ -1938,28 +2058,37 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               h(
                 'div',
                 { className: 'dc-product-form' },
-                productColumns.map((column) =>
-                  h(
-                    'label',
-                    { key: column },
-                    column === '基地'
-                      ? '基地名称'
-                      : column === '老品编码'
-                        ? '对应老品编码'
-                        : column,
-                    h('input', {
-                      'aria-label':
-                        column === '基地'
-                          ? '基地名称'
-                          : column === '老品编码'
-                            ? '对应老品编码'
-                            : column,
-                      value: product[column],
-                      onChange: (event) => setProduct({ ...product, [column]: event.target.value }),
-                    }),
+                productColumns
+                  .filter((column) => editing !== null || column !== '基地')
+                  .map((column) =>
+                    h(
+                      'label',
+                      { key: column },
+                      column === '基地'
+                        ? '基地名称'
+                        : column === '老品编码'
+                          ? '对应老品编码'
+                          : column,
+                      h('input', {
+                        'aria-label':
+                          column === '基地'
+                            ? '基地名称'
+                            : column === '老品编码'
+                              ? '对应老品编码'
+                              : column,
+                        value: product[column],
+                        onChange: (event) =>
+                          setProduct({ ...product, [column]: event.target.value }),
+                      }),
+                    ),
                   ),
-                ),
               ),
+              editing === null &&
+                h(
+                  'p',
+                  { className: 'dc-muted' },
+                  '默认适用五基地：郑州、遂平、华东、华南、西南。全国只保留一条产品关系，需求按现有基地数据分配。',
+                ),
               error && h('p', { role: 'alert' }, error),
               h(
                 'p',
@@ -2090,7 +2219,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
               : null,
           active: active && step === 'check',
         }),
-        h(CategoryDemand, { draft, active: active && step === 'check' }),
+        h(CategoryDemand, { draft, update, active: active && step === 'check' }),
         step === 'check' &&
           h(
             'div',

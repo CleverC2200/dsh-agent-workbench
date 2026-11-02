@@ -412,7 +412,7 @@
         }
       },
       "request": {
-        "sql": "SELECT r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name, SUM(p.plannum) AS plannum_total, SUM(p.allnum) AS allnum_total FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code LEFT JOIN (SELECT material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(sub_category), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(sub_category), '')) = 1 THEN MAX(sub_category) ELSE NULL END AS sub_category, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(NULLIF(TRIM(product_item_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item_name), '')) = 1 THEN MAX(product_item_name) ELSE NULL END AS product_item_name FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND material_code <> '' GROUP BY material_code) m ON p.material_code = m.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name ORDER BY CASE WHEN r.region_name IS NULL THEN 1 ELSE 0 END, r.region_name, p.belong_base, p.material_code LIMIT :gea_p98 OFFSET :gea_p99"
+        "sql": "SELECT r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name, CASE WHEN COUNT(p.plannum) = COUNT(*) THEN SUM(p.plannum) ELSE NULL END AS plannum_total, CASE WHEN COUNT(p.allnum) = COUNT(*) THEN SUM(p.allnum) ELSE NULL END AS allnum_total FROM agents_sales_plan_demand_m p LEFT JOIN (SELECT cust_code, material_code, CASE WHEN COUNT(NULLIF(TRIM(region_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(region_name), '')) = 1 THEN MAX(region_name) ELSE NULL END AS region_name FROM agents_dim_cust_sales_material_scope_detail_d GROUP BY cust_code, material_code) r ON p.cust_code = r.cust_code AND p.material_code = r.material_code LEFT JOIN (SELECT material_code, CASE WHEN COUNT(NULLIF(TRIM(material_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(material_name), '')) = 1 THEN MAX(material_name) ELSE NULL END AS material_name, CASE WHEN COUNT(NULLIF(TRIM(sub_category), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(sub_category), '')) = 1 THEN MAX(sub_category) ELSE NULL END AS sub_category, CASE WHEN COUNT(NULLIF(TRIM(series), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(series), '')) = 1 THEN MAX(series) ELSE NULL END AS series, CASE WHEN COUNT(NULLIF(TRIM(product_item), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item), '')) = 1 THEN MAX(product_item) ELSE NULL END AS product_item, CASE WHEN COUNT(NULLIF(TRIM(product_item_name), '')) = COUNT(*) AND COUNT(DISTINCT NULLIF(TRIM(product_item_name), '')) = 1 THEN MAX(product_item_name) ELSE NULL END AS product_item_name FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND material_code <> '' GROUP BY material_code) m ON p.material_code = m.material_code WHERE p.stat_month = :month AND p.cust_code IS NOT NULL AND p.cust_code <> '' GROUP BY r.region_name, p.belong_base, p.material_code, m.material_name, m.sub_category, m.series, m.product_item, m.product_item_name ORDER BY CASE WHEN r.region_name IS NULL THEN 1 ELSE 0 END, r.region_name, p.belong_base, p.material_code LIMIT :gea_p98 OFFSET :gea_p99"
       },
       "pagination": {
         "countQuery": "facts.report.count"
@@ -1004,6 +1004,57 @@
         "sql": "SELECT COUNT(*) AS total FROM (SELECT a.belong_base, p.category AS sub_category, a.stat_month, SUM(a.source_rows) AS source_rows, SUM(a.missing_qty) AS missing_qty, SUM(CASE WHEN a.quantity_variants > 1 THEN a.source_rows ELSE 0 END) AS duplicate_rows, SUM(CASE WHEN a.quantity_variants = 1 AND a.missing_qty = 0 THEN a.raw_quantity ELSE 0 END) AS demand_qty, MAX(a.update_time) AS update_time FROM (SELECT belong_base, material_code, stat_month, SUM(source_rows) AS source_rows, COUNT(*) AS quantity_variants, SUM(CASE WHEN demand_qty IS NULL THEN source_rows ELSE 0 END) AS missing_qty, SUM(demand_qty) AS raw_quantity, MAX(update_time) AS update_time FROM (SELECT belong_base, TRIM(material_code) AS material_code, stat_month, demand_qty, COUNT(*) AS source_rows, MAX(update_time) AS update_time FROM agents_dim_demand_annual_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY belong_base, TRIM(material_code), stat_month, demand_qty) AS source_values GROUP BY belong_base, material_code, stat_month) AS a INNER JOIN (SELECT TRIM(material_code) AS material_code, MIN(TRIM(sub_category)) AS category FROM agents_dim_product_list_mi WHERE material_code IS NOT NULL AND TRIM(material_code) <> '' GROUP BY TRIM(material_code) HAVING COUNT(DISTINCT TRIM(sub_category)) = 1 AND COUNT(CASE WHEN sub_category IS NULL OR TRIM(sub_category) = '' THEN 1 END) = 0) AS p ON a.material_code = p.material_code GROUP BY a.belong_base, p.category, a.stat_month) AS mps_rows"
       },
       "parameterSpec": {}
+    },
+    "unit-weights.detail": {
+      "title": "物料渠道件吨系数",
+      "grain": ["material_code", "channel_name", "ton_per_piece"],
+      "parameterSpec": {
+        "codes": {
+          "name": "codes",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 100
+        },
+        "gea_p98": {
+          "name": "page_size",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 1,
+          "maximum": 200
+        },
+        "gea_p99": {
+          "name": "offset",
+          "type": "integer",
+          "required": true,
+          "nullable": false,
+          "minimum": 0,
+          "maximum": 100000
+        }
+      },
+      "columns": ["material_code", "channel_name", "ton_per_piece"],
+      "request": {
+        "sql": "SELECT DISTINCT material_code, channel_name, ton_per_piece FROM agents_dim_material_prod_sales_info_d WHERE material_code IN (:codes) ORDER BY material_code, channel_name, ton_per_piece LIMIT :gea_p98 OFFSET :gea_p99"
+      },
+      "pagination": {
+        "countQuery": "unit-weights.count"
+      }
+    },
+    "unit-weights.count": {
+      "parameterSpec": {
+        "codes": {
+          "name": "codes",
+          "type": "array",
+          "required": true,
+          "nullable": false,
+          "maxItems": 100
+        }
+      },
+      "columns": ["total"],
+      "request": {
+        "sql": "SELECT COUNT(*) AS total FROM (SELECT DISTINCT material_code, channel_name, ton_per_piece FROM agents_dim_material_prod_sales_info_d WHERE material_code IN (:codes)) AS unit_weights"
+      }
     }
   }
 }

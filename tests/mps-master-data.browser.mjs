@@ -72,6 +72,42 @@ test('MPS reads governed products and annual demand, preserves missing dimension
   await expect(frame.getByLabel('产品数据来源', { exact: true })).toHaveCount(0);
   await expect(products).not.toContainText('演示数据');
 });
+test('MPS product sync restores a locally deleted product and keeps edits when the source fails', async (t) => {
+  const records = [
+    { ...product, material_code: '001', material_name: '产品甲' },
+    { ...product, material_code: '002', material_name: '产品乙' },
+  ];
+  let unavailable = false;
+  const { frame, calls } = await livePage(t, (query) => {
+    if (query.queryId.startsWith('products.') && query.queryId.endsWith('.count'))
+      return { ...fixture(query), rows: [{ total: records.length }] };
+    if (query.queryId === 'products.detail') {
+      if (unavailable) throw Error('GEA SQL 查询服务暂时不可用');
+      return { ...fixture(query), rows: records };
+    }
+    return fixture(query);
+  });
+  const section = frame.getByRole('region', { name: '产品明细', exact: true });
+  await expect(section.getByRole('button', { name: '删除 001', exact: true })).toBeVisible();
+  await section.getByRole('button', { name: '删除 001', exact: true }).click();
+  await expect(section.locator('tbody tr')).toHaveCount(1);
+  await section.getByRole('button', { name: '同步产品', exact: true }).click();
+  await expect(section.locator('tbody tr')).toHaveCount(2);
+  assert.deepEqual(
+    calls.filter((call) => call.queryId === 'products.detail').map((call) => call.parameters),
+    [
+      { page_size: 200, offset: 0 },
+      { page_size: 200, offset: 0 },
+    ],
+  );
+  await section.getByRole('button', { name: '删除 001', exact: true }).click();
+  unavailable = true;
+  await section.getByRole('button', { name: '同步产品', exact: true }).click();
+  await expect(section.getByRole('alert')).toContainText('数据读取失败');
+  await expect(section.locator('tbody tr')).toHaveCount(1);
+  await expect(section.getByRole('button', { name: '删除 002', exact: true })).toBeVisible();
+  await expect(section.getByRole('button', { name: '同步产品', exact: true })).toBeEnabled();
+});
 test('MPS denies without falling back to samples and discards a late response after switching versions', async (t) => {
   let deny = true,
     attempt = 0,

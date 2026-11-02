@@ -25,7 +25,7 @@ test('MPS keeps confirmed sources awaiting a Host, including forecast awaiting a
   const { page, frame } = await confirmation(t);
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
-    '刷新或切换对话会清除本页内存输入',
+    '通过工作台草稿恢复',
   );
   await frame.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await expect(frame.getByRole('button', { name: '保存调整', exact: true })).toBeDisabled();
@@ -62,8 +62,9 @@ test('MPS product relationships stay in their local month draft and can be edite
   await products.getByLabel('每页产品条数').selectOption('25');
   await products.getByRole('button', { name: '新增产品', exact: true }).click();
   const editor = frame.getByRole('dialog', { name: '新增产品', exact: true });
+  await expect(editor.getByLabel('基地名称', { exact: true })).toHaveCount(0);
+  await expect(editor).toContainText('默认适用五基地：郑州、遂平、华东、华南、西南');
   for (const [label, value] of Object.entries({
-    基地名称: '郑州',
     产品编码: 'P1',
     产品名称: '新品',
     大类: '汤圆',
@@ -97,6 +98,34 @@ test('MPS product relationships stay in their local month draft and can be edite
 });
 
 const headers = '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量';
+test('MPS rejects reversed known replacement fields in edits and imports while preserving unknown codes', async (t) => {
+  const { frame } = await confirmation(t);
+  const header = '基地,产品编码,产品名称,大类,系列,物料组,物料组名称,老品编码,老品名称';
+  const uploadProducts = (row) =>
+    frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+      name: '产品校验.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(header + '\n' + row),
+    });
+  await uploadProducts(',NEW1,新品甲,汤圆,系列甲,组甲,物料组甲,00123,老品甲');
+  const products = frame.getByRole('region', { name: '产品明细', exact: true });
+  await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
+  const editor = frame.getByRole('dialog', { name: '修改产品', exact: true });
+  await editor.getByLabel('对应老品编码', { exact: true }).fill('老品甲');
+  await editor.getByLabel('老品名称', { exact: true }).fill('00123');
+  await editor.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(editor.getByRole('alert')).toContainText('填反');
+  await editor.getByRole('button', { name: '取消', exact: true }).click();
+  await uploadProducts(',NEW1,新品甲,汤圆,系列甲,组甲,物料组甲,老品甲,00123');
+  await expect(products.getByRole('alert')).toContainText('第2行');
+  await expect(products.getByRole('cell', { name: '00123', exact: true })).toBeVisible();
+  await products.getByRole('button', { name: '编辑 NEW1', exact: true }).click();
+  await editor.getByLabel('对应老品编码', { exact: true }).fill('000-UNKNOWN');
+  await editor.getByLabel('老品名称', { exact: true }).fill('资料外老品');
+  await editor.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(products.getByRole('cell', { name: '000-UNKNOWN', exact: true })).toBeVisible();
+});
 const reportCsv =
   headers +
   '\n2026-12,郑州,P1,产品一,汤圆,系列甲,组甲,10,12\n2026-12,郑州,P1,产品一,汤圆,系列甲,组甲,5,0\n2026-12,华东,P2,产品二,汤圆,系列甲,组乙,0,\n2026-11,华南,P3,其他月份,饺子,系列乙,组丙,999,999';
@@ -198,7 +227,7 @@ test('MPS annual grid retains July to June and unresolved business calculations 
   );
   const results = frame.getByRole('region', { name: '大类预估需求数量' });
   await expect(results.getByRole('row')).toHaveCount(2);
-  await expect(results).toContainText('人工调整尚未接入');
+  await expect(results).toContainText('本地调整不代表正式保存');
   await expect(results.getByRole('cell', { name: '-', exact: true })).toHaveCount(4);
 });
 
@@ -280,7 +309,6 @@ test('MPS starts without sample products when no source is configured and still 
   const editor = frame.getByRole('dialog', { name: '新增产品', exact: true });
   await expect(editor).toBeVisible();
   for (const [label, value] of Object.entries({
-    基地名称: '郑州',
     产品编码: 'NEW1',
     产品名称: '新增产品测试',
     大类: '汤圆',
@@ -324,7 +352,7 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   await expect(frame.getByLabel('评估版本选择')).toHaveValue('local-2');
   await frame.getByRole('button', { name: '版本对比', exact: true }).click();
   const compare = frame.getByRole('dialog', { name: '版本对比', exact: true });
-  await expect(compare).toContainText('仅对比本地内存输入');
+  await expect(compare).toContainText('仅对比本地草稿输入');
   await expect(compare).toContainText('十二月核对');
   const count = compare.getByRole('row').filter({ hasText: '产品关系数量' });
   await expect(count.locator('td').nth(1)).toHaveText('0');
@@ -332,7 +360,7 @@ test('MPS creates and compares local evaluation versions in dialogs without occu
   await compare.getByRole('button', { name: '关闭弹窗', exact: true }).click();
   await frame.getByRole('button', { name: '页面说明', exact: true }).click();
   await expect(frame.getByRole('dialog', { name: '页面说明', exact: true })).toContainText(
-    '刷新或切换对话会清除',
+    '按身份、租户、对话和版本隔离',
   );
 });
 
