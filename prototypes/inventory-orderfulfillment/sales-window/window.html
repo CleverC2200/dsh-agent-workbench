@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>订单销售确认</title>
+<style>
+[hidden]{display:none!important}
+body{margin:0;background:#f5f6f7;color:#34383e;font:16px/1.7 system-ui,sans-serif}main{max-width:700px;margin:24px auto;background:white;padding:24px;border-radius:12px}h1{font-size:22px;margin:0 0 18px}#summary{white-space:pre-line;color:#555}article{padding:16px 0;border-bottom:1px solid #e5e6eb}article p{margin:4px 0;color:#666}.actions{display:flex;justify-content:flex-end;gap:12px;margin-top:24px;border-top:1px solid #e5e6eb;padding-top:18px}button,select{font:inherit;border:1px solid #c9cdd4;border-radius:8px;background:white;padding:8px 20px}button{cursor:pointer}button.primary{color:#fff;background:#245bdb;border-color:#245bdb}button:disabled{opacity:.5;cursor:default}#notice{color:#d33;min-height:1.7em}#result{padding:12px;background:#f0f7ff;color:#245bdb}small{color:#86909c}label{display:block;margin:18px 0}#quantity{font-weight:600}@media(max-width:500px){main{margin:0;padding:20px;border-radius:0}.actions button{flex:1;min-width:0}select{width:100%;margin-top:8px}}
+</style>
+<main id="confirmationMain"><h1 id="title">订单销售确认</h1><p id="summary"></p><section id="items" hidden></section>
+<label id="defer" hidden>暂缓天数 <select id="days" aria-label="暂缓天数"><option value="">请选择 1—7 天</option><option value="1">1 天</option><option value="2">2 天</option><option value="3">3 天</option><option value="4">4 天</option><option value="5">5 天</option><option value="6">6 天</option><option value="7">7 天</option></select></label>
+<p id="quantity"></p><p id="notice" role="alert"></p><p id="result" role="status" hidden></p>
+<nav id="pages" hidden><button id="previous">上一页</button> <span id="pageLabel"></span> <button id="next">下一页</button></nav>
+<small>本次只登记销售处理决定，实际开单、发货及改单由业务系统执行。</small>
+<div class="actions"><button id="cancel">取消</button><button class="primary" id="submit" disabled>确认</button></div></main>
+<!--update-begin---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->
+<main id="orderEditor" hidden aria-label="缺货订单处理"></main>
+<style>
+/* update-begin---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
+#orderEditor{padding:0;max-width:700px}#orderEditor header{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid #eee}#orderEditor h1{font-size:20px;margin:0;flex:1}#orderEditor button{font-size:14px;padding:6px 12px}#orderEditor .editor-body{padding:16px}#orderEditor .editor-note{font-size:13px;color:#86909c;margin:8px 0}#orderEditor .editor-warning{color:#c73535;font-size:13px;white-space:pre-line}#orderEditor .editor-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}#orderEditor .editor-search{font:inherit;width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:8px;padding:8px 12px}#orderEditor article{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px}#orderEditor .editor-image{height:64px;border-radius:6px;background:#f2f3f5;display:grid;place-items:center;color:#86909c;font-size:13px}#orderEditor .editor-item-info{min-width:0}#orderEditor .editor-item-info strong{display:block;overflow-wrap:anywhere}#orderEditor .editor-quantity{display:flex;gap:6px;align-items:center;justify-content:flex-end;margin-top:8px}#orderEditor input[type=number]{width:76px;text-align:center;font:inherit;border:1px solid #ddd;border-radius:4px;padding:4px}#orderEditor footer{padding:16px;border-top:1px solid #eee;display:flex;gap:12px;align-items:center;flex-wrap:wrap}#orderEditor footer .editor-totals{flex:1;min-width:180px}#orderEditor .editor-primary{color:white;background:#ed2232;border-color:#ed2232}#orderEditor button[aria-pressed=true]{color:#ed2232;border-color:#ed2232}#orderEditor .editor-empty{padding:32px;text-align:center;color:#86909c}#orderEditor label{margin:0}#orderEditor select{font-size:14px;max-width:100%;padding:6px}
+/* update-end---author:Codex ---date:2026-11-02 for：【订单履约缺货订单处理】仅订单处理窗口布局----------- */
+</style>
+<script defer src="../assets/order-editor"></script>
+<script defer src="../assets/window-script"></script></html>
+<!--update-end---author:Codex ---date:2026-11-02 for：【订单履约正式确认链路本地联调】避开测试代理静态JS路由----------- -->

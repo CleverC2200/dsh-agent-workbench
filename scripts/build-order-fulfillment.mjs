@@ -5,6 +5,7 @@ import { readFile, writeFile, mkdir, cp } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { prepareFulfillmentPresentation } from '../prototypes/inventory-orderfulfillment/prepare-presentation.mjs';
+import { buildFulfillmentSalesWindow } from './build-fulfillment-sales-window.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const source = resolve(root, 'prototypes/inventory-orderfulfillment');
@@ -81,3 +82,4 @@ await writeFile(
   ) + '\n',
 );
 console.log('Built inventory-orderfulfillment governed page from Workbench and Manage');
+await buildFulfillmentSalesWindow();
