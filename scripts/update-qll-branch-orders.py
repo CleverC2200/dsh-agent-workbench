@@ -1,5 +1,6 @@
 """Keep full-chain branch order reads aligned with the branch ASN contracts."""
 import copy
+import importlib.util
 import json
 import re
 from pathlib import Path
@@ -106,6 +107,12 @@ def build(config, base, branch):
     # The shared dealer execution query remains for the base fulfillment metric only.
     grouped['request']['parameters']['gea_p8'] = 'equal'
     grouped['request']['parameters']['gea_p9'] = '工厂'
+    spec = importlib.util.spec_from_file_location('qll_loading', ROOT / 'scripts/optimize-qll-loading.py')
+    loading = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(loading)
+    optimized = loading.optimize(config)
+    config.clear()
+    config.update(optimized)
 
 
 if __name__ == '__main__':

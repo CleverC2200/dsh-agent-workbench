@@ -9473,7 +9473,8 @@
         "mode": "sql_limit_offset",
         "countQuery": "calendar.target_versions.count"
       },
-      "resultColumns": ["month", "inventory_version", "source_rows"]
+      "resultColumns": ["month", "inventory_version", "source_rows"],
+      "priority": 30
     },
     "calendar.health_dates": {
       "title": "健康度日期类型目录",
@@ -11674,7 +11675,8 @@
       "pagination": {
         "countQuery": "page.workbench-support-by-base.count"
       },
-      "notes": " D93/D106：月度满足率只纳入已发生发货的订单行；分母为同池订单量，分子逐行限额发货量；零分母/异常量/缺数保持未知。不使用全部月度需求的outqty推算已发履约。"
+      "notes": " D93/D106：月度满足率只纳入已发生发货的订单行；分母为同池订单量，分子逐行限额发货量；零分母/异常量/缺数保持未知。不使用全部月度需求的outqty推算已发履约。",
+      "priority": 10
     },
     "page.workbench-order-structure.count": {
       "title": "页面数据：page.workbench-order-structure",
@@ -13558,7 +13560,7 @@
       "notes": [
         "批次现库存按仓库/SKU求和；01/02基地仓、20分仓，其它分类排除；正库存且生产日期有效的批次计算最大货龄。源已移除超龄阈值标志、安全/目标库存及更新时间，保持未知。"
       ],
-      "priority": 10
+      "priority": 40
     },
     "page.dashboard-groups": {
       "title": "库存与目标明细分页",
@@ -13823,7 +13825,8 @@
         "low_stock_count",
         "high_stock_count",
         "missing_target_count"
-      ]
+      ],
+      "priority": 25
     },
     "page.dashboard-groups.count": {
       "title": "库存与目标明细分页",
@@ -17364,7 +17367,8 @@
         "unknown_age_qty",
         "average_age"
       ],
-      "notes": " D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。"
+      "notes": " D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。",
+      "priority": 20
     },
     "health.inventory": {
       "title": "首页库存及货龄汇总",
@@ -17390,7 +17394,7 @@
     },
     "page.inventory-groups": {
       "title": "首屏库存数量",
-      "priority": 20,
+      "priority": 35,
       "notes": "同一库存、版本、基地、SKU去重与品类排除规则；只先发布库存，目标、周转和货龄保持独立读取。 D101/D114：同一基地与月份整体选版，纠偏→月初、月初→滚动；已选版本缺SKU、NULL、0或重复均不借用另一版本字段。 D101/D114：同一基地与月份整体选版，纠偏→月初、月初→滚动；已选版本缺SKU、NULL、0或重复均不借用另一版本字段。 D120：同仓库/SKU/生产日期/快照先按有符号数量汇总，再对净正批次计算货龄、分段及风险；不跨SKU、仓库或生产日期冲抵。 同月/版本/基地/SKU的重复目标逐字段核一致性；全非空且唯一值才取一次，冲突或空值混合保留未知，不累加重复目标。",
       "parameterSpec": {
         "gea_p1": {

@@ -53,12 +53,27 @@ export function categoryTreeReader(config: AgentSqlConfig, execute?: ConfiguredE
     if (!query) throw Error('品类下钻查询未装载，请更新全链库存插件');
     let snapshot = input.snapshot;
     if (!snapshot) {
+      const quick = layer !== 'customer' && config.overviewQuickStock;
+      const source =
+        quick ||
+        (layer === 'customer'
+          ? 'source.dealer-stock-date'
+          : layer === 'branch'
+            ? 'source.branch-stock-date'
+            : 'source.health-date');
       const result = await client.read(
-        layer === 'customer' ? 'source.dealer-stock-date' : 'source.health-date',
+        source,
         { as_of: input.date },
-        { signal },
+        {
+          signal,
+          ...(quick ? { requiredColumns: config.queries[source].resultColumns } : {}),
+        },
       );
-      snapshot = result.rows[0]?.day?.slice(0, 10);
+      snapshot = quick
+        ? result.rows.find((row) => row.location_type === layerLabels[layer])?.snapshot_date
+        : result.rows[0]?.day?.slice(0, 10);
+      if (snapshot && (!/^20\d{2}-\d{2}-\d{2}$/.test(snapshot) || snapshot > input.date))
+        throw Object.assign(Error('库存快照日期无效'), { code: 'INVALID_SOURCE_DATE' });
     }
     if (!snapshot) return { rows: [] as TreeRow[], hasNext: false, snapshot: undefined };
     const values: Record<string, any> = {};

@@ -58,28 +58,35 @@ test(
             }[c] ?? 0,
           ]),
         );
-      const rows = queryId.startsWith('source.')
-        ? [row('', '')]
-        : p.level === 'category'
-          ? [row('汤圆', '汤圆')]
-          : p.level === 'organization'
-            ? [
-                row(
-                  queryId.endsWith('customer')
-                    ? '河南省区'
-                    : queryId.endsWith('branch')
-                      ? 'A020'
-                      : '郑州',
-                  queryId.endsWith('branch')
-                    ? '长沙分仓'
-                    : queryId.endsWith('customer')
-                      ? '河南省区'
-                      : '郑州',
-                ),
-              ]
-            : Array.from({ length: p.tree_risk ? 1 : p.offset ? 2 : 11 }, (_, i) =>
-                row(`SKU${p.offset + i}`, '测试商品'),
-              );
+      const rows =
+        queryId === 'overview.quick-stock'
+          ? ['基地', '分仓'].map((location_type) => ({
+              ...row('', ''),
+              location_type,
+              snapshot_date: '2026-10-28',
+            }))
+          : queryId.startsWith('source.')
+            ? [row('', '')]
+            : p.level === 'category'
+              ? [row('汤圆', '汤圆')]
+              : p.level === 'organization'
+                ? [
+                    row(
+                      queryId.endsWith('customer')
+                        ? '河南省区'
+                        : queryId.endsWith('branch')
+                          ? 'A020'
+                          : '郑州',
+                      queryId.endsWith('branch')
+                        ? '长沙分仓'
+                        : queryId.endsWith('customer')
+                          ? '河南省区'
+                          : '郑州',
+                    ),
+                  ]
+                : Array.from({ length: p.tree_risk ? 1 : p.offset ? 2 : 11 }, (_, i) =>
+                    row(`SKU${p.offset + i}`, '测试商品'),
+                  );
       return route.fulfill({
         json: { rows, returnedColumns: columns, rejectedColumns: [], configVersion: 'fixture' },
       });

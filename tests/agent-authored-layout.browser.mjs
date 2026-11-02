@@ -776,8 +776,7 @@ test('QLL changing the date stays local until submit, then reads the new date', 
         .slice(before)
         .some(
           (query) =>
-            /^source\.(?:health|branch-stock)-date$/.test(query.queryId) &&
-            query.parameters.as_of === '2026-10-18',
+            query.queryId === 'overview.quick-stock' && query.parameters.as_of === '2026-10-18',
         ),
     )
     .toBe(true);
@@ -1262,7 +1261,10 @@ for (const id of ['aqkc', 'fc', 'qll', 'dealer'])
       .poll(() => diagnostics.some((message) => message.includes('缺少批次货龄')))
       .toBe(true);
     await expect(root).not.toContainText('缺少批次货龄与生产日期');
-    await expect(root.getByRole('alert')).toHaveCount(id === 'qll' ? 2 : 1);
+    await expect(
+      root.getByRole('alert').filter({ hasText: '部分数据暂不可用' }).first(),
+    ).toBeVisible();
+    await expect(root.getByRole('alert').first()).toContainText('缺失项不代表零值');
     assert.deepEqual(errors, []);
   });
 

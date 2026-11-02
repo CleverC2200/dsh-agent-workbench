@@ -241,7 +241,7 @@ export function createQueryClient(config, execute) {
       query(config, id).maxConcurrency === 1 ? 1 : concurrency,
       // Collect the FC first-screen reads before selecting priority. Otherwise
       // synchronous component order starts a heavy query ahead of ready cards.
-      config.agentId === 'inventory-fc',
+      ['inventory-fc', 'inventory-qll', 'inventory-aqkc'].includes(config.agentId),
     );
     signal?.throwIfAborted();
     const failure = result?.failure ?? result?.error;

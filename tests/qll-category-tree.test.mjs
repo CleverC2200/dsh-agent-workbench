@@ -105,3 +105,46 @@ test('hierarchy uses distinct branch codes and province keys, aggregates before 
     assert.doesNotMatch(sql, /OVER\s*\(/i);
   }
 });
+
+test('category snapshots reuse the card read and keep base and branch dates independent', async () => {
+  const calls = [];
+  const execute = async (_request, options) => {
+    calls.push(options);
+    const columns = config.queries[options.queryId].resultColumns;
+    if (options.queryId === 'overview.quick-stock') {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return {
+        rows: ['基地', '分仓'].map((location_type, i) => ({
+          ...Object.fromEntries(columns.map((c) => [c, 0])),
+          location_type,
+          snapshot_date: i ? '2026-10-30' : '2026-10-31',
+        })),
+        returnedColumns: columns,
+        rejectedColumns: [],
+        configVersion: 'test',
+      };
+    }
+    return { rows: [], returnedColumns: columns, rejectedColumns: [], configVersion: 'test' };
+  };
+  const read = categoryTreeReader(config, execute);
+  const [base, branch] = await Promise.all(
+    ['base', 'branch'].map((layer) =>
+      read(layer, { date: '2026-11-01', level: 'category' }, new AbortController().signal),
+    ),
+  );
+  assert.equal(base.snapshot, '2026-10-31');
+  assert.equal(branch.snapshot, '2026-10-30');
+  assert.equal(calls.filter((c) => c.queryId === 'overview.quick-stock').length, 1);
+  assert.equal(
+    calls.some((c) => c.queryId.startsWith('source.')),
+    false,
+  );
+  assert.equal(
+    calls.find((c) => c.queryId === 'category-tree.base').values.stock_date,
+    '2026-10-31',
+  );
+  assert.equal(
+    calls.find((c) => c.queryId === 'category-tree.branch').values.stat_date,
+    '2026-10-30',
+  );
+});

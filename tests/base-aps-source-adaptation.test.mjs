@@ -734,6 +734,7 @@ test('base stock and fulfillment publish before a slow or failed age source', as
   assert.equal(w.workbench.cards[0].value, '150');
   assert.equal(w.workbench.cards[2].value, '-');
   assert.equal(w.workbench.cards[3].value, '80.0%');
+  assert.ok(w.workbench.readErrors.some((error) => error.includes('AGE_SOURCE_FAILED')));
 });
 test('a failed stock source still leaves verified fulfillment available', async (t) => {
   install(t);
@@ -743,6 +744,7 @@ test('a failed stock source still leaves verified fulfillment available', async 
   const w = await cube.loadInitialDashboard();
   assert.equal(w.workbench.cards[0].value, '-');
   assert.equal(w.workbench.cards[3].value, '80.0%');
+  assert.ok(w.workbench.readErrors.some((error) => error.includes('STOCK_SOURCE_FAILED')));
 });
 
 test('base/category warnings use the highest child risk instead of offsetting inventory gaps', () => {
