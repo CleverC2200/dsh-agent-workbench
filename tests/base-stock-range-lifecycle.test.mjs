@@ -36,6 +36,11 @@ test('base changes and closed details cannot retain or publish obsolete query re
   });
   const workspace = (bases) => ({
     title: '基地库存',
+    versionSummary: {
+      targetMonth: '2026-10',
+      currentVersion: '10月滚动版',
+      planScope: '固定10月样本',
+    },
     kpis: [
       {
         label: '当前库存',
@@ -165,6 +170,11 @@ test('base changes and closed details cannot retain or publish obsolete query re
       root.render(React.createElement(page.InventoryOperationsWorkbench)),
     );
     await settle();
+    const scope = container.querySelector('[aria-label="当前库存数据口径"]');
+    assert.ok(scope);
+    assert.equal(scope.title, '固定10月样本');
+    assert.match(scope.textContent, /目标月份：2026-10/);
+    assert.match(scope.textContent, /版本：10月滚动版/);
     await filter({ bases: ['华东基地'], tab: '品类结构' });
     assert.ok(container.textContent.includes('华东品类'));
     await filter({ bases: ['华南基地'] });
