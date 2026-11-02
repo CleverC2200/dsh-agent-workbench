@@ -1,3 +1,4 @@
+import { mpsLocalStateSchema, type MpsLocalState } from './mps-local-draft.ts';
 /** UI intent only. Page owners re-check restored object IDs against their current visible data. */
 export type HtmlViewPage =
   | 'workbench-html-table'
@@ -124,6 +125,7 @@ export type AqkcViewState = {
 };
 export type MpsViewState = {
   version: 1;
+  localDrafts?: MpsLocalState;
   tab?: string;
   preview?: string | null;
   pullType?: string;
@@ -734,6 +736,7 @@ export function validHtmlViewState(page: string, value: unknown): value is HtmlV
         value,
         {
           version,
+          localDrafts: (v) => mpsLocalStateSchema.safeParse(v).success,
           tab: text,
           preview: nullable(text),
           pullType: text,

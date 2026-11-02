@@ -46,6 +46,11 @@ export function createPageViewState(page) {
       ready();
       return;
     }
+    if (value.type === 'rejected') {
+      if (binding?.channel === value.channel && binding.generation === value.generation)
+        for (const listener of listeners) listener(state, 'rejected');
+      return;
+    }
     if (value.type === 'released') {
       releasedChannels.add(value.channel);
       if (binding?.channel === value.channel) {
