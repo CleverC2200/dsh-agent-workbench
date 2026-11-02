@@ -176,6 +176,7 @@ test('full fact paging keeps zero and missing base distinct, without a failed sh
   assert.deepEqual(
     calls
       .filter((call) => call.queryId === 'facts.report' && call.parameters.month === currentMonth)
+
       .map((call) => call.parameters.offset),
     [0, 200],
   );

@@ -144,10 +144,36 @@ async function fixture(t, id, width = 559, theme = 'light', authorDocument, font
           normal_coverage: 3,
         },
       ];
+      const columns = [
+        ...new Set(
+          [...sql.matchAll(/CAST\(([a-z][a-z0-9_]*) AS VARCHAR\)/g)].map((match) => match[1]),
+        ),
+      ].filter((name) => name !== 'packet_position');
+      const packets = sql.includes('packet_numbered')
+        ? [
+            {
+              packet_index: 0,
+              packet_count: rows.length,
+              packet_scope_total: rows.length,
+              packet_rows: rows.map((row, index) =>
+                [
+                  String(index + 1),
+                  ...columns.map((name) => (row[name] == null ? null : String(row[name]))),
+                ]
+                  .map((value) =>
+                    value === null
+                      ? 'N'
+                      : 'V' + new TextEncoder().encode(value).length + ':' + value,
+                  )
+                  .join(''),
+              ),
+            },
+          ]
+        : rows;
       return {
-        rows,
-        total: rows.length,
-        returnedColumns: Object.keys(rows[0]),
+        rows: packets,
+        total: packets.length,
+        returnedColumns: Object.keys(packets[0]),
         rejectedColumns: [],
       };
     }

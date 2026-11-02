@@ -1,6 +1,7 @@
 import { call } from './channel.js';
 import { sqlQueryError } from './query-error.js';
 import { configuredQueryFreshAfter } from './query-cache';
+import { scheduledQuery } from './query-scheduler.js';
 
 export type GeaSqlRow = Record<string, string | number | null | undefined>;
 export type GeaSqlParameters = Record<string, unknown>;
@@ -8,6 +9,8 @@ export type GeaSqlRequestOptions = {
   signal?: AbortSignal;
   parameters?: GeaSqlParameters;
   pageConcurrency?: 1 | 3;
+  priority?: number;
+  rowsOnly?: boolean;
   [key: string]: unknown;
 };
 let lifetime = new AbortController();
@@ -39,13 +42,22 @@ async function read(
     ? AbortSignal.any([options.signal, lifetime.signal])
     : lifetime.signal;
   signal.throwIfAborted();
-  const key = JSON.stringify(parameters);
+  const key = JSON.stringify([parameters, options.rowsOnly === true]);
   let request = options.signal ? undefined : pending.get(key);
   if (!request) {
-    request = call(
-      'sql',
-      { ...parameters, cacheFreshAfter: configuredQueryFreshAfter() },
-      { signal },
+    request = scheduledQuery(
+      () =>
+        call(
+          'sql',
+          {
+            ...parameters,
+            ...(options.rowsOnly ? { resultShape: 'rows' } : {}),
+            cacheFreshAfter: configuredQueryFreshAfter(),
+          },
+          { signal },
+        ),
+      signal,
+      options.priority ?? 0,
     );
     if (!options.signal) pending.set(key, request);
   }

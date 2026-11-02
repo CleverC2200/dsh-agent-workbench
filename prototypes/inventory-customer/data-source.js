@@ -3,10 +3,20 @@ import { executeAllGeaSqlPages } from '../../business/shared/sql-reader.ts';
 import { mapCustomerInventoryRows } from './customer-inventory-model.js';
 import { CUSTOMER_PLAN_SQL, mergeCustomerPlanRows } from './plan-source.js';
 import { CUSTOMER_MANAGER_SQL, mergeCustomerManagers } from './manager-source.js';
+import { rowPacketSql, unpackRowPackets } from '../../business/shared/row-packets.mjs';
 
 export { mapCustomerInventoryRows } from './customer-inventory-model.js';
 
 export const CUSTOMER_INVENTORY_TABLE = 'agents_scm_cust_plan_order_analysis_d';
+const inventoryColumns = ['snapshot_date','inventory_snapshot_date','organization_snapshot_date','cust_code','cust_name','region_name','province_name','inventory_sku_rows','cif_price_min','cif_price_max','cif_price_coverage','stock_qty','large_date_stock_qty','duplicate_sku_rows','stock_amt','sales_qty_30days','normal_stock_qty','large_date_qty','large_date_coverage','large_date_invalid_sku','in_transit_qty','transit_coverage','structure_missing_sku','structure_negative_stock','structure_negative_sales','structure_score','shortage_sku','no_sales_sku','sku_rows','stock_coverage','value_coverage','sales_coverage','normal_coverage'];
+const planColumns = ['cust_code','plan_snapshot_date','monthly_plan_qty_coverage','monthly_plan_qty','shipped_qty_coverage','shipped_qty','unshipped_qty_coverage','unshipped_qty','budget_amount_coverage','budget_amount','shipped_amount_coverage','shipped_amount','unshipped_amount_coverage','unshipped_amount','plan_sku_rows','target_coverage','target_qty','standard_coverage','minimum_standard_days','maximum_standard_days','age_coverage','control_sku_count','preorder_coverage','source_preorder_qty','plan_transit_coverage','plan_in_transit_qty'];
+const addressColumns = ['cust_code','dealer_receive_addr'];
+const managerColumns = ['cust_code','manager_names','customer_manager','manager_snapshot'];
+async function readCustomerRows(sql, columns, options, order = ['cust_code']) {
+  const packets = await executeAllGeaSqlPages(rowPacketSql(sql, columns, order), {...options, rowsOnly: true});
+  options.signal?.throwIfAborted();
+  return unpackRowPackets(packets, columns, ['cust_code']);
+}
 
 // Keep the SQL fixed. GEA supplies the current business identity and enforces
 // the consumer's table/column grant before any row reaches this page.
@@ -127,16 +137,17 @@ GROUP BY d.cust_code ORDER BY d.cust_code`;
 
 export async function loadCustomerInventory(options = {}) {
   const input = bindGovernedSql(CUSTOMER_INVENTORY_SQL);
-  const inventoryRead = executeAllGeaSqlPages(`/*customer-inventory:latest*/\n${input.sql}`, {
+  const inventoryRead = readCustomerRows(`/*customer-inventory:latest*/\n${input.sql}`, inventoryColumns, {
     parameters: input.parameters,
     signal: options.signal,
     pageConcurrency: 3,
-  });
+    priority: 10,
+  }, ['stock_amt DESC', 'cust_code']);
   const addressInput = bindGovernedSql(CUSTOMER_ADDRESS_SQL);
-  const addressRead = executeAllGeaSqlPages(addressInput.sql, { parameters: addressInput.parameters, signal: options.signal, pageConcurrency: 3 }).then(rows => ({ rows, state: "ready" }), error => { return { rows: [], state: error.code ?? "ADDRESS_SOURCE_UNAVAILABLE" }; });
+  const addressRead = readCustomerRows(addressInput.sql, addressColumns, { parameters: addressInput.parameters, signal: options.signal, pageConcurrency: 3, priority: -10 }).then(rows => ({ rows, state: "ready" }), error => { return { rows: [], state: error.code ?? "ADDRESS_SOURCE_UNAVAILABLE" }; });
   const planRead = (async () => { try {
     const planInput = bindGovernedSql(CUSTOMER_PLAN_SQL);
-    const plans = await executeAllGeaSqlPages(planInput.sql, {
+    const plans = await readCustomerRows(planInput.sql, planColumns, {
       parameters: planInput.parameters,
       signal: options.signal,
       pageConcurrency: 3,
@@ -146,33 +157,53 @@ export async function loadCustomerInventory(options = {}) {
     return {plans:[],planState:error.code ?? 'PLAN_SOURCE_UNAVAILABLE'};
   } })();
   const managerInput = bindGovernedSql(CUSTOMER_MANAGER_SQL);
-  const managerRead = executeAllGeaSqlPages(managerInput.sql, {
-    parameters: managerInput.parameters, signal: options.signal, pageConcurrency: 3,
+  const managerRead = readCustomerRows(managerInput.sql, managerColumns, {
+    parameters: managerInput.parameters, signal: options.signal, pageConcurrency: 3, priority: -10,
   }).then(rows => ({ rows, state: 'ready' }), error => ({ rows: [], state: error.code ?? 'MANAGER_SOURCE_UNAVAILABLE' }));
-  const rows = await inventoryRead;
-  options.signal?.throwIfAborted();
-  options.onInventory?.({ ...mapCustomerInventoryRows(rows), planState: 'loading' });
-  const [{plans,planState}, addresses, managers] = await Promise.all([planRead,addressRead,managerRead]);
-  options.signal?.throwIfAborted();
-  const addressByCustomer = new Map(addresses.rows.map(row => [String(row.cust_code), row.dealer_receive_addr]));
-  const joinedRows = mergeCustomerManagers(rows, managers.rows).map(row => ({...row, manager_state:managers.state, dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null}));
-  const pageCache = new Map();
-  const readDetails = async (codes, {signal} = {}) => {
-    const lifetime=options.pageSignal??options.signal;
-    lifetime?.throwIfAborted();signal?.throwIfAborted();
-    const allowed = new Set(rows.map(row=>String(row.cust_code)));
-    if(!Array.isArray(codes)||codes.length>20||codes.some(code=>!allowed.has(code)))throw Error('CUSTOMER_PAGE_SCOPE_INVALID');
-    if(!codes.length)return [];
-    const key=JSON.stringify(codes);
-    if(pageCache.has(key))return structuredClone(pageCache.get(key));
-    const scope = bindGovernedSql(CUSTOMER_INVENTORY_SQL.replace('WHERE p.create_date =', 'WHERE p.cust_code IN (:list_1) AND p.create_date ='),[codes]);
-    const page = await executeAllGeaSqlPages(scope.sql,{parameters:scope.parameters,signal:lifetime&&signal?AbortSignal.any([lifetime,signal]):signal??lifetime});
-    if(page.length!==codes.length||page.some(row=>!codes.includes(String(row.cust_code)))||new Set(page.map(row=>String(row.cust_code))).size!==codes.length)
-      throw Error('CUSTOMER_PAGE_INCOMPLETE');
-    const signature=row=>JSON.stringify(Object.entries(row).sort(([a],[b])=>a.localeCompare(b)));
-    for(const row of page){const original=rows.find(item=>String(item.cust_code)===String(row.cust_code));if(signature(row)!==signature(original))throw Error('CUSTOMER_SNAPSHOT_CHANGED');}
-    const mapped=mapCustomerInventoryRows(mergeCustomerPlanRows(mergeCustomerManagers(page,managers.rows).map(row=>({...row,manager_state:managers.state,dealer_receive_addr:addressByCustomer.get(String(row.cust_code))??null})),plans)).rows;
-    pageCache.set(key,mapped);return structuredClone(mapped);
+  const supplements = {
+    plans: {plans: [], planState: 'loading'},
+    addresses: {rows: [], state: 'loading'},
+    managers: {rows: [], state: 'loading'},
   };
-  return { ...mapCustomerInventoryRows(mergeCustomerPlanRows(joinedRows, plans)), planState, addressState: addresses.state, managerState: managers.state, readDetails };
+  let rows;
+  const compose = () => {
+    const {plans, planState} = supplements.plans;
+    const {addresses, managers} = supplements;
+    const addressByCustomer = new Map(addresses.rows.map(row => [String(row.cust_code), row.dealer_receive_addr]));
+    const joined = mergeCustomerManagers(rows, managers.rows).map(row => ({
+      ...row, manager_state: managers.state,
+      dealer_receive_addr: addressByCustomer.get(String(row.cust_code)) ?? null,
+    }));
+    const inventory = {...mapCustomerInventoryRows(mergeCustomerPlanRows(joined, plans)),
+      planState, addressState: addresses.state, managerState: managers.state};
+    // A table page uses exactly the complete, validated facts behind its cards.
+    // Refresh and identity/session invalidation own the lifetime of this load.
+    const byCode = new Map(inventory.rows.map(row => [String(row.code), structuredClone(row)]));
+    if (byCode.size !== inventory.rows.length) throw Error('CUSTOMER_PAGE_INCOMPLETE');
+    inventory.readDetails = async (codes, {signal} = {}) => {
+      (options.pageSignal ?? options.signal)?.throwIfAborted();
+      signal?.throwIfAborted();
+      if (!Array.isArray(codes) || codes.length > 20 || new Set(codes).size !== codes.length || codes.some(code => !byCode.has(code)))
+        throw Error('CUSTOMER_PAGE_SCOPE_INVALID');
+      return structuredClone(codes.map(code => byCode.get(code)));
+    };
+    return inventory;
+  };
+  const notify = () => {
+    options.signal?.throwIfAborted();
+    if (rows) options.onInventory?.(compose());
+  };
+  const enrichment = Promise.all([
+    planRead.then(value => { supplements.plans = value; notify(); }),
+    addressRead.then(value => { supplements.addresses = value; notify(); }),
+    managerRead.then(value => { supplements.managers = value; notify(); }),
+  ]);
+  // Observe cancellation/errors even if the primary inventory fails first.
+  void enrichment.catch(() => {});
+  rows = await inventoryRead;
+  options.signal?.throwIfAborted();
+  notify();
+  await enrichment;
+  options.signal?.throwIfAborted();
+  return compose();
 }

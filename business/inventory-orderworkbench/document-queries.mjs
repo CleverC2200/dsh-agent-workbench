@@ -74,21 +74,23 @@ const events = `SELECT cust_code,cust_order_no,name,region,province,
   FROM (${lockedHeaders}) locked_orders`;
 
 /** The original region/customer tables now receive order counts, not quantities. */
-export const changesSql = [
-  ['1', 'cancel'],
-  ['2', 'change'],
-]
-  .map(
-    ([kind, field]) => `SELECT '${kind}' AS kind,region,province,
+export const changesSql =
+  `WITH change_events AS (${events}) ` +
+  [
+    ['1', 'cancel'],
+    ['2', 'change'],
+  ]
+    .map(
+      ([kind, field]) => `SELECT '${kind}' AS kind,region,province,
   CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_numerator) END AS numerator,
   CASE WHEN SUM(invalid_${field})=0 THEN SUM(${field}_denominator) END AS denominator,
   SUM(CASE WHEN invalid_${field}=0 THEN ${field}_numerator ELSE 0 END) AS sample_numerator,
   SUM(CASE WHEN invalid_${field}=0 THEN ${field}_denominator ELSE 0 END) AS sample_denominator,
   SUM(CASE WHEN invalid_${field}=0 THEN 1 ELSE 0 END) AS sample_records,
   COUNT(*) AS records,SUM(invalid_${field}) AS invalid
-  FROM (${events}) order_events GROUP BY region,province`,
-  )
-  .join(' UNION ALL ');
+  FROM change_events order_events GROUP BY region,province`,
+    )
+    .join(' UNION ALL ');
 
 export const customersSql = `SELECT region,province,cust_code AS customer,MAX(name) AS name,
   CASE WHEN SUM(invalid_change)=0 THEN SUM(change_numerator) END AS numerator,
@@ -201,6 +203,9 @@ export const ontimeSql = `SELECT h.cust_order_no AS order_no,h.cust_code AS cust
   ${ontimeSources} GROUP BY h.cust_order_no,h.cust_code`;
 
 // Pack flat members without changing the whole-order verdict or its customer key.
-export const ontimeSummarySql = `SELECT h.belong_base AS base,a.invalid,a.ontime,
+export const ontimeSummarySql = `WITH ontime_products AS (${executionProductsSql}),
+  ontime_traces AS (${traceHeadersSql}),
+  ontime_arrivals AS (${arrivedOrders.replace(`(${executionProductsSql})`, 'ontime_products').replace(`(${traceHeadersSql})`, 'ontime_traces')})
+  SELECT h.belong_base AS base,a.invalid,a.ontime,
   ARRAY_AGG(CONCAT(${tupleSql(['h.cust_order_no', 'h.cust_code', 'CAST(a.arrival_date AS CHAR)', ...memberFields])})) AS packed_orders
-  ${ontimeSources} GROUP BY h.belong_base,a.invalid,a.ontime`;
+  ${ontimeSources.replace(`(${executionProductsSql})`, 'ontime_products').replace(`(${arrivedOrders})`, 'ontime_arrivals')} GROUP BY h.belong_base,a.invalid,a.ontime`;

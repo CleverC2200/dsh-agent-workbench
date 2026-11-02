@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 6;
+export const metricCalculationVersion = 8;
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -152,7 +152,7 @@ export function computeWorkbenchMetrics(
     !invalid(ages) && total > 0 && aged !== null && aged >= 0 && aged <= total
       ? (aged / total) * 100
       : null,
-    '工厂仓＋工厂外租仓批次≥60天库存 ÷ 同范围现存量；非零库存缺生产日期时不发布占比，不当作新鲜库存',
+    'Hive货龄快照：工厂仓＋工厂外租仓内 age_days≥60 的 inv_qty ÷ 同范围 inv_qty 合计；周、月均取各自截止日内最新业务日快照，不累计每日库存；非零库存缺货龄时不发布占比',
   );
   put(
     '周转天数',
@@ -357,7 +357,7 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
   )
     return '系统未能计算：同范围月度计划日均需求合计不大于0，可发货天数没有有效分母。';
   if (name === '货龄（>60天库存占比）' && total('stock_qty') <= 0)
-    return '系统未能计算：agents_scm_inventory_sku_data_d 当前分组有效批次库存合计不大于0，货龄占比没有有效分母。';
+    return '系统未能计算：hive.dw.dwd_scm_material_age_his 当前分组 inv_qty 合计不大于0，货龄占比没有有效分母。';
   return `系统未能计算：${name}的有效分母、数量范围或判定条件不满足；${note || '缺失不补0，零分母不计算比率。'}`;
 }
 export function metricState(name, value, { base = '' } = {}) {
