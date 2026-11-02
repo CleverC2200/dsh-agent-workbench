@@ -956,6 +956,28 @@ export function InventoryOperationsWorkbench() {
     <div className={styles.shell}>
       <section ref={boardRef} className={styles.boardPanel} aria-label="业务看板">
         <BusinessToolbar
+          navigation={
+            overviewWorkspace &&
+            !dashboardLoading &&
+            !overviewLoading &&
+            !dashboardError &&
+            !overviewError ? (
+              <div
+                className={styles.sourceScope}
+                aria-label="当前库存数据口径"
+                title={overviewWorkspace.versionSummary.planScope}
+              >
+                <span>目标月份：{overviewWorkspace.versionSummary.targetMonth}</span>
+                <span>版本：{overviewWorkspace.versionSummary.currentVersion}</span>
+                <span>
+                  库存快照：
+                  {overviewWorkspace.workbench?.inventoryInsight?.sources?.inventorySnapshots.join(
+                    '、',
+                  ) || '未返回'}
+                </span>
+              </div>
+            ) : undefined
+          }
           filters={
             <Dropdown
               trigger="click"
