@@ -66,18 +66,21 @@ test('preview rules preserve unknown, exact threshold and current order scope', 
   for (const rate of [null, undefined, '', '无权限', NaN, -1, 101])
     assert.equal(confirmationDraft({ ...order, rate }).scenario, 'unknown');
 });
-test('Feishu template binds callbacks to order01 and never embeds an unverified recipient', () => {
+test('Feishu template requires Host links and never embeds an unverified recipient', () => {
   const card = salesConfirmationCard({ ...order, customer: '<at id=all>所有人</at>' });
   assert.doesNotMatch(JSON.stringify(card), /<at|open_id|chat_id|delegationToken/);
-  const buttons = card.elements[1].actions;
-  assert.ok(buttons.at(-1).confirm);
-  assert.equal(buttons.at(-1).value.action, 'confirm_shipment');
-  assert.ok(
-    buttons.every((b) => b.value.consumerCode === 'order01' && b.value.orderNo === order.orderNo),
+  const buttons = card.body.elements[1].columns[1].elements;
+  assert.equal(card.schema, '2.0');
+  assert.equal(card.header.title.content, '订单待确认');
+  assert.deepEqual(
+    buttons.map((b) => b.text.content),
+    ['确认发货', '暂缓发货'],
   );
+  assert.ok(buttons.every((b) => b.disabled && !b.behaviors && !b.value));
   assert.equal(
-    salesConfirmationCard({ ...order, rate: 40 }).elements[1].actions.at(-1).value.action,
-    'edit_order',
+    salesConfirmationCard({ ...order, rate: 40 }).body.elements[1].columns[1].elements.at(-1).text
+      .content,
+    '订单处理',
   );
 });
 test('client only initiates a group notification and never exposes sales execution controls', () => {
@@ -94,7 +97,7 @@ test('client only initiates a group notification and never exposes sales executi
     ),
   );
   assert.equal(d.querySelector('select,input,tbody'), null);
-  assert.ok(card.elements[1].actions.some((b) => b.value.action === 'confirm_shipment'));
+  assert.ok(card.body.elements[1].columns[1].elements.some((b) => b.text.content === '确认发货'));
   click('取消');
   assert.equal(d.getElementById('salesConfirmOverlay').hidden, true);
   assert.equal(d.activeElement.id, 'open');
@@ -105,7 +108,7 @@ test('shortage handling stays in the Feishu card; closing or switching orders cl
   const { dom, d, ui } = fixture();
   const source = { ...order, rate: 70 };
   const card = ui.open(source);
-  assert.equal(card.elements[1].actions.at(-1).value.action, 'edit_order');
+  assert.equal(card.body.elements[1].columns[1].elements.at(-1).text.content, '订单处理');
   assert.equal(d.querySelector('input'), null);
   assert.equal(source.lines[0].rawQuantity, 100);
   ui.close();

@@ -1,0 +1,16 @@
+{
+  "owner": "dsh-agent-workbench",
+  "consumerCode": "order01",
+  "dataMode": "EXISTING_AUTHORIZED_SALES_WINDOW",
+  "backendResourcePaths": {
+    "window.html": "order-confirmation/window.html",
+    "window.js": "order-confirmation/window.js"
+  },
+  "assets": {
+    "window.html": "43230fbfdc22f88ed503d07706b4c2b46f6531fa9f1e73ec9ac32a9ed8e60c31",
+    "window.js": "42b39437648a40529f5c2782cf2e90451fd2561b5516f9d660e9e4e20cef0874",
+    "card.mjs": "70d5f2fecead5a0db16f3def86eaf6708d53bee7bdac3ff0e43cd01e550a1d9f"
+  },
+  "orderEditing": "DRAFT_ONLY_UNTIL_REAL_ORDER_API_CONNECTED",
+  "deployed": false
+}
