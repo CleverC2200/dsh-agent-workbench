@@ -1,5 +1,5 @@
 import { shippableDaysState } from './performance-rules.mjs';
-export const metricCalculationVersion = 8;
+export const metricCalculationVersion = 9;
 export function compatibleWorkbenchFacts(facts) {
   return (
     facts?.complete === true &&
@@ -273,13 +273,16 @@ export function computeWorkbenchMetrics(
         Object.assign(result[name], { value: null, note: '所选周期及授权范围内无来源数据' });
   }
   for (const name of metricNames)
-    if (result[name]?.value == null)
+    if (result[name]?.value == null) {
       result[name].missingReason = workbenchMetricMissingReason(
         period,
         name,
         filter,
         result[name].note,
       );
+      if (period.start >= period.end && !period.sections.length)
+        result[name].note = result[name].missingReason;
+    }
   return result;
 }
 export function workbenchMetricMissingReason(period, name, filter = () => true, note = '') {
@@ -293,6 +296,8 @@ export function workbenchMetricMissingReason(period, name, filter = () => true, 
           ? 'ontime'
           : 'orders';
   const part = period?.sections?.find((section) => section.id === id);
+  if (period && period.start >= period.end && Array.isArray(period.sections) && !period.sections.length)
+    return '本周期暂无已结束统计日：订单按T-1累计，当前区间起止相同，未发起空区间查询。不是仍在加载，也不代表整张源表无数据；库存指标仍需筛选内的有效快照，缺失保持未知，不用其他周期替代。';
   if (!part || part.status === 'loading')
     return '系统尚未完成读取：所选周期数据未加载完成，暂不能判定源表缺数据。';
   if (part.status !== 'ready')
