@@ -539,20 +539,13 @@ test('regional mounted author restores and republishes after its existing channe
 
 // MPS reception observes the existing authored iframe and current channel output.
 async function addMpsProduct(frame) {
-  const expand = frame.getByRole('button', { name: '展开产品明细', exact: true });
-  if (await expand.isVisible()) await expand.click();
-  await frame.getByRole('button', { name: '新增产品', exact: true }).click();
-  const dialog = frame.getByRole('dialog', { name: '新增产品', exact: true });
-  for (const [name, value] of Object.entries({
-    基地名称: '郑州',
-    产品编码: 'A',
-    产品名称: '产品甲',
-    大类: '汤圆',
-    系列: '系列',
-    物料组: '组',
-  }))
-    await dialog.getByLabel(name, { exact: true }).fill(value);
-  await dialog.getByRole('button', { name: '新增', exact: true }).click();
+  await frame.getByLabel('选择产品关系CSV或Excel', { exact: true }).setInputFiles({
+    name: 'context-product.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(
+      '基地,产品编码,产品名称,大类,系列,物料组,老品编码,老品名称\n郑州,A,产品甲,汤圆,系列,组,,',
+    ),
+  });
 }
 test('received MPS publishes committed source edits and removes the previous step context', async (t) => {
   const page = await fixture(t, ['mps']);
@@ -774,7 +767,7 @@ test('received MPS context covers the seven current steps and preserves unassess
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS commits restored navigation and clears local inputs before publishing into a rebound Session', async (t) => {
+test('received MPS restores navigation and isolates local inputs before publishing into a rebound Session', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -845,8 +838,8 @@ test('received MPS commits restored navigation and clears local inputs before pu
   for (const row of returning) {
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
     assert.ok(
-      row.context.parts.process.rows.every(
-        (item) => item.reportQuantity === null && item.demand === null,
+      row.context.parts.process.rows.some(
+        (item) => item.reportQuantity === 18 && item.demand === null,
       ),
     );
   }
@@ -1207,7 +1200,7 @@ test('MPS Host context remains unavailable after identity withdrawal even when a
   assert.equal(await readHost(), undefined);
 });
 
-test('received MPS clears local files and in-flight file reads when the current Session changes', async (t) => {
+test('received MPS isolates local files and cancels in-flight reads across Sessions, then restores committed input', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
@@ -1270,10 +1263,8 @@ test('received MPS clears local files and in-flight file reads when the current 
             ?.rowCount,
       ),
     )
-    .toBe(0);
-  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
-    '当前期间无已读取记录',
-  );
+    .toBe(1);
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('当前期间1条');
 });
 
 for (const boundary of ['Session', 'identity']) {

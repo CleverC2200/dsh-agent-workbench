@@ -55,9 +55,9 @@ for (const referrer of ['', 'dsh-app://app/']) {
     const f = await fixture(t, referrer, 'dsh-app://app/api/agent-workbench/html?id=inventory-fc');
     assert.equal(f.channel.currentSessionId(), undefined);
     assert.doesNotThrow(() => f.connect('dsh-app://app', {}));
-    await assert.rejects(f.channel.call('access'), /请先登录并连接/);
+    await assert.rejects(f.channel.call('access'), /页面能力尚未连接/);
     assert.doesNotThrow(() => f.connect('https://other.example'));
-    await assert.rejects(f.channel.call('access'), /请先登录并连接/);
+    await assert.rejects(f.channel.call('access'), /页面能力尚未连接/);
     assert.doesNotThrow(() => f.connect('dsh-app://app'));
     assert.equal(f.channel.currentSessionId(), 'owned-session');
     const result = f.channel.call('access');
@@ -72,12 +72,12 @@ for (const referrer of ['', 'dsh-app://app/']) {
 test('invalid referrer rejects the connect without throwing', async (t) => {
   const f = await fixture(t, 'not a URL', 'dsh-app://app/api/agent-workbench/html');
   assert.doesNotThrow(() => f.connect('dsh-app://app'));
-  await assert.rejects(f.channel.call('access'), /请先登录并连接/);
+  await assert.rejects(f.channel.call('access'), /页面能力尚未连接/);
 });
 test('originless page URL cannot accept an opaque parent origin', async (t) => {
   const f = await fixture(t, '', 'data:text/html,fixture');
   assert.doesNotThrow(() => f.connect('null'));
-  await assert.rejects(f.channel.call('access'), /请先登录并连接/);
+  await assert.rejects(f.channel.call('access'), /页面能力尚未连接/);
 });
 
 test('returning to the same Session replaces a revoked port even when its final context reset was lost', async (t) => {

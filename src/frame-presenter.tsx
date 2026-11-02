@@ -178,6 +178,9 @@ const inventoryAgentPages = new Set([
 
 /** The single native/HTML presentation module. Host Session references are explicitly borrowed. */
 export type FrameCopyKey =
+  | 'pageReconnect'
+  | 'pageReconnecting'
+  | 'pageReconnected'
   | 'pageConnect'
   | 'pageNewChat'
   | 'pageAssistantTitle'
@@ -299,6 +302,10 @@ export function mountFramePresentation(
       setPreferredWidth(width);
     };
     const [loaded, setLoaded] = useState(0);
+    const [connectionAttempt, setConnectionAttempt] = useState(0);
+    const [connectionState, setConnectionState] = useState<
+      'idle' | 'connecting' | 'connected' | 'failed'
+    >('idle');
     const [view, setView] = useState<'center' | 'split' | 'chat'>(
       () => pageViews.get(page.id) ?? 'split',
     );
@@ -353,7 +360,12 @@ export function mountFramePresentation(
       selection?.sessionId === sessionId &&
       selection !== undefined &&
       (!page.resourceId || (selection.ownerScope === identity.scope && identityReady));
-    const frameKey = page.resourceId && identityReady ? (identity.scope ?? undefined) : undefined;
+    const frameKey =
+      page.id === 'plan-category-production'
+        ? JSON.stringify([identity.scope, connectionAttempt])
+        : page.resourceId && identityReady
+          ? (identity.scope ?? undefined)
+          : undefined;
     const viewScope =
       isBusinessViewPage(page.id) && associated && identity.subject && sessionId
         ? JSON.stringify([identity.subject, sessionId])
@@ -378,7 +390,7 @@ export function mountFramePresentation(
         controller.abort();
         stop();
       };
-    }, [active, page, viewScope, workbench]);
+    }, [active, page, viewScope, workbench, connectionAttempt]);
     const restoreView = useRef<'center' | 'split' | 'chat'>();
     const currentTools = useSyncExternalStore(
       (listener) => {
@@ -541,6 +553,7 @@ export function mountFramePresentation(
       const alive = () =>
         !controller.signal.aborted &&
         selection.ownerScope === currentExecution.identity.getSnapshot().scope;
+      setConnectionState('connecting');
       const setup = connectionTransition.current.then(async () => {
         controller.signal.throwIfAborted();
         reference = ctx.sessions.retain(selection!.sessionId, {
@@ -570,8 +583,12 @@ export function mountFramePresentation(
             (failure) => {
               if (alive()) {
                 setError(failure instanceof Error ? failure.message : String(failure));
+                setConnectionState('failed');
                 if (connection) void currentExecution.close(connection).catch(() => {});
               }
+            },
+            () => {
+              if (alive()) setConnectionState('connected');
             },
           );
           disposeBridge = bridge;
@@ -599,6 +616,7 @@ export function mountFramePresentation(
       connectionTransition.current = setup.catch((failure) => {
         if (alive()) {
           setError(failure instanceof Error ? failure.message : String(failure));
+          setConnectionState('failed');
           if (connection) void currentExecution.close(connection).catch(() => {});
         }
       });
@@ -689,12 +707,42 @@ export function mountFramePresentation(
           associateDisabled={
             !sessionId || session?.openState !== 'open' || currentPreset === undefined
           }
-          error={error || navigationError || ''}
+          error={
+            page.id === 'plan-category-production' && connectionState === 'failed'
+              ? ''
+              : error || navigationError || ''
+          }
           tools={associated ? guide : emptyGuide}
           onOpenTool={openTool}
           onCloseTools={closeTools}
           toolsExpanded={toolsExpanded}
         >
+          {page.id === 'plan-category-production' && page.kind === 'html' && page.resourceId && (
+            <>
+              <button
+                type="button"
+                className="gea-conversation-toolbar-action gea-conversation-toolbar-reconnect"
+                aria-label={t('pageReconnect')}
+                title={t('pageReconnect')}
+                disabled={busy || !associated || !identityReady || connectionState === 'connecting'}
+                onClick={() => {
+                  setError('');
+                  setConnectionState('connecting');
+                  setConnectionAttempt((attempt) => attempt + 1);
+                }}
+              >
+                {t(connectionState === 'connecting' ? 'pageReconnecting' : 'pageReconnect')}
+              </button>
+              {connectionAttempt > 0 && connectionState === 'connected' && (
+                <span role="status">{t('pageReconnected')}</span>
+              )}
+              {connectionState === 'failed' && error && (
+                <span className="gea-conversation-toolbar-error" role="alert">
+                  {error}
+                </span>
+              )}
+            </>
+          )}
           {page.id !== 'inventory-fc' && identityReady && interpreters.length > 1 && (
             <InterpreterSelect
               label={t('pageInterpreter')}

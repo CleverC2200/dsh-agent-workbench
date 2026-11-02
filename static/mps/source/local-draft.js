@@ -1,0 +1,114 @@
+import { mpsLocalStateSchema } from '../../../src/mps-local-draft.ts';
+
+export const emptyAdjustments = () => ({ categoryDemand: [], shares: [], history: [] });
+const sources = ['products', 'annual', 'report', 'forecast', 'history'];
+const columns = [
+  '月份',
+  '基地',
+  '产品编码',
+  '产品名称',
+  '大类',
+  '系列',
+  '物料组',
+  '物料组名称',
+  '老品编码',
+  '老品名称',
+  '数量',
+  '月初数量',
+  '纠偏数量',
+];
+const fields = (row, names) =>
+  Object.fromEntries(
+    names.filter((name) => row[name] !== undefined).map((name) => [name, row[name]]),
+  );
+export function encodeLocalDrafts(drafts, selected) {
+  return mpsLocalStateSchema.parse({
+    format: 1,
+    selected,
+    drafts: drafts.map((draft) => ({
+      id: draft.id,
+      name: draft.name,
+      month: draft.month,
+      pull: draft.pull,
+      inputs: Object.fromEntries(
+        sources.flatMap((source) => {
+          const local =
+            source === 'products'
+              ? ['local-file', 'local-edited'].includes(draft.productSource)
+              : draft[source + 'Source'] === 'local-file';
+          return local
+            ? [
+                [
+                  source,
+                  {
+                    file: draft.files[source] ?? '本地维护',
+                    rows: draft[source].map((row) => fields(row, columns)),
+                  },
+                ],
+              ]
+            : [];
+        }),
+      ),
+      adjustments: draft.adjustments ?? emptyAdjustments(),
+      ...(draft.constraints
+        ? {
+            constraints: {
+              safetyDays: draft.constraints.safetyDays ?? [],
+              rules: {
+                local: (draft.constraints.rules?.local ?? []).map((row) =>
+                  Object.fromEntries(
+                    ['description', 'target', 'strength', 'until'].map((key) => [
+                      key,
+                      row[key] ?? '',
+                    ]),
+                  ),
+                ),
+              },
+            },
+          }
+        : {}),
+      ...fields(draft, ['productionDays', 'unitWeights', 'resources', 'resourceAssignments']),
+      ...(draft.shipment
+        ? {
+            shipment: {
+              ...fields(draft.shipment, ['cutoff', 'activeSource', 'values', 'remaining']),
+              ...(draft.shipment.sourceEdits
+                ? {
+                    sourceEdits: Object.fromEntries(
+                      ['local-file', 'business'].flatMap((source) =>
+                        draft.shipment.sourceEdits[source]
+                          ? [
+                              [
+                                source,
+                                fields(draft.shipment.sourceEdits[source], ['values', 'remaining']),
+                              ],
+                            ]
+                          : [],
+                      ),
+                    ),
+                  }
+                : {}),
+              ...(draft.shipment.rows ? fields(draft.shipment, ['rows', 'file']) : {}),
+            },
+          }
+        : {}),
+    })),
+  });
+}
+export function decodeLocalDrafts(value, makeDraft, fallback) {
+  const result = mpsLocalStateSchema.safeParse(value);
+  if (!result.success) return fallback();
+  return {
+    selected: result.data.selected,
+    drafts: result.data.drafts.map(({ inputs, ...saved }) => {
+      const draft = { ...makeDraft(saved.id, saved.month), ...saved };
+      for (const [source, input] of Object.entries(inputs)) {
+        draft[source] = input.rows;
+        draft.files[source] = input.file;
+        draft[source === 'products' ? 'productSource' : source + 'Source'] = 'local-file';
+        draft[source + 'Read'] = { status: 'ready' };
+      }
+      return draft;
+    }),
+  };
+}
