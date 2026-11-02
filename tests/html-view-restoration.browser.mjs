@@ -544,7 +544,6 @@ async function addMpsProduct(frame) {
   await frame.getByRole('button', { name: '新增产品', exact: true }).click();
   const dialog = frame.getByRole('dialog', { name: '新增产品', exact: true });
   for (const [name, value] of Object.entries({
-    基地名称: '郑州',
     产品编码: 'A',
     产品名称: '产品甲',
     大类: '汤圆',
@@ -774,7 +773,7 @@ test('received MPS context covers the seven current steps and preserves unassess
   assert.deepEqual(await page.evaluate(() => window.mockErrors), []);
 });
 
-test('received MPS commits restored navigation and clears local inputs before publishing into a rebound Session', async (t) => {
+test('received MPS commits restored navigation and isolates restored local inputs across Sessions', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.clock.setFixedTime(new Date('2026-10-20T04:00:00Z'));
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
@@ -844,9 +843,10 @@ test('received MPS commits restored navigation and clears local inputs before pu
   assert.ok(returning.length > 0);
   for (const row of returning) {
     assert.deepEqual(Object.keys(row.context.parts).sort(), ['navigation', 'process']);
+    assert.equal(row.context.parts.process.rows.length, 1);
     assert.ok(
       row.context.parts.process.rows.every(
-        (item) => item.reportQuantity === null && item.demand === null,
+        (item) => item.reportQuantity === 18 && item.demand === null,
       ),
     );
   }
@@ -1207,7 +1207,7 @@ test('MPS Host context remains unavailable after identity withdrawal even when a
   assert.equal(await readHost(), undefined);
 });
 
-test('received MPS clears local files and in-flight file reads when the current Session changes', async (t) => {
+test('received MPS isolates local files, rejects in-flight reads and restores the original Session inputs', async (t) => {
   const page = await fixture(t, ['mps']);
   await page.evaluate(() => window.openPage('plan-category-production', 'mps'));
   const frame = page.frameLocator('iframe');
@@ -1217,10 +1217,10 @@ test('received MPS clears local files and in-flight file reads when the current 
   await creating.getByRole('button', { name: '创建本地版本', exact: true }).click();
   const csv =
     '月份,基地,产品编码,产品名称,大类,系列,物料组,月初数量,纠偏数量\n2026-12,郑州,P1,产品,汤圆,系列,组,8,9';
-  const upload = () =>
+  const upload = (contents = csv) =>
     frame
       .getByLabel('选择计划提报CSV')
-      .setInputFiles({ name: 'local.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+      .setInputFiles({ name: 'local.csv', mimeType: 'text/csv', buffer: Buffer.from(contents) });
   await upload();
   await expect
     .poll(() =>
@@ -1239,7 +1239,7 @@ test('received MPS clears local files and in-flight file reads when the current 
       });
     };
   });
-  await upload();
+  await upload(csv.replace(',8,9', ',88,99'));
   await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('正在读取…');
   await page.evaluate(() =>
     window.switchViewSession('session-22222222-2222-4222-8222-222222222222'),
@@ -1270,10 +1270,8 @@ test('received MPS clears local files and in-flight file reads when the current 
             ?.rowCount,
       ),
     )
-    .toBe(0);
-  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText(
-    '当前期间无已读取记录',
-  );
+    .toBe(1);
+  await expect(frame.getByRole('region', { name: '计划提报数据' })).toContainText('数量合计8件');
 });
 
 for (const boundary of ['Session', 'identity']) {

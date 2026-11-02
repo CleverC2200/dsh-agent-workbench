@@ -289,7 +289,10 @@ try {
       ['pnpm', 'install', '--frozen-lockfile', '--ignore-scripts', '--prefer-offline'],
       manifest.repositories.find((entry) => entry.repo === 'dsh-gea-plugin').path,
     );
-    const buildAllPages = plan.files.includes('tests/agent-authored-layout.browser.mjs');
+    const buildAllPages = [
+      'tests/agent-authored-layout.browser.mjs',
+      'tests/agent-page-return.browser.mjs',
+    ].some((file) => plan.files.includes(file));
     const leaf = resolve('business/inventory-fc/source/inventory-light-plugins');
     if (
       buildAllPages ||

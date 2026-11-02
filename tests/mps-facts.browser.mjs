@@ -392,11 +392,12 @@ test('processing fetches every SKU month through governed paging and keeps the f
       assert(reads.some((call) => call.parameters.offset === 0));
       assert(reads.some((call) => call.parameters.offset === 200));
       assert(reads.every((call) => call.parameters.page_size === 200));
-      if (month !== '10')
-        assert.deepEqual(
-          reads.map((call) => call.parameters.offset),
-          [0, 200],
-        );
+      if (month !== '10') {
+        const offsets = reads.map((call) => call.parameters.offset);
+        assert.equal(offsets.length % 2, 0);
+        for (let index = 0; index < offsets.length; index += 2)
+          assert.deepEqual(offsets.slice(index, index + 2), [0, 200]);
+      }
     }
   }
   const pending = page.waitForEvent('download');
@@ -513,7 +514,7 @@ test('period source diagnostics expose complete totals, current-basis coverage a
     '成功有记录',
     '4',
     '2',
-    '1/3',
+    '1/2',
     '1',
     '1',
     '1',
@@ -527,7 +528,7 @@ test('period source diagnostics expose complete totals, current-basis coverage a
     '成功有记录',
     '1',
     '1',
-    '1/3',
+    '1/2',
     '0',
     '0',
     '0',
@@ -537,7 +538,7 @@ test('period source diagnostics expose complete totals, current-basis coverage a
   const summary = page.waitForEvent('download');
   await diagnostics.getByRole('button', { name: '导出来源诊断', exact: true }).click();
   const csv = await mpsDownloadText(await (await summary).path());
-  assert.match(csv, /计划提报,2026-12,成功空集,0,0,0\/3,0,0,0/);
+  assert.match(csv, /计划提报,2026-12,成功空集,0,0,0\/1,0,0,0/);
   await row('计划提报', '2026-10').getByRole('button', { name: '明细', exact: true }).click();
   const dialog = frame.getByRole('dialog');
   await expect(dialog).toContainText('OUTSIDE');

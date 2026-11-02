@@ -325,6 +325,7 @@ export function createDemandConfirmation(react, useMpsPart, view) {
                   row[column] === '' || row[column] == null
                     ? '-'
                     : (/数量|收入|金额|合计/.test(column) ||
+                          /^M\+\d$/.test(column) ||
                           ['① 环比法', '② 占比法', '加权'].includes(column)) &&
                         Number.isFinite(Number(row[column]))
                       ? integer(row[column])
